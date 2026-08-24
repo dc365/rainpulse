@@ -66,4 +66,7 @@ and produced variables. Missing prerequisites result in `skipped`; they never
 cause an absent field to be fabricated.
 
 Publication is temporary-write, full validation, then atomic commit to
-`radar/qc/{radar_id}/{yyyy}/{mm}/{dd}/{scan_time}/volume.zarr`.
+`radar/qc/{radar_id}/{scan_id}/{qc_pipeline_version}/volume.zarr`.
+
+The pipeline version is part of the immutable object prefix so a versioned rerun cannot
+reuse another job's `_SUCCESS.json` completion marker.

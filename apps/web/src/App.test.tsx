@@ -45,7 +45,7 @@ const status = {
     scan_id: '10000000-0000-4000-8000-000000000001',
     radar_id: 'z9598',
     qc_profile: 'rp008-basic-v1',
-    qc_pipeline_version: 'rp008-basic-1.0.3',
+    qc_pipeline_version: 'rp008-basic-1.0.4',
     flag_definition_version: 'qc-flags-v1',
     health_state: 'DEGRADED',
     mean_quality_index: 0.784,

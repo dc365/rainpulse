@@ -115,9 +115,9 @@ func TestCreateRadarQCUsesNormalizedInputAndStableIdentity(t *testing.T) {
 		NormalizedURI: "s3://rainpulse/radar/normalized/z9598/scan/volume.zarr",
 		CurrentStatus: workflow.RadarScanNormalized,
 		Health:        workflow.RadarHealthDegraded,
-		QCProfile:     "rp008-basic-v1", QCPipelineVersion: "rp008-basic-1.0.3",
+		QCProfile:     "rp008-basic-v1", QCPipelineVersion: "rp008-basic-1.0.4",
 		FlagDefinitionVersion: "qc-flags-v1",
-		QCConfig:              json.RawMessage(`{"pipeline_version":"rp008-basic-1.0.3"}`),
+		QCConfig:              json.RawMessage(`{"pipeline_version":"rp008-basic-1.0.4"}`),
 		QCConfigSHA256:        "63266c7c72321262a01b945281060abd84153a8f3ad64a95c5b73b9fd510f678",
 	}
 
@@ -142,6 +142,9 @@ func TestCreateRadarQCUsesNormalizedInputAndStableIdentity(t *testing.T) {
 	if requested.Payload.ScanID != input.ScanID || requested.Payload.InputURI != input.NormalizedURI ||
 		requested.Payload.QCProfile != input.QCProfile {
 		t.Fatalf("unexpected radar QC request: %#v", requested)
+	}
+	if requested.Payload.OutputPrefix != "s3://rainpulse/radar/qc/z9598/"+input.ScanID.String()+"/rp008-basic-1.0.4/" {
+		t.Fatalf("radar QC output must be isolated by pipeline version: %q", requested.Payload.OutputPrefix)
 	}
 	second, err := service.CreateRadarQC(context.Background(), input)
 	if err != nil {

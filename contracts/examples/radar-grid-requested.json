@@ -9,7 +9,7 @@
   "payload": {
     "scan_id": "10000000-0000-4000-8000-000000000004",
     "radar_id": "synthetic_radar_01",
-    "input_uri": "s3://rainpulse/radar/qc/synthetic_radar_01/2026/08/24/030000/volume.zarr",
+    "input_uri": "s3://rainpulse/radar/qc/synthetic_radar_01/10000000-0000-4000-8000-000000000004/rp008-basic-1.0.4/volume.zarr",
     "output_prefix": "s3://rainpulse/radar/grid/synthetic_radar_01/2026/08/24/030000/",
     "grid_id": "synthetic-grid-v1",
     "grid_config_version": "synthetic-grid-config-v1",

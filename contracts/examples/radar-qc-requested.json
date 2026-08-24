@@ -10,7 +10,7 @@
     "scan_id": "10000000-0000-4000-8000-000000000004",
     "radar_id": "synthetic_radar_01",
     "input_uri": "s3://rainpulse/radar/normalized/synthetic_radar_01/2026/08/24/030000/volume.zarr",
-    "output_prefix": "s3://rainpulse/radar/qc/synthetic_radar_01/2026/08/24/030000/",
+    "output_prefix": "s3://rainpulse/radar/qc/synthetic_radar_01/10000000-0000-4000-8000-000000000004/rp008-basic-1.0.4/",
     "radar_config_version": "synthetic-radar-01-v1",
     "qc_profile": "synthetic-v1",
     "qc_pipeline_version": "qc-contract-v1",

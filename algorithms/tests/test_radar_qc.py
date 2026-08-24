@@ -237,10 +237,10 @@ def test_real_qc_worker_reads_verified_normalized_artifact_and_builds_qc_zarr(
                 "scan_id": "10000000-0000-4000-8000-000000000004",
                 "radar_id": "z9598",
                 "input_uri": f"s3://rainpulse/{prefix}",
-                "output_prefix": "s3://rainpulse/radar/qc/z9598/scan/",
+                "output_prefix": "s3://rainpulse/radar/qc/z9598/scan/rp008-basic-1.0.4/",
                 "radar_config_version": "z9598-test-v1",
                 "qc_profile": "rp008-basic-v1",
-                "qc_pipeline_version": "rp008-basic-1.0.3",
+                "qc_pipeline_version": "rp008-basic-1.0.4",
                 "flag_definition_version": "qc-flags-v1",
             },
         }

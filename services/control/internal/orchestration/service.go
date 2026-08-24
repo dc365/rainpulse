@@ -199,7 +199,12 @@ func (service *Service) CreateRadarQC(
 	jobID := stableID("radar-qc-job", input.RunID.String(), input.QCPipelineVersion)
 	traceID := stableID("radar-qc-trace", input.RunID.String(), input.QCPipelineVersion)
 	eventID := stableID("radar-qc-request", jobID.String())
-	outputPrefix := fmt.Sprintf("s3://rainpulse/radar/qc/%s/%s/", input.RadarID, input.ScanID)
+	outputPrefix := fmt.Sprintf(
+		"s3://rainpulse/radar/qc/%s/%s/%s/",
+		input.RadarID,
+		input.ScanID,
+		url.PathEscape(input.QCPipelineVersion),
+	)
 	request := RadarQCRequested{
 		SchemaVersion: SchemaVersion,
 		EventID:       eventID,
