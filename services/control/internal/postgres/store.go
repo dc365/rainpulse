@@ -34,6 +34,13 @@ func (store *Store) CreateBundle(ctx context.Context, bundle workflow.CreateBund
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	_, err = tx.Exec(ctx, `
+INSERT INTO workflow_runs (run_id, run_type, created_at)
+VALUES ($1, 'forecast_run', $2)`, bundle.Run.ID, bundle.Run.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("insert forecast workflow identity: %w", err)
+	}
+
+	_, err = tx.Exec(ctx, `
 INSERT INTO forecast_runs (
     run_id, issue_time, grid_id, config_version, status, rerun_of, reason,
     created_at, updated_at

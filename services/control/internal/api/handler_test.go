@@ -142,6 +142,91 @@ func TestRunEventStreamSendsCurrentState(t *testing.T) {
 	}
 }
 
+func TestRadarAndAnalysisQueriesPreservePartialRadarFailure(t *testing.T) {
+	now := time.Date(2026, 8, 24, 3, 0, 0, 0, time.UTC)
+	scanAID := uuid.MustParse("10000000-0000-4000-8000-000000000001")
+	scanBID := uuid.MustParse("10000000-0000-4000-8000-000000000002")
+	reason := "synthetic radar B failed; analysis continued with radar A"
+	failedReason := "SIMULATED_RADAR_FAILURE"
+	quality := 0.82
+	complete := 1.0
+	analysis := workflow.AnalysisCycle{
+		ID:           uuid.MustParse("20000000-0000-4000-8000-000000000001"),
+		RunID:        uuid.MustParse("20000000-0000-4000-8000-000000000002"),
+		AnalysisTime: now, GridID: "synthetic-grid", ConfigVersion: "analysis-v1",
+		Status: workflow.AnalysisReady, DegradedReason: &reason, RadarCount: 1,
+		ValidCoverageRatio: floatPointer(0.86), MeanQualityIndex: &quality,
+		Radars: []workflow.AnalysisRadar{
+			{RadarID: "synthetic_radar_a", ScanID: &scanAID, State: workflow.AnalysisRadarParticipating},
+			{RadarID: "synthetic_radar_b", ScanID: &scanBID, State: workflow.AnalysisRadarFailed, ExclusionReason: &failedReason},
+		},
+		CreatedAt: now, UpdatedAt: now,
+	}
+	store := &fakeObservationStore{
+		radars: []workflow.Radar{
+			{ID: "synthetic_radar_a", Lifecycle: workflow.RadarReady, ConfigVersion: "radar-a-v1", CreatedAt: now, UpdatedAt: now},
+			{ID: "synthetic_radar_b", Lifecycle: workflow.RadarReady, ConfigVersion: "radar-b-v1", CreatedAt: now, UpdatedAt: now},
+		},
+		scans: []workflow.RadarScan{
+			{ID: scanAID, RunID: uuid.New(), RadarID: "synthetic_radar_a", VolumeStartTime: now, VolumeEndTime: now, RadarConfigVersion: "radar-a-v1", Status: workflow.RadarScanGridReady, ScanCompleteness: &complete, MeanQualityIndex: &quality, CreatedAt: now, UpdatedAt: now},
+			{ID: scanBID, RunID: uuid.New(), RadarID: "synthetic_radar_b", VolumeStartTime: now, VolumeEndTime: now, RadarConfigVersion: "radar-b-v1", Status: workflow.RadarScanFailed, DegradedReason: &failedReason, CreatedAt: now, UpdatedAt: now},
+		},
+		analysis: analysis,
+	}
+	handler := api.NewHandler(api.Options{Version: "test", Observations: store})
+
+	assertResponse := func(target string, want string) {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodGet, target, nil)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), want) {
+			t.Fatalf("GET %s: status=%d body=%s, missing %q", target, response.Code, response.Body.String(), want)
+		}
+	}
+
+	assertResponse("/api/v1/radars", `"radar_id":"synthetic_radar_a"`)
+	assertResponse("/api/v1/radar-scans/"+scanBID.String(), `"status":"FAILED"`)
+	assertResponse("/api/v1/analysis-cycles/"+analysis.ID.String(), `"status":"ANALYSIS_READY"`)
+	assertResponse("/api/v1/analysis-cycles/"+analysis.ID.String(), `"state":"FAILED"`)
+}
+
+func TestAnalysisEventStreamSendsDomainEvent(t *testing.T) {
+	now := time.Date(2026, 8, 24, 3, 0, 0, 0, time.UTC)
+	analysis := workflow.AnalysisCycle{
+		ID:           uuid.MustParse("20000000-0000-4000-8000-000000000001"),
+		RunID:        uuid.MustParse("20000000-0000-4000-8000-000000000002"),
+		AnalysisTime: now, GridID: "grid", ConfigVersion: "config",
+		Status: workflow.AnalysisReady, Radars: []workflow.AnalysisRadar{},
+		CreatedAt: now, UpdatedAt: now,
+	}
+	handler := api.NewHandler(api.Options{
+		Version: "test", Observations: &fakeObservationStore{analysis: analysis},
+		SSEPollInterval: 5 * time.Millisecond,
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	response, err := http.Get(server.URL + "/api/v1/events/stream?analysis_id=" + analysis.ID.String()) //nolint:noctx
+	if err != nil {
+		t.Fatalf("open analysis SSE stream: %v", err)
+	}
+	defer response.Body.Close()
+	reader := bufio.NewReader(response.Body)
+	var event strings.Builder
+	for range 4 {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			t.Fatalf("read analysis SSE event: %v", err)
+		}
+		event.WriteString(line)
+	}
+	if !strings.Contains(event.String(), "event: analysis.cycle.updated") ||
+		!strings.Contains(event.String(), `"status":"ANALYSIS_READY"`) {
+		t.Fatalf("unexpected analysis SSE event: %s", event.String())
+	}
+}
+
 type fakeRunStore struct {
 	run  workflow.Run
 	jobs []workflow.Job
@@ -183,4 +268,64 @@ type fakeRunCommands struct {
 func (commands *fakeRunCommands) Rerun(_ context.Context, source uuid.UUID) (workflow.Run, error) {
 	commands.source = source
 	return commands.run, nil
+}
+
+type fakeObservationStore struct {
+	radars   []workflow.Radar
+	scans    []workflow.RadarScan
+	analysis workflow.AnalysisCycle
+}
+
+func (store *fakeObservationStore) ListRadars(context.Context) ([]workflow.Radar, error) {
+	return store.radars, nil
+}
+
+func (store *fakeObservationStore) GetRadar(_ context.Context, radarID string) (workflow.Radar, error) {
+	for _, radar := range store.radars {
+		if radar.ID == radarID {
+			return radar, nil
+		}
+	}
+	return workflow.Radar{}, workflow.ErrNotFound
+}
+
+func (store *fakeObservationStore) GetRadarStatus(_ context.Context, radarID string) (workflow.RadarStatusSummary, error) {
+	return workflow.RadarStatusSummary{RadarID: radarID, Health: workflow.RadarHealthHealthy}, nil
+}
+
+func (store *fakeObservationStore) ListRadarScans(
+	context.Context,
+	int,
+	*string,
+	*workflow.RadarScanStatus,
+) ([]workflow.RadarScan, error) {
+	return store.scans, nil
+}
+
+func (store *fakeObservationStore) GetRadarScan(_ context.Context, scanID uuid.UUID) (workflow.RadarScan, error) {
+	for _, scan := range store.scans {
+		if scan.ID == scanID {
+			return scan, nil
+		}
+	}
+	return workflow.RadarScan{}, workflow.ErrNotFound
+}
+
+func (store *fakeObservationStore) ListAnalysisCycles(
+	context.Context,
+	int,
+	*workflow.AnalysisStatus,
+) ([]workflow.AnalysisCycle, error) {
+	return []workflow.AnalysisCycle{store.analysis}, nil
+}
+
+func (store *fakeObservationStore) GetAnalysisCycle(_ context.Context, analysisID uuid.UUID) (workflow.AnalysisCycle, error) {
+	if store.analysis.ID != analysisID {
+		return workflow.AnalysisCycle{}, workflow.ErrNotFound
+	}
+	return store.analysis, nil
+}
+
+func floatPointer(value float64) *float64 {
+	return &value
 }

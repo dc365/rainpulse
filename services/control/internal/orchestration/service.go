@@ -13,6 +13,7 @@ import (
 
 type Repository interface {
 	CreateBundle(context.Context, workflow.CreateBundle) error
+	CreateDomainSimulation(context.Context, workflow.DomainSimulation) error
 	GetRun(context.Context, uuid.UUID) (workflow.Run, error)
 	GetJob(context.Context, uuid.UUID) (workflow.Job, error)
 	ListJobs(context.Context, uuid.UUID) ([]workflow.Job, error)
@@ -51,7 +52,90 @@ func NewService(repository Repository, options Options) *Service {
 }
 
 func (service *Service) CreateSimulation(ctx context.Context, issueTime time.Time) (workflow.Run, workflow.Job, error) {
-	return service.createSimulation(ctx, issueTime, nil, "RP-003 simulated run")
+	return service.createSimulation(ctx, issueTime, nil, "forecast workflow simulation")
+}
+
+func (service *Service) CreateThreeWorkflowSimulation(
+	ctx context.Context,
+	analysisTime time.Time,
+) (workflow.DomainSimulation, error) {
+	now := service.now().UTC()
+	analysisTime = analysisTime.UTC()
+	displayA := "Synthetic radar A"
+	displayB := "Synthetic radar B"
+	reason := "synthetic radar B failed; analysis continued with radar A"
+	failedReason := "SIMULATED_RADAR_FAILURE"
+	normalizedURI := "s3://rainpulse/simulations/radar-a/normalized/volume.zarr"
+	qcURI := "s3://rainpulse/simulations/radar-a/qc/volume.zarr"
+	gridURI := "s3://rainpulse/simulations/radar-a/grid/grid.zarr"
+	analysisURI := "s3://rainpulse/simulations/analysis/analysis.zarr"
+	complete := 1.0
+	quality := 0.82
+	failedCompleteness := 0.5
+	zeroOffset := 0
+
+	scanAID := service.newID()
+	scanARunID := service.newID()
+	scanBID := service.newID()
+	scanBRunID := service.newID()
+	analysisID := service.newID()
+	analysisRunID := service.newID()
+	simulation := workflow.DomainSimulation{
+		Radars: []workflow.Radar{
+			{
+				ID: "synthetic_radar_a", DisplayName: &displayA,
+				Lifecycle: workflow.RadarReady, ConfigVersion: "rp004-synthetic-radar-a-v1",
+				CreatedAt: now, UpdatedAt: now,
+			},
+			{
+				ID: "synthetic_radar_b", DisplayName: &displayB,
+				Lifecycle: workflow.RadarReady, ConfigVersion: "rp004-synthetic-radar-b-v1",
+				CreatedAt: now, UpdatedAt: now,
+			},
+		},
+		Scans: []workflow.RadarScan{
+			{
+				ID: scanAID, RunID: scanARunID, RadarID: "synthetic_radar_a",
+				VolumeStartTime: analysisTime.Add(-10 * time.Second),
+				VolumeEndTime:   analysisTime.Add(-2 * time.Second), ReceivedAt: analysisTime,
+				RadarConfigVersion: "rp004-synthetic-radar-a-v1",
+				Status:             workflow.RadarScanGridReady, NormalizedURI: &normalizedURI,
+				QCURI: &qcURI, GridURI: &gridURI, ScanCompleteness: &complete,
+				MeanQualityIndex: &quality, CreatedAt: now, UpdatedAt: now,
+			},
+			{
+				ID: scanBID, RunID: scanBRunID, RadarID: "synthetic_radar_b",
+				VolumeStartTime: analysisTime.Add(-12 * time.Second),
+				VolumeEndTime:   analysisTime.Add(-4 * time.Second), ReceivedAt: analysisTime,
+				RadarConfigVersion: "rp004-synthetic-radar-b-v1",
+				Status:             workflow.RadarScanFailed, DegradedReason: &failedReason,
+				ScanCompleteness: &failedCompleteness, CreatedAt: now, UpdatedAt: now,
+			},
+		},
+		Analysis: workflow.AnalysisCycle{
+			ID: analysisID, RunID: analysisRunID, AnalysisTime: analysisTime,
+			GridID: "rp004-synthetic-grid", ConfigVersion: "rp004-synthetic-analysis-v1",
+			Status: workflow.AnalysisReady, DegradedReason: &reason, RadarCount: 1,
+			ValidCoverageRatio: float64Pointer(0.86), MeanQualityIndex: float64Pointer(0.82),
+			AnalysisURI: &analysisURI,
+			Radars: []workflow.AnalysisRadar{
+				{
+					RadarID: "synthetic_radar_a", ScanID: &scanAID,
+					State:             workflow.AnalysisRadarParticipating,
+					TimeOffsetSeconds: &zeroOffset, MeanQualityIndex: &quality,
+				},
+				{
+					RadarID: "synthetic_radar_b", ScanID: &scanBID,
+					State: workflow.AnalysisRadarFailed, ExclusionReason: &failedReason,
+				},
+			},
+			CreatedAt: now, UpdatedAt: now,
+		},
+	}
+	if err := service.repository.CreateDomainSimulation(ctx, simulation); err != nil {
+		return workflow.DomainSimulation{}, err
+	}
+	return simulation, nil
 }
 
 func (service *Service) Rerun(ctx context.Context, sourceRunID uuid.UUID) (workflow.Run, error) {
@@ -145,7 +229,7 @@ func (service *Service) CreateFailureSimulation(ctx context.Context, issueTime t
 		InputURI:      "s3://rainpulse/simulations/input.zarr",
 		InputAssets:   []uuid.UUID{},
 		Parameters:    map[string]any{"simulation": true, "force_failure": true},
-		Reason:        "RP-004 simulated worker failure",
+		Reason:        "RP-005 simulated worker failure",
 	})
 }
 
@@ -285,4 +369,8 @@ func decodeJobRequested(data []byte) (JobRequested, error) {
 		return JobRequested{}, err
 	}
 	return event, nil
+}
+
+func float64Pointer(value float64) *float64 {
+	return &value
 }

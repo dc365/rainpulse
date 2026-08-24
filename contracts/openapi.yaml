@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: RainPulse Control API
-  version: 1.0.0
+  version: 1.1.0
   description: >-
     Public control-plane contract for the RainPulse 0–2 hour precipitation
     nowcasting system. React clients communicate only with this API.
@@ -9,6 +9,8 @@ servers:
   - url: /api/v1
 tags:
   - name: runs
+  - name: radars
+  - name: analysis
   - name: products
   - name: verification
   - name: system
@@ -79,6 +81,124 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ForecastJob"
+  /radars:
+    get:
+      operationId: listRadars
+      tags: [radars]
+      summary: List registered physical radars
+      responses:
+        "200":
+          description: Registered radars
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Radar"
+  /radars/{radar_id}:
+    get:
+      operationId: getRadar
+      tags: [radars]
+      summary: Get one radar registration
+      parameters:
+        - $ref: "#/components/parameters/RadarId"
+      responses:
+        "200":
+          description: Radar registration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Radar"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /radars/{radar_id}/status:
+    get:
+      operationId: getRadarStatus
+      tags: [radars]
+      summary: Get the latest operational status for one radar
+      parameters:
+        - $ref: "#/components/parameters/RadarId"
+      responses:
+        "200":
+          description: Latest radar status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RadarStatusSummary"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /radar-scans:
+    get:
+      operationId: listRadarScans
+      tags: [radars]
+      summary: List single-radar volume workflows
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - name: radar_id
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/RadarScanRunStatus"
+      responses:
+        "200":
+          description: Radar scan workflow page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RadarScanPage"
+  /radar-scans/{scan_id}:
+    get:
+      operationId: getRadarScan
+      tags: [radars]
+      summary: Get one single-radar volume workflow
+      parameters:
+        - $ref: "#/components/parameters/ScanId"
+      responses:
+        "200":
+          description: Radar scan workflow
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RadarScan"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /analysis-cycles:
+    get:
+      operationId: listAnalysisCycles
+      tags: [analysis]
+      summary: List fixed-time multi-radar analysis workflows
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/AnalysisCycleStatus"
+      responses:
+        "200":
+          description: Analysis-cycle page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisCyclePage"
+  /analysis-cycles/{analysis_id}:
+    get:
+      operationId: getAnalysisCycle
+      tags: [analysis]
+      summary: Get one analysis workflow and its actual radar contributors
+      parameters:
+        - $ref: "#/components/parameters/AnalysisId"
+      responses:
+        "200":
+          description: Analysis cycle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisCycle"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /products:
     get:
       operationId: listProducts
@@ -247,10 +367,22 @@ paths:
     get:
       operationId: streamEvents
       tags: [system]
-      summary: Stream run and product updates using Server-Sent Events
+      summary: Stream forecast, radar-scan, or analysis-cycle updates using SSE
       parameters:
         - name: run_id
           in: query
+          schema:
+            type: string
+            format: uuid
+        - name: scan_id
+          in: query
+          description: Stream one radar scan; mutually exclusive with run_id and analysis_id.
+          schema:
+            type: string
+            format: uuid
+        - name: analysis_id
+          in: query
+          description: Stream one analysis cycle; mutually exclusive with run_id and scan_id.
           schema:
             type: string
             format: uuid
@@ -334,6 +466,27 @@ components:
       schema:
         type: string
         minLength: 1
+    RadarId:
+      name: radar_id
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+    ScanId:
+      name: scan_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AnalysisId:
+      name: analysis_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     Limit:
       name: limit
       in: query
@@ -404,6 +557,252 @@ components:
           enum: [ready, degraded, unavailable]
         version:
           type: string
+    RadarLifecycle:
+      type: string
+      enum: [draft, ready, disabled]
+    RadarHealthState:
+      type: string
+      enum: [UNKNOWN, HEALTHY, DEGRADED, UNAVAILABLE]
+    RadarScanRunStatus:
+      type: string
+      enum:
+        - RAW_RECEIVED
+        - RAW_VALIDATING
+        - DECODING
+        - NORMALIZED
+        - QC_RUNNING
+        - QC_READY
+        - GRID_RUNNING
+        - RADAR_GRID_READY
+        - DEGRADED
+        - FAILED
+        - SKIPPED
+    AnalysisCycleStatus:
+      type: string
+      enum:
+        - OPEN
+        - COLLECTING_RADARS
+        - ALIGNING
+        - MOSAIC_RUNNING
+        - QPE_RUNNING
+        - ANALYSIS_READY
+        - DEGRADED
+        - FAILED
+        - SKIPPED
+    AnalysisRadarState:
+      type: string
+      enum: [PARTICIPATING, MISSING, FAILED, EXCLUDED]
+    Radar:
+      type: object
+      additionalProperties: false
+      required: [radar_id, lifecycle, config_version, created_at, updated_at]
+      properties:
+        radar_id:
+          type: string
+        display_name:
+          type: string
+          nullable: true
+        lifecycle:
+          $ref: "#/components/schemas/RadarLifecycle"
+        config_version:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    RadarStatusSummary:
+      type: object
+      additionalProperties: false
+      required: [radar_id, health, participating_in_latest_analysis]
+      properties:
+        radar_id:
+          type: string
+        health:
+          $ref: "#/components/schemas/RadarHealthState"
+        latest_scan_id:
+          type: string
+          format: uuid
+          nullable: true
+        latest_scan_time:
+          type: string
+          format: date-time
+          nullable: true
+        scan_status:
+          allOf:
+            - $ref: "#/components/schemas/RadarScanRunStatus"
+          nullable: true
+        scan_completeness:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          nullable: true
+        mean_quality_index:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          nullable: true
+        data_delay_seconds:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+        participating_in_latest_analysis:
+          type: boolean
+    RadarScan:
+      type: object
+      additionalProperties: false
+      required: [scan_id, run_id, radar_id, volume_start_time, volume_end_time, radar_config_version, status, created_at, updated_at]
+      properties:
+        scan_id:
+          type: string
+          format: uuid
+        run_id:
+          type: string
+          format: uuid
+        radar_id:
+          type: string
+        volume_start_time:
+          type: string
+          format: date-time
+        volume_end_time:
+          type: string
+          format: date-time
+        radar_config_version:
+          type: string
+        status:
+          $ref: "#/components/schemas/RadarScanRunStatus"
+        degraded_reason:
+          type: string
+          nullable: true
+        normalized_uri:
+          type: string
+          format: uri
+          nullable: true
+        qc_uri:
+          type: string
+          format: uri
+          nullable: true
+        grid_uri:
+          type: string
+          format: uri
+          nullable: true
+        scan_completeness:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          nullable: true
+        mean_quality_index:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    RadarScanPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RadarScan"
+    AnalysisRadar:
+      type: object
+      additionalProperties: false
+      required: [radar_id, state]
+      properties:
+        radar_id:
+          type: string
+        scan_id:
+          type: string
+          format: uuid
+          nullable: true
+        state:
+          $ref: "#/components/schemas/AnalysisRadarState"
+        time_offset_seconds:
+          type: integer
+          nullable: true
+        mean_quality_index:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          nullable: true
+        exclusion_reason:
+          type: string
+          nullable: true
+    AnalysisCycle:
+      type: object
+      additionalProperties: false
+      required: [analysis_id, run_id, analysis_time, grid_id, config_version, status, radar_count, radars, created_at, updated_at]
+      properties:
+        analysis_id:
+          type: string
+          format: uuid
+        run_id:
+          type: string
+          format: uuid
+        analysis_time:
+          type: string
+          format: date-time
+        grid_id:
+          type: string
+        config_version:
+          type: string
+        status:
+          $ref: "#/components/schemas/AnalysisCycleStatus"
+        degraded_reason:
+          type: string
+          nullable: true
+        radar_count:
+          type: integer
+          minimum: 0
+        valid_coverage_ratio:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          nullable: true
+        mean_quality_index:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          nullable: true
+        analysis_uri:
+          type: string
+          format: uri
+          nullable: true
+        radars:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnalysisRadar"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    AnalysisCyclePage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnalysisCycle"
     ForecastRun:
       type: object
       additionalProperties: false

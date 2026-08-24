@@ -14,6 +14,69 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AnalysisCycleStatus.
+const (
+	AnalysisCycleStatusALIGNING         AnalysisCycleStatus = "ALIGNING"
+	AnalysisCycleStatusANALYSISREADY    AnalysisCycleStatus = "ANALYSIS_READY"
+	AnalysisCycleStatusCOLLECTINGRADARS AnalysisCycleStatus = "COLLECTING_RADARS"
+	AnalysisCycleStatusDEGRADED         AnalysisCycleStatus = "DEGRADED"
+	AnalysisCycleStatusFAILED           AnalysisCycleStatus = "FAILED"
+	AnalysisCycleStatusMOSAICRUNNING    AnalysisCycleStatus = "MOSAIC_RUNNING"
+	AnalysisCycleStatusOPEN             AnalysisCycleStatus = "OPEN"
+	AnalysisCycleStatusQPERUNNING       AnalysisCycleStatus = "QPE_RUNNING"
+	AnalysisCycleStatusSKIPPED          AnalysisCycleStatus = "SKIPPED"
+)
+
+// Valid indicates whether the value is a known member of the AnalysisCycleStatus enum.
+func (e AnalysisCycleStatus) Valid() bool {
+	switch e {
+	case AnalysisCycleStatusALIGNING:
+		return true
+	case AnalysisCycleStatusANALYSISREADY:
+		return true
+	case AnalysisCycleStatusCOLLECTINGRADARS:
+		return true
+	case AnalysisCycleStatusDEGRADED:
+		return true
+	case AnalysisCycleStatusFAILED:
+		return true
+	case AnalysisCycleStatusMOSAICRUNNING:
+		return true
+	case AnalysisCycleStatusOPEN:
+		return true
+	case AnalysisCycleStatusQPERUNNING:
+		return true
+	case AnalysisCycleStatusSKIPPED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AnalysisRadarState.
+const (
+	AnalysisRadarStateEXCLUDED      AnalysisRadarState = "EXCLUDED"
+	AnalysisRadarStateFAILED        AnalysisRadarState = "FAILED"
+	AnalysisRadarStateMISSING       AnalysisRadarState = "MISSING"
+	AnalysisRadarStatePARTICIPATING AnalysisRadarState = "PARTICIPATING"
+)
+
+// Valid indicates whether the value is a known member of the AnalysisRadarState enum.
+func (e AnalysisRadarState) Valid() bool {
+	switch e {
+	case AnalysisRadarStateEXCLUDED:
+		return true
+	case AnalysisRadarStateFAILED:
+		return true
+	case AnalysisRadarStateMISSING:
+		return true
+	case AnalysisRadarStatePARTICIPATING:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for JobStatus.
 const (
 	JobStatusFAILED    JobStatus = "FAILED"
@@ -68,6 +131,96 @@ func (e ProductType) Valid() bool {
 	case Quantile:
 		return true
 	case RainRate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RadarHealthState.
+const (
+	RadarHealthStateDEGRADED    RadarHealthState = "DEGRADED"
+	RadarHealthStateHEALTHY     RadarHealthState = "HEALTHY"
+	RadarHealthStateUNAVAILABLE RadarHealthState = "UNAVAILABLE"
+	RadarHealthStateUNKNOWN     RadarHealthState = "UNKNOWN"
+)
+
+// Valid indicates whether the value is a known member of the RadarHealthState enum.
+func (e RadarHealthState) Valid() bool {
+	switch e {
+	case RadarHealthStateDEGRADED:
+		return true
+	case RadarHealthStateHEALTHY:
+		return true
+	case RadarHealthStateUNAVAILABLE:
+		return true
+	case RadarHealthStateUNKNOWN:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RadarLifecycle.
+const (
+	RadarLifecycleDisabled RadarLifecycle = "disabled"
+	RadarLifecycleDraft    RadarLifecycle = "draft"
+	RadarLifecycleReady    RadarLifecycle = "ready"
+)
+
+// Valid indicates whether the value is a known member of the RadarLifecycle enum.
+func (e RadarLifecycle) Valid() bool {
+	switch e {
+	case RadarLifecycleDisabled:
+		return true
+	case RadarLifecycleDraft:
+		return true
+	case RadarLifecycleReady:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RadarScanRunStatus.
+const (
+	RadarScanRunStatusDECODING       RadarScanRunStatus = "DECODING"
+	RadarScanRunStatusDEGRADED       RadarScanRunStatus = "DEGRADED"
+	RadarScanRunStatusFAILED         RadarScanRunStatus = "FAILED"
+	RadarScanRunStatusGRIDRUNNING    RadarScanRunStatus = "GRID_RUNNING"
+	RadarScanRunStatusNORMALIZED     RadarScanRunStatus = "NORMALIZED"
+	RadarScanRunStatusQCREADY        RadarScanRunStatus = "QC_READY"
+	RadarScanRunStatusQCRUNNING      RadarScanRunStatus = "QC_RUNNING"
+	RadarScanRunStatusRADARGRIDREADY RadarScanRunStatus = "RADAR_GRID_READY"
+	RadarScanRunStatusRAWRECEIVED    RadarScanRunStatus = "RAW_RECEIVED"
+	RadarScanRunStatusRAWVALIDATING  RadarScanRunStatus = "RAW_VALIDATING"
+	RadarScanRunStatusSKIPPED        RadarScanRunStatus = "SKIPPED"
+)
+
+// Valid indicates whether the value is a known member of the RadarScanRunStatus enum.
+func (e RadarScanRunStatus) Valid() bool {
+	switch e {
+	case RadarScanRunStatusDECODING:
+		return true
+	case RadarScanRunStatusDEGRADED:
+		return true
+	case RadarScanRunStatusFAILED:
+		return true
+	case RadarScanRunStatusGRIDRUNNING:
+		return true
+	case RadarScanRunStatusNORMALIZED:
+		return true
+	case RadarScanRunStatusQCREADY:
+		return true
+	case RadarScanRunStatusQCRUNNING:
+		return true
+	case RadarScanRunStatusRADARGRIDREADY:
+		return true
+	case RadarScanRunStatusRAWRECEIVED:
+		return true
+	case RadarScanRunStatusRAWVALIDATING:
+		return true
+	case RadarScanRunStatusSKIPPED:
 		return true
 	default:
 		return false
@@ -130,24 +283,63 @@ func (e RunStatus) Valid() bool {
 
 // Defines values for SystemStatusStatus.
 const (
-	Degraded    SystemStatusStatus = "degraded"
-	Ready       SystemStatusStatus = "ready"
-	Unavailable SystemStatusStatus = "unavailable"
+	SystemStatusStatusDegraded    SystemStatusStatus = "degraded"
+	SystemStatusStatusReady       SystemStatusStatus = "ready"
+	SystemStatusStatusUnavailable SystemStatusStatus = "unavailable"
 )
 
 // Valid indicates whether the value is a known member of the SystemStatusStatus enum.
 func (e SystemStatusStatus) Valid() bool {
 	switch e {
-	case Degraded:
+	case SystemStatusStatusDegraded:
 		return true
-	case Ready:
+	case SystemStatusStatusReady:
 		return true
-	case Unavailable:
+	case SystemStatusStatusUnavailable:
 		return true
 	default:
 		return false
 	}
 }
+
+// AnalysisCycle defines model for AnalysisCycle.
+type AnalysisCycle struct {
+	AnalysisId         openapi_types.UUID  `json:"analysis_id"`
+	AnalysisTime       time.Time           `json:"analysis_time"`
+	AnalysisUri        *string             `json:"analysis_uri,omitempty"`
+	ConfigVersion      string              `json:"config_version"`
+	CreatedAt          time.Time           `json:"created_at"`
+	DegradedReason     *string             `json:"degraded_reason,omitempty"`
+	GridId             string              `json:"grid_id"`
+	MeanQualityIndex   *float32            `json:"mean_quality_index,omitempty"`
+	RadarCount         int                 `json:"radar_count"`
+	Radars             []AnalysisRadar     `json:"radars"`
+	RunId              openapi_types.UUID  `json:"run_id"`
+	Status             AnalysisCycleStatus `json:"status"`
+	UpdatedAt          time.Time           `json:"updated_at"`
+	ValidCoverageRatio *float32            `json:"valid_coverage_ratio,omitempty"`
+}
+
+// AnalysisCyclePage defines model for AnalysisCyclePage.
+type AnalysisCyclePage struct {
+	Items []AnalysisCycle `json:"items"`
+}
+
+// AnalysisCycleStatus defines model for AnalysisCycleStatus.
+type AnalysisCycleStatus string
+
+// AnalysisRadar defines model for AnalysisRadar.
+type AnalysisRadar struct {
+	ExclusionReason   *string             `json:"exclusion_reason,omitempty"`
+	MeanQualityIndex  *float32            `json:"mean_quality_index,omitempty"`
+	RadarId           string              `json:"radar_id"`
+	ScanId            *openapi_types.UUID `json:"scan_id,omitempty"`
+	State             AnalysisRadarState  `json:"state"`
+	TimeOffsetSeconds *int                `json:"time_offset_seconds,omitempty"`
+}
+
+// AnalysisRadarState defines model for AnalysisRadarState.
+type AnalysisRadarState string
 
 // AreaStatistics defines model for AreaStatistics.
 type AreaStatistics struct {
@@ -265,6 +457,62 @@ type ProductPage struct {
 // ProductType defines model for ProductType.
 type ProductType string
 
+// Radar defines model for Radar.
+type Radar struct {
+	ConfigVersion string         `json:"config_version"`
+	CreatedAt     time.Time      `json:"created_at"`
+	DisplayName   *string        `json:"display_name,omitempty"`
+	Lifecycle     RadarLifecycle `json:"lifecycle"`
+	RadarId       string         `json:"radar_id"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+}
+
+// RadarHealthState defines model for RadarHealthState.
+type RadarHealthState string
+
+// RadarLifecycle defines model for RadarLifecycle.
+type RadarLifecycle string
+
+// RadarScan defines model for RadarScan.
+type RadarScan struct {
+	CreatedAt          time.Time          `json:"created_at"`
+	DegradedReason     *string            `json:"degraded_reason,omitempty"`
+	GridUri            *string            `json:"grid_uri,omitempty"`
+	MeanQualityIndex   *float32           `json:"mean_quality_index,omitempty"`
+	NormalizedUri      *string            `json:"normalized_uri,omitempty"`
+	QcUri              *string            `json:"qc_uri,omitempty"`
+	RadarConfigVersion string             `json:"radar_config_version"`
+	RadarId            string             `json:"radar_id"`
+	RunId              openapi_types.UUID `json:"run_id"`
+	ScanCompleteness   *float32           `json:"scan_completeness,omitempty"`
+	ScanId             openapi_types.UUID `json:"scan_id"`
+	Status             RadarScanRunStatus `json:"status"`
+	UpdatedAt          time.Time          `json:"updated_at"`
+	VolumeEndTime      time.Time          `json:"volume_end_time"`
+	VolumeStartTime    time.Time          `json:"volume_start_time"`
+}
+
+// RadarScanPage defines model for RadarScanPage.
+type RadarScanPage struct {
+	Items []RadarScan `json:"items"`
+}
+
+// RadarScanRunStatus defines model for RadarScanRunStatus.
+type RadarScanRunStatus string
+
+// RadarStatusSummary defines model for RadarStatusSummary.
+type RadarStatusSummary struct {
+	DataDelaySeconds              *int64              `json:"data_delay_seconds,omitempty"`
+	Health                        RadarHealthState    `json:"health"`
+	LatestScanId                  *openapi_types.UUID `json:"latest_scan_id,omitempty"`
+	LatestScanTime                *time.Time          `json:"latest_scan_time,omitempty"`
+	MeanQualityIndex              *float32            `json:"mean_quality_index,omitempty"`
+	ParticipatingInLatestAnalysis bool                `json:"participating_in_latest_analysis"`
+	RadarId                       string              `json:"radar_id"`
+	ScanCompleteness              *float32            `json:"scan_completeness,omitempty"`
+	ScanStatus                    *RadarScanRunStatus `json:"scan_status,omitempty"`
+}
+
 // RunStatus defines model for RunStatus.
 type RunStatus string
 
@@ -294,6 +542,9 @@ type VerificationSummary struct {
 	VerifiedAt time.Time            `json:"verified_at"`
 }
 
+// AnalysisId defines model for AnalysisId.
+type AnalysisId = openapi_types.UUID
+
 // Cursor defines model for Cursor.
 type Cursor = string
 
@@ -306,14 +557,26 @@ type ModelId = string
 // ProductId defines model for ProductId.
 type ProductId = openapi_types.UUID
 
+// RadarId defines model for RadarId.
+type RadarId = string
+
 // RunId defines model for RunId.
 type RunId = openapi_types.UUID
+
+// ScanId defines model for ScanId.
+type ScanId = openapi_types.UUID
 
 // Conflict defines model for Conflict.
 type Conflict = ErrorResponse
 
 // NotFound defines model for NotFound.
 type NotFound = ErrorResponse
+
+// ListAnalysisCyclesParams defines parameters for ListAnalysisCycles.
+type ListAnalysisCyclesParams struct {
+	Limit  *Limit               `form:"limit,omitempty" json:"limit,omitempty"`
+	Status *AnalysisCycleStatus `form:"status,omitempty" json:"status,omitempty"`
+}
 
 // GetAreaStatisticsParams defines parameters for GetAreaStatistics.
 type GetAreaStatisticsParams struct {
@@ -326,6 +589,12 @@ type GetAreaStatisticsParams struct {
 // StreamEventsParams defines parameters for StreamEvents.
 type StreamEventsParams struct {
 	RunId *openapi_types.UUID `form:"run_id,omitempty" json:"run_id,omitempty"`
+
+	// ScanId Stream one radar scan; mutually exclusive with run_id and analysis_id.
+	ScanId *openapi_types.UUID `form:"scan_id,omitempty" json:"scan_id,omitempty"`
+
+	// AnalysisId Stream one analysis cycle; mutually exclusive with run_id and scan_id.
+	AnalysisId *openapi_types.UUID `form:"analysis_id,omitempty" json:"analysis_id,omitempty"`
 }
 
 // GetPointForecastParams defines parameters for GetPointForecast.
@@ -342,6 +611,13 @@ type ListProductsParams struct {
 	RunId       *openapi_types.UUID `form:"run_id,omitempty" json:"run_id,omitempty"`
 	ModelId     *string             `form:"model_id,omitempty" json:"model_id,omitempty"`
 	ProductType *ProductType        `form:"product_type,omitempty" json:"product_type,omitempty"`
+}
+
+// ListRadarScansParams defines parameters for ListRadarScans.
+type ListRadarScansParams struct {
+	Limit   *Limit              `form:"limit,omitempty" json:"limit,omitempty"`
+	RadarId *string             `form:"radar_id,omitempty" json:"radar_id,omitempty"`
+	Status  *RadarScanRunStatus `form:"status,omitempty" json:"status,omitempty"`
 }
 
 // ListRunsParams defines parameters for ListRuns.
@@ -367,10 +643,16 @@ type ServerInterface interface {
 	// RerunForecastRun Create a new run using the selected run inputs and configuration
 	// (POST /admin/runs/{run_id}/rerun)
 	RerunForecastRun(w http.ResponseWriter, r *http.Request, runId RunId)
+	// ListAnalysisCycles List fixed-time multi-radar analysis workflows
+	// (GET /analysis-cycles)
+	ListAnalysisCycles(w http.ResponseWriter, r *http.Request, params ListAnalysisCyclesParams)
+	// GetAnalysisCycle Get one analysis workflow and its actual radar contributors
+	// (GET /analysis-cycles/{analysis_id})
+	GetAnalysisCycle(w http.ResponseWriter, r *http.Request, analysisId AnalysisId)
 	// GetAreaStatistics Query statistics inside a WGS84 bounding box
 	// (GET /area-statistics)
 	GetAreaStatistics(w http.ResponseWriter, r *http.Request, params GetAreaStatisticsParams)
-	// StreamEvents Stream run and product updates using Server-Sent Events
+	// StreamEvents Stream forecast, radar-scan, or analysis-cycle updates using SSE
 	// (GET /events/stream)
 	StreamEvents(w http.ResponseWriter, r *http.Request, params StreamEventsParams)
 	// GetPointForecast Query forecast values at a geographic point
@@ -385,6 +667,21 @@ type ServerInterface interface {
 	// ListProductAssets List files and object-store assets for a product
 	// (GET /products/{product_id}/assets)
 	ListProductAssets(w http.ResponseWriter, r *http.Request, productId ProductId)
+	// ListRadarScans List single-radar volume workflows
+	// (GET /radar-scans)
+	ListRadarScans(w http.ResponseWriter, r *http.Request, params ListRadarScansParams)
+	// GetRadarScan Get one single-radar volume workflow
+	// (GET /radar-scans/{scan_id})
+	GetRadarScan(w http.ResponseWriter, r *http.Request, scanId ScanId)
+	// ListRadars List registered physical radars
+	// (GET /radars)
+	ListRadars(w http.ResponseWriter, r *http.Request)
+	// GetRadar Get one radar registration
+	// (GET /radars/{radar_id})
+	GetRadar(w http.ResponseWriter, r *http.Request, radarId RadarId)
+	// GetRadarStatus Get the latest operational status for one radar
+	// (GET /radars/{radar_id}/status)
+	GetRadarStatus(w http.ResponseWriter, r *http.Request, radarId RadarId)
 	// ListRuns List forecast runs
 	// (GET /runs)
 	ListRuns(w http.ResponseWriter, r *http.Request, params ListRunsParams)
@@ -427,13 +724,25 @@ func (_ Unimplemented) RerunForecastRun(w http.ResponseWriter, r *http.Request, 
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// ListAnalysisCycles List fixed-time multi-radar analysis workflows
+// (GET /analysis-cycles)
+func (_ Unimplemented) ListAnalysisCycles(w http.ResponseWriter, r *http.Request, params ListAnalysisCyclesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAnalysisCycle Get one analysis workflow and its actual radar contributors
+// (GET /analysis-cycles/{analysis_id})
+func (_ Unimplemented) GetAnalysisCycle(w http.ResponseWriter, r *http.Request, analysisId AnalysisId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // GetAreaStatistics Query statistics inside a WGS84 bounding box
 // (GET /area-statistics)
 func (_ Unimplemented) GetAreaStatistics(w http.ResponseWriter, r *http.Request, params GetAreaStatisticsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// StreamEvents Stream run and product updates using Server-Sent Events
+// StreamEvents Stream forecast, radar-scan, or analysis-cycle updates using SSE
 // (GET /events/stream)
 func (_ Unimplemented) StreamEvents(w http.ResponseWriter, r *http.Request, params StreamEventsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -460,6 +769,36 @@ func (_ Unimplemented) GetProduct(w http.ResponseWriter, r *http.Request, produc
 // ListProductAssets List files and object-store assets for a product
 // (GET /products/{product_id}/assets)
 func (_ Unimplemented) ListProductAssets(w http.ResponseWriter, r *http.Request, productId ProductId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListRadarScans List single-radar volume workflows
+// (GET /radar-scans)
+func (_ Unimplemented) ListRadarScans(w http.ResponseWriter, r *http.Request, params ListRadarScansParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetRadarScan Get one single-radar volume workflow
+// (GET /radar-scans/{scan_id})
+func (_ Unimplemented) GetRadarScan(w http.ResponseWriter, r *http.Request, scanId ScanId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListRadars List registered physical radars
+// (GET /radars)
+func (_ Unimplemented) ListRadars(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetRadar Get one radar registration
+// (GET /radars/{radar_id})
+func (_ Unimplemented) GetRadar(w http.ResponseWriter, r *http.Request, radarId RadarId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetRadarStatus Get the latest operational status for one radar
+// (GET /radars/{radar_id}/status)
+func (_ Unimplemented) GetRadarStatus(w http.ResponseWriter, r *http.Request, radarId RadarId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -586,6 +925,78 @@ func (siw *ServerInterfaceWrapper) RerunForecastRun(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
+// ListAnalysisCycles operation middleware
+func (siw *ServerInterfaceWrapper) ListAnalysisCycles(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAnalysisCyclesParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAnalysisCycles(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAnalysisCycle operation middleware
+func (siw *ServerInterfaceWrapper) GetAnalysisCycle(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "analysis_id" -------------
+	var analysisId AnalysisId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "analysis_id", chi.URLParam(r, "analysis_id"), &analysisId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "analysis_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAnalysisCycle(w, r, analysisId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetAreaStatistics operation middleware
 func (siw *ServerInterfaceWrapper) GetAreaStatistics(w http.ResponseWriter, r *http.Request) {
 
@@ -650,6 +1061,32 @@ func (siw *ServerInterfaceWrapper) StreamEvents(w http.ResponseWriter, r *http.R
 			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "run_id"})
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "run_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "scan_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "scan_id", r.URL.Query(), &params.ScanId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "scan_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "scan_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "analysis_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "analysis_id", r.URL.Query(), &params.AnalysisId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "analysis_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "analysis_id", Err: err})
 		}
 		return
 	}
@@ -852,6 +1289,157 @@ func (siw *ServerInterfaceWrapper) ListProductAssets(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListProductAssets(w, r, productId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListRadarScans operation middleware
+func (siw *ServerInterfaceWrapper) ListRadarScans(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListRadarScansParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "radar_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "radar_id", r.URL.Query(), &params.RadarId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "radar_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "radar_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListRadarScans(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetRadarScan operation middleware
+func (siw *ServerInterfaceWrapper) GetRadarScan(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "scan_id" -------------
+	var scanId ScanId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "scan_id", chi.URLParam(r, "scan_id"), &scanId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "scan_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRadarScan(w, r, scanId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListRadars operation middleware
+func (siw *ServerInterfaceWrapper) ListRadars(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListRadars(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetRadar operation middleware
+func (siw *ServerInterfaceWrapper) GetRadar(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "radar_id" -------------
+	var radarId RadarId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "radar_id", chi.URLParam(r, "radar_id"), &radarId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "radar_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRadar(w, r, radarId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetRadarStatus operation middleware
+func (siw *ServerInterfaceWrapper) GetRadarStatus(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "radar_id" -------------
+	var radarId RadarId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "radar_id", chi.URLParam(r, "radar_id"), &radarId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "radar_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRadarStatus(w, r, radarId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1157,6 +1745,27 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/runs/{run_id}/jobs", wrapper.ListRunJobs)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/radars", wrapper.ListRadars)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/radars/{radar_id}", wrapper.GetRadar)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/radars/{radar_id}/status", wrapper.GetRadarStatus)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/radar-scans", wrapper.ListRadarScans)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/radar-scans/{scan_id}", wrapper.GetRadarScan)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/analysis-cycles", wrapper.ListAnalysisCycles)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/analysis-cycles/{analysis_id}", wrapper.GetAnalysisCycle)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/products", wrapper.ListProducts)

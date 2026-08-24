@@ -53,6 +53,11 @@ func main() {
 			slog.Error("create simulated failure run", "error", err)
 			os.Exit(1)
 		}
+	case "simulate-workflows":
+		if err := simulateWorkflows(ctx, service); err != nil {
+			slog.Error("create simulated radar/analysis workflows", "error", err)
+			os.Exit(1)
+		}
 	case "complete":
 		if len(os.Args) != 3 {
 			slog.Error("complete requires a job UUID")
@@ -183,6 +188,21 @@ func simulate(ctx context.Context, service *orchestration.Service, forceFailure 
 	return json.NewEncoder(os.Stdout).Encode(map[string]string{
 		"run_id": run.ID.String(),
 		"job_id": job.ID.String(),
+	})
+}
+
+func simulateWorkflows(ctx context.Context, service *orchestration.Service) error {
+	simulation, err := service.CreateThreeWorkflowSimulation(ctx, time.Now().UTC())
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(os.Stdout).Encode(map[string]any{
+		"analysis_id":     simulation.Analysis.ID.String(),
+		"analysis_run_id": simulation.Analysis.RunID.String(),
+		"scan_ids": []string{
+			simulation.Scans[0].ID.String(),
+			simulation.Scans[1].ID.String(),
+		},
 	})
 }
 

@@ -125,4 +125,49 @@ if [[ "$published" -ne 2 || "$processed" -ne 2 ]]; then
   exit 1
 fi
 
-printf 'RP-004 control-plane foundation smoke test passed: run/job, outbox, JetStream, completion, rerun, SSE\n'
+workflow_simulation=$("${compose[@]}" run --rm --no-deps orchestrator simulate-workflows | tail -n 1)
+read -r analysis_id scan_a_id scan_b_id < <(python3 -c '
+import json
+import sys
+
+value = json.load(sys.stdin)
+print(value["analysis_id"], *value["scan_ids"])
+' <<<"$workflow_simulation")
+
+scan_a=$(curl --fail --silent --show-error "$api_url/api/v1/radar-scans/$scan_a_id")
+scan_b=$(curl --fail --silent --show-error "$api_url/api/v1/radar-scans/$scan_b_id")
+analysis=$(curl --fail --silent --show-error "$api_url/api/v1/analysis-cycles/$analysis_id")
+python3 -c '
+import json
+import sys
+
+scan_a, scan_b, analysis = map(json.loads, sys.argv[1:])
+assert scan_a["status"] == "RADAR_GRID_READY", scan_a
+assert scan_b["status"] == "FAILED", scan_b
+assert analysis["status"] == "ANALYSIS_READY", analysis
+assert analysis["radar_count"] == 1, analysis
+assert analysis["degraded_reason"], analysis
+states = {item["radar_id"]: item["state"] for item in analysis["radars"]}
+assert states == {"synthetic_radar_a": "PARTICIPATING", "synthetic_radar_b": "FAILED"}, states
+' "$scan_a" "$scan_b" "$analysis"
+
+radar_b_status=$(curl --fail --silent --show-error \
+  "$api_url/api/v1/radars/synthetic_radar_b/status")
+python3 -c '
+import json
+import sys
+
+status = json.load(sys.stdin)
+assert status["health"] == "UNAVAILABLE", status
+assert status["participating_in_latest_analysis"] is False, status
+' <<<"$radar_b_status"
+
+analysis_sse=$(curl --silent --no-buffer --max-time 2 \
+  "$api_url/api/v1/events/stream?analysis_id=$analysis_id" 2>/dev/null || true)
+if [[ "$analysis_sse" != *"event: analysis.cycle.updated"* || \
+      "$analysis_sse" != *'"status":"ANALYSIS_READY"'* ]]; then
+  printf 'analysis SSE did not contain the degraded-ready cycle\n' >&2
+  exit 1
+fi
+
+printf 'RP-004 control-plane smoke passed: forecast plus radar/analysis workflows, partial-radar degradation, API and SSE\n'

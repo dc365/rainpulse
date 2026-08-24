@@ -50,9 +50,10 @@ func main() {
 	server := &http.Server{
 		Addr: address,
 		Handler: api.NewHandler(api.Options{
-			Version:  version,
-			Runs:     store,
-			Commands: commands,
+			Version:      version,
+			Runs:         store,
+			Observations: store,
+			Commands:     commands,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,

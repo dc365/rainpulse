@@ -83,6 +83,43 @@ func TestDispatchOnceMarksPublishedOnlyAfterPublish(t *testing.T) {
 	}
 }
 
+func TestCreateThreeWorkflowSimulationKeepsAnalysisReadyAfterOneRadarFails(t *testing.T) {
+	repository := &fakeRepository{}
+	now := time.Date(2026, 8, 24, 3, 0, 1, 0, time.UTC)
+	ids := []uuid.UUID{
+		uuid.MustParse("10000000-0000-4000-8000-000000000001"),
+		uuid.MustParse("10000000-0000-4000-8000-000000000002"),
+		uuid.MustParse("10000000-0000-4000-8000-000000000003"),
+		uuid.MustParse("10000000-0000-4000-8000-000000000004"),
+		uuid.MustParse("10000000-0000-4000-8000-000000000005"),
+		uuid.MustParse("10000000-0000-4000-8000-000000000006"),
+	}
+	service := NewService(repository, Options{
+		Now: func() time.Time { return now },
+		NewID: func() uuid.UUID {
+			id := ids[0]
+			ids = ids[1:]
+			return id
+		},
+	})
+
+	simulation, err := service.CreateThreeWorkflowSimulation(context.Background(), now)
+	if err != nil {
+		t.Fatalf("CreateThreeWorkflowSimulation() error = %v", err)
+	}
+	if len(simulation.Scans) != 2 || simulation.Scans[0].Status != workflow.RadarScanGridReady ||
+		simulation.Scans[1].Status != workflow.RadarScanFailed {
+		t.Fatalf("unexpected radar simulations: %#v", simulation.Scans)
+	}
+	if simulation.Analysis.Status != workflow.AnalysisReady ||
+		simulation.Analysis.DegradedReason == nil || simulation.Analysis.RadarCount != 1 {
+		t.Fatalf("analysis did not preserve degraded-ready semantics: %#v", simulation.Analysis)
+	}
+	if repository.domain.Analysis.ID != simulation.Analysis.ID {
+		t.Fatal("domain simulation was not persisted as one repository operation")
+	}
+}
+
 func TestDecodeJobCompletedRejectsUnknownFields(t *testing.T) {
 	data := []byte(`{
       "schema_version":"1.0",
@@ -111,7 +148,7 @@ func TestHandleResultDispatchesStrictFailureEvent(t *testing.T) {
       "run_id":"f3641335-13a3-4f68-96c0-56a5e0e684d7",
       "job_id":"0894481f-c096-49af-8d32-e9c531a66772",
       "trace_id":"0d049a59-754c-4405-8a31-d789685056c2",
-      "payload":{"status":"failed","started_at":"2026-08-24T03:00:03Z","finished_at":"2026-08-24T03:00:06Z","runtime_ms":3000,"error_code":"SIMULATED_FAILURE","error_message":"RP-004 simulated worker failure","retryable":false,"details":{}}
+      "payload":{"status":"failed","started_at":"2026-08-24T03:00:03Z","finished_at":"2026-08-24T03:00:06Z","runtime_ms":3000,"error_code":"SIMULATED_FAILURE","error_message":"RP-005 simulated worker failure","retryable":false,"details":{}}
     }`)
 
 	applied, err := service.HandleResult(context.Background(), data)
@@ -127,10 +164,19 @@ func TestHandleResultDispatchesStrictFailureEvent(t *testing.T) {
 
 type fakeRepository struct {
 	created        workflow.CreateBundle
+	domain         workflow.DomainSimulation
 	claimed        workflow.OutboxEvent
 	published      uuid.UUID
 	failed         uuid.UUID
 	appliedFailure JobFailed
+}
+
+func (repository *fakeRepository) CreateDomainSimulation(
+	_ context.Context,
+	simulation workflow.DomainSimulation,
+) error {
+	repository.domain = simulation
+	return nil
 }
 
 func (repository *fakeRepository) CreateBundle(_ context.Context, bundle workflow.CreateBundle) error {

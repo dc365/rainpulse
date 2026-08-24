@@ -31,7 +31,7 @@ NowcastInput gate.
 | RP-001 radar inventory/config | Complete | Draft/ready radar Schema, inventory template, unknown-value gate and uint32 QC flags |
 | RP-002 data/event contracts | Complete | Raw, normalized polar, QC polar, Hybrid Scan, analysis, nowcast and forecast contracts plus domain event schemas/examples |
 | RP-003 infrastructure | Complete | PostgreSQL, NATS JetStream and MinIO with migrations, persistence and health checks |
-| RP-004 Go three-level workflows | Partial | Existing forecast simulation proves outbox/inbox/jobs/SSE; radar scan and analysis-cycle state machines are not implemented |
+| RP-004 Go three-level workflows | Implemented locally; server acceptance pending | Separate radar-scan, analysis-cycle and forecast states; additive metadata migration; radar/analysis API and SSE; two-radar degradation simulation |
 | RP-005 Python Worker SDK | Foundation complete | NATS/Pydantic/idempotency/atomic output/health are proven by a simulation Worker; domain-task routing still needs generalization |
 | RP-006 first real radar decoder | Blocked on input | Requires a verified representative raw base-data sample and complete ready radar configuration |
 | RP-007–RP-016 | Not started | Depend on the preceding radar chain and representative data |
@@ -79,7 +79,19 @@ RP-003 remains operational:
 - MinIO with a persistent `rainpulse` bucket;
 - UTC migrations, application credentials, health gates and smoke tests.
 
-The RP-004/RP-005 foundation already proves:
+RP-004 now adds locally verified control-plane behavior:
+
+- a generic `workflow_runs` identity keeps shared jobs referentially sound
+  without mixing the three domain state machines;
+- independent `radar_scan_run` and `analysis_cycle` records and transitions;
+- radar/config/scan, analysis-cycle and actual-contributor metadata tables;
+- radar registration/status, scan and analysis REST queries;
+- forecast, radar-scan and analysis-cycle SSE filters;
+- a deterministic two-radar simulation where radar A reaches
+  `RADAR_GRID_READY`, radar B reaches `FAILED`, and the analysis still reaches
+  `ANALYSIS_READY` with a degradation reason and one actual contributor.
+
+The RP-004/RP-005 foundation also proves:
 
 - transactional run/job/outbox creation;
 - JetStream publication and strict terminal-result consumption;
@@ -110,20 +122,27 @@ Docker Hub access is unreliable. Continue to use local Linux/amd64 builds and
 export/import pinned images through `http://127.0.0.1:7897` when necessary.
 No credentials or secrets belong in this document or repository.
 
+The RP-004 code, generated clients, tests and Linux/amd64 binaries pass locally.
+The workstation has no Docker runtime, and the GPU server rejected the supplied
+SSH authentication on 2026-08-24. Migration `0005_radar_workflows.sql` and the
+updated Compose control-plane smoke therefore remain pending on-server
+acceptance. The deployed runtime remains `rp004-20260824`; no remote state or
+volume was changed by this attempt.
+
 ## Next acceptance target
 
-Complete RP-004 as the Go three-level workflow skeleton:
+First complete the pending RP-004 server acceptance:
 
-1. `radar_scan_run` for each radar volume;
-2. `analysis_cycle` for each fixed UTC analysis time;
-3. existing `forecast_run` behind the NowcastInput quality gate;
-4. additive PostgreSQL migration and domain lifecycle records;
-5. radar/analysis REST and SSE surfaces;
-6. a synthetic two-radar end-to-end control-plane test where one radar can fail
-   without cancelling the analysis cycle.
+1. restore SSH access to the test server;
+2. synchronize the committed source and Linux/amd64 artifacts;
+3. apply additive migration `0005_radar_workflows.sql` on the persistent test database;
+4. run infrastructure, forecast control-plane, two-radar degradation, Worker
+   and end-to-end smoke tests;
+5. retain the previous deployed version until these checks pass.
 
-The current forecast simulation remains available during this migration and is
-the rollback path until all three workflow simulations pass.
+Then complete RP-005 domain-task routing so decode, QC, grid, mosaic/QPE and
+NowcastInput workers reuse the established long-lived Worker SDK without
+pretending to implement real meteorological algorithms.
 
 ## Required inputs before RP-006
 

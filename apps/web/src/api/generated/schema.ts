@@ -72,6 +72,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/radars": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List registered physical radars */
+        get: operations["listRadars"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/radars/{radar_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one radar registration */
+        get: operations["getRadar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/radars/{radar_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the latest operational status for one radar */
+        get: operations["getRadarStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/radar-scans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List single-radar volume workflows */
+        get: operations["listRadarScans"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/radar-scans/{scan_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one single-radar volume workflow */
+        get: operations["getRadarScan"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/analysis-cycles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List fixed-time multi-radar analysis workflows */
+        get: operations["listAnalysisCycles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/analysis-cycles/{analysis_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one analysis workflow and its actual radar contributors */
+        get: operations["getAnalysisCycle"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/products": {
         parameters: {
             query?: never;
@@ -198,7 +317,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Stream run and product updates using Server-Sent Events */
+        /** Stream forecast, radar-scan, or analysis-cycle updates using SSE */
         get: operations["streamEvents"];
         put?: never;
         post?: never;
@@ -275,6 +394,110 @@ export interface components {
             /** @enum {string} */
             status: "ready" | "degraded" | "unavailable";
             version: string;
+        };
+        /** @enum {string} */
+        RadarLifecycle: "draft" | "ready" | "disabled";
+        /** @enum {string} */
+        RadarHealthState: "UNKNOWN" | "HEALTHY" | "DEGRADED" | "UNAVAILABLE";
+        /** @enum {string} */
+        RadarScanRunStatus: "RAW_RECEIVED" | "RAW_VALIDATING" | "DECODING" | "NORMALIZED" | "QC_RUNNING" | "QC_READY" | "GRID_RUNNING" | "RADAR_GRID_READY" | "DEGRADED" | "FAILED" | "SKIPPED";
+        /** @enum {string} */
+        AnalysisCycleStatus: "OPEN" | "COLLECTING_RADARS" | "ALIGNING" | "MOSAIC_RUNNING" | "QPE_RUNNING" | "ANALYSIS_READY" | "DEGRADED" | "FAILED" | "SKIPPED";
+        /** @enum {string} */
+        AnalysisRadarState: "PARTICIPATING" | "MISSING" | "FAILED" | "EXCLUDED";
+        Radar: {
+            radar_id: string;
+            display_name?: string | null;
+            lifecycle: components["schemas"]["RadarLifecycle"];
+            config_version: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        RadarStatusSummary: {
+            radar_id: string;
+            health: components["schemas"]["RadarHealthState"];
+            /** Format: uuid */
+            latest_scan_id?: string | null;
+            /** Format: date-time */
+            latest_scan_time?: string | null;
+            scan_status?: components["schemas"]["RadarScanRunStatus"] | null;
+            /** Format: float */
+            scan_completeness?: number | null;
+            /** Format: float */
+            mean_quality_index?: number | null;
+            /** Format: int64 */
+            data_delay_seconds?: number | null;
+            participating_in_latest_analysis: boolean;
+        };
+        RadarScan: {
+            /** Format: uuid */
+            scan_id: string;
+            /** Format: uuid */
+            run_id: string;
+            radar_id: string;
+            /** Format: date-time */
+            volume_start_time: string;
+            /** Format: date-time */
+            volume_end_time: string;
+            radar_config_version: string;
+            status: components["schemas"]["RadarScanRunStatus"];
+            degraded_reason?: string | null;
+            /** Format: uri */
+            normalized_uri?: string | null;
+            /** Format: uri */
+            qc_uri?: string | null;
+            /** Format: uri */
+            grid_uri?: string | null;
+            /** Format: float */
+            scan_completeness?: number | null;
+            /** Format: float */
+            mean_quality_index?: number | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        RadarScanPage: {
+            items: components["schemas"]["RadarScan"][];
+        };
+        AnalysisRadar: {
+            radar_id: string;
+            /** Format: uuid */
+            scan_id?: string | null;
+            state: components["schemas"]["AnalysisRadarState"];
+            time_offset_seconds?: number | null;
+            /** Format: float */
+            mean_quality_index?: number | null;
+            exclusion_reason?: string | null;
+        };
+        AnalysisCycle: {
+            /** Format: uuid */
+            analysis_id: string;
+            /** Format: uuid */
+            run_id: string;
+            /** Format: date-time */
+            analysis_time: string;
+            grid_id: string;
+            config_version: string;
+            status: components["schemas"]["AnalysisCycleStatus"];
+            degraded_reason?: string | null;
+            radar_count: number;
+            /** Format: float */
+            valid_coverage_ratio?: number | null;
+            /** Format: float */
+            mean_quality_index?: number | null;
+            /** Format: uri */
+            analysis_uri?: string | null;
+            radars: components["schemas"]["AnalysisRadar"][];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        AnalysisCyclePage: {
+            items: components["schemas"]["AnalysisCycle"][];
         };
         ForecastRun: {
             /** Format: uuid */
@@ -436,6 +659,9 @@ export interface components {
         RunId: string;
         ProductId: string;
         ModelId: string;
+        RadarId: string;
+        ScanId: string;
+        AnalysisId: string;
         Limit: number;
         Cursor: string;
     };
@@ -533,6 +759,165 @@ export interface operations {
                     "application/json": components["schemas"]["ForecastJob"][];
                 };
             };
+        };
+    };
+    listRadars: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Registered radars */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Radar"][];
+                };
+            };
+        };
+    };
+    getRadar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                radar_id: components["parameters"]["RadarId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Radar registration */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Radar"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getRadarStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                radar_id: components["parameters"]["RadarId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Latest radar status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RadarStatusSummary"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listRadarScans: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                radar_id?: string;
+                status?: components["schemas"]["RadarScanRunStatus"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Radar scan workflow page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RadarScanPage"];
+                };
+            };
+        };
+    };
+    getRadarScan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scan_id: components["parameters"]["ScanId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Radar scan workflow */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RadarScan"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listAnalysisCycles: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                status?: components["schemas"]["AnalysisCycleStatus"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Analysis-cycle page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisCyclePage"];
+                };
+            };
+        };
+    };
+    getAnalysisCycle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                analysis_id: components["parameters"]["AnalysisId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Analysis cycle */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisCycle"];
+                };
+            };
+            404: components["responses"]["NotFound"];
         };
     };
     listProducts: {
@@ -703,6 +1088,10 @@ export interface operations {
         parameters: {
             query?: {
                 run_id?: string;
+                /** @description Stream one radar scan; mutually exclusive with run_id and analysis_id. */
+                scan_id?: string;
+                /** @description Stream one analysis cycle; mutually exclusive with run_id and scan_id. */
+                analysis_id?: string;
             };
             header?: never;
             path?: never;

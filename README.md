@@ -42,6 +42,9 @@ After `make dev-up`, the public seams are:
 - Web: `http://127.0.0.1:4173`
 - Control API status: `http://127.0.0.1:8080/api/v1/system/status`
 - Latest run: `http://127.0.0.1:8080/api/v1/runs/latest`
+- Registered radars: `http://127.0.0.1:8080/api/v1/radars`
+- Radar scan workflows: `http://127.0.0.1:8080/api/v1/radar-scans`
+- Analysis cycles: `http://127.0.0.1:8080/api/v1/analysis-cycles`
 - Run updates: `http://127.0.0.1:8080/api/v1/events/stream`
 
 Use `make dev-down` to stop the composed runtime without deleting its named
