@@ -117,6 +117,8 @@ func TestCreateRadarQCUsesNormalizedInputAndStableIdentity(t *testing.T) {
 		Health:        workflow.RadarHealthDegraded,
 		QCProfile:     "rp008-basic-v1", QCPipelineVersion: "rp008-basic-1.0.0",
 		FlagDefinitionVersion: "qc-flags-v1",
+		QCConfig:              json.RawMessage(`{"pipeline_version":"rp008-basic-1.0.0"}`),
+		QCConfigSHA256:        "63266c7c72321262a01b945281060abd84153a8f3ad64a95c5b73b9fd510f678",
 	}
 
 	job, err := service.CreateRadarQC(context.Background(), input)
@@ -129,6 +131,9 @@ func TestCreateRadarQCUsesNormalizedInputAndStableIdentity(t *testing.T) {
 	}
 	if job.JobType != RadarQCJobType || job.RunID != input.RunID {
 		t.Fatalf("unexpected radar QC job: %#v", job)
+	}
+	if string(first.Config) != string(input.QCConfig) || first.ConfigSHA256 != input.QCConfigSHA256 {
+		t.Fatalf("radar QC configuration was not registered in the workflow bundle: %#v", first)
 	}
 	var requested RadarQCRequested
 	if err := json.Unmarshal(first.Outbox.Payload, &requested); err != nil {

@@ -54,6 +54,8 @@ type RadarQCInput struct {
 	QCProfile             string
 	QCPipelineVersion     string
 	FlagDefinitionVersion string
+	QCConfig              json.RawMessage
+	QCConfigSHA256        string
 }
 
 type Publisher interface {
@@ -224,9 +226,11 @@ func (service *Service) CreateRadarQC(
 		RequestPayload: payload, CreatedAt: now,
 	}
 	bundle := workflow.RadarQCBundle{
-		ScanID: input.ScanID,
-		Status: input.CurrentStatus,
-		Job:    job,
+		ScanID:       input.ScanID,
+		Status:       input.CurrentStatus,
+		Config:       input.QCConfig,
+		ConfigSHA256: input.QCConfigSHA256,
+		Job:          job,
 		Outbox: workflow.OutboxEvent{
 			ID: eventID, AggregateID: jobID.String(), EventType: RadarQCRequestedEventType,
 			Subject: RadarQCRequestedSubject, Payload: payload,
@@ -243,6 +247,10 @@ func validateRadarQCInput(input RadarQCInput) error {
 		input.RadarConfigVersion == "" || input.QCProfile == "" ||
 		input.QCPipelineVersion == "" || input.FlagDefinitionVersion == "" {
 		return fmt.Errorf("radar QC identity and version fields are required")
+	}
+	if len(input.QCConfig) == 0 || !json.Valid(input.QCConfig) ||
+		!sha256Pattern.MatchString(input.QCConfigSHA256) {
+		return fmt.Errorf("radar QC configuration and SHA-256 are required")
 	}
 	if input.CurrentStatus != workflow.RadarScanNormalized &&
 		input.CurrentStatus != workflow.RadarScanQCRunning &&

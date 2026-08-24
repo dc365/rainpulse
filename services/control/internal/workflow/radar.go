@@ -181,10 +181,12 @@ type RadarDecodeBundle struct {
 }
 
 type RadarQCBundle struct {
-	ScanID uuid.UUID
-	Status RadarScanStatus
-	Job    Job
-	Outbox OutboxEvent
+	ScanID       uuid.UUID
+	Status       RadarScanStatus
+	Config       json.RawMessage
+	ConfigSHA256 string
+	Job          Job
+	Outbox       OutboxEvent
 }
 
 type RadarQCMetrics struct {

@@ -186,6 +186,21 @@ WHERE run_id = $1 FOR UPDATE`, bundle.Job.RunID).Scan(&scanID, &status); err != 
 		status != workflow.RadarScanQCReady {
 		return fmt.Errorf("radar scan status %s cannot create a QC job", status)
 	}
+	if _, err = tx.Exec(ctx, `
+INSERT INTO config_versions (config_version, sha256, config, description, created_at)
+VALUES ($1, $2, $3, 'Radar QC configuration registered by RP-008 workflow', $4)
+ON CONFLICT (config_version) DO NOTHING`,
+		bundle.Job.ConfigVersion, bundle.ConfigSHA256, bundle.Config, bundle.Job.CreatedAt); err != nil {
+		return fmt.Errorf("insert radar QC config %s: %w", bundle.Job.ConfigVersion, err)
+	}
+	var storedConfigHash string
+	if err = tx.QueryRow(ctx, `SELECT sha256 FROM config_versions WHERE config_version = $1`,
+		bundle.Job.ConfigVersion).Scan(&storedConfigHash); err != nil {
+		return fmt.Errorf("verify radar QC config %s: %w", bundle.Job.ConfigVersion, err)
+	}
+	if storedConfigHash != bundle.ConfigSHA256 {
+		return fmt.Errorf("radar QC config version %s already has a different SHA-256", bundle.Job.ConfigVersion)
+	}
 	_, err = tx.Exec(ctx, `
 INSERT INTO jobs (
     job_id, run_id, trace_id, job_type, model_id, model_version,

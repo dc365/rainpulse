@@ -219,6 +219,15 @@ func radarQC(
 	if err := yaml.Unmarshal(configBytes, &config); err != nil {
 		return fmt.Errorf("decode radar QC configuration: %w", err)
 	}
+	var configValue map[string]any
+	if err := yaml.Unmarshal(configBytes, &configValue); err != nil {
+		return fmt.Errorf("normalize radar QC configuration: %w", err)
+	}
+	configJSON, err := json.Marshal(configValue)
+	if err != nil {
+		return fmt.Errorf("encode radar QC configuration: %w", err)
+	}
+	configHash := sha256.Sum256(configBytes)
 	scan, err := store.GetRadarScan(ctx, scanID)
 	if err != nil {
 		return err
@@ -239,6 +248,8 @@ func radarQC(
 		QCProfile:             config.ProfileVersion,
 		QCPipelineVersion:     config.PipelineVersion,
 		FlagDefinitionVersion: config.FlagDefinitionVersion,
+		QCConfig:              configJSON,
+		QCConfigSHA256:        fmt.Sprintf("%x", configHash),
 	})
 	if err != nil {
 		return err
