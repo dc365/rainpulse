@@ -249,7 +249,14 @@ def apply_basic_qc(
     for sweep_number in root["sweep_number"][:]:
         name = f"sweep_{int(sweep_number):03d}"
         group = root[name]
-        dbzh = group["DBZH"][:].astype("float32", copy=True)
+        if "DBZH" in group:
+            dbzh = group["DBZH"][:].astype("float32", copy=True)
+        else:
+            dbzh = np.full(
+                (len(group["azimuth"]), len(group["range"])),
+                np.nan,
+                dtype="float32",
+            )
         valid = np.isfinite(dbzh)
         lower, upper = profile.echo.dbzh_valid_range_dbz
         out_of_range = valid & ((dbzh < lower) | (dbzh > upper))

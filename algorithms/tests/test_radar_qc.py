@@ -84,6 +84,36 @@ def test_basic_qc_preserves_geometry_missing_and_no_rain_states(tmp_path: Path) 
     assert "qc/summary.json" in objects
 
 
+def test_basic_qc_preserves_sweep_when_dbzh_moment_is_absent(tmp_path: Path) -> None:
+    normalized = normalized_fixture(tmp_path)
+    store = MemoryStore()
+    store.update(normalized)
+    root = zarr.open_group(store=store, mode="a")
+    expected_shape = (
+        len(root["sweep_001/azimuth"]),
+        len(root["sweep_001/range"]),
+    )
+    del root["sweep_001/DBZH"]
+    normalized = {str(key): bytes(value) for key, value in store.items()}
+
+    result = apply_basic_qc(normalized, load_qc_profile(QC_CONFIG, FLAG_CONFIG))
+    missing_sweep = result.sweeps[1]
+
+    assert missing_sweep.dbzh_raw.shape == expected_shape
+    assert np.isnan(missing_sweep.dbzh_raw).all()
+    assert np.isnan(missing_sweep.dbzh_qc).all()
+    assert np.count_nonzero(missing_sweep.valid_mask) == 0
+    assert np.all(missing_sweep.qc_flags & np.uint32(4096))
+
+    objects = build_qc_zarr_store(
+        normalized,
+        result,
+        asset_id=UUID("50000000-0000-4000-8000-000000000003"),
+        normalized_volume_uri="s3://rainpulse/radar/normalized/z9598/scan/volume.zarr",
+    )
+    assert validate_qc_zarr_store(objects)["sweep_count"] == 2
+
+
 def test_radial_interference_flags_without_erasing_observation(tmp_path: Path) -> None:
     normalized = normalized_fixture(tmp_path)
     store = MemoryStore()
