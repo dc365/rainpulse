@@ -81,10 +81,11 @@ python3 -c '
 import json,sys
 summary=json.loads(sys.argv[1])
 status=json.loads(sys.argv[2])
+scan=json.loads(sys.argv[3])
 assert summary["scan_id"] == status["latest_scan_id"], (summary,status)
 assert summary["radar_id"] == "z9598", summary
 assert summary["qc_profile"] == "rp008-basic-v1", summary
-assert summary["qc_pipeline_version"] == "rp008-basic-1.0.1", summary
+assert summary["qc_pipeline_version"] == "rp008-basic-1.0.2", summary
 assert summary["flag_definition_version"] == "qc-flags-v1", summary
 assert summary["health_state"] == "DEGRADED", summary
 assert 0 < summary["mean_quality_index"] <= 1, summary
@@ -97,7 +98,8 @@ assert summary["module_statuses"]["static_ground_clutter"] == "skipped", summary
 assert summary["module_statuses"]["sea_ap"] == "skipped", summary
 assert status["scan_status"] == "QC_READY", status
 assert status["qc_metrics"]["qc_profile"] == "rp008-basic-v1", status
-' "$summary" "$status"
+assert scan.get("degraded_reason") == "CONFIG_NOT_READY,SOURCE_TIME_MISMATCH", scan
+' "$summary" "$status" "$scan"
 
 marker="rainpulse/${RAINPULSE_MINIO_BUCKET:-rainpulse}/radar/qc/z9598/$scan_id/volume.zarr/_SUCCESS.json"
 summary_object="rainpulse/${RAINPULSE_MINIO_BUCKET:-rainpulse}/radar/qc/z9598/$scan_id/volume.zarr/qc/summary.json"

@@ -725,8 +725,18 @@ ON CONFLICT (scan_id) DO UPDATE SET
 	_, err = tx.Exec(ctx, `
 UPDATE radar_scan_runs
 SET status = 'QC_READY', qc_uri = $2, mean_quality_index = $3,
+    degraded_reason = CASE
+        WHEN $4 = 'HEALTHY' THEN NULL
+        ELSE COALESCE((
+            SELECT NULLIF(array_to_string(ARRAY(
+                SELECT jsonb_array_elements_text(health.diagnostics -> 'health_reasons')
+            ), ','), '')
+            FROM radar_health_metrics AS health
+            WHERE health.scan_id = radar_scan_runs.scan_id
+        ), 'RADAR_HEALTH_DEGRADED')
+    END,
     updated_at = CURRENT_TIMESTAMP
-WHERE run_id = $1`, event.RunID, qcAsset.URI, metrics.MeanQualityIndex)
+WHERE run_id = $1`, event.RunID, qcAsset.URI, metrics.MeanQualityIndex, metrics.HealthState)
 	if err != nil {
 		return fmt.Errorf("complete radar QC run: %w", err)
 	}

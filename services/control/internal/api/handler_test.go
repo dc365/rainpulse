@@ -174,7 +174,7 @@ func TestRadarAndAnalysisQueriesPreservePartialRadarFailure(t *testing.T) {
 		analysis: analysis,
 		qc: workflow.RadarQCMetrics{
 			ScanID: scanAID, RadarID: "synthetic_radar_a",
-			QCProfile: "rp008-basic-v1", QCPipelineVersion: "rp008-basic-1.0.1",
+			QCProfile: "rp008-basic-v1", QCPipelineVersion: "rp008-basic-1.0.2",
 			FlagDefinitionVersion: "qc-flags-v1", HealthState: workflow.RadarHealthHealthy,
 			MeanQualityIndex: 0.82, ValidGateCount: 100, MissingGateCount: 5,
 			ModuleStatuses: map[string]string{"radial_interference": "applied"}, MeasuredAt: now,

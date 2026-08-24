@@ -218,7 +218,7 @@ ON CONFLICT (job_id) DO NOTHING`,
 	if err != nil {
 		return fmt.Errorf("insert radar QC job: %w", err)
 	}
-	_, err = tx.Exec(ctx, `
+	outboxResult, err := tx.Exec(ctx, `
 INSERT INTO outbox_events (
     event_id, aggregate_type, aggregate_id, event_type, event_version,
     subject, payload, status, available_at, created_at
@@ -229,11 +229,19 @@ ON CONFLICT (event_id) DO NOTHING`,
 	if err != nil {
 		return fmt.Errorf("insert radar QC outbox event: %w", err)
 	}
+	createdOutbox := outboxResult.RowsAffected() == 1
+	if status == workflow.RadarScanFailed && !createdOutbox {
+		return fmt.Errorf("radar QC retry requires a new pipeline version after failure")
+	}
 	_, err = tx.Exec(ctx, `
 UPDATE radar_scan_runs
-SET status = CASE WHEN status IN ('NORMALIZED', 'FAILED') THEN 'QC_RUNNING' ELSE status END,
+SET status = CASE
+        WHEN $2 AND status IN ('NORMALIZED', 'FAILED', 'QC_READY') THEN 'QC_RUNNING'
+        ELSE status
+    END,
+    degraded_reason = CASE WHEN $2 AND status = 'FAILED' THEN NULL ELSE degraded_reason END,
     updated_at = CURRENT_TIMESTAMP
-WHERE run_id = $1`, bundle.Job.RunID)
+WHERE run_id = $1`, bundle.Job.RunID, createdOutbox)
 	if err != nil {
 		return fmt.Errorf("mark radar scan QC running: %w", err)
 	}
