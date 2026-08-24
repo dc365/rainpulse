@@ -52,6 +52,8 @@
 ## Deployment target
 
 - Test deployments may use the GPU server at `private-test-host` with SSH user `<ssh-user>`.
+- Use the installed SSH public key (`ssh <ssh-user>@<private-test-host>`) for routine
+  access; do not persist the account password locally.
 - Remote project directory: `<remote-project-dir>`.
 - The remote directory is a test/deployment target, not the source of truth. Develop and verify locally, then deploy explicit artifacts or revisions.
 - Preserve any pre-existing remote contents under a sibling `legacy/` archive before deploying RainPulse.
