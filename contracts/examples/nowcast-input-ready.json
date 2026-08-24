@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "event_id": "70000000-0000-4000-8000-000000000001",
+  "event_type": "nowcast.input.ready.v1",
+  "occurred_at": "2026-08-24T03:00:45Z",
+  "run_id": "70000000-0000-4000-8000-000000000002",
+  "job_id": "70000000-0000-4000-8000-000000000003",
+  "trace_id": "70000000-0000-4000-8000-000000000004",
+  "payload": {
+    "input_uri": "s3://rainpulse/nowcast-input/synthetic-grid-v1/2026/08/24/030000/input.zarr",
+    "issue_time": "2026-08-24T03:00:00Z",
+    "grid_id": "synthetic-grid-v1",
+    "analysis_ids": [
+      "70000000-0000-4000-8000-000000000005",
+      "70000000-0000-4000-8000-000000000006",
+      "70000000-0000-4000-8000-000000000007"
+    ],
+    "frame_count": 3,
+    "timestep_minutes": 5,
+    "valid_coverage_ratio": 0.92,
+    "mean_quality_index": 0.81,
+    "max_data_age_minutes": 2.0,
+    "preprocess_version": "nowcast-input-contract-v1"
+  }
+}

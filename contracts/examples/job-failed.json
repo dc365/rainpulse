@@ -12,7 +12,7 @@
     "finished_at": "2026-08-24T03:00:06Z",
     "runtime_ms": 3000,
     "error_code": "SIMULATED_FAILURE",
-    "error_message": "RP-004 simulated worker failure",
+    "error_message": "RP-005 simulated worker failure",
     "retryable": false,
     "details": {
       "worker": "pysteps-lk-sim"

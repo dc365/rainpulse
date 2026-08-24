@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "event_id": "60000000-0000-4000-8000-000000000001",
+  "event_type": "analysis.mosaic.requested.v1",
+  "occurred_at": "2026-08-24T03:03:00Z",
+  "run_id": "50000000-0000-4000-8000-000000000002",
+  "job_id": "60000000-0000-4000-8000-000000000002",
+  "trace_id": "50000000-0000-4000-8000-000000000003",
+  "payload": {
+    "analysis_id": "50000000-0000-4000-8000-000000000004",
+    "analysis_time": "2026-08-24T03:00:00Z",
+    "grid_id": "synthetic-grid-v1",
+    "inputs": [
+      {
+        "radar_id": "synthetic_radar_01",
+        "scan_id": "10000000-0000-4000-8000-000000000004",
+        "grid_uri": "s3://rainpulse/radar/grid/synthetic_radar_01/2026/08/24/030000/grid.zarr",
+        "time_offset_seconds": 0
+      }
+    ],
+    "output_prefix": "s3://rainpulse/analysis/synthetic-grid-v1/2026/08/24/030000/",
+    "mosaic_config_version": "synthetic-mosaic-v1",
+    "qpe_config_version": "synthetic-qpe-v1"
+  }
+}

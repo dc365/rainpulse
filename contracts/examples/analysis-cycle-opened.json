@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "event_id": "50000000-0000-4000-8000-000000000001",
+  "event_type": "analysis.cycle.opened.v1",
+  "occurred_at": "2026-08-24T03:00:00Z",
+  "run_id": "50000000-0000-4000-8000-000000000002",
+  "trace_id": "50000000-0000-4000-8000-000000000003",
+  "payload": {
+    "analysis_id": "50000000-0000-4000-8000-000000000004",
+    "analysis_time": "2026-08-24T03:00:00Z",
+    "grid_id": "synthetic-grid-v1",
+    "expected_radar_ids": ["synthetic_radar_01", "synthetic_radar_02"],
+    "collection_deadline": "2026-08-24T03:03:00Z",
+    "analysis_config_version": "synthetic-analysis-v1"
+  }
+}

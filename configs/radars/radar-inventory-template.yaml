@@ -1,0 +1,52 @@
+schema_version: "1.0"
+radar_id: replace_with_registered_radar_id
+lifecycle: draft
+display_name: null
+
+site:
+  longitude_deg: null
+  latitude_deg: null
+  altitude_m: null
+  altitude_datum: null
+
+hardware:
+  manufacturer: null
+  model: null
+  radar_band: null
+  beam_width_deg: null
+  dual_pol_available: null
+  nyquist_velocity_mps: null
+  calibration_offsets:
+    dbzh_db: null
+    zdr_db: null
+
+scan:
+  strategy_name: null
+  expected_update_seconds: null
+  expected_elevations_deg: null
+  azimuth_resolution_deg: null
+  range_gate_m: null
+  max_range_m: null
+
+fields: []
+
+source:
+  format: null
+  format_version: null
+  delivery: null
+  uri_pattern: null
+  timestamp_timezone: null
+
+ancillary:
+  dem_asset_version: null
+  clutter_map_version: null
+  coastline_asset_version: null
+
+qc:
+  profile: null
+  pipeline_version: null
+  flag_definition_version: null
+
+known_issues: []
+inventory_owner: null
+updated_at: null

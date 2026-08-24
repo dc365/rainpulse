@@ -125,4 +125,4 @@ if [[ "$published" -ne 2 || "$processed" -ne 2 ]]; then
   exit 1
 fi
 
-printf 'RP-003 control-plane smoke test passed: run/job, outbox, JetStream, completion, rerun, SSE\n'
+printf 'RP-004 control-plane foundation smoke test passed: run/job, outbox, JetStream, completion, rerun, SSE\n'

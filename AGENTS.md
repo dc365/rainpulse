@@ -3,15 +3,18 @@
 ## Project scope
 
 - This repository is the only active workspace for RainPulse short-term precipitation nowcasting work.
-- Treat `docs/RainPulse_技术架构与实施方案.md` as the implementation and acceptance baseline.
+- Treat `docs/RainPulse_技术架构与实施方案_含雷达质控_v1.1.md` as the implementation and acceptance baseline.
 - Treat `docs/短临降水预报技术方案.pptx` as the product goal and algorithm-selection narrative.
-- If the two documents disagree, follow the Markdown implementation plan until the discrepancy is explicitly resolved.
+- Treat `docs/福建雷达质控.md` as the regional QC design reference.
+- `docs/RainPulse_技术架构与实施方案.md` is the superseded v1.0 history only.
+- If the active documents disagree, follow the v1.1 Markdown implementation plan until the discrepancy is explicitly resolved.
 - Keep unrelated or superseded work outside this repository. The local parent workspace stores old work in `legacy-workspace/`.
 
 ## Current delivery boundary
 
-- Start with Phase 0 contracts and repository scaffolding, then deliver the Phase 1 deterministic minimum loop.
-- Phase 1 is: continuous radar/QPE ingest -> standardization -> pySTEPS-LK -> 24 five-minute forecasts covering 0-120 minutes -> 0-1 h and 0-2 h accumulations -> Go API -> React display -> automatic verification.
+- Start with Phase 0 radar inventory/contracts and repository scaffolding, then deliver the Phase 1A trusted-radar field before Phase 1B nowcasting.
+- Phase 1A is: immutable raw radar ingest -> decode on original polar geometry -> polar QC -> DEM blockage and Hybrid Scan -> time-aligned QI mosaic -> basic QPE.
+- Phase 1B is: continuous RadarAnalysis -> fixed-step NowcastInput -> pySTEPS-LK -> 24 five-minute forecasts covering 0-120 minutes -> 0-1 h and 0-2 h accumulations -> Go API -> React display -> automatic verification.
 - Do not put STEPS ensembles, NowcastNet production inference, numerical-model fusion, online training, or Kubernetes on the Phase 1 critical path.
 - Compare pySTEPS-LK with persistence and whole-field translation baselines before declaring skill.
 
@@ -27,6 +30,9 @@
 ## Meteorological and reliability invariants
 
 - Preserve the three states: valid no-rain, missing, and low-quality. Never convert missing data to zero rainfall.
+- Preserve raw base data unchanged. Perform applicable QC in polar ray/gate space before gridding.
+- Every correction retains its cause flag, correction diagnostic, QI component, and algorithm/configuration version.
+- Never delete all marine echoes based only on a land/sea mask, amplify severe blockage, or average dBZ directly across radars.
 - Use fixed five-minute Phase 1 steps and do not mix incompatible input intervals inside one model adapter.
 - All internal timestamps use UTC.
 - Every run and product remains traceable to `run_id`, `job_id`, input assets, model version, and config version.
@@ -54,8 +60,9 @@
 
 ## Open decisions to freeze before real-data implementation
 
-- Radar/QPE source, format, update cadence, available variables, and delivery mechanism.
+- Radar base-data source, format, update cadence, available moments, scan geometry, and delivery mechanism for every radar.
 - Target grid, CRS, bounds, resolution, masks, and local display timezone.
-- Quality-control algorithms, thresholds, and quality-index definition.
+- Radar site/hardware/calibration metadata plus DEM, coastline, clutter maps, and their versions.
+- Quality-control thresholds, regional/radar profiles, and quality-index formula.
 - Exact semantics and units of exceedance-probability products.
 - Phase 1 latency/availability thresholds after measuring the actual data path and hardware.

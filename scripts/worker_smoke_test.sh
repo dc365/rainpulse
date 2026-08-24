@@ -100,4 +100,4 @@ if [[ -n "$temporary_objects" ]]; then
   exit 1
 fi
 
-printf 'RP-004 Worker smoke test passed: health, success, atomic marker, replay idempotency, failure\n'
+printf 'RP-005 Worker SDK smoke test passed: health, success, atomic marker, replay idempotency, failure\n'

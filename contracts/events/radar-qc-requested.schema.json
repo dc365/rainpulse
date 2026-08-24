@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/contracts/events/radar-qc-requested.schema.json",
+  "title": "RainPulse radar.qc.requested.v1 event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "event_type", "occurred_at", "run_id", "job_id", "trace_id", "payload"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "event_id": { "type": "string", "format": "uuid" },
+    "event_type": { "const": "radar.qc.requested.v1" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "run_id": { "type": "string", "format": "uuid" },
+    "job_id": { "type": "string", "format": "uuid" },
+    "trace_id": { "type": "string", "format": "uuid" },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scan_id", "radar_id", "input_uri", "output_prefix", "radar_config_version", "qc_profile", "qc_pipeline_version", "flag_definition_version"],
+      "properties": {
+        "scan_id": { "type": "string", "format": "uuid" },
+        "radar_id": { "type": "string", "minLength": 1 },
+        "input_uri": { "type": "string", "format": "uri" },
+        "output_prefix": { "type": "string", "format": "uri" },
+        "radar_config_version": { "type": "string", "minLength": 1 },
+        "qc_profile": { "type": "string", "minLength": 1 },
+        "qc_pipeline_version": { "type": "string", "minLength": 1 },
+        "flag_definition_version": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

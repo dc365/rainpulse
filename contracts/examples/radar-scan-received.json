@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "event_id": "10000000-0000-4000-8000-000000000001",
+  "event_type": "radar.scan.received.v1",
+  "occurred_at": "2026-08-24T03:00:10Z",
+  "run_id": "10000000-0000-4000-8000-000000000002",
+  "trace_id": "10000000-0000-4000-8000-000000000003",
+  "payload": {
+    "scan_id": "10000000-0000-4000-8000-000000000004",
+    "asset_id": "10000000-0000-4000-8000-000000000005",
+    "radar_id": "synthetic_radar_01",
+    "source_uri": "s3://rainpulse/radar/raw/synthetic_radar_01/2026/08/24/030000/sample.bin",
+    "source_format": "rainpulse-synthetic-volume",
+    "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    "file_size_bytes": 1048576,
+    "volume_start_time": "2026-08-24T03:00:00Z",
+    "volume_end_time": "2026-08-24T03:00:08Z",
+    "received_at": "2026-08-24T03:00:10Z",
+    "radar_config_version": "synthetic-radar-01-v1"
+  }
+}

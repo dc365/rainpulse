@@ -19,7 +19,7 @@ required_files=(
 )
 
 for path in "${required_files[@]}"; do
-  test -f "$path" || { printf 'missing RP-004 file: %s\n' "$path" >&2; exit 1; }
+  test -f "$path" || { printf 'missing RP-005 file: %s\n' "$path" >&2; exit 1; }
 done
 
 rg --quiet 'rainpulse.jobs.failed' contracts/events/README.md
@@ -30,4 +30,4 @@ rg --quiet 'force_failure' algorithms/rainpulse_algo/worker/simulation.py
 rg --quiet 'CopySource' algorithms/rainpulse_algo/worker/object_store.py
 rg --quiet 'message\.ack' algorithms/rainpulse_algo/worker/runtime.py
 
-printf 'RP-004 Worker SDK structure checks passed\n'
+printf 'RP-005 Worker SDK structure checks passed\n'

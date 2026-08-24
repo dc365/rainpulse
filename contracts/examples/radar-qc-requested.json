@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "event_id": "30000000-0000-4000-8000-000000000001",
+  "event_type": "radar.qc.requested.v1",
+  "occurred_at": "2026-08-24T03:00:20Z",
+  "run_id": "10000000-0000-4000-8000-000000000002",
+  "job_id": "30000000-0000-4000-8000-000000000002",
+  "trace_id": "10000000-0000-4000-8000-000000000003",
+  "payload": {
+    "scan_id": "10000000-0000-4000-8000-000000000004",
+    "radar_id": "synthetic_radar_01",
+    "input_uri": "s3://rainpulse/radar/normalized/synthetic_radar_01/2026/08/24/030000/volume.zarr",
+    "output_prefix": "s3://rainpulse/radar/qc/synthetic_radar_01/2026/08/24/030000/",
+    "radar_config_version": "synthetic-radar-01-v1",
+    "qc_profile": "synthetic-v1",
+    "qc_pipeline_version": "qc-contract-v1",
+    "flag_definition_version": "qc-flags-v1"
+  }
+}

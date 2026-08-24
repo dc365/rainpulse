@@ -16,5 +16,5 @@ __pycache__/
 .ruff_cache/
 *.py[cod]
 
-runtime/
-data/
+/runtime/
+/data/

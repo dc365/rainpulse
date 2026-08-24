@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/contracts/events/analysis-cycle-opened.schema.json",
+  "title": "RainPulse analysis.cycle.opened.v1 event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "event_type", "occurred_at", "run_id", "trace_id", "payload"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "event_id": { "type": "string", "format": "uuid" },
+    "event_type": { "const": "analysis.cycle.opened.v1" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "run_id": { "type": "string", "format": "uuid" },
+    "trace_id": { "type": "string", "format": "uuid" },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["analysis_id", "analysis_time", "grid_id", "expected_radar_ids", "collection_deadline", "analysis_config_version"],
+      "properties": {
+        "analysis_id": { "type": "string", "format": "uuid" },
+        "analysis_time": { "type": "string", "format": "date-time" },
+        "grid_id": { "type": "string", "minLength": 1 },
+        "expected_radar_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "collection_deadline": { "type": "string", "format": "date-time" },
+        "analysis_config_version": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

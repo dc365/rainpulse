@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "event_id": "80000000-0000-4000-8000-000000000001",
+  "event_type": "forecast.run.requested.v1",
+  "occurred_at": "2026-08-24T03:00:46Z",
+  "run_id": "80000000-0000-4000-8000-000000000002",
+  "trace_id": "80000000-0000-4000-8000-000000000003",
+  "payload": {
+    "input_uri": "s3://rainpulse/nowcast-input/synthetic-grid-v1/2026/08/24/030000/input.zarr",
+    "issue_time": "2026-08-24T03:00:00Z",
+    "grid_id": "synthetic-grid-v1",
+    "baseline_models": ["persistence", "translation", "pysteps_lk"],
+    "config_version": "forecast-contract-v1"
+  }
+}

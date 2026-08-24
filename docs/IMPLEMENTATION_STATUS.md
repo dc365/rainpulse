@@ -2,116 +2,94 @@
 
 Updated: 2026-08-24
 
-## Completed acceptance targets
+## Active baseline
 
-RP-000 repository baseline is implemented:
+The implementation and acceptance baseline is
+`docs/RainPulse_技术架构与实施方案_含雷达质控_v1.1.md`.
+`docs/RainPulse_技术架构与实施方案.md` is retained only as the superseded v1.0
+history. The active chain starts with immutable raw polar radar base data:
 
-- pnpm workspace with a React/TypeScript/Vite Web application;
-- Go control API exposing `GET /api/v1/system/status`;
-- Go Web gateway serving the React SPA and proxying `/api/*` to the control API;
-- Python `rainpulse_algo` package baseline managed by uv;
-- repository structure checks, unit tests, linting, builds, Compose health checks, and an end-to-end smoke command;
-- CI workflow for the same bootstrap, test, lint, and build seams.
-
-RP-001 contracts are implemented:
-
-- `contracts/openapi.yaml` covers the planned `/api/v1` run, product,
-  verification, system, SSE and administration operations;
-- Draft 2020-12 Schemas and valid examples cover `job.requested`,
-  `job.completed`, `job.failed`, and `product.published` events;
-- canonical NowcastInput and ForecastOutput Zarr contracts preserve valid
-  no-rain, missing and low-quality states;
-- pinned `oapi-codegen` and `openapi-typescript` generation produces the Go
-  Chi server interface/models and TypeScript API types;
-- Go and React consume the generated `SystemStatus` model, and CI rejects
-  generated-code drift.
-
-RP-002 infrastructure is implemented:
-
-- Compose runs PostgreSQL 17.11, NATS 2.14.5 with persistent JetStream, and
-  MinIO `RELEASE.2025-10-15T17-29-55Z` with a persistent `rainpulse` bucket;
-- the initial UTC PostgreSQL migration creates all 14 Phase 1 metadata tables,
-  their traceability/quality/status constraints, indexes, and an idempotent
-  `schema_migrations` ledger;
-- infrastructure ports bind to loopback by default, while API and Web retain
-  their existing deployment-host endpoints;
-- required secrets live only in the ignored `deploy/.env`; normal shutdown
-  does not remove PostgreSQL, JetStream, or MinIO volumes;
-- Compose dependency gates, service health checks, migration reruns, bucket
-  initialization, infrastructure smoke tests, and API/Web smoke tests pass on
-  the GPU test server without consuming GPU resources.
-
-RP-003 Go run/job control plane is implemented:
-
-- a long-lived Go orchestrator owns the run/job state machines and health
-  endpoint; the API remains a separate Go process and React still calls Go only;
-- run, job, and `job.requested` outbox records are created in one PostgreSQL
-  transaction; publishing uses event UUIDs as JetStream message IDs and marks a
-  job `RUNNING` only after the broker acknowledges the task;
-- terminal Worker results are strictly decoded against their frozen event
-  shapes, consumed through `rainpulse-orchestrator-results-v2`, and applied to
-  job/run state in the same transaction as the inbox ledger;
-- terminal results are idempotent by `event_id` and `job_id`, so duplicate or
-  conflicting success/failure events cannot terminate one job twice;
-- `GET /runs/latest`, `GET /runs`, `GET /runs/{run_id}`,
-  `GET /runs/{run_id}/jobs`, manual rerun, and run-filtered SSE are backed by
-  PostgreSQL and the generated OpenAPI models;
-- pgx `v5.10.0` and nats.go `v1.53.1` are pinned; API readiness now verifies the
-  database state rather than accepting an HTTP response alone;
-- the server smoke test passes a real create → outbox → JetStream → completion
-  → inbox → state update → rerun → SSE loop, including duplicate completion.
-
-RP-004 Python Worker SDK is implemented:
-
-- the long-lived simulation Worker uses a durable JetStream pull consumer and
-  strict Pydantic models for `job.requested`, `job.completed`, and `job.failed`;
-- a deterministic result event UUID and committed object marker provide
-  idempotency across request redelivery, while the Go inbox is the final
-  job-level idempotency boundary;
-- outputs are written below `_temporary`, size-validated, copied to the final
-  prefix, and committed by writing `forecast.zarr/_SUCCESS.json` last; a task is
-  ACKed only after its completion/failure result is acknowledged by JetStream;
-- poison messages are terminated, while result-publication failure NAKs the
-  original request so it can be redelivered;
-- the Worker has a dependency-aware health endpoint and uses a dedicated MinIO
-  application user instead of root credentials;
-- the server smoke covers health, successful execution, committed marker,
-  request replay without duplicate output/inbox state, and failure propagation
-  into `FAILED` run/job state with a structured error code.
-
-The RP-003/RP-004 model/config records, output objects, and metrics are explicitly
-simulations. They prove the distributed execution path only and do not claim
-pySTEPS or real-data readiness.
-
-This remains an engineering/contract baseline, not a real-data nowcasting loop.
-Concrete radar/QPE source and target-grid registrations must be frozen before
-RP-005 real-sample standardization, not invented during infrastructure work.
-
-## Deployment decision
-
-The GPU test server cannot currently reach Docker Hub reliably and does not
-provide a Go, Node, or Python build toolchain. API, Web, NATS, MinIO, and the
-MinIO client are locally cross-compiled for Linux/amd64 and packaged into
-`scratch` images. Worker dependencies are resolved from the lockfile into a
-Linux/amd64 site-packages directory. The pinned official PostgreSQL and Python
-base images are exported through the workstation proxy and imported with
-`docker load`; the server Docker daemon configuration is left unchanged.
-
-Reproducible commands:
-
-```bash
-make build-linux
-make build-worker-linux
-# If the target cannot reach Docker Hub:
-HTTPS_PROXY=http://127.0.0.1:7897 make export-postgres-image
-HTTPS_PROXY=http://127.0.0.1:7897 make export-python-image
-# synchronize the repository and generated artifacts to the target
-make deploy-up
-make infrastructure-smoke
-make control-plane-smoke
-make worker-smoke
-make smoke
+```text
+RawRadarAsset
+→ NormalizedRadarVolume
+→ QCRadarVolume
+→ RadarGrid / Hybrid Scan
+→ RadarAnalysis / QI mosaic / QPE
+→ NowcastInput
+→ pySTEPS
+→ products and verification
 ```
+
+No real nowcast may bypass polar QC, mosaic/QPE quality gates, or the fixed-step
+NowcastInput gate.
+
+## v1.1 task status
+
+| Task | Status | Current capability |
+|---|---|---|
+| RP-000 Monorepo/CI | Complete | React, Go, Python, unified commands, CI and smoke seams |
+| RP-001 radar inventory/config | Complete | Draft/ready radar Schema, inventory template, unknown-value gate and uint32 QC flags |
+| RP-002 data/event contracts | Complete | Raw, normalized polar, QC polar, Hybrid Scan, analysis, nowcast and forecast contracts plus domain event schemas/examples |
+| RP-003 infrastructure | Complete | PostgreSQL, NATS JetStream and MinIO with migrations, persistence and health checks |
+| RP-004 Go three-level workflows | Partial | Existing forecast simulation proves outbox/inbox/jobs/SSE; radar scan and analysis-cycle state machines are not implemented |
+| RP-005 Python Worker SDK | Foundation complete | NATS/Pydantic/idempotency/atomic output/health are proven by a simulation Worker; domain-task routing still needs generalization |
+| RP-006 first real radar decoder | Blocked on input | Requires a verified representative raw base-data sample and complete ready radar configuration |
+| RP-007–RP-016 | Not started | Depend on the preceding radar chain and representative data |
+
+The old execution labels map to v1.1 by capability, not by their previous
+number: old contract work contributes to RP-002, old infrastructure is RP-003,
+old control-plane work is an RP-004 foundation, and the old simulated Worker is
+the RP-005 foundation.
+
+## Completed engineering foundation
+
+RP-000 provides:
+
+- pnpm React/TypeScript/Vite Web workspace;
+- Go API, orchestrator and Web gateway;
+- Python `rainpulse_algo` package managed by uv;
+- repository, unit, lint, build, Compose and smoke commands;
+- CI for the same seams.
+
+RP-001 now provides:
+
+- `configs/schemas/radar-config.schema.json` with strict unknown-key rejection;
+- a draft radar inventory template that retains unknown values explicitly;
+- a `ready` gate requiring verified station, hardware, geometry, DBZH mapping,
+  source, UTC, ancillary and QC versions;
+- canonical optional moment names without synthesizing missing fields;
+- a versioned uint32 QC flag bit set and tests for unique bits/masks.
+
+RP-002 now provides:
+
+- immutable `RawRadarAsset` metadata;
+- original-geometry `NormalizedRadarVolume`;
+- polar `QCRadarVolume` with QI components, module provenance and uint32 flags;
+- single-radar `RadarGrid`/Hybrid Scan and multi-radar `RadarAnalysis`;
+- `NowcastInput` v1.1 provenance and unchanged `ForecastOutput` semantics;
+- radar receive/decode/QC/grid, analysis-cycle/mosaic, input-ready and
+  forecast-run event schemas with valid examples;
+- existing common job command/result and product-published schemas;
+- contract tests preserving valid no-rain, missing and low-quality states.
+
+RP-003 remains operational:
+
+- PostgreSQL 17.11;
+- NATS 2.14.5 with persistent JetStream;
+- MinIO with a persistent `rainpulse` bucket;
+- UTC migrations, application credentials, health gates and smoke tests.
+
+The RP-004/RP-005 foundation already proves:
+
+- transactional run/job/outbox creation;
+- JetStream publication and strict terminal-result consumption;
+- inbox/job idempotency under at-least-once delivery;
+- long-lived pull consumers;
+- temporary output, validation, final copy and `_SUCCESS.json` commit;
+- success, replay, poison-message and structured-failure behavior.
+
+All existing model/config records and products are simulations. They do not
+claim radar decode, QC, QPE, pySTEPS, or real-data readiness.
 
 ## Active test environment
 
@@ -119,23 +97,73 @@ make smoke
 - Project: `<remote-project-dir>`
 - Web: `http://private-test-host:4173`
 - API: `http://private-test-host:8080/api/v1/system/status`
-- Deployed version: `rp004-20260824`
+- Deployed runtime version: `rp004-20260824`
 - Previous remote contents: `<remote-legacy-archive>`
 
+The target has 24 logical CPUs, about 156 GiB RAM, an RTX 6000D GPU, NVIDIA
+container runtime, and about 405 GB free disk at the last audit. Phase 1 radar
+QC and pySTEPS are CPU-first. GPU use is reserved for later NowcastNet work.
+Raw-volume retention and expected daily volume must be frozen before continuous
+ingest because free disk is the immediate capacity constraint.
+
+Docker Hub access is unreliable. Continue to use local Linux/amd64 builds and
+export/import pinned images through `http://127.0.0.1:7897` when necessary.
 No credentials or secrets belong in this document or repository.
 
 ## Next acceptance target
 
-RP-005 standardizes one representative real radar/QPE sample into the frozen
-NowcastInput Zarr contract, including missing/no-rain/low-quality semantics and
-quality summary. It cannot start honestly until the source and target-grid
-decisions below are supplied and frozen.
+Complete RP-004 as the Go three-level workflow skeleton:
 
-## Decisions required before RP-005
+1. `radar_scan_run` for each radar volume;
+2. `analysis_cycle` for each fixed UTC analysis time;
+3. existing `forecast_run` behind the NowcastInput quality gate;
+4. additive PostgreSQL migration and domain lifecycle records;
+5. radar/analysis REST and SSE surfaces;
+6. a synthetic two-radar end-to-end control-plane test where one radar can fail
+   without cancelling the analysis cycle.
 
-Before real-sample standardization begins, freeze:
+The current forecast simulation remains available during this migration and is
+the rollback path until all three workflow simulations pass.
 
-1. Radar and QPE source, format, variables, cadence, sample files, and delivery mechanism.
-2. Target grid CRS, bounds, resolution, masks, and display timezone.
-3. Missing-data, no-rain, quality-index, and QC threshold semantics.
-4. Sanitized representative samples and expected normalized outputs for contract tests.
+## Required inputs before RP-006
+
+For at least one physical radar, provide and verify:
+
+1. Full-volume raw base-data samples, source format/version and delivery path.
+2. Site longitude/latitude/altitude plus altitude datum.
+3. Radar model/band/beam width and calibration information.
+4. Scan strategy, elevations, update interval, azimuth/range resolution and
+   maximum range.
+5. Field names, source units, scale/offset, missing values and dual-polarization
+   availability.
+6. Timestamp timezone and filename/time semantics.
+7. Target grid CRS, bounds, resolution and masks.
+8. DEM and coastline assets with versions and datum metadata.
+9. Representative clear-air, radial-interference, sea/AP, mountain-blockage,
+   ordinary-rain, convection and typhoon cases.
+10. Later QPE truth: gauge locations, observation interval and quality rules.
+
+Until these inputs are available, RP-004 and RP-005 can progress with explicitly
+synthetic fixtures, but RP-006 must not invent a decoder or production radar
+configuration.
+
+## Reproducible commands
+
+```bash
+make test-radar-config
+make test-contracts
+make test
+make lint
+make build
+
+# Deployment artifacts, when runtime code changes:
+make build-linux
+make build-worker-linux
+HTTPS_PROXY=http://127.0.0.1:7897 make export-postgres-image
+HTTPS_PROXY=http://127.0.0.1:7897 make export-python-image
+make deploy-up
+make infrastructure-smoke
+make control-plane-smoke
+make worker-smoke
+make smoke
+```

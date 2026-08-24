@@ -1,0 +1,24 @@
+schema_version: "1.0"
+definition_version: qc-flags-v1
+storage_dtype: uint32
+flags:
+  - {name: GROUND_CLUTTER, bit: 0, mask: 1}
+  - {name: SEA_CLUTTER, bit: 1, mask: 2}
+  - {name: ANOMALOUS_PROPAGATION, bit: 2, mask: 4}
+  - {name: RADIAL_INTERFERENCE, bit: 3, mask: 8}
+  - {name: HARDWARE_ANOMALY, bit: 4, mask: 16}
+  - {name: BIOLOGICAL_ECHO, bit: 5, mask: 32}
+  - {name: BEAM_BLOCKED, bit: 6, mask: 64}
+  - {name: ATTENUATED, bit: 7, mask: 128}
+  - {name: WET_RADOME, bit: 8, mask: 256}
+  - {name: BRIGHT_BAND, bit: 9, mask: 512}
+  - {name: VELOCITY_ALIASED, bit: 10, mask: 1024}
+  - {name: LOW_SNR, bit: 11, mask: 2048}
+  - {name: MISSING, bit: 12, mask: 4096}
+  - {name: CORRECTED, bit: 13, mask: 8192}
+  - {name: LOW_QUALITY, bit: 14, mask: 16384}
+reserved_bits: [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]
+notes:
+  - Flags describe causes and processing history; they do not replace VALID_MASK or LOW_QUALITY_MASK.
+  - NO_RAIN is an observation state, not a QC flag.
+  - A correction must retain its cause flag and also set CORRECTED.

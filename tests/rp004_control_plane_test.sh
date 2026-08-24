@@ -17,7 +17,7 @@ required_files=(
 )
 
 for path in "${required_files[@]}"; do
-  test -f "$path" || { printf 'missing RP-003 file: %s\n' "$path" >&2; exit 1; }
+  test -f "$path" || { printf 'missing RP-004 foundation file: %s\n' "$path" >&2; exit 1; }
 done
 
 rg --quiet '^  orchestrator:' deploy/docker-compose.yaml
@@ -28,4 +28,4 @@ rg --quiet 'UNIQUE INDEX.*inbox_events_job_event_type|inbox_events_job_event_typ
 rg --quiet 'service_healthy' deploy/docker-compose.yaml
 rg --quiet 'rainpulse-orchestrator' Makefile
 
-printf 'RP-003 control-plane structure checks passed\n'
+printf 'RP-004 control-plane foundation structure checks passed\n'

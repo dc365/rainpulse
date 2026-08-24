@@ -2,7 +2,7 @@
 
 RainPulse is a 0–2 hour precipitation nowcasting system. The repository keeps the React user interface, Go control plane, Python compute workers, contracts, configuration, and deployment assets together so their boundaries remain explicit and testable.
 
-The implementation baseline is [`docs/RainPulse_技术架构与实施方案.md`](docs/RainPulse_技术架构与实施方案.md). Phase 1 delivers a deterministic pySTEPS-LK loop before probabilistic ensembles or NowcastNet enter the production path.
+The implementation baseline is [`docs/RainPulse_技术架构与实施方案_含雷达质控_v1.1.md`](docs/RainPulse_技术架构与实施方案_含雷达质控_v1.1.md). Phase 1 first builds a trusted radar field from immutable raw polar volumes, then delivers a deterministic pySTEPS-LK loop before probabilistic ensembles or NowcastNet enter the production path.
 
 ## Repository areas
 
@@ -22,6 +22,7 @@ Prerequisites: Go 1.25+, Node.js 22+, pnpm 11, Python 3.11+, `uv`, `ruff`, Docke
 ```bash
 make bootstrap
 make contracts-check
+make test-radar-config
 make test
 make dev-up
 make infrastructure-smoke
@@ -44,8 +45,9 @@ After `make dev-up`, the public seams are:
 - Run updates: `http://127.0.0.1:8080/api/v1/events/stream`
 
 Use `make dev-down` to stop the composed runtime without deleting its named
-volumes. PostgreSQL, NATS JetStream and MinIO are persistent RP-002 services;
-RP-004 adds the long-lived simulated Worker but no real meteorological model.
+volumes. PostgreSQL, NATS JetStream and MinIO are persistent RP-003 services;
+RP-005 provides the reusable long-lived simulated Worker foundation but no
+real radar decoder, QC algorithm, or meteorological model.
 
 ## Test deployment artifacts
 

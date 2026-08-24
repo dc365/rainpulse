@@ -75,4 +75,4 @@ bucket=${RAINPULSE_MINIO_BUCKET:-rainpulse}
 "${compose[@]}" run --rm --no-deps minio-init \
   ls "rainpulse/${bucket}" >/dev/null
 
-printf 'RP-002 infrastructure smoke test passed: PostgreSQL, NATS JetStream, MinIO\n'
+printf 'RP-003 infrastructure smoke test passed: PostgreSQL, NATS JetStream, MinIO\n'

@@ -18,7 +18,7 @@ required_files=(
 )
 
 for path in "${required_files[@]}"; do
-  test -f "$path" || { printf 'missing RP-002 file: %s\n' "$path" >&2; exit 1; }
+  test -f "$path" || { printf 'missing RP-003 file: %s\n' "$path" >&2; exit 1; }
 done
 
 required_services=(postgres migrate nats minio minio-init api web)
@@ -48,4 +48,4 @@ rg --quiet 'healthcheck:' deploy/docker-compose.yaml
 rg --quiet 'service_completed_successfully' deploy/docker-compose.yaml
 rg --quiet 'postgres-data:|nats-data:|minio-data:' deploy/docker-compose.yaml
 
-printf 'RP-002 infrastructure structure checks passed\n'
+printf 'RP-003 infrastructure structure checks passed\n'
