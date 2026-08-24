@@ -89,6 +89,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/radars/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the latest integrity and health status for every radar */
+        get: operations["listRadarStatuses"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/radars/{radar_id}": {
         parameters: {
             query?: never;
@@ -417,6 +434,9 @@ export interface components {
         };
         RadarStatusSummary: {
             radar_id: string;
+            display_name?: string | null;
+            lifecycle: components["schemas"]["RadarLifecycle"];
+            config_version: string;
             health: components["schemas"]["RadarHealthState"];
             /** Format: uuid */
             latest_scan_id?: string | null;
@@ -430,6 +450,62 @@ export interface components {
             /** Format: int64 */
             data_delay_seconds?: number | null;
             participating_in_latest_analysis: boolean;
+            health_metrics?: components["schemas"]["RadarHealthMetrics"] | null;
+        };
+        RadarFieldAvailability: {
+            field: string;
+            available: boolean;
+            present_sweep_count: number;
+            /** Format: float */
+            finite_gate_ratio: number;
+            /** Format: int64 */
+            out_of_range_gate_count: number;
+            unit: string;
+        };
+        RadarNoiseLevel: {
+            source: string;
+            /** Format: float */
+            horizontal_dbm?: number | null;
+            /** Format: float */
+            vertical_dbm?: number | null;
+            sample_count: number;
+        };
+        RadarHealthMetrics: {
+            /** Format: uuid */
+            scan_id: string;
+            radar_id: string;
+            radar_config_version: string;
+            health_profile_version: string;
+            health: components["schemas"]["RadarHealthState"];
+            health_reasons: string[];
+            /** Format: float */
+            scan_completeness: number;
+            expected_sweep_count: number;
+            actual_sweep_count: number;
+            missing_sweep_numbers: number[];
+            expected_radial_count: number;
+            actual_radial_count: number;
+            missing_radial_count: number;
+            /** Format: float */
+            maximum_azimuth_gap_deg: number;
+            /** Format: float */
+            field_availability_ratio: number;
+            field_availability: components["schemas"]["RadarFieldAvailability"][];
+            noise_level: components["schemas"]["RadarNoiseLevel"];
+            /** @enum {string} */
+            channel_status: "OK" | "DEGRADED" | "UNKNOWN";
+            /** Format: int64 */
+            out_of_range_gate_count: number;
+            /** Format: float */
+            out_of_range_gate_ratio: number;
+            /** Format: int64 */
+            anomaly_count: number;
+            layer_anomalies: {
+                [key: string]: unknown;
+            }[];
+            warnings: string[];
+            /** Format: date-time */
+            measured_at: string;
         };
         RadarScan: {
             /** Format: uuid */
@@ -777,6 +853,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Radar"][];
+                };
+            };
+        };
+    };
+    listRadarStatuses: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Latest radar health summaries */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RadarStatusSummary"][];
                 };
             };
         };

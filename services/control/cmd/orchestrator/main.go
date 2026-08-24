@@ -2,13 +2,17 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -19,6 +23,7 @@ import (
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/workflow"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"gopkg.in/yaml.v3"
 )
 
 func main() {
@@ -58,6 +63,15 @@ func main() {
 			slog.Error("create simulated radar/analysis workflows", "error", err)
 			os.Exit(1)
 		}
+	case "radar-decode":
+		if len(os.Args) != 6 {
+			slog.Error("radar-decode requires config YAML, input path, volume start and volume end")
+			os.Exit(2)
+		}
+		if err := radarDecode(ctx, service, os.Args[2], os.Args[3], os.Args[4], os.Args[5]); err != nil {
+			slog.Error("create radar decode workflow", "error", err)
+			os.Exit(1)
+		}
 	case "complete":
 		if len(os.Args) != 3 {
 			slog.Error("complete requires a job UUID")
@@ -80,6 +94,95 @@ func main() {
 		slog.Error("unknown orchestrator command", "command", command)
 		os.Exit(2)
 	}
+}
+
+type radarConfiguration struct {
+	ConfigVersion string `yaml:"config_version"`
+	RadarID       string `yaml:"radar_id"`
+	Lifecycle     string `yaml:"lifecycle"`
+	DisplayName   string `yaml:"display_name"`
+	Source        struct {
+		Format string `yaml:"format"`
+	} `yaml:"source"`
+}
+
+func radarDecode(
+	ctx context.Context,
+	service *orchestration.Service,
+	configPath string,
+	inputPath string,
+	rawStart string,
+	rawEnd string,
+) error {
+	configBytes, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("read radar configuration: %w", err)
+	}
+	var config radarConfiguration
+	if err := yaml.Unmarshal(configBytes, &config); err != nil {
+		return fmt.Errorf("decode radar configuration: %w", err)
+	}
+	var configValue map[string]any
+	if err := yaml.Unmarshal(configBytes, &configValue); err != nil {
+		return fmt.Errorf("normalize radar configuration: %w", err)
+	}
+	configJSON, err := json.Marshal(configValue)
+	if err != nil {
+		return fmt.Errorf("encode radar configuration: %w", err)
+	}
+	absoluteInput, err := filepath.Abs(inputPath)
+	if err != nil {
+		return fmt.Errorf("resolve radar input path: %w", err)
+	}
+	info, err := os.Stat(absoluteInput)
+	if err != nil {
+		return fmt.Errorf("stat radar input: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("radar input is not a regular file")
+	}
+	inputHash, err := sha256File(absoluteInput)
+	if err != nil {
+		return err
+	}
+	start, err := time.Parse(time.RFC3339Nano, rawStart)
+	if err != nil {
+		return fmt.Errorf("parse volume start: %w", err)
+	}
+	end, err := time.Parse(time.RFC3339Nano, rawEnd)
+	if err != nil {
+		return fmt.Errorf("parse volume end: %w", err)
+	}
+	configHash := sha256.Sum256(configBytes)
+	displayName := config.DisplayName
+	scan, job, err := service.CreateRadarDecode(ctx, orchestration.RadarDecodeInput{
+		RadarID: config.RadarID, DisplayName: &displayName,
+		Lifecycle:     workflow.RadarLifecycle(config.Lifecycle),
+		ConfigVersion: config.ConfigVersion, Config: configJSON,
+		ConfigSHA256: fmt.Sprintf("%x", configHash), SourceFormat: config.Source.Format,
+		InputURI:    (&url.URL{Scheme: "file", Path: absoluteInput}).String(),
+		InputSHA256: inputHash, InputSizeBytes: info.Size(),
+		VolumeStartTime: start, VolumeEndTime: end,
+	})
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(os.Stdout).Encode(map[string]string{
+		"scan_id": scan.ID.String(), "run_id": scan.RunID.String(), "job_id": job.ID.String(),
+	})
+}
+
+func sha256File(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("open radar input: %w", err)
+	}
+	defer file.Close()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", fmt.Errorf("hash radar input: %w", err)
+	}
+	return fmt.Sprintf("%x", hash.Sum(nil)), nil
 }
 
 func dependencies(ctx context.Context) (*pgxpool.Pool, *postgresstore.Store, *messaging.JetStream, *orchestration.Service, error) {
@@ -236,19 +339,28 @@ func replay(ctx context.Context, store *postgresstore.Store, bus *messaging.JetS
 	if err != nil {
 		return err
 	}
-	var event orchestration.JobRequested
+	var event map[string]any
 	if err := json.Unmarshal(job.RequestPayload, &event); err != nil {
 		return fmt.Errorf("decode job request: %w", err)
 	}
-	event.EventID = uuid.New()
-	event.OccurredAt = time.Now().UTC()
+	eventType, _ := event["event_type"].(string)
+	event["event_id"] = uuid.New().String()
+	event["occurred_at"] = time.Now().UTC()
 	payload, err := json.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("encode replayed job request: %w", err)
 	}
+	subject := orchestration.JobRequestedSubject
+	if eventType == orchestration.RadarDecodeRequestedEventType {
+		subject = orchestration.RadarDecodeRequestedSubject
+	}
+	eventID, err := uuid.Parse(event["event_id"].(string))
+	if err != nil {
+		return fmt.Errorf("parse replay event UUID: %w", err)
+	}
 	return bus.Publish(ctx, workflow.OutboxEvent{
-		ID:      event.EventID,
-		Subject: orchestration.JobRequestedSubject,
+		ID:      eventID,
+		Subject: subject,
 		Payload: payload,
 	})
 }

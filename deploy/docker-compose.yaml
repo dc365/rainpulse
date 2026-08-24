@@ -146,6 +146,9 @@ services:
       RAINPULSE_NATS_URL: nats://nats:4222
       RAINPULSE_ORCHESTRATOR_HEALTH_ADDR: ":8090"
       TZ: UTC
+    volumes:
+      - ../configs:/opt/rainpulse/configs:ro
+      - /data/Weather/RADA/FMT_L2_Z959X_SBD:/data/Weather/RADA/FMT_L2_Z959X_SBD:ro
     healthcheck:
       test: ["CMD", "/rainpulse-healthcheck", "http://127.0.0.1:8090/healthz"]
       interval: 5s
@@ -208,10 +211,11 @@ services:
       RAINPULSE_WORKER_ID: cma-rstm-z9598
       RAINPULSE_WORKER_PROFILE: radar-decode-fmt
       RAINPULSE_RADAR_CONFIG_DIR: /opt/rainpulse/configs/radars
+      RAINPULSE_RADAR_HEALTH_CONFIG: /opt/rainpulse/configs/health/rp007-integrity-v1.yaml
       RAINPULSE_RADAR_INPUT_ROOTS: /data/Weather/RADA/FMT_L2_Z959X_SBD
       TZ: UTC
     volumes:
-      - ../configs/radars:/opt/rainpulse/configs/radars:ro
+      - ../configs:/opt/rainpulse/configs:ro
       - /data/Weather/RADA/FMT_L2_Z959X_SBD:/data/Weather/RADA/FMT_L2_Z959X_SBD:ro
     healthcheck:
       test:

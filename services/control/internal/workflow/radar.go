@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -100,6 +101,9 @@ type RadarScan struct {
 
 type RadarStatusSummary struct {
 	RadarID                       string
+	DisplayName                   *string
+	Lifecycle                     RadarLifecycle
+	ConfigVersion                 string
 	Health                        RadarHealthState
 	LatestScanID                  *uuid.UUID
 	LatestScanTime                *time.Time
@@ -108,6 +112,71 @@ type RadarStatusSummary struct {
 	MeanQualityIndex              *float64
 	DataDelaySeconds              *int64
 	ParticipatingInLatestAnalysis bool
+	HealthMetrics                 *RadarHealthMetrics
+}
+
+type RadarFieldAvailability struct {
+	Field               string  `json:"field"`
+	Available           bool    `json:"available"`
+	PresentSweepCount   int     `json:"present_sweep_count"`
+	FiniteGateRatio     float64 `json:"finite_gate_ratio"`
+	OutOfRangeGateCount int64   `json:"out_of_range_gate_count"`
+	Unit                string  `json:"unit"`
+}
+
+type RadarNoiseLevel struct {
+	Source        string   `json:"source"`
+	HorizontalDBM *float64 `json:"horizontal_dbm"`
+	VerticalDBM   *float64 `json:"vertical_dbm"`
+	SampleCount   int      `json:"sample_count"`
+}
+
+type RadarHealthMetrics struct {
+	ScanID                 uuid.UUID                `json:"scan_id"`
+	RadarID                string                   `json:"radar_id"`
+	RadarConfigVersion     string                   `json:"radar_config_version"`
+	HealthProfileVersion   string                   `json:"health_profile_version"`
+	Health                 RadarHealthState         `json:"health"`
+	HealthReasons          []string                 `json:"health_reasons"`
+	ScanCompleteness       float64                  `json:"scan_completeness"`
+	ExpectedSweepCount     int                      `json:"expected_sweep_count"`
+	ActualSweepCount       int                      `json:"actual_sweep_count"`
+	MissingSweepNumbers    []int16                  `json:"missing_sweep_numbers"`
+	ExpectedRadialCount    int                      `json:"expected_radial_count"`
+	ActualRadialCount      int                      `json:"actual_radial_count"`
+	MissingRadialCount     int                      `json:"missing_radial_count"`
+	MaximumAzimuthGapDeg   float64                  `json:"maximum_azimuth_gap_deg"`
+	FieldAvailabilityRatio float64                  `json:"field_availability_ratio"`
+	FieldAvailability      []RadarFieldAvailability `json:"field_availability"`
+	NoiseLevel             RadarNoiseLevel          `json:"noise_level"`
+	ChannelStatus          string                   `json:"channel_status"`
+	OutOfRangeGateCount    int64                    `json:"out_of_range_gate_count"`
+	OutOfRangeGateRatio    float64                  `json:"out_of_range_gate_ratio"`
+	AnomalyCount           int64                    `json:"anomaly_count"`
+	LayerAnomalies         []map[string]any         `json:"layer_anomalies"`
+	Warnings               []string                 `json:"warnings"`
+	MeasuredAt             time.Time                `json:"measured_at"`
+}
+
+type RawRadarAsset struct {
+	ID         uuid.UUID
+	SourceID   uuid.UUID
+	ObservedAt time.Time
+	ObjectURI  string
+	MediaType  string
+	SizeBytes  int64
+	SHA256     string
+	Metadata   json.RawMessage
+}
+
+type RadarDecodeBundle struct {
+	Radar        Radar
+	Config       json.RawMessage
+	ConfigSHA256 string
+	Asset        RawRadarAsset
+	Scan         RadarScan
+	Job          Job
+	Outbox       OutboxEvent
 }
 
 type AnalysisRadar struct {

@@ -15,7 +15,7 @@ MINIO_MC_BUILD_VERSION := 2025-08-13T08:35:41Z
 MINIO_MC_COMMIT := 7394ce0dd2a80935aded936b09fa12cbb3cb8096
 MINIO_MC_LDFLAGS := -s -w -X github.com/minio/mc/cmd.Version=$(MINIO_MC_BUILD_VERSION) -X github.com/minio/mc/cmd.CopyrightYear=2025 -X github.com/minio/mc/cmd.ReleaseTag=$(MINIO_MC_VERSION) -X github.com/minio/mc/cmd.CommitID=$(MINIO_MC_COMMIT) -X github.com/minio/mc/cmd.ShortCommitID=7394ce0dd2a8
 
-.PHONY: bootstrap contracts-generate contracts-check test test-structure test-radar-config test-contracts test-infrastructure test-control-plane test-worker-sdk test-radar-decoder test-go test-python test-web lint build build-linux build-infrastructure-linux export-postgres-image export-python-image build-worker-linux deploy-up dev-up dev-down smoke infrastructure-smoke control-plane-smoke worker-smoke radar-decode-smoke
+.PHONY: bootstrap contracts-generate contracts-check test test-structure test-radar-config test-contracts test-infrastructure test-control-plane test-worker-sdk test-radar-decoder test-radar-health test-go test-python test-web lint build build-linux build-infrastructure-linux export-postgres-image export-python-image build-worker-linux deploy-up dev-up dev-down smoke infrastructure-smoke control-plane-smoke worker-smoke radar-decode-smoke radar-health-smoke
 
 bootstrap:
 	@command -v go >/dev/null || { echo "go is required" >&2; exit 1; }
@@ -31,7 +31,7 @@ contracts-generate:
 contracts-check:
 	bash scripts/check_generated_contracts.sh
 
-test: test-structure test-radar-config test-contracts test-infrastructure test-control-plane test-worker-sdk test-radar-decoder test-go test-python test-web
+test: test-structure test-radar-config test-contracts test-infrastructure test-control-plane test-worker-sdk test-radar-decoder test-radar-health test-go test-python test-web
 
 test-structure:
 	bash tests/rp000_structure_test.sh
@@ -55,6 +55,9 @@ test-worker-sdk:
 
 test-radar-decoder:
 	bash tests/rp006_radar_decoder_test.sh
+
+test-radar-health:
+	bash tests/rp007_radar_health_test.sh
 
 test-go:
 	go test ./services/control/...
@@ -139,3 +142,6 @@ worker-smoke:
 
 radar-decode-smoke:
 	bash scripts/radar_decode_smoke_test.sh
+
+radar-health-smoke:
+	bash scripts/radar_health_smoke_test.sh

@@ -72,6 +72,7 @@ class JobCompletedPayload(ContractModel):
     runtime_ms: int = Field(ge=0)
     assets: list[CompletedAsset]
     metrics: dict[str, float]
+    diagnostics: dict[str, Any] = Field(default_factory=dict)
 
 
 class JobCompleted(ContractModel):

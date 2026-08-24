@@ -27,6 +27,7 @@ type RunCommands interface {
 
 type ObservationStore interface {
 	ListRadars(context.Context) ([]workflow.Radar, error)
+	ListRadarStatuses(context.Context) ([]workflow.RadarStatusSummary, error)
 	GetRadar(context.Context, string) (workflow.Radar, error)
 	GetRadarStatus(context.Context, string) (workflow.RadarStatusSummary, error)
 	ListRadarScans(context.Context, int, *string, *workflow.RadarScanStatus) ([]workflow.RadarScan, error)
@@ -231,6 +232,23 @@ func (service *server) GetRadarStatus(
 		return
 	}
 	writeJSON(response, http.StatusOK, toAPIRadarStatus(status))
+}
+
+func (service *server) ListRadarStatuses(response http.ResponseWriter, request *http.Request) {
+	if service.observations == nil {
+		writeServiceUnavailable(response)
+		return
+	}
+	statuses, err := service.observations.ListRadarStatuses(request.Context())
+	if err != nil {
+		writeStoreError(response, err)
+		return
+	}
+	items := make([]apiv1.RadarStatusSummary, 0, len(statuses))
+	for _, status := range statuses {
+		items = append(items, toAPIRadarStatus(status))
+	}
+	writeJSON(response, http.StatusOK, items)
 }
 
 func (service *server) ListRadarScans(
@@ -504,13 +522,58 @@ func toAPIRadarStatus(status workflow.RadarStatusSummary) apiv1.RadarStatusSumma
 		value := apiv1.RadarScanRunStatus(*status.ScanStatus)
 		scanStatus = &value
 	}
-	return apiv1.RadarStatusSummary{
+	result := apiv1.RadarStatusSummary{
 		RadarId: status.RadarID, Health: apiv1.RadarHealthState(status.Health),
-		LatestScanId: status.LatestScanID, LatestScanTime: utcPointer(status.LatestScanTime),
+		DisplayName: status.DisplayName, Lifecycle: apiv1.RadarLifecycle(status.Lifecycle),
+		ConfigVersion: status.ConfigVersion,
+		LatestScanId:  status.LatestScanID, LatestScanTime: utcPointer(status.LatestScanTime),
 		ScanStatus: scanStatus, ScanCompleteness: float32Pointer(status.ScanCompleteness),
 		MeanQualityIndex:              float32Pointer(status.MeanQualityIndex),
 		DataDelaySeconds:              status.DataDelaySeconds,
 		ParticipatingInLatestAnalysis: status.ParticipatingInLatestAnalysis,
+	}
+	if status.HealthMetrics != nil {
+		result.HealthMetrics = toAPIRadarHealth(*status.HealthMetrics)
+	}
+	return result
+}
+
+func toAPIRadarHealth(health workflow.RadarHealthMetrics) *apiv1.RadarHealthMetrics {
+	fields := make([]apiv1.RadarFieldAvailability, 0, len(health.FieldAvailability))
+	for _, field := range health.FieldAvailability {
+		fields = append(fields, apiv1.RadarFieldAvailability{
+			Field: field.Field, Available: field.Available,
+			PresentSweepCount:   field.PresentSweepCount,
+			FiniteGateRatio:     float32(field.FiniteGateRatio),
+			OutOfRangeGateCount: field.OutOfRangeGateCount, Unit: field.Unit,
+		})
+	}
+	missingSweeps := make([]int, len(health.MissingSweepNumbers))
+	for index, value := range health.MissingSweepNumbers {
+		missingSweeps[index] = int(value)
+	}
+	return &apiv1.RadarHealthMetrics{
+		ScanId: health.ScanID, RadarId: health.RadarID,
+		RadarConfigVersion:   health.RadarConfigVersion,
+		HealthProfileVersion: health.HealthProfileVersion,
+		Health:               apiv1.RadarHealthState(health.Health), HealthReasons: health.HealthReasons,
+		ScanCompleteness:   float32(health.ScanCompleteness),
+		ExpectedSweepCount: health.ExpectedSweepCount, ActualSweepCount: health.ActualSweepCount,
+		MissingSweepNumbers: missingSweeps,
+		ExpectedRadialCount: health.ExpectedRadialCount, ActualRadialCount: health.ActualRadialCount,
+		MissingRadialCount:     health.MissingRadialCount,
+		MaximumAzimuthGapDeg:   float32(health.MaximumAzimuthGapDeg),
+		FieldAvailabilityRatio: float32(health.FieldAvailabilityRatio), FieldAvailability: fields,
+		NoiseLevel: apiv1.RadarNoiseLevel{
+			Source: health.NoiseLevel.Source, SampleCount: health.NoiseLevel.SampleCount,
+			HorizontalDbm: float32ValuePointer(health.NoiseLevel.HorizontalDBM),
+			VerticalDbm:   float32ValuePointer(health.NoiseLevel.VerticalDBM),
+		},
+		ChannelStatus:       apiv1.RadarHealthMetricsChannelStatus(health.ChannelStatus),
+		OutOfRangeGateCount: health.OutOfRangeGateCount,
+		OutOfRangeGateRatio: float32(health.OutOfRangeGateRatio),
+		AnomalyCount:        health.AnomalyCount, LayerAnomalies: health.LayerAnomalies,
+		Warnings: health.Warnings, MeasuredAt: health.MeasuredAt.UTC(),
 	}
 }
 
@@ -564,6 +627,10 @@ func float32Pointer(value *float64) *float32 {
 	}
 	converted := float32(*value)
 	return &converted
+}
+
+func float32ValuePointer(value *float64) *float32 {
+	return float32Pointer(value)
 }
 
 func writeStoreError(response http.ResponseWriter, err error) {

@@ -111,6 +111,8 @@ class DecodedSweep:
     azimuth_deg: np.ndarray
     elevation_deg: np.ndarray
     ray_time: np.ndarray
+    horizontal_noise_dbm: np.ndarray
+    vertical_noise_dbm: np.ndarray
     range_m: np.ndarray
     fields: dict[str, np.ndarray]
     field_metadata: dict[str, FieldMetadata]
@@ -169,6 +171,8 @@ class _Radial:
     azimuth_deg: float
     elevation_deg: float
     time_ns: int
+    horizontal_noise_dbm: float
+    vertical_noise_dbm: float
     moments: dict[int, _Moment]
 
 
@@ -228,8 +232,8 @@ def decode_fmt_volume(path: str | Path, config: RadarDecoderConfig) -> DecodedRa
                 data_length,
                 moment_number,
                 _reserved,
-                _horizontal_noise,
-                _vertical_noise,
+                horizontal_noise,
+                vertical_noise,
                 zip_type,
                 _reserved2,
             ) = values
@@ -278,6 +282,8 @@ def decode_fmt_volume(path: str | Path, config: RadarDecoderConfig) -> DecodedRa
                     azimuth_deg=float(azimuth) % 360.0,
                     elevation_deg=float(elevation),
                     time_ns=int(seconds) * 1_000_000_000 + int(microseconds) * 1_000,
+                    horizontal_noise_dbm=_decode_noise(horizontal_noise),
+                    vertical_noise_dbm=_decode_noise(vertical_noise),
                     moments=moments,
                 )
             )
@@ -409,6 +415,12 @@ def _finalize_sweep(
         azimuth_deg=np.asarray([radial.azimuth_deg for radial in radials], dtype="float32"),
         elevation_deg=np.asarray([radial.elevation_deg for radial in radials], dtype="float32"),
         ray_time=times.astype("datetime64[ns]"),
+        horizontal_noise_dbm=np.asarray(
+            [radial.horizontal_noise_dbm for radial in radials], dtype="float32"
+        ),
+        vertical_noise_dbm=np.asarray(
+            [radial.vertical_noise_dbm for radial in radials], dtype="float32"
+        ),
         range_m=range_m,
         fields=fields,
         field_metadata=metadata,
@@ -565,3 +577,7 @@ def _filename_time(filename: str) -> datetime | None:
         return datetime.strptime(match.group(1), "%Y%m%d%H%M%S").replace(tzinfo=UTC)
     except ValueError:
         return None
+
+
+def _decode_noise(value: int) -> float:
+    return np.nan if value == -32768 else value / 100.0

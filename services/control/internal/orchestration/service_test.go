@@ -58,6 +58,52 @@ func TestCreateSimulationPersistsContractEventInOneBundle(t *testing.T) {
 	}
 }
 
+func TestCreateRadarDecodeUsesStableIdentityAndRealWorkerSubject(t *testing.T) {
+	repository := &fakeRepository{}
+	now := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+	service := NewService(repository, Options{Now: func() time.Time { return now }})
+	displayName := "SanMing Z9598"
+	input := RadarDecodeInput{
+		RadarID: "z9598", DisplayName: &displayName, Lifecycle: workflow.RadarDraft,
+		ConfigVersion: "z9598-fmt-v1", Config: json.RawMessage(`{"radar_id":"z9598"}`),
+		ConfigSHA256: "63266c7c72321262a01b945281060abd84153a8f3ad64a95c5b73b9fd510f678",
+		SourceFormat: "cma-rstm-level2", InputURI: "file:///data/Weather/sample.bin.bz2",
+		InputSHA256:     "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+		InputSizeBytes:  3,
+		VolumeStartTime: time.Date(2026, 6, 15, 11, 58, 29, 0, time.UTC),
+		VolumeEndTime:   time.Date(2026, 6, 15, 12, 3, 52, 0, time.UTC),
+	}
+
+	scan, job, err := service.CreateRadarDecode(context.Background(), input)
+	if err != nil {
+		t.Fatalf("CreateRadarDecode() error = %v", err)
+	}
+	first := repository.radarDecode
+	if first.Outbox.Subject != RadarDecodeRequestedSubject || first.Outbox.EventType != RadarDecodeRequestedEventType {
+		t.Fatalf("unexpected radar worker route: %#v", first.Outbox)
+	}
+	if scan.Status != workflow.RadarScanRawValidating || job.JobType != RadarDecodeJobType {
+		t.Fatalf("unexpected radar workflow states: scan=%s job=%s", scan.Status, job.JobType)
+	}
+	var requested RadarDecodeRequested
+	if err := json.Unmarshal(first.Outbox.Payload, &requested); err != nil {
+		t.Fatalf("decode radar request: %v", err)
+	}
+	if requested.Payload.ScanID != scan.ID || requested.Payload.DecoderVersion != RadarDecoderVersion ||
+		requested.Payload.InputURI != input.InputURI {
+		t.Fatalf("unexpected radar decode request: %#v", requested)
+	}
+
+	secondScan, secondJob, err := service.CreateRadarDecode(context.Background(), input)
+	if err != nil {
+		t.Fatalf("repeat CreateRadarDecode() error = %v", err)
+	}
+	if secondScan.ID != scan.ID || secondScan.RunID != scan.RunID || secondJob.ID != job.ID ||
+		repository.radarDecode.Outbox.ID != first.Outbox.ID {
+		t.Fatal("radar decode workflow identifiers are not deterministic")
+	}
+}
+
 func TestDispatchOnceMarksPublishedOnlyAfterPublish(t *testing.T) {
 	event := workflow.OutboxEvent{ID: uuid.New(), Subject: JobRequestedSubject, Payload: json.RawMessage(`{}`)}
 	repository := &fakeRepository{claimed: event}
@@ -164,11 +210,20 @@ func TestHandleResultDispatchesStrictFailureEvent(t *testing.T) {
 
 type fakeRepository struct {
 	created        workflow.CreateBundle
+	radarDecode    workflow.RadarDecodeBundle
 	domain         workflow.DomainSimulation
 	claimed        workflow.OutboxEvent
 	published      uuid.UUID
 	failed         uuid.UUID
 	appliedFailure JobFailed
+}
+
+func (repository *fakeRepository) CreateRadarDecodeBundle(
+	_ context.Context,
+	bundle workflow.RadarDecodeBundle,
+) error {
+	repository.radarDecode = bundle
+	return nil
 }
 
 func (repository *fakeRepository) CreateDomainSimulation(

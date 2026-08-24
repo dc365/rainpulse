@@ -95,6 +95,20 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Radar"
+  /radars/status:
+    get:
+      operationId: listRadarStatuses
+      tags: [radars]
+      summary: List the latest integrity and health status for every radar
+      responses:
+        "200":
+          description: Latest radar health summaries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RadarStatusSummary"
   /radars/{radar_id}:
     get:
       operationId: getRadar
@@ -615,9 +629,16 @@ components:
     RadarStatusSummary:
       type: object
       additionalProperties: false
-      required: [radar_id, health, participating_in_latest_analysis]
+      required: [radar_id, lifecycle, config_version, health, participating_in_latest_analysis]
       properties:
         radar_id:
+          type: string
+        display_name:
+          type: string
+          nullable: true
+        lifecycle:
+          $ref: "#/components/schemas/RadarLifecycle"
+        config_version:
           type: string
         health:
           $ref: "#/components/schemas/RadarHealthState"
@@ -652,6 +673,163 @@ components:
           nullable: true
         participating_in_latest_analysis:
           type: boolean
+        health_metrics:
+          allOf:
+            - $ref: "#/components/schemas/RadarHealthMetrics"
+          nullable: true
+    RadarFieldAvailability:
+      type: object
+      additionalProperties: false
+      required: [field, available, present_sweep_count, finite_gate_ratio, out_of_range_gate_count, unit]
+      properties:
+        field:
+          type: string
+        available:
+          type: boolean
+        present_sweep_count:
+          type: integer
+        finite_gate_ratio:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        out_of_range_gate_count:
+          type: integer
+          format: int64
+          minimum: 0
+        unit:
+          type: string
+    RadarNoiseLevel:
+      type: object
+      additionalProperties: false
+      required: [source, sample_count]
+      properties:
+        source:
+          type: string
+        horizontal_dbm:
+          type: number
+          format: float
+          nullable: true
+        vertical_dbm:
+          type: number
+          format: float
+          nullable: true
+        sample_count:
+          type: integer
+          minimum: 0
+    RadarHealthMetrics:
+      type: object
+      additionalProperties: false
+      required:
+        - scan_id
+        - radar_id
+        - radar_config_version
+        - health_profile_version
+        - health
+        - health_reasons
+        - scan_completeness
+        - expected_sweep_count
+        - actual_sweep_count
+        - missing_sweep_numbers
+        - expected_radial_count
+        - actual_radial_count
+        - missing_radial_count
+        - maximum_azimuth_gap_deg
+        - field_availability_ratio
+        - field_availability
+        - noise_level
+        - channel_status
+        - out_of_range_gate_count
+        - out_of_range_gate_ratio
+        - anomaly_count
+        - layer_anomalies
+        - warnings
+        - measured_at
+      properties:
+        scan_id:
+          type: string
+          format: uuid
+        radar_id:
+          type: string
+        radar_config_version:
+          type: string
+        health_profile_version:
+          type: string
+        health:
+          $ref: "#/components/schemas/RadarHealthState"
+        health_reasons:
+          type: array
+          items:
+            type: string
+        scan_completeness:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        expected_sweep_count:
+          type: integer
+          minimum: 1
+        actual_sweep_count:
+          type: integer
+          minimum: 0
+        missing_sweep_numbers:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+        expected_radial_count:
+          type: integer
+          minimum: 1
+        actual_radial_count:
+          type: integer
+          minimum: 0
+        missing_radial_count:
+          type: integer
+          minimum: 0
+        maximum_azimuth_gap_deg:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 360
+        field_availability_ratio:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        field_availability:
+          type: array
+          items:
+            $ref: "#/components/schemas/RadarFieldAvailability"
+        noise_level:
+          $ref: "#/components/schemas/RadarNoiseLevel"
+        channel_status:
+          type: string
+          enum: [OK, DEGRADED, UNKNOWN]
+        out_of_range_gate_count:
+          type: integer
+          format: int64
+          minimum: 0
+        out_of_range_gate_ratio:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        anomaly_count:
+          type: integer
+          format: int64
+          minimum: 0
+        layer_anomalies:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        warnings:
+          type: array
+          items:
+            type: string
+        measured_at:
+          type: string
+          format: date-time
     RadarScan:
       type: object
       additionalProperties: false

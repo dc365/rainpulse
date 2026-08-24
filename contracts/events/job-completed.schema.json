@@ -49,6 +49,9 @@
         "metrics": {
           "type": "object",
           "additionalProperties": { "type": "number" }
+        },
+        "diagnostics": {
+          "type": "object"
         }
       }
     }

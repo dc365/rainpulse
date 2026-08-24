@@ -14,21 +14,25 @@ import (
 )
 
 const (
-	SchemaVersion          = "1.0"
-	JobRequestedEventType  = "job.requested"
-	JobCompletedEventType  = "job.completed"
-	JobFailedEventType     = "job.failed"
-	JobRequestedSubject    = "rainpulse.jobs.requested.model_pysteps_lk"
-	JobCompletedSubject    = "rainpulse.jobs.completed"
-	JobFailedSubject       = "rainpulse.jobs.failed"
-	JobResultsSubject      = "rainpulse.jobs.*"
-	JobStreamName          = "RAINPULSE_JOBS"
-	ResultConsumerName     = "rainpulse-orchestrator-results-v2"
-	SimulationJobType      = "model.pysteps_lk"
-	SimulationModelID      = "pysteps-lk-sim"
-	SimulationModelVersion = "pysteps-lk-sim-v1"
-	SimulationConfig       = "rp003-sim-v1"
-	SimulationGrid         = "rp003-sim-grid"
+	SchemaVersion                 = "1.0"
+	JobRequestedEventType         = "job.requested"
+	JobCompletedEventType         = "job.completed"
+	JobFailedEventType            = "job.failed"
+	JobRequestedSubject           = "rainpulse.jobs.requested.model_pysteps_lk"
+	RadarDecodeRequestedEventType = "radar.decode.requested.v1"
+	RadarDecodeRequestedSubject   = "rainpulse.jobs.requested.radar_decode"
+	RadarDecodeJobType            = "radar.decode"
+	RadarDecoderVersion           = "cma-rstm-2.0.0"
+	JobCompletedSubject           = "rainpulse.jobs.completed"
+	JobFailedSubject              = "rainpulse.jobs.failed"
+	JobResultsSubject             = "rainpulse.jobs.*"
+	JobStreamName                 = "RAINPULSE_JOBS"
+	ResultConsumerName            = "rainpulse-orchestrator-results-v2"
+	SimulationJobType             = "model.pysteps_lk"
+	SimulationModelID             = "pysteps-lk-sim"
+	SimulationModelVersion        = "pysteps-lk-sim-v1"
+	SimulationConfig              = "rp003-sim-v1"
+	SimulationGrid                = "rp003-sim-grid"
 )
 
 type JobRequested struct {
@@ -54,6 +58,28 @@ type JobRequestedPayload struct {
 	Parameters   map[string]any `json:"parameters,omitempty"`
 }
 
+type RadarDecodeRequested struct {
+	SchemaVersion string                      `json:"schema_version"`
+	EventID       uuid.UUID                   `json:"event_id"`
+	EventType     string                      `json:"event_type"`
+	OccurredAt    time.Time                   `json:"occurred_at"`
+	RunID         uuid.UUID                   `json:"run_id"`
+	JobID         uuid.UUID                   `json:"job_id"`
+	TraceID       uuid.UUID                   `json:"trace_id"`
+	Payload       RadarDecodeRequestedPayload `json:"payload"`
+}
+
+type RadarDecodeRequestedPayload struct {
+	ScanID         uuid.UUID `json:"scan_id"`
+	AssetID        uuid.UUID `json:"asset_id"`
+	RadarID        string    `json:"radar_id"`
+	InputURI       string    `json:"input_uri"`
+	OutputPrefix   string    `json:"output_prefix"`
+	SourceFormat   string    `json:"source_format"`
+	RadarConfig    string    `json:"radar_config_version"`
+	DecoderVersion string    `json:"decoder_version"`
+}
+
 type JobCompleted struct {
 	SchemaVersion string              `json:"schema_version"`
 	EventID       uuid.UUID           `json:"event_id"`
@@ -66,12 +92,13 @@ type JobCompleted struct {
 }
 
 type JobCompletedPayload struct {
-	Status     string              `json:"status"`
-	StartedAt  time.Time           `json:"started_at"`
-	FinishedAt time.Time           `json:"finished_at"`
-	RuntimeMS  int64               `json:"runtime_ms"`
-	Assets     []JobCompletedAsset `json:"assets"`
-	Metrics    map[string]float64  `json:"metrics"`
+	Status      string                     `json:"status"`
+	StartedAt   time.Time                  `json:"started_at"`
+	FinishedAt  time.Time                  `json:"finished_at"`
+	RuntimeMS   int64                      `json:"runtime_ms"`
+	Assets      []JobCompletedAsset        `json:"assets"`
+	Metrics     map[string]float64         `json:"metrics"`
+	Diagnostics map[string]json.RawMessage `json:"diagnostics,omitempty"`
 }
 
 type JobCompletedAsset struct {

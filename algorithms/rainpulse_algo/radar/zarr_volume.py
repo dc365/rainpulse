@@ -12,6 +12,7 @@ from zarr.storage import MemoryStore
 
 from .config import RadarDecoderConfig
 from .fmt import DECODER_ID, DECODER_VERSION, DecodedRadarVolume, DecodeError
+from .health import RadarHealthSummary
 
 CONTRACT_NAME = "rainpulse.normalized-radar-volume"
 CONTRACT_VERSION = "1.0"
@@ -24,6 +25,7 @@ def build_zarr_store(
     *,
     asset_id: UUID | str,
     source_uri: str,
+    health: RadarHealthSummary | None = None,
     provenance: Mapping[str, str] | None = None,
 ) -> dict[str, bytes]:
     store = MemoryStore()
@@ -76,6 +78,16 @@ def build_zarr_store(
             "known_source_issues": list(config.known_issues),
         }
     )
+    if health is not None:
+        root.attrs.update(
+            {
+                "health_summary_key": "health/summary.json",
+                "health_profile_version": health.value["health_profile_version"],
+                "radar_health": health.value["health"],
+                "scan_completeness": health.value["scan_completeness"],
+                "channel_status": health.value["channel_status"],
+            }
+        )
     if provenance:
         root.attrs.update(dict(provenance))
 
@@ -106,6 +118,16 @@ def build_zarr_store(
         )
         ray_time = _array(group, "ray_time", sweep.ray_time, compressor)
         ray_time.attrs.update({"timezone": "UTC", "standard_name": "time"})
+        horizontal_noise = _array(
+            group, "horizontal_noise", sweep.horizontal_noise_dbm, compressor
+        )
+        horizontal_noise.attrs.update(
+            {"units": "dBm", "source": "RSTM radial header", "missing_value": "NaN"}
+        )
+        vertical_noise = _array(group, "vertical_noise", sweep.vertical_noise_dbm, compressor)
+        vertical_noise.attrs.update(
+            {"units": "dBm", "source": "RSTM radial header", "missing_value": "NaN"}
+        )
         range_array = _array(group, "range", sweep.range_m, compressor)
         range_array.attrs.update(
             {"units": "m", "standard_name": "projection_range_coordinate"}
@@ -138,6 +160,8 @@ def build_zarr_store(
 
     zarr.consolidate_metadata(store)
     objects = {str(key): bytes(value) for key, value in store.items()}
+    if health is not None:
+        objects["health/summary.json"] = health.json_bytes()
     validate_zarr_store(objects)
     return objects
 
@@ -166,17 +190,40 @@ def validate_zarr_store(objects: Mapping[str, bytes]) -> dict[str, Any]:
         azimuth = group["azimuth"][:]
         elevation = group["elevation"][:]
         ray_time = group["ray_time"][:].astype("datetime64[ns]").astype("int64")
+        horizontal_noise = group["horizontal_noise"][:]
+        vertical_noise = group["vertical_noise"][:]
         ranges = group["range"][:]
-        if not (azimuth.ndim == elevation.ndim == ray_time.ndim == ranges.ndim == 1):
+        if not (
+            azimuth.ndim
+            == elevation.ndim
+            == ray_time.ndim
+            == horizontal_noise.ndim
+            == vertical_noise.ndim
+            == ranges.ndim
+            == 1
+        ):
             raise DecodeError("normalized Zarr coordinate rank is invalid")
-        if not (len(azimuth) == len(elevation) == len(ray_time)):
+        if not (
+            len(azimuth)
+            == len(elevation)
+            == len(ray_time)
+            == len(horizontal_noise)
+            == len(vertical_noise)
+        ):
             raise DecodeError("normalized Zarr ray coordinates have different lengths")
         if np.any((azimuth < 0) | (azimuth >= 360)):
             raise DecodeError("normalized Zarr azimuth is outside [0, 360)")
         if np.any(np.diff(ray_time) < 0) or np.any(np.diff(ranges) <= 0):
             raise DecodeError("normalized Zarr time/range coordinates are not increasing")
         for name, array in group.arrays():
-            if name in {"azimuth", "elevation", "ray_time", "range"}:
+            if name in {
+                "azimuth",
+                "elevation",
+                "ray_time",
+                "horizontal_noise",
+                "vertical_noise",
+                "range",
+            }:
                 continue
             if array.shape != (len(azimuth), len(ranges)) or array.dtype != np.dtype("float32"):
                 raise DecodeError(f"normalized field {name} has invalid shape or dtype")

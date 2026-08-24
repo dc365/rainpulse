@@ -65,6 +65,7 @@ class WorkerResult:
     data: bytes | None = None
     metrics: dict[str, float] = field(default_factory=dict)
     objects: dict[str, bytes] | None = None
+    diagnostics: dict[str, Any] = field(default_factory=dict)
 
     def payloads(self) -> dict[str, bytes]:
         return normalize_artifact_objects(data=self.data, objects=self.objects)
@@ -280,6 +281,7 @@ class Worker:
                     )
                 ],
                 metrics=result.metrics,
+                diagnostics=result.diagnostics,
             ),
         )
 

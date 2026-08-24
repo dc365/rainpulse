@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/configs/schemas/radar-health.schema.json",
+  "title": "RainPulse radar integrity and health profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profile_version", "thresholds", "field_hard_limits"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "profile_version": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum_scan_completeness",
+        "unavailable_below_completeness",
+        "maximum_azimuth_gap_deg",
+        "maximum_out_of_range_ratio",
+        "degrade_when_noise_telemetry_missing",
+        "noise_dbm_range"
+      ],
+      "properties": {
+        "minimum_scan_completeness": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        },
+        "unavailable_below_completeness": {
+          "type": "number",
+          "minimum": 0,
+          "exclusiveMaximum": 1
+        },
+        "maximum_azimuth_gap_deg": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 180
+        },
+        "maximum_out_of_range_ratio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "degrade_when_noise_telemetry_missing": { "type": "boolean" },
+        "noise_dbm_range": {
+          "type": "array",
+          "prefixItems": [{ "type": "number" }, { "type": "number" }],
+          "items": false,
+          "minItems": 2,
+          "maxItems": 2
+        }
+      }
+    },
+    "field_hard_limits": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "prefixItems": [{ "type": "number" }, { "type": "number" }],
+        "items": false,
+        "minItems": 2,
+        "maxItems": 2
+      }
+    }
+  }
+}

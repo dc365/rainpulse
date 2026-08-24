@@ -1,5 +1,6 @@
 import bz2
 import json
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
@@ -23,12 +24,14 @@ from rainpulse_algo.radar.fmt import (
     DecodeError,
     decode_fmt_volume,
 )
+from rainpulse_algo.radar.health import assess_volume_health, load_radar_health_config
 from rainpulse_algo.radar.worker import execute_fmt_decode
 from rainpulse_algo.radar.zarr_volume import build_zarr_store, validate_zarr_store
 from rainpulse_algo.worker.domain_contracts import RadarDecodeRequested
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 Z9598_CONFIG = REPOSITORY_ROOT / "configs" / "radars" / "z9598.yaml"
+HEALTH_CONFIG = REPOSITORY_ROOT / "configs" / "health" / "rp007-integrity-v1.yaml"
 
 
 def make_config(tmp_path: Path) -> Path:
@@ -40,6 +43,7 @@ def make_config(tmp_path: Path) -> Path:
             "expected_cut_elevations_deg": [0.5, 1.5],
             "range_gate_m": 1000.0,
             "max_range_m": 6000.0,
+            "azimuth_resolution_deg": 180.0,
         }
     )
     value["fields"] = [value["fields"][0]]
@@ -133,8 +137,8 @@ def make_fmt_fixture(tmp_path: Path, *, magic: int = MAGIC_NUMBER) -> Path:
                 data_length,
                 1,
                 0,
-                0,
-                0,
+                -32768,
+                -32768,
                 b"\0",
                 bytes(13),
             )
@@ -179,12 +183,14 @@ def test_normalized_zarr_round_trip(tmp_path: Path) -> None:
     config = load_radar_config(make_config(tmp_path))
     source = make_fmt_fixture(tmp_path)
     volume = decode_fmt_volume(source, config)
+    health = assess_volume_health(volume, config, load_radar_health_config(HEALTH_CONFIG))
 
     objects = build_zarr_store(
         volume,
         config,
         asset_id=UUID("44444444-4444-4444-8444-444444444444"),
         source_uri=source.as_uri(),
+        health=health,
     )
     summary = validate_zarr_store(objects)
     store = MemoryStore()
@@ -196,8 +202,46 @@ def test_normalized_zarr_round_trip(tmp_path: Path) -> None:
     assert summary["fields"] == ["DBZH"]
     assert root.attrs["geometry_encoding"] == "sweep_groups_v1"
     assert root.attrs["operational_eligible"] is False
+    assert root.attrs["radar_health"] == "DEGRADED"
     assert root["sweep_000/DBZH"].dtype == np.dtype("float32")
     assert np.isnan(root["sweep_000/DBZH"][0, 0])
+    assert "health/summary.json" in objects
+
+
+def test_health_summary_detects_missing_sweep_and_noise_telemetry(tmp_path: Path) -> None:
+    config = load_radar_config(make_config(tmp_path))
+    volume = decode_fmt_volume(make_fmt_fixture(tmp_path), config)
+    incomplete = replace(volume, sweeps=volume.sweeps[:1])
+
+    summary = assess_volume_health(
+        incomplete, config, load_radar_health_config(HEALTH_CONFIG)
+    ).value
+
+    assert summary["health"] == "DEGRADED"
+    assert summary["missing_sweep_numbers"] == [2]
+    assert summary["missing_radial_count"] == 2
+    assert summary["scan_completeness"] == pytest.approx(0.5)
+    assert summary["channel_status"] == "UNKNOWN"
+    assert "NOISE_TELEMETRY_MISSING" in summary["health_reasons"]
+
+
+def test_health_summary_counts_out_of_range_gates(tmp_path: Path) -> None:
+    config = load_radar_config(make_config(tmp_path))
+    volume = decode_fmt_volume(make_fmt_fixture(tmp_path), config)
+    first = volume.sweeps[0]
+    fields = dict(first.fields)
+    fields["DBZH"] = fields["DBZH"].copy()
+    fields["DBZH"][0, 2] = 999.0
+    changed = replace(first, fields=fields)
+    volume = replace(volume, sweeps=(changed, *volume.sweeps[1:]))
+
+    summary = assess_volume_health(
+        volume, config, load_radar_health_config(HEALTH_CONFIG)
+    ).value
+
+    assert summary["out_of_range_gate_count"] == 1
+    assert summary["anomaly_count"] >= 1
+    assert "ANOMALOUS_VALUES" in summary["health_reasons"]
 
 
 def test_real_worker_executor_enforces_allowed_root_and_builds_zarr(
@@ -221,11 +265,13 @@ def test_real_worker_executor_enforces_allowed_root_and_builds_zarr(
     request = RadarDecodeRequested.model_validate(value)
     monkeypatch.setenv("RAINPULSE_RADAR_INPUT_ROOTS", str(tmp_path))
     monkeypatch.setenv("RAINPULSE_RADAR_CONFIG_DIR", str(config_path.parent))
+    monkeypatch.setenv("RAINPULSE_RADAR_HEALTH_CONFIG", str(HEALTH_CONFIG))
 
     result = execute_fmt_decode(request)
 
     assert result.data is None
     assert result.objects is not None
     assert ".zgroup" in result.objects
+    assert result.diagnostics["radar_health"]["health"] == "DEGRADED"
     assert result.metrics["sweep_count"] == 2.0
     assert validate_zarr_store(result.objects)["fields"] == ["DBZH"]

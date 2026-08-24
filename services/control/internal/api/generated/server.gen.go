@@ -137,6 +137,27 @@ func (e ProductType) Valid() bool {
 	}
 }
 
+// Defines values for RadarHealthMetricsChannelStatus.
+const (
+	RadarHealthMetricsChannelStatusDEGRADED RadarHealthMetricsChannelStatus = "DEGRADED"
+	RadarHealthMetricsChannelStatusOK       RadarHealthMetricsChannelStatus = "OK"
+	RadarHealthMetricsChannelStatusUNKNOWN  RadarHealthMetricsChannelStatus = "UNKNOWN"
+)
+
+// Valid indicates whether the value is a known member of the RadarHealthMetricsChannelStatus enum.
+func (e RadarHealthMetricsChannelStatus) Valid() bool {
+	switch e {
+	case RadarHealthMetricsChannelStatusDEGRADED:
+		return true
+	case RadarHealthMetricsChannelStatusOK:
+		return true
+	case RadarHealthMetricsChannelStatusUNKNOWN:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RadarHealthState.
 const (
 	RadarHealthStateDEGRADED    RadarHealthState = "DEGRADED"
@@ -467,11 +488,60 @@ type Radar struct {
 	UpdatedAt     time.Time      `json:"updated_at"`
 }
 
+// RadarFieldAvailability defines model for RadarFieldAvailability.
+type RadarFieldAvailability struct {
+	Available           bool    `json:"available"`
+	Field               string  `json:"field"`
+	FiniteGateRatio     float32 `json:"finite_gate_ratio"`
+	OutOfRangeGateCount int64   `json:"out_of_range_gate_count"`
+	PresentSweepCount   int     `json:"present_sweep_count"`
+	Unit                string  `json:"unit"`
+}
+
+// RadarHealthMetrics defines model for RadarHealthMetrics.
+type RadarHealthMetrics struct {
+	ActualRadialCount      int                             `json:"actual_radial_count"`
+	ActualSweepCount       int                             `json:"actual_sweep_count"`
+	AnomalyCount           int64                           `json:"anomaly_count"`
+	ChannelStatus          RadarHealthMetricsChannelStatus `json:"channel_status"`
+	ExpectedRadialCount    int                             `json:"expected_radial_count"`
+	ExpectedSweepCount     int                             `json:"expected_sweep_count"`
+	FieldAvailability      []RadarFieldAvailability        `json:"field_availability"`
+	FieldAvailabilityRatio float32                         `json:"field_availability_ratio"`
+	Health                 RadarHealthState                `json:"health"`
+	HealthProfileVersion   string                          `json:"health_profile_version"`
+	HealthReasons          []string                        `json:"health_reasons"`
+	LayerAnomalies         []map[string]interface{}        `json:"layer_anomalies"`
+	MaximumAzimuthGapDeg   float32                         `json:"maximum_azimuth_gap_deg"`
+	MeasuredAt             time.Time                       `json:"measured_at"`
+	MissingRadialCount     int                             `json:"missing_radial_count"`
+	MissingSweepNumbers    []int                           `json:"missing_sweep_numbers"`
+	NoiseLevel             RadarNoiseLevel                 `json:"noise_level"`
+	OutOfRangeGateCount    int64                           `json:"out_of_range_gate_count"`
+	OutOfRangeGateRatio    float32                         `json:"out_of_range_gate_ratio"`
+	RadarConfigVersion     string                          `json:"radar_config_version"`
+	RadarId                string                          `json:"radar_id"`
+	ScanCompleteness       float32                         `json:"scan_completeness"`
+	ScanId                 openapi_types.UUID              `json:"scan_id"`
+	Warnings               []string                        `json:"warnings"`
+}
+
+// RadarHealthMetricsChannelStatus defines model for RadarHealthMetrics.ChannelStatus.
+type RadarHealthMetricsChannelStatus string
+
 // RadarHealthState defines model for RadarHealthState.
 type RadarHealthState string
 
 // RadarLifecycle defines model for RadarLifecycle.
 type RadarLifecycle string
+
+// RadarNoiseLevel defines model for RadarNoiseLevel.
+type RadarNoiseLevel struct {
+	HorizontalDbm *float32 `json:"horizontal_dbm,omitempty"`
+	SampleCount   int      `json:"sample_count"`
+	Source        string   `json:"source"`
+	VerticalDbm   *float32 `json:"vertical_dbm,omitempty"`
+}
 
 // RadarScan defines model for RadarScan.
 type RadarScan struct {
@@ -502,10 +572,14 @@ type RadarScanRunStatus string
 
 // RadarStatusSummary defines model for RadarStatusSummary.
 type RadarStatusSummary struct {
+	ConfigVersion                 string              `json:"config_version"`
 	DataDelaySeconds              *int64              `json:"data_delay_seconds,omitempty"`
+	DisplayName                   *string             `json:"display_name,omitempty"`
 	Health                        RadarHealthState    `json:"health"`
+	HealthMetrics                 *RadarHealthMetrics `json:"health_metrics,omitempty"`
 	LatestScanId                  *openapi_types.UUID `json:"latest_scan_id,omitempty"`
 	LatestScanTime                *time.Time          `json:"latest_scan_time,omitempty"`
+	Lifecycle                     RadarLifecycle      `json:"lifecycle"`
 	MeanQualityIndex              *float32            `json:"mean_quality_index,omitempty"`
 	ParticipatingInLatestAnalysis bool                `json:"participating_in_latest_analysis"`
 	RadarId                       string              `json:"radar_id"`
@@ -676,6 +750,9 @@ type ServerInterface interface {
 	// ListRadars List registered physical radars
 	// (GET /radars)
 	ListRadars(w http.ResponseWriter, r *http.Request)
+	// ListRadarStatuses List the latest integrity and health status for every radar
+	// (GET /radars/status)
+	ListRadarStatuses(w http.ResponseWriter, r *http.Request)
 	// GetRadar Get one radar registration
 	// (GET /radars/{radar_id})
 	GetRadar(w http.ResponseWriter, r *http.Request, radarId RadarId)
@@ -787,6 +864,12 @@ func (_ Unimplemented) GetRadarScan(w http.ResponseWriter, r *http.Request, scan
 // ListRadars List registered physical radars
 // (GET /radars)
 func (_ Unimplemented) ListRadars(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListRadarStatuses List the latest integrity and health status for every radar
+// (GET /radars/status)
+func (_ Unimplemented) ListRadarStatuses(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1397,6 +1480,20 @@ func (siw *ServerInterfaceWrapper) ListRadars(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
+// ListRadarStatuses operation middleware
+func (siw *ServerInterfaceWrapper) ListRadarStatuses(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListRadarStatuses(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetRadar operation middleware
 func (siw *ServerInterfaceWrapper) GetRadar(w http.ResponseWriter, r *http.Request) {
 
@@ -1748,6 +1845,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/radars", wrapper.ListRadars)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/radars/status", wrapper.ListRadarStatuses)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/radars/{radar_id}", wrapper.GetRadar)

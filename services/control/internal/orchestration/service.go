@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/workflow"
@@ -13,6 +15,7 @@ import (
 
 type Repository interface {
 	CreateBundle(context.Context, workflow.CreateBundle) error
+	CreateRadarDecodeBundle(context.Context, workflow.RadarDecodeBundle) error
 	CreateDomainSimulation(context.Context, workflow.DomainSimulation) error
 	GetRun(context.Context, uuid.UUID) (workflow.Run, error)
 	GetJob(context.Context, uuid.UUID) (workflow.Job, error)
@@ -22,6 +25,21 @@ type Repository interface {
 	MarkOutboxFailed(context.Context, uuid.UUID, string) error
 	ApplyCompletion(context.Context, JobCompleted, json.RawMessage) (bool, error)
 	ApplyFailure(context.Context, JobFailed, json.RawMessage) (bool, error)
+}
+
+type RadarDecodeInput struct {
+	RadarID         string
+	DisplayName     *string
+	Lifecycle       workflow.RadarLifecycle
+	ConfigVersion   string
+	Config          json.RawMessage
+	ConfigSHA256    string
+	SourceFormat    string
+	InputURI        string
+	InputSHA256     string
+	InputSizeBytes  int64
+	VolumeStartTime time.Time
+	VolumeEndTime   time.Time
 }
 
 type Publisher interface {
@@ -49,6 +67,113 @@ func NewService(repository Repository, options Options) *Service {
 		newID = uuid.New
 	}
 	return &Service{repository: repository, now: now, newID: newID}
+}
+
+func (service *Service) CreateRadarDecode(
+	ctx context.Context,
+	input RadarDecodeInput,
+) (workflow.RadarScan, workflow.Job, error) {
+	if err := validateRadarDecodeInput(input); err != nil {
+		return workflow.RadarScan{}, workflow.Job{}, err
+	}
+	now := service.now().UTC()
+	start := input.VolumeStartTime.UTC()
+	end := input.VolumeEndTime.UTC()
+	assetID := stableID("radar-asset", input.InputSHA256)
+	scanID := stableID("radar-scan", input.RadarID, start.Format(time.RFC3339Nano), end.Format(time.RFC3339Nano))
+	runID := stableID("radar-scan-run", scanID.String(), input.ConfigVersion, RadarDecoderVersion)
+	jobID := stableID("radar-decode-job", runID.String())
+	traceID := stableID("radar-decode-trace", runID.String())
+	eventID := stableID("radar-decode-request", jobID.String())
+	sourceID := stableID("radar-source", input.RadarID)
+	outputPrefix := fmt.Sprintf("s3://rainpulse/radar/normalized/%s/%s/", input.RadarID, scanID)
+
+	request := RadarDecodeRequested{
+		SchemaVersion: SchemaVersion,
+		EventID:       eventID,
+		EventType:     RadarDecodeRequestedEventType,
+		OccurredAt:    now,
+		RunID:         runID,
+		JobID:         jobID,
+		TraceID:       traceID,
+		Payload: RadarDecodeRequestedPayload{
+			ScanID: scanID, AssetID: assetID, RadarID: input.RadarID,
+			InputURI: input.InputURI, OutputPrefix: outputPrefix,
+			SourceFormat: input.SourceFormat, RadarConfig: input.ConfigVersion,
+			DecoderVersion: RadarDecoderVersion,
+		},
+	}
+	payload, err := json.Marshal(request)
+	if err != nil {
+		return workflow.RadarScan{}, workflow.Job{}, fmt.Errorf("encode radar decode request: %w", err)
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"radar_id": input.RadarID, "source_format": input.SourceFormat,
+		"volume_start_time": start, "volume_end_time": end,
+	})
+	if err != nil {
+		return workflow.RadarScan{}, workflow.Job{}, fmt.Errorf("encode radar asset metadata: %w", err)
+	}
+	scan := workflow.RadarScan{
+		ID: scanID, RunID: runID, RadarID: input.RadarID,
+		VolumeStartTime: start, VolumeEndTime: end, ReceivedAt: now,
+		RadarConfigVersion: input.ConfigVersion,
+		Status:             workflow.RadarScanRawValidating, CreatedAt: now, UpdatedAt: now,
+	}
+	job := workflow.Job{
+		ID: jobID, RunID: runID, TraceID: traceID, JobType: RadarDecodeJobType,
+		ConfigVersion: input.ConfigVersion, Status: workflow.JobPending, Attempt: 1,
+		RequestPayload: payload, CreatedAt: now,
+	}
+	bundle := workflow.RadarDecodeBundle{
+		Radar: workflow.Radar{
+			ID: input.RadarID, DisplayName: input.DisplayName, Lifecycle: input.Lifecycle,
+			ConfigVersion: input.ConfigVersion, CreatedAt: now, UpdatedAt: now,
+		},
+		Config: input.Config, ConfigSHA256: input.ConfigSHA256,
+		Asset: workflow.RawRadarAsset{
+			ID: assetID, SourceID: sourceID, ObservedAt: start, ObjectURI: input.InputURI,
+			MediaType: "application/x-bzip2", SizeBytes: input.InputSizeBytes,
+			SHA256: input.InputSHA256, Metadata: metadata,
+		},
+		Scan: scan,
+		Job:  job,
+		Outbox: workflow.OutboxEvent{
+			ID: eventID, AggregateID: jobID.String(), EventType: RadarDecodeRequestedEventType,
+			Subject: RadarDecodeRequestedSubject, Payload: payload,
+		},
+	}
+	if err := service.repository.CreateRadarDecodeBundle(ctx, bundle); err != nil {
+		return workflow.RadarScan{}, workflow.Job{}, err
+	}
+	return scan, job, nil
+}
+
+func validateRadarDecodeInput(input RadarDecodeInput) error {
+	if input.RadarID == "" || input.ConfigVersion == "" || input.SourceFormat == "" {
+		return fmt.Errorf("radar ID, config version and source format are required")
+	}
+	if input.Lifecycle != workflow.RadarDraft && input.Lifecycle != workflow.RadarReady && input.Lifecycle != workflow.RadarDisabled {
+		return fmt.Errorf("unsupported radar lifecycle %q", input.Lifecycle)
+	}
+	if len(input.Config) == 0 || !json.Valid(input.Config) {
+		return fmt.Errorf("radar configuration must be valid JSON")
+	}
+	if !sha256Pattern.MatchString(input.ConfigSHA256) || !sha256Pattern.MatchString(input.InputSHA256) {
+		return fmt.Errorf("radar configuration and input SHA-256 values are required")
+	}
+	parsed, err := url.ParseRequestURI(input.InputURI)
+	if err != nil || parsed.Scheme != "file" {
+		return fmt.Errorf("radar decoder input must be a file URI")
+	}
+	if input.InputSizeBytes < 0 || input.VolumeStartTime.IsZero() || input.VolumeEndTime.Before(input.VolumeStartTime) {
+		return fmt.Errorf("invalid radar input size or volume time range")
+	}
+	return nil
+}
+
+func stableID(parts ...string) uuid.UUID {
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("rainpulse:"+strings.Join(parts, ":")))
 }
 
 func (service *Service) CreateSimulation(ctx context.Context, issueTime time.Time) (workflow.Run, workflow.Job, error) {

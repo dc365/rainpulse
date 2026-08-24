@@ -226,8 +226,25 @@ RETURNING run_id`, jobID).Scan(&runID)
 	if err != nil {
 		return fmt.Errorf("mark published job running: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `UPDATE forecast_runs SET updated_at = CURRENT_TIMESTAMP WHERE run_id = $1`, runID); err != nil {
-		return fmt.Errorf("touch published run: %w", err)
+	var runType workflow.WorkflowType
+	if err := tx.QueryRow(ctx, `SELECT run_type FROM workflow_runs WHERE run_id = $1`, runID).Scan(&runType); err != nil {
+		return fmt.Errorf("get published workflow type: %w", err)
+	}
+	switch runType {
+	case workflow.WorkflowForecastRun:
+		if _, err := tx.Exec(ctx, `UPDATE forecast_runs SET updated_at = CURRENT_TIMESTAMP WHERE run_id = $1`, runID); err != nil {
+			return fmt.Errorf("touch published forecast run: %w", err)
+		}
+	case workflow.WorkflowRadarScan:
+		if _, err := tx.Exec(ctx, `
+UPDATE radar_scan_runs
+SET status = CASE WHEN status = 'RAW_VALIDATING' THEN 'DECODING' ELSE status END,
+    updated_at = CURRENT_TIMESTAMP
+WHERE run_id = $1`, runID); err != nil {
+			return fmt.Errorf("mark radar scan decoding: %w", err)
+		}
+	default:
+		return fmt.Errorf("unsupported published workflow type %q", runType)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit publish transaction: %w", err)
@@ -269,10 +286,13 @@ ON CONFLICT DO NOTHING`,
 	var runID, traceID uuid.UUID
 	var jobType string
 	var jobStatus workflow.JobStatus
+	var runType workflow.WorkflowType
 	err = tx.QueryRow(ctx, `
-SELECT run_id, trace_id, job_type, status
-FROM jobs WHERE job_id = $1 FOR UPDATE`, event.JobID).
-		Scan(&runID, &traceID, &jobType, &jobStatus)
+SELECT j.run_id, j.trace_id, j.job_type, j.status, wr.run_type
+FROM jobs AS j
+JOIN workflow_runs AS wr ON wr.run_id = j.run_id
+WHERE j.job_id = $1 FOR UPDATE OF j`, event.JobID).
+		Scan(&runID, &traceID, &jobType, &jobStatus, &runType)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, fmt.Errorf("%w: completion job does not exist", orchestration.ErrInvalidEvent)
 	}
@@ -287,9 +307,10 @@ FROM jobs WHERE job_id = $1 FOR UPDATE`, event.JobID).
 	}
 
 	metadata, err := json.Marshal(map[string]any{
-		"runtime_ms": event.Payload.RuntimeMS,
-		"assets":     event.Payload.Assets,
-		"metrics":    event.Payload.Metrics,
+		"runtime_ms":  event.Payload.RuntimeMS,
+		"assets":      event.Payload.Assets,
+		"metrics":     event.Payload.Metrics,
+		"diagnostics": event.Payload.Diagnostics,
 	})
 	if err != nil {
 		return false, fmt.Errorf("encode completion metadata: %w", err)
@@ -316,19 +337,28 @@ WHERE job_id = $1`, event.JobID, event.Payload.StartedAt, event.Payload.Finished
 		return false, fmt.Errorf("complete job: %w", err)
 	}
 
-	nextStatus := completionRunStatus(jobType)
-	var currentStatus workflow.RunStatus
-	if err := tx.QueryRow(ctx, `SELECT status FROM forecast_runs WHERE run_id = $1 FOR UPDATE`, runID).Scan(&currentStatus); err != nil {
-		return false, fmt.Errorf("lock completion run: %w", err)
-	}
-	if !workflow.CanTransitionRun(currentStatus, nextStatus) {
-		return false, fmt.Errorf("%w: cannot transition run from %s to %s", orchestration.ErrInvalidEvent, currentStatus, nextStatus)
-	}
-	_, err = tx.Exec(ctx, `
+	switch runType {
+	case workflow.WorkflowForecastRun:
+		nextStatus := completionRunStatus(jobType)
+		var currentStatus workflow.RunStatus
+		if err := tx.QueryRow(ctx, `SELECT status FROM forecast_runs WHERE run_id = $1 FOR UPDATE`, runID).Scan(&currentStatus); err != nil {
+			return false, fmt.Errorf("lock completion run: %w", err)
+		}
+		if !workflow.CanTransitionRun(currentStatus, nextStatus) {
+			return false, fmt.Errorf("%w: cannot transition run from %s to %s", orchestration.ErrInvalidEvent, currentStatus, nextStatus)
+		}
+		_, err = tx.Exec(ctx, `
 UPDATE forecast_runs SET status = $2, updated_at = CURRENT_TIMESTAMP
 WHERE run_id = $1`, runID, nextStatus)
-	if err != nil {
-		return false, fmt.Errorf("advance completed run: %w", err)
+		if err != nil {
+			return false, fmt.Errorf("advance completed run: %w", err)
+		}
+	case workflow.WorkflowRadarScan:
+		if err := applyRadarCompletion(ctx, tx, event, jobType); err != nil {
+			return false, err
+		}
+	default:
+		return false, fmt.Errorf("%w: unsupported completion workflow type %q", orchestration.ErrInvalidEvent, runType)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -358,10 +388,13 @@ ON CONFLICT DO NOTHING`,
 
 	var runID, traceID uuid.UUID
 	var jobStatus workflow.JobStatus
+	var runType workflow.WorkflowType
 	err = tx.QueryRow(ctx, `
-SELECT run_id, trace_id, status
-FROM jobs WHERE job_id = $1 FOR UPDATE`, event.JobID).
-		Scan(&runID, &traceID, &jobStatus)
+SELECT j.run_id, j.trace_id, j.status, wr.run_type
+FROM jobs AS j
+JOIN workflow_runs AS wr ON wr.run_id = j.run_id
+WHERE j.job_id = $1 FOR UPDATE OF j`, event.JobID).
+		Scan(&runID, &traceID, &jobStatus, &runType)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, fmt.Errorf("%w: failure job does not exist", orchestration.ErrInvalidEvent)
 	}
@@ -409,25 +442,161 @@ WHERE job_id = $1`, event.JobID, event.Payload.StartedAt, event.Payload.Finished
 		return false, fmt.Errorf("fail job: %w", err)
 	}
 
-	var currentStatus workflow.RunStatus
-	if err := tx.QueryRow(ctx, `SELECT status FROM forecast_runs WHERE run_id = $1 FOR UPDATE`, runID).Scan(&currentStatus); err != nil {
-		return false, fmt.Errorf("lock failed run: %w", err)
-	}
-	if !workflow.CanTransitionRun(currentStatus, workflow.RunFailed) {
-		return false, fmt.Errorf("%w: cannot transition run from %s to FAILED", orchestration.ErrInvalidEvent, currentStatus)
-	}
-	_, err = tx.Exec(ctx, `
+	switch runType {
+	case workflow.WorkflowForecastRun:
+		var currentStatus workflow.RunStatus
+		if err := tx.QueryRow(ctx, `SELECT status FROM forecast_runs WHERE run_id = $1 FOR UPDATE`, runID).Scan(&currentStatus); err != nil {
+			return false, fmt.Errorf("lock failed run: %w", err)
+		}
+		if !workflow.CanTransitionRun(currentStatus, workflow.RunFailed) {
+			return false, fmt.Errorf("%w: cannot transition run from %s to FAILED", orchestration.ErrInvalidEvent, currentStatus)
+		}
+		_, err = tx.Exec(ctx, `
 UPDATE forecast_runs
 SET status = 'FAILED', reason = $2, updated_at = CURRENT_TIMESTAMP
 WHERE run_id = $1`, runID, event.Payload.ErrorCode)
-	if err != nil {
-		return false, fmt.Errorf("fail run: %w", err)
+		if err != nil {
+			return false, fmt.Errorf("fail run: %w", err)
+		}
+	case workflow.WorkflowRadarScan:
+		_, err = tx.Exec(ctx, `
+UPDATE radar_scan_runs
+SET status = 'FAILED', degraded_reason = $2, updated_at = CURRENT_TIMESTAMP
+WHERE run_id = $1`, runID, event.Payload.ErrorCode)
+		if err != nil {
+			return false, fmt.Errorf("fail radar scan run: %w", err)
+		}
+	default:
+		return false, fmt.Errorf("%w: unsupported failure workflow type %q", orchestration.ErrInvalidEvent, runType)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return false, fmt.Errorf("commit failure transaction: %w", err)
 	}
 	return true, nil
+}
+
+func applyRadarCompletion(
+	ctx context.Context,
+	tx pgx.Tx,
+	event orchestration.JobCompleted,
+	jobType string,
+) error {
+	if jobType != orchestration.RadarDecodeJobType {
+		return fmt.Errorf("%w: unsupported radar job type %q", orchestration.ErrInvalidEvent, jobType)
+	}
+	var normalized *orchestration.JobCompletedAsset
+	for index := range event.Payload.Assets {
+		if event.Payload.Assets[index].AssetType == "normalized_radar_volume" {
+			if normalized != nil {
+				return fmt.Errorf("%w: multiple normalized radar assets", orchestration.ErrInvalidEvent)
+			}
+			normalized = &event.Payload.Assets[index]
+		}
+	}
+	if normalized == nil {
+		return fmt.Errorf("%w: normalized radar asset is required", orchestration.ErrInvalidEvent)
+	}
+	rawHealth, ok := event.Payload.Diagnostics["radar_health"]
+	if !ok {
+		return fmt.Errorf("%w: radar health diagnostics are required", orchestration.ErrInvalidEvent)
+	}
+	var health workflow.RadarHealthMetrics
+	if err := json.Unmarshal(rawHealth, &health); err != nil {
+		return fmt.Errorf("%w: decode radar health diagnostics: %v", orchestration.ErrInvalidEvent, err)
+	}
+	if health.Health != workflow.RadarHealthHealthy && health.Health != workflow.RadarHealthDegraded &&
+		health.Health != workflow.RadarHealthUnavailable {
+		return fmt.Errorf("%w: invalid radar health state %q", orchestration.ErrInvalidEvent, health.Health)
+	}
+	if health.ScanCompleteness < 0 || health.ScanCompleteness > 1 || health.ExpectedSweepCount <= 0 ||
+		health.ExpectedRadialCount <= 0 || health.MaximumAzimuthGapDeg < 0 || health.MaximumAzimuthGapDeg > 360 {
+		return fmt.Errorf("%w: invalid radar health metrics", orchestration.ErrInvalidEvent)
+	}
+
+	var scanID uuid.UUID
+	var radarID, configVersion string
+	if err := tx.QueryRow(ctx, `
+SELECT scan_id, radar_id, radar_config_version
+FROM radar_scan_runs WHERE run_id = $1 FOR UPDATE`, event.RunID).
+		Scan(&scanID, &radarID, &configVersion); err != nil {
+		return fmt.Errorf("lock radar scan completion: %w", err)
+	}
+	if health.RadarID != radarID || health.RadarConfigVersion != configVersion {
+		return fmt.Errorf("%w: radar health identity does not match scan", orchestration.ErrInvalidEvent)
+	}
+	health.ScanID = scanID
+	health.MeasuredAt = event.Payload.FinishedAt
+	fields, err := json.Marshal(health.FieldAvailability)
+	if err != nil {
+		return fmt.Errorf("encode field availability: %w", err)
+	}
+	noise, err := json.Marshal(health.NoiseLevel)
+	if err != nil {
+		return fmt.Errorf("encode noise telemetry: %w", err)
+	}
+	diagnostics, err := json.Marshal(health)
+	if err != nil {
+		return fmt.Errorf("encode radar health diagnostics: %w", err)
+	}
+	_, err = tx.Exec(ctx, `
+INSERT INTO radar_health_metrics (
+    scan_id, radar_id, health_profile_version, health_state, scan_completeness,
+    expected_sweep_count, actual_sweep_count, missing_sweep_numbers,
+    expected_radial_count, actual_radial_count, missing_radial_count,
+    maximum_azimuth_gap_deg, field_availability, noise_level, channel_status,
+    anomaly_count, diagnostics, measured_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+)
+ON CONFLICT (scan_id) DO UPDATE SET
+    health_profile_version = EXCLUDED.health_profile_version,
+    health_state = EXCLUDED.health_state,
+    scan_completeness = EXCLUDED.scan_completeness,
+    expected_sweep_count = EXCLUDED.expected_sweep_count,
+    actual_sweep_count = EXCLUDED.actual_sweep_count,
+    missing_sweep_numbers = EXCLUDED.missing_sweep_numbers,
+    expected_radial_count = EXCLUDED.expected_radial_count,
+    actual_radial_count = EXCLUDED.actual_radial_count,
+    missing_radial_count = EXCLUDED.missing_radial_count,
+    maximum_azimuth_gap_deg = EXCLUDED.maximum_azimuth_gap_deg,
+    field_availability = EXCLUDED.field_availability,
+    noise_level = EXCLUDED.noise_level,
+    channel_status = EXCLUDED.channel_status,
+    anomaly_count = EXCLUDED.anomaly_count,
+    diagnostics = EXCLUDED.diagnostics,
+    measured_at = EXCLUDED.measured_at`,
+		scanID, radarID, health.HealthProfileVersion, health.Health,
+		health.ScanCompleteness, health.ExpectedSweepCount, health.ActualSweepCount,
+		health.MissingSweepNumbers, health.ExpectedRadialCount, health.ActualRadialCount,
+		health.MissingRadialCount, health.MaximumAzimuthGapDeg, fields, noise,
+		health.ChannelStatus, health.AnomalyCount, diagnostics, health.MeasuredAt)
+	if err != nil {
+		return fmt.Errorf("persist radar health metrics: %w", err)
+	}
+	_, err = tx.Exec(ctx, `
+UPDATE radar_scan_runs
+SET status = 'NORMALIZED', normalized_uri = $2, scan_completeness = $3,
+    degraded_reason = CASE WHEN $4 = 'HEALTHY' THEN NULL ELSE array_to_string($5::text[], ',') END,
+    updated_at = CURRENT_TIMESTAMP
+WHERE run_id = $1`, event.RunID, normalized.URI, health.ScanCompleteness,
+		health.Health, health.HealthReasons)
+	if err != nil {
+		return fmt.Errorf("complete radar scan run: %w", err)
+	}
+	qualityState := "valid"
+	if health.Health != workflow.RadarHealthHealthy {
+		qualityState = "low_quality"
+	}
+	_, err = tx.Exec(ctx, `
+UPDATE input_assets AS asset
+SET quality_state = $2
+FROM radar_scans AS scan
+WHERE scan.scan_id = $1 AND asset.asset_id = scan.raw_asset_id`, scanID, qualityState)
+	if err != nil {
+		return fmt.Errorf("update raw radar asset quality state: %w", err)
+	}
+	return nil
 }
 
 func completionRunStatus(jobType string) workflow.RunStatus {

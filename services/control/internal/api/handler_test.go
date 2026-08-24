@@ -186,6 +186,7 @@ func TestRadarAndAnalysisQueriesPreservePartialRadarFailure(t *testing.T) {
 	}
 
 	assertResponse("/api/v1/radars", `"radar_id":"synthetic_radar_a"`)
+	assertResponse("/api/v1/radars/status", `"radar_id":"synthetic_radar_a"`)
 	assertResponse("/api/v1/radar-scans/"+scanBID.String(), `"status":"FAILED"`)
 	assertResponse("/api/v1/analysis-cycles/"+analysis.ID.String(), `"status":"ANALYSIS_READY"`)
 	assertResponse("/api/v1/analysis-cycles/"+analysis.ID.String(), `"state":"FAILED"`)
@@ -278,6 +279,18 @@ type fakeObservationStore struct {
 
 func (store *fakeObservationStore) ListRadars(context.Context) ([]workflow.Radar, error) {
 	return store.radars, nil
+}
+
+func (store *fakeObservationStore) ListRadarStatuses(context.Context) ([]workflow.RadarStatusSummary, error) {
+	statuses := make([]workflow.RadarStatusSummary, 0, len(store.radars))
+	for _, radar := range store.radars {
+		statuses = append(statuses, workflow.RadarStatusSummary{
+			RadarID: radar.ID, DisplayName: radar.DisplayName,
+			Lifecycle: radar.Lifecycle, ConfigVersion: radar.ConfigVersion,
+			Health: workflow.RadarHealthHealthy,
+		})
+	}
+	return statuses, nil
 }
 
 func (store *fakeObservationStore) GetRadar(_ context.Context, radarID string) (workflow.Radar, error) {

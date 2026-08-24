@@ -162,3 +162,15 @@ def test_qc_flag_definition_is_a_unique_uint32_bitset() -> None:
     assert all(0 <= bit <= 31 for bit in bits)
     assert masks == [1 << bit for bit in bits]
     assert {"MISSING", "LOW_QUALITY", "RADIAL_INTERFERENCE", "BEAM_BLOCKED"} <= set(names)
+
+
+def test_rp007_health_profile_is_valid_and_versioned() -> None:
+    schema = json.loads((CONFIG_ROOT / "schemas" / "radar-health.schema.json").read_text())
+    profile = yaml.safe_load(
+        (CONFIG_ROOT / "health" / "rp007-integrity-v1.yaml").read_text()
+    )
+
+    Draft202012Validator.check_schema(schema)
+    Draft202012Validator(schema).validate(profile)
+    assert profile["profile_version"] == "rp007-integrity-v1"
+    assert set(profile["field_hard_limits"]) >= {"DBZH", "ZDR", "RHOHV", "PHIDP"}

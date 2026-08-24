@@ -55,6 +55,7 @@ def test_openapi_exposes_the_planned_v1_operations() -> None:
         "/runs/{run_id}",
         "/runs/{run_id}/jobs",
         "/radars",
+        "/radars/status",
         "/radars/{radar_id}",
         "/radars/{radar_id}/status",
         "/radar-scans",

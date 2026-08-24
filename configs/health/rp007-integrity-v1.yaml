@@ -1,0 +1,21 @@
+schema_version: "1.0"
+profile_version: rp007-integrity-v1
+
+thresholds:
+  minimum_scan_completeness: 0.97
+  unavailable_below_completeness: 0.50
+  maximum_azimuth_gap_deg: 3.0
+  maximum_out_of_range_ratio: 0.001
+  degrade_when_noise_telemetry_missing: true
+  noise_dbm_range: [-120.0, -70.0]
+
+# These are deliberately broad format sanity limits, not meteorological QC
+# thresholds. RP-008 owns echo classification and correction.
+field_hard_limits:
+  DBZH: [-32.0, 80.0]
+  ZDR: [-8.0, 8.0]
+  RHOHV: [-0.025, 1.05]
+  PHIDP: [-0.5, 360.0]
+  VR: [-64.5, 64.0]
+  SW: [-64.5, 64.0]
+  SNR: [-10.0, 80.0]

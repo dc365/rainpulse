@@ -7,6 +7,7 @@ from uuid import UUID
 
 from .config import load_radar_config
 from .fmt import DecodedRadarVolume, decode_fmt_volume
+from .health import assess_volume_health, load_radar_health_config
 from .zarr_volume import build_zarr_store, validate_zarr_store, write_zarr_store
 
 
@@ -25,8 +26,11 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     config = load_radar_config(args.config)
+    health_config = load_radar_health_config(args.health_config)
     volume = decode_fmt_volume(args.input, config)
+    health = assess_volume_health(volume, config, health_config)
     summary = _volume_summary(volume, config.lifecycle)
+    summary["health"] = health.value
     if args.command == "inspect":
         print(json.dumps(summary, separators=(",", ":"), sort_keys=True))
         return 0
@@ -37,6 +41,7 @@ def main(argv: list[str] | None = None) -> int:
         config,
         asset_id=args.asset_id,
         source_uri=source_uri,
+        health=health,
     )
     write_zarr_store(objects, args.output)
     summary.update(validate_zarr_store(objects))
@@ -48,6 +53,7 @@ def main(argv: list[str] | None = None) -> int:
 def _common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument("--health-config", type=Path, required=True)
 
 
 def _volume_summary(volume: DecodedRadarVolume, lifecycle: str) -> dict[str, object]:

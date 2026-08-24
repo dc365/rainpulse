@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -11,6 +12,158 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
+
+func (store *Store) CreateRadarDecodeBundle(ctx context.Context, bundle workflow.RadarDecodeBundle) error {
+	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin radar decode transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err = tx.Exec(ctx, `
+INSERT INTO config_versions (config_version, sha256, config, description, created_at)
+VALUES ($1, $2, $3, 'Radar configuration registered by RP-007 decode workflow', $4)
+ON CONFLICT (config_version) DO NOTHING`,
+		bundle.Radar.ConfigVersion, bundle.ConfigSHA256, bundle.Config, bundle.Radar.CreatedAt); err != nil {
+		return fmt.Errorf("insert global radar config %s: %w", bundle.Radar.ConfigVersion, err)
+	}
+	var storedConfigHash string
+	if err = tx.QueryRow(ctx, `SELECT sha256 FROM config_versions WHERE config_version = $1`,
+		bundle.Radar.ConfigVersion).Scan(&storedConfigHash); err != nil {
+		return fmt.Errorf("verify global radar config %s: %w", bundle.Radar.ConfigVersion, err)
+	}
+	if storedConfigHash != bundle.ConfigSHA256 {
+		return fmt.Errorf("radar config version %s already has a different SHA-256", bundle.Radar.ConfigVersion)
+	}
+
+	_, err = tx.Exec(ctx, `
+INSERT INTO data_sources (
+    source_id, name, source_type, enabled, config_version, metadata, created_at, updated_at
+) VALUES ($1, $2, 'radar', TRUE, $3, $4, $5, $5)
+ON CONFLICT (source_id) DO UPDATE SET
+    config_version = EXCLUDED.config_version,
+    metadata = EXCLUDED.metadata,
+    updated_at = EXCLUDED.updated_at`,
+		bundle.Asset.SourceID, "radar:"+bundle.Radar.ID, bundle.Radar.ConfigVersion,
+		json.RawMessage(fmt.Sprintf(`{"radar_id":%q}`, bundle.Radar.ID)), bundle.Radar.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("upsert radar source %s: %w", bundle.Radar.ID, err)
+	}
+
+	_, err = tx.Exec(ctx, `
+INSERT INTO input_assets (
+    asset_id, source_id, issue_time, observed_at, object_uri, media_type,
+    size_bytes, sha256, status, quality_state, metadata, created_at
+) VALUES ($1, $2, $3, $3, $4, $5, $6, $7, 'available', 'unknown', $8, $9)
+ON CONFLICT (asset_id) DO NOTHING`,
+		bundle.Asset.ID, bundle.Asset.SourceID, bundle.Asset.ObservedAt,
+		bundle.Asset.ObjectURI, bundle.Asset.MediaType, bundle.Asset.SizeBytes,
+		bundle.Asset.SHA256, bundle.Asset.Metadata, bundle.Radar.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("insert raw radar asset: %w", err)
+	}
+	var storedAssetHash string
+	if err = tx.QueryRow(ctx, `SELECT sha256 FROM input_assets WHERE asset_id = $1`,
+		bundle.Asset.ID).Scan(&storedAssetHash); err != nil {
+		return fmt.Errorf("verify raw radar asset: %w", err)
+	}
+	if storedAssetHash != bundle.Asset.SHA256 {
+		return fmt.Errorf("raw radar asset identity already refers to different content")
+	}
+
+	_, err = tx.Exec(ctx, `
+INSERT INTO radars (
+    radar_id, display_name, lifecycle, current_config_version, created_at, updated_at
+) VALUES ($1, $2, $3, $4, $5, $5)
+ON CONFLICT (radar_id) DO UPDATE SET
+    display_name = EXCLUDED.display_name,
+    lifecycle = EXCLUDED.lifecycle,
+    current_config_version = EXCLUDED.current_config_version,
+    updated_at = EXCLUDED.updated_at`,
+		bundle.Radar.ID, bundle.Radar.DisplayName, bundle.Radar.Lifecycle,
+		bundle.Radar.ConfigVersion, bundle.Radar.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("upsert radar %s: %w", bundle.Radar.ID, err)
+	}
+	_, err = tx.Exec(ctx, `
+INSERT INTO radar_config_versions (
+    radar_id, radar_config_version, config, sha256, created_at
+) VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (radar_id, radar_config_version) DO NOTHING`,
+		bundle.Radar.ID, bundle.Radar.ConfigVersion, bundle.Config,
+		bundle.ConfigSHA256, bundle.Radar.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("insert radar config %s: %w", bundle.Radar.ID, err)
+	}
+	var storedRadarConfigHash string
+	if err = tx.QueryRow(ctx, `
+SELECT sha256 FROM radar_config_versions
+WHERE radar_id = $1 AND radar_config_version = $2`,
+		bundle.Radar.ID, bundle.Radar.ConfigVersion).Scan(&storedRadarConfigHash); err != nil {
+		return fmt.Errorf("verify radar config %s: %w", bundle.Radar.ID, err)
+	}
+	if storedRadarConfigHash != bundle.ConfigSHA256 {
+		return fmt.Errorf("radar %s config version %s already has a different SHA-256", bundle.Radar.ID, bundle.Radar.ConfigVersion)
+	}
+
+	_, err = tx.Exec(ctx, `
+INSERT INTO workflow_runs (run_id, run_type, created_at)
+VALUES ($1, 'radar_scan', $2)
+ON CONFLICT (run_id) DO NOTHING`, bundle.Scan.RunID, bundle.Scan.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("insert radar scan workflow identity: %w", err)
+	}
+	_, err = tx.Exec(ctx, `
+INSERT INTO radar_scans (
+    scan_id, radar_id, raw_asset_id, volume_start_time, volume_end_time, received_at, created_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (scan_id) DO NOTHING`,
+		bundle.Scan.ID, bundle.Scan.RadarID, bundle.Asset.ID,
+		bundle.Scan.VolumeStartTime, bundle.Scan.VolumeEndTime,
+		bundle.Scan.ReceivedAt, bundle.Scan.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("insert radar scan %s: %w", bundle.Scan.ID, err)
+	}
+	_, err = tx.Exec(ctx, `
+INSERT INTO radar_scan_runs (
+    run_id, scan_id, radar_id, radar_config_version, status, created_at, updated_at
+) VALUES ($1, $2, $3, $4, $5, $6, $6)
+ON CONFLICT (run_id) DO NOTHING`,
+		bundle.Scan.RunID, bundle.Scan.ID, bundle.Scan.RadarID,
+		bundle.Scan.RadarConfigVersion, bundle.Scan.Status, bundle.Scan.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("insert radar scan run %s: %w", bundle.Scan.RunID, err)
+	}
+	_, err = tx.Exec(ctx, `
+INSERT INTO jobs (
+    job_id, run_id, trace_id, job_type, model_id, model_version,
+    config_version, status, max_attempts, scheduled_at, created_at, updated_at,
+    request_payload
+) VALUES ($1, $2, $3, $4, NULL, NULL, $5, $6, 3, $7, $7, $7, $8)
+ON CONFLICT (job_id) DO NOTHING`,
+		bundle.Job.ID, bundle.Job.RunID, bundle.Job.TraceID, bundle.Job.JobType,
+		bundle.Job.ConfigVersion, bundle.Job.Status, bundle.Job.CreatedAt,
+		bundle.Job.RequestPayload)
+	if err != nil {
+		return fmt.Errorf("insert radar decode job: %w", err)
+	}
+	_, err = tx.Exec(ctx, `
+INSERT INTO outbox_events (
+    event_id, aggregate_type, aggregate_id, event_type, event_version,
+    subject, payload, status, available_at, created_at
+) VALUES ($1, 'job', $2, $3, 1, $4, $5, 'pending', $6, $6)
+ON CONFLICT (event_id) DO NOTHING`,
+		bundle.Outbox.ID, bundle.Outbox.AggregateID, bundle.Outbox.EventType,
+		bundle.Outbox.Subject, bundle.Outbox.Payload, bundle.Job.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("insert radar decode outbox event: %w", err)
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit radar decode transaction: %w", err)
+	}
+	return nil
+}
 
 func (store *Store) CreateDomainSimulation(ctx context.Context, simulation workflow.DomainSimulation) error {
 	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
@@ -152,7 +305,8 @@ func (store *Store) GetRadar(ctx context.Context, radarID string) (workflow.Rada
 }
 
 func (store *Store) GetRadarStatus(ctx context.Context, radarID string) (workflow.RadarStatusSummary, error) {
-	if _, err := store.GetRadar(ctx, radarID); err != nil {
+	radar, err := store.GetRadar(ctx, radarID)
+	if err != nil {
 		return workflow.RadarStatusSummary{}, err
 	}
 	row := store.pool.QueryRow(ctx, `
@@ -168,20 +322,27 @@ SELECT s.scan_id, s.volume_end_time, r.status, r.scan_completeness,
                  SELECT analysis_id FROM analysis_cycles
                  ORDER BY analysis_time DESC, created_at DESC LIMIT 1
              )
-       )
+       ), h.health_state, COALESCE(h.diagnostics, 'null'::jsonb)
 FROM radar_scans AS s
 JOIN radar_scan_runs AS r ON r.scan_id = s.scan_id
+LEFT JOIN radar_health_metrics AS h ON h.scan_id = s.scan_id
 WHERE s.radar_id = $1
 ORDER BY s.volume_end_time DESC, r.created_at DESC
 LIMIT 1`, radarID)
 
 	var summary workflow.RadarStatusSummary
 	summary.RadarID = radarID
+	summary.DisplayName = radar.DisplayName
+	summary.Lifecycle = radar.Lifecycle
+	summary.ConfigVersion = radar.ConfigVersion
 	var status workflow.RadarScanStatus
+	var healthState *string
+	var rawHealth json.RawMessage
 	if err := row.Scan(
 		&summary.LatestScanID, &summary.LatestScanTime, &status,
 		&summary.ScanCompleteness, &summary.MeanQualityIndex,
 		&summary.DataDelaySeconds, &summary.ParticipatingInLatestAnalysis,
+		&healthState, &rawHealth,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			summary.Health = workflow.RadarHealthUnknown
@@ -190,6 +351,15 @@ LIMIT 1`, radarID)
 		return workflow.RadarStatusSummary{}, fmt.Errorf("get radar status: %w", err)
 	}
 	summary.ScanStatus = &status
+	if healthState != nil {
+		summary.Health = workflow.RadarHealthState(*healthState)
+		var metrics workflow.RadarHealthMetrics
+		if err := json.Unmarshal(rawHealth, &metrics); err != nil {
+			return workflow.RadarStatusSummary{}, fmt.Errorf("decode radar health metrics: %w", err)
+		}
+		summary.HealthMetrics = &metrics
+		return summary, nil
+	}
 	switch status {
 	case workflow.RadarScanGridReady:
 		summary.Health = workflow.RadarHealthHealthy
@@ -201,6 +371,22 @@ LIMIT 1`, radarID)
 		summary.Health = workflow.RadarHealthUnknown
 	}
 	return summary, nil
+}
+
+func (store *Store) ListRadarStatuses(ctx context.Context) ([]workflow.RadarStatusSummary, error) {
+	radars, err := store.ListRadars(ctx)
+	if err != nil {
+		return nil, err
+	}
+	statuses := make([]workflow.RadarStatusSummary, 0, len(radars))
+	for _, radar := range radars {
+		status, err := store.GetRadarStatus(ctx, radar.ID)
+		if err != nil {
+			return nil, err
+		}
+		statuses = append(statuses, status)
+	}
+	return statuses, nil
 }
 
 func (store *Store) ListRadarScans(
