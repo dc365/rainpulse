@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 from minio import Minio
 
+from .handlers import handler_for_profile
 from .object_store import AtomicObjectPublisher
 from .runtime import Worker, WorkerConfig
 
@@ -22,7 +23,8 @@ async def main() -> None:
         secret_key=required_environment("RAINPULSE_OBJECT_STORE_SECRET_KEY"),
         secure=endpoint.scheme == "https",
     )
-    worker = Worker(config, AtomicObjectPublisher(client))
+    handler = None if config.profile == "simulation" else handler_for_profile(config.profile)
+    worker = Worker(config, AtomicObjectPublisher(client), handler=handler)
     loop = asyncio.get_running_loop()
     for name in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(name, worker.stop)

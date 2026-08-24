@@ -10,6 +10,8 @@ required_files=(
   contracts/examples/job-failed.json
   deploy/postgres/migrations/0004_worker_results.sql
   algorithms/rainpulse_algo/worker/contracts.py
+  algorithms/rainpulse_algo/worker/domain_contracts.py
+  algorithms/rainpulse_algo/worker/handlers.py
   algorithms/rainpulse_algo/worker/object_store.py
   algorithms/rainpulse_algo/worker/runtime.py
   algorithms/rainpulse_algo/worker/simulation.py
@@ -29,5 +31,10 @@ rg --quiet 'inbox_events_job_terminal_result_uidx' deploy/postgres/migrations/00
 rg --quiet 'force_failure' algorithms/rainpulse_algo/worker/simulation.py
 rg --quiet 'CopySource' algorithms/rainpulse_algo/worker/object_store.py
 rg --quiet 'message\.ack' algorithms/rainpulse_algo/worker/runtime.py
+rg --quiet 'class TaskHandler' algorithms/rainpulse_algo/worker/runtime.py
+rg --quiet 'radar-decode-synthetic' algorithms/rainpulse_algo/worker/handlers.py
+rg --quiet 'mosaic-qpe-synthetic' algorithms/rainpulse_algo/worker/handlers.py
+rg --quiet 'nowcast-input-synthetic' algorithms/rainpulse_algo/worker/handlers.py
+rg --quiet 'RAINPULSE_WORKER_PROFILE' deploy/docker-compose.yaml
 
 printf 'RP-005 Worker SDK structure checks passed\n'

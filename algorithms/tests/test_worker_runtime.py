@@ -38,7 +38,7 @@ class FakePublisher:
         self.existing: JobCompleted | None = None
         self.publish_count = 0
 
-    def load_completion(self, _: str) -> JobCompleted | None:
+    def load_completion(self, _: str, _artifact_name: str) -> JobCompleted | None:
         return self.existing
 
     def publish(self, **values: Any) -> None:

@@ -17,6 +17,8 @@ only after validated output is atomically published. Examples in
   indefinitely for every radar.
 - `analysis.mosaic.requested.v1` selects versioned RadarGrid inputs and creates
   the quality mosaic plus basic QPE.
+- `nowcast.input.requested.v1` selects 3–6 committed RadarAnalysis frames for
+  fixed-step gate evaluation and input construction.
 - `nowcast.input.ready.v1` proves the fixed-step input gate was satisfied.
 - `forecast.run.requested.v1` starts baseline nowcasting from that committed input.
 
@@ -29,6 +31,8 @@ machines to those idempotent job records.
 - Stream: `RAINPULSE_JOBS`
 - Task subject: `rainpulse.jobs.requested.<job_type_token>`
 - Existing control-plane simulation task: `rainpulse.jobs.requested.model_pysteps_lk`
+- Synthetic domain task tokens: `radar_decode`, `radar_qc`, `radar_grid`,
+  `analysis_mosaic`, and `nowcast_input`
 - Completion subject: `rainpulse.jobs.completed`
 - Failure subject: `rainpulse.jobs.failed`
 - Go terminal-result consumer: `rainpulse-orchestrator-results-v2`

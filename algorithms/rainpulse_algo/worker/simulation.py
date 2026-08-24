@@ -11,7 +11,7 @@ class SimulatedFailure(RuntimeError):
 
 def execute(request: JobRequested) -> tuple[bytes, dict[str, float]]:
     if request.payload.parameters.get("force_failure") is True:
-        raise SimulatedFailure("RP-004 simulated worker failure")
+        raise SimulatedFailure("RP-005 simulated worker failure")
 
     result = json.dumps(
         {

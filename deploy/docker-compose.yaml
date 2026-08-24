@@ -173,6 +173,7 @@ services:
       RAINPULSE_OBJECT_STORE_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
       RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
       RAINPULSE_WORKER_ID: pysteps-lk-sim
+      RAINPULSE_WORKER_PROFILE: simulation
       TZ: UTC
     healthcheck:
       test:

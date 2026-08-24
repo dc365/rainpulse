@@ -20,6 +20,7 @@ EVENT_NAMES = (
     "radar-grid-requested",
     "analysis-cycle-opened",
     "analysis-mosaic-requested",
+    "nowcast-input-requested",
     "nowcast-input-ready",
     "forecast-run-requested",
 )

@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "event_id": "71000000-0000-4000-8000-000000000001",
+  "event_type": "nowcast.input.requested.v1",
+  "occurred_at": "2026-08-24T03:00:40Z",
+  "run_id": "71000000-0000-4000-8000-000000000002",
+  "job_id": "71000000-0000-4000-8000-000000000003",
+  "trace_id": "71000000-0000-4000-8000-000000000004",
+  "payload": {
+    "analysis_ids": [
+      "71000000-0000-4000-8000-000000000005",
+      "71000000-0000-4000-8000-000000000006",
+      "71000000-0000-4000-8000-000000000007"
+    ],
+    "input_uris": [
+      "s3://rainpulse/analysis/synthetic-grid-v1/2026/08/24/025000/analysis.zarr",
+      "s3://rainpulse/analysis/synthetic-grid-v1/2026/08/24/025500/analysis.zarr",
+      "s3://rainpulse/analysis/synthetic-grid-v1/2026/08/24/030000/analysis.zarr"
+    ],
+    "output_prefix": "s3://rainpulse/nowcast-input/synthetic-grid-v1/2026/08/24/030000/",
+    "issue_time": "2026-08-24T03:00:00Z",
+    "grid_id": "synthetic-grid-v1",
+    "preprocess_version": "nowcast-input-contract-v1",
+    "gate_config_version": "nowcast-gates-contract-v1"
+  }
+}

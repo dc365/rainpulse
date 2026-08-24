@@ -14,6 +14,7 @@ required_files=(
   "contracts/events/radar-grid-requested.schema.json"
   "contracts/events/analysis-cycle-opened.schema.json"
   "contracts/events/analysis-mosaic-requested.schema.json"
+  "contracts/events/nowcast-input-requested.schema.json"
   "contracts/events/nowcast-input-ready.schema.json"
   "contracts/events/forecast-run-requested.schema.json"
   "contracts/data/raw-radar-asset.md"

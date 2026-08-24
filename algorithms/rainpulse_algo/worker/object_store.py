@@ -36,9 +36,13 @@ class AtomicObjectPublisher:
     def __init__(self, client: Minio) -> None:
         self._client = client
 
-    def load_completion(self, output_prefix: str) -> JobCompleted | None:
+    def load_completion(
+        self,
+        output_prefix: str,
+        artifact_name: str = "forecast.zarr",
+    ) -> JobCompleted | None:
         bucket, prefix = parse_s3_uri(output_prefix)
-        marker_key = self._marker_key(prefix)
+        marker_key = self._marker_key(prefix, artifact_name)
         try:
             response = self._client.get_object(bucket, marker_key)
         except S3Error as error:
@@ -59,12 +63,13 @@ class AtomicObjectPublisher:
         job_id: UUID,
         data: bytes,
         completion: JobCompleted,
+        artifact_name: str = "forecast.zarr",
     ) -> PublishedObject:
         bucket, prefix = parse_s3_uri(output_prefix)
         prefix = prefix.rstrip("/")
         temporary_key = f"_temporary/{job_id}/{uuid4()}/result.json"
-        data_key = f"{prefix}/forecast.zarr/result.json"
-        marker_key = self._marker_key(prefix)
+        data_key = f"{prefix}/{artifact_name}/result.json"
+        marker_key = self._marker_key(prefix, artifact_name)
         digest = hashlib.sha256(data).hexdigest()
 
         try:
@@ -97,7 +102,7 @@ class AtomicObjectPublisher:
                 pass
 
         return PublishedObject(
-            asset_uri=f"s3://{bucket}/{prefix}/forecast.zarr",
+            asset_uri=f"s3://{bucket}/{prefix}/{artifact_name}",
             sha256=digest,
             size_bytes=len(data),
             marker_key=marker_key,
@@ -113,5 +118,8 @@ class AtomicObjectPublisher:
         )
 
     @staticmethod
-    def _marker_key(prefix: str) -> str:
-        return f"{prefix.rstrip('/')}/forecast.zarr/_SUCCESS.json"
+    def _marker_key(prefix: str, artifact_name: str) -> str:
+        artifact_name = artifact_name.strip("/")
+        if not artifact_name or artifact_name.startswith("_temporary") or ".." in artifact_name:
+            raise ValueError("artifact_name must be a safe relative object name")
+        return f"{prefix.rstrip('/')}/{artifact_name}/_SUCCESS.json"

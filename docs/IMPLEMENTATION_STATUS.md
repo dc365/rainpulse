@@ -32,7 +32,7 @@ NowcastInput gate.
 | RP-002 data/event contracts | Complete | Raw, normalized polar, QC polar, Hybrid Scan, analysis, nowcast and forecast contracts plus domain event schemas/examples |
 | RP-003 infrastructure | Complete | PostgreSQL, NATS JetStream and MinIO with migrations, persistence and health checks |
 | RP-004 Go three-level workflows | Implemented locally; server acceptance pending | Separate radar-scan, analysis-cycle and forecast states; additive metadata migration; radar/analysis API and SSE; two-radar degradation simulation |
-| RP-005 Python Worker SDK | Foundation complete | NATS/Pydantic/idempotency/atomic output/health are proven by a simulation Worker; domain-task routing still needs generalization |
+| RP-005 Python Worker SDK | Implemented locally; server acceptance pending | Registered decode/QC/grid/mosaic-QPE/NowcastInput profiles reuse strict contracts, idempotency, artifact-specific atomic output, logs and health |
 | RP-006 first real radar decoder | Blocked on input | Requires a verified representative raw base-data sample and complete ready radar configuration |
 | RP-007–RP-016 | Not started | Depend on the preceding radar chain and representative data |
 
@@ -100,6 +100,18 @@ The RP-004/RP-005 foundation also proves:
 - temporary output, validation, final copy and `_SUCCESS.json` commit;
 - success, replay, poison-message and structured-failure behavior.
 
+RP-005 now additionally provides:
+
+- a registered `TaskHandler` boundary with one request model, subject, durable
+  consumer, executor and output artifact definition per Worker profile;
+- strict Pydantic models for decode, QC, grid, mosaic/QPE and NowcastInput task
+  requests, including 3–6-frame identity checks;
+- artifact-specific atomic markers for `volume.zarr`, `grid.zarr`,
+  `analysis.zarr`, `input.zarr` and the existing `forecast.zarr`;
+- deterministic replay behavior across all synthetic domain profiles;
+- explicit fixture output stating that no radar array or meteorological
+  algorithm ran.
+
 All existing model/config records and products are simulations. They do not
 claim radar decode, QC, QPE, pySTEPS, or real-data readiness.
 
@@ -122,7 +134,7 @@ Docker Hub access is unreliable. Continue to use local Linux/amd64 builds and
 export/import pinned images through `http://127.0.0.1:7897` when necessary.
 No credentials or secrets belong in this document or repository.
 
-The RP-004 code, generated clients, tests and Linux/amd64 binaries pass locally.
+The RP-004/RP-005 code, generated clients, tests and Linux/amd64 binaries pass locally.
 The workstation has no Docker runtime, and the GPU server rejected the supplied
 SSH authentication on 2026-08-24. Migration `0005_radar_workflows.sql` and the
 updated Compose control-plane smoke therefore remain pending on-server
@@ -140,9 +152,9 @@ First complete the pending RP-004 server acceptance:
    and end-to-end smoke tests;
 5. retain the previous deployed version until these checks pass.
 
-Then complete RP-005 domain-task routing so decode, QC, grid, mosaic/QPE and
-NowcastInput workers reuse the established long-lived Worker SDK without
-pretending to implement real meteorological algorithms.
+After server acceptance, RP-006 is the first real-data target: implement one
+verified radar-format adapter that publishes `NormalizedRadarVolume`. It must
+not begin without the representative base-data sample and ready radar config.
 
 ## Required inputs before RP-006
 

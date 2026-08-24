@@ -13,7 +13,7 @@ from typing import Any
 import nats
 from nats.errors import TimeoutError as NATSTimeoutError
 from nats.js.api import AckPolicy, ConsumerConfig
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from .contracts import (
     JOB_COMPLETED_SUBJECT,
@@ -39,6 +39,7 @@ class WorkerConfig:
     health_host: str
     health_port: int
     worker_id: str
+    profile: str = "simulation"
 
     @classmethod
     def from_environment(cls) -> WorkerConfig:
@@ -51,7 +52,26 @@ class WorkerConfig:
             health_host=host or "0.0.0.0",
             health_port=int(raw_port),
             worker_id=os.getenv("RAINPULSE_WORKER_ID", "pysteps-lk-sim"),
+            profile=os.getenv("RAINPULSE_WORKER_PROFILE", "simulation"),
         )
+
+
+@dataclass(frozen=True)
+class WorkerResult:
+    data: bytes
+    metrics: dict[str, float]
+
+
+@dataclass(frozen=True)
+class TaskHandler:
+    profile: str
+    subject: str
+    consumer: str
+    request_model: type[BaseModel]
+    executor: Callable[[Any], WorkerResult | tuple[bytes, dict[str, float]]]
+    asset_type: str
+    artifact_name: str
+    media_type: str = "application/vnd+zarr"
 
 
 class Worker:
@@ -60,10 +80,19 @@ class Worker:
         config: WorkerConfig,
         publisher: AtomicObjectPublisher,
         executor: Callable[[JobRequested], tuple[bytes, dict[str, float]]] = execute,
+        handler: TaskHandler | None = None,
     ) -> None:
         self._config = config
         self._publisher = publisher
-        self._executor = executor
+        self._handler = handler or TaskHandler(
+            profile="simulation",
+            subject=JOB_REQUESTED_SUBJECT,
+            consumer=WORKER_CONSUMER,
+            request_model=JobRequested,
+            executor=executor,
+            asset_type="forecast_zarr",
+            artifact_name="forecast.zarr",
+        )
         self._connection: Any = None
         self._ready = False
         self._stop = asyncio.Event()
@@ -78,8 +107,8 @@ class Worker:
         )
         jetstream = self._connection.jetstream()
         subscription = await jetstream.pull_subscribe(
-            JOB_REQUESTED_SUBJECT,
-            durable=WORKER_CONSUMER,
+            self._handler.subject,
+            durable=self._handler.consumer,
             stream=JOB_STREAM,
             config=ConsumerConfig(
                 ack_policy=AckPolicy.EXPLICIT,
@@ -93,7 +122,13 @@ class Worker:
             self._config.health_port,
         )
         self._ready = True
-        log_event("info", "worker.ready", worker_id=self._config.worker_id)
+        log_event(
+            "info",
+            "worker.ready",
+            worker_id=self._config.worker_id,
+            profile=self._handler.profile,
+            subject=self._handler.subject,
+        )
         try:
             while not self._stop.is_set():
                 try:
@@ -114,7 +149,7 @@ class Worker:
 
     async def process_message(self, message: Any, jetstream: Any) -> None:
         try:
-            request = JobRequested.model_validate_json(message.data)
+            request = self._handler.request_model.model_validate_json(message.data)
         except ValidationError as error:
             log_event("error", "job.invalid", error_code="INVALID_JOB_REQUEST", error=str(error))
             await message.term()
@@ -126,6 +161,8 @@ class Worker:
             "run_id": str(request.run_id),
             "job_id": str(request.job_id),
             "trace_id": str(request.trace_id),
+            "event_type": request.event_type,
+            "worker_profile": self._handler.profile,
         }
         log_event("info", "job.started", **context)
 
@@ -133,6 +170,7 @@ class Worker:
             existing = await asyncio.to_thread(
                 self._publisher.load_completion,
                 request.payload.output_prefix,
+                self._handler.artifact_name,
             )
             if existing is not None:
                 self._validate_existing(existing, request)
@@ -141,20 +179,21 @@ class Worker:
                 log_event("info", "job.idempotent_replay", **context)
                 return
 
-            data, metrics = await asyncio.to_thread(self._executor, request)
+            raw_result = await asyncio.to_thread(self._handler.executor, request)
+            result = self._coerce_result(raw_result)
             completion = self._build_completion(
                 request=request,
                 started_at=started_at,
                 started_tick=started_tick,
-                data=data,
-                metrics=metrics,
+                result=result,
             )
             await asyncio.to_thread(
                 self._publisher.publish,
                 output_prefix=request.payload.output_prefix,
                 job_id=request.job_id,
-                data=data,
+                data=result.data,
                 completion=completion,
+                artifact_name=self._handler.artifact_name,
             )
             await self._publish_result(jetstream, completion)
             await message.ack()
@@ -200,16 +239,15 @@ class Worker:
     def _build_completion(
         self,
         *,
-        request: JobRequested,
+        request: Any,
         started_at: datetime,
         started_tick: float,
-        data: bytes,
-        metrics: dict[str, float],
+        result: WorkerResult,
     ) -> JobCompleted:
         finished_at = datetime.now(UTC)
         runtime_ms = max(0, round((time.perf_counter() - started_tick) * 1000))
         bucket, prefix = parse_s3_uri(request.payload.output_prefix)
-        asset_uri = f"s3://{bucket}/{prefix.rstrip('/')}/forecast.zarr"
+        asset_uri = f"s3://{bucket}/{prefix.rstrip('/')}/{self._handler.artifact_name}"
         return JobCompleted(
             event_id=result_event_id(request.job_id, "job.completed"),
             occurred_at=finished_at,
@@ -223,20 +261,20 @@ class Worker:
                 runtime_ms=runtime_ms,
                 assets=[
                     CompletedAsset(
-                        asset_type="forecast_zarr",
+                        asset_type=self._handler.asset_type,
                         uri=asset_uri,
-                        sha256=hashlib.sha256(data).hexdigest(),
-                        size_bytes=len(data),
-                        media_type="application/vnd+zarr",
+                        sha256=hashlib.sha256(result.data).hexdigest(),
+                        size_bytes=len(result.data),
+                        media_type=self._handler.media_type,
                     )
                 ],
-                metrics=metrics,
+                metrics=result.metrics,
             ),
         )
 
     def _build_failure(
         self,
-        request: JobRequested,
+        request: Any,
         started_at: datetime,
         started_tick: float,
         error: Exception,
@@ -255,7 +293,7 @@ class Worker:
                 runtime_ms=max(0, round((time.perf_counter() - started_tick) * 1000)),
                 error_code="SIMULATED_FAILURE" if simulated else "WORKER_PROCESSING_ERROR",
                 error_message=(
-                    "RP-004 simulated worker failure" if simulated else "Worker processing failed"
+                    "RP-005 simulated worker failure" if simulated else "Worker processing failed"
                 ),
                 retryable=False,
                 details={"worker_id": self._config.worker_id, "exception": type(error).__name__},
@@ -263,13 +301,22 @@ class Worker:
         )
 
     @staticmethod
-    def _validate_existing(completion: JobCompleted, request: JobRequested) -> None:
+    def _validate_existing(completion: JobCompleted, request: Any) -> None:
         if (
             completion.run_id != request.run_id
             or completion.job_id != request.job_id
             or completion.trace_id != request.trace_id
         ):
             raise RuntimeError("published completion identity does not match request")
+
+    @staticmethod
+    def _coerce_result(
+        result: WorkerResult | tuple[bytes, dict[str, float]],
+    ) -> WorkerResult:
+        if isinstance(result, WorkerResult):
+            return result
+        data, metrics = result
+        return WorkerResult(data=data, metrics=metrics)
 
     async def _handle_health(
         self,
@@ -284,7 +331,12 @@ class Worker:
         connected = self._connection is not None and self._connection.is_connected
         healthy = path == "/healthz" and self._ready and connected
         status = "200 OK" if healthy else "503 Service Unavailable"
-        body = json.dumps({"status": "ready" if healthy else "unavailable"}).encode()
+        body = json.dumps(
+            {
+                "status": "ready" if healthy else "unavailable",
+                "profile": self._handler.profile,
+            }
+        ).encode()
         writer.write(
             (
                 f"HTTP/1.1 {status}\r\nContent-Type: application/json\r\n"
@@ -303,7 +355,7 @@ def log_event(level: str, event: str, **fields: Any) -> None:
             {
                 "timestamp": datetime.now(UTC).isoformat(),
                 "level": level,
-                "service": "rainpulse-simulation-worker",
+                "service": "rainpulse-worker",
                 "event": event,
                 **fields,
             },

@@ -58,8 +58,7 @@ def test_atomic_publish_writes_marker_last_and_reloads_completion() -> None:
         request=request,
         started_at=request.occurred_at,
         started_tick=0.0,
-        data=data,
-        metrics={"simulation": 1.0},
+        result=worker._coerce_result((data, {"simulation": 1.0})),  # noqa: SLF001
     )
     client = FakeMinio()
     publisher = AtomicObjectPublisher(client)  # type: ignore[arg-type]
@@ -77,3 +76,36 @@ def test_atomic_publish_writes_marker_last_and_reloads_completion() -> None:
     reloaded = publisher.load_completion(request.payload.output_prefix)
     assert isinstance(reloaded, JobCompleted)
     assert reloaded.event_id == completion.event_id
+
+
+def test_atomic_publish_supports_stage_specific_artifact_names() -> None:
+    from rainpulse_algo.worker.contracts import JobRequested
+
+    request = JobRequested.model_validate(requested_data())
+    worker = Worker(
+        WorkerConfig("nats://test", "127.0.0.1", 8091, "test-worker"),
+        publisher=None,  # type: ignore[arg-type]
+    )
+    data = b'{"synthetic_contract_fixture":true}'
+    completion = worker._build_completion(  # noqa: SLF001
+        request=request,
+        started_at=request.occurred_at,
+        started_tick=0.0,
+        result=worker._coerce_result((data, {"simulation": 1.0})),  # noqa: SLF001
+    )
+    client = FakeMinio()
+    publisher = AtomicObjectPublisher(client)  # type: ignore[arg-type]
+
+    published = publisher.publish(
+        output_prefix=request.payload.output_prefix,
+        job_id=request.job_id,
+        data=data,
+        completion=completion,
+        artifact_name="volume.zarr",
+    )
+
+    assert published.asset_uri.endswith("/volume.zarr")
+    assert published.marker_key.endswith("volume.zarr/_SUCCESS.json")
+    assert publisher.load_completion(
+        request.payload.output_prefix, "volume.zarr"
+    ).event_id == completion.event_id

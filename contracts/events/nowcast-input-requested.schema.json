@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/contracts/events/nowcast-input-requested.schema.json",
+  "title": "RainPulse nowcast.input.requested.v1 event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "event_type", "occurred_at", "run_id", "job_id", "trace_id", "payload"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "event_id": { "type": "string", "format": "uuid" },
+    "event_type": { "const": "nowcast.input.requested.v1" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "run_id": { "type": "string", "format": "uuid" },
+    "job_id": { "type": "string", "format": "uuid" },
+    "trace_id": { "type": "string", "format": "uuid" },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["analysis_ids", "input_uris", "output_prefix", "issue_time", "grid_id", "preprocess_version", "gate_config_version"],
+      "properties": {
+        "analysis_ids": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 6,
+          "uniqueItems": true,
+          "items": { "type": "string", "format": "uuid" }
+        },
+        "input_uris": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 6,
+          "uniqueItems": true,
+          "items": { "type": "string", "format": "uri" }
+        },
+        "output_prefix": { "type": "string", "format": "uri" },
+        "issue_time": { "type": "string", "format": "date-time" },
+        "grid_id": { "type": "string", "minLength": 1 },
+        "preprocess_version": { "type": "string", "minLength": 1 },
+        "gate_config_version": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

@@ -49,8 +49,9 @@ After `make dev-up`, the public seams are:
 
 Use `make dev-down` to stop the composed runtime without deleting its named
 volumes. PostgreSQL, NATS JetStream and MinIO are persistent RP-003 services;
-RP-005 provides the reusable long-lived simulated Worker foundation but no
-real radar decoder, QC algorithm, or meteorological model.
+RP-005 provides registered long-lived Worker profiles and common idempotent,
+atomic publication behavior, but no real radar decoder, QC algorithm, or
+meteorological model yet.
 
 ## Test deployment artifacts
 
