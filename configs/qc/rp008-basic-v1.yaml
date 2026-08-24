@@ -1,6 +1,6 @@
 schema_version: "1.0"
 profile_version: rp008-basic-v1
-pipeline_version: rp008-basic-1.0.0
+pipeline_version: rp008-basic-1.0.1
 flag_definition_version: qc-flags-v1
 
 health_gate:

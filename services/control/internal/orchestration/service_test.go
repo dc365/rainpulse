@@ -115,9 +115,9 @@ func TestCreateRadarQCUsesNormalizedInputAndStableIdentity(t *testing.T) {
 		NormalizedURI: "s3://rainpulse/radar/normalized/z9598/scan/volume.zarr",
 		CurrentStatus: workflow.RadarScanNormalized,
 		Health:        workflow.RadarHealthDegraded,
-		QCProfile:     "rp008-basic-v1", QCPipelineVersion: "rp008-basic-1.0.0",
+		QCProfile:     "rp008-basic-v1", QCPipelineVersion: "rp008-basic-1.0.1",
 		FlagDefinitionVersion: "qc-flags-v1",
-		QCConfig:              json.RawMessage(`{"pipeline_version":"rp008-basic-1.0.0"}`),
+		QCConfig:              json.RawMessage(`{"pipeline_version":"rp008-basic-1.0.1"}`),
 		QCConfigSHA256:        "63266c7c72321262a01b945281060abd84153a8f3ad64a95c5b73b9fd510f678",
 	}
 
