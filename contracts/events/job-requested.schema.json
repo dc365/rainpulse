@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/contracts/events/job-requested.schema.json",
+  "title": "RainPulse job.requested event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_id",
+    "event_type",
+    "occurred_at",
+    "run_id",
+    "job_id",
+    "trace_id",
+    "payload"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "event_id": { "type": "string", "format": "uuid" },
+    "event_type": { "const": "job.requested" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "run_id": { "type": "string", "format": "uuid" },
+    "job_id": { "type": "string", "format": "uuid" },
+    "trace_id": { "type": "string", "format": "uuid" },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job_type",
+        "input_uri",
+        "output_prefix",
+        "grid_id",
+        "config_version",
+        "model_version",
+        "issue_time"
+      ],
+      "properties": {
+        "job_type": {
+          "type": "string",
+          "enum": [
+            "preprocess",
+            "model.persistence",
+            "model.translation",
+            "model.pysteps_lk",
+            "product.build",
+            "verification.run"
+          ]
+        },
+        "input_uri": { "type": "string", "format": "uri" },
+        "output_prefix": { "type": "string", "format": "uri" },
+        "grid_id": { "type": "string", "minLength": 1 },
+        "config_version": { "type": "string", "minLength": 1 },
+        "model_version": { "type": "string", "minLength": 1 },
+        "issue_time": { "type": "string", "format": "date-time" },
+        "input_asset_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "format": "uuid" }
+        },
+        "parameters": {
+          "type": "object",
+          "description": "Small JSON configuration overrides only; never meteorological arrays."
+        }
+      }
+    }
+  }
+}

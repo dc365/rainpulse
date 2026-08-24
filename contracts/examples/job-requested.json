@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "event_id": "d3407132-8f23-49d1-8107-39b45c943760",
+  "event_type": "job.requested",
+  "occurred_at": "2026-08-24T03:00:01Z",
+  "run_id": "f3641335-13a3-4f68-96c0-56a5e0e684d7",
+  "job_id": "0894481f-c096-49af-8d32-e9c531a66772",
+  "trace_id": "0d049a59-754c-4405-8a31-d789685056c2",
+  "payload": {
+    "job_type": "model.pysteps_lk",
+    "input_uri": "s3://rainpulse/standard/fuzhou_1km_v1/2026/08/24/0300/input.zarr",
+    "output_prefix": "s3://rainpulse/products/f3641335-13a3-4f68-96c0-56a5e0e684d7/pysteps-lk/",
+    "grid_id": "fuzhou_1km_v1",
+    "config_version": "baseline-v1",
+    "model_version": "pysteps-lk-v1",
+    "issue_time": "2026-08-24T03:00:00Z",
+    "input_asset_ids": ["5436e295-49c0-4da7-a945-0d5444f390ac"]
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "event_id": "241df97b-4d3c-43c6-8d25-a1dc8d3015e8",
+  "event_type": "job.completed",
+  "occurred_at": "2026-08-24T03:00:42Z",
+  "run_id": "f3641335-13a3-4f68-96c0-56a5e0e684d7",
+  "job_id": "0894481f-c096-49af-8d32-e9c531a66772",
+  "trace_id": "0d049a59-754c-4405-8a31-d789685056c2",
+  "payload": {
+    "status": "succeeded",
+    "started_at": "2026-08-24T03:00:03Z",
+    "finished_at": "2026-08-24T03:00:42Z",
+    "runtime_ms": 39000,
+    "assets": [
+      {
+        "asset_type": "forecast_zarr",
+        "uri": "s3://rainpulse/products/f3641335-13a3-4f68-96c0-56a5e0e684d7/pysteps-lk/forecast.zarr",
+        "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "size_bytes": 1048576,
+        "media_type": "application/vnd+zarr"
+      }
+    ],
+    "metrics": {
+      "input_missing_ratio": 0.012,
+      "max_rain_rate": 72.3
+    }
+  }
+}

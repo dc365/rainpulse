@@ -1,0 +1,9 @@
+{
+  "name": "rainpulse-nowcast",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@11.10.0",
+  "devDependencies": {
+    "openapi-typescript": "7.13.0"
+  }
+}

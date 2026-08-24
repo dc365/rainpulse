@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/contracts/events/job-failed.schema.json",
+  "title": "RainPulse job.failed event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_id",
+    "event_type",
+    "occurred_at",
+    "run_id",
+    "job_id",
+    "trace_id",
+    "payload"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "event_id": { "type": "string", "format": "uuid" },
+    "event_type": { "const": "job.failed" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "run_id": { "type": "string", "format": "uuid" },
+    "job_id": { "type": "string", "format": "uuid" },
+    "trace_id": { "type": "string", "format": "uuid" },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "started_at",
+        "finished_at",
+        "runtime_ms",
+        "error_code",
+        "error_message",
+        "retryable",
+        "details"
+      ],
+      "properties": {
+        "status": { "const": "failed" },
+        "started_at": { "type": "string", "format": "date-time" },
+        "finished_at": { "type": "string", "format": "date-time" },
+        "runtime_ms": { "type": "integer", "minimum": 0 },
+        "error_code": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "error_message": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "retryable": { "type": "boolean" },
+        "details": {
+          "type": "object",
+          "description": "Small diagnostic metadata only; never raw arrays or secrets."
+        }
+      }
+    }
+  }
+}

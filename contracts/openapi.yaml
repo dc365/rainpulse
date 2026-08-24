@@ -1,0 +1,712 @@
+openapi: 3.0.3
+info:
+  title: RainPulse Control API
+  version: 1.0.0
+  description: >-
+    Public control-plane contract for the RainPulse 0–2 hour precipitation
+    nowcasting system. React clients communicate only with this API.
+servers:
+  - url: /api/v1
+tags:
+  - name: runs
+  - name: products
+  - name: verification
+  - name: system
+  - name: admin
+paths:
+  /runs/latest:
+    get:
+      operationId: getLatestRun
+      tags: [runs]
+      summary: Get the latest forecast run
+      responses:
+        "200":
+          description: Latest forecast run
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForecastRun"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /runs:
+    get:
+      operationId: listRuns
+      tags: [runs]
+      summary: List forecast runs
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/RunStatus"
+      responses:
+        "200":
+          description: Forecast run page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForecastRunPage"
+  /runs/{run_id}:
+    get:
+      operationId: getRun
+      tags: [runs]
+      summary: Get one forecast run
+      parameters:
+        - $ref: "#/components/parameters/RunId"
+      responses:
+        "200":
+          description: Forecast run
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForecastRun"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /runs/{run_id}/jobs:
+    get:
+      operationId: listRunJobs
+      tags: [runs]
+      summary: List jobs belonging to a forecast run
+      parameters:
+        - $ref: "#/components/parameters/RunId"
+      responses:
+        "200":
+          description: Jobs ordered by creation time
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ForecastJob"
+  /products:
+    get:
+      operationId: listProducts
+      tags: [products]
+      summary: List published products
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - name: run_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: model_id
+          in: query
+          schema:
+            type: string
+        - name: product_type
+          in: query
+          schema:
+            $ref: "#/components/schemas/ProductType"
+      responses:
+        "200":
+          description: Product page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductPage"
+  /products/{product_id}:
+    get:
+      operationId: getProduct
+      tags: [products]
+      summary: Get product metadata
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      responses:
+        "200":
+          description: Product metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /products/{product_id}/assets:
+    get:
+      operationId: listProductAssets
+      tags: [products]
+      summary: List files and object-store assets for a product
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      responses:
+        "200":
+          description: Product assets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProductAsset"
+  /point-forecast:
+    get:
+      operationId: getPointForecast
+      tags: [products]
+      summary: Query forecast values at a geographic point
+      parameters:
+        - name: product_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: longitude
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: -180
+            maximum: 180
+        - name: latitude
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: -90
+            maximum: 90
+      responses:
+        "200":
+          description: Point forecast series
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PointForecast"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /area-statistics:
+    get:
+      operationId: getAreaStatistics
+      tags: [products]
+      summary: Query statistics inside a WGS84 bounding box
+      parameters:
+        - name: product_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: bbox
+          in: query
+          required: true
+          description: min longitude, min latitude, max longitude, max latitude
+          schema:
+            type: array
+            minItems: 4
+            maxItems: 4
+            items:
+              type: number
+              format: double
+          style: form
+          explode: false
+      responses:
+        "200":
+          description: Area statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AreaStatistics"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /verification/summary:
+    get:
+      operationId: getVerificationSummary
+      tags: [verification]
+      summary: Get verification summary for one run
+      parameters:
+        - name: run_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Verification summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerificationSummary"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /system/status:
+    get:
+      operationId: getSystemStatus
+      tags: [system]
+      summary: Get control-plane readiness and version
+      responses:
+        "200":
+          description: Control-plane status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemStatus"
+  /events/stream:
+    get:
+      operationId: streamEvents
+      tags: [system]
+      summary: Stream run and product updates using Server-Sent Events
+      parameters:
+        - name: run_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Server-Sent Event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+  /admin/runs/{run_id}/rerun:
+    post:
+      operationId: rerunForecastRun
+      tags: [admin]
+      summary: Create a new run using the selected run inputs and configuration
+      parameters:
+        - $ref: "#/components/parameters/RunId"
+      responses:
+        "202":
+          description: Rerun accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForecastRun"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /admin/models/{model_id}/enable:
+    post:
+      operationId: enableModel
+      tags: [admin]
+      summary: Enable a configured model
+      parameters:
+        - $ref: "#/components/parameters/ModelId"
+      responses:
+        "200":
+          description: Updated model state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelState"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /admin/models/{model_id}/disable:
+    post:
+      operationId: disableModel
+      tags: [admin]
+      summary: Disable a configured model
+      parameters:
+        - $ref: "#/components/parameters/ModelId"
+      responses:
+        "200":
+          description: Updated model state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelState"
+        "404":
+          $ref: "#/components/responses/NotFound"
+components:
+  parameters:
+    RunId:
+      name: run_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ProductId:
+      name: product_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ModelId:
+      name: model_id
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    Cursor:
+      name: cursor
+      in: query
+      schema:
+        type: string
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: Request conflicts with the current resource state
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    RunStatus:
+      type: string
+      enum:
+        - WAITING
+        - RECEIVED
+        - VALIDATING
+        - PREPROCESSING
+        - BASELINE_RUNNING
+        - BASELINE_READY
+        - ENHANCED_RUNNING
+        - PRODUCT_BUILDING
+        - PUBLISHED
+        - VERIFYING
+        - VERIFIED
+        - DEGRADED
+        - FAILED
+        - SKIPPED
+    JobStatus:
+      type: string
+      enum: [PENDING, RUNNING, SUCCEEDED, FAILED, SKIPPED]
+    ProductType:
+      type: string
+      enum:
+        - rain_rate
+        - accumulation_60
+        - accumulation_120
+        - probability_exceedance
+        - quantile
+        - motion_field
+        - quality
+    SystemStatus:
+      type: object
+      additionalProperties: false
+      required: [service, status, version]
+      properties:
+        service:
+          type: string
+          example: rainpulse-control
+        status:
+          type: string
+          enum: [ready, degraded, unavailable]
+        version:
+          type: string
+    ForecastRun:
+      type: object
+      additionalProperties: false
+      required:
+        - run_id
+        - issue_time
+        - grid_id
+        - config_version
+        - status
+        - created_at
+        - updated_at
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        issue_time:
+          type: string
+          format: date-time
+        grid_id:
+          type: string
+        config_version:
+          type: string
+        status:
+          $ref: "#/components/schemas/RunStatus"
+        degraded_reason:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ForecastRunPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ForecastRun"
+        next_cursor:
+          type: string
+          nullable: true
+    ForecastJob:
+      type: object
+      additionalProperties: false
+      required:
+        - job_id
+        - run_id
+        - job_type
+        - model_version
+        - config_version
+        - status
+        - created_at
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        run_id:
+          type: string
+          format: uuid
+        job_type:
+          type: string
+        model_version:
+          type: string
+        config_version:
+          type: string
+        status:
+          $ref: "#/components/schemas/JobStatus"
+        attempt:
+          type: integer
+          minimum: 1
+          default: 1
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        runtime_ms:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+        error_code:
+          type: string
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    Product:
+      type: object
+      additionalProperties: false
+      required:
+        - product_id
+        - run_id
+        - product_type
+        - model_id
+        - model_version
+        - config_version
+        - grid_id
+        - issue_time
+        - created_at
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        run_id:
+          type: string
+          format: uuid
+        product_type:
+          $ref: "#/components/schemas/ProductType"
+        model_id:
+          type: string
+        model_version:
+          type: string
+        config_version:
+          type: string
+        grid_id:
+          type: string
+        issue_time:
+          type: string
+          format: date-time
+        valid_times:
+          type: array
+          items:
+            type: string
+            format: date-time
+        member_count:
+          type: integer
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+    ProductPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Product"
+        next_cursor:
+          type: string
+          nullable: true
+    ProductAsset:
+      type: object
+      additionalProperties: false
+      required: [asset_id, asset_type, uri, media_type, sha256, size_bytes, created_at]
+      properties:
+        asset_id:
+          type: string
+          format: uuid
+        asset_type:
+          type: string
+        uri:
+          type: string
+          format: uri
+        media_type:
+          type: string
+        sha256:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+        size_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        lead_time_minutes:
+          type: integer
+          minimum: 0
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    PointForecastValue:
+      type: object
+      additionalProperties: false
+      required: [valid_time, lead_time_minutes, rain_rate, valid]
+      properties:
+        valid_time:
+          type: string
+          format: date-time
+        lead_time_minutes:
+          type: integer
+          minimum: 0
+        rain_rate:
+          type: number
+          format: float
+          nullable: true
+          description: Millimetres per hour; null when valid is false.
+        valid:
+          type: boolean
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          nullable: true
+    PointForecast:
+      type: object
+      additionalProperties: false
+      required: [product_id, longitude, latitude, values]
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        longitude:
+          type: number
+          format: double
+        latitude:
+          type: number
+          format: double
+        values:
+          type: array
+          items:
+            $ref: "#/components/schemas/PointForecastValue"
+    AreaStatistics:
+      type: object
+      additionalProperties: false
+      required: [product_id, bbox, valid_pixel_ratio, max_rain_rate, mean_rain_rate]
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        bbox:
+          type: array
+          minItems: 4
+          maxItems: 4
+          items:
+            type: number
+            format: double
+        valid_pixel_ratio:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        max_rain_rate:
+          type: number
+          format: float
+        mean_rain_rate:
+          type: number
+          format: float
+    VerificationMetric:
+      type: object
+      additionalProperties: false
+      required: [name, value]
+      properties:
+        name:
+          type: string
+        threshold:
+          type: number
+          format: float
+          nullable: true
+        lead_time_minutes:
+          type: integer
+          nullable: true
+        value:
+          type: number
+          format: double
+    VerificationSummary:
+      type: object
+      additionalProperties: false
+      required: [run_id, metrics, verified_at]
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        metrics:
+          type: array
+          items:
+            $ref: "#/components/schemas/VerificationMetric"
+        verified_at:
+          type: string
+          format: date-time
+    ModelState:
+      type: object
+      additionalProperties: false
+      required: [model_id, enabled, updated_at]
+      properties:
+        model_id:
+          type: string
+        enabled:
+          type: boolean
+        updated_at:
+          type: string
+          format: date-time
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [code, message, trace_id]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        trace_id:
+          type: string
+          format: uuid

@@ -1,0 +1,17 @@
+.git
+.github
+.build/*
+!.build/linux-amd64/
+!.build/linux-amd64/*
+!.build/worker-site-packages/
+!.build/worker-site-packages/**
+**/.DS_Store
+**/.venv
+**/__pycache__
+**/node_modules
+**/dist
+!apps/web/dist/
+!apps/web/dist/**
+docs/*.pptx
+runtime
+data
