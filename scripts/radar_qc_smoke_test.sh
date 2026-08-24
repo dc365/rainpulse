@@ -85,7 +85,7 @@ scan=json.loads(sys.argv[3])
 assert summary["scan_id"] == status["latest_scan_id"], (summary,status)
 assert summary["radar_id"] == "z9598", summary
 assert summary["qc_profile"] == "rp008-basic-v1", summary
-assert summary["qc_pipeline_version"] == "rp008-basic-1.0.2", summary
+assert summary["qc_pipeline_version"] == "rp008-basic-1.0.3", summary
 assert summary["flag_definition_version"] == "qc-flags-v1", summary
 assert summary["health_state"] == "DEGRADED", summary
 assert 0 < summary["mean_quality_index"] <= 1, summary
