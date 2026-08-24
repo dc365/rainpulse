@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import PurePosixPath
@@ -15,6 +16,18 @@ from minio.commonconfig import CopySource
 from minio.error import S3Error
 
 from .contracts import JobCompleted
+
+
+def minio_client_from_environment() -> Minio:
+    endpoint = urlparse(_required_environment("RAINPULSE_OBJECT_STORE_ENDPOINT"))
+    if not endpoint.hostname:
+        raise ValueError("RAINPULSE_OBJECT_STORE_ENDPOINT must include a hostname")
+    return Minio(
+        endpoint.netloc,
+        access_key=_required_environment("RAINPULSE_OBJECT_STORE_ACCESS_KEY"),
+        secret_key=_required_environment("RAINPULSE_OBJECT_STORE_SECRET_KEY"),
+        secure=endpoint.scheme == "https",
+    )
 
 
 @dataclass(frozen=True)
@@ -143,6 +156,48 @@ class AtomicObjectPublisher:
         return f"{prefix.rstrip('/')}/{artifact_name}/_SUCCESS.json"
 
 
+class ArtifactObjectReader:
+    """Loads and verifies an atomically published multi-object artifact."""
+
+    def __init__(self, client: Minio) -> None:
+        self._client = client
+
+    def load(self, artifact_uri: str) -> dict[str, bytes]:
+        bucket, prefix = parse_s3_uri(artifact_uri)
+        prefix = prefix.rstrip("/")
+        marker = json.loads(self._get_bytes(bucket, f"{prefix}/_SUCCESS.json"))
+        manifest = marker.get("objects")
+        if not isinstance(manifest, list) or not manifest:
+            raise RuntimeError("published artifact marker has no object manifest")
+        objects: dict[str, bytes] = {}
+        for item in manifest:
+            relative_key = item.get("key")
+            if not isinstance(relative_key, str):
+                raise RuntimeError("published artifact manifest has an invalid key")
+            normalized = normalize_artifact_objects(
+                data=None,
+                objects={relative_key: b""},
+            )
+            key = next(iter(normalized))
+            value = self._get_bytes(bucket, f"{prefix}/{key}")
+            if len(value) != item.get("size_bytes"):
+                raise RuntimeError(f"published artifact size differs for {key}")
+            if hashlib.sha256(value).hexdigest() != item.get("sha256"):
+                raise RuntimeError(f"published artifact checksum differs for {key}")
+            objects[key] = value
+        if artifact_sha256(objects) != marker.get("sha256"):
+            raise RuntimeError("published artifact bundle checksum differs")
+        return objects
+
+    def _get_bytes(self, bucket: str, key: str) -> bytes:
+        response = self._client.get_object(bucket, key)
+        try:
+            return response.read()
+        finally:
+            response.close()
+            response.release_conn()
+
+
 def normalize_artifact_objects(
     *,
     data: bytes | None,
@@ -185,3 +240,10 @@ def _content_type(key: str) -> str:
     if key.endswith((".json", ".zattrs", ".zarray", ".zgroup")):
         return "application/json"
     return "application/octet-stream"
+
+
+def _required_environment(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        raise ValueError(f"{name} is required")
+    return value

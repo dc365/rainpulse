@@ -104,6 +104,54 @@ func TestCreateRadarDecodeUsesStableIdentityAndRealWorkerSubject(t *testing.T) {
 	}
 }
 
+func TestCreateRadarQCUsesNormalizedInputAndStableIdentity(t *testing.T) {
+	repository := &fakeRepository{}
+	now := time.Date(2026, 8, 24, 13, 0, 0, 0, time.UTC)
+	service := NewService(repository, Options{Now: func() time.Time { return now }})
+	input := RadarQCInput{
+		ScanID:  uuid.MustParse("10000000-0000-4000-8000-000000000004"),
+		RunID:   uuid.MustParse("10000000-0000-4000-8000-000000000002"),
+		RadarID: "z9598", RadarConfigVersion: "z9598-fmt-v1",
+		NormalizedURI: "s3://rainpulse/radar/normalized/z9598/scan/volume.zarr",
+		CurrentStatus: workflow.RadarScanNormalized,
+		Health:        workflow.RadarHealthDegraded,
+		QCProfile:     "rp008-basic-v1", QCPipelineVersion: "rp008-basic-1.0.0",
+		FlagDefinitionVersion: "qc-flags-v1",
+	}
+
+	job, err := service.CreateRadarQC(context.Background(), input)
+	if err != nil {
+		t.Fatalf("CreateRadarQC() error = %v", err)
+	}
+	first := repository.radarQC
+	if first.Outbox.Subject != RadarQCRequestedSubject || first.Outbox.EventType != RadarQCRequestedEventType {
+		t.Fatalf("unexpected radar QC worker route: %#v", first.Outbox)
+	}
+	if job.JobType != RadarQCJobType || job.RunID != input.RunID {
+		t.Fatalf("unexpected radar QC job: %#v", job)
+	}
+	var requested RadarQCRequested
+	if err := json.Unmarshal(first.Outbox.Payload, &requested); err != nil {
+		t.Fatalf("decode radar QC request: %v", err)
+	}
+	if requested.Payload.ScanID != input.ScanID || requested.Payload.InputURI != input.NormalizedURI ||
+		requested.Payload.QCProfile != input.QCProfile {
+		t.Fatalf("unexpected radar QC request: %#v", requested)
+	}
+	second, err := service.CreateRadarQC(context.Background(), input)
+	if err != nil {
+		t.Fatalf("repeat CreateRadarQC() error = %v", err)
+	}
+	if second.ID != job.ID || repository.radarQC.Outbox.ID != first.Outbox.ID {
+		t.Fatal("radar QC workflow identifiers are not deterministic")
+	}
+
+	input.Health = workflow.RadarHealthUnavailable
+	if _, err := service.CreateRadarQC(context.Background(), input); err == nil {
+		t.Fatal("unavailable radar health must not enter QC")
+	}
+}
+
 func TestDispatchOnceMarksPublishedOnlyAfterPublish(t *testing.T) {
 	event := workflow.OutboxEvent{ID: uuid.New(), Subject: JobRequestedSubject, Payload: json.RawMessage(`{}`)}
 	repository := &fakeRepository{claimed: event}
@@ -211,11 +259,20 @@ func TestHandleResultDispatchesStrictFailureEvent(t *testing.T) {
 type fakeRepository struct {
 	created        workflow.CreateBundle
 	radarDecode    workflow.RadarDecodeBundle
+	radarQC        workflow.RadarQCBundle
 	domain         workflow.DomainSimulation
 	claimed        workflow.OutboxEvent
 	published      uuid.UUID
 	failed         uuid.UUID
 	appliedFailure JobFailed
+}
+
+func (repository *fakeRepository) CreateRadarQCBundle(
+	_ context.Context,
+	bundle workflow.RadarQCBundle,
+) error {
+	repository.radarQC = bundle
+	return nil
 }
 
 func (repository *fakeRepository) CreateRadarDecodeBundle(

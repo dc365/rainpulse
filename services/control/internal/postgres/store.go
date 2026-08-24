@@ -216,13 +216,14 @@ RETURNING aggregate_id::uuid`, eventID).Scan(&jobID)
 	}
 
 	var runID uuid.UUID
+	var jobType string
 	err = tx.QueryRow(ctx, `
 UPDATE jobs
 SET status = CASE WHEN status = 'PENDING' THEN 'RUNNING' ELSE status END,
     started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
     updated_at = CURRENT_TIMESTAMP
 WHERE job_id = $1
-RETURNING run_id`, jobID).Scan(&runID)
+RETURNING run_id, job_type`, jobID).Scan(&runID, &jobType)
 	if err != nil {
 		return fmt.Errorf("mark published job running: %w", err)
 	}
@@ -236,12 +237,24 @@ RETURNING run_id`, jobID).Scan(&runID)
 			return fmt.Errorf("touch published forecast run: %w", err)
 		}
 	case workflow.WorkflowRadarScan:
+		nextStatus := ""
+		if jobType == orchestration.RadarDecodeJobType {
+			nextStatus = "DECODING"
+		} else if jobType == orchestration.RadarQCJobType {
+			nextStatus = "QC_RUNNING"
+		} else {
+			return fmt.Errorf("unsupported radar job type %q", jobType)
+		}
 		if _, err := tx.Exec(ctx, `
 UPDATE radar_scan_runs
-SET status = CASE WHEN status = 'RAW_VALIDATING' THEN 'DECODING' ELSE status END,
+SET status = CASE
+        WHEN $2 = 'DECODING' AND status = 'RAW_VALIDATING' THEN 'DECODING'
+        WHEN $2 = 'QC_RUNNING' AND status IN ('NORMALIZED', 'QC_RUNNING') THEN 'QC_RUNNING'
+        ELSE status
+    END,
     updated_at = CURRENT_TIMESTAMP
-WHERE run_id = $1`, runID); err != nil {
-			return fmt.Errorf("mark radar scan decoding: %w", err)
+WHERE run_id = $1`, runID, nextStatus); err != nil {
+			return fmt.Errorf("mark radar scan worker running: %w", err)
 		}
 	default:
 		return fmt.Errorf("unsupported published workflow type %q", runType)
@@ -482,9 +495,21 @@ func applyRadarCompletion(
 	event orchestration.JobCompleted,
 	jobType string,
 ) error {
-	if jobType != orchestration.RadarDecodeJobType {
+	switch jobType {
+	case orchestration.RadarDecodeJobType:
+		return applyRadarDecodeCompletion(ctx, tx, event)
+	case orchestration.RadarQCJobType:
+		return applyRadarQCCompletion(ctx, tx, event)
+	default:
 		return fmt.Errorf("%w: unsupported radar job type %q", orchestration.ErrInvalidEvent, jobType)
 	}
+}
+
+func applyRadarDecodeCompletion(
+	ctx context.Context,
+	tx pgx.Tx,
+	event orchestration.JobCompleted,
+) error {
 	var normalized *orchestration.JobCompletedAsset
 	for index := range event.Payload.Assets {
 		if event.Payload.Assets[index].AssetType == "normalized_radar_volume" {
@@ -595,6 +620,115 @@ FROM radar_scans AS scan
 WHERE scan.scan_id = $1 AND asset.asset_id = scan.raw_asset_id`, scanID, qualityState)
 	if err != nil {
 		return fmt.Errorf("update raw radar asset quality state: %w", err)
+	}
+	return nil
+}
+
+func applyRadarQCCompletion(
+	ctx context.Context,
+	tx pgx.Tx,
+	event orchestration.JobCompleted,
+) error {
+	var qcAsset *orchestration.JobCompletedAsset
+	for index := range event.Payload.Assets {
+		if event.Payload.Assets[index].AssetType == "qc_radar_volume" {
+			if qcAsset != nil {
+				return fmt.Errorf("%w: multiple QC radar assets", orchestration.ErrInvalidEvent)
+			}
+			qcAsset = &event.Payload.Assets[index]
+		}
+	}
+	if qcAsset == nil {
+		return fmt.Errorf("%w: QC radar asset is required", orchestration.ErrInvalidEvent)
+	}
+	rawQC, ok := event.Payload.Diagnostics["radar_qc"]
+	if !ok {
+		return fmt.Errorf("%w: radar QC diagnostics are required", orchestration.ErrInvalidEvent)
+	}
+	var metrics workflow.RadarQCMetrics
+	if err := json.Unmarshal(rawQC, &metrics); err != nil {
+		return fmt.Errorf("%w: decode radar QC diagnostics: %v", orchestration.ErrInvalidEvent, err)
+	}
+	if metrics.MeanQualityIndex < 0 || metrics.MeanQualityIndex > 1 ||
+		metrics.ValidGateCount < 0 || metrics.MissingGateCount < 0 ||
+		metrics.LowQualityGateCount < 0 || metrics.LowQualityGateCount > metrics.ValidGateCount ||
+		metrics.NoRainGateCount < 0 || metrics.RadialInterferenceRayCount < 0 ||
+		metrics.GroundClutterGateCount < 0 || metrics.SeaClutterGateCount < 0 ||
+		metrics.APGateCount < 0 || metrics.QCProfile == "" || metrics.QCPipelineVersion == "" ||
+		metrics.FlagDefinitionVersion == "" {
+		return fmt.Errorf("%w: invalid radar QC metrics", orchestration.ErrInvalidEvent)
+	}
+	if metrics.HealthState != workflow.RadarHealthHealthy &&
+		metrics.HealthState != workflow.RadarHealthDegraded {
+		return fmt.Errorf("%w: invalid QC health state %q", orchestration.ErrInvalidEvent, metrics.HealthState)
+	}
+	var scanID uuid.UUID
+	var radarID string
+	var status workflow.RadarScanStatus
+	if err := tx.QueryRow(ctx, `
+SELECT scan_id, radar_id, status FROM radar_scan_runs
+WHERE run_id = $1 FOR UPDATE`, event.RunID).Scan(&scanID, &radarID, &status); err != nil {
+		return fmt.Errorf("lock radar QC completion: %w", err)
+	}
+	if status != workflow.RadarScanQCRunning && status != workflow.RadarScanQCReady {
+		return fmt.Errorf("%w: radar scan status %q cannot complete QC", orchestration.ErrInvalidEvent, status)
+	}
+	if metrics.ScanID != scanID || metrics.RadarID != radarID {
+		return fmt.Errorf("%w: radar QC identity does not match scan", orchestration.ErrInvalidEvent)
+	}
+	metrics.MeasuredAt = event.Payload.FinishedAt
+	moduleStatuses, err := json.Marshal(metrics.ModuleStatuses)
+	if err != nil {
+		return fmt.Errorf("encode radar QC module statuses: %w", err)
+	}
+	diagnostics, err := json.Marshal(metrics)
+	if err != nil {
+		return fmt.Errorf("encode radar QC diagnostics: %w", err)
+	}
+	_, err = tx.Exec(ctx, `
+INSERT INTO radar_qc_metrics (
+    scan_id, radar_id, qc_profile, qc_pipeline_version,
+    flag_definition_version, health_state, mean_quality_index,
+    valid_gate_count, missing_gate_count, low_quality_gate_count,
+    no_rain_gate_count, radial_interference_ray_count,
+    ground_clutter_gate_count, sea_clutter_gate_count, ap_gate_count,
+    module_statuses, diagnostics, measured_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+)
+ON CONFLICT (scan_id) DO UPDATE SET
+    qc_profile = EXCLUDED.qc_profile,
+    qc_pipeline_version = EXCLUDED.qc_pipeline_version,
+    flag_definition_version = EXCLUDED.flag_definition_version,
+    health_state = EXCLUDED.health_state,
+    mean_quality_index = EXCLUDED.mean_quality_index,
+    valid_gate_count = EXCLUDED.valid_gate_count,
+    missing_gate_count = EXCLUDED.missing_gate_count,
+    low_quality_gate_count = EXCLUDED.low_quality_gate_count,
+    no_rain_gate_count = EXCLUDED.no_rain_gate_count,
+    radial_interference_ray_count = EXCLUDED.radial_interference_ray_count,
+    ground_clutter_gate_count = EXCLUDED.ground_clutter_gate_count,
+    sea_clutter_gate_count = EXCLUDED.sea_clutter_gate_count,
+    ap_gate_count = EXCLUDED.ap_gate_count,
+    module_statuses = EXCLUDED.module_statuses,
+    diagnostics = EXCLUDED.diagnostics,
+    measured_at = EXCLUDED.measured_at`,
+		scanID, radarID, metrics.QCProfile, metrics.QCPipelineVersion,
+		metrics.FlagDefinitionVersion, metrics.HealthState, metrics.MeanQualityIndex,
+		metrics.ValidGateCount, metrics.MissingGateCount, metrics.LowQualityGateCount,
+		metrics.NoRainGateCount, metrics.RadialInterferenceRayCount,
+		metrics.GroundClutterGateCount, metrics.SeaClutterGateCount, metrics.APGateCount,
+		moduleStatuses, diagnostics, metrics.MeasuredAt)
+	if err != nil {
+		return fmt.Errorf("persist radar QC metrics: %w", err)
+	}
+	_, err = tx.Exec(ctx, `
+UPDATE radar_scan_runs
+SET status = 'QC_READY', qc_uri = $2, mean_quality_index = $3,
+    updated_at = CURRENT_TIMESTAMP
+WHERE run_id = $1`, event.RunID, qcAsset.URI, metrics.MeanQualityIndex)
+	if err != nil {
+		return fmt.Errorf("complete radar QC run: %w", err)
 	}
 	return nil
 }

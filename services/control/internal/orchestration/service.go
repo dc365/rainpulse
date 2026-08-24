@@ -16,6 +16,7 @@ import (
 type Repository interface {
 	CreateBundle(context.Context, workflow.CreateBundle) error
 	CreateRadarDecodeBundle(context.Context, workflow.RadarDecodeBundle) error
+	CreateRadarQCBundle(context.Context, workflow.RadarQCBundle) error
 	CreateDomainSimulation(context.Context, workflow.DomainSimulation) error
 	GetRun(context.Context, uuid.UUID) (workflow.Run, error)
 	GetJob(context.Context, uuid.UUID) (workflow.Job, error)
@@ -40,6 +41,19 @@ type RadarDecodeInput struct {
 	InputSizeBytes  int64
 	VolumeStartTime time.Time
 	VolumeEndTime   time.Time
+}
+
+type RadarQCInput struct {
+	ScanID                uuid.UUID
+	RunID                 uuid.UUID
+	RadarID               string
+	RadarConfigVersion    string
+	NormalizedURI         string
+	CurrentStatus         workflow.RadarScanStatus
+	Health                workflow.RadarHealthState
+	QCProfile             string
+	QCPipelineVersion     string
+	FlagDefinitionVersion string
 }
 
 type Publisher interface {
@@ -168,6 +182,79 @@ func validateRadarDecodeInput(input RadarDecodeInput) error {
 	}
 	if input.InputSizeBytes < 0 || input.VolumeStartTime.IsZero() || input.VolumeEndTime.Before(input.VolumeStartTime) {
 		return fmt.Errorf("invalid radar input size or volume time range")
+	}
+	return nil
+}
+
+func (service *Service) CreateRadarQC(
+	ctx context.Context,
+	input RadarQCInput,
+) (workflow.Job, error) {
+	if err := validateRadarQCInput(input); err != nil {
+		return workflow.Job{}, err
+	}
+	now := service.now().UTC()
+	jobID := stableID("radar-qc-job", input.RunID.String(), input.QCPipelineVersion)
+	traceID := stableID("radar-qc-trace", input.RunID.String(), input.QCPipelineVersion)
+	eventID := stableID("radar-qc-request", jobID.String())
+	outputPrefix := fmt.Sprintf("s3://rainpulse/radar/qc/%s/%s/", input.RadarID, input.ScanID)
+	request := RadarQCRequested{
+		SchemaVersion: SchemaVersion,
+		EventID:       eventID,
+		EventType:     RadarQCRequestedEventType,
+		OccurredAt:    now,
+		RunID:         input.RunID,
+		JobID:         jobID,
+		TraceID:       traceID,
+		Payload: RadarQCRequestedPayload{
+			ScanID: input.ScanID, RadarID: input.RadarID,
+			InputURI: input.NormalizedURI, OutputPrefix: outputPrefix,
+			RadarConfig: input.RadarConfigVersion, QCProfile: input.QCProfile,
+			QCPipelineVersion:     input.QCPipelineVersion,
+			FlagDefinitionVersion: input.FlagDefinitionVersion,
+		},
+	}
+	payload, err := json.Marshal(request)
+	if err != nil {
+		return workflow.Job{}, fmt.Errorf("encode radar QC request: %w", err)
+	}
+	job := workflow.Job{
+		ID: jobID, RunID: input.RunID, TraceID: traceID, JobType: RadarQCJobType,
+		ConfigVersion: input.QCPipelineVersion, Status: workflow.JobPending, Attempt: 1,
+		RequestPayload: payload, CreatedAt: now,
+	}
+	bundle := workflow.RadarQCBundle{
+		ScanID: input.ScanID,
+		Status: input.CurrentStatus,
+		Job:    job,
+		Outbox: workflow.OutboxEvent{
+			ID: eventID, AggregateID: jobID.String(), EventType: RadarQCRequestedEventType,
+			Subject: RadarQCRequestedSubject, Payload: payload,
+		},
+	}
+	if err := service.repository.CreateRadarQCBundle(ctx, bundle); err != nil {
+		return workflow.Job{}, err
+	}
+	return job, nil
+}
+
+func validateRadarQCInput(input RadarQCInput) error {
+	if input.ScanID == uuid.Nil || input.RunID == uuid.Nil || input.RadarID == "" ||
+		input.RadarConfigVersion == "" || input.QCProfile == "" ||
+		input.QCPipelineVersion == "" || input.FlagDefinitionVersion == "" {
+		return fmt.Errorf("radar QC identity and version fields are required")
+	}
+	if input.CurrentStatus != workflow.RadarScanNormalized &&
+		input.CurrentStatus != workflow.RadarScanQCRunning &&
+		input.CurrentStatus != workflow.RadarScanQCReady {
+		return fmt.Errorf("radar scan status %q cannot enter QC", input.CurrentStatus)
+	}
+	if input.Health == workflow.RadarHealthUnavailable || input.Health == workflow.RadarHealthUnknown {
+		return fmt.Errorf("radar health %q cannot enter QC", input.Health)
+	}
+	parsed, err := url.ParseRequestURI(input.NormalizedURI)
+	if err != nil || parsed.Scheme != "s3" {
+		return fmt.Errorf("radar QC input must be an s3 URI")
 	}
 	return nil
 }

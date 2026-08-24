@@ -113,6 +113,7 @@ type RadarStatusSummary struct {
 	DataDelaySeconds              *int64
 	ParticipatingInLatestAnalysis bool
 	HealthMetrics                 *RadarHealthMetrics
+	QCMetrics                     *RadarQCMetrics
 }
 
 type RadarFieldAvailability struct {
@@ -177,6 +178,33 @@ type RadarDecodeBundle struct {
 	Scan         RadarScan
 	Job          Job
 	Outbox       OutboxEvent
+}
+
+type RadarQCBundle struct {
+	ScanID uuid.UUID
+	Status RadarScanStatus
+	Job    Job
+	Outbox OutboxEvent
+}
+
+type RadarQCMetrics struct {
+	ScanID                     uuid.UUID         `json:"scan_id"`
+	RadarID                    string            `json:"radar_id"`
+	QCProfile                  string            `json:"qc_profile"`
+	QCPipelineVersion          string            `json:"qc_pipeline_version"`
+	FlagDefinitionVersion      string            `json:"flag_definition_version"`
+	HealthState                RadarHealthState  `json:"health_state"`
+	MeanQualityIndex           float64           `json:"mean_quality_index"`
+	ValidGateCount             int64             `json:"valid_gate_count"`
+	MissingGateCount           int64             `json:"missing_gate_count"`
+	LowQualityGateCount        int64             `json:"low_quality_gate_count"`
+	NoRainGateCount            int64             `json:"no_rain_gate_count"`
+	RadialInterferenceRayCount int64             `json:"radial_interference_ray_count"`
+	GroundClutterGateCount     int64             `json:"ground_clutter_gate_count"`
+	SeaClutterGateCount        int64             `json:"sea_clutter_gate_count"`
+	APGateCount                int64             `json:"ap_gate_count"`
+	ModuleStatuses             map[string]string `json:"module_statuses"`
+	MeasuredAt                 time.Time         `json:"measured_at"`
 }
 
 type AnalysisRadar struct {

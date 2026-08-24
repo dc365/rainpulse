@@ -72,6 +72,15 @@ func main() {
 			slog.Error("create radar decode workflow", "error", err)
 			os.Exit(1)
 		}
+	case "radar-qc":
+		if len(os.Args) != 4 {
+			slog.Error("radar-qc requires a scan UUID and QC config YAML")
+			os.Exit(2)
+		}
+		if err := radarQC(ctx, store, service, os.Args[2], os.Args[3]); err != nil {
+			slog.Error("create radar QC workflow", "error", err)
+			os.Exit(1)
+		}
 	case "complete":
 		if len(os.Args) != 3 {
 			slog.Error("complete requires a job UUID")
@@ -104,6 +113,12 @@ type radarConfiguration struct {
 	Source        struct {
 		Format string `yaml:"format"`
 	} `yaml:"source"`
+}
+
+type qcConfiguration struct {
+	ProfileVersion        string `yaml:"profile_version"`
+	PipelineVersion       string `yaml:"pipeline_version"`
+	FlagDefinitionVersion string `yaml:"flag_definition_version"`
 }
 
 func radarDecode(
@@ -183,6 +198,54 @@ func sha256File(path string) (string, error) {
 		return "", fmt.Errorf("hash radar input: %w", err)
 	}
 	return fmt.Sprintf("%x", hash.Sum(nil)), nil
+}
+
+func radarQC(
+	ctx context.Context,
+	store *postgresstore.Store,
+	service *orchestration.Service,
+	rawScanID string,
+	configPath string,
+) error {
+	scanID, err := uuid.Parse(rawScanID)
+	if err != nil {
+		return fmt.Errorf("parse radar scan UUID: %w", err)
+	}
+	configBytes, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("read radar QC configuration: %w", err)
+	}
+	var config qcConfiguration
+	if err := yaml.Unmarshal(configBytes, &config); err != nil {
+		return fmt.Errorf("decode radar QC configuration: %w", err)
+	}
+	scan, err := store.GetRadarScan(ctx, scanID)
+	if err != nil {
+		return err
+	}
+	if scan.NormalizedURI == nil {
+		return fmt.Errorf("radar scan has no normalized volume")
+	}
+	health, err := store.GetRadarHealthMetrics(ctx, scanID)
+	if err != nil {
+		return err
+	}
+	job, err := service.CreateRadarQC(ctx, orchestration.RadarQCInput{
+		ScanID: scan.ID, RunID: scan.RunID, RadarID: scan.RadarID,
+		RadarConfigVersion:    scan.RadarConfigVersion,
+		NormalizedURI:         *scan.NormalizedURI,
+		CurrentStatus:         scan.Status,
+		Health:                health.Health,
+		QCProfile:             config.ProfileVersion,
+		QCPipelineVersion:     config.PipelineVersion,
+		FlagDefinitionVersion: config.FlagDefinitionVersion,
+	})
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(os.Stdout).Encode(map[string]string{
+		"scan_id": scan.ID.String(), "run_id": scan.RunID.String(), "job_id": job.ID.String(),
+	})
 }
 
 func dependencies(ctx context.Context) (*pgxpool.Pool, *postgresstore.Store, *messaging.JetStream, *orchestration.Service, error) {
@@ -353,6 +416,8 @@ func replay(ctx context.Context, store *postgresstore.Store, bus *messaging.JetS
 	subject := orchestration.JobRequestedSubject
 	if eventType == orchestration.RadarDecodeRequestedEventType {
 		subject = orchestration.RadarDecodeRequestedSubject
+	} else if eventType == orchestration.RadarQCRequestedEventType {
+		subject = orchestration.RadarQCRequestedSubject
 	}
 	eventID, err := uuid.Parse(event["event_id"].(string))
 	if err != nil {

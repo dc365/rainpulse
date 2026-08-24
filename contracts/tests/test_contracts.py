@@ -60,6 +60,7 @@ def test_openapi_exposes_the_planned_v1_operations() -> None:
         "/radars/{radar_id}/status",
         "/radar-scans",
         "/radar-scans/{scan_id}",
+        "/radar-scans/{scan_id}/qc-summary",
         "/analysis-cycles",
         "/analysis-cycles/{analysis_id}",
         "/products",
@@ -119,3 +120,5 @@ def test_v11_radar_contract_chain_is_frozen() -> None:
     for name in ("qc-radar-volume", "radar-grid", "radar-analysis", "nowcast-input"):
         assert "uint32" in contracts[name]
         assert "uint16` | Versioned bit set" not in contracts[name]
+
+    assert "An unavailable prerequisite is represented by `NaN`" in contracts["qc-radar-volume"]

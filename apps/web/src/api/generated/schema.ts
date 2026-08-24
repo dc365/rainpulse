@@ -174,6 +174,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/radar-scans/{scan_id}/qc-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the versioned polar QC summary for one radar scan */
+        get: operations["getRadarScanQCSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/analysis-cycles": {
         parameters: {
             query?: never;
@@ -451,6 +468,7 @@ export interface components {
             data_delay_seconds?: number | null;
             participating_in_latest_analysis: boolean;
             health_metrics?: components["schemas"]["RadarHealthMetrics"] | null;
+            qc_metrics?: components["schemas"]["RadarQCMetrics"] | null;
         };
         RadarFieldAvailability: {
             field: string;
@@ -534,6 +552,38 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        RadarQCMetrics: {
+            /** Format: uuid */
+            scan_id: string;
+            radar_id: string;
+            qc_profile: string;
+            qc_pipeline_version: string;
+            flag_definition_version: string;
+            health_state: components["schemas"]["RadarHealthState"];
+            /** Format: float */
+            mean_quality_index: number;
+            /** Format: int64 */
+            valid_gate_count: number;
+            /** Format: int64 */
+            missing_gate_count: number;
+            /** Format: int64 */
+            low_quality_gate_count: number;
+            /** Format: int64 */
+            no_rain_gate_count: number;
+            /** Format: int64 */
+            radial_interference_ray_count: number;
+            /** Format: int64 */
+            ground_clutter_gate_count: number;
+            /** Format: int64 */
+            sea_clutter_gate_count: number;
+            /** Format: int64 */
+            ap_gate_count: number;
+            module_statuses: {
+                [key: string]: "applied" | "skipped" | "failed";
+            };
+            /** Format: date-time */
+            measured_at: string;
         };
         RadarScanPage: {
             items: components["schemas"]["RadarScan"][];
@@ -965,6 +1015,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RadarScan"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getRadarScanQCSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scan_id: components["parameters"]["ScanId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Radar polar QC summary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RadarQCMetrics"];
                 };
             };
             404: components["responses"]["NotFound"];

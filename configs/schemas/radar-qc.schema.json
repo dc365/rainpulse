@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/configs/schemas/radar-qc.schema.json",
+  "title": "RainPulse basic polar radar QC profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_version",
+    "pipeline_version",
+    "flag_definition_version",
+    "health_gate",
+    "echo",
+    "radial_interference",
+    "static_ground_clutter",
+    "sea_ap",
+    "quality_index"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "profile_version": { "$ref": "#/$defs/version" },
+    "pipeline_version": { "$ref": "#/$defs/version" },
+    "flag_definition_version": { "$ref": "#/$defs/version" },
+    "health_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reject_states", "degraded_quality_multiplier"],
+      "properties": {
+        "reject_states": {
+          "type": "array",
+          "items": { "enum": ["HEALTHY", "DEGRADED", "UNAVAILABLE"] },
+          "uniqueItems": true
+        },
+        "degraded_quality_multiplier": { "$ref": "#/$defs/probability" }
+      }
+    },
+    "echo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dbzh_valid_range_dbz",
+        "no_rain_below_dbz",
+        "low_snr_db",
+        "snr_meteo_range_db",
+        "rhohv_meteo_range",
+        "fallback_meteo_probability"
+      ],
+      "properties": {
+        "dbzh_valid_range_dbz": { "$ref": "#/$defs/pair" },
+        "no_rain_below_dbz": { "type": "number" },
+        "low_snr_db": { "type": "number" },
+        "snr_meteo_range_db": { "$ref": "#/$defs/pair" },
+        "rhohv_meteo_range": { "$ref": "#/$defs/pair" },
+        "fallback_meteo_probability": { "$ref": "#/$defs/probability" }
+      }
+    },
+    "radial_interference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum_valid_gate_fraction",
+        "minimum_consecutive_gates",
+        "neighbour_difference_db",
+        "low_quality_probability",
+        "flag_probability"
+      ],
+      "properties": {
+        "minimum_valid_gate_fraction": { "$ref": "#/$defs/probability" },
+        "minimum_consecutive_gates": { "type": "integer", "minimum": 2 },
+        "neighbour_difference_db": { "type": "number", "exclusiveMinimum": 0 },
+        "low_quality_probability": { "$ref": "#/$defs/probability" },
+        "flag_probability": { "$ref": "#/$defs/probability" }
+      }
+    },
+    "static_ground_clutter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asset_uri", "asset_version", "flag_probability"],
+      "properties": {
+        "asset_uri": { "$ref": "#/$defs/asset_uri" },
+        "asset_version": { "type": ["string", "null"] },
+        "flag_probability": { "$ref": "#/$defs/probability" }
+      }
+    },
+    "sea_ap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coastline_asset_uri", "asset_version", "flag_probability"],
+      "properties": {
+        "coastline_asset_uri": { "$ref": "#/$defs/asset_uri" },
+        "asset_version": { "type": ["string", "null"] },
+        "flag_probability": { "$ref": "#/$defs/probability" }
+      }
+    },
+    "quality_index": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "aggregation",
+        "components",
+        "minimum_range_quality",
+        "low_quality_threshold",
+        "unavailable_component_policy"
+      ],
+      "properties": {
+        "aggregation": { "const": "product" },
+        "components": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["QI_METEO", "QI_INTERFERENCE", "QI_RANGE"]
+          }
+        },
+        "minimum_range_quality": { "$ref": "#/$defs/probability" },
+        "low_quality_threshold": { "$ref": "#/$defs/probability" },
+        "unavailable_component_policy": { "const": "skip_and_record" }
+      }
+    }
+  },
+  "$defs": {
+    "probability": { "type": "number", "minimum": 0, "maximum": 1 },
+    "asset_uri": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^(file|s3)://" }
+      ]
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+    },
+    "pair": {
+      "type": "array",
+      "prefixItems": [{ "type": "number" }, { "type": "number" }],
+      "items": false,
+      "minItems": 2,
+      "maxItems": 2
+    }
+  }
+}

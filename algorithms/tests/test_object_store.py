@@ -6,7 +6,11 @@ from uuid import UUID
 import pytest
 
 from rainpulse_algo.worker.contracts import JobCompleted
-from rainpulse_algo.worker.object_store import AtomicObjectPublisher, normalize_artifact_objects
+from rainpulse_algo.worker.object_store import (
+    ArtifactObjectReader,
+    AtomicObjectPublisher,
+    normalize_artifact_objects,
+)
 from rainpulse_algo.worker.runtime import Worker, WorkerConfig
 
 from .test_worker_contracts import requested_data
@@ -152,6 +156,43 @@ def test_atomic_publish_commits_multi_object_zarr_bundle_before_marker() -> None
     assert published.size_bytes == sum(map(len, objects.values()))
     assert completion.payload.assets[0].sha256 == published.sha256
     assert all(not key.startswith("_temporary/") for _, key in client.objects)
+
+    loaded = ArtifactObjectReader(client).load(published.asset_uri)  # type: ignore[arg-type]
+    assert loaded == objects
+
+
+def test_artifact_reader_rejects_corrupt_published_object() -> None:
+    from rainpulse_algo.worker.contracts import JobRequested
+    from rainpulse_algo.worker.runtime import WorkerResult
+
+    request = JobRequested.model_validate(requested_data())
+    worker = Worker(
+        WorkerConfig("nats://test", "127.0.0.1", 8091, "test-worker"),
+        publisher=None,  # type: ignore[arg-type]
+    )
+    objects = {".zgroup": b'{"zarr_format":2}', ".zattrs": b"{}"}
+    result = WorkerResult(objects=objects)
+    completion = worker._build_completion(  # noqa: SLF001
+        request=request,
+        started_at=request.occurred_at,
+        started_tick=0.0,
+        result=result,
+    )
+    client = FakeMinio()
+    published = AtomicObjectPublisher(client).publish(  # type: ignore[arg-type]
+        output_prefix=request.payload.output_prefix,
+        job_id=request.job_id,
+        data=None,
+        objects=objects,
+        completion=completion,
+    )
+    bucket, key = next(
+        item for item in client.objects if item[1].endswith("forecast.zarr/.zattrs")
+    )
+    client.objects[(bucket, key)] = b"xx"
+
+    with pytest.raises(RuntimeError, match="checksum"):
+        ArtifactObjectReader(client).load(published.asset_uri)  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize("key", [".", "../escape", "/absolute", "_SUCCESS.json"])

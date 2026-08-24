@@ -4,6 +4,7 @@ import json
 from collections.abc import Callable
 from typing import Any
 
+from rainpulse_algo.radar.qc_worker import execute_basic_qc
 from rainpulse_algo.radar.worker import execute_fmt_decode
 
 from .domain_contracts import (
@@ -64,12 +65,22 @@ HANDLERS = {
     ),
     "radar-qc-synthetic": TaskHandler(
         profile="radar-qc-synthetic",
-        subject="rainpulse.jobs.requested.radar_qc",
+        subject="rainpulse.jobs.requested.radar_qc_synthetic",
         consumer="rainpulse-radar-qc-synthetic",
         request_model=RadarQCRequested,
         executor=_synthetic_executor("radar_qc"),
         asset_type="qc_radar_volume",
         artifact_name="volume.zarr",
+    ),
+    "radar-qc-basic": TaskHandler(
+        profile="radar-qc-basic",
+        subject="rainpulse.jobs.requested.radar_qc",
+        consumer="rainpulse-radar-qc-rp008-basic-v1",
+        request_model=RadarQCRequested,
+        executor=execute_basic_qc,
+        asset_type="qc_radar_volume",
+        artifact_name="volume.zarr",
+        ack_wait_seconds=300,
     ),
     "radar-grid-synthetic": TaskHandler(
         profile="radar-grid-synthetic",

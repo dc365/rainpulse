@@ -12,7 +12,8 @@ The registry currently exposes these profiles:
 |---|---|---|
 | `radar-decode-fmt` | `rainpulse.jobs.requested.radar_decode` | `volume.zarr` |
 | `radar-decode-synthetic` | `rainpulse.jobs.requested.radar_decode_synthetic` | `volume.zarr` |
-| `radar-qc-synthetic` | `rainpulse.jobs.requested.radar_qc` | `volume.zarr` |
+| `radar-qc-basic` | `rainpulse.jobs.requested.radar_qc` | `volume.zarr` |
+| `radar-qc-synthetic` | `rainpulse.jobs.requested.radar_qc_synthetic` | `volume.zarr` |
 | `radar-grid-synthetic` | `rainpulse.jobs.requested.radar_grid` | `grid.zarr` |
 | `mosaic-qpe-synthetic` | `rainpulse.jobs.requested.analysis_mosaic` | `analysis.zarr` |
 | `nowcast-input-synthetic` | `rainpulse.jobs.requested.nowcast_input` | `input.zarr` |
@@ -21,7 +22,10 @@ Select one with `RAINPULSE_WORKER_PROFILE`; `simulation` retains the existing
 forecast control-plane smoke handler. The `radar-decode-fmt` profile is the
 first real compute handler. It accepts configured `file://` sources only below
 `RAINPULSE_RADAR_INPUT_ROOTS`, validates CMA RSTM 2.0 metadata and geometry,
-and emits a multi-object Zarr v2 `NormalizedRadarVolume`. The test deployment
+and emits a multi-object Zarr v2 `NormalizedRadarVolume`. `radar-qc-basic`
+reads that committed artifact, enforces the RP-007 health gate, performs the
+versioned RP-008 polar QC modules, and atomically emits a separate
+`QCRadarVolume`. The test deployment
 mounts only the specific NAS radar directory and mounts it read-only.
 
 The synthetic domain handlers write only small JSON contract fixtures whose

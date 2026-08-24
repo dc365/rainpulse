@@ -203,6 +203,27 @@ func (e RadarLifecycle) Valid() bool {
 	}
 }
 
+// Defines values for RadarQCMetricsModuleStatuses.
+const (
+	Applied RadarQCMetricsModuleStatuses = "applied"
+	Failed  RadarQCMetricsModuleStatuses = "failed"
+	Skipped RadarQCMetricsModuleStatuses = "skipped"
+)
+
+// Valid indicates whether the value is a known member of the RadarQCMetricsModuleStatuses enum.
+func (e RadarQCMetricsModuleStatuses) Valid() bool {
+	switch e {
+	case Applied:
+		return true
+	case Failed:
+		return true
+	case Skipped:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RadarScanRunStatus.
 const (
 	RadarScanRunStatusDECODING       RadarScanRunStatus = "DECODING"
@@ -543,6 +564,30 @@ type RadarNoiseLevel struct {
 	VerticalDbm   *float32 `json:"vertical_dbm,omitempty"`
 }
 
+// RadarQCMetrics defines model for RadarQCMetrics.
+type RadarQCMetrics struct {
+	ApGateCount                int64                                   `json:"ap_gate_count"`
+	FlagDefinitionVersion      string                                  `json:"flag_definition_version"`
+	GroundClutterGateCount     int64                                   `json:"ground_clutter_gate_count"`
+	HealthState                RadarHealthState                        `json:"health_state"`
+	LowQualityGateCount        int64                                   `json:"low_quality_gate_count"`
+	MeanQualityIndex           float32                                 `json:"mean_quality_index"`
+	MeasuredAt                 time.Time                               `json:"measured_at"`
+	MissingGateCount           int64                                   `json:"missing_gate_count"`
+	ModuleStatuses             map[string]RadarQCMetricsModuleStatuses `json:"module_statuses"`
+	NoRainGateCount            int64                                   `json:"no_rain_gate_count"`
+	QcPipelineVersion          string                                  `json:"qc_pipeline_version"`
+	QcProfile                  string                                  `json:"qc_profile"`
+	RadarId                    string                                  `json:"radar_id"`
+	RadialInterferenceRayCount int64                                   `json:"radial_interference_ray_count"`
+	ScanId                     openapi_types.UUID                      `json:"scan_id"`
+	SeaClutterGateCount        int64                                   `json:"sea_clutter_gate_count"`
+	ValidGateCount             int64                                   `json:"valid_gate_count"`
+}
+
+// RadarQCMetricsModuleStatuses defines model for RadarQCMetrics.ModuleStatuses.
+type RadarQCMetricsModuleStatuses string
+
 // RadarScan defines model for RadarScan.
 type RadarScan struct {
 	CreatedAt          time.Time          `json:"created_at"`
@@ -582,6 +627,7 @@ type RadarStatusSummary struct {
 	Lifecycle                     RadarLifecycle      `json:"lifecycle"`
 	MeanQualityIndex              *float32            `json:"mean_quality_index,omitempty"`
 	ParticipatingInLatestAnalysis bool                `json:"participating_in_latest_analysis"`
+	QcMetrics                     *RadarQCMetrics     `json:"qc_metrics,omitempty"`
 	RadarId                       string              `json:"radar_id"`
 	ScanCompleteness              *float32            `json:"scan_completeness,omitempty"`
 	ScanStatus                    *RadarScanRunStatus `json:"scan_status,omitempty"`
@@ -747,6 +793,9 @@ type ServerInterface interface {
 	// GetRadarScan Get one single-radar volume workflow
 	// (GET /radar-scans/{scan_id})
 	GetRadarScan(w http.ResponseWriter, r *http.Request, scanId ScanId)
+	// GetRadarScanQCSummary Get the versioned polar QC summary for one radar scan
+	// (GET /radar-scans/{scan_id}/qc-summary)
+	GetRadarScanQCSummary(w http.ResponseWriter, r *http.Request, scanId ScanId)
 	// ListRadars List registered physical radars
 	// (GET /radars)
 	ListRadars(w http.ResponseWriter, r *http.Request)
@@ -858,6 +907,12 @@ func (_ Unimplemented) ListRadarScans(w http.ResponseWriter, r *http.Request, pa
 // GetRadarScan Get one single-radar volume workflow
 // (GET /radar-scans/{scan_id})
 func (_ Unimplemented) GetRadarScan(w http.ResponseWriter, r *http.Request, scanId ScanId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetRadarScanQCSummary Get the versioned polar QC summary for one radar scan
+// (GET /radar-scans/{scan_id}/qc-summary)
+func (_ Unimplemented) GetRadarScanQCSummary(w http.ResponseWriter, r *http.Request, scanId ScanId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1466,6 +1521,32 @@ func (siw *ServerInterfaceWrapper) GetRadarScan(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// GetRadarScanQCSummary operation middleware
+func (siw *ServerInterfaceWrapper) GetRadarScanQCSummary(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "scan_id" -------------
+	var scanId ScanId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "scan_id", chi.URLParam(r, "scan_id"), &scanId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "scan_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRadarScanQCSummary(w, r, scanId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListRadars operation middleware
 func (siw *ServerInterfaceWrapper) ListRadars(w http.ResponseWriter, r *http.Request) {
 
@@ -1860,6 +1941,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/radar-scans/{scan_id}", wrapper.GetRadarScan)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/radar-scans/{scan_id}/qc-summary", wrapper.GetRadarScanQCSummary)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/analysis-cycles", wrapper.ListAnalysisCycles)

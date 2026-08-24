@@ -43,7 +43,7 @@ while true; do
 import json
 import sys
 
-raise SystemExit(0 if json.load(sys.stdin).get("status") == "NORMALIZED" else 1)
+raise SystemExit(0 if json.load(sys.stdin).get("status") in {"NORMALIZED", "QC_RUNNING", "QC_READY"} else 1)
 ' <<<"$scan"; then
     break
   fi
@@ -67,7 +67,7 @@ assert status["radar_id"] == "z9598", status
 assert status["lifecycle"] == "draft", status
 assert status["config_version"] == "z9598-fmt-v1", status
 assert status["health"] == "DEGRADED", status
-assert status["scan_status"] == "NORMALIZED", status
+assert status["scan_status"] in {"NORMALIZED", "QC_RUNNING", "QC_READY"}, status
 health = status["health_metrics"]
 assert health["health_profile_version"] == "rp007-integrity-v1", health
 assert health["expected_sweep_count"] == health["actual_sweep_count"] == 11, health

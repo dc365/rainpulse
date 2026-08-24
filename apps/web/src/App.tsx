@@ -26,6 +26,23 @@ const reasonLabels: Record<string, string> = {
   SOURCE_TIME_MISMATCH: '文件名时间与基数据内部时间不一致',
 }
 
+const qcModuleLabels: Record<string, string> = {
+  attenuation_and_calibration: '衰减与标定',
+  dem_blockage: 'DEM 遮挡',
+  health_gate: '雷达健康门控',
+  missing_and_echo_state: '缺测与回波状态',
+  quality_index: '基础质量指数',
+  radial_interference: '径向干扰',
+  sea_ap: '海杂波 / AP',
+  static_ground_clutter: '静态地物杂波',
+}
+
+const qcStatusLabels: Record<string, string> = {
+  applied: '已执行',
+  failed: '执行失败',
+  skipped: '已跳过',
+}
+
 function formatUtc(value?: string | null) {
   if (!value) return '尚无体扫'
   return `${new Intl.DateTimeFormat('zh-CN', {
@@ -156,9 +173,9 @@ export default function App() {
 
       <section className="page-heading" aria-labelledby="page-title">
         <div>
-          <p className="section-kicker">Radar operations / RP-007</p>
+          <p className="section-kicker">Radar operations / RP-007 + RP-008</p>
           <h1 id="page-title">雷达运行总览</h1>
-          <p>监控基数据解码、体扫完整性与设备通道状态。回波质控将在 RP-008 接入。</p>
+          <p>监控基数据解码、体扫完整性、设备通道状态与基础极坐标质控。</p>
         </div>
         <div className="update-time">
           <span>状态更新时间</span>
@@ -250,6 +267,7 @@ function SummaryStat({
 
 function RadarDetail({ radar }: { radar: RadarStatus }) {
   const health = radar.health_metrics
+  const qc = radar.qc_metrics
   return (
     <>
       <div className="detail-heading">
@@ -345,8 +363,46 @@ function RadarDetail({ radar }: { radar: RadarStatus }) {
           </dl>
           <div className="qc-note">
             <span>QI / 回波质控</span>
-            <strong>等待 RP-008</strong>
+            <strong>{qc ? `${percent(qc.mean_quality_index)} · ${qc.qc_profile}` : '等待 RP-008'}</strong>
           </div>
+        </article>
+
+        <article className="module qc-module">
+          <ModuleHeading
+            eyebrow="Polar quality control"
+            title="基础极坐标质控"
+            trailing={qc?.qc_pipeline_version}
+          />
+          {qc ? (
+            <div className="qc-layout">
+              <div className="quality-block">
+                <span>平均质量指数</span>
+                <strong>{percent(qc.mean_quality_index)}</strong>
+                <div className="progress-track quality-track" aria-label="平均质量指数">
+                  <span style={{ width: `${Math.min(100, qc.mean_quality_index * 100)}%` }} />
+                </div>
+                <small>{qc.flag_definition_version}</small>
+              </div>
+              <dl className="qc-counts">
+                <div><dt>有效距离库</dt><dd>{qc.valid_gate_count.toLocaleString('zh-CN')}</dd></div>
+                <div><dt>缺测距离库</dt><dd>{qc.missing_gate_count.toLocaleString('zh-CN')}</dd></div>
+                <div><dt>低质量距离库</dt><dd>{qc.low_quality_gate_count.toLocaleString('zh-CN')}</dd></div>
+                <div><dt>有效无雨</dt><dd>{qc.no_rain_gate_count.toLocaleString('zh-CN')}</dd></div>
+                <div><dt>径向干扰</dt><dd>{qc.radial_interference_ray_count.toLocaleString('zh-CN')} 条</dd></div>
+                <div><dt>杂波 / AP 标记</dt><dd>{(qc.ground_clutter_gate_count + qc.sea_clutter_gate_count + qc.ap_gate_count).toLocaleString('zh-CN')}</dd></div>
+              </dl>
+              <div className="qc-module-list" aria-label="质控模块状态">
+                {Object.entries(qc.module_statuses).map(([name, state]) => (
+                  <div key={name}>
+                    <span>{qcModuleLabels[name] ?? name}</span>
+                    <strong className={`module-state ${state}`}>{qcStatusLabels[state] ?? state}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="module-empty">当前体扫尚未生成 QCRadarVolume，等待 RP-008 Worker。</p>
+          )}
         </article>
       </div>
     </>

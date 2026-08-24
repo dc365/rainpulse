@@ -1,1 +1,1 @@
-"""RainPulse compute-plane tests."""
+"""RainPulse algorithm test package."""

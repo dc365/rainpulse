@@ -165,6 +165,65 @@ ON CONFLICT (event_id) DO NOTHING`,
 	return nil
 }
 
+func (store *Store) CreateRadarQCBundle(ctx context.Context, bundle workflow.RadarQCBundle) error {
+	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin radar QC transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var scanID uuid.UUID
+	var status workflow.RadarScanStatus
+	if err = tx.QueryRow(ctx, `
+SELECT scan_id, status FROM radar_scan_runs
+WHERE run_id = $1 FOR UPDATE`, bundle.Job.RunID).Scan(&scanID, &status); err != nil {
+		return fmt.Errorf("lock radar scan for QC: %w", err)
+	}
+	if scanID != bundle.ScanID {
+		return fmt.Errorf("radar QC scan identity differs from its run")
+	}
+	if status != workflow.RadarScanNormalized && status != workflow.RadarScanQCRunning &&
+		status != workflow.RadarScanQCReady {
+		return fmt.Errorf("radar scan status %s cannot create a QC job", status)
+	}
+	_, err = tx.Exec(ctx, `
+INSERT INTO jobs (
+    job_id, run_id, trace_id, job_type, model_id, model_version,
+    config_version, status, max_attempts, scheduled_at, created_at, updated_at,
+    request_payload
+) VALUES ($1, $2, $3, $4, NULL, NULL, $5, $6, 3, $7, $7, $7, $8)
+ON CONFLICT (job_id) DO NOTHING`,
+		bundle.Job.ID, bundle.Job.RunID, bundle.Job.TraceID, bundle.Job.JobType,
+		bundle.Job.ConfigVersion, bundle.Job.Status, bundle.Job.CreatedAt,
+		bundle.Job.RequestPayload)
+	if err != nil {
+		return fmt.Errorf("insert radar QC job: %w", err)
+	}
+	_, err = tx.Exec(ctx, `
+INSERT INTO outbox_events (
+    event_id, aggregate_type, aggregate_id, event_type, event_version,
+    subject, payload, status, available_at, created_at
+) VALUES ($1, 'job', $2, $3, 1, $4, $5, 'pending', $6, $6)
+ON CONFLICT (event_id) DO NOTHING`,
+		bundle.Outbox.ID, bundle.Outbox.AggregateID, bundle.Outbox.EventType,
+		bundle.Outbox.Subject, bundle.Outbox.Payload, bundle.Job.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("insert radar QC outbox event: %w", err)
+	}
+	_, err = tx.Exec(ctx, `
+UPDATE radar_scan_runs
+SET status = CASE WHEN status = 'NORMALIZED' THEN 'QC_RUNNING' ELSE status END,
+    updated_at = CURRENT_TIMESTAMP
+WHERE run_id = $1`, bundle.Job.RunID)
+	if err != nil {
+		return fmt.Errorf("mark radar scan QC running: %w", err)
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit radar QC transaction: %w", err)
+	}
+	return nil
+}
+
 func (store *Store) CreateDomainSimulation(ctx context.Context, simulation workflow.DomainSimulation) error {
 	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
@@ -322,10 +381,12 @@ SELECT s.scan_id, s.volume_end_time, r.status, r.scan_completeness,
                  SELECT analysis_id FROM analysis_cycles
                  ORDER BY analysis_time DESC, created_at DESC LIMIT 1
              )
-       ), h.health_state, COALESCE(h.diagnostics, 'null'::jsonb)
+       ), h.health_state, COALESCE(h.diagnostics, 'null'::jsonb),
+       COALESCE(q.diagnostics, 'null'::jsonb)
 FROM radar_scans AS s
 JOIN radar_scan_runs AS r ON r.scan_id = s.scan_id
 LEFT JOIN radar_health_metrics AS h ON h.scan_id = s.scan_id
+LEFT JOIN radar_qc_metrics AS q ON q.scan_id = s.scan_id
 WHERE s.radar_id = $1
 ORDER BY s.volume_end_time DESC, r.created_at DESC
 LIMIT 1`, radarID)
@@ -338,11 +399,12 @@ LIMIT 1`, radarID)
 	var status workflow.RadarScanStatus
 	var healthState *string
 	var rawHealth json.RawMessage
+	var rawQC json.RawMessage
 	if err := row.Scan(
 		&summary.LatestScanID, &summary.LatestScanTime, &status,
 		&summary.ScanCompleteness, &summary.MeanQualityIndex,
 		&summary.DataDelaySeconds, &summary.ParticipatingInLatestAnalysis,
-		&healthState, &rawHealth,
+		&healthState, &rawHealth, &rawQC,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			summary.Health = workflow.RadarHealthUnknown
@@ -358,6 +420,15 @@ LIMIT 1`, radarID)
 			return workflow.RadarStatusSummary{}, fmt.Errorf("decode radar health metrics: %w", err)
 		}
 		summary.HealthMetrics = &metrics
+	}
+	if string(rawQC) != "null" {
+		var metrics workflow.RadarQCMetrics
+		if err := json.Unmarshal(rawQC, &metrics); err != nil {
+			return workflow.RadarStatusSummary{}, fmt.Errorf("decode radar QC metrics: %w", err)
+		}
+		summary.QCMetrics = &metrics
+	}
+	if healthState != nil {
 		return summary, nil
 	}
 	switch status {
@@ -429,6 +500,44 @@ LIMIT $3`, radarValue, statusValue, limit)
 
 func (store *Store) GetRadarScan(ctx context.Context, scanID uuid.UUID) (workflow.RadarScan, error) {
 	return scanRadarScan(store.pool.QueryRow(ctx, radarScanSelect+` WHERE s.scan_id = $1`, scanID))
+}
+
+func (store *Store) GetRadarHealthMetrics(
+	ctx context.Context,
+	scanID uuid.UUID,
+) (workflow.RadarHealthMetrics, error) {
+	var raw json.RawMessage
+	if err := store.pool.QueryRow(ctx, `
+SELECT diagnostics FROM radar_health_metrics WHERE scan_id = $1`, scanID).Scan(&raw); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return workflow.RadarHealthMetrics{}, workflow.ErrNotFound
+		}
+		return workflow.RadarHealthMetrics{}, fmt.Errorf("get radar health metrics: %w", err)
+	}
+	var metrics workflow.RadarHealthMetrics
+	if err := json.Unmarshal(raw, &metrics); err != nil {
+		return workflow.RadarHealthMetrics{}, fmt.Errorf("decode radar health metrics: %w", err)
+	}
+	return metrics, nil
+}
+
+func (store *Store) GetRadarQCMetrics(
+	ctx context.Context,
+	scanID uuid.UUID,
+) (workflow.RadarQCMetrics, error) {
+	var raw json.RawMessage
+	if err := store.pool.QueryRow(ctx, `
+SELECT diagnostics FROM radar_qc_metrics WHERE scan_id = $1`, scanID).Scan(&raw); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return workflow.RadarQCMetrics{}, workflow.ErrNotFound
+		}
+		return workflow.RadarQCMetrics{}, fmt.Errorf("get radar QC metrics: %w", err)
+	}
+	var metrics workflow.RadarQCMetrics
+	if err := json.Unmarshal(raw, &metrics); err != nil {
+		return workflow.RadarQCMetrics{}, fmt.Errorf("decode radar QC metrics: %w", err)
+	}
+	return metrics, nil
 }
 
 func (store *Store) ListAnalysisCycles(

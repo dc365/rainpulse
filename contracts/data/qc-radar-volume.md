@@ -22,28 +22,35 @@ The volume uses the exact `sweep`/`ray`/`gate` representation of its
 | `KDP` | float32 | degree km-1 | if produced |
 | `VR_QC` | float32 | m s-1 | if produced |
 | `QUALITY_INDEX` | float32 | `[0, 1]`; `NaN` where unavailable | yes |
-| `QI_METEO` | float32 | `[0, 1]` | yes |
-| `QI_BLOCKAGE` | float32 | `[0, 1]` | yes |
-| `QI_BEAM_HEIGHT` | float32 | `[0, 1]` | yes |
-| `QI_ATTENUATION` | float32 | `[0, 1]` | yes |
-| `QI_INTERFERENCE` | float32 | `[0, 1]` | yes |
-| `QI_TIME` | float32 | `[0, 1]` | yes |
-| `QI_CALIBRATION` | float32 | `[0, 1]` | yes |
-| `QI_RANGE` | float32 | `[0, 1]` | yes |
+| `QI_METEO` | float32 | `[0, 1]`; `NaN` when unavailable | yes |
+| `QI_BLOCKAGE` | float32 | `[0, 1]`; `NaN` until RP-009 | yes |
+| `QI_BEAM_HEIGHT` | float32 | `[0, 1]`; `NaN` until RP-009 | yes |
+| `QI_ATTENUATION` | float32 | `[0, 1]`; `NaN` when not evaluated | yes |
+| `QI_INTERFERENCE` | float32 | `[0, 1]`; `NaN` when unavailable | yes |
+| `QI_TIME` | float32 | `[0, 1]`; `NaN` until analysis-time alignment | yes |
+| `QI_CALIBRATION` | float32 | `[0, 1]`; `NaN` without verified calibration | yes |
+| `QI_RANGE` | float32 | `[0, 1]`; `NaN` when unavailable | yes |
 | `QC_FLAGS` | uint32 | Versioned bit set | yes |
 | `VALID_MASK` | uint8 | Exactly 0 or 1 | yes |
 | `LOW_QUALITY_MASK` | uint8 | Exactly 0 or 1 and never greater than valid | yes |
 | `BLOCKAGE_RATE` | float32 | `[0, 1]` | yes after DEM processing |
 | `ATTENUATION_CORRECTION` | float32 | dB | when attenuation module runs |
 | `P_METEO` | float32 | `[0, 1]` | yes in Phase 1 |
-| `P_AP` | float32 | `[0, 1]` | yes in Phase 1 |
-| `P_SEA_CLUTTER` | float32 | `[0, 1]` | yes in Phase 1 |
-| `P_RADIAL_INTERFERENCE` | float32 | `[0, 1]` | yes in Phase 1 |
+| `P_AP` | float32 | `[0, 1]`; `NaN` when prerequisites are unavailable | yes in Phase 1 |
+| `P_SEA_CLUTTER` | float32 | `[0, 1]`; `NaN` when prerequisites are unavailable | yes in Phase 1 |
+| `P_RADIAL_INTERFERENCE` | float32 | `[0, 1]`; `NaN` when unavailable | yes in Phase 1 |
 
 `QC_FLAGS` follows the versioned `configs/qc/flag-definitions.yaml` definition.
 Missing, low-quality, and valid no-rain remain separate states. A QC module may
 repair a limited area only when it retains the cause flag, sets `CORRECTED`,
 and publishes its correction/confidence diagnostic.
+
+An unavailable prerequisite is represented by `NaN` plus a `skipped` module
+record. Zero means the module ran and found zero probability; it must never be
+used as a substitute for an absent clutter map, coastline mask, DEM,
+calibration value, field, neighbouring radar, or adjacent volume. The first
+quality index combines only components selected by its versioned profile and
+records the component availability mask in module diagnostics.
 
 ## Required attributes and module provenance
 

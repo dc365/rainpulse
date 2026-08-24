@@ -172,6 +172,13 @@ func TestRadarAndAnalysisQueriesPreservePartialRadarFailure(t *testing.T) {
 			{ID: scanBID, RunID: uuid.New(), RadarID: "synthetic_radar_b", VolumeStartTime: now, VolumeEndTime: now, RadarConfigVersion: "radar-b-v1", Status: workflow.RadarScanFailed, DegradedReason: &failedReason, CreatedAt: now, UpdatedAt: now},
 		},
 		analysis: analysis,
+		qc: workflow.RadarQCMetrics{
+			ScanID: scanAID, RadarID: "synthetic_radar_a",
+			QCProfile: "rp008-basic-v1", QCPipelineVersion: "rp008-basic-1.0.0",
+			FlagDefinitionVersion: "qc-flags-v1", HealthState: workflow.RadarHealthHealthy,
+			MeanQualityIndex: 0.82, ValidGateCount: 100, MissingGateCount: 5,
+			ModuleStatuses: map[string]string{"radial_interference": "applied"}, MeasuredAt: now,
+		},
 	}
 	handler := api.NewHandler(api.Options{Version: "test", Observations: store})
 
@@ -188,6 +195,7 @@ func TestRadarAndAnalysisQueriesPreservePartialRadarFailure(t *testing.T) {
 	assertResponse("/api/v1/radars", `"radar_id":"synthetic_radar_a"`)
 	assertResponse("/api/v1/radars/status", `"radar_id":"synthetic_radar_a"`)
 	assertResponse("/api/v1/radar-scans/"+scanBID.String(), `"status":"FAILED"`)
+	assertResponse("/api/v1/radar-scans/"+scanAID.String()+"/qc-summary", `"qc_profile":"rp008-basic-v1"`)
 	assertResponse("/api/v1/analysis-cycles/"+analysis.ID.String(), `"status":"ANALYSIS_READY"`)
 	assertResponse("/api/v1/analysis-cycles/"+analysis.ID.String(), `"state":"FAILED"`)
 }
@@ -275,6 +283,17 @@ type fakeObservationStore struct {
 	radars   []workflow.Radar
 	scans    []workflow.RadarScan
 	analysis workflow.AnalysisCycle
+	qc       workflow.RadarQCMetrics
+}
+
+func (store *fakeObservationStore) GetRadarQCMetrics(
+	_ context.Context,
+	scanID uuid.UUID,
+) (workflow.RadarQCMetrics, error) {
+	if store.qc.ScanID != scanID {
+		return workflow.RadarQCMetrics{}, workflow.ErrNotFound
+	}
+	return store.qc, nil
 }
 
 func (store *fakeObservationStore) ListRadars(context.Context) ([]workflow.Radar, error) {

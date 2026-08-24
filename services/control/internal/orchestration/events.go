@@ -23,6 +23,9 @@ const (
 	RadarDecodeRequestedSubject   = "rainpulse.jobs.requested.radar_decode"
 	RadarDecodeJobType            = "radar.decode"
 	RadarDecoderVersion           = "cma-rstm-2.0.0"
+	RadarQCRequestedEventType     = "radar.qc.requested.v1"
+	RadarQCRequestedSubject       = "rainpulse.jobs.requested.radar_qc"
+	RadarQCJobType                = "radar.qc"
 	JobCompletedSubject           = "rainpulse.jobs.completed"
 	JobFailedSubject              = "rainpulse.jobs.failed"
 	JobResultsSubject             = "rainpulse.jobs.*"
@@ -78,6 +81,28 @@ type RadarDecodeRequestedPayload struct {
 	SourceFormat   string    `json:"source_format"`
 	RadarConfig    string    `json:"radar_config_version"`
 	DecoderVersion string    `json:"decoder_version"`
+}
+
+type RadarQCRequested struct {
+	SchemaVersion string                  `json:"schema_version"`
+	EventID       uuid.UUID               `json:"event_id"`
+	EventType     string                  `json:"event_type"`
+	OccurredAt    time.Time               `json:"occurred_at"`
+	RunID         uuid.UUID               `json:"run_id"`
+	JobID         uuid.UUID               `json:"job_id"`
+	TraceID       uuid.UUID               `json:"trace_id"`
+	Payload       RadarQCRequestedPayload `json:"payload"`
+}
+
+type RadarQCRequestedPayload struct {
+	ScanID                uuid.UUID `json:"scan_id"`
+	RadarID               string    `json:"radar_id"`
+	InputURI              string    `json:"input_uri"`
+	OutputPrefix          string    `json:"output_prefix"`
+	RadarConfig           string    `json:"radar_config_version"`
+	QCProfile             string    `json:"qc_profile"`
+	QCPipelineVersion     string    `json:"qc_pipeline_version"`
+	FlagDefinitionVersion string    `json:"flag_definition_version"`
 }
 
 type JobCompleted struct {

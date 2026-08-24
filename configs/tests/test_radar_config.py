@@ -174,3 +174,16 @@ def test_rp007_health_profile_is_valid_and_versioned() -> None:
     Draft202012Validator(schema).validate(profile)
     assert profile["profile_version"] == "rp007-integrity-v1"
     assert set(profile["field_hard_limits"]) >= {"DBZH", "ZDR", "RHOHV", "PHIDP"}
+
+
+def test_rp008_qc_profile_is_valid_and_keeps_external_assets_explicit() -> None:
+    schema = json.loads((CONFIG_ROOT / "schemas" / "radar-qc.schema.json").read_text())
+    profile = yaml.safe_load((CONFIG_ROOT / "qc" / "rp008-basic-v1.yaml").read_text())
+
+    Draft202012Validator.check_schema(schema)
+    Draft202012Validator(schema).validate(profile)
+    assert profile["profile_version"] == "rp008-basic-v1"
+    assert profile["flag_definition_version"] == "qc-flags-v1"
+    assert profile["static_ground_clutter"]["asset_uri"] is None
+    assert profile["sea_ap"]["coastline_asset_uri"] is None
+    assert profile["quality_index"]["aggregation"] == "product"

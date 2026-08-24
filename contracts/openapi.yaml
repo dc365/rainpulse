@@ -179,6 +179,22 @@ paths:
                 $ref: "#/components/schemas/RadarScan"
         "404":
           $ref: "#/components/responses/NotFound"
+  /radar-scans/{scan_id}/qc-summary:
+    get:
+      operationId: getRadarScanQCSummary
+      tags: [radars]
+      summary: Get the versioned polar QC summary for one radar scan
+      parameters:
+        - $ref: "#/components/parameters/ScanId"
+      responses:
+        "200":
+          description: Radar polar QC summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RadarQCMetrics"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /analysis-cycles:
     get:
       operationId: listAnalysisCycles
@@ -677,6 +693,10 @@ components:
           allOf:
             - $ref: "#/components/schemas/RadarHealthMetrics"
           nullable: true
+        qc_metrics:
+          allOf:
+            - $ref: "#/components/schemas/RadarQCMetrics"
+          nullable: true
     RadarFieldAvailability:
       type: object
       additionalProperties: false
@@ -884,6 +904,86 @@ components:
           type: string
           format: date-time
         updated_at:
+          type: string
+          format: date-time
+    RadarQCMetrics:
+      type: object
+      additionalProperties: false
+      required:
+        - scan_id
+        - radar_id
+        - qc_profile
+        - qc_pipeline_version
+        - flag_definition_version
+        - health_state
+        - mean_quality_index
+        - valid_gate_count
+        - missing_gate_count
+        - low_quality_gate_count
+        - no_rain_gate_count
+        - radial_interference_ray_count
+        - ground_clutter_gate_count
+        - sea_clutter_gate_count
+        - ap_gate_count
+        - module_statuses
+        - measured_at
+      properties:
+        scan_id:
+          type: string
+          format: uuid
+        radar_id:
+          type: string
+        qc_profile:
+          type: string
+        qc_pipeline_version:
+          type: string
+        flag_definition_version:
+          type: string
+        health_state:
+          $ref: "#/components/schemas/RadarHealthState"
+        mean_quality_index:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        valid_gate_count:
+          type: integer
+          format: int64
+          minimum: 0
+        missing_gate_count:
+          type: integer
+          format: int64
+          minimum: 0
+        low_quality_gate_count:
+          type: integer
+          format: int64
+          minimum: 0
+        no_rain_gate_count:
+          type: integer
+          format: int64
+          minimum: 0
+        radial_interference_ray_count:
+          type: integer
+          format: int64
+          minimum: 0
+        ground_clutter_gate_count:
+          type: integer
+          format: int64
+          minimum: 0
+        sea_clutter_gate_count:
+          type: integer
+          format: int64
+          minimum: 0
+        ap_gate_count:
+          type: integer
+          format: int64
+          minimum: 0
+        module_statuses:
+          type: object
+          additionalProperties:
+            type: string
+            enum: [applied, skipped, failed]
+        measured_at:
           type: string
           format: date-time
     RadarScanPage:

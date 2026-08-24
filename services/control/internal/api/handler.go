@@ -32,6 +32,7 @@ type ObservationStore interface {
 	GetRadarStatus(context.Context, string) (workflow.RadarStatusSummary, error)
 	ListRadarScans(context.Context, int, *string, *workflow.RadarScanStatus) ([]workflow.RadarScan, error)
 	GetRadarScan(context.Context, uuid.UUID) (workflow.RadarScan, error)
+	GetRadarQCMetrics(context.Context, uuid.UUID) (workflow.RadarQCMetrics, error)
 	ListAnalysisCycles(context.Context, int, *workflow.AnalysisStatus) ([]workflow.AnalysisCycle, error)
 	GetAnalysisCycle(context.Context, uuid.UUID) (workflow.AnalysisCycle, error)
 }
@@ -300,6 +301,23 @@ func (service *server) GetRadarScan(
 	writeJSON(response, http.StatusOK, toAPIRadarScan(scan))
 }
 
+func (service *server) GetRadarScanQCSummary(
+	response http.ResponseWriter,
+	request *http.Request,
+	scanID apiv1.ScanId,
+) {
+	if service.observations == nil {
+		writeServiceUnavailable(response)
+		return
+	}
+	metrics, err := service.observations.GetRadarQCMetrics(request.Context(), scanID)
+	if err != nil {
+		writeStoreError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, toAPIRadarQC(metrics))
+}
+
 func (service *server) ListAnalysisCycles(
 	response http.ResponseWriter,
 	request *http.Request,
@@ -535,7 +553,35 @@ func toAPIRadarStatus(status workflow.RadarStatusSummary) apiv1.RadarStatusSumma
 	if status.HealthMetrics != nil {
 		result.HealthMetrics = toAPIRadarHealth(*status.HealthMetrics)
 	}
+	if status.QCMetrics != nil {
+		qc := toAPIRadarQC(*status.QCMetrics)
+		result.QcMetrics = &qc
+	}
 	return result
+}
+
+func toAPIRadarQC(metrics workflow.RadarQCMetrics) apiv1.RadarQCMetrics {
+	statuses := make(map[string]apiv1.RadarQCMetricsModuleStatuses, len(metrics.ModuleStatuses))
+	for name, status := range metrics.ModuleStatuses {
+		statuses[name] = apiv1.RadarQCMetricsModuleStatuses(status)
+	}
+	return apiv1.RadarQCMetrics{
+		ScanId: metrics.ScanID, RadarId: metrics.RadarID,
+		QcProfile: metrics.QCProfile, QcPipelineVersion: metrics.QCPipelineVersion,
+		FlagDefinitionVersion:      metrics.FlagDefinitionVersion,
+		HealthState:                apiv1.RadarHealthState(metrics.HealthState),
+		MeanQualityIndex:           float32(metrics.MeanQualityIndex),
+		ValidGateCount:             metrics.ValidGateCount,
+		MissingGateCount:           metrics.MissingGateCount,
+		LowQualityGateCount:        metrics.LowQualityGateCount,
+		NoRainGateCount:            metrics.NoRainGateCount,
+		RadialInterferenceRayCount: metrics.RadialInterferenceRayCount,
+		GroundClutterGateCount:     metrics.GroundClutterGateCount,
+		SeaClutterGateCount:        metrics.SeaClutterGateCount,
+		ApGateCount:                metrics.APGateCount,
+		ModuleStatuses:             statuses,
+		MeasuredAt:                 metrics.MeasuredAt.UTC(),
+	}
 }
 
 func toAPIRadarHealth(health workflow.RadarHealthMetrics) *apiv1.RadarHealthMetrics {
