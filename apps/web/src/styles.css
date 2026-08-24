@@ -388,6 +388,7 @@ h1 {
   .scan-strip { grid-template-columns: 1fr 1fr; }
   .scan-metric:nth-child(2) { border-right: 0; }
   .scan-metric:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+  .scan-metric strong { line-height: 1.4; white-space: normal; }
   .detail-grid { grid-template-columns: 1fr; }
   .module { min-height: auto; }
 }
