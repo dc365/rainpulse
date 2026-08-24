@@ -33,8 +33,8 @@ NowcastInput gate.
 | RP-003 infrastructure | Complete | PostgreSQL, NATS JetStream and MinIO with migrations, persistence and health checks |
 | RP-004 Go three-level workflows | Complete | Separate radar-scan, analysis-cycle and forecast states; additive metadata migration; radar/analysis API and SSE; two-radar degradation simulation |
 | RP-005 Python Worker SDK | Complete | Registered decode/QC/grid/mosaic-QPE/NowcastInput profiles reuse strict contracts, idempotency, artifact-specific atomic output, logs and health |
-| RP-006 first real radar decoder | Blocked on input | Requires a verified representative raw base-data sample and complete ready radar configuration |
-| RP-007–RP-016 | Not started | Depend on the preceding radar chain and representative data |
+| RP-006 first real radar decoder | Complete | CMA RSTM 2.0 decoder, Z9598 draft config, sweep-group Zarr, real Worker profile and NAS golden-sample acceptance |
+| RP-007–RP-016 | Not started | Next is data integrity/radar health, followed by QC and the remaining radar/nowcast chain |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -112,8 +112,26 @@ RP-005 now additionally provides:
 - explicit fixture output stating that no radar array or meteorological
   algorithm ran.
 
-All existing model/config records and products are simulations. They do not
-claim radar decode, QC, QPE, pySTEPS, or real-data readiness.
+RP-006 now provides:
+
+- a streaming decoder for raw or whole-file BZip2 CMA RSTM Level 2 version 2.0;
+- strict site, scan, cut, radial, geometry, scale/offset and source checksum
+  validation;
+- preservation of the original per-cut polar geometry in Zarr v2
+  `sweep_groups_v1`;
+- verified Z9598 mappings for DBZH, ZDR, RHOHV, PHIDP, VR, SW and SNR, with
+  source reserved codes 0–4 decoded as NaN;
+- a real `radar-decode-fmt` Worker restricted to configured read-only
+  `file://` roots and a separate synthetic decode subject;
+- multi-object atomic publication with a deterministic manifest and
+  `_SUCCESS.json` written last;
+- a reproducible NAS golden sample and acceptance script, documented in
+  `docs/RP006_真实雷达基数据解码验收记录.md`.
+
+Z9598 is a real-sample configuration, but it intentionally remains `draft` and
+its decoder output is marked `operational_eligible=false`. QC, gridding, QPE,
+NowcastInput and forecast products remain synthetic until their corresponding
+tasks are implemented.
 
 ## Active test environment
 
@@ -121,7 +139,7 @@ claim radar decode, QC, QPE, pySTEPS, or real-data readiness.
 - Project: `<remote-project-dir>`
 - Web: `http://private-test-host:4173`
 - API: `http://private-test-host:8080/api/v1/system/status`
-- Deployed runtime version: `rp005-v1.1-912c04e-20260824`
+- Deployed runtime version: `rp006-v1.1-7903196-20260824`
 - One-time legacy archive: `<remote-legacy-archive>`
 
 The target has 24 logical CPUs, about 156 GiB RAM, an RTX 6000D GPU, NVIDIA
@@ -134,13 +152,14 @@ Docker Hub access is unreliable. Continue to use local Linux/amd64 builds and
 export/import pinned images through `http://127.0.0.1:7897` when necessary.
 No credentials or secrets belong in this document or repository.
 
-The RP-004/RP-005 code, generated clients, tests and Linux/amd64 binaries pass
+The RP-004–RP-006 code, generated clients, tests and Linux/amd64 binaries pass
 locally. SSH public-key access to the GPU server is active; passwords are not
-stored locally. On 2026-08-24 the committed source and Linux/amd64 artifacts
-were deployed, migration `0005_radar_workflows.sql` was applied to the retained
-PostgreSQL volume, and infrastructure, control-plane, partial-radar degradation,
-Worker idempotency/failure, API and Web smoke tests all passed. The API and Web
-are reachable from the local network at the URLs above.
+stored locally. On 2026-08-24 RP-006 was deployed in place without a new source
+or database backup. All services, including `radar-decode-worker`, are healthy;
+the Z9598 NAS golden sample decoded to 11 sweeps, 3994 rays and seven canonical
+fields and passed the normalized Zarr validator. Infrastructure, control-plane,
+partial-radar degradation, Worker idempotency/failure, API and Web smoke tests
+also passed. The retained PostgreSQL, NATS and MinIO volumes were not deleted.
 
 The local repository is the code source of truth. Deployment and integration
 debugging run directly in the server's `rainpulse-nowcast` directory through
@@ -151,33 +170,36 @@ of the active test environment and must not be deleted during ordinary updates.
 
 ## Next acceptance target
 
-RP-006 is the next target: implement one verified radar-format adapter that
-publishes `NormalizedRadarVolume`. It must not begin without the representative
-base-data sample and ready radar config. Preserve the deployed RP-005 runtime as
-the acceptance baseline while decoder work proceeds through a separate Worker
-profile.
+RP-007 is next: compute data-integrity summaries and radar health from decoded
+polar volumes. It will detect missing cuts/radials and field availability,
+summarize noise/anomalous values, persist health state, and expose the results
+through the Go API and React overview. It must continue to use internal RSTM
+radial UTC as observation time because the current NAS is a replay source whose
+filename timestamps and payload identities are not unique.
 
-## Required inputs before RP-006
+## Required inputs before operational QC and gridding
 
-For at least one physical radar, provide and verify:
+The raw sample, RSTM 2.0 format, Z9598 header geometry, field scaling and NAS
+path are now known. The following still require business or radar-maintainer
+confirmation:
 
-1. Full-volume raw base-data samples, source format/version and delivery path.
-2. Site longitude/latitude/altitude plus altitude datum.
-3. Radar model/band/beam width and calibration information.
-4. Scan strategy, elevations, update interval, azimuth/range resolution and
-   maximum range.
-5. Field names, source units, scale/offset, missing values and dual-polarization
-   availability.
-6. Timestamp timezone and filename/time semantics.
-7. Target grid CRS, bounds, resolution and masks.
-8. DEM and coastline assets with versions and datum metadata.
-9. Representative clear-air, radial-interference, sea/AP, mountain-blockage,
+1. Z9598 ground/antenna altitude datum and authoritative station metadata.
+2. Radar manufacturer/model, formal meaning of RDA type code 4, calibration
+   offsets, calibration interval and maintenance metadata.
+3. Real-time delivery SLA, filename timestamp semantics and duplicate/replay
+   handling policy.
+4. Operational integrity thresholds for missing cuts/radials, field coverage,
+   noise and anomalous values.
+5. Target grid CRS, bounds, resolution and masks.
+6. DEM, coastline, static clutter and beam-blockage assets with versions and
+   datum metadata.
+7. Representative clear-air, radial-interference, sea/AP, mountain-blockage,
    ordinary-rain, convection and typhoon cases.
-10. Later QPE truth: gauge locations, observation interval and quality rules.
+8. Later QPE truth: gauge locations, observation interval and quality rules.
 
-Until these inputs are available, RP-004 and RP-005 can progress with explicitly
-synthetic fixtures, but RP-006 must not invent a decoder or production radar
-configuration.
+Until the ready-state metadata and QC versions are verified, the deployed
+decoder remains suitable for replay/integration work only and cannot feed an
+operational nowcast.
 
 ## Reproducible commands
 
@@ -197,5 +219,6 @@ make deploy-up
 make infrastructure-smoke
 make control-plane-smoke
 make worker-smoke
+make radar-decode-smoke
 make smoke
 ```

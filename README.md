@@ -28,6 +28,7 @@ make dev-up
 make infrastructure-smoke
 make control-plane-smoke
 make worker-smoke
+make radar-decode-smoke
 make smoke
 ```
 
@@ -50,8 +51,9 @@ After `make dev-up`, the public seams are:
 Use `make dev-down` to stop the composed runtime without deleting its named
 volumes. PostgreSQL, NATS JetStream and MinIO are persistent RP-003 services;
 RP-005 provides registered long-lived Worker profiles and common idempotent,
-atomic publication behavior, but no real radar decoder, QC algorithm, or
-meteorological model yet.
+atomic publication behavior. RP-006 adds the first real CMA RSTM 2.0 decoder
+and a read-only NAS-backed Worker profile; radar QC and meteorological models
+are not implemented yet.
 
 ## Test deployment artifacts
 
