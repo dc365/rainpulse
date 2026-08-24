@@ -29,6 +29,8 @@ make infrastructure-smoke
 make control-plane-smoke
 make worker-smoke
 make radar-decode-smoke
+make radar-health-smoke
+make radar-qc-smoke
 make smoke
 ```
 
@@ -45,6 +47,7 @@ After `make dev-up`, the public seams are:
 - Latest run: `http://127.0.0.1:8080/api/v1/runs/latest`
 - Registered radars: `http://127.0.0.1:8080/api/v1/radars`
 - Radar scan workflows: `http://127.0.0.1:8080/api/v1/radar-scans`
+- Per-scan QC summary: `http://127.0.0.1:8080/api/v1/radar-scans/{scan_id}/qc-summary`
 - Radar fleet health: `http://127.0.0.1:8080/api/v1/radars/status`
 - Per-radar health: `http://127.0.0.1:8080/api/v1/radars/{radar_id}/status`
 - Analysis cycles: `http://127.0.0.1:8080/api/v1/analysis-cycles`
@@ -55,9 +58,12 @@ volumes. PostgreSQL, NATS JetStream and MinIO are persistent RP-003 services;
 RP-005 provides registered long-lived Worker profiles and common idempotent,
 atomic publication behavior. RP-006 adds the first real CMA RSTM 2.0 decoder
 and a read-only NAS-backed Worker profile. RP-007 adds decoded-volume integrity
-and radar-health diagnostics, persistence/API support, and the radar operations
-console. RP-008 polar QC and all downstream meteorological models are not
-implemented yet.
+and radar-health diagnostics. RP-008 adds health-gated basic polar QC, a
+separate version-isolated QC Zarr, flags/QI/provenance, persistence/API support,
+and the radar operations console module. Ancillary-dependent clutter, sea/AP
+and DEM modules still require operational assets and representative-case
+acceptance; gridding and all downstream meteorological models are not yet
+implemented.
 
 ## Test deployment artifacts
 
@@ -78,4 +84,7 @@ and load them with `docker load` before starting Compose. `make dev-up` combines
 artifact build and Compose startup for a developer machine with the full
 toolchain.
 
-Current implementation and deployment decisions are recorded in [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md).
+Current implementation and deployment decisions are recorded in
+[`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md). The real
+RP-008 server acceptance evidence is in
+[`docs/RP008_基础极坐标质控验收记录.md`](docs/RP008_基础极坐标质控验收记录.md).

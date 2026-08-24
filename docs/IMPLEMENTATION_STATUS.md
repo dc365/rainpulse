@@ -35,7 +35,8 @@ NowcastInput gate.
 | RP-005 Python Worker SDK | Complete | Registered decode/QC/grid/mosaic-QPE/NowcastInput profiles reuse strict contracts, idempotency, artifact-specific atomic output, logs and health |
 | RP-006 first real radar decoder | Complete | CMA RSTM 2.0 decoder, Z9598 draft config, sweep-group Zarr, real Worker profile and NAS golden-sample acceptance |
 | RP-007 data integrity/radar health | Complete | Versioned health profile, real-volume integrity metrics, persistence/API and responsive React radar console |
-| RP-008–RP-016 | Not started | Next is polar QC, followed by Hybrid Scan, mosaic/QPE and the remaining nowcast chain |
+| RP-008 basic polar QC | Core vertical slice complete | Real Z9598 normalized Zarr to version-isolated QC Zarr, flags/QI/provenance, persistence/API/console and replay acceptance; ancillary-dependent modules still await operational assets |
+| RP-009–RP-016 | Not started | Next is DEM blockage and Hybrid Scan, followed by mosaic/QPE and the remaining nowcast chain |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -141,14 +142,35 @@ RP-007 now provides:
   decode requests, plus idempotent persistence into `radar_health_metrics`;
 - per-radar and fleet status APIs and a responsive React radar-operations
   console with 30-second refresh, completeness, reasons, fields, noise/channel
-  state and an explicit RP-008 QC placeholder;
+  state, plus the UI seam later filled by the RP-008 QC module;
 - end-to-end health and replay-idempotency smoke tests, documented in
   `docs/RP007_数据完整性与雷达健康验收记录.md`.
 
+RP-008 now provides:
+
+- `rp008-basic-v1` configuration, strict Schema and `qc-flags-v1` uint32 flag
+  definitions;
+- health-gated basic polar QC that preserves all original sweep geometry,
+  including legal cuts without DBZH, and explicitly retains valid, missing,
+  no-rain and low-quality semantics;
+- radial-interference detection, static-clutter and sea/AP module seams,
+  per-module provenance, QI components and aggregate diagnostics;
+- a separate, immutable `QCRadarVolume` Zarr whose object prefix includes the
+  QC pipeline version, so versioned reruns cannot reuse another job's completion
+  marker;
+- deterministic QC jobs, transactional config registration, NATS routing,
+  idempotent PostgreSQL metrics, QC summary/status APIs and a responsive React
+  console module;
+- safe versioned retry from a failed QC stage only when the normalized artifact
+  and radar-health gate remain valid, while preserving prior job audit records;
+- real Z9598 end-to-end acceptance, documented in
+  `docs/RP008_基础极坐标质控验收记录.md`.
+
 Z9598 is a real-sample configuration, but it intentionally remains `draft` and
-its decoder output is marked `operational_eligible=false`. QC, gridding, QPE,
-NowcastInput and forecast products remain synthetic until their corresponding
-tasks are implemented.
+its decoder output is marked `operational_eligible=false`. RP-008 can therefore
+run the real sample for controlled replay/integration acceptance, but it is not
+an operational QC feed. Gridding, QPE, NowcastInput and forecast products remain
+synthetic or unimplemented until their corresponding tasks are accepted.
 
 ## Active test environment
 
@@ -156,7 +178,7 @@ tasks are implemented.
 - Project: `<remote-project-dir>`
 - Web: `http://private-test-host:4173`
 - API: `http://private-test-host:8080/api/v1/system/status`
-- Deployed runtime version: `rp007-v1.1-73f085a-20260824`
+- Deployed runtime version: `rp008-v1.1-0748898-20260824`
 - One-time legacy archive: `<remote-legacy-archive>`
 
 The target has 24 logical CPUs, about 156 GiB RAM, an RTX 6000D GPU, NVIDIA
@@ -169,17 +191,20 @@ Docker Hub access is unreliable. Continue to use local Linux/amd64 builds and
 export/import pinned images through `http://127.0.0.1:7897` when necessary.
 No credentials or secrets belong in this document or repository.
 
-The RP-004–RP-007 code, generated clients, tests and Linux/amd64 binaries pass
+The RP-004–RP-008 code, generated clients, tests and Linux/amd64 binaries pass
 locally. SSH public-key access to the GPU server is active; passwords are not
 stored locally. On 2026-08-24 RP-007 was deployed in place without a new source
-or database backup. All eight Compose services are healthy. The Z9598 NAS
-golden sample decoded to 11 sweeps, 3994 rays and seven canonical fields, then
+or database backup, followed by RP-008 under the same rule. All nine long-lived
+Compose services are healthy. The Z9598 NAS golden sample decoded to 11 sweeps,
+3994 rays and seven canonical fields, then
 persisted a complete integrity record with no missing radials, 1.08° maximum
-azimuth gap and an `OK` noise channel. Infrastructure, control-plane,
+azimuth gap and an `OK` noise channel. The accepted RP-008 pipeline then wrote a
+version-isolated QC Zarr, reached `QC_READY`, and recorded mean QI `0.617353`,
+278,214 valid gates and 4,036,486 missing gates. Infrastructure, control-plane,
 partial-radar degradation, Worker idempotency/failure, real decode, radar
-health, API and Web smoke tests passed. Desktop and 375 px mobile browser checks
-also passed without horizontal overflow. The retained PostgreSQL, NATS and
-MinIO volumes were not deleted.
+health, radar QC, API and Web smoke tests passed. Desktop 1280 px and mobile
+375 px browser checks passed without horizontal overflow or console errors. The
+retained PostgreSQL, NATS and MinIO volumes were not deleted.
 
 The local repository is the code source of truth. Deployment and integration
 debugging run directly in the server's `rainpulse-nowcast` directory through
@@ -190,20 +215,19 @@ of the active test environment and must not be deleted during ordinary updates.
 
 ## Next acceptance target
 
-RP-008 is next: implement the first operational polar QC pipeline before any
-gridding, mosaic, QPE or forecast work. It will preserve the normalized input,
-write a separate `QCRadarVolume`, maintain missing/no-rain/valid semantics, and
-produce versioned `QC_FLAGS`, QI components, correction provenance and module
-diagnostics. The first rule set covers invalid/status gates, radial
-interference, static ground clutter and basic sea-clutter/AP handling. It must
-consume the RP-007 health result as a gate and continue to use internal RSTM
-radial UTC as observation time.
+RP-009 is next: add versioned DEM/beam-blockage handling and produce the first
+single-radar `RadarGrid`/Hybrid Scan from an accepted `QCRadarVolume`. It must
+consume QC flags and QI rather than only reflectivity, preserve coverage and
+quality masks through polar-to-Cartesian mapping, and reject unavailable or
+unversioned ancillary assets. Static clutter and coastline/sea-AP assets should
+be prepared alongside RP-009 so the currently skipped RP-008 modules can receive
+representative-case operational acceptance before multi-radar mosaic/QPE work.
 
 ## Required inputs before operational QC and gridding
 
-The raw sample, RSTM 2.0 format, Z9598 header geometry, field scaling and NAS
-path are now known. The following still require business or radar-maintainer
-confirmation:
+The raw sample, RSTM 2.0 format, Z9598 header geometry, field scaling, NAS path
+and first basic-QC replay are now known. The following still require business
+or radar-maintainer confirmation:
 
 1. Z9598 ground/antenna altitude datum and authoritative station metadata.
 2. Radar manufacturer/model, formal meaning of RDA type code 4, calibration
@@ -211,7 +235,8 @@ confirmation:
 3. Real-time delivery SLA, filename timestamp semantics and duplicate/replay
    handling policy.
 4. Business-confirmed integrity and QC thresholds for missing cuts/radials,
-   field coverage, noise, anomalous values and each RP-008 rule.
+   field coverage, noise, anomalous values and each RP-008 rule; the current
+   values are engineering defaults, not an operational sign-off.
 5. Target grid CRS, bounds, resolution and masks.
 6. DEM, coastline, static clutter and beam-blockage assets with versions and
    datum metadata.
@@ -219,9 +244,10 @@ confirmation:
    ordinary-rain, convection and typhoon cases.
 8. Later QPE truth: gauge locations, observation interval and quality rules.
 
-Until the ready-state metadata and QC versions are verified, the deployed
-decoder remains suitable for replay/integration work only and cannot feed an
-operational nowcast.
+Until the ready-state metadata, operational ancillary assets, representative
+case labels and QC thresholds are verified, the deployed decode/QC chain remains
+suitable for replay/integration work only and cannot feed an operational
+nowcast.
 
 ## Reproducible commands
 
@@ -243,5 +269,6 @@ make control-plane-smoke
 make worker-smoke
 make radar-decode-smoke
 make radar-health-smoke
+make radar-qc-smoke
 make smoke
 ```
