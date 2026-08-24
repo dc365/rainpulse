@@ -45,6 +45,8 @@ After `make dev-up`, the public seams are:
 - Latest run: `http://127.0.0.1:8080/api/v1/runs/latest`
 - Registered radars: `http://127.0.0.1:8080/api/v1/radars`
 - Radar scan workflows: `http://127.0.0.1:8080/api/v1/radar-scans`
+- Radar fleet health: `http://127.0.0.1:8080/api/v1/radars/status`
+- Per-radar health: `http://127.0.0.1:8080/api/v1/radars/{radar_id}/status`
 - Analysis cycles: `http://127.0.0.1:8080/api/v1/analysis-cycles`
 - Run updates: `http://127.0.0.1:8080/api/v1/events/stream`
 
@@ -52,8 +54,10 @@ Use `make dev-down` to stop the composed runtime without deleting its named
 volumes. PostgreSQL, NATS JetStream and MinIO are persistent RP-003 services;
 RP-005 provides registered long-lived Worker profiles and common idempotent,
 atomic publication behavior. RP-006 adds the first real CMA RSTM 2.0 decoder
-and a read-only NAS-backed Worker profile; radar QC and meteorological models
-are not implemented yet.
+and a read-only NAS-backed Worker profile. RP-007 adds decoded-volume integrity
+and radar-health diagnostics, persistence/API support, and the radar operations
+console. RP-008 polar QC and all downstream meteorological models are not
+implemented yet.
 
 ## Test deployment artifacts
 
