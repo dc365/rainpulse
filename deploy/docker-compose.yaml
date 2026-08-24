@@ -187,6 +187,44 @@ services:
       start_period: 5s
     restart: unless-stopped
 
+  radar-decode-worker:
+    image: rainpulse-radar-decode-worker
+    build:
+      context: ..
+      dockerfile: algorithms/worker.Dockerfile
+    depends_on:
+      nats:
+        condition: service_healthy
+      minio-worker-policy:
+        condition: service_completed_successfully
+      orchestrator:
+        condition: service_healthy
+    environment:
+      RAINPULSE_NATS_URL: nats://nats:4222
+      RAINPULSE_OBJECT_STORE_ENDPOINT: http://minio:9000
+      RAINPULSE_OBJECT_STORE_ACCESS_KEY: "${RAINPULSE_MINIO_WORKER_ACCESS_KEY:?set RAINPULSE_MINIO_WORKER_ACCESS_KEY in deploy/.env}"
+      RAINPULSE_OBJECT_STORE_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
+      RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
+      RAINPULSE_WORKER_ID: cma-rstm-z9598
+      RAINPULSE_WORKER_PROFILE: radar-decode-fmt
+      RAINPULSE_RADAR_CONFIG_DIR: /opt/rainpulse/configs/radars
+      RAINPULSE_RADAR_INPUT_ROOTS: /data/Weather/RADA/FMT_L2_Z959X_SBD
+      TZ: UTC
+    volumes:
+      - ../configs/radars:/opt/rainpulse/configs/radars:ro
+      - /data/Weather/RADA/FMT_L2_Z959X_SBD:/data/Weather/RADA/FMT_L2_Z959X_SBD:ro
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import json,urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:8091/healthz', timeout=2))['profile'] == 'radar-decode-fmt'"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
+
   api:
     build:
       context: ..

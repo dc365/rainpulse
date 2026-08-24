@@ -4,6 +4,8 @@ import json
 from collections.abc import Callable
 from typing import Any
 
+from rainpulse_algo.radar.worker import execute_fmt_decode
+
 from .domain_contracts import (
     AnalysisMosaicRequested,
     NowcastInputRequested,
@@ -41,9 +43,19 @@ def _synthetic_executor(stage: str) -> Callable[[Any], WorkerResult]:
 
 
 HANDLERS = {
+    "radar-decode-fmt": TaskHandler(
+        profile="radar-decode-fmt",
+        subject="rainpulse.jobs.requested.radar_decode",
+        consumer="rainpulse-radar-decode-cma-rstm-2-0-0",
+        request_model=RadarDecodeRequested,
+        executor=execute_fmt_decode,
+        asset_type="normalized_radar_volume",
+        artifact_name="volume.zarr",
+        ack_wait_seconds=300,
+    ),
     "radar-decode-synthetic": TaskHandler(
         profile="radar-decode-synthetic",
-        subject="rainpulse.jobs.requested.radar_decode",
+        subject="rainpulse.jobs.requested.radar_decode_synthetic",
         consumer="rainpulse-radar-decode-synthetic",
         request_model=RadarDecodeRequested,
         executor=_synthetic_executor("radar_decode"),

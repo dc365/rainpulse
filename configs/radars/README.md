@@ -17,3 +17,13 @@ Field mappings use canonical names (`DBZH`, `ZDR`, `RHOHV`, `PHIDP`, `VR`,
 `SW`, `SNR`) while retaining the source name, unit, missing value, scale, and
 offset. A missing optional field is omitted from the mapping; it is not
 synthesized by the decoder or QC pipeline.
+
+`z9598.yaml` is the first real-sample configuration. Values copied from the
+RSTM 2.0 site/task/cut headers are populated, while unverified station datum,
+hardware model, calibration and ancillary/QC versions remain explicit nulls.
+It intentionally stays `draft`: it is valid for RP-006 replay/golden-sample
+decoding but not eligible for operational ingest.
+
+The NAS directory currently replays historical payloads beneath newer
+filenames. The RSTM task/radial UTC timestamps and compressed-byte SHA-256 are
+authoritative; filename time is discovery metadata only.

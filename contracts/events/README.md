@@ -31,7 +31,9 @@ machines to those idempotent job records.
 - Stream: `RAINPULSE_JOBS`
 - Task subject: `rainpulse.jobs.requested.<job_type_token>`
 - Existing control-plane simulation task: `rainpulse.jobs.requested.model_pysteps_lk`
-- Synthetic domain task tokens: `radar_decode`, `radar_qc`, `radar_grid`,
+- Real RP-006 task token: `radar_decode`; synthetic decode uses
+  `radar_decode_synthetic` so it cannot compete for real commands.
+- Other synthetic domain task tokens: `radar_qc`, `radar_grid`,
   `analysis_mosaic`, and `nowcast_input`
 - Completion subject: `rainpulse.jobs.completed`
 - Failure subject: `rainpulse.jobs.failed`

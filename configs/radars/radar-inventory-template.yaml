@@ -1,4 +1,5 @@
 schema_version: "1.0"
+config_version: replace_with_immutable_config_version
 radar_id: replace_with_registered_radar_id
 lifecycle: draft
 display_name: null
@@ -7,13 +8,16 @@ site:
   longitude_deg: null
   latitude_deg: null
   altitude_m: null
+  antenna_altitude_m: null
   altitude_datum: null
 
 hardware:
   manufacturer: null
   model: null
   radar_band: null
+  frequency_mhz: null
   beam_width_deg: null
+  beam_width_vertical_deg: null
   dual_pol_available: null
   nyquist_velocity_mps: null
   calibration_offsets:
@@ -24,6 +28,7 @@ scan:
   strategy_name: null
   expected_update_seconds: null
   expected_elevations_deg: null
+  expected_cut_elevations_deg: null
   azimuth_resolution_deg: null
   range_gate_m: null
   max_range_m: null

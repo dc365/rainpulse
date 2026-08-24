@@ -30,6 +30,7 @@ def ready_synthetic_config() -> dict:
     config.update(
         {
             "radar_id": "synthetic_radar_01",
+            "config_version": "synthetic-radar-v1",
             "lifecycle": "ready",
             "display_name": "Synthetic contract fixture",
             "inventory_owner": "contract-tests",
@@ -40,13 +41,16 @@ def ready_synthetic_config() -> dict:
         "longitude_deg": 0.0,
         "latitude_deg": 0.0,
         "altitude_m": 0.0,
+        "antenna_altitude_m": 0.0,
         "altitude_datum": "synthetic-datum-v1",
     }
     config["hardware"] = {
         "manufacturer": "synthetic",
         "model": "contract-fixture",
         "radar_band": "S",
+        "frequency_mhz": 2800.0,
         "beam_width_deg": 1.0,
+        "beam_width_vertical_deg": 1.0,
         "dual_pol_available": False,
         "nyquist_velocity_mps": None,
         "calibration_offsets": {"dbzh_db": 0.0, "zdr_db": None},
@@ -55,6 +59,7 @@ def ready_synthetic_config() -> dict:
         "strategy_name": "synthetic-volume-v1",
         "expected_update_seconds": 300,
         "expected_elevations_deg": [0.5, 1.5],
+        "expected_cut_elevations_deg": [0.5, 1.5],
         "azimuth_resolution_deg": 1.0,
         "range_gate_m": 1000.0,
         "max_range_m": 100000.0,
@@ -118,6 +123,28 @@ def test_unknown_configuration_keys_are_rejected() -> None:
     config = copy.deepcopy(ready_synthetic_config())
     config["site"]["guessed_station_code"] = "not-allowed"
 
+    with pytest.raises(ValidationError):
+        validate(config)
+
+
+def test_z9598_real_sample_configuration_is_valid_but_not_ready() -> None:
+    config = yaml.safe_load((CONFIG_ROOT / "radars" / "z9598.yaml").read_text())
+
+    validate(config)
+    assert config["lifecycle"] == "draft"
+    assert config["site"]["longitude_deg"] == pytest.approx(117.08055877685547)
+    assert config["scan"]["expected_cut_elevations_deg"][:4] == [0.5, 0.5, 1.5, 1.5]
+    assert {item["canonical_name"] for item in config["fields"]} >= {
+        "DBZH",
+        "ZDR",
+        "RHOHV",
+        "PHIDP",
+        "VR",
+        "SW",
+        "SNR",
+    }
+
+    config["lifecycle"] = "ready"
     with pytest.raises(ValidationError):
         validate(config)
 

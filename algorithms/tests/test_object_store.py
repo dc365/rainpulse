@@ -1,9 +1,12 @@
 import io
+import json
 from types import SimpleNamespace
 from uuid import UUID
 
+import pytest
+
 from rainpulse_algo.worker.contracts import JobCompleted
-from rainpulse_algo.worker.object_store import AtomicObjectPublisher
+from rainpulse_algo.worker.object_store import AtomicObjectPublisher, normalize_artifact_objects
 from rainpulse_algo.worker.runtime import Worker, WorkerConfig
 
 from .test_worker_contracts import requested_data
@@ -109,3 +112,49 @@ def test_atomic_publish_supports_stage_specific_artifact_names() -> None:
     assert publisher.load_completion(
         request.payload.output_prefix, "volume.zarr"
     ).event_id == completion.event_id
+
+
+def test_atomic_publish_commits_multi_object_zarr_bundle_before_marker() -> None:
+    from rainpulse_algo.worker.contracts import JobRequested
+    from rainpulse_algo.worker.runtime import WorkerResult
+
+    request = JobRequested.model_validate(requested_data())
+    worker = Worker(
+        WorkerConfig("nats://test", "127.0.0.1", 8091, "test-worker"),
+        publisher=None,  # type: ignore[arg-type]
+    )
+    objects = {
+        ".zgroup": b'{"zarr_format":2}',
+        ".zattrs": b'{"contract_name":"rainpulse.normalized-radar-volume"}',
+        "sweep_000/DBZH/0.0": b"compressed-radar-bytes",
+    }
+    result = WorkerResult(objects=objects, metrics={"sweep_count": 1.0})
+    completion = worker._build_completion(  # noqa: SLF001
+        request=request,
+        started_at=request.occurred_at,
+        started_tick=0.0,
+        result=result,
+    )
+    client = FakeMinio()
+    publisher = AtomicObjectPublisher(client)  # type: ignore[arg-type]
+
+    published = publisher.publish(
+        output_prefix=request.payload.output_prefix,
+        job_id=request.job_id,
+        data=None,
+        objects=objects,
+        completion=completion,
+        artifact_name="volume.zarr",
+    )
+
+    marker = json.loads(client.objects[("rainpulse", published.marker_key)])
+    assert [item["key"] for item in marker["objects"]] == sorted(objects)
+    assert published.size_bytes == sum(map(len, objects.values()))
+    assert completion.payload.assets[0].sha256 == published.sha256
+    assert all(not key.startswith("_temporary/") for _, key in client.objects)
+
+
+@pytest.mark.parametrize("key", [".", "../escape", "/absolute", "_SUCCESS.json"])
+def test_multi_object_artifact_rejects_unsafe_or_reserved_keys(key: str) -> None:
+    with pytest.raises(ValueError, match="unsafe"):
+        normalize_artifact_objects(data=None, objects={key: b"value"})

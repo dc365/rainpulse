@@ -25,6 +25,13 @@ If source sweeps use incompatible gate spacing or gate counts, the adapter must
 preserve them in separate versioned Zarr sweep groups rather than invent a
 common geometry. The selected encoding is recorded in `geometry_encoding`.
 
+RP-006 uses Zarr v2 with `geometry_encoding=sweep_groups_v1`. Root arrays hold
+the conceptual sweep number and inclusive flattened ray boundaries. Each
+`sweep_NNN` group contains its own `azimuth`, `elevation`, `ray_time`, `range`
+and available canonical `[ray, gate]` fields. This preserves the Z9598 VCP21D
+11-cut layout, including the separate 0.5° and 1.5° waveform/moment cuts and
+the different gate counts at higher elevations.
+
 ## Canonical fields
 
 Each available moment is `[ray, gate]` `float32` with `NaN` for source missing

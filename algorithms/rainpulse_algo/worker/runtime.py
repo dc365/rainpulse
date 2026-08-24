@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import os
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
@@ -29,7 +28,12 @@ from .contracts import (
     JobRequested,
     result_event_id,
 )
-from .object_store import AtomicObjectPublisher, parse_s3_uri
+from .object_store import (
+    AtomicObjectPublisher,
+    artifact_sha256,
+    normalize_artifact_objects,
+    parse_s3_uri,
+)
 from .simulation import SimulatedFailure, execute
 
 
@@ -58,8 +62,12 @@ class WorkerConfig:
 
 @dataclass(frozen=True)
 class WorkerResult:
-    data: bytes
-    metrics: dict[str, float]
+    data: bytes | None = None
+    metrics: dict[str, float] = field(default_factory=dict)
+    objects: dict[str, bytes] | None = None
+
+    def payloads(self) -> dict[str, bytes]:
+        return normalize_artifact_objects(data=self.data, objects=self.objects)
 
 
 @dataclass(frozen=True)
@@ -72,6 +80,7 @@ class TaskHandler:
     asset_type: str
     artifact_name: str
     media_type: str = "application/vnd+zarr"
+    ack_wait_seconds: int = 30
 
 
 class Worker:
@@ -112,7 +121,7 @@ class Worker:
             stream=JOB_STREAM,
             config=ConsumerConfig(
                 ack_policy=AckPolicy.EXPLICIT,
-                ack_wait=30,
+                ack_wait=self._handler.ack_wait_seconds,
                 max_deliver=10,
             ),
         )
@@ -192,6 +201,7 @@ class Worker:
                 output_prefix=request.payload.output_prefix,
                 job_id=request.job_id,
                 data=result.data,
+                objects=result.objects,
                 completion=completion,
                 artifact_name=self._handler.artifact_name,
             )
@@ -248,6 +258,7 @@ class Worker:
         runtime_ms = max(0, round((time.perf_counter() - started_tick) * 1000))
         bucket, prefix = parse_s3_uri(request.payload.output_prefix)
         asset_uri = f"s3://{bucket}/{prefix.rstrip('/')}/{self._handler.artifact_name}"
+        payloads = result.payloads()
         return JobCompleted(
             event_id=result_event_id(request.job_id, "job.completed"),
             occurred_at=finished_at,
@@ -263,8 +274,8 @@ class Worker:
                     CompletedAsset(
                         asset_type=self._handler.asset_type,
                         uri=asset_uri,
-                        sha256=hashlib.sha256(result.data).hexdigest(),
-                        size_bytes=len(result.data),
+                        sha256=artifact_sha256(payloads),
+                        size_bytes=sum(len(value) for value in payloads.values()),
                         media_type=self._handler.media_type,
                     )
                 ],

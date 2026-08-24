@@ -3,7 +3,9 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import urlparse
 from uuid import UUID, uuid4
@@ -61,34 +63,49 @@ class AtomicObjectPublisher:
         *,
         output_prefix: str,
         job_id: UUID,
-        data: bytes,
+        data: bytes | None,
         completion: JobCompleted,
         artifact_name: str = "forecast.zarr",
+        objects: Mapping[str, bytes] | None = None,
     ) -> PublishedObject:
         bucket, prefix = parse_s3_uri(output_prefix)
         prefix = prefix.rstrip("/")
-        temporary_key = f"_temporary/{job_id}/{uuid4()}/result.json"
-        data_key = f"{prefix}/{artifact_name}/result.json"
+        payloads = normalize_artifact_objects(data=data, objects=objects)
+        temporary_root = f"_temporary/{job_id}/{uuid4()}"
+        temporary_keys: list[str] = []
         marker_key = self._marker_key(prefix, artifact_name)
-        digest = hashlib.sha256(data).hexdigest()
+        digest = artifact_sha256(payloads)
+        total_size = sum(len(value) for value in payloads.values())
+        manifest: list[dict[str, Any]] = []
 
         try:
-            self._put_bytes(bucket, temporary_key, data, "application/json")
-            temporary = self._client.stat_object(bucket, temporary_key)
-            if temporary.size != len(data):
-                raise RuntimeError("temporary object size validation failed")
+            for relative_key, value in payloads.items():
+                temporary_key = f"{temporary_root}/{relative_key}"
+                data_key = f"{prefix}/{artifact_name}/{relative_key}"
+                temporary_keys.append(temporary_key)
+                self._put_bytes(bucket, temporary_key, value, _content_type(relative_key))
+                temporary = self._client.stat_object(bucket, temporary_key)
+                if temporary.size != len(value):
+                    raise RuntimeError("temporary object size validation failed")
 
-            self._client.copy_object(bucket, data_key, CopySource(bucket, temporary_key))
-            published = self._client.stat_object(bucket, data_key)
-            if published.size != len(data):
-                raise RuntimeError("published object size validation failed")
+                self._client.copy_object(bucket, data_key, CopySource(bucket, temporary_key))
+                published = self._client.stat_object(bucket, data_key)
+                if published.size != len(value):
+                    raise RuntimeError("published object size validation failed")
+                manifest.append(
+                    {
+                        "key": relative_key,
+                        "sha256": hashlib.sha256(value).hexdigest(),
+                        "size_bytes": len(value),
+                    }
+                )
 
             marker = json.dumps(
                 {
                     "schema_version": "1.0",
-                    "data_key": data_key,
                     "sha256": digest,
-                    "size_bytes": len(data),
+                    "size_bytes": total_size,
+                    "objects": manifest,
                     "completion_event": completion.model_dump(mode="json"),
                 },
                 separators=(",", ":"),
@@ -96,15 +113,16 @@ class AtomicObjectPublisher:
             ).encode()
             self._put_bytes(bucket, marker_key, marker, "application/json")
         finally:
-            try:
-                self._client.remove_object(bucket, temporary_key)
-            except S3Error:
-                pass
+            for temporary_key in temporary_keys:
+                try:
+                    self._client.remove_object(bucket, temporary_key)
+                except S3Error:
+                    pass
 
         return PublishedObject(
             asset_uri=f"s3://{bucket}/{prefix}/{artifact_name}",
             sha256=digest,
-            size_bytes=len(data),
+            size_bytes=total_size,
             marker_key=marker_key,
         )
 
@@ -123,3 +141,47 @@ class AtomicObjectPublisher:
         if not artifact_name or artifact_name.startswith("_temporary") or ".." in artifact_name:
             raise ValueError("artifact_name must be a safe relative object name")
         return f"{prefix.rstrip('/')}/{artifact_name}/_SUCCESS.json"
+
+
+def normalize_artifact_objects(
+    *,
+    data: bytes | None,
+    objects: Mapping[str, bytes] | None,
+) -> dict[str, bytes]:
+    if (data is None) == (objects is None):
+        raise ValueError("exactly one of data or objects is required")
+    payloads = {"result.json": data} if data is not None else dict(objects or {})
+    if not payloads:
+        raise ValueError("artifact object bundle must not be empty")
+    normalized: dict[str, bytes] = {}
+    for key, value in payloads.items():
+        path = PurePosixPath(key)
+        if (
+            not key
+            or key in {".", "_SUCCESS.json"}
+            or path.is_absolute()
+            or ".." in path.parts
+            or str(path) != key
+        ):
+            raise ValueError(f"unsafe artifact object key {key!r}")
+        if not isinstance(value, bytes):
+            raise TypeError(f"artifact object {key!r} must contain bytes")
+        normalized[key] = value
+    return dict(sorted(normalized.items()))
+
+
+def artifact_sha256(objects: Mapping[str, bytes]) -> str:
+    digest = hashlib.sha256()
+    for key, value in sorted(objects.items()):
+        key_bytes = key.encode()
+        digest.update(len(key_bytes).to_bytes(4, "big"))
+        digest.update(key_bytes)
+        digest.update(len(value).to_bytes(8, "big"))
+        digest.update(hashlib.sha256(value).digest())
+    return digest.hexdigest()
+
+
+def _content_type(key: str) -> str:
+    if key.endswith((".json", ".zattrs", ".zarray", ".zgroup")):
+        return "application/json"
+    return "application/octet-stream"

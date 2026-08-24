@@ -6,6 +6,7 @@
   "additionalProperties": false,
   "required": [
     "schema_version",
+    "config_version",
     "radar_id",
     "lifecycle",
     "site",
@@ -18,6 +19,10 @@
   ],
   "properties": {
     "schema_version": { "const": "1.0" },
+    "config_version": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+    },
     "radar_id": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9_-]{2,63}$"
@@ -59,6 +64,7 @@
           "scan": { "$ref": "#/$defs/readyScan" },
           "fields": {
             "minItems": 1,
+            "items": { "$ref": "#/$defs/readyFieldMapping" },
             "contains": {
               "type": "object",
               "required": ["canonical_name"],
@@ -76,11 +82,12 @@
     "site": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["longitude_deg", "latitude_deg", "altitude_m", "altitude_datum"],
+      "required": ["longitude_deg", "latitude_deg", "altitude_m", "antenna_altitude_m", "altitude_datum"],
       "properties": {
         "longitude_deg": { "type": ["number", "null"], "minimum": -180, "maximum": 180 },
         "latitude_deg": { "type": ["number", "null"], "minimum": -90, "maximum": 90 },
         "altitude_m": { "type": ["number", "null"] },
+        "antenna_altitude_m": { "type": ["number", "null"] },
         "altitude_datum": { "type": ["string", "null"], "minLength": 1 }
       }
     },
@@ -92,6 +99,7 @@
             "longitude_deg": { "type": "number" },
             "latitude_deg": { "type": "number" },
             "altitude_m": { "type": "number" },
+            "antenna_altitude_m": { "type": "number" },
             "altitude_datum": { "type": "string", "minLength": 1 }
           }
         }
@@ -104,7 +112,9 @@
         "manufacturer",
         "model",
         "radar_band",
+        "frequency_mhz",
         "beam_width_deg",
+        "beam_width_vertical_deg",
         "dual_pol_available",
         "nyquist_velocity_mps",
         "calibration_offsets"
@@ -113,7 +123,9 @@
         "manufacturer": { "type": ["string", "null"], "minLength": 1 },
         "model": { "type": ["string", "null"], "minLength": 1 },
         "radar_band": { "type": ["string", "null"], "enum": ["S", "C", "X", null] },
+        "frequency_mhz": { "type": ["number", "null"], "exclusiveMinimum": 0 },
         "beam_width_deg": { "type": ["number", "null"], "exclusiveMinimum": 0, "maximum": 10 },
+        "beam_width_vertical_deg": { "type": ["number", "null"], "exclusiveMinimum": 0, "maximum": 10 },
         "dual_pol_available": { "type": ["boolean", "null"] },
         "nyquist_velocity_mps": { "type": ["number", "null"], "exclusiveMinimum": 0 },
         "calibration_offsets": {
@@ -132,9 +144,12 @@
         { "$ref": "#/$defs/hardware" },
         {
           "properties": {
+            "manufacturer": { "type": "string", "minLength": 1 },
             "model": { "type": "string", "minLength": 1 },
             "radar_band": { "type": "string", "enum": ["S", "C", "X"] },
+            "frequency_mhz": { "type": "number", "exclusiveMinimum": 0 },
             "beam_width_deg": { "type": "number", "exclusiveMinimum": 0, "maximum": 10 },
+            "beam_width_vertical_deg": { "type": "number", "exclusiveMinimum": 0, "maximum": 10 },
             "dual_pol_available": { "type": "boolean" }
           }
         }
@@ -147,6 +162,7 @@
         "strategy_name",
         "expected_update_seconds",
         "expected_elevations_deg",
+        "expected_cut_elevations_deg",
         "azimuth_resolution_deg",
         "range_gate_m",
         "max_range_m"
@@ -158,6 +174,11 @@
           "type": ["array", "null"],
           "minItems": 1,
           "uniqueItems": true,
+          "items": { "type": "number", "minimum": -1, "maximum": 90 }
+        },
+        "expected_cut_elevations_deg": {
+          "type": ["array", "null"],
+          "minItems": 1,
           "items": { "type": "number", "minimum": -1, "maximum": 90 }
         },
         "azimuth_resolution_deg": { "type": ["number", "null"], "exclusiveMinimum": 0, "maximum": 10 },
@@ -173,6 +194,7 @@
             "strategy_name": { "type": "string", "minLength": 1 },
             "expected_update_seconds": { "type": "integer", "minimum": 1 },
             "expected_elevations_deg": { "type": "array", "minItems": 1 },
+            "expected_cut_elevations_deg": { "type": "array", "minItems": 1 },
             "azimuth_resolution_deg": { "type": "number", "exclusiveMinimum": 0 },
             "range_gate_m": { "type": "number", "exclusiveMinimum": 0 },
             "max_range_m": { "type": "number", "exclusiveMinimum": 0 }
@@ -183,7 +205,7 @@
     "fieldMapping": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["canonical_name", "source_name", "source_unit", "canonical_unit", "missing_value"],
+      "required": ["canonical_name", "source_name", "source_unit", "canonical_unit", "missing_value", "scale_factor", "add_offset"],
       "properties": {
         "canonical_name": {
           "type": "string",
@@ -196,6 +218,17 @@
         "scale_factor": { "type": ["number", "null"] },
         "add_offset": { "type": ["number", "null"] }
       }
+    },
+    "readyFieldMapping": {
+      "allOf": [
+        { "$ref": "#/$defs/fieldMapping" },
+        {
+          "properties": {
+            "scale_factor": { "type": "number" },
+            "add_offset": { "type": "number" }
+          }
+        }
+      ]
     },
     "source": {
       "type": "object",
@@ -218,6 +251,7 @@
         {
           "properties": {
             "format": { "type": "string", "minLength": 1 },
+            "format_version": { "type": "string", "minLength": 1 },
             "delivery": {
               "type": "string",
               "enum": ["shared_directory", "http_callback", "object_store", "manual"]
