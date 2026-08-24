@@ -122,9 +122,7 @@ claim radar decode, QC, QPE, pySTEPS, or real-data readiness.
 - Web: `http://private-test-host:4173`
 - API: `http://private-test-host:8080/api/v1/system/status`
 - Deployed runtime version: `rp005-v1.1-912c04e-20260824`
-- Previous remote contents: `<remote-legacy-archive>`
-- Previous RP-004 source: `/home/<ssh-user>/hwapp/fonwee/meteo-ai/legacy/rp004-20260824-before-v1.1`
-- Pre-v1.1 database backup: `/home/<ssh-user>/hwapp/fonwee/meteo-ai/legacy/db-backups/rainpulse-before-v1.1-912c04e-20260824.dump`
+- One-time legacy archive: `<remote-legacy-archive>`
 
 The target has 24 logical CPUs, about 156 GiB RAM, an RTX 6000D GPU, NVIDIA
 container runtime, and about 405 GB free disk at the last audit. Phase 1 radar
@@ -143,6 +141,13 @@ were deployed, migration `0005_radar_workflows.sql` was applied to the retained
 PostgreSQL volume, and infrastructure, control-plane, partial-radar degradation,
 Worker idempotency/failure, API and Web smoke tests all passed. The API and Web
 are reachable from the local network at the URLs above.
+
+The local repository is the code source of truth. Deployment and integration
+debugging run directly in the server's `rainpulse-nowcast` directory through
+the formal launch period. Do not create a source or database backup for every
+test release; keep only the one-time legacy archive above unless a backup is
+explicitly requested. Persistent PostgreSQL, NATS and MinIO volumes remain part
+of the active test environment and must not be deleted during ordinary updates.
 
 ## Next acceptance target
 

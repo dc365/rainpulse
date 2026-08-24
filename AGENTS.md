@@ -55,8 +55,14 @@
 - Use the installed SSH public key (`ssh <ssh-user>@<private-test-host>`) for routine
   access; do not persist the account password locally.
 - Remote project directory: `<remote-project-dir>`.
-- The remote directory is a test/deployment target, not the source of truth. Develop and verify locally, then deploy explicit artifacts or revisions.
-- Preserve any pre-existing remote contents under a sibling `legacy/` archive before deploying RainPulse.
+- The local repository is the source of truth for code changes. Use the remote
+  directory for deployment, integration debugging, Compose services and
+  hardware-dependent verification.
+- The one-time pre-RainPulse archive is
+  `<remote-legacy-archive>`. Keep that
+  archive, but update `rainpulse-nowcast` in place for subsequent test releases;
+  do not create per-release source copies or database dumps unless explicitly
+  requested.
 - Never store SSH passwords or other secrets in this repository, logs, generated memory, Compose files, or committed environment files.
 - Inspect GPU drivers, CUDA/container runtime, disk capacity, ports, and existing services before selecting deployment settings.
 
