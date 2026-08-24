@@ -580,4 +580,6 @@ def _filename_time(filename: str) -> datetime | None:
 
 
 def _decode_noise(value: int) -> float:
-    return np.nan if value == -32768 else value / 100.0
+    # RSTM radial headers encode the magnitude of negative dBm in centi-dBm.
+    # Z9598 uses both zero and the minimum signed short for unavailable estimates.
+    return np.nan if value in {0, -32768} else -abs(value) / 100.0

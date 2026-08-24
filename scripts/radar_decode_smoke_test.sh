@@ -50,9 +50,12 @@ assert health["health"] == "DEGRADED", health
 assert health["scan_completeness"] >= 0.99, health
 assert health["expected_sweep_count"] == health["actual_sweep_count"] == 11, health
 assert health["missing_sweep_numbers"] == [], health
-assert health["channel_status"] == "UNKNOWN", health
-assert health["noise_level"]["sample_count"] == 0, health
-assert {"CONFIG_NOT_READY", "SOURCE_TIME_MISMATCH", "NOISE_TELEMETRY_MISSING"}.issubset(health["health_reasons"]), health
+assert health["channel_status"] == "OK", health
+assert health["noise_level"]["sample_count"] > 0, health
+assert -120 <= health["noise_level"]["horizontal_dbm"] <= -70, health
+assert -120 <= health["noise_level"]["vertical_dbm"] <= -70, health
+assert {"CONFIG_NOT_READY", "SOURCE_TIME_MISMATCH"}.issubset(health["health_reasons"]), health
+assert "NOISE_OUT_OF_RANGE" not in health["health_reasons"], health
 ' <<<"$summary"
 
 printf 'RP-007 radar integrity smoke passed: Z9598 RSTM 2.0 -> validated health-aware sweep-group Zarr\n'

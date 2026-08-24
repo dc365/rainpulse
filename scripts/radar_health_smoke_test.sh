@@ -74,11 +74,12 @@ assert health["expected_sweep_count"] == health["actual_sweep_count"] == 11, hea
 assert health["actual_radial_count"] == 3994, health
 assert health["missing_sweep_numbers"] == [], health
 assert health["scan_completeness"] >= 0.99, health
-assert health["channel_status"] == "UNKNOWN", health
-assert health["noise_level"]["horizontal_dbm"] is None, health
-assert health["noise_level"]["vertical_dbm"] is None, health
-assert health["noise_level"]["sample_count"] == 0, health
-assert {"CONFIG_NOT_READY", "SOURCE_TIME_MISMATCH", "NOISE_TELEMETRY_MISSING"}.issubset(health["health_reasons"]), health
+assert health["channel_status"] == "OK", health
+assert -120 <= health["noise_level"]["horizontal_dbm"] <= -70, health
+assert -120 <= health["noise_level"]["vertical_dbm"] <= -70, health
+assert health["noise_level"]["sample_count"] > 0, health
+assert {"CONFIG_NOT_READY", "SOURCE_TIME_MISMATCH"}.issubset(health["health_reasons"]), health
+assert "NOISE_OUT_OF_RANGE" not in health["health_reasons"], health
 assert {item["field"] for item in health["field_availability"]} == {"DBZH", "PHIDP", "RHOHV", "SNR", "SW", "VR", "ZDR"}, health
 assert any(item["radar_id"] == "z9598" and item["health"] == "DEGRADED" for item in statuses), statuses
 ' "$status" "$statuses"
@@ -94,7 +95,7 @@ import sys
 value = json.load(sys.stdin)
 assert value["radar_id"] == "z9598", value
 assert value["health"] == "DEGRADED", value
-assert value["channel_status"] == "UNKNOWN", value
+assert value["channel_status"] == "OK", value
 ' <<<"$object_health"
 
 "${compose[@]}" run --rm --no-deps orchestrator replay "$job_id" >/dev/null

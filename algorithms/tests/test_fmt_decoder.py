@@ -52,7 +52,12 @@ def make_config(tmp_path: Path) -> Path:
     return path
 
 
-def make_fmt_fixture(tmp_path: Path, *, magic: int = MAGIC_NUMBER) -> Path:
+def make_fmt_fixture(
+    tmp_path: Path,
+    *,
+    magic: int = MAGIC_NUMBER,
+    noise: tuple[int, int] = (-32768, -32768),
+) -> Path:
     start = int(datetime(2026, 6, 15, 9, 4, 25, tzinfo=UTC).timestamp())
     payload = bytearray()
     payload.extend(GENERIC_HEADER.pack(magic, 2, 0, 1, -2147483648, bytes(16)))
@@ -137,8 +142,8 @@ def make_fmt_fixture(tmp_path: Path, *, magic: int = MAGIC_NUMBER) -> Path:
                 data_length,
                 1,
                 0,
-                -32768,
-                -32768,
+                noise[0],
+                noise[1],
                 b"\0",
                 bytes(13),
             )
@@ -177,6 +182,16 @@ def test_fmt_decoder_rejects_invalid_magic(tmp_path: Path) -> None:
 
     with pytest.raises(DecodeError, match="magic"):
         decode_fmt_volume(source, config)
+
+
+def test_fmt_decoder_decodes_noise_magnitude_and_missing_codes(tmp_path: Path) -> None:
+    config = load_radar_config(make_config(tmp_path))
+    source = make_fmt_fixture(tmp_path, noise=(8717, 0))
+
+    volume = decode_fmt_volume(source, config)
+
+    assert volume.sweeps[0].horizontal_noise_dbm[0] == pytest.approx(-87.17)
+    assert np.isnan(volume.sweeps[0].vertical_noise_dbm).all()
 
 
 def test_normalized_zarr_round_trip(tmp_path: Path) -> None:
