@@ -36,7 +36,11 @@ while true; do
   scan=$(curl --fail --silent --show-error "$api_url/api/v1/radar-scans/$scan_id" 2>/dev/null || true)
   if [[ -n "$scan" ]] && python3 -c '
 import json,sys
-raise SystemExit(0 if json.load(sys.stdin).get("status") in {"NORMALIZED", "QC_RUNNING", "QC_READY"} else 1)
+scan=json.load(sys.stdin)
+ready = scan.get("status") in {"NORMALIZED", "QC_RUNNING", "QC_READY"} or (
+    scan.get("status") == "FAILED" and bool(scan.get("normalized_uri"))
+)
+raise SystemExit(0 if ready else 1)
 ' <<<"$scan"; then
     break
   fi

@@ -174,17 +174,21 @@ func (store *Store) CreateRadarQCBundle(ctx context.Context, bundle workflow.Rad
 
 	var scanID uuid.UUID
 	var status workflow.RadarScanStatus
+	var normalizedURI string
 	if err = tx.QueryRow(ctx, `
-SELECT scan_id, status FROM radar_scan_runs
-WHERE run_id = $1 FOR UPDATE`, bundle.Job.RunID).Scan(&scanID, &status); err != nil {
+SELECT scan_id, status, COALESCE(normalized_uri, '') FROM radar_scan_runs
+WHERE run_id = $1 FOR UPDATE`, bundle.Job.RunID).Scan(&scanID, &status, &normalizedURI); err != nil {
 		return fmt.Errorf("lock radar scan for QC: %w", err)
 	}
 	if scanID != bundle.ScanID {
 		return fmt.Errorf("radar QC scan identity differs from its run")
 	}
 	if status != workflow.RadarScanNormalized && status != workflow.RadarScanQCRunning &&
-		status != workflow.RadarScanQCReady {
+		status != workflow.RadarScanQCReady && status != workflow.RadarScanFailed {
 		return fmt.Errorf("radar scan status %s cannot create a QC job", status)
+	}
+	if normalizedURI == "" {
+		return fmt.Errorf("radar scan %s has no normalized artifact for QC", bundle.ScanID)
 	}
 	if _, err = tx.Exec(ctx, `
 INSERT INTO config_versions (config_version, sha256, config, description, created_at)
@@ -227,7 +231,7 @@ ON CONFLICT (event_id) DO NOTHING`,
 	}
 	_, err = tx.Exec(ctx, `
 UPDATE radar_scan_runs
-SET status = CASE WHEN status = 'NORMALIZED' THEN 'QC_RUNNING' ELSE status END,
+SET status = CASE WHEN status IN ('NORMALIZED', 'FAILED') THEN 'QC_RUNNING' ELSE status END,
     updated_at = CURRENT_TIMESTAMP
 WHERE run_id = $1`, bundle.Job.RunID)
 	if err != nil {

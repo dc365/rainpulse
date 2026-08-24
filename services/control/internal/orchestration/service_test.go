@@ -155,6 +155,12 @@ func TestCreateRadarQCUsesNormalizedInputAndStableIdentity(t *testing.T) {
 	if _, err := service.CreateRadarQC(context.Background(), input); err == nil {
 		t.Fatal("unavailable radar health must not enter QC")
 	}
+
+	input.Health = workflow.RadarHealthDegraded
+	input.CurrentStatus = workflow.RadarScanFailed
+	if _, err := service.CreateRadarQC(context.Background(), input); err != nil {
+		t.Fatalf("failed QC scan with normalized input must be retryable: %v", err)
+	}
 }
 
 func TestDispatchOnceMarksPublishedOnlyAfterPublish(t *testing.T) {
