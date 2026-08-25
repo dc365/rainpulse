@@ -6,7 +6,7 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
 required_files=(
   "configs/schemas/radar-grid-profile.schema.json"
-  "configs/gridding/rp009-hybrid-v1.yaml"
+  "configs/gridding/rp009-hybrid-v1.1.yaml"
   "algorithms/rainpulse_algo/radar/blockage.py"
   "algorithms/rainpulse_algo/radar/dem.py"
   "algorithms/rainpulse_algo/radar/hybrid.py"

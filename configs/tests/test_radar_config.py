@@ -258,11 +258,12 @@ def test_rp009_hybrid_profile_is_valid_and_explicitly_engineering_only() -> None
         (CONFIG_ROOT / "schemas" / "radar-grid-profile.schema.json").read_text()
     )
     profile = yaml.safe_load(
-        (CONFIG_ROOT / "gridding" / "rp009-hybrid-v1.yaml").read_text()
+        (CONFIG_ROOT / "gridding" / "rp009-hybrid-v1.1.yaml").read_text()
     )
 
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(profile)
+    assert profile["profile_version"] == "rp009-hybrid-v1.1"
     assert profile["algorithm_version"] == "hybrid-scan-1.0.1"
     assert profile["grid_id"] == "fuzhou_118_123_25_27_0p01deg_v1"
     assert profile["dem"]["asset_version"] == "copernicus-dem-glo30-2022-v1"

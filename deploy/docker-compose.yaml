@@ -287,7 +287,7 @@ services:
       RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
       RAINPULSE_WORKER_ID: rp009-hybrid-grid
       RAINPULSE_WORKER_PROFILE: radar-grid-hybrid
-      RAINPULSE_RADAR_GRID_CONFIG: /opt/rainpulse/configs/gridding/rp009-hybrid-v1.yaml
+      RAINPULSE_RADAR_GRID_CONFIG: /opt/rainpulse/configs/gridding/rp009-hybrid-v1.1.yaml
       RAINPULSE_GRID_CONFIG: /opt/rainpulse/configs/grids/fuzhou-0p01deg-v1.yaml
       RAINPULSE_ANCILLARY_CONFIG: /opt/rainpulse/configs/ancillary/fujian-taiwan-v1.yaml
       RAINPULSE_ANCILLARY_ROOT: /opt/rainpulse/ancillary

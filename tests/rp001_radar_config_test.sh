@@ -14,6 +14,7 @@ required_files=(
   "configs/grids/fuzhou-0p01deg-v1.yaml"
   "configs/ancillary/fujian-taiwan-v1.yaml"
   "configs/gridding/rp009-hybrid-v1.yaml"
+  "configs/gridding/rp009-hybrid-v1.1.yaml"
   "configs/qc/flag-definitions.yaml"
   "configs/tests/test_radar_config.py"
 )

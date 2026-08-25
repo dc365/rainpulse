@@ -13,7 +13,7 @@ service or worker code.
   `ancillary/fujian-taiwan-v1.yaml` freeze DEM/coastline source provenance for
   `114–127°E`, `21–29°N`.
 - `schemas/radar-grid-profile.schema.json` and
-  `gridding/rp009-hybrid-v1.yaml` freeze beam geometry, DEM blockage, direct
+  `gridding/rp009-hybrid-v1.1.yaml` freezes beam geometry, DEM blockage, direct
   polar mapping and lowest-usable-elevation Hybrid Scan rules.
 - `schemas/radar-mosaic-profile.schema.json` and
   `mosaic/rp010-qi-mosaic-v1.yaml` freeze five-minute alignment, QI selection

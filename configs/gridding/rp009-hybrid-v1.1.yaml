@@ -1,6 +1,6 @@
 schema_version: "1.0"
-profile_version: rp009-hybrid-v1
-algorithm_version: hybrid-scan-1.0.0
+profile_version: rp009-hybrid-v1.1
+algorithm_version: hybrid-scan-1.0.1
 flag_definition_version: qc-flags-v1
 
 grid_id: fuzhou_118_123_25_27_0p01deg_v1

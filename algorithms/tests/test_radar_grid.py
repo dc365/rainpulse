@@ -28,7 +28,7 @@ from rainpulse_algo.radar.hybrid import RadarGridInputError, build_hybrid_scan
 from .test_fmt_decoder import make_config
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-PROFILE_PATH = REPOSITORY_ROOT / "configs" / "gridding" / "rp009-hybrid-v1.yaml"
+PROFILE_PATH = REPOSITORY_ROOT / "configs" / "gridding" / "rp009-hybrid-v1.1.yaml"
 FLAG_PATH = REPOSITORY_ROOT / "configs" / "qc" / "flag-definitions.yaml"
 
 
