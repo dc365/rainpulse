@@ -1,0 +1,36 @@
+CREATE TABLE radar_grid_metrics (
+    scan_id UUID PRIMARY KEY REFERENCES radar_scans(scan_id) ON DELETE RESTRICT,
+    radar_id TEXT NOT NULL REFERENCES radars(radar_id) ON DELETE RESTRICT,
+    grid_id TEXT NOT NULL,
+    grid_config_version TEXT NOT NULL,
+    profile_version TEXT NOT NULL,
+    algorithm_version TEXT NOT NULL,
+    dem_asset_version TEXT NOT NULL,
+    vertical_datum_status TEXT NOT NULL,
+    operational_eligible BOOLEAN NOT NULL,
+    operational_reasons TEXT[] NOT NULL,
+    grid_cell_count BIGINT NOT NULL,
+    valid_cell_count BIGINT NOT NULL,
+    missing_cell_count BIGINT NOT NULL,
+    low_quality_cell_count BIGINT NOT NULL,
+    valid_coverage_ratio DOUBLE PRECISION NOT NULL,
+    mean_quality_index DOUBLE PRECISION NOT NULL,
+    beam_blocked_missing_cell_count BIGINT NOT NULL,
+    selection_counts JSONB NOT NULL,
+    diagnostics JSONB NOT NULL,
+    measured_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK (vertical_datum_status IN ('verified_egm2008', 'unverified_engineering')),
+    CHECK (grid_cell_count > 0),
+    CHECK (valid_cell_count >= 0),
+    CHECK (missing_cell_count >= 0),
+    CHECK (valid_cell_count + missing_cell_count = grid_cell_count),
+    CHECK (low_quality_cell_count BETWEEN 0 AND valid_cell_count),
+    CHECK (valid_coverage_ratio BETWEEN 0 AND 1),
+    CHECK (mean_quality_index BETWEEN 0 AND 1),
+    CHECK (beam_blocked_missing_cell_count >= 0),
+    CHECK (operational_eligible = FALSE OR cardinality(operational_reasons) = 0)
+);
+
+CREATE INDEX radar_grid_metrics_radar_time_idx
+    ON radar_grid_metrics (radar_id, measured_at DESC);

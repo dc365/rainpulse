@@ -62,6 +62,7 @@ class RadarDecoderConfig:
     scan: dict[str, Any]
     fields: tuple[FieldMapping, ...]
     source: dict[str, Any]
+    ancillary: dict[str, Any]
     known_issues: tuple[str, ...]
 
     @property
@@ -129,6 +130,7 @@ def load_radar_config(path: str | Path) -> RadarDecoderConfig:
         scan=_mapping(value["scan"], "scan"),
         fields=fields,
         source=source,
+        ancillary=_mapping(value.get("ancillary", {}), "ancillary"),
         known_issues=tuple(str(item) for item in value.get("known_issues", [])),
     )
 

@@ -4,6 +4,7 @@ import json
 from collections.abc import Callable
 from typing import Any
 
+from rainpulse_algo.radar.grid_worker import execute_radar_grid
 from rainpulse_algo.radar.qc_worker import execute_basic_qc
 from rainpulse_algo.radar.worker import execute_fmt_decode
 
@@ -84,12 +85,22 @@ HANDLERS = {
     ),
     "radar-grid-synthetic": TaskHandler(
         profile="radar-grid-synthetic",
-        subject="rainpulse.jobs.requested.radar_grid",
+        subject="rainpulse.jobs.requested.radar_grid_synthetic",
         consumer="rainpulse-radar-grid-synthetic",
         request_model=RadarGridRequested,
         executor=_synthetic_executor("radar_grid"),
         asset_type="radar_grid",
         artifact_name="grid.zarr",
+    ),
+    "radar-grid-hybrid": TaskHandler(
+        profile="radar-grid-hybrid",
+        subject="rainpulse.jobs.requested.radar_grid",
+        consumer="rainpulse-radar-grid-hybrid-scan-1-0-0",
+        request_model=RadarGridRequested,
+        executor=execute_radar_grid,
+        asset_type="radar_grid",
+        artifact_name="grid.zarr",
+        ack_wait_seconds=900,
     ),
     "mosaic-qpe-synthetic": TaskHandler(
         profile="mosaic-qpe-synthetic",

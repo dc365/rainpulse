@@ -166,6 +166,63 @@ func TestCreateRadarQCUsesNormalizedInputAndStableIdentity(t *testing.T) {
 	}
 }
 
+func TestCreateRadarGridUsesQCInputAndVersionIsolatedOutput(t *testing.T) {
+	repository := &fakeRepository{}
+	now := time.Date(2026, 8, 25, 6, 0, 0, 0, time.UTC)
+	service := NewService(repository, Options{Now: func() time.Time { return now }})
+	input := RadarGridInput{
+		ScanID:             uuid.MustParse("10000000-0000-4000-8000-000000000004"),
+		RunID:              uuid.MustParse("10000000-0000-4000-8000-000000000002"),
+		RadarID:            "z9598",
+		QCURI:              "s3://rainpulse/radar/qc/z9598/scan/rp008-basic-1.0.4/volume.zarr",
+		CurrentStatus:      workflow.RadarScanQCReady,
+		GridID:             "fuzhou_118_123_25_27_0p01deg_v1",
+		GridConfigVersion:  "fuzhou-grid-0p01deg-v1",
+		GridProfileVersion: "rp009-hybrid-v1",
+		HybridScanVersion:  "hybrid-scan-1.0.0",
+		GridConfig:         json.RawMessage(`{"profile_version":"rp009-hybrid-v1"}`),
+		GridConfigSHA256:   "63266c7c72321262a01b945281060abd84153a8f3ad64a95c5b73b9fd510f678",
+	}
+
+	job, err := service.CreateRadarGrid(context.Background(), input)
+	if err != nil {
+		t.Fatalf("CreateRadarGrid() error = %v", err)
+	}
+	first := repository.radarGrid
+	if first.Outbox.Subject != RadarGridRequestedSubject ||
+		first.Outbox.EventType != RadarGridRequestedEventType {
+		t.Fatalf("unexpected radar grid worker route: %#v", first.Outbox)
+	}
+	if job.JobType != RadarGridJobType || job.ConfigVersion != input.GridProfileVersion {
+		t.Fatalf("unexpected radar grid job: %#v", job)
+	}
+	var requested RadarGridRequested
+	if err := json.Unmarshal(first.Outbox.Payload, &requested); err != nil {
+		t.Fatalf("decode radar grid request: %v", err)
+	}
+	if requested.Payload.ScanID != input.ScanID || requested.Payload.InputURI != input.QCURI ||
+		requested.Payload.GridID != input.GridID {
+		t.Fatalf("unexpected radar grid request: %#v", requested)
+	}
+	wantPrefix := "s3://rainpulse/radar/grid/z9598/" + input.ScanID.String() +
+		"/hybrid-scan-1.0.0/"
+	if requested.Payload.OutputPrefix != wantPrefix {
+		t.Fatalf("radar grid output must be algorithm-version isolated: %q", requested.Payload.OutputPrefix)
+	}
+	second, err := service.CreateRadarGrid(context.Background(), input)
+	if err != nil {
+		t.Fatalf("repeat CreateRadarGrid() error = %v", err)
+	}
+	if second.ID != job.ID || repository.radarGrid.Outbox.ID != first.Outbox.ID {
+		t.Fatal("radar grid workflow identifiers are not deterministic")
+	}
+
+	input.CurrentStatus = workflow.RadarScanNormalized
+	if _, err := service.CreateRadarGrid(context.Background(), input); err == nil {
+		t.Fatal("normalized radar scan must pass QC before gridding")
+	}
+}
+
 func TestDispatchOnceMarksPublishedOnlyAfterPublish(t *testing.T) {
 	event := workflow.OutboxEvent{ID: uuid.New(), Subject: JobRequestedSubject, Payload: json.RawMessage(`{}`)}
 	repository := &fakeRepository{claimed: event}
@@ -274,11 +331,20 @@ type fakeRepository struct {
 	created        workflow.CreateBundle
 	radarDecode    workflow.RadarDecodeBundle
 	radarQC        workflow.RadarQCBundle
+	radarGrid      workflow.RadarGridBundle
 	domain         workflow.DomainSimulation
 	claimed        workflow.OutboxEvent
 	published      uuid.UUID
 	failed         uuid.UUID
 	appliedFailure JobFailed
+}
+
+func (repository *fakeRepository) CreateRadarGridBundle(
+	_ context.Context,
+	bundle workflow.RadarGridBundle,
+) error {
+	repository.radarGrid = bundle
+	return nil
 }
 
 func (repository *fakeRepository) CreateRadarQCBundle(

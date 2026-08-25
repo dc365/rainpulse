@@ -12,6 +12,9 @@ service or worker code.
 - `schemas/ancillary-source.schema.json` and
   `ancillary/fujian-taiwan-v1.yaml` freeze DEM/coastline source provenance for
   `114–127°E`, `21–29°N`.
+- `schemas/radar-grid-profile.schema.json` and
+  `gridding/rp009-hybrid-v1.yaml` freeze beam geometry, DEM blockage, direct
+  polar mapping and lowest-usable-elevation Hybrid Scan rules.
 - `radars/radar-inventory-template.yaml` records unknown values explicitly and
   cannot become operational until it satisfies all `ready` requirements.
 - `qc/flag-definitions.yaml` freezes the uint32 QC flag bit assignments.

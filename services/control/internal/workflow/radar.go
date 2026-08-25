@@ -189,6 +189,38 @@ type RadarQCBundle struct {
 	Outbox       OutboxEvent
 }
 
+type RadarGridBundle struct {
+	ScanID       uuid.UUID
+	Status       RadarScanStatus
+	Config       json.RawMessage
+	ConfigSHA256 string
+	Job          Job
+	Outbox       OutboxEvent
+}
+
+type RadarGridMetrics struct {
+	ScanID                      uuid.UUID         `json:"scan_id"`
+	RadarID                     string            `json:"radar_id"`
+	GridID                      string            `json:"grid_id"`
+	GridConfigVersion           string            `json:"grid_config_version"`
+	ProfileVersion              string            `json:"profile_version"`
+	AlgorithmVersion            string            `json:"algorithm_version"`
+	DEMAssetVersion             string            `json:"dem_asset_version"`
+	VerticalDatumStatus         string            `json:"vertical_datum_status"`
+	OperationalEligible         bool              `json:"operational_eligible"`
+	OperationalReasons          []string          `json:"operational_reasons"`
+	GridCellCount               int64             `json:"grid_cell_count"`
+	ValidCellCount              int64             `json:"valid_cell_count"`
+	MissingCellCount            int64             `json:"missing_cell_count"`
+	LowQualityCellCount         int64             `json:"low_quality_cell_count"`
+	ValidCoverageRatio          float64           `json:"valid_coverage_ratio"`
+	MeanQualityIndex            float64           `json:"mean_quality_index"`
+	BeamBlockedMissingCellCount int64             `json:"beam_blocked_missing_cell_count"`
+	SelectionCounts             map[string]int64  `json:"selection_counts"`
+	SkippedSweeps               map[string]string `json:"skipped_sweeps"`
+	MeasuredAt                  time.Time         `json:"measured_at"`
+}
+
 type RadarQCMetrics struct {
 	ScanID                     uuid.UUID         `json:"scan_id"`
 	RadarID                    string            `json:"radar_id"`

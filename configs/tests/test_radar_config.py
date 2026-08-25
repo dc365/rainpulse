@@ -251,3 +251,25 @@ def test_fujian_taiwan_ancillary_sources_are_valid_and_cover_104_dem_tiles() -> 
         "8dbbe7e071e77e9e75f2d639239099ebca8d5c16d6a07df8169729d49f15cf41"
     )
     assert source["static_clutter"]["status"] == "awaiting_clear_air_samples"
+
+
+def test_rp009_hybrid_profile_is_valid_and_explicitly_engineering_only() -> None:
+    schema = json.loads(
+        (CONFIG_ROOT / "schemas" / "radar-grid-profile.schema.json").read_text()
+    )
+    profile = yaml.safe_load(
+        (CONFIG_ROOT / "gridding" / "rp009-hybrid-v1.yaml").read_text()
+    )
+
+    Draft202012Validator.check_schema(schema)
+    Draft202012Validator(schema).validate(profile)
+    assert profile["algorithm_version"] == "hybrid-scan-1.0.0"
+    assert profile["grid_id"] == "fuzhou_118_123_25_27_0p01deg_v1"
+    assert profile["dem"]["asset_version"] == "copernicus-dem-glo30-2022-v1"
+    assert profile["beam_geometry"]["unverified_vertical_datum_policy"] == (
+        "allow_engineering_only"
+    )
+    assert profile["blockage"]["flag_fraction"] < profile["blockage"][
+        "maximum_usable_fraction"
+    ]
+    assert profile["hybrid_scan"]["selection"] == "lowest_usable_elevation"

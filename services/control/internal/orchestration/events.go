@@ -26,6 +26,9 @@ const (
 	RadarQCRequestedEventType     = "radar.qc.requested.v1"
 	RadarQCRequestedSubject       = "rainpulse.jobs.requested.radar_qc"
 	RadarQCJobType                = "radar.qc"
+	RadarGridRequestedEventType   = "radar.grid.requested.v1"
+	RadarGridRequestedSubject     = "rainpulse.jobs.requested.radar_grid"
+	RadarGridJobType              = "radar.grid"
 	JobCompletedSubject           = "rainpulse.jobs.completed"
 	JobFailedSubject              = "rainpulse.jobs.failed"
 	JobResultsSubject             = "rainpulse.jobs.*"
@@ -103,6 +106,27 @@ type RadarQCRequestedPayload struct {
 	QCProfile             string    `json:"qc_profile"`
 	QCPipelineVersion     string    `json:"qc_pipeline_version"`
 	FlagDefinitionVersion string    `json:"flag_definition_version"`
+}
+
+type RadarGridRequested struct {
+	SchemaVersion string                    `json:"schema_version"`
+	EventID       uuid.UUID                 `json:"event_id"`
+	EventType     string                    `json:"event_type"`
+	OccurredAt    time.Time                 `json:"occurred_at"`
+	RunID         uuid.UUID                 `json:"run_id"`
+	JobID         uuid.UUID                 `json:"job_id"`
+	TraceID       uuid.UUID                 `json:"trace_id"`
+	Payload       RadarGridRequestedPayload `json:"payload"`
+}
+
+type RadarGridRequestedPayload struct {
+	ScanID            uuid.UUID `json:"scan_id"`
+	RadarID           string    `json:"radar_id"`
+	InputURI          string    `json:"input_uri"`
+	OutputPrefix      string    `json:"output_prefix"`
+	GridID            string    `json:"grid_id"`
+	GridConfig        string    `json:"grid_config_version"`
+	HybridScanVersion string    `json:"hybrid_scan_version"`
 }
 
 type JobCompleted struct {

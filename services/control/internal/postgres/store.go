@@ -500,6 +500,8 @@ func applyRadarCompletion(
 		return applyRadarDecodeCompletion(ctx, tx, event)
 	case orchestration.RadarQCJobType:
 		return applyRadarQCCompletion(ctx, tx, event)
+	case orchestration.RadarGridJobType:
+		return applyRadarGridCompletion(ctx, tx, event)
 	default:
 		return fmt.Errorf("%w: unsupported radar job type %q", orchestration.ErrInvalidEvent, jobType)
 	}
@@ -739,6 +741,131 @@ SET status = 'QC_READY', qc_uri = $2, mean_quality_index = $3,
 WHERE run_id = $1`, event.RunID, qcAsset.URI, metrics.MeanQualityIndex, metrics.HealthState)
 	if err != nil {
 		return fmt.Errorf("complete radar QC run: %w", err)
+	}
+	return nil
+}
+
+func applyRadarGridCompletion(
+	ctx context.Context,
+	tx pgx.Tx,
+	event orchestration.JobCompleted,
+) error {
+	var gridAsset *orchestration.JobCompletedAsset
+	for index := range event.Payload.Assets {
+		if event.Payload.Assets[index].AssetType == "radar_grid" {
+			if gridAsset != nil {
+				return fmt.Errorf("%w: multiple radar grid assets", orchestration.ErrInvalidEvent)
+			}
+			gridAsset = &event.Payload.Assets[index]
+		}
+	}
+	if gridAsset == nil {
+		return fmt.Errorf("%w: radar grid asset is required", orchestration.ErrInvalidEvent)
+	}
+	rawGrid, ok := event.Payload.Diagnostics["radar_grid"]
+	if !ok {
+		return fmt.Errorf("%w: radar grid diagnostics are required", orchestration.ErrInvalidEvent)
+	}
+	var metrics workflow.RadarGridMetrics
+	if err := json.Unmarshal(rawGrid, &metrics); err != nil {
+		return fmt.Errorf("%w: decode radar grid diagnostics: %v", orchestration.ErrInvalidEvent, err)
+	}
+	if metrics.RadarID == "" || metrics.GridID == "" || metrics.GridConfigVersion == "" ||
+		metrics.ProfileVersion == "" || metrics.AlgorithmVersion == "" ||
+		metrics.DEMAssetVersion == "" || metrics.VerticalDatumStatus == "" ||
+		metrics.GridCellCount <= 0 || metrics.ValidCellCount < 0 ||
+		metrics.MissingCellCount < 0 || metrics.LowQualityCellCount < 0 ||
+		metrics.ValidCellCount+metrics.MissingCellCount != metrics.GridCellCount ||
+		metrics.LowQualityCellCount > metrics.ValidCellCount ||
+		metrics.ValidCoverageRatio < 0 || metrics.ValidCoverageRatio > 1 ||
+		metrics.MeanQualityIndex < 0 || metrics.MeanQualityIndex > 1 ||
+		metrics.BeamBlockedMissingCellCount < 0 {
+		return fmt.Errorf("%w: invalid radar grid metrics", orchestration.ErrInvalidEvent)
+	}
+	if metrics.OperationalEligible && len(metrics.OperationalReasons) != 0 {
+		return fmt.Errorf("%w: eligible radar grid has operational blockers", orchestration.ErrInvalidEvent)
+	}
+	var scanID uuid.UUID
+	var radarID string
+	var status workflow.RadarScanStatus
+	if err := tx.QueryRow(ctx, `
+SELECT scan_id, radar_id, status FROM radar_scan_runs
+WHERE run_id = $1 FOR UPDATE`, event.RunID).Scan(&scanID, &radarID, &status); err != nil {
+		return fmt.Errorf("lock radar grid completion: %w", err)
+	}
+	if status != workflow.RadarScanGridRunning && status != workflow.RadarScanGridReady {
+		return fmt.Errorf(
+			"%w: radar scan status %q cannot complete gridding",
+			orchestration.ErrInvalidEvent,
+			status,
+		)
+	}
+	if metrics.ScanID != scanID || metrics.RadarID != radarID {
+		return fmt.Errorf("%w: radar grid identity does not match scan", orchestration.ErrInvalidEvent)
+	}
+	metrics.MeasuredAt = event.Payload.FinishedAt
+	selectionCounts, err := json.Marshal(metrics.SelectionCounts)
+	if err != nil {
+		return fmt.Errorf("encode radar grid selection counts: %w", err)
+	}
+	diagnostics, err := json.Marshal(metrics)
+	if err != nil {
+		return fmt.Errorf("encode radar grid diagnostics: %w", err)
+	}
+	_, err = tx.Exec(ctx, `
+INSERT INTO radar_grid_metrics (
+    scan_id, radar_id, grid_id, grid_config_version, profile_version,
+    algorithm_version, dem_asset_version, vertical_datum_status,
+    operational_eligible, operational_reasons, grid_cell_count,
+    valid_cell_count, missing_cell_count, low_quality_cell_count,
+    valid_coverage_ratio, mean_quality_index, beam_blocked_missing_cell_count,
+    selection_counts, diagnostics, measured_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+    $17, $18, $19, $20
+)
+ON CONFLICT (scan_id) DO UPDATE SET
+    grid_id = EXCLUDED.grid_id,
+    grid_config_version = EXCLUDED.grid_config_version,
+    profile_version = EXCLUDED.profile_version,
+    algorithm_version = EXCLUDED.algorithm_version,
+    dem_asset_version = EXCLUDED.dem_asset_version,
+    vertical_datum_status = EXCLUDED.vertical_datum_status,
+    operational_eligible = EXCLUDED.operational_eligible,
+    operational_reasons = EXCLUDED.operational_reasons,
+    grid_cell_count = EXCLUDED.grid_cell_count,
+    valid_cell_count = EXCLUDED.valid_cell_count,
+    missing_cell_count = EXCLUDED.missing_cell_count,
+    low_quality_cell_count = EXCLUDED.low_quality_cell_count,
+    valid_coverage_ratio = EXCLUDED.valid_coverage_ratio,
+    mean_quality_index = EXCLUDED.mean_quality_index,
+    beam_blocked_missing_cell_count = EXCLUDED.beam_blocked_missing_cell_count,
+    selection_counts = EXCLUDED.selection_counts,
+    diagnostics = EXCLUDED.diagnostics,
+    measured_at = EXCLUDED.measured_at`,
+		scanID, radarID, metrics.GridID, metrics.GridConfigVersion,
+		metrics.ProfileVersion, metrics.AlgorithmVersion, metrics.DEMAssetVersion,
+		metrics.VerticalDatumStatus, metrics.OperationalEligible,
+		metrics.OperationalReasons, metrics.GridCellCount, metrics.ValidCellCount,
+		metrics.MissingCellCount, metrics.LowQualityCellCount,
+		metrics.ValidCoverageRatio, metrics.MeanQualityIndex,
+		metrics.BeamBlockedMissingCellCount, selectionCounts, diagnostics,
+		metrics.MeasuredAt)
+	if err != nil {
+		return fmt.Errorf("persist radar grid metrics: %w", err)
+	}
+	_, err = tx.Exec(ctx, `
+UPDATE radar_scan_runs
+SET status = 'RADAR_GRID_READY', grid_uri = $2, mean_quality_index = $3,
+    degraded_reason = CASE
+        WHEN $4 THEN degraded_reason
+        ELSE NULLIF(concat_ws(',', degraded_reason, array_to_string($5::text[], ',')), '')
+    END,
+    updated_at = CURRENT_TIMESTAMP
+WHERE run_id = $1`, event.RunID, gridAsset.URI, metrics.MeanQualityIndex,
+		metrics.OperationalEligible, metrics.OperationalReasons)
+	if err != nil {
+		return fmt.Errorf("complete radar grid run: %w", err)
 	}
 	return nil
 }

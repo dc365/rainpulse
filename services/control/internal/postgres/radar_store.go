@@ -251,6 +251,95 @@ WHERE run_id = $1`, bundle.Job.RunID, createdOutbox)
 	return nil
 }
 
+func (store *Store) CreateRadarGridBundle(ctx context.Context, bundle workflow.RadarGridBundle) error {
+	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin radar grid transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var scanID uuid.UUID
+	var status workflow.RadarScanStatus
+	var qcURI string
+	if err = tx.QueryRow(ctx, `
+SELECT scan_id, status, COALESCE(qc_uri, '') FROM radar_scan_runs
+WHERE run_id = $1 FOR UPDATE`, bundle.Job.RunID).Scan(&scanID, &status, &qcURI); err != nil {
+		return fmt.Errorf("lock radar scan for gridding: %w", err)
+	}
+	if scanID != bundle.ScanID {
+		return fmt.Errorf("radar grid scan identity differs from its run")
+	}
+	if status != workflow.RadarScanQCReady && status != workflow.RadarScanGridRunning &&
+		status != workflow.RadarScanGridReady && status != workflow.RadarScanFailed {
+		return fmt.Errorf("radar scan status %s cannot create a grid job", status)
+	}
+	if qcURI == "" {
+		return fmt.Errorf("radar scan %s has no QC artifact for gridding", bundle.ScanID)
+	}
+	if _, err = tx.Exec(ctx, `
+INSERT INTO config_versions (config_version, sha256, config, description, created_at)
+VALUES ($1, $2, $3, 'Radar grid configuration registered by RP-009 workflow', $4)
+ON CONFLICT (config_version) DO NOTHING`,
+		bundle.Job.ConfigVersion, bundle.ConfigSHA256, bundle.Config, bundle.Job.CreatedAt); err != nil {
+		return fmt.Errorf("insert radar grid config %s: %w", bundle.Job.ConfigVersion, err)
+	}
+	var storedConfigHash string
+	if err = tx.QueryRow(ctx, `SELECT sha256 FROM config_versions WHERE config_version = $1`,
+		bundle.Job.ConfigVersion).Scan(&storedConfigHash); err != nil {
+		return fmt.Errorf("verify radar grid config %s: %w", bundle.Job.ConfigVersion, err)
+	}
+	if storedConfigHash != bundle.ConfigSHA256 {
+		return fmt.Errorf(
+			"radar grid config version %s already has a different SHA-256",
+			bundle.Job.ConfigVersion,
+		)
+	}
+	_, err = tx.Exec(ctx, `
+INSERT INTO jobs (
+    job_id, run_id, trace_id, job_type, model_id, model_version,
+    config_version, status, max_attempts, scheduled_at, created_at, updated_at,
+    request_payload
+) VALUES ($1, $2, $3, $4, NULL, NULL, $5, $6, 3, $7, $7, $7, $8)
+ON CONFLICT (job_id) DO NOTHING`,
+		bundle.Job.ID, bundle.Job.RunID, bundle.Job.TraceID, bundle.Job.JobType,
+		bundle.Job.ConfigVersion, bundle.Job.Status, bundle.Job.CreatedAt,
+		bundle.Job.RequestPayload)
+	if err != nil {
+		return fmt.Errorf("insert radar grid job: %w", err)
+	}
+	outboxResult, err := tx.Exec(ctx, `
+INSERT INTO outbox_events (
+    event_id, aggregate_type, aggregate_id, event_type, event_version,
+    subject, payload, status, available_at, created_at
+) VALUES ($1, 'job', $2, $3, 1, $4, $5, 'pending', $6, $6)
+ON CONFLICT (event_id) DO NOTHING`,
+		bundle.Outbox.ID, bundle.Outbox.AggregateID, bundle.Outbox.EventType,
+		bundle.Outbox.Subject, bundle.Outbox.Payload, bundle.Job.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("insert radar grid outbox event: %w", err)
+	}
+	createdOutbox := outboxResult.RowsAffected() == 1
+	if status == workflow.RadarScanFailed && !createdOutbox {
+		return fmt.Errorf("radar grid retry requires a new Hybrid Scan version after failure")
+	}
+	_, err = tx.Exec(ctx, `
+UPDATE radar_scan_runs
+SET status = CASE
+        WHEN $2 AND status IN ('QC_READY', 'FAILED', 'RADAR_GRID_READY') THEN 'GRID_RUNNING'
+        ELSE status
+    END,
+    degraded_reason = CASE WHEN $2 AND status = 'FAILED' THEN NULL ELSE degraded_reason END,
+    updated_at = CURRENT_TIMESTAMP
+WHERE run_id = $1`, bundle.Job.RunID, createdOutbox)
+	if err != nil {
+		return fmt.Errorf("mark radar scan grid running: %w", err)
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit radar grid transaction: %w", err)
+	}
+	return nil
+}
+
 func (store *Store) CreateDomainSimulation(ctx context.Context, simulation workflow.DomainSimulation) error {
 	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
@@ -563,6 +652,25 @@ SELECT diagnostics FROM radar_qc_metrics WHERE scan_id = $1`, scanID).Scan(&raw)
 	var metrics workflow.RadarQCMetrics
 	if err := json.Unmarshal(raw, &metrics); err != nil {
 		return workflow.RadarQCMetrics{}, fmt.Errorf("decode radar QC metrics: %w", err)
+	}
+	return metrics, nil
+}
+
+func (store *Store) GetRadarGridMetrics(
+	ctx context.Context,
+	scanID uuid.UUID,
+) (workflow.RadarGridMetrics, error) {
+	var raw json.RawMessage
+	if err := store.pool.QueryRow(ctx, `
+SELECT diagnostics FROM radar_grid_metrics WHERE scan_id = $1`, scanID).Scan(&raw); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return workflow.RadarGridMetrics{}, workflow.ErrNotFound
+		}
+		return workflow.RadarGridMetrics{}, fmt.Errorf("get radar grid metrics: %w", err)
+	}
+	var metrics workflow.RadarGridMetrics
+	if err := json.Unmarshal(raw, &metrics); err != nil {
+		return workflow.RadarGridMetrics{}, fmt.Errorf("decode radar grid metrics: %w", err)
 	}
 	return metrics, nil
 }

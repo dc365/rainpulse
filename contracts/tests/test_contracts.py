@@ -61,6 +61,7 @@ def test_openapi_exposes_the_planned_v1_operations() -> None:
         "/radar-scans",
         "/radar-scans/{scan_id}",
         "/radar-scans/{scan_id}/qc-summary",
+        "/radar-scans/{scan_id}/grid-summary",
         "/analysis-cycles",
         "/analysis-cycles/{analysis_id}",
         "/products",
@@ -144,6 +145,18 @@ def test_phase1_grid_contract_is_equal_lat_lon_end_to_end() -> None:
     assert "resolution_m" not in contracts["nowcast-input"]
     for contract in contracts.values():
         assert "Projected cell-centre" not in contract
+
+
+def test_radar_grid_requires_polar_blockage_evidence_and_datum_gate() -> None:
+    contract = (CONTRACTS_ROOT / "data" / "radar-grid.md").read_text()
+
+    assert "contract_version=1.2" in contract
+    assert "`QI_BLOCKAGE`" in contract
+    assert "`QI_BEAM_HEIGHT`" in contract
+    assert "`SOURCE_SWEEP`" in contract
+    assert "per-sweep polar blockage diagnostics" in contract
+    assert "operational_eligible=false" in contract
+    assert "Velocity-only" in contract
 
 
 def test_distribution_contracts_preserve_grid_and_missing_semantics() -> None:

@@ -81,6 +81,15 @@ func main() {
 			slog.Error("create radar QC workflow", "error", err)
 			os.Exit(1)
 		}
+	case "radar-grid":
+		if len(os.Args) != 4 {
+			slog.Error("radar-grid requires a scan UUID and grid profile YAML")
+			os.Exit(2)
+		}
+		if err := radarGrid(ctx, store, service, os.Args[2], os.Args[3]); err != nil {
+			slog.Error("create radar grid workflow", "error", err)
+			os.Exit(1)
+		}
 	case "complete":
 		if len(os.Args) != 3 {
 			slog.Error("complete requires a job UUID")
@@ -119,6 +128,13 @@ type qcConfiguration struct {
 	ProfileVersion        string `yaml:"profile_version"`
 	PipelineVersion       string `yaml:"pipeline_version"`
 	FlagDefinitionVersion string `yaml:"flag_definition_version"`
+}
+
+type gridConfiguration struct {
+	ProfileVersion    string `yaml:"profile_version"`
+	AlgorithmVersion  string `yaml:"algorithm_version"`
+	GridID            string `yaml:"grid_id"`
+	GridConfigVersion string `yaml:"grid_config_version"`
 }
 
 func radarDecode(
@@ -250,6 +266,57 @@ func radarQC(
 		FlagDefinitionVersion: config.FlagDefinitionVersion,
 		QCConfig:              configJSON,
 		QCConfigSHA256:        fmt.Sprintf("%x", configHash),
+	})
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(os.Stdout).Encode(map[string]string{
+		"scan_id": scan.ID.String(), "run_id": scan.RunID.String(), "job_id": job.ID.String(),
+	})
+}
+
+func radarGrid(
+	ctx context.Context,
+	store *postgresstore.Store,
+	service *orchestration.Service,
+	rawScanID string,
+	configPath string,
+) error {
+	scanID, err := uuid.Parse(rawScanID)
+	if err != nil {
+		return fmt.Errorf("parse radar scan UUID: %w", err)
+	}
+	configBytes, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("read radar grid configuration: %w", err)
+	}
+	var config gridConfiguration
+	if err := yaml.Unmarshal(configBytes, &config); err != nil {
+		return fmt.Errorf("decode radar grid configuration: %w", err)
+	}
+	var configValue map[string]any
+	if err := yaml.Unmarshal(configBytes, &configValue); err != nil {
+		return fmt.Errorf("normalize radar grid configuration: %w", err)
+	}
+	configJSON, err := json.Marshal(configValue)
+	if err != nil {
+		return fmt.Errorf("encode radar grid configuration: %w", err)
+	}
+	configHash := sha256.Sum256(configBytes)
+	scan, err := store.GetRadarScan(ctx, scanID)
+	if err != nil {
+		return err
+	}
+	if scan.QCURI == nil {
+		return fmt.Errorf("radar scan has no QC volume")
+	}
+	job, err := service.CreateRadarGrid(ctx, orchestration.RadarGridInput{
+		ScanID: scan.ID, RunID: scan.RunID, RadarID: scan.RadarID,
+		QCURI: *scan.QCURI, CurrentStatus: scan.Status,
+		GridID: config.GridID, GridConfigVersion: config.GridConfigVersion,
+		GridProfileVersion: config.ProfileVersion,
+		HybridScanVersion:  config.AlgorithmVersion,
+		GridConfig:         configJSON, GridConfigSHA256: fmt.Sprintf("%x", configHash),
 	})
 	if err != nil {
 		return err
@@ -429,6 +496,8 @@ func replay(ctx context.Context, store *postgresstore.Store, bus *messaging.JetS
 		subject = orchestration.RadarDecodeRequestedSubject
 	} else if eventType == orchestration.RadarQCRequestedEventType {
 		subject = orchestration.RadarQCRequestedSubject
+	} else if eventType == orchestration.RadarGridRequestedEventType {
+		subject = orchestration.RadarGridRequestedSubject
 	}
 	eventID, err := uuid.Parse(event["event_id"].(string))
 	if err != nil {

@@ -191,6 +191,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/radar-scans/{scan_id}/grid-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the versioned hybrid-scan grid summary for one radar scan */
+        get: operations["getRadarScanGridSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/analysis-cycles": {
         parameters: {
             query?: never;
@@ -581,6 +598,42 @@ export interface components {
             ap_gate_count: number;
             module_statuses: {
                 [key: string]: "applied" | "skipped" | "failed";
+            };
+            /** Format: date-time */
+            measured_at: string;
+        };
+        RadarGridMetrics: {
+            /** Format: uuid */
+            scan_id: string;
+            radar_id: string;
+            grid_id: string;
+            grid_config_version: string;
+            profile_version: string;
+            algorithm_version: string;
+            dem_asset_version: string;
+            /** @enum {string} */
+            vertical_datum_status: "verified_egm2008" | "unverified_engineering";
+            operational_eligible: boolean;
+            operational_reasons: string[];
+            /** Format: int64 */
+            grid_cell_count: number;
+            /** Format: int64 */
+            valid_cell_count: number;
+            /** Format: int64 */
+            missing_cell_count: number;
+            /** Format: int64 */
+            low_quality_cell_count: number;
+            /** Format: float */
+            valid_coverage_ratio: number;
+            /** Format: float */
+            mean_quality_index: number;
+            /** Format: int64 */
+            beam_blocked_missing_cell_count: number;
+            selection_counts: {
+                [key: string]: number;
+            };
+            skipped_sweeps: {
+                [key: string]: string;
             };
             /** Format: date-time */
             measured_at: string;
@@ -1038,6 +1091,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RadarQCMetrics"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getRadarScanGridSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scan_id: components["parameters"]["ScanId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Radar hybrid-scan grid summary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RadarGridMetrics"];
                 };
             };
             404: components["responses"]["NotFound"];

@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/configs/schemas/radar-grid-profile.schema.json",
+  "title": "RainPulse polar blockage and Hybrid Scan profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_version",
+    "algorithm_version",
+    "flag_definition_version",
+    "grid_id",
+    "grid_config_version",
+    "ancillary_config_version",
+    "dem",
+    "beam_geometry",
+    "blockage",
+    "polar_mapping",
+    "hybrid_scan"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "profile_version": { "$ref": "#/$defs/identifier" },
+    "algorithm_version": { "$ref": "#/$defs/identifier" },
+    "flag_definition_version": { "$ref": "#/$defs/identifier" },
+    "grid_id": { "$ref": "#/$defs/identifier" },
+    "grid_config_version": { "$ref": "#/$defs/identifier" },
+    "ancillary_config_version": { "$ref": "#/$defs/identifier" },
+    "dem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asset_version", "horizontal_crs", "vertical_crs", "sampling"],
+      "properties": {
+        "asset_version": { "$ref": "#/$defs/identifier" },
+        "horizontal_crs": { "const": "EPSG:4326" },
+        "vertical_crs": { "const": "EPSG:3855" },
+        "sampling": { "const": "nearest_native_pixel" }
+      }
+    },
+    "beam_geometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "effective_earth_radius_factor",
+        "earth_radius_m",
+        "antenna_altitude_source",
+        "vertical_beam_width_source",
+        "unverified_vertical_datum_policy"
+      ],
+      "properties": {
+        "effective_earth_radius_factor": { "type": "number", "minimum": 1, "maximum": 2 },
+        "earth_radius_m": { "type": "number", "minimum": 6000000, "maximum": 7000000 },
+        "antenna_altitude_source": { "const": "radar_config" },
+        "vertical_beam_width_source": { "const": "radar_config" },
+        "unverified_vertical_datum_policy": {
+          "enum": ["reject", "allow_engineering_only"]
+        }
+      }
+    },
+    "blockage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "cumulative_rule",
+        "flag_fraction",
+        "maximum_usable_fraction"
+      ],
+      "properties": {
+        "method": { "const": "circular_beam_partial_blockage" },
+        "cumulative_rule": { "const": "maximum_along_ray" },
+        "flag_fraction": { "$ref": "#/$defs/probability" },
+        "maximum_usable_fraction": { "$ref": "#/$defs/probability" }
+      }
+    },
+    "polar_mapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "maximum_azimuth_offset_deg", "maximum_range_offset_gate_fraction"],
+      "properties": {
+        "method": { "const": "nearest_polar_gate" },
+        "maximum_azimuth_offset_deg": { "type": "number", "exclusiveMinimum": 0, "maximum": 2 },
+        "maximum_range_offset_gate_fraction": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 }
+      }
+    },
+    "hybrid_scan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selection",
+        "minimum_source_quality_index",
+        "low_quality_threshold",
+        "maximum_beam_height_agl_m",
+        "beam_height_quality_scale_m",
+        "reject_flags"
+      ],
+      "properties": {
+        "selection": { "const": "lowest_usable_elevation" },
+        "minimum_source_quality_index": { "$ref": "#/$defs/probability" },
+        "low_quality_threshold": { "$ref": "#/$defs/probability" },
+        "maximum_beam_height_agl_m": { "type": "number", "exclusiveMinimum": 0 },
+        "beam_height_quality_scale_m": { "type": "number", "exclusiveMinimum": 0 },
+        "reject_flags": {
+          "type": "array",
+          "items": { "enum": ["MISSING", "HARDWARE_ANOMALY"] },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+    },
+    "probability": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    }
+  }
+}

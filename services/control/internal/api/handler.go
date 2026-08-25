@@ -33,6 +33,7 @@ type ObservationStore interface {
 	ListRadarScans(context.Context, int, *string, *workflow.RadarScanStatus) ([]workflow.RadarScan, error)
 	GetRadarScan(context.Context, uuid.UUID) (workflow.RadarScan, error)
 	GetRadarQCMetrics(context.Context, uuid.UUID) (workflow.RadarQCMetrics, error)
+	GetRadarGridMetrics(context.Context, uuid.UUID) (workflow.RadarGridMetrics, error)
 	ListAnalysisCycles(context.Context, int, *workflow.AnalysisStatus) ([]workflow.AnalysisCycle, error)
 	GetAnalysisCycle(context.Context, uuid.UUID) (workflow.AnalysisCycle, error)
 }
@@ -318,6 +319,23 @@ func (service *server) GetRadarScanQCSummary(
 	writeJSON(response, http.StatusOK, toAPIRadarQC(metrics))
 }
 
+func (service *server) GetRadarScanGridSummary(
+	response http.ResponseWriter,
+	request *http.Request,
+	scanID apiv1.ScanId,
+) {
+	if service.observations == nil {
+		writeServiceUnavailable(response)
+		return
+	}
+	metrics, err := service.observations.GetRadarGridMetrics(request.Context(), scanID)
+	if err != nil {
+		writeStoreError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, toAPIRadarGrid(metrics))
+}
+
 func (service *server) ListAnalysisCycles(
 	response http.ResponseWriter,
 	request *http.Request,
@@ -581,6 +599,22 @@ func toAPIRadarQC(metrics workflow.RadarQCMetrics) apiv1.RadarQCMetrics {
 		ApGateCount:                metrics.APGateCount,
 		ModuleStatuses:             statuses,
 		MeasuredAt:                 metrics.MeasuredAt.UTC(),
+	}
+}
+
+func toAPIRadarGrid(metrics workflow.RadarGridMetrics) apiv1.RadarGridMetrics {
+	return apiv1.RadarGridMetrics{
+		ScanId: metrics.ScanID, RadarId: metrics.RadarID, GridId: metrics.GridID,
+		GridConfigVersion: metrics.GridConfigVersion, ProfileVersion: metrics.ProfileVersion,
+		AlgorithmVersion: metrics.AlgorithmVersion, DemAssetVersion: metrics.DEMAssetVersion,
+		VerticalDatumStatus: apiv1.RadarGridMetricsVerticalDatumStatus(metrics.VerticalDatumStatus),
+		OperationalEligible: metrics.OperationalEligible, OperationalReasons: metrics.OperationalReasons,
+		GridCellCount: metrics.GridCellCount, ValidCellCount: metrics.ValidCellCount,
+		MissingCellCount: metrics.MissingCellCount, LowQualityCellCount: metrics.LowQualityCellCount,
+		ValidCoverageRatio: float32(metrics.ValidCoverageRatio), MeanQualityIndex: float32(metrics.MeanQualityIndex),
+		BeamBlockedMissingCellCount: metrics.BeamBlockedMissingCellCount,
+		SelectionCounts:             metrics.SelectionCounts, SkippedSweeps: metrics.SkippedSweeps,
+		MeasuredAt: metrics.MeasuredAt.UTC(),
 	}
 }
 

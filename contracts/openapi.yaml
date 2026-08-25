@@ -195,6 +195,22 @@ paths:
                 $ref: "#/components/schemas/RadarQCMetrics"
         "404":
           $ref: "#/components/responses/NotFound"
+  /radar-scans/{scan_id}/grid-summary:
+    get:
+      operationId: getRadarScanGridSummary
+      tags: [radars]
+      summary: Get the versioned hybrid-scan grid summary for one radar scan
+      parameters:
+        - $ref: "#/components/parameters/ScanId"
+      responses:
+        "200":
+          description: Radar hybrid-scan grid summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RadarGridMetrics"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /analysis-cycles:
     get:
       operationId: listAnalysisCycles
@@ -983,6 +999,98 @@ components:
           additionalProperties:
             type: string
             enum: [applied, skipped, failed]
+        measured_at:
+          type: string
+          format: date-time
+    RadarGridMetrics:
+      type: object
+      additionalProperties: false
+      required:
+        - scan_id
+        - radar_id
+        - grid_id
+        - grid_config_version
+        - profile_version
+        - algorithm_version
+        - dem_asset_version
+        - vertical_datum_status
+        - operational_eligible
+        - operational_reasons
+        - grid_cell_count
+        - valid_cell_count
+        - missing_cell_count
+        - low_quality_cell_count
+        - valid_coverage_ratio
+        - mean_quality_index
+        - beam_blocked_missing_cell_count
+        - selection_counts
+        - skipped_sweeps
+        - measured_at
+      properties:
+        scan_id:
+          type: string
+          format: uuid
+        radar_id:
+          type: string
+        grid_id:
+          type: string
+        grid_config_version:
+          type: string
+        profile_version:
+          type: string
+        algorithm_version:
+          type: string
+        dem_asset_version:
+          type: string
+        vertical_datum_status:
+          type: string
+          enum: [verified_egm2008, unverified_engineering]
+        operational_eligible:
+          type: boolean
+        operational_reasons:
+          type: array
+          items:
+            type: string
+        grid_cell_count:
+          type: integer
+          format: int64
+          minimum: 1
+        valid_cell_count:
+          type: integer
+          format: int64
+          minimum: 0
+        missing_cell_count:
+          type: integer
+          format: int64
+          minimum: 0
+        low_quality_cell_count:
+          type: integer
+          format: int64
+          minimum: 0
+        valid_coverage_ratio:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        mean_quality_index:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        beam_blocked_missing_cell_count:
+          type: integer
+          format: int64
+          minimum: 0
+        selection_counts:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+            minimum: 0
+        skipped_sweeps:
+          type: object
+          additionalProperties:
+            type: string
         measured_at:
           type: string
           format: date-time

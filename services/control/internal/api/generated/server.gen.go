@@ -137,6 +137,24 @@ func (e ProductType) Valid() bool {
 	}
 }
 
+// Defines values for RadarGridMetricsVerticalDatumStatus.
+const (
+	UnverifiedEngineering RadarGridMetricsVerticalDatumStatus = "unverified_engineering"
+	VerifiedEgm2008       RadarGridMetricsVerticalDatumStatus = "verified_egm2008"
+)
+
+// Valid indicates whether the value is a known member of the RadarGridMetricsVerticalDatumStatus enum.
+func (e RadarGridMetricsVerticalDatumStatus) Valid() bool {
+	switch e {
+	case UnverifiedEngineering:
+		return true
+	case VerifiedEgm2008:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RadarHealthMetricsChannelStatus.
 const (
 	RadarHealthMetricsChannelStatusDEGRADED RadarHealthMetricsChannelStatus = "DEGRADED"
@@ -519,6 +537,33 @@ type RadarFieldAvailability struct {
 	Unit                string  `json:"unit"`
 }
 
+// RadarGridMetrics defines model for RadarGridMetrics.
+type RadarGridMetrics struct {
+	AlgorithmVersion            string                              `json:"algorithm_version"`
+	BeamBlockedMissingCellCount int64                               `json:"beam_blocked_missing_cell_count"`
+	DemAssetVersion             string                              `json:"dem_asset_version"`
+	GridCellCount               int64                               `json:"grid_cell_count"`
+	GridConfigVersion           string                              `json:"grid_config_version"`
+	GridId                      string                              `json:"grid_id"`
+	LowQualityCellCount         int64                               `json:"low_quality_cell_count"`
+	MeanQualityIndex            float32                             `json:"mean_quality_index"`
+	MeasuredAt                  time.Time                           `json:"measured_at"`
+	MissingCellCount            int64                               `json:"missing_cell_count"`
+	OperationalEligible         bool                                `json:"operational_eligible"`
+	OperationalReasons          []string                            `json:"operational_reasons"`
+	ProfileVersion              string                              `json:"profile_version"`
+	RadarId                     string                              `json:"radar_id"`
+	ScanId                      openapi_types.UUID                  `json:"scan_id"`
+	SelectionCounts             map[string]int64                    `json:"selection_counts"`
+	SkippedSweeps               map[string]string                   `json:"skipped_sweeps"`
+	ValidCellCount              int64                               `json:"valid_cell_count"`
+	ValidCoverageRatio          float32                             `json:"valid_coverage_ratio"`
+	VerticalDatumStatus         RadarGridMetricsVerticalDatumStatus `json:"vertical_datum_status"`
+}
+
+// RadarGridMetricsVerticalDatumStatus defines model for RadarGridMetrics.VerticalDatumStatus.
+type RadarGridMetricsVerticalDatumStatus string
+
 // RadarHealthMetrics defines model for RadarHealthMetrics.
 type RadarHealthMetrics struct {
 	ActualRadialCount      int                             `json:"actual_radial_count"`
@@ -793,6 +838,9 @@ type ServerInterface interface {
 	// GetRadarScan Get one single-radar volume workflow
 	// (GET /radar-scans/{scan_id})
 	GetRadarScan(w http.ResponseWriter, r *http.Request, scanId ScanId)
+	// GetRadarScanGridSummary Get the versioned hybrid-scan grid summary for one radar scan
+	// (GET /radar-scans/{scan_id}/grid-summary)
+	GetRadarScanGridSummary(w http.ResponseWriter, r *http.Request, scanId ScanId)
 	// GetRadarScanQCSummary Get the versioned polar QC summary for one radar scan
 	// (GET /radar-scans/{scan_id}/qc-summary)
 	GetRadarScanQCSummary(w http.ResponseWriter, r *http.Request, scanId ScanId)
@@ -907,6 +955,12 @@ func (_ Unimplemented) ListRadarScans(w http.ResponseWriter, r *http.Request, pa
 // GetRadarScan Get one single-radar volume workflow
 // (GET /radar-scans/{scan_id})
 func (_ Unimplemented) GetRadarScan(w http.ResponseWriter, r *http.Request, scanId ScanId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetRadarScanGridSummary Get the versioned hybrid-scan grid summary for one radar scan
+// (GET /radar-scans/{scan_id}/grid-summary)
+func (_ Unimplemented) GetRadarScanGridSummary(w http.ResponseWriter, r *http.Request, scanId ScanId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1521,6 +1575,32 @@ func (siw *ServerInterfaceWrapper) GetRadarScan(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// GetRadarScanGridSummary operation middleware
+func (siw *ServerInterfaceWrapper) GetRadarScanGridSummary(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "scan_id" -------------
+	var scanId ScanId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "scan_id", chi.URLParam(r, "scan_id"), &scanId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "scan_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRadarScanGridSummary(w, r, scanId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetRadarScanQCSummary operation middleware
 func (siw *ServerInterfaceWrapper) GetRadarScanQCSummary(w http.ResponseWriter, r *http.Request) {
 
@@ -1944,6 +2024,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/radar-scans/{scan_id}/qc-summary", wrapper.GetRadarScanQCSummary)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/radar-scans/{scan_id}/grid-summary", wrapper.GetRadarScanGridSummary)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/analysis-cycles", wrapper.ListAnalysisCycles)

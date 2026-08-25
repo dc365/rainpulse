@@ -17,6 +17,7 @@ type Repository interface {
 	CreateBundle(context.Context, workflow.CreateBundle) error
 	CreateRadarDecodeBundle(context.Context, workflow.RadarDecodeBundle) error
 	CreateRadarQCBundle(context.Context, workflow.RadarQCBundle) error
+	CreateRadarGridBundle(context.Context, workflow.RadarGridBundle) error
 	CreateDomainSimulation(context.Context, workflow.DomainSimulation) error
 	GetRun(context.Context, uuid.UUID) (workflow.Run, error)
 	GetJob(context.Context, uuid.UUID) (workflow.Job, error)
@@ -56,6 +57,20 @@ type RadarQCInput struct {
 	FlagDefinitionVersion string
 	QCConfig              json.RawMessage
 	QCConfigSHA256        string
+}
+
+type RadarGridInput struct {
+	ScanID             uuid.UUID
+	RunID              uuid.UUID
+	RadarID            string
+	QCURI              string
+	CurrentStatus      workflow.RadarScanStatus
+	GridID             string
+	GridConfigVersion  string
+	GridProfileVersion string
+	HybridScanVersion  string
+	GridConfig         json.RawMessage
+	GridConfigSHA256   string
 }
 
 type Publisher interface {
@@ -269,6 +284,85 @@ func validateRadarQCInput(input RadarQCInput) error {
 	parsed, err := url.ParseRequestURI(input.NormalizedURI)
 	if err != nil || parsed.Scheme != "s3" {
 		return fmt.Errorf("radar QC input must be an s3 URI")
+	}
+	return nil
+}
+
+func (service *Service) CreateRadarGrid(
+	ctx context.Context,
+	input RadarGridInput,
+) (workflow.Job, error) {
+	if err := validateRadarGridInput(input); err != nil {
+		return workflow.Job{}, err
+	}
+	now := service.now().UTC()
+	jobID := stableID("radar-grid-job", input.RunID.String(), input.HybridScanVersion)
+	traceID := stableID("radar-grid-trace", input.RunID.String(), input.HybridScanVersion)
+	eventID := stableID("radar-grid-request", jobID.String())
+	outputPrefix := fmt.Sprintf(
+		"s3://rainpulse/radar/grid/%s/%s/%s/",
+		input.RadarID,
+		input.ScanID,
+		url.PathEscape(input.HybridScanVersion),
+	)
+	request := RadarGridRequested{
+		SchemaVersion: SchemaVersion,
+		EventID:       eventID,
+		EventType:     RadarGridRequestedEventType,
+		OccurredAt:    now,
+		RunID:         input.RunID,
+		JobID:         jobID,
+		TraceID:       traceID,
+		Payload: RadarGridRequestedPayload{
+			ScanID: input.ScanID, RadarID: input.RadarID,
+			InputURI: input.QCURI, OutputPrefix: outputPrefix,
+			GridID: input.GridID, GridConfig: input.GridConfigVersion,
+			HybridScanVersion: input.HybridScanVersion,
+		},
+	}
+	payload, err := json.Marshal(request)
+	if err != nil {
+		return workflow.Job{}, fmt.Errorf("encode radar grid request: %w", err)
+	}
+	job := workflow.Job{
+		ID: jobID, RunID: input.RunID, TraceID: traceID, JobType: RadarGridJobType,
+		ConfigVersion: input.GridProfileVersion, Status: workflow.JobPending, Attempt: 1,
+		RequestPayload: payload, CreatedAt: now,
+	}
+	bundle := workflow.RadarGridBundle{
+		ScanID: input.ScanID, Status: input.CurrentStatus,
+		Config: input.GridConfig, ConfigSHA256: input.GridConfigSHA256,
+		Job: job,
+		Outbox: workflow.OutboxEvent{
+			ID: eventID, AggregateID: jobID.String(), EventType: RadarGridRequestedEventType,
+			Subject: RadarGridRequestedSubject, Payload: payload,
+		},
+	}
+	if err := service.repository.CreateRadarGridBundle(ctx, bundle); err != nil {
+		return workflow.Job{}, err
+	}
+	return job, nil
+}
+
+func validateRadarGridInput(input RadarGridInput) error {
+	if input.ScanID == uuid.Nil || input.RunID == uuid.Nil || input.RadarID == "" ||
+		input.GridID == "" || input.GridConfigVersion == "" ||
+		input.GridProfileVersion == "" || input.HybridScanVersion == "" {
+		return fmt.Errorf("radar grid identity and version fields are required")
+	}
+	if len(input.GridConfig) == 0 || !json.Valid(input.GridConfig) ||
+		!sha256Pattern.MatchString(input.GridConfigSHA256) {
+		return fmt.Errorf("radar grid configuration and SHA-256 are required")
+	}
+	if input.CurrentStatus != workflow.RadarScanQCReady &&
+		input.CurrentStatus != workflow.RadarScanGridRunning &&
+		input.CurrentStatus != workflow.RadarScanGridReady &&
+		input.CurrentStatus != workflow.RadarScanFailed {
+		return fmt.Errorf("radar scan status %q cannot enter gridding", input.CurrentStatus)
+	}
+	parsed, err := url.ParseRequestURI(input.QCURI)
+	if err != nil || parsed.Scheme != "s3" {
+		return fmt.Errorf("radar grid input must be an s3 URI")
 	}
 	return nil
 }

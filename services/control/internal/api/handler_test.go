@@ -179,6 +179,16 @@ func TestRadarAndAnalysisQueriesPreservePartialRadarFailure(t *testing.T) {
 			MeanQualityIndex: 0.82, ValidGateCount: 100, MissingGateCount: 5,
 			ModuleStatuses: map[string]string{"radial_interference": "applied"}, MeasuredAt: now,
 		},
+		grid: workflow.RadarGridMetrics{
+			ScanID: scanAID, RadarID: "synthetic_radar_a", GridID: "fuzhou-0p01-v1",
+			GridConfigVersion: "fuzhou-0p01-v1", ProfileVersion: "rp009-hybrid-v1",
+			AlgorithmVersion: "hybrid-scan-1.0.0", DEMAssetVersion: "ancillary-fujian-taiwan-v1",
+			VerticalDatumStatus: "unverified_engineering", OperationalEligible: false,
+			OperationalReasons: []string{"RADAR_CONFIG_DRAFT"}, GridCellCount: 100,
+			ValidCellCount: 80, MissingCellCount: 20, ValidCoverageRatio: 0.8,
+			MeanQualityIndex: 0.75, SelectionCounts: map[string]int64{"sweep_0": 80},
+			SkippedSweeps: map[string]string{"sweep_1": "NO_VALID_DBZH"}, MeasuredAt: now,
+		},
 	}
 	handler := api.NewHandler(api.Options{Version: "test", Observations: store})
 
@@ -196,6 +206,7 @@ func TestRadarAndAnalysisQueriesPreservePartialRadarFailure(t *testing.T) {
 	assertResponse("/api/v1/radars/status", `"radar_id":"synthetic_radar_a"`)
 	assertResponse("/api/v1/radar-scans/"+scanBID.String(), `"status":"FAILED"`)
 	assertResponse("/api/v1/radar-scans/"+scanAID.String()+"/qc-summary", `"qc_profile":"rp008-basic-v1"`)
+	assertResponse("/api/v1/radar-scans/"+scanAID.String()+"/grid-summary", `"profile_version":"rp009-hybrid-v1"`)
 	assertResponse("/api/v1/analysis-cycles/"+analysis.ID.String(), `"status":"ANALYSIS_READY"`)
 	assertResponse("/api/v1/analysis-cycles/"+analysis.ID.String(), `"state":"FAILED"`)
 }
@@ -284,6 +295,7 @@ type fakeObservationStore struct {
 	scans    []workflow.RadarScan
 	analysis workflow.AnalysisCycle
 	qc       workflow.RadarQCMetrics
+	grid     workflow.RadarGridMetrics
 }
 
 func (store *fakeObservationStore) GetRadarQCMetrics(
@@ -294,6 +306,16 @@ func (store *fakeObservationStore) GetRadarQCMetrics(
 		return workflow.RadarQCMetrics{}, workflow.ErrNotFound
 	}
 	return store.qc, nil
+}
+
+func (store *fakeObservationStore) GetRadarGridMetrics(
+	_ context.Context,
+	scanID uuid.UUID,
+) (workflow.RadarGridMetrics, error) {
+	if store.grid.ScanID != scanID {
+		return workflow.RadarGridMetrics{}, workflow.ErrNotFound
+	}
+	return store.grid, nil
 }
 
 func (store *fakeObservationStore) ListRadars(context.Context) ([]workflow.Radar, error) {
