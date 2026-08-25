@@ -17,7 +17,7 @@ The implementation baseline is [`docs/RainPulse_技术架构与实施方案_含�
 
 ## Developer entry points
 
-Prerequisites: Go 1.25+, Node.js 22+, pnpm 11, Python 3.11+, `uv`, `ruff`, Docker, and Docker Compose. Docker is only required for the composed runtime commands.
+Prerequisites: Go 1.25+, Node.js 22+, pnpm 11, Python 3.11+, `uv`, `ruff`, `ripgrep`, Docker, and Docker Compose. Docker is only required for the composed runtime commands.
 
 ```bash
 make bootstrap

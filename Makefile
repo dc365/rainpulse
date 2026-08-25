@@ -18,6 +18,7 @@ MINIO_MC_LDFLAGS := -s -w -X github.com/minio/mc/cmd.Version=$(MINIO_MC_BUILD_VE
 .PHONY: bootstrap contracts-generate contracts-check test test-structure test-radar-config test-contracts test-infrastructure test-control-plane test-worker-sdk test-radar-decoder test-radar-health test-radar-qc test-radar-grid test-radar-mosaic test-qpe test-diagnostics test-nowcast-input test-pysteps-lk test-products test-ancillary test-grid test-go test-python test-web lint build build-linux build-infrastructure-linux export-postgres-image export-python-image build-worker-linux deploy-up dev-up dev-down smoke infrastructure-smoke control-plane-smoke worker-smoke radar-decode-smoke radar-health-smoke radar-qc-smoke radar-grid-smoke ancillary-plan ancillary-download ancillary-verify
 
 bootstrap:
+	@command -v rg >/dev/null || { echo "ripgrep is required" >&2; exit 1; }
 	@command -v go >/dev/null || { echo "go is required" >&2; exit 1; }
 	@command -v pnpm >/dev/null || { echo "pnpm is required" >&2; exit 1; }
 	@command -v uv >/dev/null || { echo "uv is required" >&2; exit 1; }
