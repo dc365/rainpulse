@@ -1005,19 +1005,9 @@ func replay(ctx context.Context, store *postgresstore.Store, bus *messaging.JetS
 	if err != nil {
 		return fmt.Errorf("encode replayed job request: %w", err)
 	}
-	subject := orchestration.JobRequestedSubject
-	if eventType == orchestration.RadarDecodeRequestedEventType {
-		subject = orchestration.RadarDecodeRequestedSubject
-	} else if eventType == orchestration.RadarQCRequestedEventType {
-		subject = orchestration.RadarQCRequestedSubject
-	} else if eventType == orchestration.RadarGridRequestedEventType {
-		subject = orchestration.RadarGridRequestedSubject
-	} else if eventType == orchestration.AnalysisMosaicRequestedEventType {
-		subject = orchestration.AnalysisMosaicRequestedSubject
-	} else if eventType == orchestration.NowcastInputRequestedEventType {
-		subject = orchestration.NowcastInputRequestedSubject
-	} else if eventType == orchestration.PystepsLKRequestedEventType {
-		subject = orchestration.PystepsLKRequestedSubject
+	subject, err := requestedSubject(eventType)
+	if err != nil {
+		return err
 	}
 	eventID, err := uuid.Parse(event["event_id"].(string))
 	if err != nil {
@@ -1028,6 +1018,33 @@ func replay(ctx context.Context, store *postgresstore.Store, bus *messaging.JetS
 		Subject: subject,
 		Payload: payload,
 	})
+}
+
+func requestedSubject(eventType string) (string, error) {
+	switch eventType {
+	case orchestration.JobRequestedEventType:
+		return orchestration.JobRequestedSubject, nil
+	case orchestration.RadarDecodeRequestedEventType:
+		return orchestration.RadarDecodeRequestedSubject, nil
+	case orchestration.RadarQCRequestedEventType:
+		return orchestration.RadarQCRequestedSubject, nil
+	case orchestration.RadarGridRequestedEventType:
+		return orchestration.RadarGridRequestedSubject, nil
+	case orchestration.AnalysisMosaicRequestedEventType:
+		return orchestration.AnalysisMosaicRequestedSubject, nil
+	case orchestration.AnalysisQPERequestedEventType:
+		return orchestration.AnalysisQPERequestedSubject, nil
+	case orchestration.AnalysisDiagnosticsRequestedEventType:
+		return orchestration.AnalysisDiagnosticsRequestedSubject, nil
+	case orchestration.NowcastInputRequestedEventType:
+		return orchestration.NowcastInputRequestedSubject, nil
+	case orchestration.PystepsLKRequestedEventType:
+		return orchestration.PystepsLKRequestedSubject, nil
+	case orchestration.ProductBuildRequestedEventType:
+		return orchestration.ProductBuildRequestedSubject, nil
+	default:
+		return "", fmt.Errorf("unsupported replay event type %q", eventType)
+	}
 }
 
 func environmentOrDefault(name, fallback string) string {
