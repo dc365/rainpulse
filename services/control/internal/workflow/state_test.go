@@ -10,6 +10,8 @@ func TestRunStateTransitions(t *testing.T) {
 	}{
 		{RunWaiting, RunReceived, true},
 		{RunReceived, RunValidating, true},
+		{RunPreprocessing, RunInputReady, true},
+		{RunInputReady, RunBaselineRunning, true},
 		{RunBaselineRunning, RunBaselineReady, true},
 		{RunPublished, RunVerifying, true},
 		{RunVerifying, RunVerified, true},

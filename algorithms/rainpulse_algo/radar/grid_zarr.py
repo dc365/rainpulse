@@ -55,6 +55,7 @@ def build_radar_grid_zarr_store(
             "scan_id": source["scan_id"],
             "radar_id": source["radar_id"],
             "qc_asset_id": source["asset_id"],
+            "input_asset_ids": list(source["input_asset_ids"]),
             "qc_volume_uri": qc_volume_uri,
             "normalized_volume_uri": source["normalized_volume_uri"],
             "radar_config_version": source["radar_config_version"],

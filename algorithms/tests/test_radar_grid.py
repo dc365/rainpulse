@@ -80,6 +80,7 @@ def qc_fixture(radar_config_version: str) -> dict[str, bytes]:
             "contract_name": "rainpulse.qc-radar-volume",
             "contract_version": "1.0",
             "asset_id": "50000000-0000-4000-8000-000000000001",
+            "input_asset_ids": ["40000000-0000-4000-8000-000000000001"],
             "scan_id": "10000000-0000-4000-8000-000000000004",
             "radar_id": "z9598",
             "normalized_volume_uri": "s3://rainpulse/normalized/volume.zarr",

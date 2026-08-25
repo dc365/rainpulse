@@ -37,6 +37,7 @@ make test-radar-grid
 make test-radar-mosaic
 make test-qpe
 make test-diagnostics
+make test-nowcast-input
 make smoke
 ```
 
@@ -88,8 +89,12 @@ available, so this is an engineering pipeline acceptance rather than an
 operational rainfall-accuracy claim. RP-012 adds immutable transparent grid/PPI
 diagnostic layers, a controlled Go image API and a responsive React evidence
 workbench with raw/QC comparison, QI, flags, sources, masks and QPE provenance.
-RP-013 NowcastInput and downstream meteorological models remain to be
-implemented.
+RP-013 adds a real fixed-step NowcastInput Builder: it selects 3–6 committed
+RadarAnalysis frames ending at the issue time, rejects gaps and mixed versions,
+rechecks coverage/QI/data-age gates, preserves missing/no-rain/low-quality
+states, publishes an immutable input Zarr and advances the forecast run to
+`INPUT_READY`. Real meteorological-sequence acceptance still needs at least
+three consecutive operational RadarAnalysis cycles; pySTEPS remains RP-014.
 
 ## Test deployment artifacts
 

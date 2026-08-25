@@ -157,6 +157,12 @@ def validate_radar_analysis_zarr_store(
         raise QPEInputError("RadarAnalysis contract name is invalid")
     if root.attrs.get("contract_version") != CONTRACT_VERSION:
         raise QPEInputError("RadarAnalysis contract version is invalid")
+    for name in ("input_asset_ids", "qc_pipeline_versions"):
+        values = root.attrs.get(name)
+        if not isinstance(values, list) or not values or not all(
+            isinstance(value, str) and value for value in values
+        ):
+            raise QPEInputError(f"RadarAnalysis attribute {name} is invalid")
     if root.attrs.get("crs") != "EPSG:4326" or root.attrs.get("registration") != "point":
         raise QPEInputError("RadarAnalysis spatial reference is invalid")
     shape = (len(root["lat"]), len(root["lon"]))

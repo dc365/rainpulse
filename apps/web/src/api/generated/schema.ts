@@ -502,7 +502,7 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /** @enum {string} */
-        RunStatus: "WAITING" | "RECEIVED" | "VALIDATING" | "PREPROCESSING" | "BASELINE_RUNNING" | "BASELINE_READY" | "ENHANCED_RUNNING" | "PRODUCT_BUILDING" | "PUBLISHED" | "VERIFYING" | "VERIFIED" | "DEGRADED" | "FAILED" | "SKIPPED";
+        RunStatus: "WAITING" | "RECEIVED" | "VALIDATING" | "PREPROCESSING" | "INPUT_READY" | "BASELINE_RUNNING" | "BASELINE_READY" | "ENHANCED_RUNNING" | "PRODUCT_BUILDING" | "PUBLISHED" | "VERIFYING" | "VERIFIED" | "DEGRADED" | "FAILED" | "SKIPPED";
         /** @enum {string} */
         JobStatus: "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "SKIPPED";
         /** @enum {string} */

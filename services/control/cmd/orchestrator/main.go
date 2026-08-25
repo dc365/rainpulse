@@ -117,6 +117,15 @@ func main() {
 			slog.Error("create analysis diagnostic workflow", "error", err)
 			os.Exit(1)
 		}
+	case "nowcast-input":
+		if len(os.Args) != 4 {
+			slog.Error("nowcast-input requires an RFC3339 issue time and NowcastInput config YAML")
+			os.Exit(2)
+		}
+		if err := nowcastInput(ctx, store, service, os.Args[2], os.Args[3]); err != nil {
+			slog.Error("create NowcastInput workflow", "error", err)
+			os.Exit(1)
+		}
 	case "complete":
 		if len(os.Args) != 3 {
 			slog.Error("complete requires a job UUID")
@@ -189,6 +198,23 @@ type diagnosticConfiguration struct {
 	ProfileVersion        string `yaml:"profile_version"`
 	RendererVersion       string `yaml:"renderer_version"`
 	FlagDefinitionVersion string `yaml:"flag_definition_version"`
+}
+
+type nowcastInputConfiguration struct {
+	ProfileVersion    string `yaml:"profile_version"`
+	BuilderVersion    string `yaml:"builder_version"`
+	GridID            string `yaml:"grid_id"`
+	GridConfigVersion string `yaml:"grid_config_version"`
+	Sequence          struct {
+		MinimumFrames   int    `yaml:"minimum_frames"`
+		MaximumFrames   int    `yaml:"maximum_frames"`
+		TimestepMinutes int    `yaml:"timestep_minutes"`
+		Selection       string `yaml:"selection"`
+	} `yaml:"sequence"`
+	Gates struct {
+		MinimumValidCoverageRatio float64 `yaml:"minimum_valid_coverage_ratio"`
+		MinimumMeanQualityIndex   float64 `yaml:"minimum_mean_quality_index"`
+	} `yaml:"gates"`
 }
 
 func radarDecode(
@@ -605,6 +631,65 @@ func analysisDiagnostics(
 	})
 }
 
+func nowcastInput(
+	ctx context.Context,
+	store *postgresstore.Store,
+	service *orchestration.Service,
+	rawIssueTime string,
+	configPath string,
+) error {
+	issueTime, err := time.Parse(time.RFC3339Nano, rawIssueTime)
+	if err != nil {
+		return fmt.Errorf("parse NowcastInput issue time: %w", err)
+	}
+	configBytes, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("read NowcastInput configuration: %w", err)
+	}
+	var config nowcastInputConfiguration
+	if err := yaml.Unmarshal(configBytes, &config); err != nil {
+		return fmt.Errorf("decode NowcastInput configuration: %w", err)
+	}
+	if config.Sequence.Selection != "latest_contiguous" {
+		return fmt.Errorf("unsupported NowcastInput frame selection %q", config.Sequence.Selection)
+	}
+	var configValue map[string]any
+	if err := yaml.Unmarshal(configBytes, &configValue); err != nil {
+		return fmt.Errorf("normalize NowcastInput configuration: %w", err)
+	}
+	configJSON, err := json.Marshal(configValue)
+	if err != nil {
+		return fmt.Errorf("encode NowcastInput configuration: %w", err)
+	}
+	candidates, err := store.ListNowcastInputCandidates(
+		ctx, issueTime, config.GridID, config.Sequence.MaximumFrames,
+	)
+	if err != nil {
+		return err
+	}
+	configHash := sha256.Sum256(configBytes)
+	run, job, err := service.CreateNowcastInput(ctx, orchestration.NowcastInputInput{
+		IssueTime: issueTime, GridID: config.GridID,
+		GridConfigVersion:         config.GridConfigVersion,
+		PreprocessVersion:         config.BuilderVersion,
+		GateConfigVersion:         config.ProfileVersion,
+		MinimumFrames:             config.Sequence.MinimumFrames,
+		MaximumFrames:             config.Sequence.MaximumFrames,
+		Timestep:                  time.Duration(config.Sequence.TimestepMinutes) * time.Minute,
+		MinimumValidCoverageRatio: config.Gates.MinimumValidCoverageRatio,
+		MinimumMeanQualityIndex:   config.Gates.MinimumMeanQualityIndex,
+		Candidates:                candidates, Config: configJSON,
+		ConfigSHA256: fmt.Sprintf("%x", configHash),
+	})
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(os.Stdout).Encode(map[string]any{
+		"run_id": run.ID.String(), "job_id": job.ID.String(),
+		"issue_time": run.IssueTime, "candidate_count": len(candidates),
+	})
+}
+
 func dependencies(ctx context.Context) (*pgxpool.Pool, *postgresstore.Store, *messaging.JetStream, *orchestration.Service, error) {
 	databaseURL, err := runtimeconfig.DatabaseURL()
 	if err != nil {
@@ -779,6 +864,8 @@ func replay(ctx context.Context, store *postgresstore.Store, bus *messaging.JetS
 		subject = orchestration.RadarGridRequestedSubject
 	} else if eventType == orchestration.AnalysisMosaicRequestedEventType {
 		subject = orchestration.AnalysisMosaicRequestedSubject
+	} else if eventType == orchestration.NowcastInputRequestedEventType {
+		subject = orchestration.NowcastInputRequestedSubject
 	}
 	eventID, err := uuid.Parse(event["event_id"].(string))
 	if err != nil {

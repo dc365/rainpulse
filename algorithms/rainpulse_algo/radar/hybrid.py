@@ -186,6 +186,7 @@ def build_hybrid_scan(
         key: root.attrs.get(key)
         for key in (
             "asset_id",
+            "input_asset_ids",
             "scan_id",
             "radar_id",
             "normalized_volume_uri",

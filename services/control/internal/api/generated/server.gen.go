@@ -336,6 +336,7 @@ const (
 	RunStatusDEGRADED        RunStatus = "DEGRADED"
 	RunStatusENHANCEDRUNNING RunStatus = "ENHANCED_RUNNING"
 	RunStatusFAILED          RunStatus = "FAILED"
+	RunStatusINPUTREADY      RunStatus = "INPUT_READY"
 	RunStatusPREPROCESSING   RunStatus = "PREPROCESSING"
 	RunStatusPRODUCTBUILDING RunStatus = "PRODUCT_BUILDING"
 	RunStatusPUBLISHED       RunStatus = "PUBLISHED"
@@ -359,6 +360,8 @@ func (e RunStatus) Valid() bool {
 	case RunStatusENHANCEDRUNNING:
 		return true
 	case RunStatusFAILED:
+		return true
+	case RunStatusINPUTREADY:
 		return true
 	case RunStatusPREPROCESSING:
 		return true

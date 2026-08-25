@@ -7,6 +7,7 @@ const (
 	RunReceived        RunStatus = "RECEIVED"
 	RunValidating      RunStatus = "VALIDATING"
 	RunPreprocessing   RunStatus = "PREPROCESSING"
+	RunInputReady      RunStatus = "INPUT_READY"
 	RunBaselineRunning RunStatus = "BASELINE_RUNNING"
 	RunBaselineReady   RunStatus = "BASELINE_READY"
 	RunEnhancedRunning RunStatus = "ENHANCED_RUNNING"
@@ -33,7 +34,8 @@ var runTransitions = map[RunStatus]map[RunStatus]struct{}{
 	RunWaiting:         {RunReceived: {}},
 	RunReceived:        {RunValidating: {}},
 	RunValidating:      {RunPreprocessing: {}},
-	RunPreprocessing:   {RunBaselineRunning: {}},
+	RunPreprocessing:   {RunInputReady: {}},
+	RunInputReady:      {RunBaselineRunning: {}},
 	RunBaselineRunning: {RunBaselineReady: {}},
 	RunBaselineReady: {
 		RunEnhancedRunning: {},

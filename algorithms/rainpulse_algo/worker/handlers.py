@@ -48,6 +48,12 @@ def _execute_analysis_diagnostics(
     return execute_analysis_diagnostics(request)
 
 
+def _execute_nowcast_input(request: NowcastInputRequested) -> WorkerResult:
+    from rainpulse_algo.nowcast.input_worker import execute_nowcast_input
+
+    return execute_nowcast_input(request)
+
+
 def _synthetic_executor(stage: str) -> Callable[[Any], WorkerResult]:
     def execute(request: Any) -> WorkerResult:
         payload = request.payload.model_dump(mode="json")
@@ -174,12 +180,22 @@ HANDLERS = {
     ),
     "nowcast-input-synthetic": TaskHandler(
         profile="nowcast-input-synthetic",
-        subject="rainpulse.jobs.requested.nowcast_input",
+        subject="rainpulse.jobs.requested.nowcast_input_synthetic",
         consumer="rainpulse-nowcast-input-synthetic",
         request_model=NowcastInputRequested,
         executor=_synthetic_executor("nowcast_input"),
         asset_type="nowcast_input",
         artifact_name="input.zarr",
+    ),
+    "nowcast-input": TaskHandler(
+        profile="nowcast-input",
+        subject="rainpulse.jobs.requested.nowcast_input",
+        consumer="rainpulse-nowcast-input-builder-1-0-0",
+        request_model=NowcastInputRequested,
+        executor=_execute_nowcast_input,
+        asset_type="nowcast_input",
+        artifact_name="input.zarr",
+        ack_wait_seconds=300,
     ),
 }
 

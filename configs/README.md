@@ -18,6 +18,9 @@ service or worker code.
 - `schemas/radar-mosaic-profile.schema.json` and
   `mosaic/rp010-qi-mosaic-v1.yaml` freeze five-minute alignment, QI selection
   and linear-Z blending rules.
+- `schemas/nowcast-input-profile.schema.json` and
+  `nowcast/rp013-fixed-5min-v1.yaml` freeze the 3–6-frame, five-minute sequence
+  and the operational coverage, QI and data-age gates before any model runs.
 - `radars/radar-inventory-template.yaml` records unknown values explicitly and
   cannot become operational until it satisfies all `ready` requirements.
 - `qc/flag-definitions.yaml` freezes the uint32 QC flag bit assignments.

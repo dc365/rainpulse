@@ -347,6 +347,10 @@ def _contributor_details(
                 "grid_uri": item.grid_uri,
                 "time_offset_seconds": item.time_offset_seconds,
                 "hybrid_scan_version": item.hybrid_scan_version,
+                "input_asset_ids": list(roots[index].attrs["input_asset_ids"]),
+                "qc_pipeline_version": str(
+                    roots[index].attrs["qc_pipeline_version"]
+                ),
                 "input_operational_eligible": bool(
                     roots[index].attrs.get("operational_eligible")
                 ),

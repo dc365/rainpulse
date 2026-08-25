@@ -39,6 +39,11 @@ const (
 	AnalysisDiagnosticsRequestedEventType = "analysis.diagnostics.requested.v1"
 	AnalysisDiagnosticsRequestedSubject   = "rainpulse.jobs.requested.analysis_diagnostics"
 	AnalysisDiagnosticsJobType            = "analysis.diagnostics"
+	NowcastInputRequestedEventType        = "nowcast.input.requested.v1"
+	NowcastInputRequestedSubject          = "rainpulse.jobs.requested.nowcast_input"
+	NowcastInputJobType                   = "nowcast.input"
+	NowcastInputReadyEventType            = "nowcast.input.ready.v1"
+	NowcastInputReadySubject              = "rainpulse.jobs.lifecycle.nowcast_input_ready"
 	JobCompletedSubject                   = "rainpulse.jobs.completed"
 	JobFailedSubject                      = "rainpulse.jobs.failed"
 	JobResultsSubject                     = "rainpulse.jobs.*"
@@ -216,6 +221,51 @@ type AnalysisDiagnosticsRequestedPayload struct {
 	DiagnosticConfig      string                                  `json:"diagnostic_config_version"`
 	RendererVersion       string                                  `json:"renderer_version"`
 	FlagDefinitionVersion string                                  `json:"flag_definition_version"`
+}
+
+type NowcastInputRequested struct {
+	SchemaVersion string                       `json:"schema_version"`
+	EventID       uuid.UUID                    `json:"event_id"`
+	EventType     string                       `json:"event_type"`
+	OccurredAt    time.Time                    `json:"occurred_at"`
+	RunID         uuid.UUID                    `json:"run_id"`
+	JobID         uuid.UUID                    `json:"job_id"`
+	TraceID       uuid.UUID                    `json:"trace_id"`
+	Payload       NowcastInputRequestedPayload `json:"payload"`
+}
+
+type NowcastInputRequestedPayload struct {
+	AnalysisIDs       []uuid.UUID `json:"analysis_ids"`
+	InputURIs         []string    `json:"input_uris"`
+	OutputPrefix      string      `json:"output_prefix"`
+	IssueTime         time.Time   `json:"issue_time"`
+	GridID            string      `json:"grid_id"`
+	PreprocessVersion string      `json:"preprocess_version"`
+	GateConfigVersion string      `json:"gate_config_version"`
+}
+
+type NowcastInputReady struct {
+	SchemaVersion string                   `json:"schema_version"`
+	EventID       uuid.UUID                `json:"event_id"`
+	EventType     string                   `json:"event_type"`
+	OccurredAt    time.Time                `json:"occurred_at"`
+	RunID         uuid.UUID                `json:"run_id"`
+	JobID         uuid.UUID                `json:"job_id"`
+	TraceID       uuid.UUID                `json:"trace_id"`
+	Payload       NowcastInputReadyPayload `json:"payload"`
+}
+
+type NowcastInputReadyPayload struct {
+	InputURI           string      `json:"input_uri"`
+	IssueTime          time.Time   `json:"issue_time"`
+	GridID             string      `json:"grid_id"`
+	AnalysisIDs        []uuid.UUID `json:"analysis_ids"`
+	FrameCount         int         `json:"frame_count"`
+	TimestepMinutes    int         `json:"timestep_minutes"`
+	ValidCoverageRatio float64     `json:"valid_coverage_ratio"`
+	MeanQualityIndex   float64     `json:"mean_quality_index"`
+	MaxDataAgeMinutes  float64     `json:"max_data_age_minutes"`
+	PreprocessVersion  string      `json:"preprocess_version"`
 }
 
 type JobCompleted struct {

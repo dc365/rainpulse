@@ -61,6 +61,19 @@ def build_radar_mosaic_zarr_store(
             "analysis_cycle_version": profile.analysis_cycle_version,
             "flag_definition_version": profile.flag_definition_version,
             "contributors": list(result.contributors),
+            "input_asset_ids": list(
+                dict.fromkeys(
+                    asset_id
+                    for contributor in result.contributors
+                    for asset_id in contributor["input_asset_ids"]
+                )
+            ),
+            "qc_pipeline_versions": list(
+                dict.fromkeys(
+                    contributor["qc_pipeline_version"]
+                    for contributor in result.contributors
+                )
+            ),
             "radar_source_codes": result.radar_source_codes,
             "blended_source_code": profile.fusion.blended_source_code,
             "operational_eligible": result.operational_eligible,
@@ -119,6 +132,12 @@ def validate_radar_mosaic_zarr_store(objects: Mapping[str, bytes]) -> dict[str, 
         raise RadarMosaicInputError("RadarMosaic contract name is invalid")
     if root.attrs.get("contract_version") != CONTRACT_VERSION:
         raise RadarMosaicInputError("RadarMosaic contract version is invalid")
+    for name in ("input_asset_ids", "qc_pipeline_versions"):
+        values = root.attrs.get(name)
+        if not isinstance(values, list) or not values or not all(
+            isinstance(value, str) and value for value in values
+        ):
+            raise RadarMosaicInputError(f"RadarMosaic attribute {name} is invalid")
     if root.attrs.get("crs") != "EPSG:4326" or root.attrs.get("registration") != "point":
         raise RadarMosaicInputError("RadarMosaic spatial reference is invalid")
     latitude = root["lat"][:]
@@ -212,4 +231,3 @@ def _field_attributes(name: str) -> dict[str, Any]:
     if name in {"QUALITY_INDEX", *QI_COMPONENTS, "BLOCKAGE_RATE"}:
         return {"units": "1", "valid_range": [0.0, 1.0], "missing_value": "NaN"}
     return {"units": "1"}
-

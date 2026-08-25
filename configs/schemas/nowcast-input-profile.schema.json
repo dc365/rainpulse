@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/configs/schemas/nowcast-input-profile.schema.json",
+  "title": "RainPulse RP-013 NowcastInput profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profile_version", "builder_version", "nowcast_input_contract_version", "radar_analysis_contract_version", "grid_id", "grid_config_version", "sequence", "gates"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "profile_version": { "$ref": "#/$defs/identifier" },
+    "builder_version": { "$ref": "#/$defs/identifier" },
+    "nowcast_input_contract_version": { "const": "1.2" },
+    "radar_analysis_contract_version": { "const": "1.2" },
+    "grid_id": { "$ref": "#/$defs/identifier" },
+    "grid_config_version": { "$ref": "#/$defs/identifier" },
+    "sequence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minimum_frames", "maximum_frames", "timestep_minutes", "selection"],
+      "properties": {
+        "minimum_frames": { "const": 3 },
+        "maximum_frames": { "const": 6 },
+        "timestep_minutes": { "const": 5 },
+        "selection": { "const": "latest_contiguous" }
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minimum_valid_coverage_ratio", "minimum_mean_quality_index", "maximum_data_age_minutes", "require_all_frames_operational_eligible"],
+      "properties": {
+        "minimum_valid_coverage_ratio": { "$ref": "#/$defs/probability" },
+        "minimum_mean_quality_index": { "$ref": "#/$defs/probability" },
+        "maximum_data_age_minutes": { "type": "number", "exclusiveMinimum": 0, "maximum": 60 },
+        "require_all_frames_operational_eligible": { "const": true }
+      }
+    }
+  },
+  "$defs": {
+    "identifier": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$" },
+    "probability": { "type": "number", "minimum": 0, "maximum": 1 }
+  }
+}

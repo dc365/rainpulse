@@ -239,6 +239,46 @@ type AnalysisDiagnosticsBundle struct {
 	Outbox          OutboxEvent
 }
 
+type NowcastInputFrame struct {
+	AnalysisID         uuid.UUID `json:"analysis_id"`
+	AnalysisTime       time.Time `json:"analysis_time"`
+	InputURI           string    `json:"input_uri"`
+	ValidCoverageRatio float64   `json:"valid_coverage_ratio"`
+	MeanQualityIndex   float64   `json:"mean_quality_index"`
+}
+
+type NowcastInputBundle struct {
+	Run               Run
+	Frames            []NowcastInputFrame
+	PreprocessVersion string
+	GateConfigVersion string
+	Config            json.RawMessage
+	ConfigSHA256      string
+	Job               Job
+	Outbox            OutboxEvent
+}
+
+type NowcastInputMetrics struct {
+	SchemaVersion       string      `json:"schema_version"`
+	IssueTimeUTC        time.Time   `json:"issue_time_utc"`
+	GridID              string      `json:"grid_id"`
+	ProfileVersion      string      `json:"profile_version"`
+	PreprocessVersion   string      `json:"preprocess_version"`
+	AnalysisIDs         []uuid.UUID `json:"analysis_ids"`
+	InputURIs           []string    `json:"input_uris"`
+	FrameCount          int         `json:"frame_count"`
+	TimestepMinutes     int         `json:"timestep_minutes"`
+	ValidCoverageRatio  float64     `json:"valid_coverage_ratio"`
+	MeanQualityIndex    float64     `json:"mean_quality_index"`
+	MaxDataAgeMinutes   float64     `json:"max_data_age_minutes"`
+	ValidCellCount      int64       `json:"valid_cell_count"`
+	MissingCellCount    int64       `json:"missing_cell_count"`
+	LowQualityCellCount int64       `json:"low_quality_cell_count"`
+	OperationalEligible bool        `json:"operational_eligible"`
+	OperationalReasons  []string    `json:"operational_reasons"`
+	MeasuredAt          time.Time   `json:"measured_at"`
+}
+
 type DiagnosticLegendEntry struct {
 	Label string   `json:"label"`
 	Color string   `json:"color"`

@@ -374,6 +374,12 @@ WHERE job_id = $1`, event.JobID, event.Payload.StartedAt, event.Payload.Finished
 
 	switch runType {
 	case workflow.WorkflowForecastRun:
+		if jobType == orchestration.NowcastInputJobType {
+			if err := applyNowcastInputCompletion(ctx, tx, event); err != nil {
+				return false, err
+			}
+			break
+		}
 		nextStatus := completionRunStatus(jobType)
 		var currentStatus workflow.RunStatus
 		if err := tx.QueryRow(ctx, `SELECT status FROM forecast_runs WHERE run_id = $1 FOR UPDATE`, runID).Scan(&currentStatus); err != nil {
@@ -513,6 +519,14 @@ SET status = 'FAILED', reason = $2, updated_at = CURRENT_TIMESTAMP
 WHERE run_id = $1`, runID, event.Payload.ErrorCode)
 		if err != nil {
 			return false, fmt.Errorf("fail run: %w", err)
+		}
+		if jobType == orchestration.NowcastInputJobType {
+			if _, err = tx.Exec(ctx, `
+UPDATE nowcast_input_runs
+SET status = 'FAILED', updated_at = CURRENT_TIMESTAMP
+WHERE job_id = $1`, event.JobID); err != nil {
+				return false, fmt.Errorf("fail NowcastInput run: %w", err)
+			}
 		}
 	case workflow.WorkflowRadarScan:
 		_, err = tx.Exec(ctx, `

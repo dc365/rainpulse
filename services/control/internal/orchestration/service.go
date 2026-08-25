@@ -23,6 +23,7 @@ type Repository interface {
 	CreateAnalysisMosaicBundle(context.Context, workflow.AnalysisMosaicBundle) error
 	CreateAnalysisQPEBundle(context.Context, workflow.AnalysisQPEBundle) error
 	CreateAnalysisDiagnosticsBundle(context.Context, workflow.AnalysisDiagnosticsBundle) error
+	CreateNowcastInputBundle(context.Context, workflow.NowcastInputBundle) error
 	CreateDomainSimulation(context.Context, workflow.DomainSimulation) error
 	GetRun(context.Context, uuid.UUID) (workflow.Run, error)
 	GetJob(context.Context, uuid.UUID) (workflow.Job, error)
@@ -132,6 +133,33 @@ type AnalysisDiagnosticsInput struct {
 	DiagnosticConfigVersion string
 	RendererVersion         string
 	FlagDefinitionVersion   string
+}
+
+type NowcastInputCandidate struct {
+	AnalysisID          uuid.UUID
+	AnalysisTime        time.Time
+	GridID              string
+	AnalysisURI         string
+	CurrentStatus       workflow.AnalysisStatus
+	OperationalEligible bool
+	ValidCoverageRatio  float64
+	MeanQualityIndex    float64
+}
+
+type NowcastInputInput struct {
+	IssueTime                 time.Time
+	GridID                    string
+	GridConfigVersion         string
+	PreprocessVersion         string
+	GateConfigVersion         string
+	MinimumFrames             int
+	MaximumFrames             int
+	Timestep                  time.Duration
+	MinimumValidCoverageRatio float64
+	MinimumMeanQualityIndex   float64
+	Candidates                []NowcastInputCandidate
+	Config                    json.RawMessage
+	ConfigSHA256              string
 }
 
 type Publisher interface {
@@ -761,6 +789,158 @@ func validateAnalysisDiagnosticsInput(input AnalysisDiagnosticsInput) error {
 		return fmt.Errorf("diagnostic configuration and SHA-256 are required")
 	}
 	return nil
+}
+
+func (service *Service) CreateNowcastInput(
+	ctx context.Context,
+	input NowcastInputInput,
+) (workflow.Run, workflow.Job, error) {
+	frames, err := validateAndSelectNowcastFrames(input)
+	if err != nil {
+		return workflow.Run{}, workflow.Job{}, err
+	}
+	now := service.now().UTC()
+	issueTime := input.IssueTime.UTC()
+	runID := stableID(
+		"nowcast-input-run",
+		input.GridID,
+		issueTime.Format(time.RFC3339),
+		input.PreprocessVersion,
+		input.GateConfigVersion,
+	)
+	jobID := stableID("nowcast-input-job", runID.String())
+	traceID := stableID("nowcast-input-trace", runID.String())
+	eventID := stableID("nowcast-input-request", jobID.String())
+	outputPrefix := fmt.Sprintf(
+		"s3://rainpulse/nowcast-input/%s/%s/%s/",
+		input.GridID,
+		issueTime.Format("2006/01/02/150405Z"),
+		url.PathEscape(input.PreprocessVersion),
+	)
+	analysisIDs := make([]uuid.UUID, len(frames))
+	inputURIs := make([]string, len(frames))
+	for index, frame := range frames {
+		analysisIDs[index] = frame.AnalysisID
+		inputURIs[index] = frame.InputURI
+	}
+	request := NowcastInputRequested{
+		SchemaVersion: SchemaVersion,
+		EventID:       eventID,
+		EventType:     NowcastInputRequestedEventType,
+		OccurredAt:    now,
+		RunID:         runID,
+		JobID:         jobID,
+		TraceID:       traceID,
+		Payload: NowcastInputRequestedPayload{
+			AnalysisIDs: analysisIDs, InputURIs: inputURIs,
+			OutputPrefix: outputPrefix, IssueTime: issueTime, GridID: input.GridID,
+			PreprocessVersion: input.PreprocessVersion,
+			GateConfigVersion: input.GateConfigVersion,
+		},
+	}
+	payload, err := json.Marshal(request)
+	if err != nil {
+		return workflow.Run{}, workflow.Job{}, fmt.Errorf("encode NowcastInput request: %w", err)
+	}
+	run := workflow.Run{
+		ID: runID, IssueTime: issueTime, GridID: input.GridID,
+		ConfigVersion: input.GateConfigVersion, Status: workflow.RunPreprocessing,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	job := workflow.Job{
+		ID: jobID, RunID: runID, TraceID: traceID, JobType: NowcastInputJobType,
+		ConfigVersion: input.GateConfigVersion, Status: workflow.JobPending,
+		Attempt: 1, RequestPayload: payload, CreatedAt: now,
+	}
+	bundle := workflow.NowcastInputBundle{
+		Run: run, Frames: frames,
+		PreprocessVersion: input.PreprocessVersion,
+		GateConfigVersion: input.GateConfigVersion,
+		Config:            input.Config, ConfigSHA256: input.ConfigSHA256,
+		Job: job,
+		Outbox: workflow.OutboxEvent{
+			ID: eventID, AggregateID: jobID.String(),
+			EventType: NowcastInputRequestedEventType,
+			Subject:   NowcastInputRequestedSubject, Payload: payload,
+		},
+	}
+	if err := service.repository.CreateNowcastInputBundle(ctx, bundle); err != nil {
+		return workflow.Run{}, workflow.Job{}, err
+	}
+	return run, job, nil
+}
+
+func validateAndSelectNowcastFrames(
+	input NowcastInputInput,
+) ([]workflow.NowcastInputFrame, error) {
+	issueTime := input.IssueTime.UTC()
+	if input.IssueTime.IsZero() || input.GridID == "" || input.GridConfigVersion == "" ||
+		input.PreprocessVersion == "" || input.GateConfigVersion == "" {
+		return nil, fmt.Errorf("NowcastInput identity and version fields are required")
+	}
+	if input.MinimumFrames != 3 || input.MaximumFrames != 6 ||
+		input.Timestep != 5*time.Minute {
+		return nil, fmt.Errorf("Phase-1 NowcastInput requires 3-6 frames at five-minute steps")
+	}
+	if !issueTime.Equal(issueTime.Truncate(input.Timestep)) {
+		return nil, fmt.Errorf("NowcastInput issue time must be on a five-minute UTC boundary")
+	}
+	if input.MinimumValidCoverageRatio < 0 || input.MinimumValidCoverageRatio > 1 ||
+		input.MinimumMeanQualityIndex < 0 || input.MinimumMeanQualityIndex > 1 {
+		return nil, fmt.Errorf("NowcastInput quality gates must be within [0, 1]")
+	}
+	if len(input.Config) == 0 || !json.Valid(input.Config) ||
+		!sha256Pattern.MatchString(input.ConfigSHA256) {
+		return nil, fmt.Errorf("NowcastInput configuration and SHA-256 are required")
+	}
+	byTime := make(map[time.Time]NowcastInputCandidate, len(input.Candidates))
+	for _, candidate := range input.Candidates {
+		candidateTime := candidate.AnalysisTime.UTC()
+		parsed, uriErr := url.ParseRequestURI(candidate.AnalysisURI)
+		if candidate.AnalysisID == uuid.Nil || candidate.AnalysisTime.IsZero() ||
+			candidate.GridID != input.GridID || candidate.CurrentStatus != workflow.AnalysisReady ||
+			uriErr != nil || parsed.Scheme != "s3" {
+			continue
+		}
+		if _, exists := byTime[candidateTime]; exists {
+			return nil, fmt.Errorf("multiple RadarAnalysis candidates share analysis time %s", candidateTime)
+		}
+		byTime[candidateTime] = candidate
+	}
+	selectedReverse := make([]workflow.NowcastInputFrame, 0, input.MaximumFrames)
+	for offset := 0; offset < input.MaximumFrames; offset++ {
+		expected := issueTime.Add(-time.Duration(offset) * input.Timestep)
+		candidate, exists := byTime[expected]
+		if !exists {
+			break
+		}
+		if !candidate.OperationalEligible {
+			return nil, fmt.Errorf("RadarAnalysis %s is not operationally eligible", candidate.AnalysisID)
+		}
+		if candidate.ValidCoverageRatio < input.MinimumValidCoverageRatio {
+			return nil, fmt.Errorf("RadarAnalysis %s valid coverage is below gate", candidate.AnalysisID)
+		}
+		if candidate.MeanQualityIndex < input.MinimumMeanQualityIndex {
+			return nil, fmt.Errorf("RadarAnalysis %s mean quality is below gate", candidate.AnalysisID)
+		}
+		selectedReverse = append(selectedReverse, workflow.NowcastInputFrame{
+			AnalysisID: candidate.AnalysisID, AnalysisTime: expected,
+			InputURI:           candidate.AnalysisURI,
+			ValidCoverageRatio: candidate.ValidCoverageRatio,
+			MeanQualityIndex:   candidate.MeanQualityIndex,
+		})
+	}
+	if len(selectedReverse) < input.MinimumFrames {
+		return nil, fmt.Errorf(
+			"NowcastInput requires at least %d contiguous frames ending at %s; found %d",
+			input.MinimumFrames, issueTime.Format(time.RFC3339), len(selectedReverse),
+		)
+	}
+	frames := make([]workflow.NowcastInputFrame, len(selectedReverse))
+	for index := range selectedReverse {
+		frames[len(selectedReverse)-1-index] = selectedReverse[index]
+	}
+	return frames, nil
 }
 
 func alignMosaicCandidates(

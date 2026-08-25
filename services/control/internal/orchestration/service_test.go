@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -497,6 +498,70 @@ func TestHandleResultDispatchesStrictFailureEvent(t *testing.T) {
 	}
 }
 
+func TestCreateNowcastInputSelectsLatestContiguousOperationalFrames(t *testing.T) {
+	repository := &fakeRepository{}
+	now := time.Date(2026, 8, 25, 12, 11, 0, 0, time.UTC)
+	issueTime := time.Date(2026, 8, 25, 12, 10, 0, 0, time.UTC)
+	service := NewService(repository, Options{Now: func() time.Time { return now }})
+	candidates := make([]NowcastInputCandidate, 3)
+	for index := range candidates {
+		analysisTime := issueTime.Add(time.Duration(index-2) * 5 * time.Minute)
+		candidates[index] = NowcastInputCandidate{
+			AnalysisID:    uuid.MustParse(fmt.Sprintf("81000000-0000-4000-8000-%012d", index+1)),
+			AnalysisTime:  analysisTime,
+			GridID:        "fuzhou_118_123_25_27_0p01deg_v1",
+			AnalysisURI:   fmt.Sprintf("s3://rainpulse/analysis/%d/analysis.zarr", index),
+			CurrentStatus: workflow.AnalysisReady, OperationalEligible: true,
+			ValidCoverageRatio: 0.8, MeanQualityIndex: 0.7,
+		}
+	}
+	input := NowcastInputInput{
+		IssueTime: issueTime, GridID: "fuzhou_118_123_25_27_0p01deg_v1",
+		GridConfigVersion: "fuzhou-grid-0p01deg-v1",
+		PreprocessVersion: "nowcast-input-builder-1.0.0",
+		GateConfigVersion: "rp013-fixed-5min-v1",
+		MinimumFrames:     3, MaximumFrames: 6, Timestep: 5 * time.Minute,
+		MinimumValidCoverageRatio: 0.7, MinimumMeanQualityIndex: 0.45,
+		Candidates: candidates, Config: json.RawMessage(`{"profile_version":"rp013-fixed-5min-v1"}`),
+		ConfigSHA256: "63266c7c72321262a01b945281060abd84153a8f3ad64a95c5b73b9fd510f678",
+	}
+
+	run, job, err := service.CreateNowcastInput(context.Background(), input)
+	if err != nil {
+		t.Fatalf("CreateNowcastInput() error = %v", err)
+	}
+	if run.Status != workflow.RunPreprocessing || job.JobType != NowcastInputJobType {
+		t.Fatalf("unexpected RP-013 workflow state: run=%s job=%s", run.Status, job.JobType)
+	}
+	if len(repository.nowcastInput.Frames) != 3 ||
+		!repository.nowcastInput.Frames[2].AnalysisTime.Equal(issueTime) {
+		t.Fatalf("unexpected selected sequence: %#v", repository.nowcastInput.Frames)
+	}
+	var requested NowcastInputRequested
+	if err := json.Unmarshal(repository.nowcastInput.Outbox.Payload, &requested); err != nil {
+		t.Fatalf("decode NowcastInput request: %v", err)
+	}
+	if requested.EventType != NowcastInputRequestedEventType ||
+		repository.nowcastInput.Outbox.Subject != NowcastInputRequestedSubject ||
+		len(requested.Payload.AnalysisIDs) != 3 {
+		t.Fatalf("unexpected RP-013 request: %#v", requested)
+	}
+	secondRun, secondJob, err := service.CreateNowcastInput(context.Background(), input)
+	if err != nil || secondRun.ID != run.ID || secondJob.ID != job.ID {
+		t.Fatalf("NowcastInput identity is not deterministic: %v", err)
+	}
+
+	input.Candidates[1].AnalysisTime = issueTime.Add(-15 * time.Minute)
+	if _, _, err := service.CreateNowcastInput(context.Background(), input); err == nil {
+		t.Fatal("gapped RadarAnalysis sequence must be rejected")
+	}
+	input.Candidates[1].AnalysisTime = issueTime.Add(-5 * time.Minute)
+	input.Candidates[2].MeanQualityIndex = 0.2
+	if _, _, err := service.CreateNowcastInput(context.Background(), input); err == nil {
+		t.Fatal("below-gate RadarAnalysis must be rejected")
+	}
+}
+
 type fakeRepository struct {
 	created             workflow.CreateBundle
 	radarDecode         workflow.RadarDecodeBundle
@@ -505,11 +570,20 @@ type fakeRepository struct {
 	analysisMosaic      workflow.AnalysisMosaicBundle
 	analysisQPE         workflow.AnalysisQPEBundle
 	analysisDiagnostics workflow.AnalysisDiagnosticsBundle
+	nowcastInput        workflow.NowcastInputBundle
 	domain              workflow.DomainSimulation
 	claimed             workflow.OutboxEvent
 	published           uuid.UUID
 	failed              uuid.UUID
 	appliedFailure      JobFailed
+}
+
+func (repository *fakeRepository) CreateNowcastInputBundle(
+	_ context.Context,
+	bundle workflow.NowcastInputBundle,
+) error {
+	repository.nowcastInput = bundle
+	return nil
 }
 
 func (repository *fakeRepository) CreateAnalysisMosaicBundle(

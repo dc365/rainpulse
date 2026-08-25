@@ -81,6 +81,7 @@ def radar_grid_fixture(
             "contract_name": "rainpulse.radar-grid",
             "contract_version": "1.3",
             "asset_id": "60000000-0000-4000-8000-000000000001",
+            "input_asset_ids": [f"raw-{scan_id}"],
             "scan_id": scan_id,
             "radar_id": radar_id,
             "qc_asset_id": "50000000-0000-4000-8000-000000000001",
@@ -288,4 +289,3 @@ def test_rejects_request_time_offset_that_differs_from_grid() -> None:
             profile=profile(),
             flag_masks=flag_masks(),
         )
-

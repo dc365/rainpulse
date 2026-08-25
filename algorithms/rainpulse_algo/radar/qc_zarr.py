@@ -55,6 +55,7 @@ def build_qc_zarr_store(
             "contract_version": CONTRACT_VERSION,
             "geometry_encoding": GEOMETRY_ENCODING,
             "asset_id": str(asset_id),
+            "input_asset_ids": [str(source.attrs["asset_id"])],
             "scan_id": source.attrs.get("scan_id"),
             "radar_id": source.attrs["radar_id"],
             "normalized_volume_uri": normalized_volume_uri,

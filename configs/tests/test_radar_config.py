@@ -350,3 +350,26 @@ def test_rp012_diagnostic_profile_freezes_layers_and_transparency() -> None:
         "polar_quality_index",
         "polar_qc_flags",
     } == set(profile["layers"])
+
+
+def test_rp013_nowcast_input_profile_freezes_sequence_and_operational_gates() -> None:
+    schema = json.loads(
+        (CONFIG_ROOT / "schemas" / "nowcast-input-profile.schema.json").read_text()
+    )
+    profile = yaml.safe_load(
+        (CONFIG_ROOT / "nowcast" / "rp013-fixed-5min-v1.yaml").read_text()
+    )
+
+    Draft202012Validator.check_schema(schema)
+    Draft202012Validator(schema).validate(profile)
+    assert profile["nowcast_input_contract_version"] == "1.2"
+    assert profile["radar_analysis_contract_version"] == "1.2"
+    assert profile["sequence"] == {
+        "minimum_frames": 3,
+        "maximum_frames": 6,
+        "timestep_minutes": 5,
+        "selection": "latest_contiguous",
+    }
+    assert profile["gates"]["require_all_frames_operational_eligible"] is True
+    assert profile["gates"]["minimum_valid_coverage_ratio"] > 0
+    assert profile["gates"]["minimum_mean_quality_index"] > 0

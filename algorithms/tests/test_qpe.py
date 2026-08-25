@@ -49,6 +49,8 @@ def mosaic_fixture(*, operational_eligible: bool = True) -> dict[str, bytes]:
             "analysis_cycle_version": "analysis-cycle-rp010-v1",
             "flag_definition_version": "qc-flags-v1",
             "contributors": [{"radar_id": "z9598", "scan_id": "fixture"}],
+            "input_asset_ids": ["74000000-0000-4000-8000-000000000001"],
+            "qc_pipeline_versions": ["rp008-basic-qc-1.0.0"],
             "radar_source_codes": {"z9598": 1},
             "blended_source_code": 65535,
             "operational_eligible": operational_eligible,
