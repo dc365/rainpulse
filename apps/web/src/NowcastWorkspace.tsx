@@ -4,11 +4,11 @@ import {
   useMemo,
   useState,
   type FormEvent,
-  type KeyboardEvent,
-  type MouseEvent,
 } from 'react'
 
 import type { components } from './api/generated/schema'
+import { NowcastMap } from './NowcastMap'
+import { NowcastTimeline } from './NowcastTimeline'
 
 type ForecastRun = components['schemas']['ForecastRun']
 type Product = components['schemas']['Product']
@@ -51,13 +51,6 @@ const rainfallAmountLegend = [
   [25, '#ee8a2d'], [50, '#cf453b'], [100, '#862f82'],
 ] as const
 
-const cityLabels = [
-  { name: '福州', longitude: 119.2965, latitude: 26.0745 },
-  { name: '宁德', longitude: 119.527, latitude: 26.66 },
-  { name: '南平', longitude: 118.178, latitude: 26.642 },
-  { name: '莆田', longitude: 119.007, latitude: 25.454 },
-]
-
 const areaPresets = [
   { label: '福州城区', bbox: [119, 25.9, 119.6, 26.3] },
   { label: '闽江口', bbox: [119.45, 25.8, 120.05, 26.25] },
@@ -93,27 +86,6 @@ function percent(value?: number | null) {
 
 function formatCoordinate(value: number) {
   return value.toFixed(2)
-}
-
-function clamp(value: number, minimum: number, maximum: number) {
-  return Math.min(maximum, Math.max(minimum, value))
-}
-
-function positionOnGrid(point: Coordinate, bounds = FUZHOU_GRID) {
-  return {
-    left: `${((point.longitude - bounds.west) / (bounds.east - bounds.west)) * 100}%`,
-    top: `${((bounds.north - point.latitude) / (bounds.north - bounds.south)) * 100}%`,
-  }
-}
-
-function areaPosition(bbox: readonly number[], bounds = FUZHOU_GRID) {
-  const [west, south, east, north] = bbox
-  return {
-    left: `${((west - bounds.west) / (bounds.east - bounds.west)) * 100}%`,
-    top: `${((bounds.north - north) / (bounds.north - bounds.south)) * 100}%`,
-    width: `${((east - west) / (bounds.east - bounds.west)) * 100}%`,
-    height: `${((north - south) / (bounds.north - bounds.south)) * 100}%`,
-  }
 }
 
 export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
@@ -305,34 +277,10 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
     setPoint(normalized)
   }, [])
 
-  const selectMapPoint = (event: MouseEvent<HTMLButtonElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect()
-    if (rect.width <= 0 || rect.height <= 0) return
-    selectPoint({
-      longitude: FUZHOU_GRID.west
-        + clamp((event.clientX - rect.left) / rect.width, 0, 1)
-          * (FUZHOU_GRID.east - FUZHOU_GRID.west),
-      latitude: FUZHOU_GRID.north
-        - clamp((event.clientY - rect.top) / rect.height, 0, 1)
-          * (FUZHOU_GRID.north - FUZHOU_GRID.south),
-    })
-  }
-
-  const moveMapPoint = (event: KeyboardEvent<HTMLButtonElement>) => {
-    const movements: Record<string, Coordinate> = {
-      ArrowLeft: { longitude: -0.01, latitude: 0 },
-      ArrowRight: { longitude: 0.01, latitude: 0 },
-      ArrowUp: { longitude: 0, latitude: 0.01 },
-      ArrowDown: { longitude: 0, latitude: -0.01 },
-    }
-    const movement = movements[event.key]
-    if (!movement) return
-    event.preventDefault()
-    selectPoint({
-      longitude: clamp(point.longitude + movement.longitude, FUZHOU_GRID.west, FUZHOU_GRID.east),
-      latitude: clamp(point.latitude + movement.latitude, FUZHOU_GRID.south, FUZHOU_GRID.north),
-    })
-  }
+  const selectTimelineAsset = useCallback((asset: ProductAsset) => {
+    setSelectedLead(asset.lead_time_minutes ?? null)
+    setLayerError(false)
+  }, [])
 
   const submitPoint = (event: FormEvent) => {
     event.preventDefault()
@@ -423,78 +371,33 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
         <div className="forecast-workspace">
           <div className="forecast-visual-column">
             <div className="forecast-map-wrap">
-              <button
-                type="button"
-                className="forecast-map-surface"
-                aria-label={`降水地图，当前选点 ${formatCoordinate(point.longitude)}°E、${formatCoordinate(point.latitude)}°N，可点击地图或用方向键移动`}
-                onClick={selectMapPoint}
-                onKeyDown={moveMapPoint}
-              >
-                <span className="map-grid" aria-hidden="true" />
-                <img className="map-coastline" src="/coastline-fuzhou.svg" alt="" width="1000" height="400" />
-                {cityLabels.map((city) => (
-                  <span className="map-city" style={positionOnGrid(city)} key={city.name} aria-hidden="true">
-                    <i />{city.name}
-                  </span>
-                ))}
-                {selectedAsset && !layerError ? (
-                  <img
-                    key={selectedAsset.asset_id}
-                    className="forecast-layer-image"
-                    src={selectedAsset.content_url}
-                    alt={layerAlt(productType, currentLead)}
-                    width="501"
-                    height="201"
-                    onError={() => setLayerError(true)}
-                  />
-                ) : (
-                  <span className="forecast-layer-empty">
-                    <strong>{loading ? '正在读取降水图层' : '降水图层暂不可用'}</strong>
-                    <small>{layerError ? '图层内容校验或网络请求失败' : '等待已发布的透明 PNG 产品'}</small>
-                  </span>
-                )}
-                <span className="selected-area" style={areaPosition(bbox)} aria-hidden="true" />
-                <span className="selected-point" style={positionOnGrid(point)} aria-hidden="true"><i /></span>
-                <span className="map-axis north" aria-hidden="true">27°N</span>
-                <span className="map-axis south" aria-hidden="true">25°N</span>
-                <span className="map-axis west" aria-hidden="true">118°E</span>
-                <span className="map-axis east" aria-hidden="true">123°E</span>
-              </button>
-
-              <div className="forecast-legend" aria-label="降水图例">
-                <div><span>{productType === 'rain_rate' ? '雨强 mm/h' : '累计量 mm'}</span><small>rainfall-operational-v1</small></div>
-                <ol>{legend.map(([minimum, color]) => <li key={minimum}><i style={{ backgroundColor: color }} /><span>≥ {minimum}</span></li>)}</ol>
-                <p><i className="transparent-swatch" />透明包含缺测与 &lt;0.1，实际状态以覆盖统计为准。</p>
-              </div>
+              <NowcastMap
+                imageUrl={selectedAsset?.content_url}
+                imageDescription={layerAlt(productType, currentLead)}
+                validTimeLabel={formatUtc(selectedAsset?.valid_time)}
+                leadLabel={formatLead(currentLead)}
+                productLabel={productLabels[productType]}
+                legend={legend}
+                legendUnit={productType === 'rain_rate' ? 'mm/h' : 'mm'}
+                point={point}
+                pointValueLabel={formatRate(currentPointValue)}
+                bbox={bbox}
+                loading={loading}
+                layerError={layerError}
+                onLayerError={setLayerError}
+                onSelectPoint={selectPoint}
+              />
             </div>
 
-            <div className="forecast-timeline" aria-label="五分钟预报时间轴">
-              <header>
-                <div><span>预报帧</span><strong>{productType === 'rain_rate' ? `${renderedAssets.length} 个五分钟时效` : productLabels[productType]}</strong></div>
-                <p>{formatUtc(run?.issue_time)} <i /> {formatUtc(selectedAsset?.valid_time)}</p>
-              </header>
-              <div className="timeline-scroll">
-                <div className="timeline-frames">
-                  {renderedAssets.map((asset) => (
-                    <button
-                      type="button"
-                      key={asset.asset_id}
-                      className={asset.asset_id === selectedAsset?.asset_id ? 'active' : ''}
-                      aria-pressed={asset.asset_id === selectedAsset?.asset_id}
-                      aria-label={`${formatLead(asset.lead_time_minutes)}，${formatUtc(asset.valid_time)}`}
-                      onClick={() => {
-                        setSelectedLead(asset.lead_time_minutes ?? null)
-                        setLayerError(false)
-                      }}
-                    >
-                      <i />
-                      <strong>+{String(asset.lead_time_minutes ?? 0).padStart(2, '0')}</strong>
-                      <small>{formatUtc(asset.valid_time).replace(' UTC', '')}</small>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <NowcastTimeline
+              key={productType}
+              assets={renderedAssets}
+              selectedAsset={selectedAsset}
+              issueTime={run?.issue_time}
+              fixedWindow={productType !== 'rain_rate'}
+              productLabel={productLabels[productType]}
+              onSelect={selectTimelineAsset}
+            />
 
             <div className="asset-delivery">
               <div><span>当前产品交付</span><strong>{formatLead(currentLead)} · {productLabels[productType]}</strong></div>

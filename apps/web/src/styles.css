@@ -1217,3 +1217,306 @@ h1 {
   .area-results { grid-template-columns: 1fr; }
   .area-results div { border-right: 0; }
 }
+
+/* RP-015 interactive GIS and playback timeline */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.forecast-map-wrap {
+  display: block;
+  padding: 12px;
+  background: #e7ece9;
+}
+
+.nowcast-gis-shell {
+  --gis-control: rgb(249 251 250 / 92%);
+  --gis-control-strong: rgb(249 251 250 / 97%);
+  --gis-border: rgb(35 70 62 / 24%);
+  --gis-divider: rgb(35 70 62 / 14%);
+  --gis-text: #415b55;
+  --gis-muted: #6b7b76;
+  position: relative;
+  height: clamp(460px, calc(100svh - 360px), 680px);
+  min-height: 460px;
+  overflow: hidden;
+  border: 1px solid #aebeb8;
+  border-radius: 7px;
+  background: #d8e4e4;
+  box-shadow: 0 2px 7px rgb(32 56 49 / 13%);
+}
+
+.nowcast-gis-map {
+  width: 100%;
+  height: 100%;
+  background-color: #d8e4e4;
+  cursor: crosshair;
+  touch-action: manipulation;
+}
+
+.nowcast-gis-map:focus-visible { outline: 2px solid var(--teal); outline-offset: -3px; }
+.nowcast-gis-shell .rainpulse-basemap-layer { filter: grayscale(.24) brightness(.96) contrast(1.03) saturate(.74); }
+
+.gis-display-controls,
+.gis-valid-time,
+.gis-map-controls,
+.gis-coordinate-readout,
+.gis-legend {
+  z-index: 5;
+  position: absolute;
+  color: var(--gis-text);
+  background: var(--gis-control);
+  box-shadow: 0 2px 8px rgb(32 56 49 / 13%);
+}
+
+.gis-display-controls {
+  top: 12px;
+  left: 12px;
+  display: flex;
+  align-items: stretch;
+  min-height: 40px;
+  border: 1px solid var(--gis-border);
+}
+
+.gis-display-controls button {
+  min-width: 60px;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 0;
+  border-right: 1px solid var(--gis-divider);
+  color: var(--gis-muted);
+  background: transparent;
+  font-size: 9px;
+  cursor: pointer;
+  transition-property: color, background-color, transform;
+  transition-duration: 120ms;
+}
+
+.gis-display-controls button[aria-pressed="true"] { color: #075e52; background: #e3efeb; }
+.gis-display-controls button:active { transform: scale(.96); }
+.gis-display-controls label { display: grid; grid-template-columns: auto 82px; align-items: center; gap: 8px; padding: 0 9px; color: var(--gis-muted); font-size: 8px; white-space: nowrap; }
+.gis-display-controls input { width: 82px; margin: 0; accent-color: var(--teal); cursor: pointer; }
+
+.gis-valid-time {
+  top: 12px;
+  right: 64px;
+  min-width: 176px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 3px 10px;
+  padding: 8px 9px;
+  border: 1px solid var(--gis-border);
+}
+
+.gis-valid-time::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--teal); }
+.gis-valid-time span { color: var(--gis-muted); font-size: 7px; letter-spacing: .11em; }
+.gis-valid-time code { color: var(--teal); font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 8px; }
+.gis-valid-time strong { grid-column: 1 / -1; font-size: 11px; font-variant-numeric: tabular-nums; }
+
+.gis-map-controls {
+  top: 12px;
+  right: 12px;
+  display: grid;
+  border: 1px solid var(--gis-border);
+}
+
+.gis-map-controls button {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-bottom: 1px solid var(--gis-divider);
+  color: #34544d;
+  background: transparent;
+  font: 600 17px/1 ui-monospace, "SFMono-Regular", Menlo, monospace;
+  cursor: pointer;
+  transition-property: color, background-color, transform;
+  transition-duration: 120ms;
+}
+
+.gis-map-controls button:last-child { border-bottom: 0; }
+.gis-map-controls button:active { transform: scale(.92); }
+
+.gis-coordinate-readout {
+  bottom: 14px;
+  left: 14px;
+  min-width: 185px;
+  display: grid;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid var(--gis-border);
+  font-variant-numeric: tabular-nums;
+}
+
+.gis-coordinate-readout span { color: var(--gis-muted); font-size: 7px; }
+.gis-coordinate-readout strong { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 10px; }
+.gis-coordinate-readout small { color: var(--teal); font-size: 8px; }
+
+.gis-legend {
+  right: 14px;
+  bottom: 14px;
+  width: min(330px, calc(100% - 28px));
+  padding: 9px 10px 8px;
+  border: 1px solid var(--gis-border);
+}
+
+.gis-legend header,
+.gis-legend footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.gis-legend header span { font-size: 9px; font-weight: 720; }
+.gis-legend header strong { color: var(--teal); font-size: 8px; }
+.gis-legend-cells { display: grid; gap: 2px; margin: 7px 0 6px; }
+.gis-legend-cells span { min-width: 0; display: grid; gap: 3px; text-align: center; }
+.gis-legend-cells i { height: 9px; border: 1px solid rgb(23 37 34 / 8%); }
+.gis-legend-cells small { color: var(--gis-muted); font-size: 6px; font-variant-numeric: tabular-nums; }
+.gis-legend footer { color: var(--gis-muted); font-size: 6px; }
+.gis-legend footer span { letter-spacing: .08em; }
+
+.gis-layer-empty {
+  z-index: 4;
+  position: absolute;
+  inset: 50% auto auto 50%;
+  min-width: 220px;
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border: 1px solid var(--gis-border);
+  color: var(--gis-muted);
+  background: var(--gis-control-strong);
+  text-align: center;
+  transform: translate(-50%, -50%);
+}
+
+.gis-layer-empty strong { color: var(--ink); font-size: 12px; }
+.gis-layer-empty small { font-size: 8px; }
+
+.nowcast-gis-shell .ol-attribution {
+  right: 14px;
+  bottom: 84px;
+  padding: 2px 5px;
+  border-radius: 0;
+  background: rgb(249 251 250 / 72%);
+}
+
+.nowcast-gis-shell .ol-attribution ul { margin: 0; color: #697a75; font-size: 7px; }
+.nowcast-gis-shell .ol-attribution a { color: #395a53; }
+.nowcast-gis-shell .ol-scale-line { right: 14px; bottom: 106px; left: auto; padding: 2px 0; border-radius: 0; background: transparent; }
+.nowcast-gis-shell .ol-scale-line-inner { border-color: #526e68; color: #425f58; font-size: 8px; text-shadow: 0 1px 2px #fff; }
+
+.nowcast-timeline {
+  border-top: 1px solid var(--line);
+  background: #fafbf9;
+}
+
+.nowcast-timeline:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
+.nowcast-timeline-toolbar { min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+.timeline-playback { display: flex; gap: 4px; }
+.timeline-playback button { min-width: 40px; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 0 8px; border: 1px solid var(--line-strong); color: #596b66; background: #fff; font-size: 9px; cursor: pointer; transition-property: color, background-color, transform; transition-duration: 120ms; }
+.timeline-playback button:active:not(:disabled) { transform: scale(.96); }
+.timeline-playback button:disabled { opacity: .34; cursor: not-allowed; }
+.timeline-playback .timeline-play-button { min-width: 66px; color: #075e52; border-color: #73a59b; background: #e7f1ee; }
+.timeline-playback .timeline-play-button[aria-pressed="true"] { color: #f3fbf8; background: var(--teal); }
+.timeline-active-state { min-width: 0; text-align: right; }
+.timeline-active-state span { display: flex; align-items: center; justify-content: flex-end; gap: 6px; color: var(--muted); font-size: 8px; }
+.timeline-active-state span i { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); animation: nowcast-playing 900ms ease-out infinite; }
+.timeline-active-state strong { display: block; margin-top: 4px; font-size: 11px; font-variant-numeric: tabular-nums; }
+.timeline-hour-bands { height: 22px; display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--line); }
+.timeline-hour-bands span { display: flex; align-items: center; padding-left: 10px; color: var(--muted); font-size: 7px; letter-spacing: .08em; }
+.timeline-hour-bands span:first-child { border-right: 1px solid var(--line-strong); }
+
+.nowcast-timeline-rail {
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+  padding: 9px 9px 5px;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+}
+
+.nowcast-timeline-rail button {
+  position: relative;
+  flex: 1 0 38px;
+  min-width: 38px;
+  min-height: 42px;
+  padding: 16px 1px 4px;
+  border: 0;
+  border-top: 1px solid #b7c5c0;
+  color: #7a8883;
+  background: transparent;
+  font-size: 7px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+  transition-property: color, background-color, transform;
+  transition-duration: 120ms;
+}
+
+.nowcast-timeline-rail button i { position: absolute; z-index: 1; top: -4px; left: calc(50% - 4px); width: 7px; height: 7px; border: 1px solid #fafbf9; border-radius: 50%; background: #99a7a2; }
+.nowcast-timeline-rail button[data-major="true"] { color: #53655f; font-weight: 750; }
+.nowcast-timeline-rail button[data-major="true"] i { top: -5px; left: calc(50% - 5px); width: 9px; height: 9px; }
+.nowcast-timeline-rail button.active { color: #075e52; background: #e7f1ee; }
+.nowcast-timeline-rail button.active::before { content: ""; position: absolute; inset: -1px 0 0; border-top: 2px solid var(--teal); box-shadow: inset 0 0 0 1px #9fc1b9; }
+.nowcast-timeline-rail button.active i { top: -6px; left: calc(50% - 6px); width: 11px; height: 11px; border: 2px solid #fafbf9; background: var(--teal); box-shadow: 0 0 0 3px rgb(19 117 104 / 14%); }
+.nowcast-timeline-rail button:active:not(:disabled) { transform: scale(.96); }
+.nowcast-timeline-rail button:disabled { opacity: 1; cursor: default; }
+
+.timeline-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 10px 8px; color: var(--muted); font-size: 7px; }
+.timeline-footer span { display: inline-flex; align-items: center; gap: 5px; }
+.timeline-footer span > i { width: 8px; height: 8px; background: var(--teal); }
+
+@keyframes nowcast-playing {
+  0%, 100% { opacity: .35; transform: scale(.8); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+@media (hover: hover) {
+  .gis-display-controls button:hover,
+  .gis-map-controls button:hover { color: var(--teal); background: #e9f2ef; }
+  .timeline-playback button:hover:not(:disabled),
+  .nowcast-timeline-rail button:hover:not(:disabled) { color: var(--teal); background: #edf4f1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timeline-active-state span i { animation: none; }
+  .gis-display-controls button,
+  .gis-map-controls button,
+  .timeline-playback button,
+  .nowcast-timeline-rail button { transition-duration: 0ms; }
+}
+
+@media (max-width: 700px) {
+  .forecast-map-wrap { padding: 8px; }
+  .nowcast-gis-shell { height: 480px; min-height: 480px; border-radius: 5px; }
+  .gis-display-controls { max-width: calc(100% - 60px); overflow-x: auto; }
+  .gis-display-controls button { min-width: 58px; }
+  .gis-display-controls label { grid-template-columns: auto 62px; }
+  .gis-display-controls input { width: 62px; }
+  .gis-valid-time { top: 58px; right: auto; left: 12px; min-width: 164px; }
+  .gis-coordinate-readout { bottom: 92px; min-width: 160px; }
+  .gis-legend { right: 12px; bottom: 12px; left: 12px; width: auto; }
+  .nowcast-gis-shell .ol-scale-line { display: none; }
+  .nowcast-gis-shell .ol-attribution { right: 12px; bottom: 112px; }
+  .nowcast-timeline-toolbar { align-items: stretch; flex-direction: column-reverse; gap: 7px; }
+  .timeline-active-state { text-align: left; }
+  .timeline-active-state span { justify-content: flex-start; }
+  .timeline-playback { width: 100%; }
+  .timeline-playback button { flex: 1; }
+  .nowcast-timeline-rail button { flex-basis: 44px; min-width: 44px; }
+  .timeline-footer { align-items: flex-start; flex-direction: column; }
+}
+
+@media (max-width: 380px) {
+  .nowcast-gis-shell { height: 450px; min-height: 450px; }
+  .gis-display-controls label { display: none; }
+  .gis-valid-time { min-width: 155px; }
+  .gis-coordinate-readout { right: 12px; bottom: 90px; min-width: 0; }
+  .gis-legend-cells small { font-size: 5px; }
+}

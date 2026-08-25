@@ -39,15 +39,18 @@ lose geographic context.
 ## 6. Depth and elevation
 
 Depth is communicated with `canvas`, `paper` and elevated white background
-steps. Borders remain structural dividers. The rainfall PNG sits above a quiet
-latitude/longitude plotting surface without glass effects.
+steps. Borders remain structural dividers. The rainfall PNG is an OpenLayers
+`ImageStatic` layer above a configurable XYZ basemap, local coastline and
+latitude/longitude graticule, without glass effects.
 
 ## 7. Guardrails
 
 - Never hide missing-data semantics behind zero rainfall.
 - Never imply that publication status proves meteorological skill.
 - Do not expose internal Zarr artifacts to the browser.
-- Do not add a heavy mapping dependency for the fixed Phase 1 grid.
+- Keep OpenLayers as the single GIS runtime; do not add a second map framework.
+- Preserve the product pixel-edge extent separately from the point-centre grid.
+- Keep the local GSHHG coastline available when the XYZ basemap is unavailable.
 - Keep UTC explicit on every forecast time.
 - Preserve product, model, configuration and source SHA provenance.
 - Avoid decorative gradients, generic card grids and ornamental animation.
@@ -55,16 +58,18 @@ latitude/longitude plotting surface without glass effects.
 ## 8. Responsive behavior
 
 At 980 px the evidence rail moves below the map. At 700 px status metrics and
-query panels become single-column, while the 24-frame timeline scrolls
-horizontally. Controls retain a minimum 40 px hit area down to 375 px.
+query panels become single-column, map controls condense without covering the
+valid-time or legend overlays, and the 24-frame timeline scrolls horizontally.
+Controls retain a minimum 40 px hit area down to 375 px.
 
 ## 9. Agent prompt guide
 
 - Build a forecast status strip on `paper` with 11 px labels, 24 px tabular
   values, one-pixel structural dividers and no decorative shadow.
-- Build a georeferenced rain layer on `canvas`, 501:201 aspect ratio, fixed
-  `118..123 E` and `25..27 N` axes, product PNG above the grid, 7 px radius.
-- Build a 24-frame timeline using 40 px minimum targets, teal selected state,
-  UTC labels and a 160 ms opacity-only layer transition.
+- Build an EPSG:4326 OpenLayers workspace with a configurable XYZ basemap,
+  GSHHG fallback, graticule, scale line, city labels and the 501x201 product PNG
+  at pixel-edge extent `117.995,24.995,123.005,27.005`.
+- Build a 24-frame timeline using 40 px minimum targets, previous/play/next
+  controls, 900 ms playback, 0–1h/1–2h bands, teal selected state and UTC labels.
 - Build a point forecast line chart using the product teal, subtle horizontal
   guides and tabular rain-rate values; do not use bars for the time series.
