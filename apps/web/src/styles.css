@@ -637,6 +637,9 @@ h1 {
   .cycle-list { display: grid; grid-template-columns: repeat(2, 1fr); }
   .evidence-rail { grid-template-columns: 180px minmax(0, 1fr); }
   .analysis-status { display: none; }
+  .analysis-metrics { grid-template-columns: 1fr 1fr; }
+  .analysis-metrics > div:nth-child(2) { border-right: 0; }
+  .analysis-metrics > div:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
   .visualization-layout { grid-template-columns: 1fr; }
   .layer-stage { border-right: 0; border-bottom: 1px solid var(--line); }
   .layer-ledger { display: grid; grid-template-columns: minmax(180px, .8fr) 1fr; gap: 0 20px; }
@@ -684,9 +687,6 @@ h1 {
   .evidence-rail li { min-width: 92px; }
   .degradation-notice { align-items: start; flex-direction: column; }
   .degradation-notice ul { justify-content: start; }
-  .analysis-metrics { grid-template-columns: 1fr 1fr; }
-  .analysis-metrics > div:nth-child(2) { border-right: 0; }
-  .analysis-metrics > div:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
   .layer-toolbar { flex-direction: column; }
   .scope-switch { border-right: 0; border-bottom: 1px solid var(--line); }
   .layer-stage, .layer-stage.grid { min-height: 300px; padding: 10px; }
