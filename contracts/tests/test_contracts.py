@@ -22,6 +22,7 @@ EVENT_NAMES = (
     "analysis-mosaic-requested",
     "analysis-mosaic-requested-v2",
     "analysis-qpe-requested",
+    "analysis-diagnostics-requested",
     "nowcast-input-requested",
     "nowcast-input-ready",
     "forecast-run-requested",
@@ -68,6 +69,8 @@ def test_openapi_exposes_the_planned_v1_operations() -> None:
         "/analysis-cycles/{analysis_id}",
         "/analysis-cycles/{analysis_id}/mosaic-summary",
         "/analysis-cycles/{analysis_id}/qpe-summary",
+        "/analysis-cycles/{analysis_id}/diagnostics",
+        "/diagnostics/{job_id}/layers/{layer_id}",
         "/products",
         "/products/{product_id}",
         "/products/{product_id}/assets",
@@ -190,6 +193,16 @@ def test_rp011_qpe_contract_is_versioned_and_never_fabricates_raw_fields() -> No
     assert "RATE_QPE=0" in analysis
     assert "must not be fabricated" in analysis
     assert "gauge adjustment is disabled" in analysis
+
+
+def test_rp012_diagnostics_are_pre_rendered_and_preserve_three_states() -> None:
+    diagnostics = (CONTRACTS_ROOT / "data" / "diagnostic-bundle.md").read_text()
+
+    assert "React and Go must not parse Zarr arrays" in diagnostics
+    assert "Missing pixels have alpha 0" in diagnostics
+    assert "Valid no-rain is not transparent" in diagnostics
+    assert "Low-quality pixels remain visible" in diagnostics
+    assert "arbitrary object-store keys" in diagnostics
 
 
 def test_distribution_contracts_preserve_grid_and_missing_semantics() -> None:

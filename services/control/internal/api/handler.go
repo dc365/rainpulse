@@ -9,6 +9,7 @@ import (
 	"time"
 
 	apiv1 "github.com/fonwee/rainpulse-nowcast/services/control/internal/api/generated"
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/objectstore"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/workflow"
 	"github.com/google/uuid"
 )
@@ -36,25 +37,33 @@ type ObservationStore interface {
 	GetRadarGridMetrics(context.Context, uuid.UUID) (workflow.RadarGridMetrics, error)
 	GetAnalysisMosaicMetrics(context.Context, uuid.UUID) (workflow.AnalysisMosaicMetrics, error)
 	GetAnalysisQPEMetrics(context.Context, uuid.UUID) (workflow.AnalysisQPEMetrics, error)
+	GetAnalysisDiagnostics(context.Context, uuid.UUID) (workflow.AnalysisDiagnostics, error)
+	GetDiagnosticLayer(context.Context, uuid.UUID, string) (string, string, error)
 	ListAnalysisCycles(context.Context, int, *workflow.AnalysisStatus) ([]workflow.AnalysisCycle, error)
 	GetAnalysisCycle(context.Context, uuid.UUID) (workflow.AnalysisCycle, error)
 }
 
+type DiagnosticLayerReader interface {
+	Read(context.Context, string, string) ([]byte, string, error)
+}
+
 type Options struct {
-	Version         string
-	Runs            RunStore
-	Observations    ObservationStore
-	Commands        RunCommands
-	SSEPollInterval time.Duration
+	Version          string
+	Runs             RunStore
+	Observations     ObservationStore
+	Commands         RunCommands
+	DiagnosticLayers DiagnosticLayerReader
+	SSEPollInterval  time.Duration
 }
 
 type server struct {
 	apiv1.Unimplemented
-	version         string
-	runs            RunStore
-	observations    ObservationStore
-	commands        RunCommands
-	ssePollInterval time.Duration
+	version          string
+	runs             RunStore
+	observations     ObservationStore
+	commands         RunCommands
+	diagnosticLayers DiagnosticLayerReader
+	ssePollInterval  time.Duration
 }
 
 func NewHandler(options Options) http.Handler {
@@ -63,11 +72,12 @@ func NewHandler(options Options) http.Handler {
 		pollInterval = time.Second
 	}
 	return apiv1.HandlerWithOptions(&server{
-		version:         options.Version,
-		runs:            options.Runs,
-		observations:    options.Observations,
-		commands:        options.Commands,
-		ssePollInterval: pollInterval,
+		version:          options.Version,
+		runs:             options.Runs,
+		observations:     options.Observations,
+		commands:         options.Commands,
+		diagnosticLayers: options.DiagnosticLayers,
+		ssePollInterval:  pollInterval,
 	}, apiv1.ChiServerOptions{BaseURL: "/api/v1"})
 }
 
@@ -423,6 +433,77 @@ func (service *server) GetAnalysisQpeSummary(
 	writeJSON(response, http.StatusOK, metrics)
 }
 
+func (service *server) GetAnalysisDiagnostics(
+	response http.ResponseWriter,
+	request *http.Request,
+	analysisID apiv1.AnalysisId,
+) {
+	if service.observations == nil {
+		writeServiceUnavailable(response)
+		return
+	}
+	diagnostics, err := service.observations.GetAnalysisDiagnostics(
+		request.Context(), analysisID,
+	)
+	if err != nil {
+		writeStoreError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, toAPIDiagnostics(diagnostics))
+}
+
+func (service *server) GetDiagnosticLayer(
+	response http.ResponseWriter,
+	request *http.Request,
+	jobID apiv1.JobId,
+	layerID apiv1.LayerId,
+) {
+	if service.observations == nil || service.diagnosticLayers == nil {
+		writeServiceUnavailable(response)
+		return
+	}
+	bundleURI, objectPath, err := service.observations.GetDiagnosticLayer(
+		request.Context(), jobID, layerID,
+	)
+	if err != nil {
+		writeStoreError(response, err)
+		return
+	}
+	data, etag, err := service.diagnosticLayers.Read(
+		request.Context(), bundleURI, objectPath,
+	)
+	if err != nil {
+		if errors.Is(err, objectstore.ErrNotFound) {
+			writeError(response, http.StatusNotFound, "not_found", "diagnostic layer was not found")
+			return
+		}
+		writeError(
+			response,
+			http.StatusBadGateway,
+			"object_store_error",
+			"diagnostic layer could not be read",
+		)
+		return
+	}
+	if len(data) < 8 || string(data[:8]) != "\x89PNG\r\n\x1a\n" {
+		writeError(
+			response,
+			http.StatusBadGateway,
+			"invalid_diagnostic_layer",
+			"diagnostic layer is not a PNG",
+		)
+		return
+	}
+	response.Header().Set("Content-Type", "image/png")
+	response.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	response.Header().Set("X-Content-Type-Options", "nosniff")
+	if etag != "" {
+		response.Header().Set("ETag", fmt.Sprintf("%q", etag))
+	}
+	response.WriteHeader(http.StatusOK)
+	_, _ = response.Write(data)
+}
+
 func (service *server) StreamEvents(response http.ResponseWriter, request *http.Request, params apiv1.StreamEventsParams) {
 	selected := 0
 	for _, present := range []bool{params.RunId != nil, params.ScanId != nil, params.AnalysisId != nil} {
@@ -730,6 +811,65 @@ func toAPIAnalysis(cycle workflow.AnalysisCycle) apiv1.AnalysisCycle {
 		MeanQualityIndex:   float32Pointer(cycle.MeanQualityIndex),
 		MosaicUri:          cycle.MosaicURI, AnalysisUri: cycle.AnalysisURI, Radars: radars,
 		CreatedAt: cycle.CreatedAt.UTC(), UpdatedAt: cycle.UpdatedAt.UTC(),
+	}
+}
+
+func toAPIDiagnostics(value workflow.AnalysisDiagnostics) apiv1.DiagnosticBundle {
+	manifest := value.Manifest
+	layers := make([]apiv1.DiagnosticLayer, 0, len(manifest.Layers))
+	for _, layer := range manifest.Layers {
+		legend := make([]apiv1.DiagnosticLegendEntry, 0, len(layer.Legend))
+		for _, item := range layer.Legend {
+			var numericValue *float32
+			if item.Value != nil {
+				converted := float32(*item.Value)
+				numericValue = &converted
+			}
+			legend = append(legend, apiv1.DiagnosticLegendEntry{
+				Label: item.Label, Color: item.Color, Value: numericValue, Code: item.Code,
+			})
+		}
+		var bounds *[]float32
+		if len(layer.Bounds) == 4 {
+			converted := make([]float32, len(layer.Bounds))
+			for index, value := range layer.Bounds {
+				converted[index] = float32(value)
+			}
+			bounds = &converted
+		}
+		var elevation *float32
+		if layer.ElevationDeg != nil {
+			converted := float32(*layer.ElevationDeg)
+			elevation = &converted
+		}
+		var maximumRange *float32
+		if layer.MaximumRangeKM != nil {
+			converted := float32(*layer.MaximumRangeKM)
+			maximumRange = &converted
+		}
+		layers = append(layers, apiv1.DiagnosticLayer{
+			LayerId: layer.LayerID, Title: layer.Title,
+			Scope: apiv1.DiagnosticLayerScope(layer.Scope), Field: layer.Field,
+			Rendering: apiv1.DiagnosticLayerRendering(layer.Rendering), Unit: layer.Unit,
+			ImageUrl: fmt.Sprintf("/api/v1/diagnostics/%s/layers/%s", value.JobID, layer.LayerID),
+			Width:    layer.Width, Height: layer.Height,
+			PaletteVersion: layer.PaletteVersion, Legend: legend,
+			Bounds: bounds, RadarId: layer.RadarID, ScanId: layer.ScanID,
+			SweepNumber: layer.SweepNumber, ElevationDeg: elevation,
+			MaximumRangeKm: maximumRange,
+		})
+	}
+	return apiv1.DiagnosticBundle{
+		ContractVersion: manifest.ContractVersion,
+		JobId:           value.JobID, AnalysisId: manifest.AnalysisID,
+		AnalysisTime: manifest.AnalysisTime.UTC(), GridId: manifest.GridID,
+		DiagnosticConfigVersion: manifest.DiagnosticConfig,
+		RendererVersion:         manifest.RendererVersion,
+		PaletteVersion:          manifest.PaletteVersion,
+		FlagDefinitionVersion:   manifest.FlagDefinitionVersion,
+		OperationalEligible:     manifest.OperationalEligible,
+		OperationalReasons:      manifest.OperationalReasons,
+		Layers:                  layers, CreatedAt: manifest.CreatedAt.UTC(),
 	}
 }
 

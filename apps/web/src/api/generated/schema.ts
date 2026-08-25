@@ -276,6 +276,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/analysis-cycles/{analysis_id}/diagnostics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the accepted RP-012 diagnostic manifest for an analysis */
+        get: operations["getAnalysisDiagnostics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/diagnostics/{job_id}/layers/{layer_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one immutable PNG layer listed by a diagnostic manifest */
+        get: operations["getDiagnosticLayer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/products": {
         parameters: {
             query?: never;
@@ -781,6 +815,56 @@ export interface components {
             /** Format: date-time */
             measured_at: string;
         };
+        DiagnosticLegendEntry: {
+            label: string;
+            color: string;
+            value?: number | null;
+            code?: number | null;
+        };
+        DiagnosticLayer: {
+            layer_id: string;
+            title: string;
+            /** @enum {string} */
+            scope: "grid" | "polar";
+            field: string;
+            /** @enum {string} */
+            rendering: "scalar" | "categorical" | "flags" | "state";
+            unit?: string | null;
+            /** Format: uri-reference */
+            image_url: string;
+            width: number;
+            height: number;
+            palette_version: string;
+            legend: components["schemas"]["DiagnosticLegendEntry"][];
+            bounds?: number[];
+            radar_id?: string | null;
+            /** Format: uuid */
+            scan_id?: string | null;
+            sweep_number?: number | null;
+            /** Format: float */
+            elevation_deg?: number | null;
+            /** Format: float */
+            maximum_range_km?: number | null;
+        };
+        DiagnosticBundle: {
+            contract_version: string;
+            /** Format: uuid */
+            job_id: string;
+            /** Format: uuid */
+            analysis_id: string;
+            /** Format: date-time */
+            analysis_time: string;
+            grid_id: string;
+            diagnostic_config_version: string;
+            renderer_version: string;
+            palette_version: string;
+            flag_definition_version: string;
+            operational_eligible: boolean;
+            operational_reasons: string[];
+            layers: components["schemas"]["DiagnosticLayer"][];
+            /** Format: date-time */
+            created_at: string;
+        };
         AnalysisCycle: {
             /** Format: uuid */
             analysis_id: string;
@@ -973,6 +1057,8 @@ export interface components {
         RadarId: string;
         ScanId: string;
         AnalysisId: string;
+        JobId: string;
+        LayerId: string;
         Limit: number;
         Cursor: string;
     };
@@ -1338,6 +1424,54 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AnalysisQPEMetrics"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getAnalysisDiagnostics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                analysis_id: components["parameters"]["AnalysisId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pre-rendered analysis and contributing-radar diagnostics */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiagnosticBundle"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getDiagnosticLayer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: components["parameters"]["JobId"];
+                layer_id: components["parameters"]["LayerId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Transparent diagnostic PNG */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
                 };
             };
             404: components["responses"]["NotFound"];

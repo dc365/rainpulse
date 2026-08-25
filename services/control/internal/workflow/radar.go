@@ -220,6 +220,75 @@ type AnalysisQPEBundle struct {
 	Outbox           OutboxEvent
 }
 
+type AnalysisDiagnosticRadarInput struct {
+	RadarID string    `json:"radar_id"`
+	ScanID  uuid.UUID `json:"scan_id"`
+	QCURI   string    `json:"qc_uri"`
+}
+
+type AnalysisDiagnosticsBundle struct {
+	AnalysisID      uuid.UUID
+	RunID           uuid.UUID
+	AnalysisURI     string
+	ConfigVersion   string
+	RendererVersion string
+	Config          json.RawMessage
+	ConfigSHA256    string
+	RadarInputs     []AnalysisDiagnosticRadarInput
+	Job             Job
+	Outbox          OutboxEvent
+}
+
+type DiagnosticLegendEntry struct {
+	Label string   `json:"label"`
+	Color string   `json:"color"`
+	Value *float64 `json:"value,omitempty"`
+	Code  *int     `json:"code,omitempty"`
+}
+
+type DiagnosticLayer struct {
+	LayerID        string                  `json:"layer_id"`
+	Title          string                  `json:"title"`
+	Scope          string                  `json:"scope"`
+	Field          string                  `json:"field"`
+	Rendering      string                  `json:"rendering"`
+	Unit           *string                 `json:"unit"`
+	ObjectPath     string                  `json:"object_path"`
+	Width          int                     `json:"width"`
+	Height         int                     `json:"height"`
+	PaletteVersion string                  `json:"palette_version"`
+	Legend         []DiagnosticLegendEntry `json:"legend"`
+	Bounds         []float64               `json:"bounds,omitempty"`
+	RadarID        *string                 `json:"radar_id,omitempty"`
+	ScanID         *uuid.UUID              `json:"scan_id,omitempty"`
+	SweepNumber    *int                    `json:"sweep_number,omitempty"`
+	ElevationDeg   *float64                `json:"elevation_deg,omitempty"`
+	MaximumRangeKM *float64                `json:"maximum_range_km,omitempty"`
+}
+
+type DiagnosticManifest struct {
+	ContractVersion       string            `json:"contract_version"`
+	JobID                 uuid.UUID         `json:"job_id"`
+	AnalysisID            uuid.UUID         `json:"analysis_id"`
+	AnalysisTime          time.Time         `json:"analysis_time"`
+	AnalysisURI           string            `json:"analysis_uri"`
+	GridID                string            `json:"grid_id"`
+	DiagnosticConfig      string            `json:"diagnostic_config_version"`
+	RendererVersion       string            `json:"renderer_version"`
+	PaletteVersion        string            `json:"palette_version"`
+	FlagDefinitionVersion string            `json:"flag_definition_version"`
+	OperationalEligible   bool              `json:"operational_eligible"`
+	OperationalReasons    []string          `json:"operational_reasons"`
+	Layers                []DiagnosticLayer `json:"layers"`
+	CreatedAt             time.Time         `json:"created_at"`
+}
+
+type AnalysisDiagnostics struct {
+	JobID     uuid.UUID
+	BundleURI string
+	Manifest  DiagnosticManifest
+}
+
 type RadarGridMetrics struct {
 	ScanID                      uuid.UUID         `json:"scan_id"`
 	RadarID                     string            `json:"radar_id"`

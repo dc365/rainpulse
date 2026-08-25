@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import type { components } from './api/generated/schema'
+import { AnalysisDiagnostics } from './AnalysisDiagnostics'
 import './styles.css'
 
 type SystemStatus = components['schemas']['SystemStatus']
@@ -70,6 +71,8 @@ function percent(value?: number | null) {
 }
 
 export default function App() {
+  const [activeView, setActiveView] = useState<'analysis' | 'radar'>('analysis')
+  const [analysisRefreshToken, setAnalysisRefreshToken] = useState(0)
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null)
   const [radars, setRadars] = useState<RadarStatus[]>([])
   const [selectedRadarId, setSelectedRadarId] = useState<string | null>(null)
@@ -151,6 +154,10 @@ export default function App() {
             <p className="product-name">短临降水预报系统</p>
           </div>
         </div>
+        <nav className="workspace-nav" aria-label="业务工作区">
+          <button type="button" className={activeView === 'analysis' ? 'active' : ''} aria-current={activeView === 'analysis' ? 'page' : undefined} onClick={() => setActiveView('analysis')}>分析诊断</button>
+          <button type="button" className={activeView === 'radar' ? 'active' : ''} aria-current={activeView === 'radar' ? 'page' : undefined} onClick={() => setActiveView('radar')}>雷达运行</button>
+        </nav>
         <div className="system-meta" aria-live="polite">
           <span className={`system-dot ${systemStatus?.status ?? 'loading'}`} />
           <span>{systemStatus?.status === 'ready' ? '控制面正常' : '控制面检查中'}</span>
@@ -159,9 +166,9 @@ export default function App() {
           <button
             className="refresh-button"
             type="button"
-            aria-label="刷新雷达状态"
-            disabled={refreshing}
-            onClick={() => void load(undefined, true)}
+            aria-label={activeView === 'analysis' ? '刷新分析诊断' : '刷新雷达状态'}
+            disabled={activeView === 'radar' && refreshing}
+            onClick={() => activeView === 'analysis' ? setAnalysisRefreshToken((value) => value + 1) : void load(undefined, true)}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M20 7v5h-5M4 17v-5h5" />
@@ -170,6 +177,9 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      {activeView === 'radar' ? (
+        <>
 
       <section className="page-heading" aria-labelledby="page-title">
         <div>
@@ -241,6 +251,8 @@ export default function App() {
           {selected ? <RadarDetail radar={selected} /> : <p className="empty-state">请选择一个雷达站</p>}
         </section>
       </section>
+        </>
+      ) : <AnalysisDiagnostics refreshToken={analysisRefreshToken} />}
     </main>
   )
 }

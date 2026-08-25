@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/configs/schemas/diagnostic-profile.schema.json",
+  "title": "RainPulse RP-012 diagnostic renderer profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profile_version", "renderer_version", "bundle_contract_version", "radar_analysis_contract_version", "qc_radar_volume_contract_version", "flag_definition_version", "palette_version", "grid_render", "polar_render", "layers"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "profile_version": { "$ref": "#/$defs/identifier" },
+    "renderer_version": { "$ref": "#/$defs/identifier" },
+    "bundle_contract_version": { "const": "1.0" },
+    "radar_analysis_contract_version": { "const": "1.2" },
+    "qc_radar_volume_contract_version": { "const": "1.0" },
+    "flag_definition_version": { "$ref": "#/$defs/identifier" },
+    "palette_version": { "const": "rainpulse-meteorological-v1" },
+    "grid_render": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pixel_scale", "north_up", "missing_alpha"],
+      "properties": {
+        "pixel_scale": { "type": "integer", "minimum": 1, "maximum": 4 },
+        "north_up": { "const": true },
+        "missing_alpha": { "const": 0 }
+      }
+    },
+    "polar_render": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image_size", "sweep_selection", "missing_alpha"],
+      "properties": {
+        "image_size": { "type": "integer", "minimum": 256, "maximum": 1200 },
+        "sweep_selection": { "const": "lowest_dbzh_sweep" },
+        "missing_alpha": { "const": 0 }
+      }
+    },
+    "layers": {
+      "type": "array",
+      "minItems": 11,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "grid_dbzh_qc", "grid_rate_qpe", "grid_quality_index",
+          "grid_source_radar", "grid_beam_height", "grid_qc_flags",
+          "grid_state_mask", "polar_dbzh_raw", "polar_dbzh_qc",
+          "polar_quality_index", "polar_qc_flags"
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "identifier": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$" }
+  }
+}

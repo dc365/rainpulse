@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "event_id": "81000000-0000-4000-8000-000000000001",
+  "event_type": "analysis.diagnostics.requested.v1",
+  "occurred_at": "2026-08-25T12:06:00Z",
+  "run_id": "82000000-0000-4000-8000-000000000001",
+  "job_id": "83000000-0000-4000-8000-000000000001",
+  "trace_id": "84000000-0000-4000-8000-000000000001",
+  "payload": {
+    "analysis_id": "85000000-0000-4000-8000-000000000001",
+    "analysis_time": "2026-08-25T12:05:00Z",
+    "grid_id": "fuzhou_118_123_25_27_0p01deg_v1",
+    "input_uri": "s3://rainpulse/analysis/fuzhou_118_123_25_27_0p01deg_v1/2026/08/25/120500Z/basic-zr-qpe-1.0.0/analysis.zarr",
+    "radar_inputs": [
+      {
+        "radar_id": "z9598",
+        "scan_id": "86000000-0000-4000-8000-000000000001",
+        "qc_uri": "s3://rainpulse/radar/qc/z9598/2026/08/25/120442Z/rp008-basic-1.0.4/volume.zarr"
+      }
+    ],
+    "output_prefix": "s3://rainpulse/diagnostics/85000000-0000-4000-8000-000000000001/radar-diagnostic-renderer-1.0.0/",
+    "diagnostic_config_version": "rp012-operational-diagnostics-v1",
+    "renderer_version": "radar-diagnostic-renderer-1.0.0",
+    "flag_definition_version": "qc-flags-v1"
+  }
+}

@@ -314,3 +314,39 @@ def test_rp011_qpe_profile_freezes_basic_zr_and_disables_gauge_adjustment() -> N
         "method": "none",
         "observation_qc_version": None,
     }
+
+
+def test_rp012_diagnostic_profile_freezes_layers_and_transparency() -> None:
+    schema = json.loads(
+        (CONFIG_ROOT / "schemas" / "diagnostic-profile.schema.json").read_text()
+    )
+    profile = yaml.safe_load(
+        (
+            CONFIG_ROOT
+            / "diagnostics"
+            / "rp012-operational-diagnostics-v1.yaml"
+        ).read_text()
+    )
+
+    Draft202012Validator.check_schema(schema)
+    Draft202012Validator(schema).validate(profile)
+    assert profile["renderer_version"] == "radar-diagnostic-renderer-1.0.0"
+    assert profile["grid_render"] == {
+        "pixel_scale": 2,
+        "north_up": True,
+        "missing_alpha": 0,
+    }
+    assert profile["polar_render"]["sweep_selection"] == "lowest_dbzh_sweep"
+    assert {
+        "grid_dbzh_qc",
+        "grid_rate_qpe",
+        "grid_quality_index",
+        "grid_source_radar",
+        "grid_beam_height",
+        "grid_qc_flags",
+        "grid_state_mask",
+        "polar_dbzh_raw",
+        "polar_dbzh_qc",
+        "polar_quality_index",
+        "polar_qc_flags",
+    } == set(profile["layers"])

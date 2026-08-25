@@ -277,6 +277,44 @@ paths:
                 $ref: "#/components/schemas/AnalysisQPEMetrics"
         "404":
           $ref: "#/components/responses/NotFound"
+  /analysis-cycles/{analysis_id}/diagnostics:
+    get:
+      operationId: getAnalysisDiagnostics
+      tags: [analysis]
+      summary: Get the accepted RP-012 diagnostic manifest for an analysis
+      parameters:
+        - $ref: "#/components/parameters/AnalysisId"
+      responses:
+        "200":
+          description: Pre-rendered analysis and contributing-radar diagnostics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiagnosticBundle"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /diagnostics/{job_id}/layers/{layer_id}:
+    get:
+      operationId: getDiagnosticLayer
+      tags: [analysis]
+      summary: Read one immutable PNG layer listed by a diagnostic manifest
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+        - $ref: "#/components/parameters/LayerId"
+      responses:
+        "200":
+          description: Transparent diagnostic PNG
+          headers:
+            ETag:
+              schema:
+                type: string
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
   /products:
     get:
       operationId: listProducts
@@ -565,6 +603,20 @@ components:
       schema:
         type: string
         format: uuid
+    JobId:
+      name: job_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    LayerId:
+      name: layer_id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-z0-9][a-z0-9-]{2,127}$"
     Limit:
       name: limit
       in: query
@@ -1363,6 +1415,121 @@ components:
           format: float
           minimum: 0
         measured_at:
+          type: string
+          format: date-time
+    DiagnosticLegendEntry:
+      type: object
+      additionalProperties: false
+      required: [label, color]
+      properties:
+        label:
+          type: string
+        color:
+          type: string
+          pattern: "^#[0-9a-fA-F]{6}$"
+        value:
+          type: number
+          nullable: true
+        code:
+          type: integer
+          nullable: true
+    DiagnosticLayer:
+      type: object
+      additionalProperties: false
+      required: [layer_id, title, scope, field, rendering, image_url, width, height, palette_version, legend]
+      properties:
+        layer_id:
+          type: string
+        title:
+          type: string
+        scope:
+          type: string
+          enum: [grid, polar]
+        field:
+          type: string
+        rendering:
+          type: string
+          enum: [scalar, categorical, flags, state]
+        unit:
+          type: string
+          nullable: true
+        image_url:
+          type: string
+          format: uri-reference
+        width:
+          type: integer
+          minimum: 1
+        height:
+          type: integer
+          minimum: 1
+        palette_version:
+          type: string
+        legend:
+          type: array
+          items:
+            $ref: "#/components/schemas/DiagnosticLegendEntry"
+        bounds:
+          type: array
+          minItems: 4
+          maxItems: 4
+          items:
+            type: number
+        radar_id:
+          type: string
+          nullable: true
+        scan_id:
+          type: string
+          format: uuid
+          nullable: true
+        sweep_number:
+          type: integer
+          nullable: true
+        elevation_deg:
+          type: number
+          format: float
+          nullable: true
+        maximum_range_km:
+          type: number
+          format: float
+          nullable: true
+    DiagnosticBundle:
+      type: object
+      additionalProperties: false
+      required: [contract_version, job_id, analysis_id, analysis_time, grid_id, diagnostic_config_version, renderer_version, palette_version, flag_definition_version, operational_eligible, operational_reasons, layers, created_at]
+      properties:
+        contract_version:
+          type: string
+        job_id:
+          type: string
+          format: uuid
+        analysis_id:
+          type: string
+          format: uuid
+        analysis_time:
+          type: string
+          format: date-time
+        grid_id:
+          type: string
+        diagnostic_config_version:
+          type: string
+        renderer_version:
+          type: string
+        palette_version:
+          type: string
+        flag_definition_version:
+          type: string
+        operational_eligible:
+          type: boolean
+        operational_reasons:
+          type: array
+          items:
+            type: string
+        layers:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/DiagnosticLayer"
+        created_at:
           type: string
           format: date-time
     AnalysisCycle:

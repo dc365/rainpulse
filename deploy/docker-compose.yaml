@@ -384,6 +384,43 @@ services:
       start_period: 5s
     restart: unless-stopped
 
+  analysis-diagnostics-worker:
+    image: rainpulse-analysis-diagnostics-worker
+    build:
+      context: ..
+      dockerfile: algorithms/worker.Dockerfile
+    depends_on:
+      nats:
+        condition: service_healthy
+      minio-worker-policy:
+        condition: service_completed_successfully
+      orchestrator:
+        condition: service_healthy
+    environment:
+      RAINPULSE_NATS_URL: nats://nats:4222
+      RAINPULSE_OBJECT_STORE_ENDPOINT: http://minio:9000
+      RAINPULSE_OBJECT_STORE_ACCESS_KEY: "${RAINPULSE_MINIO_WORKER_ACCESS_KEY:?set RAINPULSE_MINIO_WORKER_ACCESS_KEY in deploy/.env}"
+      RAINPULSE_OBJECT_STORE_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
+      RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
+      RAINPULSE_WORKER_ID: rp012-analysis-diagnostics
+      RAINPULSE_WORKER_PROFILE: analysis-diagnostics
+      RAINPULSE_DIAGNOSTIC_CONFIG: /opt/rainpulse/configs/diagnostics/rp012-operational-diagnostics-v1.yaml
+      RAINPULSE_QC_FLAG_DEFINITIONS: /opt/rainpulse/configs/qc/flag-definitions.yaml
+      TZ: UTC
+    volumes:
+      - ../configs:/opt/rainpulse/configs:ro
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import json,urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:8091/healthz', timeout=2))['profile'] == 'analysis-diagnostics'"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
+
   api:
     build:
       context: ..
@@ -399,6 +436,8 @@ services:
         condition: service_healthy
       simulation-worker:
         condition: service_healthy
+      analysis-diagnostics-worker:
+        condition: service_healthy
     environment:
       RAINPULSE_HTTP_ADDR: ":8080"
       RAINPULSE_VERSION: "${RAINPULSE_VERSION:-dev}"
@@ -409,6 +448,8 @@ services:
       RAINPULSE_NATS_URL: nats://nats:4222
       RAINPULSE_OBJECT_STORE_ENDPOINT: http://minio:9000
       RAINPULSE_OBJECT_STORE_BUCKET: "${RAINPULSE_MINIO_BUCKET:-rainpulse}"
+      RAINPULSE_OBJECT_STORE_ACCESS_KEY: "${RAINPULSE_MINIO_WORKER_ACCESS_KEY:?set RAINPULSE_MINIO_WORKER_ACCESS_KEY in deploy/.env}"
+      RAINPULSE_OBJECT_STORE_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
       TZ: UTC
     ports:
       - "${RAINPULSE_BIND_ADDRESS:-0.0.0.0}:${RAINPULSE_API_PORT:-8080}:8080"

@@ -10,6 +10,7 @@ import (
 
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/api"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/healthcheck"
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/objectstore"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/orchestration"
 	postgresstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/postgres"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/runtimeconfig"
@@ -46,14 +47,20 @@ func main() {
 	}
 	store := postgresstore.New(pool)
 	commands := orchestration.NewService(store, orchestration.Options{})
+	diagnosticLayers, err := objectstore.NewFromEnvironment()
+	if err != nil {
+		slog.Error("configure diagnostic object reader", "error", err)
+		os.Exit(1)
+	}
 
 	server := &http.Server{
 		Addr: address,
 		Handler: api.NewHandler(api.Options{
-			Version:      version,
-			Runs:         store,
-			Observations: store,
-			Commands:     commands,
+			Version:          version,
+			Runs:             store,
+			Observations:     store,
+			Commands:         commands,
+			DiagnosticLayers: diagnosticLayers,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,

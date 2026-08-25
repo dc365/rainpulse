@@ -108,6 +108,15 @@ func main() {
 			slog.Error("create analysis QPE workflow", "error", err)
 			os.Exit(1)
 		}
+	case "analysis-diagnostics":
+		if len(os.Args) != 4 {
+			slog.Error("analysis-diagnostics requires an analysis UUID and diagnostic config YAML")
+			os.Exit(2)
+		}
+		if err := analysisDiagnostics(ctx, store, service, os.Args[2], os.Args[3]); err != nil {
+			slog.Error("create analysis diagnostic workflow", "error", err)
+			os.Exit(1)
+		}
 	case "complete":
 		if len(os.Args) != 3 {
 			slog.Error("complete requires a job UUID")
@@ -174,6 +183,12 @@ type qpeConfiguration struct {
 	FlagDefinitionVersion string `yaml:"flag_definition_version"`
 	GridID                string `yaml:"grid_id"`
 	GridConfigVersion     string `yaml:"grid_config_version"`
+}
+
+type diagnosticConfiguration struct {
+	ProfileVersion        string `yaml:"profile_version"`
+	RendererVersion       string `yaml:"renderer_version"`
+	FlagDefinitionVersion string `yaml:"flag_definition_version"`
 }
 
 func radarDecode(
@@ -499,6 +514,86 @@ func analysisQPE(
 		QPEConfigVersion:    config.ProfileVersion,
 		QPEAlgorithmVersion: config.AlgorithmVersion,
 		QPEConfig:           configJSON, QPEConfigSHA256: fmt.Sprintf("%x", configHash),
+	})
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(os.Stdout).Encode(map[string]string{
+		"analysis_id": analysis.ID.String(),
+		"run_id":      analysis.RunID.String(),
+		"job_id":      job.ID.String(),
+	})
+}
+
+func analysisDiagnostics(
+	ctx context.Context,
+	store *postgresstore.Store,
+	service *orchestration.Service,
+	rawAnalysisID string,
+	configPath string,
+) error {
+	analysisID, err := uuid.Parse(rawAnalysisID)
+	if err != nil {
+		return fmt.Errorf("parse analysis UUID: %w", err)
+	}
+	analysis, err := store.GetAnalysisCycle(ctx, analysisID)
+	if err != nil {
+		return err
+	}
+	if analysis.AnalysisURI == nil {
+		return fmt.Errorf("analysis %s has no committed RadarAnalysis", analysis.ID)
+	}
+	inputs := make([]workflow.AnalysisDiagnosticRadarInput, 0, len(analysis.Radars))
+	for _, radar := range analysis.Radars {
+		if radar.State != workflow.AnalysisRadarParticipating || radar.ScanID == nil {
+			continue
+		}
+		scan, scanErr := store.GetRadarScan(ctx, *radar.ScanID)
+		if scanErr != nil {
+			return scanErr
+		}
+		if scan.RadarID != radar.RadarID || scan.QCURI == nil {
+			return fmt.Errorf("analysis contributor %s has no exact QCRadarVolume", radar.RadarID)
+		}
+		inputs = append(inputs, workflow.AnalysisDiagnosticRadarInput{
+			RadarID: radar.RadarID,
+			ScanID:  *radar.ScanID,
+			QCURI:   *scan.QCURI,
+		})
+	}
+	if len(inputs) == 0 {
+		return fmt.Errorf("analysis %s has no participating QC radar inputs", analysis.ID)
+	}
+	configBytes, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("read diagnostic configuration: %w", err)
+	}
+	var config diagnosticConfiguration
+	if err := yaml.Unmarshal(configBytes, &config); err != nil {
+		return fmt.Errorf("decode diagnostic configuration: %w", err)
+	}
+	var configValue map[string]any
+	if err := yaml.Unmarshal(configBytes, &configValue); err != nil {
+		return fmt.Errorf("normalize diagnostic configuration: %w", err)
+	}
+	configJSON, err := json.Marshal(configValue)
+	if err != nil {
+		return fmt.Errorf("encode diagnostic configuration: %w", err)
+	}
+	configHash := sha256.Sum256(configBytes)
+	job, err := service.CreateAnalysisDiagnostics(ctx, orchestration.AnalysisDiagnosticsInput{
+		AnalysisID:              analysis.ID,
+		RunID:                   analysis.RunID,
+		AnalysisTime:            analysis.AnalysisTime,
+		GridID:                  analysis.GridID,
+		AnalysisURI:             *analysis.AnalysisURI,
+		CurrentStatus:           analysis.Status,
+		RadarInputs:             inputs,
+		DiagnosticConfig:        configJSON,
+		DiagnosticConfigSHA256:  fmt.Sprintf("%x", configHash),
+		DiagnosticConfigVersion: config.ProfileVersion,
+		RendererVersion:         config.RendererVersion,
+		FlagDefinitionVersion:   config.FlagDefinitionVersion,
 	})
 	if err != nil {
 		return err

@@ -22,6 +22,7 @@ type Repository interface {
 	CreateRadarGridBundle(context.Context, workflow.RadarGridBundle) error
 	CreateAnalysisMosaicBundle(context.Context, workflow.AnalysisMosaicBundle) error
 	CreateAnalysisQPEBundle(context.Context, workflow.AnalysisQPEBundle) error
+	CreateAnalysisDiagnosticsBundle(context.Context, workflow.AnalysisDiagnosticsBundle) error
 	CreateDomainSimulation(context.Context, workflow.DomainSimulation) error
 	GetRun(context.Context, uuid.UUID) (workflow.Run, error)
 	GetJob(context.Context, uuid.UUID) (workflow.Job, error)
@@ -116,6 +117,21 @@ type AnalysisQPEInput struct {
 	QPEAlgorithmVersion    string
 	QPEConfig              json.RawMessage
 	QPEConfigSHA256        string
+}
+
+type AnalysisDiagnosticsInput struct {
+	AnalysisID              uuid.UUID
+	RunID                   uuid.UUID
+	AnalysisTime            time.Time
+	GridID                  string
+	AnalysisURI             string
+	CurrentStatus           workflow.AnalysisStatus
+	RadarInputs             []workflow.AnalysisDiagnosticRadarInput
+	DiagnosticConfig        json.RawMessage
+	DiagnosticConfigSHA256  string
+	DiagnosticConfigVersion string
+	RendererVersion         string
+	FlagDefinitionVersion   string
 }
 
 type Publisher interface {
@@ -631,6 +647,118 @@ func validateAnalysisQPEInput(input AnalysisQPEInput) error {
 	if len(input.QPEConfig) == 0 || !json.Valid(input.QPEConfig) ||
 		!sha256Pattern.MatchString(input.QPEConfigSHA256) {
 		return fmt.Errorf("QPE configuration and SHA-256 are required")
+	}
+	return nil
+}
+
+func (service *Service) CreateAnalysisDiagnostics(
+	ctx context.Context,
+	input AnalysisDiagnosticsInput,
+) (workflow.Job, error) {
+	if err := validateAnalysisDiagnosticsInput(input); err != nil {
+		return workflow.Job{}, err
+	}
+	now := service.now().UTC()
+	jobID := stableID(
+		"analysis-diagnostics-job",
+		input.RunID.String(),
+		input.RendererVersion,
+	)
+	traceID := stableID("analysis-diagnostics-trace", jobID.String())
+	eventID := stableID("analysis-diagnostics-request", jobID.String())
+	outputPrefix := fmt.Sprintf(
+		"s3://rainpulse/diagnostics/%s/%s/",
+		input.AnalysisID,
+		url.PathEscape(input.RendererVersion),
+	)
+	request := AnalysisDiagnosticsRequested{
+		SchemaVersion: SchemaVersion,
+		EventID:       eventID,
+		EventType:     AnalysisDiagnosticsRequestedEventType,
+		OccurredAt:    now,
+		RunID:         input.RunID,
+		JobID:         jobID,
+		TraceID:       traceID,
+		Payload: AnalysisDiagnosticsRequestedPayload{
+			AnalysisID:            input.AnalysisID,
+			AnalysisTime:          input.AnalysisTime.UTC(),
+			GridID:                input.GridID,
+			InputURI:              input.AnalysisURI,
+			RadarInputs:           input.RadarInputs,
+			OutputPrefix:          outputPrefix,
+			DiagnosticConfig:      input.DiagnosticConfigVersion,
+			RendererVersion:       input.RendererVersion,
+			FlagDefinitionVersion: input.FlagDefinitionVersion,
+		},
+	}
+	payload, err := json.Marshal(request)
+	if err != nil {
+		return workflow.Job{}, fmt.Errorf("encode analysis diagnostics request: %w", err)
+	}
+	job := workflow.Job{
+		ID: jobID, RunID: input.RunID, TraceID: traceID,
+		JobType:       AnalysisDiagnosticsJobType,
+		ConfigVersion: input.DiagnosticConfigVersion,
+		Status:        workflow.JobPending, Attempt: 1,
+		RequestPayload: payload, CreatedAt: now,
+	}
+	bundle := workflow.AnalysisDiagnosticsBundle{
+		AnalysisID: input.AnalysisID, RunID: input.RunID,
+		AnalysisURI:     input.AnalysisURI,
+		ConfigVersion:   input.DiagnosticConfigVersion,
+		RendererVersion: input.RendererVersion,
+		Config:          input.DiagnosticConfig,
+		ConfigSHA256:    input.DiagnosticConfigSHA256,
+		RadarInputs:     input.RadarInputs,
+		Job:             job,
+		Outbox: workflow.OutboxEvent{
+			ID: eventID, AggregateID: jobID.String(),
+			EventType: AnalysisDiagnosticsRequestedEventType,
+			Subject:   AnalysisDiagnosticsRequestedSubject, Payload: payload,
+		},
+	}
+	if err := service.repository.CreateAnalysisDiagnosticsBundle(ctx, bundle); err != nil {
+		return workflow.Job{}, err
+	}
+	return job, nil
+}
+
+func validateAnalysisDiagnosticsInput(input AnalysisDiagnosticsInput) error {
+	if input.AnalysisID == uuid.Nil || input.RunID == uuid.Nil ||
+		input.AnalysisTime.IsZero() || input.GridID == "" ||
+		input.DiagnosticConfigVersion == "" || input.RendererVersion == "" ||
+		input.FlagDefinitionVersion == "" {
+		return fmt.Errorf("analysis diagnostic identity and version fields are required")
+	}
+	if input.CurrentStatus != workflow.AnalysisReady {
+		return fmt.Errorf("analysis status %q cannot render diagnostics", input.CurrentStatus)
+	}
+	parsed, err := url.ParseRequestURI(input.AnalysisURI)
+	if err != nil || parsed.Scheme != "s3" {
+		return fmt.Errorf("diagnostic input must be a committed s3 RadarAnalysis URI")
+	}
+	if len(input.RadarInputs) == 0 {
+		return fmt.Errorf("at least one contributing QC radar input is required")
+	}
+	radars := make(map[string]struct{}, len(input.RadarInputs))
+	scans := make(map[uuid.UUID]struct{}, len(input.RadarInputs))
+	for _, radar := range input.RadarInputs {
+		uri, uriErr := url.ParseRequestURI(radar.QCURI)
+		if radar.RadarID == "" || radar.ScanID == uuid.Nil || uriErr != nil || uri.Scheme != "s3" {
+			return fmt.Errorf("diagnostic radar identity and QC s3 URI are required")
+		}
+		if _, exists := radars[radar.RadarID]; exists {
+			return fmt.Errorf("diagnostic radar IDs must be unique")
+		}
+		if _, exists := scans[radar.ScanID]; exists {
+			return fmt.Errorf("diagnostic scan IDs must be unique")
+		}
+		radars[radar.RadarID] = struct{}{}
+		scans[radar.ScanID] = struct{}{}
+	}
+	if len(input.DiagnosticConfig) == 0 || !json.Valid(input.DiagnosticConfig) ||
+		!sha256Pattern.MatchString(input.DiagnosticConfigSHA256) {
+		return fmt.Errorf("diagnostic configuration and SHA-256 are required")
 	}
 	return nil
 }

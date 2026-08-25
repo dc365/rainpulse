@@ -163,6 +163,44 @@ class AnalysisQPERequestedV1(DomainRequest):
     payload: AnalysisQPEPayloadV1
 
 
+class AnalysisDiagnosticRadarInput(ContractModel):
+    radar_id: str = Field(min_length=1)
+    scan_id: UUID
+    qc_uri: str
+
+    @field_validator("qc_uri")
+    @classmethod
+    def validate_qc_uri(cls, value: str) -> str:
+        if urlparse(value).scheme != "s3":
+            raise ValueError("diagnostic QC URI must use s3")
+        return value
+
+
+class AnalysisDiagnosticsPayloadV1(ObjectTaskPayload):
+    analysis_id: UUID
+    analysis_time: datetime
+    grid_id: str = Field(min_length=1)
+    radar_inputs: list[AnalysisDiagnosticRadarInput] = Field(min_length=1)
+    diagnostic_config_version: str = Field(min_length=1)
+    renderer_version: str = Field(min_length=1)
+    flag_definition_version: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_radar_identity(self) -> AnalysisDiagnosticsPayloadV1:
+        radar_ids = [item.radar_id for item in self.radar_inputs]
+        scan_ids = [item.scan_id for item in self.radar_inputs]
+        if len(radar_ids) != len(set(radar_ids)):
+            raise ValueError("diagnostic radar IDs must be unique")
+        if len(scan_ids) != len(set(scan_ids)):
+            raise ValueError("diagnostic scan IDs must be unique")
+        return self
+
+
+class AnalysisDiagnosticsRequestedV1(DomainRequest):
+    event_type: Literal["analysis.diagnostics.requested.v1"]
+    payload: AnalysisDiagnosticsPayloadV1
+
+
 class NowcastInputPayload(ContractModel):
     analysis_ids: list[UUID] = Field(min_length=3, max_length=6)
     input_uris: list[str] = Field(min_length=3, max_length=6)

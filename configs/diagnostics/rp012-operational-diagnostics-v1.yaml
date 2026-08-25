@@ -1,0 +1,31 @@
+schema_version: "1.0"
+profile_version: rp012-operational-diagnostics-v1
+renderer_version: radar-diagnostic-renderer-1.0.0
+bundle_contract_version: "1.0"
+radar_analysis_contract_version: "1.2"
+qc_radar_volume_contract_version: "1.0"
+flag_definition_version: qc-flags-v1
+palette_version: rainpulse-meteorological-v1
+
+grid_render:
+  pixel_scale: 2
+  north_up: true
+  missing_alpha: 0
+
+polar_render:
+  image_size: 640
+  sweep_selection: lowest_dbzh_sweep
+  missing_alpha: 0
+
+layers:
+  - grid_dbzh_qc
+  - grid_rate_qpe
+  - grid_quality_index
+  - grid_source_radar
+  - grid_beam_height
+  - grid_qc_flags
+  - grid_state_mask
+  - polar_dbzh_raw
+  - polar_dbzh_qc
+  - polar_quality_index
+  - polar_qc_flags

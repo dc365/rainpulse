@@ -262,8 +262,12 @@ WHERE run_id = $1`, runID, nextStatus); err != nil {
 		}
 	case workflow.WorkflowAnalysisCycle:
 		if jobType != orchestration.AnalysisMosaicJobType &&
-			jobType != orchestration.AnalysisQPEJobType {
+			jobType != orchestration.AnalysisQPEJobType &&
+			jobType != orchestration.AnalysisDiagnosticsJobType {
 			return fmt.Errorf("unsupported analysis job type %q", jobType)
+		}
+		if jobType == orchestration.AnalysisDiagnosticsJobType {
+			break
 		}
 		expectedStatus := workflow.AnalysisMosaic
 		if jobType == orchestration.AnalysisQPEJobType {
@@ -390,7 +394,8 @@ WHERE run_id = $1`, runID, nextStatus)
 		}
 	case workflow.WorkflowAnalysisCycle:
 		if jobType != orchestration.AnalysisMosaicJobType &&
-			jobType != orchestration.AnalysisQPEJobType {
+			jobType != orchestration.AnalysisQPEJobType &&
+			jobType != orchestration.AnalysisDiagnosticsJobType {
 			return false, fmt.Errorf(
 				"%w: unsupported analysis job type %q",
 				orchestration.ErrInvalidEvent,
@@ -399,8 +404,10 @@ WHERE run_id = $1`, runID, nextStatus)
 		}
 		if jobType == orchestration.AnalysisMosaicJobType {
 			err = applyAnalysisMosaicCompletion(ctx, tx, event)
-		} else {
+		} else if jobType == orchestration.AnalysisQPEJobType {
 			err = applyAnalysisQPECompletion(ctx, tx, event)
+		} else {
+			err = applyAnalysisDiagnosticsCompletion(ctx, tx, event)
 		}
 		if err != nil {
 			return false, err
@@ -516,6 +523,16 @@ WHERE run_id = $1`, runID, event.Payload.ErrorCode)
 			return false, fmt.Errorf("fail radar scan run: %w", err)
 		}
 	case workflow.WorkflowAnalysisCycle:
+		if jobType == orchestration.AnalysisDiagnosticsJobType {
+			_, err = tx.Exec(ctx, `
+UPDATE diagnostic_runs
+SET status = 'FAILED', updated_at = CURRENT_TIMESTAMP
+WHERE job_id = $1`, event.JobID)
+			if err != nil {
+				return false, fmt.Errorf("fail diagnostic run: %w", err)
+			}
+			break
+		}
 		_, err = tx.Exec(ctx, `
 UPDATE analysis_cycles
 SET status = 'FAILED', degraded_reason = $2, updated_at = CURRENT_TIMESTAMP
@@ -1205,6 +1222,200 @@ WHERE analysis_id = $1`, analysisID, analysisAsset.URI,
 		return fmt.Errorf("complete analysis QPE: %w", err)
 	}
 	return nil
+}
+
+func applyAnalysisDiagnosticsCompletion(
+	ctx context.Context,
+	tx pgx.Tx,
+	event orchestration.JobCompleted,
+) error {
+	var diagnosticAsset *orchestration.JobCompletedAsset
+	for index := range event.Payload.Assets {
+		if event.Payload.Assets[index].AssetType == "analysis_diagnostic_bundle" {
+			if diagnosticAsset != nil {
+				return fmt.Errorf(
+					"%w: multiple analysis diagnostic assets",
+					orchestration.ErrInvalidEvent,
+				)
+			}
+			diagnosticAsset = &event.Payload.Assets[index]
+		}
+	}
+	if diagnosticAsset == nil {
+		return fmt.Errorf("%w: analysis diagnostic asset is required", orchestration.ErrInvalidEvent)
+	}
+	rawManifest, ok := event.Payload.Diagnostics["analysis_diagnostics"]
+	if !ok {
+		return fmt.Errorf("%w: analysis diagnostic manifest is required", orchestration.ErrInvalidEvent)
+	}
+	var manifest workflow.DiagnosticManifest
+	if err := json.Unmarshal(rawManifest, &manifest); err != nil {
+		return fmt.Errorf(
+			"%w: decode analysis diagnostic manifest: %v",
+			orchestration.ErrInvalidEvent,
+			err,
+		)
+	}
+	if manifest.ContractVersion != "1.0" || manifest.JobID != event.JobID ||
+		manifest.AnalysisID == uuid.Nil || manifest.AnalysisTime.IsZero() ||
+		manifest.AnalysisURI == "" || manifest.GridID == "" ||
+		manifest.DiagnosticConfig == "" || manifest.RendererVersion == "" ||
+		manifest.PaletteVersion == "" || manifest.FlagDefinitionVersion == "" ||
+		manifest.CreatedAt.IsZero() || len(manifest.Layers) < 11 ||
+		manifest.OperationalEligible != (len(manifest.OperationalReasons) == 0) {
+		return fmt.Errorf("%w: invalid analysis diagnostic manifest", orchestration.ErrInvalidEvent)
+	}
+	layerIDs := make(map[string]struct{}, len(manifest.Layers))
+	gridFields := make(map[string]struct{}, 7)
+	polarFields := make(map[string]map[string]struct{})
+	polarScans := make(map[string]uuid.UUID)
+	gridLayers := 0
+	polarLayers := 0
+	for _, layer := range manifest.Layers {
+		if !validDiagnosticLayerID(layer.LayerID) || layer.Title == "" ||
+			layer.Field == "" || layer.PaletteVersion != manifest.PaletteVersion ||
+			layer.ObjectPath != "layers/"+layer.LayerID+".png" ||
+			layer.Width <= 0 || layer.Height <= 0 || len(layer.Legend) == 0 {
+			return fmt.Errorf("%w: invalid diagnostic layer", orchestration.ErrInvalidEvent)
+		}
+		if _, exists := layerIDs[layer.LayerID]; exists {
+			return fmt.Errorf("%w: duplicate diagnostic layer", orchestration.ErrInvalidEvent)
+		}
+		layerIDs[layer.LayerID] = struct{}{}
+		switch layer.Scope {
+		case "grid":
+			gridLayers++
+			if len(layer.Bounds) != 4 || layer.RadarID != nil || layer.ScanID != nil {
+				return fmt.Errorf("%w: invalid grid diagnostic layer", orchestration.ErrInvalidEvent)
+			}
+			if _, exists := gridFields[layer.Field]; exists {
+				return fmt.Errorf("%w: duplicate grid diagnostic field", orchestration.ErrInvalidEvent)
+			}
+			gridFields[layer.Field] = struct{}{}
+		case "polar":
+			polarLayers++
+			if layer.RadarID == nil || *layer.RadarID == "" || layer.ScanID == nil ||
+				layer.SweepNumber == nil || layer.ElevationDeg == nil ||
+				layer.MaximumRangeKM == nil || *layer.MaximumRangeKM <= 0 {
+				return fmt.Errorf("%w: invalid polar diagnostic layer", orchestration.ErrInvalidEvent)
+			}
+			fields, exists := polarFields[*layer.RadarID]
+			if !exists {
+				fields = make(map[string]struct{}, 4)
+				polarFields[*layer.RadarID] = fields
+				polarScans[*layer.RadarID] = *layer.ScanID
+			}
+			if polarScans[*layer.RadarID] != *layer.ScanID {
+				return fmt.Errorf("%w: inconsistent polar diagnostic scan", orchestration.ErrInvalidEvent)
+			}
+			if _, exists = fields[layer.Field]; exists {
+				return fmt.Errorf("%w: duplicate polar diagnostic field", orchestration.ErrInvalidEvent)
+			}
+			fields[layer.Field] = struct{}{}
+		default:
+			return fmt.Errorf("%w: invalid diagnostic layer scope", orchestration.ErrInvalidEvent)
+		}
+	}
+	if gridLayers != 7 || polarLayers < 4 || polarLayers%4 != 0 {
+		return fmt.Errorf("%w: incomplete diagnostic layer set", orchestration.ErrInvalidEvent)
+	}
+	requiredGridFields := []string{
+		"DBZH_QC", "RATE_QPE", "QUALITY_INDEX", "SOURCE_RADAR",
+		"BEAM_HEIGHT", "QC_FLAGS", "VALID_MASK+LOW_QUALITY_MASK",
+	}
+	for _, field := range requiredGridFields {
+		if _, exists := gridFields[field]; !exists {
+			return fmt.Errorf("%w: missing grid diagnostic field", orchestration.ErrInvalidEvent)
+		}
+	}
+
+	var analysisID uuid.UUID
+	var analysisStatus workflow.AnalysisStatus
+	var analysisTime time.Time
+	var gridID, configVersion, rendererVersion, inputURI string
+	var rawRequest json.RawMessage
+	if err := tx.QueryRow(ctx, `
+SELECT d.analysis_id, a.status, a.analysis_time, a.grid_id,
+       d.diagnostic_config_version, d.renderer_version, d.input_analysis_uri,
+       j.request_payload
+FROM diagnostic_runs AS d
+JOIN analysis_cycles AS a ON a.analysis_id = d.analysis_id
+JOIN jobs AS j ON j.job_id = d.job_id
+WHERE d.job_id = $1 AND a.run_id = $2 FOR UPDATE OF d, a`,
+		event.JobID, event.RunID).Scan(
+		&analysisID, &analysisStatus, &analysisTime, &gridID,
+		&configVersion, &rendererVersion, &inputURI, &rawRequest,
+	); err != nil {
+		return fmt.Errorf("lock analysis diagnostic completion: %w", err)
+	}
+	if analysisStatus != workflow.AnalysisReady {
+		return fmt.Errorf(
+			"%w: analysis status %q cannot complete diagnostics",
+			orchestration.ErrInvalidEvent,
+			analysisStatus,
+		)
+	}
+	var requested orchestration.AnalysisDiagnosticsRequested
+	if err := json.Unmarshal(rawRequest, &requested); err != nil {
+		return fmt.Errorf("decode stored analysis diagnostic request: %w", err)
+	}
+	expectedRadars := make(map[string]uuid.UUID, len(requested.Payload.RadarInputs))
+	for _, radar := range requested.Payload.RadarInputs {
+		expectedRadars[radar.RadarID] = radar.ScanID
+	}
+	if len(polarFields) != len(expectedRadars) {
+		return fmt.Errorf("%w: polar diagnostics do not match requested radars", orchestration.ErrInvalidEvent)
+	}
+	requiredPolarFields := []string{"DBZH_RAW", "DBZH_QC", "QUALITY_INDEX", "QC_FLAGS"}
+	for radarID, scanID := range expectedRadars {
+		fields, exists := polarFields[radarID]
+		if !exists || polarScans[radarID] != scanID || len(fields) != len(requiredPolarFields) {
+			return fmt.Errorf("%w: polar diagnostics do not match requested radar", orchestration.ErrInvalidEvent)
+		}
+		for _, field := range requiredPolarFields {
+			if _, exists = fields[field]; !exists {
+				return fmt.Errorf("%w: missing polar diagnostic field", orchestration.ErrInvalidEvent)
+			}
+		}
+	}
+	if manifest.AnalysisID != analysisID || requested.Payload.AnalysisID != analysisID ||
+		!manifest.AnalysisTime.Equal(analysisTime) ||
+		!requested.Payload.AnalysisTime.Equal(analysisTime) ||
+		manifest.GridID != gridID || requested.Payload.GridID != gridID ||
+		manifest.AnalysisURI != inputURI || requested.Payload.InputURI != inputURI ||
+		manifest.DiagnosticConfig != configVersion ||
+		requested.Payload.DiagnosticConfig != configVersion ||
+		manifest.RendererVersion != rendererVersion ||
+		requested.Payload.RendererVersion != rendererVersion ||
+		manifest.FlagDefinitionVersion != requested.Payload.FlagDefinitionVersion {
+		return fmt.Errorf("%w: diagnostic identity does not match analysis", orchestration.ErrInvalidEvent)
+	}
+	manifestJSON, err := json.Marshal(manifest)
+	if err != nil {
+		return fmt.Errorf("encode analysis diagnostic manifest: %w", err)
+	}
+	if _, err = tx.Exec(ctx, `
+UPDATE diagnostic_runs
+SET status = 'SUCCEEDED', bundle_uri = $2, manifest = $3,
+    measured_at = $4, updated_at = CURRENT_TIMESTAMP
+WHERE job_id = $1`, event.JobID, diagnosticAsset.URI, manifestJSON,
+		event.Payload.FinishedAt); err != nil {
+		return fmt.Errorf("persist analysis diagnostic completion: %w", err)
+	}
+	return nil
+}
+
+func validDiagnosticLayerID(value string) bool {
+	if len(value) < 3 || len(value) > 128 || value[0] < 'a' || value[0] > 'z' {
+		return false
+	}
+	for _, character := range value {
+		if (character < 'a' || character > 'z') &&
+			(character < '0' || character > '9') && character != '-' {
+			return false
+		}
+	}
+	return true
 }
 
 func completionRunStatus(jobType string) workflow.RunStatus {

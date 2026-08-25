@@ -263,6 +263,83 @@ func TestAnalysisEventStreamSendsDomainEvent(t *testing.T) {
 	}
 }
 
+func TestAnalysisDiagnosticsExposeManifestAndOnlyListedPNGLayer(t *testing.T) {
+	now := time.Date(2026, 8, 25, 12, 6, 0, 0, time.UTC)
+	analysisID := uuid.MustParse("85000000-0000-4000-8000-000000000001")
+	jobID := uuid.MustParse("83000000-0000-4000-8000-000000000001")
+	unit := "mm/h"
+	diagnostics := workflow.AnalysisDiagnostics{
+		JobID:     jobID,
+		BundleURI: "s3://rainpulse/diagnostics/fixture/diagnostics",
+		Manifest: workflow.DiagnosticManifest{
+			ContractVersion: "1.0", JobID: jobID, AnalysisID: analysisID,
+			AnalysisTime: now, GridID: "fuzhou-grid",
+			DiagnosticConfig:      "rp012-operational-diagnostics-v1",
+			RendererVersion:       "radar-diagnostic-renderer-1.0.0",
+			PaletteVersion:        "rainpulse-meteorological-v1",
+			FlagDefinitionVersion: "qc-flags-v1",
+			OperationalEligible:   false,
+			OperationalReasons:    []string{"engineering_input"},
+			CreatedAt:             now,
+			Layers: []workflow.DiagnosticLayer{
+				{
+					LayerID: "grid-rate-qpe", Title: "瞬时雨强", Scope: "grid",
+					Field: "RATE_QPE", Rendering: "scalar", Unit: &unit,
+					ObjectPath: "layers/grid-rate-qpe.png", Width: 1002, Height: 402,
+					PaletteVersion: "rainpulse-meteorological-v1",
+					Bounds:         []float64{117.995, 24.995, 123.005, 27.005},
+					Legend:         []workflow.DiagnosticLegendEntry{{Label: "≥ 0 mm/h", Color: "#dce9ee"}},
+				},
+			},
+		},
+	}
+	store := &fakeObservationStore{diagnostics: diagnostics}
+	reader := &fakeDiagnosticLayerReader{
+		data: []byte("\x89PNG\r\n\x1a\nfixture"), etag: "fixture-etag",
+	}
+	handler := api.NewHandler(api.Options{
+		Version: "test", Observations: store, DiagnosticLayers: reader,
+	})
+
+	manifestRequest := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/analysis-cycles/"+analysisID.String()+"/diagnostics",
+		nil,
+	)
+	manifestResponse := httptest.NewRecorder()
+	handler.ServeHTTP(manifestResponse, manifestRequest)
+	if manifestResponse.Code != http.StatusOK ||
+		!strings.Contains(manifestResponse.Body.String(),
+			`"image_url":"/api/v1/diagnostics/`+jobID.String()+`/layers/grid-rate-qpe"`) {
+		t.Fatalf("unexpected diagnostic manifest: %d %s", manifestResponse.Code, manifestResponse.Body.String())
+	}
+
+	layerRequest := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/diagnostics/"+jobID.String()+"/layers/grid-rate-qpe",
+		nil,
+	)
+	layerResponse := httptest.NewRecorder()
+	handler.ServeHTTP(layerResponse, layerRequest)
+	if layerResponse.Code != http.StatusOK ||
+		layerResponse.Header().Get("Content-Type") != "image/png" ||
+		!strings.Contains(layerResponse.Header().Get("Cache-Control"), "immutable") ||
+		reader.relativePath != "layers/grid-rate-qpe.png" {
+		t.Fatalf("unexpected diagnostic layer response: %d %#v", layerResponse.Code, layerResponse.Header())
+	}
+
+	unknownRequest := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/diagnostics/"+jobID.String()+"/layers/not-listed",
+		nil,
+	)
+	unknownResponse := httptest.NewRecorder()
+	handler.ServeHTTP(unknownResponse, unknownRequest)
+	if unknownResponse.Code != http.StatusNotFound {
+		t.Fatalf("unlisted diagnostic layer status = %d", unknownResponse.Code)
+	}
+}
+
 type fakeRunStore struct {
 	run  workflow.Run
 	jobs []workflow.Job
@@ -307,13 +384,40 @@ func (commands *fakeRunCommands) Rerun(_ context.Context, source uuid.UUID) (wor
 }
 
 type fakeObservationStore struct {
-	radars   []workflow.Radar
-	scans    []workflow.RadarScan
-	analysis workflow.AnalysisCycle
-	qc       workflow.RadarQCMetrics
-	grid     workflow.RadarGridMetrics
-	mosaic   workflow.AnalysisMosaicMetrics
-	qpe      workflow.AnalysisQPEMetrics
+	radars      []workflow.Radar
+	scans       []workflow.RadarScan
+	analysis    workflow.AnalysisCycle
+	qc          workflow.RadarQCMetrics
+	grid        workflow.RadarGridMetrics
+	mosaic      workflow.AnalysisMosaicMetrics
+	qpe         workflow.AnalysisQPEMetrics
+	diagnostics workflow.AnalysisDiagnostics
+}
+
+func (store *fakeObservationStore) GetAnalysisDiagnostics(
+	_ context.Context,
+	analysisID uuid.UUID,
+) (workflow.AnalysisDiagnostics, error) {
+	if store.diagnostics.Manifest.AnalysisID != analysisID {
+		return workflow.AnalysisDiagnostics{}, workflow.ErrNotFound
+	}
+	return store.diagnostics, nil
+}
+
+func (store *fakeObservationStore) GetDiagnosticLayer(
+	_ context.Context,
+	jobID uuid.UUID,
+	layerID string,
+) (string, string, error) {
+	if store.diagnostics.JobID != jobID {
+		return "", "", workflow.ErrNotFound
+	}
+	for _, layer := range store.diagnostics.Manifest.Layers {
+		if layer.LayerID == layerID {
+			return store.diagnostics.BundleURI, layer.ObjectPath, nil
+		}
+	}
+	return "", "", workflow.ErrNotFound
 }
 
 func (store *fakeObservationStore) GetAnalysisMosaicMetrics(
@@ -414,4 +518,21 @@ func (store *fakeObservationStore) GetAnalysisCycle(_ context.Context, analysisI
 
 func floatPointer(value float64) *float64 {
 	return &value
+}
+
+type fakeDiagnosticLayerReader struct {
+	data         []byte
+	etag         string
+	artifactURI  string
+	relativePath string
+}
+
+func (reader *fakeDiagnosticLayerReader) Read(
+	_ context.Context,
+	artifactURI string,
+	relativePath string,
+) ([]byte, string, error) {
+	reader.artifactURI = artifactURI
+	reader.relativePath = relativePath
+	return reader.data, reader.etag, nil
 }

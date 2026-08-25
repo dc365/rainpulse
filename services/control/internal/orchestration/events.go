@@ -10,41 +10,45 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/workflow"
 	"github.com/google/uuid"
 )
 
 const (
-	SchemaVersion                    = "1.0"
-	JobRequestedEventType            = "job.requested"
-	JobCompletedEventType            = "job.completed"
-	JobFailedEventType               = "job.failed"
-	JobRequestedSubject              = "rainpulse.jobs.requested.model_pysteps_lk"
-	RadarDecodeRequestedEventType    = "radar.decode.requested.v1"
-	RadarDecodeRequestedSubject      = "rainpulse.jobs.requested.radar_decode"
-	RadarDecodeJobType               = "radar.decode"
-	RadarDecoderVersion              = "cma-rstm-2.0.0"
-	RadarQCRequestedEventType        = "radar.qc.requested.v1"
-	RadarQCRequestedSubject          = "rainpulse.jobs.requested.radar_qc"
-	RadarQCJobType                   = "radar.qc"
-	RadarGridRequestedEventType      = "radar.grid.requested.v1"
-	RadarGridRequestedSubject        = "rainpulse.jobs.requested.radar_grid"
-	RadarGridJobType                 = "radar.grid"
-	AnalysisMosaicRequestedEventType = "analysis.mosaic.requested.v2"
-	AnalysisMosaicRequestedSubject   = "rainpulse.jobs.requested.analysis_mosaic"
-	AnalysisMosaicJobType            = "analysis.mosaic"
-	AnalysisQPERequestedEventType    = "analysis.qpe.requested.v1"
-	AnalysisQPERequestedSubject      = "rainpulse.jobs.requested.analysis_qpe"
-	AnalysisQPEJobType               = "analysis.qpe"
-	JobCompletedSubject              = "rainpulse.jobs.completed"
-	JobFailedSubject                 = "rainpulse.jobs.failed"
-	JobResultsSubject                = "rainpulse.jobs.*"
-	JobStreamName                    = "RAINPULSE_JOBS"
-	ResultConsumerName               = "rainpulse-orchestrator-results-v2"
-	SimulationJobType                = "model.pysteps_lk"
-	SimulationModelID                = "pysteps-lk-sim"
-	SimulationModelVersion           = "pysteps-lk-sim-v1"
-	SimulationConfig                 = "rp003-sim-v1"
-	SimulationGrid                   = "rp003-sim-grid"
+	SchemaVersion                         = "1.0"
+	JobRequestedEventType                 = "job.requested"
+	JobCompletedEventType                 = "job.completed"
+	JobFailedEventType                    = "job.failed"
+	JobRequestedSubject                   = "rainpulse.jobs.requested.model_pysteps_lk"
+	RadarDecodeRequestedEventType         = "radar.decode.requested.v1"
+	RadarDecodeRequestedSubject           = "rainpulse.jobs.requested.radar_decode"
+	RadarDecodeJobType                    = "radar.decode"
+	RadarDecoderVersion                   = "cma-rstm-2.0.0"
+	RadarQCRequestedEventType             = "radar.qc.requested.v1"
+	RadarQCRequestedSubject               = "rainpulse.jobs.requested.radar_qc"
+	RadarQCJobType                        = "radar.qc"
+	RadarGridRequestedEventType           = "radar.grid.requested.v1"
+	RadarGridRequestedSubject             = "rainpulse.jobs.requested.radar_grid"
+	RadarGridJobType                      = "radar.grid"
+	AnalysisMosaicRequestedEventType      = "analysis.mosaic.requested.v2"
+	AnalysisMosaicRequestedSubject        = "rainpulse.jobs.requested.analysis_mosaic"
+	AnalysisMosaicJobType                 = "analysis.mosaic"
+	AnalysisQPERequestedEventType         = "analysis.qpe.requested.v1"
+	AnalysisQPERequestedSubject           = "rainpulse.jobs.requested.analysis_qpe"
+	AnalysisQPEJobType                    = "analysis.qpe"
+	AnalysisDiagnosticsRequestedEventType = "analysis.diagnostics.requested.v1"
+	AnalysisDiagnosticsRequestedSubject   = "rainpulse.jobs.requested.analysis_diagnostics"
+	AnalysisDiagnosticsJobType            = "analysis.diagnostics"
+	JobCompletedSubject                   = "rainpulse.jobs.completed"
+	JobFailedSubject                      = "rainpulse.jobs.failed"
+	JobResultsSubject                     = "rainpulse.jobs.*"
+	JobStreamName                         = "RAINPULSE_JOBS"
+	ResultConsumerName                    = "rainpulse-orchestrator-results-v2"
+	SimulationJobType                     = "model.pysteps_lk"
+	SimulationModelID                     = "pysteps-lk-sim"
+	SimulationModelVersion                = "pysteps-lk-sim-v1"
+	SimulationConfig                      = "rp003-sim-v1"
+	SimulationGrid                        = "rp003-sim-grid"
 )
 
 type JobRequested struct {
@@ -189,6 +193,29 @@ type AnalysisQPERequestedPayload struct {
 	QPEConfigVersion      string    `json:"qpe_config_version"`
 	QPEAlgorithmVersion   string    `json:"qpe_algorithm_version"`
 	FlagDefinitionVersion string    `json:"flag_definition_version"`
+}
+
+type AnalysisDiagnosticsRequested struct {
+	SchemaVersion string                              `json:"schema_version"`
+	EventID       uuid.UUID                           `json:"event_id"`
+	EventType     string                              `json:"event_type"`
+	OccurredAt    time.Time                           `json:"occurred_at"`
+	RunID         uuid.UUID                           `json:"run_id"`
+	JobID         uuid.UUID                           `json:"job_id"`
+	TraceID       uuid.UUID                           `json:"trace_id"`
+	Payload       AnalysisDiagnosticsRequestedPayload `json:"payload"`
+}
+
+type AnalysisDiagnosticsRequestedPayload struct {
+	AnalysisID            uuid.UUID                               `json:"analysis_id"`
+	AnalysisTime          time.Time                               `json:"analysis_time"`
+	GridID                string                                  `json:"grid_id"`
+	InputURI              string                                  `json:"input_uri"`
+	RadarInputs           []workflow.AnalysisDiagnosticRadarInput `json:"radar_inputs"`
+	OutputPrefix          string                                  `json:"output_prefix"`
+	DiagnosticConfig      string                                  `json:"diagnostic_config_version"`
+	RendererVersion       string                                  `json:"renderer_version"`
+	FlagDefinitionVersion string                                  `json:"flag_definition_version"`
 }
 
 type JobCompleted struct {

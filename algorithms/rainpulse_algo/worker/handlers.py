@@ -8,6 +8,7 @@ from rainpulse_algo.radar.qc_worker import execute_basic_qc
 from rainpulse_algo.radar.worker import execute_fmt_decode
 
 from .domain_contracts import (
+    AnalysisDiagnosticsRequestedV1,
     AnalysisMosaicRequestedV1,
     AnalysisMosaicRequestedV2,
     AnalysisQPERequestedV1,
@@ -37,6 +38,14 @@ def _execute_analysis_qpe(request: AnalysisQPERequestedV1) -> WorkerResult:
     from rainpulse_algo.radar.qpe_worker import execute_analysis_qpe
 
     return execute_analysis_qpe(request)
+
+
+def _execute_analysis_diagnostics(
+    request: AnalysisDiagnosticsRequestedV1,
+) -> WorkerResult:
+    from rainpulse_algo.diagnostics.worker import execute_analysis_diagnostics
+
+    return execute_analysis_diagnostics(request)
 
 
 def _synthetic_executor(stage: str) -> Callable[[Any], WorkerResult]:
@@ -150,6 +159,17 @@ HANDLERS = {
         executor=_execute_analysis_qpe,
         asset_type="radar_analysis",
         artifact_name="analysis.zarr",
+        ack_wait_seconds=300,
+    ),
+    "analysis-diagnostics": TaskHandler(
+        profile="analysis-diagnostics",
+        subject="rainpulse.jobs.requested.analysis_diagnostics",
+        consumer="rainpulse-analysis-diagnostics-renderer-1-0-0",
+        request_model=AnalysisDiagnosticsRequestedV1,
+        executor=_execute_analysis_diagnostics,
+        asset_type="analysis_diagnostic_bundle",
+        artifact_name="diagnostics",
+        media_type="application/vnd.rainpulse.diagnostic-bundle+json",
         ack_wait_seconds=300,
     ),
     "nowcast-input-synthetic": TaskHandler(

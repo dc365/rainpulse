@@ -552,6 +552,131 @@ ON CONFLICT (event_id) DO NOTHING`,
 	return nil
 }
 
+func (store *Store) CreateAnalysisDiagnosticsBundle(
+	ctx context.Context,
+	bundle workflow.AnalysisDiagnosticsBundle,
+) error {
+	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin analysis diagnostics transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err = tx.Exec(ctx, `
+INSERT INTO config_versions (config_version, sha256, config, description, created_at)
+VALUES ($1, $2, $3, 'RP-012 diagnostic renderer configuration', $4)
+ON CONFLICT (config_version) DO NOTHING`,
+		bundle.ConfigVersion, bundle.ConfigSHA256, bundle.Config,
+		bundle.Job.CreatedAt); err != nil {
+		return fmt.Errorf("insert diagnostic config %s: %w", bundle.ConfigVersion, err)
+	}
+	var storedConfigHash string
+	if err = tx.QueryRow(ctx, `SELECT sha256 FROM config_versions WHERE config_version = $1`,
+		bundle.ConfigVersion).Scan(&storedConfigHash); err != nil {
+		return fmt.Errorf("verify diagnostic config %s: %w", bundle.ConfigVersion, err)
+	}
+	if storedConfigHash != bundle.ConfigSHA256 {
+		return fmt.Errorf(
+			"diagnostic config version %s already has a different SHA-256",
+			bundle.ConfigVersion,
+		)
+	}
+
+	var runID uuid.UUID
+	var status workflow.AnalysisStatus
+	var analysisURI string
+	if err = tx.QueryRow(ctx, `
+SELECT run_id, status, COALESCE(analysis_uri, '')
+FROM analysis_cycles WHERE analysis_id = $1 FOR SHARE`, bundle.AnalysisID).
+		Scan(&runID, &status, &analysisURI); err != nil {
+		return fmt.Errorf("verify diagnostic analysis input: %w", err)
+	}
+	if runID != bundle.RunID || status != workflow.AnalysisReady ||
+		analysisURI != bundle.AnalysisURI {
+		return fmt.Errorf("diagnostic input is not the committed ready RadarAnalysis")
+	}
+
+	var existingJobID uuid.UUID
+	err = tx.QueryRow(ctx, `
+SELECT job_id FROM diagnostic_runs
+WHERE job_id = $1 AND analysis_id = $2 AND diagnostic_config_version = $3
+  AND renderer_version = $4 AND input_analysis_uri = $5`,
+		bundle.Job.ID, bundle.AnalysisID, bundle.ConfigVersion,
+		bundle.RendererVersion, bundle.AnalysisURI).Scan(&existingJobID)
+	if err == nil {
+		return tx.Commit(ctx)
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("verify existing diagnostic run: %w", err)
+	}
+
+	for _, radar := range bundle.RadarInputs {
+		var state workflow.AnalysisRadarState
+		var storedRadarID, storedQCURI string
+		if err = tx.QueryRow(ctx, `
+SELECT acr.state, rs.radar_id, COALESCE(rs.qc_uri, '')
+FROM analysis_cycle_radars AS acr
+JOIN radar_scan_runs AS rs ON rs.scan_id = acr.scan_id
+WHERE acr.analysis_id = $1 AND acr.radar_id = $2 AND acr.scan_id = $3`,
+			bundle.AnalysisID, radar.RadarID, radar.ScanID).
+			Scan(&state, &storedRadarID, &storedQCURI); err != nil {
+			return fmt.Errorf("verify diagnostic radar input %s: %w", radar.RadarID, err)
+		}
+		if state != workflow.AnalysisRadarParticipating ||
+			storedRadarID != radar.RadarID || storedQCURI != radar.QCURI {
+			return fmt.Errorf("diagnostic radar input is not an actual analysis contributor")
+		}
+	}
+	var participatingRadarCount int
+	if err = tx.QueryRow(ctx, `
+SELECT COUNT(*) FROM analysis_cycle_radars
+WHERE analysis_id = $1 AND state = $2`,
+		bundle.AnalysisID, workflow.AnalysisRadarParticipating).
+		Scan(&participatingRadarCount); err != nil {
+		return fmt.Errorf("count diagnostic radar inputs: %w", err)
+	}
+	if participatingRadarCount != len(bundle.RadarInputs) {
+		return fmt.Errorf("diagnostic radar inputs must exactly match all analysis contributors")
+	}
+
+	if _, err = tx.Exec(ctx, `
+INSERT INTO jobs (
+    job_id, run_id, trace_id, job_type, model_id, model_version,
+    config_version, status, max_attempts, scheduled_at, created_at, updated_at,
+    request_payload
+) VALUES ($1, $2, $3, $4, NULL, NULL, $5, $6, 3, $7, $7, $7, $8)
+ON CONFLICT (job_id) DO NOTHING`,
+		bundle.Job.ID, bundle.Job.RunID, bundle.Job.TraceID, bundle.Job.JobType,
+		bundle.Job.ConfigVersion, bundle.Job.Status, bundle.Job.CreatedAt,
+		bundle.Job.RequestPayload); err != nil {
+		return fmt.Errorf("insert analysis diagnostic job: %w", err)
+	}
+	if _, err = tx.Exec(ctx, `
+INSERT INTO diagnostic_runs (
+    job_id, analysis_id, diagnostic_config_version, renderer_version,
+    input_analysis_uri, status, created_at, updated_at
+) VALUES ($1, $2, $3, $4, $5, 'RUNNING', $6, $6)
+ON CONFLICT (job_id) DO NOTHING`,
+		bundle.Job.ID, bundle.AnalysisID, bundle.ConfigVersion,
+		bundle.RendererVersion, bundle.AnalysisURI, bundle.Job.CreatedAt); err != nil {
+		return fmt.Errorf("insert diagnostic run: %w", err)
+	}
+	if _, err = tx.Exec(ctx, `
+INSERT INTO outbox_events (
+    event_id, aggregate_type, aggregate_id, event_type, event_version,
+    subject, payload, status, available_at, created_at
+) VALUES ($1, 'job', $2, $3, 1, $4, $5, 'pending', $6, $6)
+ON CONFLICT (event_id) DO NOTHING`,
+		bundle.Outbox.ID, bundle.Outbox.AggregateID, bundle.Outbox.EventType,
+		bundle.Outbox.Subject, bundle.Outbox.Payload, bundle.Job.CreatedAt); err != nil {
+		return fmt.Errorf("insert diagnostic outbox event: %w", err)
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit analysis diagnostics transaction: %w", err)
+	}
+	return nil
+}
+
 func (store *Store) CreateDomainSimulation(ctx context.Context, simulation workflow.DomainSimulation) error {
 	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
@@ -926,6 +1051,57 @@ ORDER BY measured_at DESC LIMIT 1`, analysisID).Scan(&raw); err != nil {
 		return workflow.AnalysisQPEMetrics{}, fmt.Errorf("decode analysis QPE metrics: %w", err)
 	}
 	return metrics, nil
+}
+
+func (store *Store) GetAnalysisDiagnostics(
+	ctx context.Context,
+	analysisID uuid.UUID,
+) (workflow.AnalysisDiagnostics, error) {
+	var result workflow.AnalysisDiagnostics
+	var raw json.RawMessage
+	if err := store.pool.QueryRow(ctx, `
+SELECT job_id, bundle_uri, manifest
+FROM diagnostic_runs
+WHERE analysis_id = $1 AND status = 'SUCCEEDED'
+ORDER BY measured_at DESC LIMIT 1`, analysisID).
+		Scan(&result.JobID, &result.BundleURI, &raw); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return workflow.AnalysisDiagnostics{}, workflow.ErrNotFound
+		}
+		return workflow.AnalysisDiagnostics{}, fmt.Errorf("get analysis diagnostics: %w", err)
+	}
+	if err := json.Unmarshal(raw, &result.Manifest); err != nil {
+		return workflow.AnalysisDiagnostics{}, fmt.Errorf("decode analysis diagnostics: %w", err)
+	}
+	return result, nil
+}
+
+func (store *Store) GetDiagnosticLayer(
+	ctx context.Context,
+	jobID uuid.UUID,
+	layerID string,
+) (string, string, error) {
+	var bundleURI string
+	var raw json.RawMessage
+	if err := store.pool.QueryRow(ctx, `
+SELECT bundle_uri, manifest FROM diagnostic_runs
+WHERE job_id = $1 AND status = 'SUCCEEDED'`, jobID).
+		Scan(&bundleURI, &raw); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", "", workflow.ErrNotFound
+		}
+		return "", "", fmt.Errorf("get diagnostic layer manifest: %w", err)
+	}
+	var manifest workflow.DiagnosticManifest
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		return "", "", fmt.Errorf("decode diagnostic layer manifest: %w", err)
+	}
+	for _, layer := range manifest.Layers {
+		if layer.LayerID == layerID {
+			return bundleURI, layer.ObjectPath, nil
+		}
+	}
+	return "", "", workflow.ErrNotFound
 }
 
 func (store *Store) ListAnalysisCycles(

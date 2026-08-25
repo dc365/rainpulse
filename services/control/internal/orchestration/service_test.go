@@ -341,6 +341,58 @@ func TestCreateAnalysisQPEUsesCommittedMosaicAndDeterministicIDs(t *testing.T) {
 	}
 }
 
+func TestCreateAnalysisDiagnosticsUsesReadyAnalysisAndExactQCRadars(t *testing.T) {
+	repository := &fakeRepository{}
+	now := time.Date(2026, 8, 25, 12, 6, 0, 0, time.UTC)
+	service := NewService(repository, Options{Now: func() time.Time { return now }})
+	input := AnalysisDiagnosticsInput{
+		AnalysisID:    uuid.MustParse("75000000-0000-4000-8000-000000000001"),
+		RunID:         uuid.MustParse("72000000-0000-4000-8000-000000000001"),
+		AnalysisTime:  now.Truncate(5 * time.Minute),
+		GridID:        "fuzhou_118_123_25_27_0p01deg_v1",
+		AnalysisURI:   "s3://rainpulse/analysis/fixture/analysis.zarr",
+		CurrentStatus: workflow.AnalysisReady,
+		RadarInputs: []workflow.AnalysisDiagnosticRadarInput{
+			{
+				RadarID: "z9598",
+				ScanID:  uuid.MustParse("86000000-0000-4000-8000-000000000001"),
+				QCURI:   "s3://rainpulse/radar/qc/z9598/fixture/volume.zarr",
+			},
+		},
+		DiagnosticConfig: json.RawMessage(
+			`{"profile_version":"rp012-operational-diagnostics-v1"}`,
+		),
+		DiagnosticConfigSHA256:  "73266c7c72321262a01b945281060abd84153a8f3ad64a95c5b73b9fd510f679",
+		DiagnosticConfigVersion: "rp012-operational-diagnostics-v1",
+		RendererVersion:         "radar-diagnostic-renderer-1.0.0",
+		FlagDefinitionVersion:   "qc-flags-v1",
+	}
+
+	job, err := service.CreateAnalysisDiagnostics(context.Background(), input)
+	if err != nil {
+		t.Fatalf("CreateAnalysisDiagnostics() error = %v", err)
+	}
+	if job.JobType != AnalysisDiagnosticsJobType ||
+		repository.analysisDiagnostics.Outbox.Subject != AnalysisDiagnosticsRequestedSubject {
+		t.Fatalf("unexpected diagnostic route: job=%s", job.JobType)
+	}
+	var requested AnalysisDiagnosticsRequested
+	if err := json.Unmarshal(repository.analysisDiagnostics.Outbox.Payload, &requested); err != nil {
+		t.Fatalf("decode diagnostic request: %v", err)
+	}
+	if requested.Payload.InputURI != input.AnalysisURI ||
+		requested.Payload.OutputPrefix != "s3://rainpulse/diagnostics/"+
+			input.AnalysisID.String()+"/radar-diagnostic-renderer-1.0.0/" ||
+		len(requested.Payload.RadarInputs) != 1 ||
+		requested.Payload.RadarInputs[0].QCURI != input.RadarInputs[0].QCURI {
+		t.Fatalf("unexpected diagnostic request: %#v", requested.Payload)
+	}
+	second, err := service.CreateAnalysisDiagnostics(context.Background(), input)
+	if err != nil || second.ID != job.ID {
+		t.Fatalf("diagnostic replay = %#v, %v", second, err)
+	}
+}
+
 func TestDispatchOnceMarksPublishedOnlyAfterPublish(t *testing.T) {
 	event := workflow.OutboxEvent{ID: uuid.New(), Subject: JobRequestedSubject, Payload: json.RawMessage(`{}`)}
 	repository := &fakeRepository{claimed: event}
@@ -446,17 +498,18 @@ func TestHandleResultDispatchesStrictFailureEvent(t *testing.T) {
 }
 
 type fakeRepository struct {
-	created        workflow.CreateBundle
-	radarDecode    workflow.RadarDecodeBundle
-	radarQC        workflow.RadarQCBundle
-	radarGrid      workflow.RadarGridBundle
-	analysisMosaic workflow.AnalysisMosaicBundle
-	analysisQPE    workflow.AnalysisQPEBundle
-	domain         workflow.DomainSimulation
-	claimed        workflow.OutboxEvent
-	published      uuid.UUID
-	failed         uuid.UUID
-	appliedFailure JobFailed
+	created             workflow.CreateBundle
+	radarDecode         workflow.RadarDecodeBundle
+	radarQC             workflow.RadarQCBundle
+	radarGrid           workflow.RadarGridBundle
+	analysisMosaic      workflow.AnalysisMosaicBundle
+	analysisQPE         workflow.AnalysisQPEBundle
+	analysisDiagnostics workflow.AnalysisDiagnosticsBundle
+	domain              workflow.DomainSimulation
+	claimed             workflow.OutboxEvent
+	published           uuid.UUID
+	failed              uuid.UUID
+	appliedFailure      JobFailed
 }
 
 func (repository *fakeRepository) CreateAnalysisMosaicBundle(
@@ -472,6 +525,14 @@ func (repository *fakeRepository) CreateAnalysisQPEBundle(
 	bundle workflow.AnalysisQPEBundle,
 ) error {
 	repository.analysisQPE = bundle
+	return nil
+}
+
+func (repository *fakeRepository) CreateAnalysisDiagnosticsBundle(
+	_ context.Context,
+	bundle workflow.AnalysisDiagnosticsBundle,
+) error {
+	repository.analysisDiagnostics = bundle
 	return nil
 }
 

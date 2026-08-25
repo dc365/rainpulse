@@ -77,6 +77,48 @@ func (e AnalysisRadarState) Valid() bool {
 	}
 }
 
+// Defines values for DiagnosticLayerRendering.
+const (
+	Categorical DiagnosticLayerRendering = "categorical"
+	Flags       DiagnosticLayerRendering = "flags"
+	Scalar      DiagnosticLayerRendering = "scalar"
+	State       DiagnosticLayerRendering = "state"
+)
+
+// Valid indicates whether the value is a known member of the DiagnosticLayerRendering enum.
+func (e DiagnosticLayerRendering) Valid() bool {
+	switch e {
+	case Categorical:
+		return true
+	case Flags:
+		return true
+	case Scalar:
+		return true
+	case State:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DiagnosticLayerScope.
+const (
+	Grid  DiagnosticLayerScope = "grid"
+	Polar DiagnosticLayerScope = "polar"
+)
+
+// Valid indicates whether the value is a known member of the DiagnosticLayerScope enum.
+func (e DiagnosticLayerScope) Valid() bool {
+	switch e {
+	case Grid:
+		return true
+	case Polar:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for JobStatus.
 const (
 	JobStatusFAILED    JobStatus = "FAILED"
@@ -481,6 +523,58 @@ type AreaStatistics struct {
 	ValidPixelRatio float32            `json:"valid_pixel_ratio"`
 }
 
+// DiagnosticBundle defines model for DiagnosticBundle.
+type DiagnosticBundle struct {
+	AnalysisId              openapi_types.UUID `json:"analysis_id"`
+	AnalysisTime            time.Time          `json:"analysis_time"`
+	ContractVersion         string             `json:"contract_version"`
+	CreatedAt               time.Time          `json:"created_at"`
+	DiagnosticConfigVersion string             `json:"diagnostic_config_version"`
+	FlagDefinitionVersion   string             `json:"flag_definition_version"`
+	GridId                  string             `json:"grid_id"`
+	JobId                   openapi_types.UUID `json:"job_id"`
+	Layers                  []DiagnosticLayer  `json:"layers"`
+	OperationalEligible     bool               `json:"operational_eligible"`
+	OperationalReasons      []string           `json:"operational_reasons"`
+	PaletteVersion          string             `json:"palette_version"`
+	RendererVersion         string             `json:"renderer_version"`
+}
+
+// DiagnosticLayer defines model for DiagnosticLayer.
+type DiagnosticLayer struct {
+	Bounds         *[]float32               `json:"bounds,omitempty"`
+	ElevationDeg   *float32                 `json:"elevation_deg,omitempty"`
+	Field          string                   `json:"field"`
+	Height         int                      `json:"height"`
+	ImageUrl       string                   `json:"image_url"`
+	LayerId        string                   `json:"layer_id"`
+	Legend         []DiagnosticLegendEntry  `json:"legend"`
+	MaximumRangeKm *float32                 `json:"maximum_range_km,omitempty"`
+	PaletteVersion string                   `json:"palette_version"`
+	RadarId        *string                  `json:"radar_id,omitempty"`
+	Rendering      DiagnosticLayerRendering `json:"rendering"`
+	ScanId         *openapi_types.UUID      `json:"scan_id,omitempty"`
+	Scope          DiagnosticLayerScope     `json:"scope"`
+	SweepNumber    *int                     `json:"sweep_number,omitempty"`
+	Title          string                   `json:"title"`
+	Unit           *string                  `json:"unit,omitempty"`
+	Width          int                      `json:"width"`
+}
+
+// DiagnosticLayerRendering defines model for DiagnosticLayer.Rendering.
+type DiagnosticLayerRendering string
+
+// DiagnosticLayerScope defines model for DiagnosticLayer.Scope.
+type DiagnosticLayerScope string
+
+// DiagnosticLegendEntry defines model for DiagnosticLegendEntry.
+type DiagnosticLegendEntry struct {
+	Code  *int     `json:"code,omitempty"`
+	Color string   `json:"color"`
+	Label string   `json:"label"`
+	Value *float32 `json:"value,omitempty"`
+}
+
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
 	Code    string             `json:"code"`
@@ -784,6 +878,12 @@ type AnalysisId = openapi_types.UUID
 // Cursor defines model for Cursor.
 type Cursor = string
 
+// JobId defines model for JobId.
+type JobId = openapi_types.UUID
+
+// LayerId defines model for LayerId.
+type LayerId = string
+
 // Limit defines model for Limit.
 type Limit = int
 
@@ -885,6 +985,9 @@ type ServerInterface interface {
 	// GetAnalysisCycle Get one analysis workflow and its actual radar contributors
 	// (GET /analysis-cycles/{analysis_id})
 	GetAnalysisCycle(w http.ResponseWriter, r *http.Request, analysisId AnalysisId)
+	// GetAnalysisDiagnostics Get the accepted RP-012 diagnostic manifest for an analysis
+	// (GET /analysis-cycles/{analysis_id}/diagnostics)
+	GetAnalysisDiagnostics(w http.ResponseWriter, r *http.Request, analysisId AnalysisId)
 	// GetAnalysisMosaicSummary Get the RP-010 time-aligned quality-aware mosaic summary
 	// (GET /analysis-cycles/{analysis_id}/mosaic-summary)
 	GetAnalysisMosaicSummary(w http.ResponseWriter, r *http.Request, analysisId AnalysisId)
@@ -894,6 +997,9 @@ type ServerInterface interface {
 	// GetAreaStatistics Query statistics inside a WGS84 bounding box
 	// (GET /area-statistics)
 	GetAreaStatistics(w http.ResponseWriter, r *http.Request, params GetAreaStatisticsParams)
+	// GetDiagnosticLayer Read one immutable PNG layer listed by a diagnostic manifest
+	// (GET /diagnostics/{job_id}/layers/{layer_id})
+	GetDiagnosticLayer(w http.ResponseWriter, r *http.Request, jobId JobId, layerId LayerId)
 	// StreamEvents Stream forecast, radar-scan, or analysis-cycle updates using SSE
 	// (GET /events/stream)
 	StreamEvents(w http.ResponseWriter, r *http.Request, params StreamEventsParams)
@@ -987,6 +1093,12 @@ func (_ Unimplemented) GetAnalysisCycle(w http.ResponseWriter, r *http.Request, 
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// GetAnalysisDiagnostics Get the accepted RP-012 diagnostic manifest for an analysis
+// (GET /analysis-cycles/{analysis_id}/diagnostics)
+func (_ Unimplemented) GetAnalysisDiagnostics(w http.ResponseWriter, r *http.Request, analysisId AnalysisId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // GetAnalysisMosaicSummary Get the RP-010 time-aligned quality-aware mosaic summary
 // (GET /analysis-cycles/{analysis_id}/mosaic-summary)
 func (_ Unimplemented) GetAnalysisMosaicSummary(w http.ResponseWriter, r *http.Request, analysisId AnalysisId) {
@@ -1002,6 +1114,12 @@ func (_ Unimplemented) GetAnalysisQpeSummary(w http.ResponseWriter, r *http.Requ
 // GetAreaStatistics Query statistics inside a WGS84 bounding box
 // (GET /area-statistics)
 func (_ Unimplemented) GetAreaStatistics(w http.ResponseWriter, r *http.Request, params GetAreaStatisticsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetDiagnosticLayer Read one immutable PNG layer listed by a diagnostic manifest
+// (GET /diagnostics/{job_id}/layers/{layer_id})
+func (_ Unimplemented) GetDiagnosticLayer(w http.ResponseWriter, r *http.Request, jobId JobId, layerId LayerId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1278,6 +1396,32 @@ func (siw *ServerInterfaceWrapper) GetAnalysisCycle(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
+// GetAnalysisDiagnostics operation middleware
+func (siw *ServerInterfaceWrapper) GetAnalysisDiagnostics(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "analysis_id" -------------
+	var analysisId AnalysisId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "analysis_id", chi.URLParam(r, "analysis_id"), &analysisId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "analysis_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAnalysisDiagnostics(w, r, analysisId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetAnalysisMosaicSummary operation middleware
 func (siw *ServerInterfaceWrapper) GetAnalysisMosaicSummary(w http.ResponseWriter, r *http.Request) {
 
@@ -1367,6 +1511,41 @@ func (siw *ServerInterfaceWrapper) GetAreaStatistics(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAreaStatistics(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDiagnosticLayer operation middleware
+func (siw *ServerInterfaceWrapper) GetDiagnosticLayer(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "job_id" -------------
+	var jobId JobId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "job_id", chi.URLParam(r, "job_id"), &jobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "job_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "layer_id" -------------
+	var layerId LayerId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "layer_id", chi.URLParam(r, "layer_id"), &layerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "layer_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDiagnosticLayer(w, r, jobId, layerId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2180,6 +2359,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/analysis-cycles/{analysis_id}/qpe-summary", wrapper.GetAnalysisQpeSummary)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/analysis-cycles/{analysis_id}/diagnostics", wrapper.GetAnalysisDiagnostics)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/diagnostics/{job_id}/layers/{layer_id}", wrapper.GetDiagnosticLayer)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/products", wrapper.ListProducts)
