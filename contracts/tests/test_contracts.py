@@ -122,3 +122,38 @@ def test_v11_radar_contract_chain_is_frozen() -> None:
         assert "uint16` | Versioned bit set" not in contracts[name]
 
     assert "An unavailable prerequisite is represented by `NaN`" in contracts["qc-radar-volume"]
+
+
+def test_phase1_grid_contract_is_equal_lat_lon_end_to_end() -> None:
+    contract_names = (
+        "radar-grid",
+        "radar-analysis",
+        "nowcast-input",
+        "forecast-output",
+    )
+    contracts = {
+        name: (CONTRACTS_ROOT / "data" / f"{name}.md").read_text()
+        for name in contract_names
+    }
+
+    assert "fuzhou_118_123_25_27_0p01deg_v1" in contracts["radar-grid"]
+    assert "`501`" in contracts["radar-grid"]
+    assert "`201`" in contracts["radar-grid"]
+    assert "time × lat × lon" in contracts["nowcast-input"]
+    assert "member × lead_time × lat × lon" in contracts["forecast-output"]
+    assert "resolution_m" not in contracts["nowcast-input"]
+    for contract in contracts.values():
+        assert "Projected cell-centre" not in contract
+
+
+def test_distribution_contracts_preserve_grid_and_missing_semantics() -> None:
+    netcdf = (CONTRACTS_ROOT / "data" / "application-rainfall-netcdf.md").read_text()
+    rendered = (CONTRACTS_ROOT / "data" / "rendered-rainfall-layer.md").read_text()
+
+    assert "NetCDF classic" in netcdf
+    assert "lat × lon" in netcdf
+    assert "_FillValue=-9999.0" in netcdf
+    assert "valid no-rain is `0.0`" in netcdf
+    assert "501 × 201" in rendered
+    assert "[117.995, 24.995, 123.005, 27.005]" in rendered
+    assert "half-pixel alignment error" in rendered

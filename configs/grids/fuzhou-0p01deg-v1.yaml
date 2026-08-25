@@ -1,0 +1,40 @@
+schema_version: "1.0"
+grid_id: fuzhou_118_123_25_27_0p01deg_v1
+config_version: fuzhou-grid-0p01deg-v1
+lifecycle: ready
+
+crs:
+  authority: EPSG
+  code: 4326
+  name: WGS 84
+
+registration: point
+bounds:
+  west: 118.0
+  east: 123.0
+  south: 25.0
+  north: 27.0
+  semantics: inclusive_coordinate_centres
+
+spacing:
+  longitude_deg: 0.01
+  latitude_deg: 0.01
+
+shape:
+  longitude: 501
+  latitude: 201
+
+coordinates:
+  dimension_order: [lat, lon]
+  longitude_order: west_to_east
+  latitude_order: south_to_north
+  dtype: float32
+
+coordinate_sha256: 111a8653e5f227153216d100b81e4214bd2dbf3d134ee07641969be884a3d658
+
+reference_latitude_deg: 26.0
+ancillary_domain_id: fujian-taiwan-114-127-21-29-v1
+notes:
+  - Longitude spacing is about 1.00 km at 26 degrees north; latitude spacing is about 1.11 km.
+  - Coordinate bounds identify grid-point centres, not raster outer edges.
+  - Rendered image outer bounds extend half a grid interval beyond coordinate bounds.

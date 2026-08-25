@@ -15,6 +15,10 @@ nowcast operation:
    to model workers.
 7. [`forecast-output.md`](forecast-output.md) defines model output consumed by
    product generation and verification.
+8. [`application-rainfall-netcdf.md`](application-rainfall-netcdf.md) defines
+   the two-dimensional business exchange file derived at the product boundary.
+9. [`rendered-rainfall-layer.md`](rendered-rainfall-layer.md) defines the
+   transparent PNG and geospatial layer manifest consumed by the frontend.
 
 Every stage preserves valid no-rain, missing, and low-quality states. Full
 arrays live only in versioned object-store artifacts. Database, REST, and event

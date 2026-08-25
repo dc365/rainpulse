@@ -92,9 +92,9 @@ source:
   timestamp_timezone: UTC
 
 ancillary:
-  dem_asset_version: null
+  dem_asset_version: copernicus-dem-glo30-2022-v1
   clutter_map_version: null
-  coastline_asset_version: null
+  coastline_asset_version: gshhg-2.3.7-fujian-taiwan-v1
 
 qc:
   profile: null
@@ -104,7 +104,7 @@ qc:
 known_issues:
   - NAS filenames are replay timestamps; the immutable RSTM task/radial UTC time is authoritative.
   - Identical compressed payload SHA-256 values recur under different NAS filenames.
-  - Altitude datum, radar manufacturer/model, calibration offsets and ancillary assets await verification.
+  - Altitude datum, radar manufacturer/model, calibration offsets and static clutter asset await verification.
   - VCP21D has 11 source cuts but 9 unique nominal elevations because 0.5 and 1.5 degree scans are split by waveform/moment family.
 inventory_owner: rainpulse
 updated_at: "2026-08-24T10:30:00Z"

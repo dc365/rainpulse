@@ -1,0 +1,38 @@
+schema_version: "1.0"
+domain_id: fujian-taiwan-114-127-21-29-v1
+config_version: ancillary-fujian-taiwan-v1
+
+bounds:
+  west: 114
+  east: 127
+  south: 21
+  north: 29
+
+dem:
+  asset_version: copernicus-dem-glo30-2022-v1
+  product: Copernicus DEM GLO-30 DGED
+  base_url: https://copernicus-dem-30m.s3.amazonaws.com/
+  horizontal_crs: EPSG:4326
+  vertical_crs: EPSG:3855
+  native_resolution_arc_seconds: 1.0
+  tile_size_deg: 1
+  planned_tile_count: 104
+  missing_tile_policy: allow_source_404_below_frozen_land_area_threshold
+  max_uncovered_land_area_km2_per_tile: 0.1
+  raster_registration: pixel_is_point
+  storage_prefix: ancillary/dem/copernicus-dem-glo30-2022-v1/
+
+coastline:
+  asset_version: gshhg-2.3.7-fujian-taiwan-v1
+  product: GSHHG
+  source_url: https://github.com/GenericMappingTools/gshhg-gmt/releases/download/2.3.7/gshhg-shp-2.3.7.zip
+  source_sha256: 8dbbe7e071e77e9e75f2d639239099ebca8d5c16d6a07df8169729d49f15cf41
+  horizontal_crs: EPSG:4326
+  resolutions: [full, high]
+  shoreline_level: 1
+  storage_prefix: ancillary/coastline/gshhg-2.3.7-fujian-taiwan-v1/
+
+static_clutter:
+  status: awaiting_clear_air_samples
+  derivation: per_radar_clear_air_occurrence_probability
+  required_dimensions: [sweep, azimuth, range]

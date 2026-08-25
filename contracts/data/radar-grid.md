@@ -5,10 +5,24 @@ grid. Only validated `QCRadarVolume` data may be gridded. The selected source
 elevation can vary by azimuth and range; Phase 1 must not assume a permanently
 fixed 0.5-degree elevation.
 
-## Dimensions, coordinates, and variables
+## Dimensions and coordinates
 
-Dimensions are `y × x`. Coordinates are projected cell-centre northing/easting
-in metres and must exactly match the immutable `grid_id`.
+Dimensions are `lat × lon`. `lat` and `lon` are one-dimensional `float32`
+coordinates in degrees north/east and must exactly match the immutable
+`grid_id`. Both axes are strictly increasing. The registered Phase 1 grid is
+`fuzhou_118_123_25_27_0p01deg_v1`:
+
+| Coordinate | Start/end | Interval | Count |
+|---|---:|---:|---:|
+| `lon` | `118.00 … 123.00` | `0.01°` | `501` |
+| `lat` | `25.00 … 27.00` | `0.01°` | `201` |
+
+The coordinate endpoints are grid-point centres, not raster outer edges.
+Longitude and latitude intervals are angular and must never be represented as
+one constant square-cell `resolution_m`. Algorithms that need distances use a
+versioned geodesic or local projected metric while retaining this output grid.
+
+## Variables
 
 | Variable | Dtype | Unit/range | Required |
 |---|---:|---|---|
@@ -23,8 +37,9 @@ in metres and must exactly match the immutable `grid_id`.
 | `LOW_QUALITY_MASK` | uint8 | exactly 0 or 1 | yes |
 
 Required attributes include `contract_name=rainpulse.radar-grid`,
-`contract_version=1.0`, `radar_id`, `scan_id`, `grid_id`, CRS, bounds,
-resolution, scan time, `radar_config_version`, `qc_pipeline_version`,
+`contract_version=1.1`, `radar_id`, `scan_id`, `grid_id`, `crs=EPSG:4326`,
+inclusive coordinate-centre bounds, `longitude_interval_deg`,
+`latitude_interval_deg`, scan time, `radar_config_version`, `qc_pipeline_version`,
 `grid_config_version`, Hybrid Scan algorithm/version, and all input object
 URIs/identities.
 

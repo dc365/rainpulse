@@ -24,6 +24,8 @@ required_files=(
   "contracts/data/radar-analysis.md"
   "contracts/data/nowcast-input.md"
   "contracts/data/forecast-output.md"
+  "contracts/data/application-rainfall-netcdf.md"
+  "contracts/data/rendered-rainfall-layer.md"
   "contracts/oapi-codegen.yaml"
   "services/control/internal/api/generated/server.gen.go"
   "apps/web/src/api/generated/schema.ts"

@@ -7,13 +7,13 @@ configuration.
 
 ## Dimensions and coordinates
 
-The required dimension order is `time × y × x`.
+The required dimension order is `time × lat × lon`.
 
 | Coordinate | Type | Requirements |
 |---|---|---|
 | `time` | `datetime64[ns]` | UTC, strictly increasing, no duplicates |
-| `y` | `float64` | Projected cell-centre northing in metres |
-| `x` | `float64` | Projected cell-centre easting in metres |
+| `lat` | `float32` | Degrees north, strictly increasing, identical to `grid_id` |
+| `lon` | `float32` | Degrees east, strictly increasing, identical to `grid_id` |
 
 Phase 1 inputs contain 3–6 frames at an exact five-minute interval. The final
 `time` coordinate equals `issue_time_utc`. Mixing source intervals within one
@@ -21,7 +21,7 @@ model input is invalid.
 
 ## Variables
 
-All gridded variables have dimensions `[time, y, x]` unless marked optional.
+All gridded variables have dimensions `[time, lat, lon]` unless marked optional.
 
 | Variable | Dtype | Units | Range / meaning | Required |
 |---|---|---|---|---|
@@ -39,10 +39,12 @@ All gridded variables have dimensions `[time, y, x]` unless marked optional.
 | Attribute | Type | Meaning |
 |---|---|---|
 | `contract_name` | string | Must equal `rainpulse.nowcast-input` |
-| `contract_version` | string | Must equal `1.1` for this contract |
+| `contract_version` | string | Must equal `1.2` for this contract |
 | `crs` | string | Authoritative CRS identifier or WKT, frozen by grid configuration |
 | `grid_id` | string | Immutable identifier for CRS, bounds, resolution and masks |
-| `resolution_m` | number | Positive square-cell resolution |
+| `longitude_interval_deg` | number | Positive angular longitude interval |
+| `latitude_interval_deg` | number | Positive angular latitude interval |
+| `grid_metric_version` | string | Versioned degree-to-distance rule used by model adapters |
 | `timestep_minutes` | integer | Must equal `5` in Phase 1 |
 | `issue_time_utc` | string | RFC 3339 UTC timestamp equal to the final time coordinate |
 | `source_name` | string | Registered input source identifier |
@@ -70,16 +72,17 @@ Missing cells must never be silently converted to zero rainfall.
 
 ## Validation invariants
 
-- `x` and `y` lengths and values match the immutable `grid_id` definition.
-- All required arrays have identical `[time, y, x]` shapes.
-- Rain rate, data age and resolution are never negative when finite.
+- `lat` and `lon` lengths, values, dtype, and order match the immutable
+  `grid_id` definition.
+- All required arrays have identical `[time, lat, lon]` shapes.
+- Rain rate and data age are never negative when finite; angular intervals are positive.
 - `LOW_QUALITY_MASK <= VALID_MASK` element-wise.
 - Time coordinates are UTC, regular and exactly five minutes apart in Phase 1.
 - Dataset publication is atomic: write under `_temporary/{job_id}`, validate,
   then publish to
   `nowcast-input/{grid_id}/{yyyy}/{mm}/{dd}/{issue_time}/input.zarr`.
 
-Real source names, CRS, bounds and QC thresholds remain intentionally unfrozen
-until representative raw radar samples and verified station/grid definitions
-are supplied. QC flag bits are frozen by the referenced flag-definition
-version.
+Model adapters may work in pixel space, but physical motion conversion must use
+the registered `grid_metric_version`; treating `0.01°` as a constant one
+kilometre square is invalid. QC thresholds remain versioned independently. QC
+flag bits are frozen by the referenced flag-definition version.

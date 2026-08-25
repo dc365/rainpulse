@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/configs/schemas/grid-config.schema.json",
+  "title": "RainPulse immutable regular latitude/longitude grid",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "grid_id",
+    "config_version",
+    "lifecycle",
+    "crs",
+    "registration",
+    "bounds",
+    "spacing",
+    "shape",
+    "coordinates",
+    "coordinate_sha256",
+    "reference_latitude_deg",
+    "ancillary_domain_id"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "grid_id": { "$ref": "#/$defs/identifier" },
+    "config_version": { "$ref": "#/$defs/identifier" },
+    "lifecycle": { "enum": ["draft", "ready", "disabled"] },
+    "crs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authority", "code", "name"],
+      "properties": {
+        "authority": { "const": "EPSG" },
+        "code": { "const": 4326 },
+        "name": { "const": "WGS 84" }
+      }
+    },
+    "registration": { "const": "point" },
+    "bounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["west", "east", "south", "north", "semantics"],
+      "properties": {
+        "west": { "type": "number", "minimum": -180, "maximum": 180 },
+        "east": { "type": "number", "minimum": -180, "maximum": 180 },
+        "south": { "type": "number", "minimum": -90, "maximum": 90 },
+        "north": { "type": "number", "minimum": -90, "maximum": 90 },
+        "semantics": { "const": "inclusive_coordinate_centres" }
+      }
+    },
+    "spacing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["longitude_deg", "latitude_deg"],
+      "properties": {
+        "longitude_deg": { "type": "number", "exclusiveMinimum": 0, "maximum": 10 },
+        "latitude_deg": { "type": "number", "exclusiveMinimum": 0, "maximum": 10 }
+      }
+    },
+    "shape": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["longitude", "latitude"],
+      "properties": {
+        "longitude": { "type": "integer", "minimum": 2 },
+        "latitude": { "type": "integer", "minimum": 2 }
+      }
+    },
+    "coordinates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dimension_order", "longitude_order", "latitude_order", "dtype"],
+      "properties": {
+        "dimension_order": {
+          "type": "array",
+          "prefixItems": [{ "const": "lat" }, { "const": "lon" }],
+          "items": false,
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "longitude_order": { "const": "west_to_east" },
+        "latitude_order": { "const": "south_to_north" },
+        "dtype": { "const": "float32" }
+      }
+    },
+    "coordinate_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "reference_latitude_deg": { "type": "number", "minimum": -90, "maximum": 90 },
+    "ancillary_domain_id": { "$ref": "#/$defs/identifier" },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+    }
+  }
+}

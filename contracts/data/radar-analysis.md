@@ -5,9 +5,15 @@ analysis time. It is the only source accepted by `NowcastInput` construction.
 
 ## Dimensions and coordinates
 
-Dimensions are `y × x`; `x`, `y`, CRS, bounds, masks, and resolution exactly
-match the immutable `grid_id`. `analysis_time` is one fixed five-minute UTC
-boundary in Phase 1.
+Dimensions are `lat × lon`; both one-dimensional coordinates, CRS, inclusive
+coordinate-centre bounds, masks, intervals, values, and dtype exactly match the
+immutable `grid_id`. Phase 1 uses EPSG:4326 and strictly increasing latitude
+and longitude. `analysis_time` is one fixed five-minute UTC boundary.
+
+Every contributing single-radar `RadarGrid` uses these same coordinates. Adding
+radars increases the number of input grids and contributors, not the dimensions
+of the fused `RadarAnalysis`. No second spatial interpolation is allowed between
+single-radar gridding, mosaic, QPE, and application-product export.
 
 ## Variables
 
@@ -48,7 +54,7 @@ The required QI components are `QI_METEO`, `QI_BLOCKAGE`, `QI_BEAM_HEIGHT`,
 ## Required attributes and publication
 
 Attributes include `contract_name=rainpulse.radar-analysis`,
-`contract_version=1.0`, `analysis_id`, `analysis_time`, `grid_id`, CRS,
+`contract_version=1.1`, `analysis_id`, `analysis_time`, `grid_id`, CRS,
 `analysis_cycle_version`, `radar_scan_ids`, actual per-radar time offsets,
 `qc_pipeline_versions`, `grid_config_version`, `mosaic_config_version`,
 `qpe_config_version`, `flag_definition_version`, source/interference code

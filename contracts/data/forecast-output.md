@@ -7,15 +7,15 @@ version, configuration version and target grid.
 ## Dimensions and coordinates
 
 The canonical dimension order for member-dependent forecast fields is
-`member × lead_time × y × x`.
+`member × lead_time × lat × lon`.
 
 | Coordinate | Type | Requirements |
 |---|---|---|
 | `member` | string or integer | Unique member identifiers; deterministic models use one member |
 | `lead_time` | `int32` | Minutes after issue time |
 | `valid_time` | `datetime64[ns]` | UTC and equal to `issue_time + lead_time` |
-| `y` | `float64` | Identical to the selected `NowcastInput` grid |
-| `x` | `float64` | Identical to the selected `NowcastInput` grid |
+| `lat` | `float32` | Identical to the selected `NowcastInput` grid |
+| `lon` | `float32` | Identical to the selected `NowcastInput` grid |
 
 Phase 1 deterministic output has one member and exactly 24 lead times:
 `5, 10, …, 120` minutes.
@@ -24,15 +24,15 @@ Phase 1 deterministic output has one member and exactly 24 lead times:
 
 | Variable | Dimensions | Dtype | Units | Required in Phase 1 |
 |---|---|---|---|---|
-| `rain_rate` | `[member, lead_time, y, x]` | `float32` | `mm h-1` | yes |
-| `accum_60` | `[member, y, x]` | `float32` | `mm` | yes |
-| `accum_120` | `[member, y, x]` | `float32` | `mm` | yes |
-| `output_valid_mask` | `[lead_time, y, x]` | `uint8` | `1` | yes |
-| `confidence` | `[lead_time, y, x]` | `float32` | `1` | yes |
-| `motion_u` | `[y, x]` | `float32` | `m s-1` | pySTEPS-LK diagnostic |
-| `motion_v` | `[y, x]` | `float32` | `m s-1` | pySTEPS-LK diagnostic |
-| `prob_gt_1/5/10/20/50` | `[lead_time, y, x]` | `float32` | `1` | no; ensemble phase |
-| `p10/p50/p90` | `[lead_time, y, x]` | `float32` | `mm h-1` | no; ensemble phase |
+| `rain_rate` | `[member, lead_time, lat, lon]` | `float32` | `mm h-1` | yes |
+| `accum_60` | `[member, lat, lon]` | `float32` | `mm` | yes |
+| `accum_120` | `[member, lat, lon]` | `float32` | `mm` | yes |
+| `output_valid_mask` | `[lead_time, lat, lon]` | `uint8` | `1` | yes |
+| `confidence` | `[lead_time, lat, lon]` | `float32` | `1` | yes |
+| `motion_u` | `[lat, lon]` | `float32` | `m s-1` | pySTEPS-LK diagnostic |
+| `motion_v` | `[lat, lon]` | `float32` | `m s-1` | pySTEPS-LK diagnostic |
+| `prob_gt_1/5/10/20/50` | `[lead_time, lat, lon]` | `float32` | `1` | no; ensemble phase |
+| `p10/p50/p90` | `[lead_time, lat, lon]` | `float32` | `mm h-1` | no; ensemble phase |
 
 Probability variables are reserved but must not be published until the
 threshold accumulation period, event definition and calibration rules are
@@ -49,7 +49,7 @@ required output support is invalid.
 | Attribute | Type | Meaning |
 |---|---|---|
 | `contract_name` | string | Must equal `rainpulse.forecast-output` |
-| `contract_version` | string | Must equal `1.0` |
+| `contract_version` | string | Must equal `1.1` |
 | `run_id` | UUID string | Owning forecast run |
 | `job_id` | UUID string | Producing idempotent job |
 | `model_id` | string | Stable model family identifier |
@@ -58,6 +58,7 @@ required output support is invalid.
 | `input_asset_ids` | array[string] | Raw/standard assets used by the run |
 | `issue_time` | string | RFC 3339 UTC issue time |
 | `grid_id` | string | Must match the input grid |
+| `grid_metric_version` | string | Degree-to-distance conversion used for physical motion fields |
 | `runtime_ms` | integer | Non-negative compute runtime |
 | `created_at` | string | RFC 3339 UTC publication timestamp |
 
@@ -67,6 +68,9 @@ required output support is invalid.
   `NaN`, not zero.
 - `confidence` is in `[0, 1]` where valid and `NaN` where invalid.
 - Every `valid_time` equals the issue time plus its lead time.
+- pySTEPS pixel displacement is converted to `motion_u`/`motion_v` with the
+  latitude-aware `grid_metric_version`; a constant one-kilometre conversion is
+  forbidden for the EPSG:4326 grid.
 - A deterministic model uses one member and cannot emit ensemble probability
   or quantile variables.
 - Assets are written under `_tmp/{job_id}`, validated and checksummed before an

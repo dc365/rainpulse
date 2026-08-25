@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/configs/schemas/ancillary-source.schema.json",
+  "title": "RainPulse versioned ancillary source definition",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "domain_id",
+    "config_version",
+    "bounds",
+    "dem",
+    "coastline",
+    "static_clutter"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "domain_id": { "$ref": "#/$defs/identifier" },
+    "config_version": { "$ref": "#/$defs/identifier" },
+    "bounds": { "$ref": "#/$defs/bounds" },
+    "dem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "asset_version",
+        "product",
+        "base_url",
+        "horizontal_crs",
+        "vertical_crs",
+        "native_resolution_arc_seconds",
+        "tile_size_deg",
+        "planned_tile_count",
+        "missing_tile_policy",
+        "max_uncovered_land_area_km2_per_tile",
+        "raster_registration",
+        "storage_prefix"
+      ],
+      "properties": {
+        "asset_version": { "$ref": "#/$defs/identifier" },
+        "product": { "const": "Copernicus DEM GLO-30 DGED" },
+        "base_url": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "horizontal_crs": { "const": "EPSG:4326" },
+        "vertical_crs": { "const": "EPSG:3855" },
+        "native_resolution_arc_seconds": { "const": 1.0 },
+        "tile_size_deg": { "const": 1 },
+        "planned_tile_count": { "type": "integer", "minimum": 1 },
+        "missing_tile_policy": { "const": "allow_source_404_below_frozen_land_area_threshold" },
+        "max_uncovered_land_area_km2_per_tile": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "raster_registration": { "const": "pixel_is_point" },
+        "storage_prefix": { "type": "string", "pattern": "^[a-z0-9][a-z0-9/._-]+/$" }
+      }
+    },
+    "coastline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "asset_version",
+        "product",
+        "source_url",
+        "source_sha256",
+        "horizontal_crs",
+        "resolutions",
+        "shoreline_level",
+        "storage_prefix"
+      ],
+      "properties": {
+        "asset_version": { "$ref": "#/$defs/identifier" },
+        "product": { "const": "GSHHG" },
+        "source_url": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "source_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "horizontal_crs": { "const": "EPSG:4326" },
+        "resolutions": {
+          "type": "array",
+          "prefixItems": [{ "const": "full" }, { "const": "high" }],
+          "items": false,
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "shoreline_level": { "const": 1 },
+        "storage_prefix": { "type": "string", "pattern": "^[a-z0-9][a-z0-9/._-]+/$" }
+      }
+    },
+    "static_clutter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "derivation", "required_dimensions"],
+      "properties": {
+        "status": { "const": "awaiting_clear_air_samples" },
+        "derivation": { "const": "per_radar_clear_air_occurrence_probability" },
+        "required_dimensions": {
+          "type": "array",
+          "prefixItems": [
+            { "const": "sweep" },
+            { "const": "azimuth" },
+            { "const": "range" }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        }
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+    },
+    "bounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["west", "east", "south", "north"],
+      "properties": {
+        "west": { "type": "integer", "minimum": -180, "maximum": 179 },
+        "east": { "type": "integer", "minimum": -179, "maximum": 180 },
+        "south": { "type": "integer", "minimum": -90, "maximum": 89 },
+        "north": { "type": "integer", "minimum": -89, "maximum": 90 }
+      }
+    }
+  }
+}

@@ -1,5 +1,6 @@
 import copy
 import json
+import math
 from pathlib import Path
 
 import pytest
@@ -143,6 +144,10 @@ def test_z9598_real_sample_configuration_is_valid_but_not_ready() -> None:
         "SW",
         "SNR",
     }
+    assert config["ancillary"]["dem_asset_version"] == "copernicus-dem-glo30-2022-v1"
+    assert config["ancillary"]["coastline_asset_version"] == (
+        "gshhg-2.3.7-fujian-taiwan-v1"
+    )
 
     config["lifecycle"] = "ready"
     with pytest.raises(ValidationError):
@@ -187,3 +192,62 @@ def test_rp008_qc_profile_is_valid_and_keeps_external_assets_explicit() -> None:
     assert profile["static_ground_clutter"]["asset_uri"] is None
     assert profile["sea_ap"]["coastline_asset_uri"] is None
     assert profile["quality_index"]["aggregation"] == "product"
+
+
+def test_fuzhou_grid_is_valid_and_matches_inclusive_point_registration() -> None:
+    schema = json.loads((CONFIG_ROOT / "schemas" / "grid-config.schema.json").read_text())
+    grid = yaml.safe_load((CONFIG_ROOT / "grids" / "fuzhou-0p01deg-v1.yaml").read_text())
+
+    Draft202012Validator.check_schema(schema)
+    Draft202012Validator(schema).validate(grid)
+    assert grid["grid_id"] == "fuzhou_118_123_25_27_0p01deg_v1"
+    assert grid["crs"]["code"] == 4326
+    assert grid["coordinates"]["dimension_order"] == ["lat", "lon"]
+    assert grid["coordinate_sha256"] == (
+        "111a8653e5f227153216d100b81e4214bd2dbf3d134ee07641969be884a3d658"
+    )
+
+    bounds = grid["bounds"]
+    spacing = grid["spacing"]
+    expected_lon = round((bounds["east"] - bounds["west"]) / spacing["longitude_deg"]) + 1
+    expected_lat = round((bounds["north"] - bounds["south"]) / spacing["latitude_deg"]) + 1
+    assert grid["shape"] == {"longitude": expected_lon, "latitude": expected_lat}
+    assert grid["shape"] == {"longitude": 501, "latitude": 201}
+
+    image_edges = (
+        bounds["west"] - spacing["longitude_deg"] / 2,
+        bounds["south"] - spacing["latitude_deg"] / 2,
+        bounds["east"] + spacing["longitude_deg"] / 2,
+        bounds["north"] + spacing["latitude_deg"] / 2,
+    )
+    assert image_edges == pytest.approx((117.995, 24.995, 123.005, 27.005))
+    assert not math.isclose(
+        spacing["longitude_deg"] * math.cos(math.radians(grid["reference_latitude_deg"])),
+        spacing["latitude_deg"],
+    )
+
+
+def test_fujian_taiwan_ancillary_sources_are_valid_and_cover_104_dem_tiles() -> None:
+    schema = json.loads(
+        (CONFIG_ROOT / "schemas" / "ancillary-source.schema.json").read_text()
+    )
+    source = yaml.safe_load((CONFIG_ROOT / "ancillary" / "fujian-taiwan-v1.yaml").read_text())
+
+    Draft202012Validator.check_schema(schema)
+    Draft202012Validator(schema, format_checker=FormatChecker()).validate(source)
+    bounds = source["bounds"]
+    expected_tiles = (bounds["east"] - bounds["west"]) * (
+        bounds["north"] - bounds["south"]
+    )
+    assert expected_tiles == 104
+    assert source["dem"]["planned_tile_count"] == expected_tiles
+    assert source["dem"]["missing_tile_policy"] == (
+        "allow_source_404_below_frozen_land_area_threshold"
+    )
+    assert source["dem"]["max_uncovered_land_area_km2_per_tile"] == pytest.approx(0.1)
+    assert source["dem"]["horizontal_crs"] == "EPSG:4326"
+    assert source["dem"]["vertical_crs"] == "EPSG:3855"
+    assert source["coastline"]["source_sha256"] == (
+        "8dbbe7e071e77e9e75f2d639239099ebca8d5c16d6a07df8169729d49f15cf41"
+    )
+    assert source["static_clutter"]["status"] == "awaiting_clear_air_samples"
