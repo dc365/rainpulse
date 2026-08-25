@@ -38,6 +38,7 @@ make test-radar-mosaic
 make test-qpe
 make test-diagnostics
 make test-nowcast-input
+make test-pysteps-lk
 make smoke
 ```
 
@@ -94,7 +95,12 @@ RadarAnalysis frames ending at the issue time, rejects gaps and mixed versions,
 rechecks coverage/QI/data-age gates, preserves missing/no-rain/low-quality
 states, publishes an immutable input Zarr and advances the forecast run to
 `INPUT_READY`. Real meteorological-sequence acceptance still needs at least
-three consecutive operational RadarAnalysis cycles; pySTEPS remains RP-014.
+three consecutive operational RadarAnalysis cycles. RP-014 adds the real
+pySTEPS dense Lucas–Kanade and semi-Lagrangian worker, 24 five-minute leads,
+physical U/V, persistence/whole-field-translation baselines, ForecastOutput
+v1.1, Go persistence/events and an accepted synthetic end-to-end replay.
+That replay proves the software boundary and missing-data semantics, not
+forecast skill; representative operational sequences remain required.
 
 ## Test deployment artifacts
 
@@ -132,3 +138,6 @@ The RP-012 React QC/mosaic/QPE diagnostic acceptance is recorded in
 The RP-013 fixed-step input builder and its real-gate/synthetic vertical
 acceptance are recorded in
 [`docs/RP013_NowcastInput验收记录.md`](docs/RP013_NowcastInput验收记录.md).
+The RP-014 pySTEPS-LK implementation, Linux runtime and server replay are
+recorded in
+[`docs/RP014_pySTEPS-LK验收记录.md`](docs/RP014_pySTEPS-LK验收记录.md).

@@ -32,7 +32,7 @@ NowcastInput gate.
 | RP-002 data/event contracts | Complete | Raw, normalized polar, QC polar, Hybrid Scan, analysis, nowcast and forecast contracts plus domain event schemas/examples |
 | RP-003 infrastructure | Complete | PostgreSQL, NATS JetStream and MinIO with migrations, persistence and health checks |
 | RP-004 Go three-level workflows | Complete | Separate radar-scan, analysis-cycle and forecast states; additive metadata migration; radar/analysis API and SSE; two-radar degradation simulation |
-| RP-005 Python Worker SDK | Complete | Registered decode/QC/grid/mosaic-QPE/NowcastInput profiles reuse strict contracts, idempotency, artifact-specific atomic output, logs and health |
+| RP-005 Python Worker SDK | Complete | Registered decode/QC/grid/mosaic-QPE/NowcastInput/pySTEPS-LK profiles reuse strict contracts, idempotency, artifact-specific atomic output, logs and health |
 | RP-006 first real radar decoder | Complete | CMA RSTM 2.0 decoder, Z9598 draft config, sweep-group Zarr, real Worker profile and NAS golden-sample acceptance |
 | RP-007 data integrity/radar health | Complete | Versioned health profile, real-volume integrity metrics, persistence/API and responsive React radar console |
 | RP-008 basic polar QC | Core vertical slice complete | Real Z9598 normalized Zarr to version-isolated QC Zarr, flags/QI/provenance, persistence/API/console and replay acceptance; ancillary-dependent modules still await operational assets |
@@ -41,7 +41,8 @@ NowcastInput gate.
 | RP-011 | Core vertical slice complete | Versioned Z–R QPE, RadarAnalysis v1.2, persistence/API and real Z9598 engineering replay accepted; gauge calibration remains gated |
 | RP-012 | Core vertical slice complete | Immutable 11-layer grid/PPI diagnostic bundle, controlled PNG API, React evidence workbench and real Z9598 engineering replay accepted |
 | RP-013 | Core vertical slice complete | Strict fixed-step NowcastInput, quality/eligibility gates, immutable Zarr, persistence/events and traceable synthetic server acceptance; real sequence acceptance remains gated |
-| RP-014–RP-016 | Not started | Next is pySTEPS-LK, followed by product delivery, verification and later probabilistic/AI paths |
+| RP-014 | Core vertical slice complete | Real dense Lucas–Kanade and semi-Lagrangian extrapolation, physical U/V, 24 leads, persistence/translation baselines, immutable ForecastOutput, persistence/events and synthetic server replay; real forecast-skill acceptance remains gated |
+| RP-015–RP-016 | Not started | Next is product/API/short-nowcast UI delivery, followed by verification, fault injection and end-to-end acceptance |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -74,8 +75,8 @@ RP-002 now provides:
 - polar `QCRadarVolume` with QI components, module provenance and uint32 flags;
 - single-radar `RadarGrid`/Hybrid Scan and multi-radar `RadarAnalysis`;
 - `NowcastInput` v1.2 and `ForecastOutput` v1.1 equal-lat/lon semantics;
-- radar receive/decode/QC/grid, analysis-cycle/mosaic, input-ready and
-  forecast-run event schemas with valid examples;
+- radar receive/decode/QC/grid, analysis-cycle/mosaic, input-ready,
+  pySTEPS-LK-requested and baseline-ready event schemas with valid examples;
 - existing common job command/result and product-published schemas;
 - contract tests preserving valid no-rain, missing and low-quality states.
 
@@ -323,8 +324,16 @@ rejected that real engineering analysis before input construction because it
 is not operationally eligible. A separately marked three-frame synthetic
 acceptance sequence subsequently produced a validated `3 × 201 × 501`
 NowcastInput, reached `INPUT_READY`, published its ready event and returned the
-same deterministic run/job on replay. All fourteen long-lived Compose services
-are healthy. Desktop 1440 px, tablet 768 px and
+same deterministic run/job on replay. RP-014 then introduced the provenance
+patch profile `rp013-fixed-5min-v1.1`/`nowcast-input-builder-1.0.1` instead of
+mutating that old input. The replacement run retained the same three raw asset
+IDs and fed the real `pysteps-lk-1.0.0` worker. It published a validated
+`1 × 24 × 201 × 501` ForecastOutput for 5–120 minutes, reached
+`BASELINE_READY`, and emitted exactly one baseline-ready event. Its static
+acceptance field correctly used the explicit zero-motion fallback; this is
+software-path evidence, not a forecast-skill result. Job replay left one job,
+one model run and one completion inbox record. All fifteen long-lived Compose
+services are healthy. Desktop 1440 px, tablet 768 px and
 mobile 375 px browser checks passed; the final default real-analysis view has
 no console error or warning. The
 retained PostgreSQL, NATS and MinIO volumes were not deleted.
@@ -338,13 +347,15 @@ of the active test environment and must not be deleted during ordinary updates.
 
 ## Next acceptance target
 
-Start RP-014 pySTEPS-LK from the accepted `NowcastInput` software boundary:
-freeze the preprocessing transform, motion U/V convention, 24 five-minute lead
-times, persistence and whole-field-translation baselines, `ForecastOutput`
-v1.1, idempotency and failure behavior. The isolated RP-013 synthetic input may
-be used to prove the vertical software path, but not forecast accuracy. Real
-RP-013/RP-014 acceptance still needs at least three consecutive operational
-QC→grid→mosaic→QPE cycles. Gauge adjustment remains disabled until representative
+Start RP-015 product/API/short-nowcast UI delivery from the accepted
+`ForecastOutput` boundary: freeze 0–1 h/0–2 h application products, transparent
+map images/COGs, controlled REST/SSE delivery, time-axis behavior and product
+provenance. Keep the large internal Zarr as the model artifact and only create
+NetCDF for application rainfall products that require the agreed numerical
+grid contract. RP-016 will then add verification, fault injection and the full
+raw-radar-to-React path. Real RP-013/RP-014 meteorological acceptance still
+needs at least three consecutive operational QC→grid→mosaic→QPE cycles with
+trackable precipitation. Gauge adjustment remains disabled until representative
 gauge observations and quality rules are supplied. Real multi-radar mosaic
 acceptance still requires at least two ready radar configurations and
 representative synchronized volumes. Static clutter, derived coastline/sea-AP
@@ -411,5 +422,6 @@ make test-radar-mosaic
 make test-qpe
 make test-diagnostics
 make test-nowcast-input
+make test-pysteps-lk
 make smoke
 ```
