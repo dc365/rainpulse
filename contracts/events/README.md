@@ -53,6 +53,7 @@ machines to those idempotent job records.
   `rainpulse.jobs.requested.product_build`.
 - Completion subject: `rainpulse.jobs.completed`
 - Failure subject: `rainpulse.jobs.failed`
+- Product publication subject: `rainpulse.products.published`
 - Go terminal-result consumer: `rainpulse-orchestrator-results-v2`
 - RP-005 simulation Worker consumer: `rainpulse-sim-worker`
 

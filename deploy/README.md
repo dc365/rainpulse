@@ -45,7 +45,8 @@ the Makefile and packaged locally; they do not require a registry pull.
 
 RP-003 adds the long-lived `orchestrator` service. It publishes transactional
 outbox records to `RAINPULSE_JOBS` and consumes terminal results through the
-durable `rainpulse-orchestrator-results-v2` consumer.
+durable `rainpulse-orchestrator-results-v2` consumer. The stream covers job
+subjects plus the immutable RP-015 `rainpulse.products.published` notification.
 
 RP-004 adds `simulation-worker`, a long-lived Python pull consumer with a
 dedicated MinIO application user. It publishes small completion/failure events,

@@ -48,16 +48,7 @@ func (stream *JetStream) Healthy() bool {
 }
 
 func (stream *JetStream) Ensure(ctx context.Context) error {
-	configuration := &nats.StreamConfig{
-		Name:       orchestration.JobStreamName,
-		Subjects:   []string{"rainpulse.jobs.>"},
-		Storage:    nats.FileStorage,
-		Retention:  nats.LimitsPolicy,
-		Discard:    nats.DiscardOld,
-		MaxAge:     7 * 24 * time.Hour,
-		MaxBytes:   1024 * 1024 * 1024,
-		Duplicates: 10 * time.Minute,
-	}
+	configuration := jobStreamConfiguration()
 	if _, err := stream.context.StreamInfo(orchestration.JobStreamName, nats.Context(ctx)); err != nil {
 		if !errors.Is(err, nats.ErrStreamNotFound) {
 			return fmt.Errorf("inspect job stream: %w", err)
@@ -71,6 +62,19 @@ func (stream *JetStream) Ensure(ctx context.Context) error {
 		return fmt.Errorf("update job stream: %w", err)
 	}
 	return nil
+}
+
+func jobStreamConfiguration() *nats.StreamConfig {
+	return &nats.StreamConfig{
+		Name:       orchestration.JobStreamName,
+		Subjects:   []string{"rainpulse.jobs.>", orchestration.ProductPublishedSubject},
+		Storage:    nats.FileStorage,
+		Retention:  nats.LimitsPolicy,
+		Discard:    nats.DiscardOld,
+		MaxAge:     7 * 24 * time.Hour,
+		MaxBytes:   1024 * 1024 * 1024,
+		Duplicates: 10 * time.Minute,
+	}
 }
 
 func (stream *JetStream) Publish(ctx context.Context, event workflow.OutboxEvent) error {
