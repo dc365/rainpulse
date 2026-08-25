@@ -40,7 +40,8 @@ NowcastInput gate.
 | RP-010 | Core vertical slice complete | Five-minute alignment, closest-grid selection, QI selection/linear-Z blending, RadarMosaic v1.0, persistence/API and real Z9598 single-radar replay accepted; real two-radar replay remains gated by input inventory |
 | RP-011 | Core vertical slice complete | Versioned Z–R QPE, RadarAnalysis v1.2, persistence/API and real Z9598 engineering replay accepted; gauge calibration remains gated |
 | RP-012 | Core vertical slice complete | Immutable 11-layer grid/PPI diagnostic bundle, controlled PNG API, React evidence workbench and real Z9598 engineering replay accepted |
-| RP-013–RP-016 | Not started | Next is strict fixed-step NowcastInput, followed by pySTEPS, probabilistic/AI paths and product verification |
+| RP-013 | Core vertical slice complete | Strict fixed-step NowcastInput, quality/eligibility gates, immutable Zarr, persistence/events and traceable synthetic server acceptance; real sequence acceptance remains gated |
+| RP-014–RP-016 | Not started | Next is pySTEPS-LK, followed by product delivery, verification and later probabilistic/AI paths |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -252,13 +253,26 @@ RP-012 now provides:
 - a real Z9598 engineering replay documented in
   `docs/RP012_React质控与拼图诊断验收记录.md`.
 
+RP-013 now provides:
+
+- deterministic selection of 3–6 committed `RadarAnalysis` frames ending at
+  the issue time with an exact five-minute cadence and no silent gap filling;
+- a versioned gate profile covering minimum per-frame coverage, sequence QI,
+  maximum data age and mandatory upstream operational eligibility;
+- a canonical `NowcastInput` v1.2 Zarr preserving missing, valid no-rain and
+  low-quality states together with raw/QC/QPE identities and versions;
+- transactional input-run/frame provenance, `INPUT_READY`, requested/completed/
+  ready events and replay-safe atomic publication;
+- real Z9598 negative-gate evidence plus a clearly isolated full-grid synthetic
+  vertical acceptance documented in `docs/RP013_NowcastInput验收记录.md`.
+
 ## Active test environment
 
 - Target: `private-test-host`
 - Project: `<remote-project-dir>`
 - Web: `http://private-test-host:4173`
 - API: `http://private-test-host:8080/api/v1/system/status`
-- Deployed service runtime version: `rp012-v1.1-ff46a14-20260825`
+- Deployed service runtime version: `rp013-v1.1-68574c0-20260825`
 - RP-009 ancillary runtime: `runtime/ancillary/assets`, accepted 2026-08-25
 - One-time legacy archive: `<remote-legacy-archive>`
 
@@ -272,7 +286,7 @@ Docker Hub access is unreliable. Continue to use local Linux/amd64 builds and
 export/import pinned images through `http://127.0.0.1:7897` when necessary.
 No credentials or secrets belong in this document or repository.
 
-The RP-004–RP-012 code, generated clients, tests and Linux/amd64 binaries pass
+The RP-004–RP-013 code, generated clients, tests and Linux/amd64 binaries pass
 locally. SSH public-key access to the GPU server is active; passwords are not
 stored locally. On 2026-08-24 RP-007 was deployed in place without a new source
 or database backup, followed by RP-008 through RP-012 under the same rule. The Z9598
@@ -304,8 +318,13 @@ published a directly validated 142-object RadarAnalysis and reached
 RP-012 then rendered the accepted analysis plus exact Z9598 QC contributor into
 seven grid and four PPI layers: 12 immutable objects, 75,041 bytes and 2,502 ms
 runtime. Direct bundle replay, Alpha PNG geometry, controlled image delivery and
-idempotent rerun passed without changing the analysis timestamp. All thirteen
-long-lived Compose services are healthy. Desktop 1440 px, tablet 768 px and
+idempotent rerun passed without changing the analysis timestamp. RP-013 then
+rejected that real engineering analysis before input construction because it
+is not operationally eligible. A separately marked three-frame synthetic
+acceptance sequence subsequently produced a validated `3 × 201 × 501`
+NowcastInput, reached `INPUT_READY`, published its ready event and returned the
+same deterministic run/job on replay. All fourteen long-lived Compose services
+are healthy. Desktop 1440 px, tablet 768 px and
 mobile 375 px browser checks passed; the final default real-analysis view has
 no console error or warning. The
 retained PostgreSQL, NATS and MinIO volumes were not deleted.
@@ -319,14 +338,14 @@ of the active test environment and must not be deleted during ordinary updates.
 
 ## Next acceptance target
 
-Start RP-013 NowcastInput from consecutive accepted RadarAnalysis products:
-enforce a strict five-minute cadence, 3–6 frame identity, monotonic timestamps,
-grid/config consistency, explicit missing-frame policy and minimum quality/
-coverage gates. Preserve missing, valid no-rain and low-quality states, and do
-not silently fill time gaps before pySTEPS. The current real chain has only one
-accepted analysis time, so real RP-013 acceptance needs at least three
-consecutive QC→grid→mosaic→QPE cycles. Gauge adjustment remains disabled until
-representative gauge observations and quality rules are supplied. Real multi-radar mosaic
+Start RP-014 pySTEPS-LK from the accepted `NowcastInput` software boundary:
+freeze the preprocessing transform, motion U/V convention, 24 five-minute lead
+times, persistence and whole-field-translation baselines, `ForecastOutput`
+v1.1, idempotency and failure behavior. The isolated RP-013 synthetic input may
+be used to prove the vertical software path, but not forecast accuracy. Real
+RP-013/RP-014 acceptance still needs at least three consecutive operational
+QC→grid→mosaic→QPE cycles. Gauge adjustment remains disabled until representative
+gauge observations and quality rules are supplied. Real multi-radar mosaic
 acceptance still requires at least two ready radar configurations and
 representative synchronized volumes. Static clutter, derived coastline/sea-AP
 probability assets, verified vertical datum and a representative
@@ -391,5 +410,6 @@ make radar-grid-smoke
 make test-radar-mosaic
 make test-qpe
 make test-diagnostics
+make test-nowcast-input
 make smoke
 ```

@@ -129,3 +129,6 @@ The RP-011 basic QPE and RadarAnalysis acceptance is recorded in
 [`docs/RP011_基础QPE验收记录.md`](docs/RP011_基础QPE验收记录.md).
 The RP-012 React QC/mosaic/QPE diagnostic acceptance is recorded in
 [`docs/RP012_React质控与拼图诊断验收记录.md`](docs/RP012_React质控与拼图诊断验收记录.md).
+The RP-013 fixed-step input builder and its real-gate/synthetic vertical
+acceptance are recorded in
+[`docs/RP013_NowcastInput验收记录.md`](docs/RP013_NowcastInput验收记录.md).
