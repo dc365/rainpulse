@@ -50,6 +50,7 @@ After `make dev-up`, the public seams are:
 - Registered radars: `http://127.0.0.1:8080/api/v1/radars`
 - Radar scan workflows: `http://127.0.0.1:8080/api/v1/radar-scans`
 - Per-scan QC summary: `http://127.0.0.1:8080/api/v1/radar-scans/{scan_id}/qc-summary`
+- Per-scan Hybrid Scan summary: `http://127.0.0.1:8080/api/v1/radar-scans/{scan_id}/grid-summary`
 - Radar fleet health: `http://127.0.0.1:8080/api/v1/radars/status`
 - Per-radar health: `http://127.0.0.1:8080/api/v1/radars/{radar_id}/status`
 - Analysis cycles: `http://127.0.0.1:8080/api/v1/analysis-cycles`
@@ -62,11 +63,13 @@ atomic publication behavior. RP-006 adds the first real CMA RSTM 2.0 decoder
 and a read-only NAS-backed Worker profile. RP-007 adds decoded-volume integrity
 and radar-health diagnostics. RP-008 adds health-gated basic polar QC, a
 separate version-isolated QC Zarr, flags/QI/provenance, persistence/API support,
-and the radar operations console module. Ancillary-dependent clutter, sea/AP
-modules still require representative-case acceptance. The RP-009 foundation
-freezes the Phase 1 EPSG:4326 `0.01°` Fuzhou grid and versions the accepted
-Fujian–Taiwan Copernicus GLO-30/GSHHG source assets; beam blockage, Hybrid Scan,
-gridding and downstream meteorological models are not yet implemented.
+and the radar operations console module. Ancillary-dependent clutter and sea/AP
+modules still require representative-case acceptance. RP-009 freezes the Phase
+1 EPSG:4326 `0.01°` Fuzhou grid and accepted Fujian–Taiwan Copernicus
+GLO-30/GSHHG assets, then adds polar DEM blockage, lowest-usable-elevation
+Hybrid Scan, RadarGrid v1.2, persistence/API and a real Z9598 engineering
+replay. Multi-radar mosaic, QPE and downstream meteorological models remain to
+be implemented.
 
 ## Test deployment artifacts
 
@@ -93,3 +96,5 @@ RP-008 server acceptance evidence is in
 [`docs/RP008_基础极坐标质控验收记录.md`](docs/RP008_基础极坐标质控验收记录.md).
 The accepted RP-009 grid/static-source foundation is recorded in
 [`docs/RP009_网格与静态基础数据验收记录.md`](docs/RP009_网格与静态基础数据验收记录.md).
+The RP-009 DEM blockage and Hybrid Scan replay is recorded in
+[`docs/RP009_DEM波束遮挡与HybridScan验收记录.md`](docs/RP009_DEM波束遮挡与HybridScan验收记录.md).

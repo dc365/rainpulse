@@ -36,8 +36,8 @@ NowcastInput gate.
 | RP-006 first real radar decoder | Complete | CMA RSTM 2.0 decoder, Z9598 draft config, sweep-group Zarr, real Worker profile and NAS golden-sample acceptance |
 | RP-007 data integrity/radar health | Complete | Versioned health profile, real-volume integrity metrics, persistence/API and responsive React radar console |
 | RP-008 basic polar QC | Core vertical slice complete | Real Z9598 normalized Zarr to version-isolated QC Zarr, flags/QI/provenance, persistence/API/console and replay acceptance; ancillary-dependent modules still await operational assets |
-| RP-009 | In progress | EPSG:4326 grid and Fujian–Taiwan DEM/coastline sources accepted; next is beam blockage and Hybrid Scan |
-| RP-010–RP-016 | Not started | Multi-radar mosaic/QPE follows the accepted RP-009 single-radar grid |
+| RP-009 | Core vertical slice complete | Versioned polar DEM blockage, lowest-usable-elevation Hybrid Scan and real Z9598 RadarGrid accepted for engineering replay; operational metadata/cases remain gated |
+| RP-010–RP-016 | Not started | Next is QI multi-radar mosaic, followed by QPE, diagnostics, NowcastInput and nowcast models |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -168,12 +168,13 @@ RP-008 now provides:
   `docs/RP008_基础极坐标质控验收记录.md`.
 
 Z9598 is a real-sample configuration, but it intentionally remains `draft` and
-its decoder output is marked `operational_eligible=false`. RP-008 can therefore
-run the real sample for controlled replay/integration acceptance, but it is not
-an operational QC feed. Gridding, QPE, NowcastInput and forecast products remain
-synthetic or unimplemented until their corresponding tasks are accepted.
+its decoder output is marked `operational_eligible=false`. RP-008 and RP-009 can
+therefore run the real sample for controlled replay/integration acceptance, but
+it is not an operational QC or grid feed. Multi-radar mosaic, QPE, NowcastInput
+and forecast products remain synthetic or unimplemented until their
+corresponding tasks are accepted.
 
-The RP-009 foundation now additionally provides:
+RP-009 now provides:
 
 - immutable `fuzhou_118_123_25_27_0p01deg_v1`, EPSG:4326, `0.01°`,
   `501 × 201`, inclusive point-centre coordinates;
@@ -186,7 +187,18 @@ The RP-009 foundation now additionally provides:
   coastlines on the test server, documented in
   `docs/RP009_网格与静态基础数据验收记录.md`;
 - distribution contracts for two-dimensional application NetCDF and aligned
-  transparent PNG layers, while retaining Zarr as the canonical internal form.
+  transparent PNG layers, while retaining Zarr as the canonical internal form;
+- strict `rp009-hybrid-v1` beam/blockage/selection configuration with trusted
+  lazy native DEM sampling and version/SHA/CRS gates;
+- 4/3-Earth beam height, circular partial blockage, cumulative polar blockage
+  and direct grid-to-polar registration without converting missing coverage to
+  no-rain;
+- lowest-usable-elevation selection driven by source QC flags, QI, blockage and
+  beam height, with RadarGrid v1.2 fields and retained polar diagnostics;
+- deterministic grid jobs, version-isolated atomic Zarr publication,
+  PostgreSQL metrics, REST summary and replay-idempotent completion;
+- a real Z9598 engineering replay documented in
+  `docs/RP009_DEM波束遮挡与HybridScan验收记录.md`.
 
 ## Active test environment
 
@@ -194,7 +206,7 @@ The RP-009 foundation now additionally provides:
 - Project: `<remote-project-dir>`
 - Web: `http://private-test-host:4173`
 - API: `http://private-test-host:8080/api/v1/system/status`
-- Deployed service runtime version: `rp008-v1.1-0748898-20260824`
+- Deployed service runtime version: `rp009-v1.1-bf6c6bf-20260825`
 - RP-009 ancillary runtime: `runtime/ancillary/assets`, accepted 2026-08-25
 - One-time legacy archive: `<remote-legacy-archive>`
 
@@ -208,18 +220,25 @@ Docker Hub access is unreliable. Continue to use local Linux/amd64 builds and
 export/import pinned images through `http://127.0.0.1:7897` when necessary.
 No credentials or secrets belong in this document or repository.
 
-The RP-004–RP-008 code, generated clients, tests and Linux/amd64 binaries pass
+The RP-004–RP-009 code, generated clients, tests and Linux/amd64 binaries pass
 locally. SSH public-key access to the GPU server is active; passwords are not
 stored locally. On 2026-08-24 RP-007 was deployed in place without a new source
-or database backup, followed by RP-008 under the same rule. All nine long-lived
-Compose services are healthy. The Z9598 NAS golden sample decoded to 11 sweeps,
+or database backup, followed by RP-008 and RP-009 under the same rule. The Z9598
+NAS golden sample decoded to 11 sweeps,
 3994 rays and seven canonical fields, then
 persisted a complete integrity record with no missing radials, 1.08° maximum
 azimuth gap and an `OK` noise channel. The accepted RP-008 pipeline then wrote a
 version-isolated QC Zarr, reached `QC_READY`, and recorded mean QI `0.617353`,
 278,214 valid gates and 4,036,486 missing gates. Infrastructure, control-plane,
 partial-radar degradation, Worker idempotency/failure, real decode, radar
-health, radar QC, API and Web smoke tests passed. Desktop 1280 px and mobile
+health, radar QC, API and Web smoke tests passed. RP-009 then consumed that
+immutable QC volume, wrote RadarGrid v1.2 with 100,701 cells, 3,363 valid cells,
+3.34% valid coverage and mean QI 0.31420428, and reached `RADAR_GRID_READY`.
+Its nine reflectivity sweeps retained polar DEM diagnostics; the two
+velocity-only cuts were skipped explicitly. The output remains
+`operational_eligible=false` because radar readiness, vertical datum, static
+clutter and sea/AP gates are unresolved. All ten long-lived Compose services
+are healthy. Desktop 1280 px and mobile
 375 px browser checks passed without horizontal overflow or console errors. The
 retained PostgreSQL, NATS and MinIO volumes were not deleted.
 
@@ -232,14 +251,14 @@ of the active test environment and must not be deleted during ordinary updates.
 
 ## Next acceptance target
 
-Continue RP-009 from the accepted grid/static-source foundation: calculate
-versioned polar beam height and DEM blockage for Z9598, choose the lowest usable
-elevation, and produce the first real `RadarGrid`/Hybrid Scan from an accepted
-`QCRadarVolume`. It must consume QC flags and QI rather than only reflectivity,
-preserve coverage and quality masks through polar-to-grid mapping, and reject
-unavailable or unversioned ancillary assets. Static clutter and derived
-coastline/sea-AP probability assets remain separate work before multi-radar
-mosaic/QPE operational acceptance.
+Start RP-010 from the accepted single-radar `RadarGrid`: freeze analysis-cycle
+time alignment and contributor/exclusion rules, combine multiple radar grids by
+QI selection and linear-Z weighting, and preserve source radar, QI, coverage,
+beam-height and degradation fields in `RadarAnalysis`. Engineering fixtures can
+prove the control path first, but real acceptance requires at least two ready
+radar configurations and representative synchronized volumes. Static clutter,
+derived coastline/sea-AP probability assets, verified vertical datum and a
+representative mountain-blockage case remain operational gates.
 
 ## Required inputs before operational QC and gridding
 
@@ -294,5 +313,6 @@ make worker-smoke
 make radar-decode-smoke
 make radar-health-smoke
 make radar-qc-smoke
+make radar-grid-smoke
 make smoke
 ```
