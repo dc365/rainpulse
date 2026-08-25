@@ -296,6 +296,14 @@ type fakeObservationStore struct {
 	analysis workflow.AnalysisCycle
 	qc       workflow.RadarQCMetrics
 	grid     workflow.RadarGridMetrics
+	mosaic   workflow.AnalysisMosaicMetrics
+}
+
+func (store *fakeObservationStore) GetAnalysisMosaicMetrics(
+	_ context.Context,
+	_ uuid.UUID,
+) (workflow.AnalysisMosaicMetrics, error) {
+	return store.mosaic, nil
 }
 
 func (store *fakeObservationStore) GetRadarQCMetrics(

@@ -340,6 +340,122 @@ WHERE run_id = $1`, bundle.Job.RunID, createdOutbox)
 	return nil
 }
 
+func (store *Store) CreateAnalysisMosaicBundle(
+	ctx context.Context,
+	bundle workflow.AnalysisMosaicBundle,
+) error {
+	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin analysis mosaic transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	for _, radar := range bundle.Analysis.Radars {
+		if radar.State != workflow.AnalysisRadarParticipating || radar.ScanID == nil {
+			continue
+		}
+		var storedRadarID string
+		var status workflow.RadarScanStatus
+		var gridURI string
+		if err = tx.QueryRow(ctx, `
+SELECT s.radar_id, r.status, COALESCE(r.grid_uri, '')
+FROM radar_scans AS s
+JOIN radar_scan_runs AS r ON r.scan_id = s.scan_id
+WHERE s.scan_id = $1 FOR SHARE OF r`, *radar.ScanID).
+			Scan(&storedRadarID, &status, &gridURI); err != nil {
+			return fmt.Errorf("verify mosaic radar scan %s: %w", *radar.ScanID, err)
+		}
+		if storedRadarID != radar.RadarID || status != workflow.RadarScanGridReady || gridURI == "" {
+			return fmt.Errorf("mosaic contributor %s is not a committed ready RadarGrid", radar.RadarID)
+		}
+	}
+	if _, err = tx.Exec(ctx, `
+INSERT INTO config_versions (config_version, sha256, config, description, created_at)
+VALUES ($1, $2, $3, 'Radar mosaic configuration registered by RP-010 workflow', $4)
+ON CONFLICT (config_version) DO NOTHING`,
+		bundle.Job.ConfigVersion, bundle.ConfigSHA256, bundle.Config,
+		bundle.Job.CreatedAt); err != nil {
+		return fmt.Errorf("insert mosaic config %s: %w", bundle.Job.ConfigVersion, err)
+	}
+	var storedConfigHash string
+	if err = tx.QueryRow(ctx, `SELECT sha256 FROM config_versions WHERE config_version = $1`,
+		bundle.Job.ConfigVersion).Scan(&storedConfigHash); err != nil {
+		return fmt.Errorf("verify mosaic config %s: %w", bundle.Job.ConfigVersion, err)
+	}
+	if storedConfigHash != bundle.ConfigSHA256 {
+		return fmt.Errorf("mosaic config version %s already has a different SHA-256", bundle.Job.ConfigVersion)
+	}
+	if _, err = tx.Exec(ctx, `
+INSERT INTO workflow_runs (run_id, run_type, created_at)
+VALUES ($1, $2, $3)
+ON CONFLICT (run_id) DO NOTHING`, bundle.Analysis.RunID,
+		workflow.WorkflowAnalysisCycle, bundle.Analysis.CreatedAt); err != nil {
+		return fmt.Errorf("insert analysis workflow identity: %w", err)
+	}
+	if _, err = tx.Exec(ctx, `
+INSERT INTO analysis_cycles (
+    analysis_id, run_id, analysis_time, grid_id, config_version, status,
+    radar_count, created_at, updated_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+ON CONFLICT (analysis_id) DO NOTHING`,
+		bundle.Analysis.ID, bundle.Analysis.RunID, bundle.Analysis.AnalysisTime,
+		bundle.Analysis.GridID, bundle.Analysis.ConfigVersion,
+		bundle.Analysis.Status, bundle.Analysis.RadarCount,
+		bundle.Analysis.CreatedAt); err != nil {
+		return fmt.Errorf("insert analysis mosaic cycle: %w", err)
+	}
+	for _, radar := range bundle.Analysis.Radars {
+		_, err = tx.Exec(ctx, `
+INSERT INTO analysis_cycle_radars (
+    analysis_id, radar_id, scan_id, state, time_offset_seconds,
+    mean_quality_index, exclusion_reason, created_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT (analysis_id, radar_id) DO NOTHING`,
+			bundle.Analysis.ID, radar.RadarID, radar.ScanID, radar.State,
+			radar.TimeOffsetSeconds, radar.MeanQualityIndex,
+			radar.ExclusionReason, bundle.Analysis.CreatedAt)
+		if err != nil {
+			return fmt.Errorf("insert analysis radar %s: %w", radar.RadarID, err)
+		}
+	}
+	if _, err = tx.Exec(ctx, `
+INSERT INTO jobs (
+    job_id, run_id, trace_id, job_type, model_id, model_version,
+    config_version, status, max_attempts, scheduled_at, created_at, updated_at,
+    request_payload
+) VALUES ($1, $2, $3, $4, NULL, NULL, $5, $6, 3, $7, $7, $7, $8)
+ON CONFLICT (job_id) DO NOTHING`,
+		bundle.Job.ID, bundle.Job.RunID, bundle.Job.TraceID, bundle.Job.JobType,
+		bundle.Job.ConfigVersion, bundle.Job.Status, bundle.Job.CreatedAt,
+		bundle.Job.RequestPayload); err != nil {
+		return fmt.Errorf("insert analysis mosaic job: %w", err)
+	}
+	if _, err = tx.Exec(ctx, `
+INSERT INTO mosaic_runs (
+    analysis_id, job_id, mosaic_config_version, mosaic_algorithm_version,
+    status, created_at, updated_at
+) VALUES ($1, $2, $3, $4, 'RUNNING', $5, $5)
+ON CONFLICT (analysis_id) DO NOTHING`,
+		bundle.Analysis.ID, bundle.Job.ID, bundle.Analysis.ConfigVersion,
+		bundle.AlgorithmVersion, bundle.Job.CreatedAt); err != nil {
+		return fmt.Errorf("insert mosaic run: %w", err)
+	}
+	if _, err = tx.Exec(ctx, `
+INSERT INTO outbox_events (
+    event_id, aggregate_type, aggregate_id, event_type, event_version,
+    subject, payload, status, available_at, created_at
+) VALUES ($1, 'job', $2, $3, 2, $4, $5, 'pending', $6, $6)
+ON CONFLICT (event_id) DO NOTHING`,
+		bundle.Outbox.ID, bundle.Outbox.AggregateID, bundle.Outbox.EventType,
+		bundle.Outbox.Subject, bundle.Outbox.Payload, bundle.Job.CreatedAt); err != nil {
+		return fmt.Errorf("insert analysis mosaic outbox event: %w", err)
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit analysis mosaic transaction: %w", err)
+	}
+	return nil
+}
+
 func (store *Store) CreateDomainSimulation(ctx context.Context, simulation workflow.DomainSimulation) error {
 	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
@@ -409,12 +525,12 @@ INSERT INTO radar_scan_runs (
 INSERT INTO analysis_cycles (
     analysis_id, run_id, analysis_time, grid_id, config_version, status,
     degraded_reason, radar_count, valid_coverage_ratio, mean_quality_index,
-    analysis_uri, created_at, updated_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)`,
+    mosaic_uri, analysis_uri, created_at, updated_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)`,
 		analysis.ID, analysis.RunID, analysis.AnalysisTime, analysis.GridID,
 		analysis.ConfigVersion, analysis.Status, analysis.DegradedReason,
 		analysis.RadarCount, analysis.ValidCoverageRatio, analysis.MeanQualityIndex,
-		analysis.AnalysisURI, analysis.CreatedAt)
+		analysis.MosaicURI, analysis.AnalysisURI, analysis.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("insert simulated analysis cycle %s: %w", analysis.ID, err)
 	}
@@ -675,6 +791,26 @@ SELECT diagnostics FROM radar_grid_metrics WHERE scan_id = $1`, scanID).Scan(&ra
 	return metrics, nil
 }
 
+func (store *Store) GetAnalysisMosaicMetrics(
+	ctx context.Context,
+	analysisID uuid.UUID,
+) (workflow.AnalysisMosaicMetrics, error) {
+	var raw json.RawMessage
+	if err := store.pool.QueryRow(ctx, `
+SELECT diagnostics FROM mosaic_runs
+WHERE analysis_id = $1 AND status = 'SUCCEEDED'`, analysisID).Scan(&raw); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return workflow.AnalysisMosaicMetrics{}, workflow.ErrNotFound
+		}
+		return workflow.AnalysisMosaicMetrics{}, fmt.Errorf("get radar mosaic metrics: %w", err)
+	}
+	var metrics workflow.AnalysisMosaicMetrics
+	if err := json.Unmarshal(raw, &metrics); err != nil {
+		return workflow.AnalysisMosaicMetrics{}, fmt.Errorf("decode radar mosaic metrics: %w", err)
+	}
+	return metrics, nil
+}
+
 func (store *Store) ListAnalysisCycles(
 	ctx context.Context,
 	limit int,
@@ -799,7 +935,7 @@ func scanRadarScan(row rowScanner) (workflow.RadarScan, error) {
 const analysisSelect = `
 SELECT a.analysis_id, a.run_id, a.analysis_time, a.grid_id, a.config_version,
        a.status, a.degraded_reason, a.radar_count, a.valid_coverage_ratio,
-       a.mean_quality_index, a.analysis_uri, a.created_at, a.updated_at
+	   a.mean_quality_index, a.mosaic_uri, a.analysis_uri, a.created_at, a.updated_at
 FROM analysis_cycles AS a`
 
 func scanAnalysis(row rowScanner) (workflow.AnalysisCycle, error) {
@@ -808,7 +944,7 @@ func scanAnalysis(row rowScanner) (workflow.AnalysisCycle, error) {
 		&cycle.ID, &cycle.RunID, &cycle.AnalysisTime, &cycle.GridID,
 		&cycle.ConfigVersion, &cycle.Status, &cycle.DegradedReason,
 		&cycle.RadarCount, &cycle.ValidCoverageRatio, &cycle.MeanQualityIndex,
-		&cycle.AnalysisURI, &cycle.CreatedAt, &cycle.UpdatedAt,
+		&cycle.MosaicURI, &cycle.AnalysisURI, &cycle.CreatedAt, &cycle.UpdatedAt,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return workflow.AnalysisCycle{}, workflow.ErrNotFound

@@ -27,6 +27,15 @@ class RadarGridInputError(ValueError):
     """Raised when a QC volume cannot safely enter RP-009."""
 
 
+UPSTREAM_QI_COMPONENTS = (
+    "QI_METEO",
+    "QI_ATTENUATION",
+    "QI_INTERFERENCE",
+    "QI_CALIBRATION",
+    "QI_RANGE",
+)
+
+
 @dataclass(frozen=True)
 class PolarSweepDiagnostic:
     name: str
@@ -279,6 +288,7 @@ def _empty_grid_fields(
     floating = (
         "DBZH_QC",
         "QUALITY_INDEX",
+        *UPSTREAM_QI_COMPONENTS,
         "QI_BLOCKAGE",
         "QI_BEAM_HEIGHT",
         "SOURCE_ELEVATION",
@@ -314,6 +324,10 @@ def _candidate_fields(
 ) -> dict[str, np.ndarray]:
     dbzh = _map(group["DBZH_QC"][:], mapping).astype("float32")
     source_quality = _map(group["QUALITY_INDEX"][:], mapping).astype("float32")
+    source_components = {
+        name.lower(): _map(group[name][:], mapping).astype("float32")
+        for name in UPSTREAM_QI_COMPONENTS
+    }
     source_flags = _map(group["QC_FLAGS"][:], mapping).astype("uint32")
     source_valid = _map(group["VALID_MASK"][:], mapping).astype("uint8")
     elevation = _map(
@@ -364,6 +378,7 @@ def _candidate_fields(
         "blockage": blockage,
         "usable": usable,
         "severe_blockage": severe,
+        **source_components,
     }
 
 
@@ -378,6 +393,7 @@ def _select_into(
     mapping = {
         "DBZH_QC": "dbzh",
         "QUALITY_INDEX": "quality",
+        **{name: name.lower() for name in UPSTREAM_QI_COMPONENTS},
         "QI_BLOCKAGE": "qi_blockage",
         "QI_BEAM_HEIGHT": "qi_height",
         "SOURCE_ELEVATION": "elevation",

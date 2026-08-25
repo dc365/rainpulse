@@ -372,6 +372,7 @@ type AnalysisCycle struct {
 	DegradedReason     *string             `json:"degraded_reason,omitempty"`
 	GridId             string              `json:"grid_id"`
 	MeanQualityIndex   *float32            `json:"mean_quality_index,omitempty"`
+	MosaicUri          *string             `json:"mosaic_uri,omitempty"`
 	RadarCount         int                 `json:"radar_count"`
 	Radars             []AnalysisRadar     `json:"radars"`
 	RunId              openapi_types.UUID  `json:"run_id"`
@@ -387,6 +388,40 @@ type AnalysisCyclePage struct {
 
 // AnalysisCycleStatus defines model for AnalysisCycleStatus.
 type AnalysisCycleStatus string
+
+// AnalysisMosaicContributor defines model for AnalysisMosaicContributor.
+type AnalysisMosaicContributor struct {
+	ContributingCellCount    int64              `json:"contributing_cell_count"`
+	GridUri                  string             `json:"grid_uri"`
+	HybridScanVersion        string             `json:"hybrid_scan_version"`
+	InputOperationalEligible bool               `json:"input_operational_eligible"`
+	MeanAdjustedQualityIndex float32            `json:"mean_adjusted_quality_index"`
+	RadarId                  string             `json:"radar_id"`
+	ScanId                   openapi_types.UUID `json:"scan_id"`
+	TimeOffsetSeconds        int                `json:"time_offset_seconds"`
+}
+
+// AnalysisMosaicMetrics defines model for AnalysisMosaicMetrics.
+type AnalysisMosaicMetrics struct {
+	ActualContributingRadarCount int                         `json:"actual_contributing_radar_count"`
+	AlgorithmVersion             string                      `json:"algorithm_version"`
+	AnalysisTime                 time.Time                   `json:"analysis_time"`
+	BlendedCellCount             int64                       `json:"blended_cell_count"`
+	Contributors                 []AnalysisMosaicContributor `json:"contributors"`
+	GridCellCount                int64                       `json:"grid_cell_count"`
+	GridConfigVersion            string                      `json:"grid_config_version"`
+	GridId                       string                      `json:"grid_id"`
+	InputRadarCount              int                         `json:"input_radar_count"`
+	LowQualityCellCount          int64                       `json:"low_quality_cell_count"`
+	MeanQualityIndex             float32                     `json:"mean_quality_index"`
+	MeasuredAt                   time.Time                   `json:"measured_at"`
+	MissingCellCount             int64                       `json:"missing_cell_count"`
+	OperationalEligible          bool                        `json:"operational_eligible"`
+	OperationalReasons           []string                    `json:"operational_reasons"`
+	ProfileVersion               string                      `json:"profile_version"`
+	ValidCellCount               int64                       `json:"valid_cell_count"`
+	ValidCoverageRatio           float32                     `json:"valid_coverage_ratio"`
+}
 
 // AnalysisRadar defines model for AnalysisRadar.
 type AnalysisRadar struct {
@@ -814,6 +849,9 @@ type ServerInterface interface {
 	// GetAnalysisCycle Get one analysis workflow and its actual radar contributors
 	// (GET /analysis-cycles/{analysis_id})
 	GetAnalysisCycle(w http.ResponseWriter, r *http.Request, analysisId AnalysisId)
+	// GetAnalysisMosaicSummary Get the RP-010 time-aligned quality-aware mosaic summary
+	// (GET /analysis-cycles/{analysis_id}/mosaic-summary)
+	GetAnalysisMosaicSummary(w http.ResponseWriter, r *http.Request, analysisId AnalysisId)
 	// GetAreaStatistics Query statistics inside a WGS84 bounding box
 	// (GET /area-statistics)
 	GetAreaStatistics(w http.ResponseWriter, r *http.Request, params GetAreaStatisticsParams)
@@ -907,6 +945,12 @@ func (_ Unimplemented) ListAnalysisCycles(w http.ResponseWriter, r *http.Request
 // GetAnalysisCycle Get one analysis workflow and its actual radar contributors
 // (GET /analysis-cycles/{analysis_id})
 func (_ Unimplemented) GetAnalysisCycle(w http.ResponseWriter, r *http.Request, analysisId AnalysisId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAnalysisMosaicSummary Get the RP-010 time-aligned quality-aware mosaic summary
+// (GET /analysis-cycles/{analysis_id}/mosaic-summary)
+func (_ Unimplemented) GetAnalysisMosaicSummary(w http.ResponseWriter, r *http.Request, analysisId AnalysisId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1180,6 +1224,32 @@ func (siw *ServerInterfaceWrapper) GetAnalysisCycle(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAnalysisCycle(w, r, analysisId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAnalysisMosaicSummary operation middleware
+func (siw *ServerInterfaceWrapper) GetAnalysisMosaicSummary(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "analysis_id" -------------
+	var analysisId AnalysisId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "analysis_id", chi.URLParam(r, "analysis_id"), &analysisId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "analysis_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAnalysisMosaicSummary(w, r, analysisId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2033,6 +2103,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/analysis-cycles/{analysis_id}", wrapper.GetAnalysisCycle)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/analysis-cycles/{analysis_id}/mosaic-summary", wrapper.GetAnalysisMosaicSummary)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/products", wrapper.ListProducts)

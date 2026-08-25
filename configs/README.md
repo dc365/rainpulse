@@ -15,6 +15,9 @@ service or worker code.
 - `schemas/radar-grid-profile.schema.json` and
   `gridding/rp009-hybrid-v1.yaml` freeze beam geometry, DEM blockage, direct
   polar mapping and lowest-usable-elevation Hybrid Scan rules.
+- `schemas/radar-mosaic-profile.schema.json` and
+  `mosaic/rp010-qi-mosaic-v1.yaml` freeze five-minute alignment, QI selection
+  and linear-Z blending rules.
 - `radars/radar-inventory-template.yaml` records unknown values explicitly and
   cannot become operational until it satisfies all `ready` requirements.
 - `qc/flag-definitions.yaml` freezes the uint32 QC flag bit assignments.

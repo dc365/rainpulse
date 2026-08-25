@@ -130,6 +130,11 @@ def qc_fixture(radar_config_version: str) -> dict[str, bytes]:
         shape = (4, 2)
         group.create_dataset("DBZH_QC", data=np.full(shape, reflectivity, dtype="float32"))
         group.create_dataset("QUALITY_INDEX", data=np.full(shape, 0.9, dtype="float32"))
+        group.create_dataset("QI_METEO", data=np.full(shape, 0.95, dtype="float32"))
+        group.create_dataset("QI_ATTENUATION", data=np.full(shape, np.nan, dtype="float32"))
+        group.create_dataset("QI_INTERFERENCE", data=np.ones(shape, dtype="float32"))
+        group.create_dataset("QI_CALIBRATION", data=np.full(shape, np.nan, dtype="float32"))
+        group.create_dataset("QI_RANGE", data=np.full(shape, 0.8, dtype="float32"))
         group.create_dataset("VALID_MASK", data=np.ones(shape, dtype="uint8"))
         group.create_dataset("QC_FLAGS", data=np.zeros(shape, dtype="uint32"))
     return {str(key): bytes(value) for key, value in store.items()}
@@ -200,6 +205,9 @@ def test_hybrid_scan_selects_higher_sweep_behind_low_beam_ridge(tmp_path: Path) 
     assert result.fields["SOURCE_SWEEP"][north_cell] == 1
     assert result.fields["DBZH_QC"][north_cell] == pytest.approx(30.0)
     assert result.fields["BLOCKAGE_RATE"][north_cell] < 0.7
+    assert result.fields["QI_METEO"][north_cell] == pytest.approx(0.95)
+    assert np.isnan(result.fields["QI_ATTENUATION"][north_cell])
+    assert result.fields["QI_RANGE"][north_cell] == pytest.approx(0.8)
     assert not result.operational_eligible
     assert "vertical_datum_unverified" in result.operational_reasons
     assert result.summary["selection_counts"]["sweep_001"] > 0

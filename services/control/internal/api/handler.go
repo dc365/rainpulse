@@ -34,6 +34,7 @@ type ObservationStore interface {
 	GetRadarScan(context.Context, uuid.UUID) (workflow.RadarScan, error)
 	GetRadarQCMetrics(context.Context, uuid.UUID) (workflow.RadarQCMetrics, error)
 	GetRadarGridMetrics(context.Context, uuid.UUID) (workflow.RadarGridMetrics, error)
+	GetAnalysisMosaicMetrics(context.Context, uuid.UUID) (workflow.AnalysisMosaicMetrics, error)
 	ListAnalysisCycles(context.Context, int, *workflow.AnalysisStatus) ([]workflow.AnalysisCycle, error)
 	GetAnalysisCycle(context.Context, uuid.UUID) (workflow.AnalysisCycle, error)
 }
@@ -383,6 +384,25 @@ func (service *server) GetAnalysisCycle(
 	writeJSON(response, http.StatusOK, toAPIAnalysis(cycle))
 }
 
+func (service *server) GetAnalysisMosaicSummary(
+	response http.ResponseWriter,
+	request *http.Request,
+	analysisID apiv1.AnalysisId,
+) {
+	if service.observations == nil {
+		writeServiceUnavailable(response)
+		return
+	}
+	metrics, err := service.observations.GetAnalysisMosaicMetrics(
+		request.Context(), analysisID,
+	)
+	if err != nil {
+		writeStoreError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, metrics)
+}
+
 func (service *server) StreamEvents(response http.ResponseWriter, request *http.Request, params apiv1.StreamEventsParams) {
 	selected := 0
 	for _, present := range []bool{params.RunId != nil, params.ScanId != nil, params.AnalysisId != nil} {
@@ -688,7 +708,7 @@ func toAPIAnalysis(cycle workflow.AnalysisCycle) apiv1.AnalysisCycle {
 		DegradedReason: cycle.DegradedReason, RadarCount: cycle.RadarCount,
 		ValidCoverageRatio: float32Pointer(cycle.ValidCoverageRatio),
 		MeanQualityIndex:   float32Pointer(cycle.MeanQualityIndex),
-		AnalysisUri:        cycle.AnalysisURI, Radars: radars,
+		MosaicUri:          cycle.MosaicURI, AnalysisUri: cycle.AnalysisURI, Radars: radars,
 		CreatedAt: cycle.CreatedAt.UTC(), UpdatedAt: cycle.UpdatedAt.UTC(),
 	}
 }

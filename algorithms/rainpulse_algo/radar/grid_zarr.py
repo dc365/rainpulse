@@ -13,12 +13,17 @@ from zarr.storage import MemoryStore
 from .hybrid import RadarGridInputError, RadarGridResult
 
 CONTRACT_NAME = "rainpulse.radar-grid"
-CONTRACT_VERSION = "1.2"
+CONTRACT_VERSION = "1.3"
 REQUIRED_FIELDS = {
     "DBZH_QC": np.dtype("float32"),
     "QUALITY_INDEX": np.dtype("float32"),
+    "QI_METEO": np.dtype("float32"),
     "QI_BLOCKAGE": np.dtype("float32"),
     "QI_BEAM_HEIGHT": np.dtype("float32"),
+    "QI_ATTENUATION": np.dtype("float32"),
+    "QI_INTERFERENCE": np.dtype("float32"),
+    "QI_CALIBRATION": np.dtype("float32"),
+    "QI_RANGE": np.dtype("float32"),
     "QC_FLAGS": np.dtype("uint32"),
     "SOURCE_SWEEP": np.dtype("int16"),
     "SOURCE_ELEVATION": np.dtype("float32"),
@@ -187,6 +192,13 @@ def validate_radar_grid_zarr_store(objects: Mapping[str, bytes]) -> dict[str, An
     missing = valid == 0
     if np.any(source_sweep[missing] != -1) or np.any((flags[missing] & np.uint32(4096)) == 0):
         raise RadarGridInputError("RadarGrid missing-state identity is inconsistent")
+    unavailable_qi = {
+        "QI_METEO",
+        "QI_ATTENUATION",
+        "QI_INTERFERENCE",
+        "QI_CALIBRATION",
+        "QI_RANGE",
+    }
     floating_fields = [
         name for name, dtype in REQUIRED_FIELDS.items() if dtype == np.dtype("float32")
     ]
@@ -194,10 +206,21 @@ def validate_radar_grid_zarr_store(objects: Mapping[str, bytes]) -> dict[str, An
         values = root[name][:]
         if np.any(~np.isnan(values[missing])):
             raise RadarGridInputError(f"RadarGrid missing cells contain finite {name}")
-        if np.any(~np.isfinite(values[~missing])):
+        if name not in unavailable_qi and np.any(~np.isfinite(values[~missing])):
             raise RadarGridInputError(f"RadarGrid valid cells contain missing {name}")
-    for name in ("QUALITY_INDEX", "QI_BLOCKAGE", "QI_BEAM_HEIGHT", "BLOCKAGE_RATE"):
+    for name in (
+        "QUALITY_INDEX",
+        "QI_METEO",
+        "QI_BLOCKAGE",
+        "QI_BEAM_HEIGHT",
+        "QI_ATTENUATION",
+        "QI_INTERFERENCE",
+        "QI_CALIBRATION",
+        "QI_RANGE",
+        "BLOCKAGE_RATE",
+    ):
         finite = root[name][:][~missing]
+        finite = finite[np.isfinite(finite)]
         if finite.size and (finite.min() < 0 or finite.max() > 1):
             raise RadarGridInputError(f"RadarGrid field {name} is outside [0, 1]")
     if np.any(root["DATA_AGE"][:][~missing] < 0):
@@ -263,8 +286,13 @@ def _fill_value(name: str, dtype: np.dtype[Any]) -> float | int:
 def _field_attributes(name: str) -> dict[str, Any]:
     if name in {
         "QUALITY_INDEX",
+        "QI_METEO",
         "QI_BLOCKAGE",
         "QI_BEAM_HEIGHT",
+        "QI_ATTENUATION",
+        "QI_INTERFERENCE",
+        "QI_CALIBRATION",
+        "QI_RANGE",
         "BLOCKAGE_RATE",
         "PARTIAL_BLOCKAGE",
     }:

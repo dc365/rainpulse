@@ -90,6 +90,15 @@ func main() {
 			slog.Error("create radar grid workflow", "error", err)
 			os.Exit(1)
 		}
+	case "analysis-mosaic":
+		if len(os.Args) < 5 {
+			slog.Error("analysis-mosaic requires analysis time, mosaic config YAML and one or more scan UUIDs")
+			os.Exit(2)
+		}
+		if err := analysisMosaic(ctx, store, service, os.Args[2], os.Args[3], os.Args[4:]); err != nil {
+			slog.Error("create analysis mosaic workflow", "error", err)
+			os.Exit(1)
+		}
 	case "complete":
 		if len(os.Args) != 3 {
 			slog.Error("complete requires a job UUID")
@@ -135,6 +144,19 @@ type gridConfiguration struct {
 	AlgorithmVersion  string `yaml:"algorithm_version"`
 	GridID            string `yaml:"grid_id"`
 	GridConfigVersion string `yaml:"grid_config_version"`
+}
+
+type mosaicConfiguration struct {
+	ProfileVersion        string `yaml:"profile_version"`
+	AlgorithmVersion      string `yaml:"algorithm_version"`
+	FlagDefinitionVersion string `yaml:"flag_definition_version"`
+	GridID                string `yaml:"grid_id"`
+	GridConfigVersion     string `yaml:"grid_config_version"`
+	Alignment             struct {
+		MaximumAbsoluteOffsetSeconds int      `yaml:"maximum_absolute_offset_seconds"`
+		MinimumContributors          int      `yaml:"minimum_contributors"`
+		ExpectedRadarIDs             []string `yaml:"expected_radar_ids"`
+	} `yaml:"alignment"`
 }
 
 func radarDecode(
@@ -326,6 +348,86 @@ func radarGrid(
 	})
 }
 
+func analysisMosaic(
+	ctx context.Context,
+	store *postgresstore.Store,
+	service *orchestration.Service,
+	rawAnalysisTime string,
+	configPath string,
+	rawScanIDs []string,
+) error {
+	analysisTime, err := time.Parse(time.RFC3339Nano, rawAnalysisTime)
+	if err != nil {
+		return fmt.Errorf("parse analysis time: %w", err)
+	}
+	configBytes, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("read radar mosaic configuration: %w", err)
+	}
+	var config mosaicConfiguration
+	if err := yaml.Unmarshal(configBytes, &config); err != nil {
+		return fmt.Errorf("decode radar mosaic configuration: %w", err)
+	}
+	var configValue map[string]any
+	if err := yaml.Unmarshal(configBytes, &configValue); err != nil {
+		return fmt.Errorf("normalize radar mosaic configuration: %w", err)
+	}
+	configJSON, err := json.Marshal(configValue)
+	if err != nil {
+		return fmt.Errorf("encode radar mosaic configuration: %w", err)
+	}
+	candidates := make([]orchestration.AnalysisMosaicCandidate, 0, len(rawScanIDs))
+	for _, rawScanID := range rawScanIDs {
+		scanID, err := uuid.Parse(rawScanID)
+		if err != nil {
+			return fmt.Errorf("parse radar scan UUID %q: %w", rawScanID, err)
+		}
+		scan, err := store.GetRadarScan(ctx, scanID)
+		if err != nil {
+			return err
+		}
+		if scan.GridURI == nil {
+			return fmt.Errorf("radar scan %s has no committed RadarGrid", scan.ID)
+		}
+		gridMetrics, err := store.GetRadarGridMetrics(ctx, scanID)
+		if err != nil {
+			return err
+		}
+		if gridMetrics.GridID != config.GridID ||
+			gridMetrics.GridConfigVersion != config.GridConfigVersion {
+			return fmt.Errorf("radar scan %s uses a different target grid", scan.ID)
+		}
+		candidates = append(candidates, orchestration.AnalysisMosaicCandidate{
+			RadarID: scan.RadarID, ScanID: scan.ID, GridURI: *scan.GridURI,
+			VolumeEndTime: scan.VolumeEndTime, CurrentStatus: scan.Status,
+			HybridScanVersion: gridMetrics.AlgorithmVersion,
+		})
+	}
+	configHash := sha256.Sum256(configBytes)
+	analysis, job, err := service.CreateAnalysisMosaic(ctx, orchestration.AnalysisMosaicInput{
+		AnalysisTime: analysisTime, GridID: config.GridID,
+		GridConfigVersion:      config.GridConfigVersion,
+		MosaicConfigVersion:    config.ProfileVersion,
+		MosaicAlgorithmVersion: config.AlgorithmVersion,
+		FlagDefinitionVersion:  config.FlagDefinitionVersion,
+		MaximumAbsoluteOffset: time.Duration(
+			config.Alignment.MaximumAbsoluteOffsetSeconds,
+		) * time.Second,
+		MinimumContributors: config.Alignment.MinimumContributors,
+		ExpectedRadarIDs:    config.Alignment.ExpectedRadarIDs,
+		Candidates:          candidates, MosaicConfig: configJSON,
+		MosaicConfigSHA256: fmt.Sprintf("%x", configHash),
+	})
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(os.Stdout).Encode(map[string]string{
+		"analysis_id": analysis.ID.String(),
+		"run_id":      analysis.RunID.String(),
+		"job_id":      job.ID.String(),
+	})
+}
+
 func dependencies(ctx context.Context) (*pgxpool.Pool, *postgresstore.Store, *messaging.JetStream, *orchestration.Service, error) {
 	databaseURL, err := runtimeconfig.DatabaseURL()
 	if err != nil {
@@ -498,6 +600,8 @@ func replay(ctx context.Context, store *postgresstore.Store, bus *messaging.JetS
 		subject = orchestration.RadarQCRequestedSubject
 	} else if eventType == orchestration.RadarGridRequestedEventType {
 		subject = orchestration.RadarGridRequestedSubject
+	} else if eventType == orchestration.AnalysisMosaicRequestedEventType {
+		subject = orchestration.AnalysisMosaicRequestedSubject
 	}
 	eventID, err := uuid.Parse(event["event_id"].(string))
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/orchestration"
@@ -242,6 +243,8 @@ RETURNING run_id, job_type`, jobID).Scan(&runID, &jobType)
 			nextStatus = "DECODING"
 		} else if jobType == orchestration.RadarQCJobType {
 			nextStatus = "QC_RUNNING"
+		} else if jobType == orchestration.RadarGridJobType {
+			nextStatus = "GRID_RUNNING"
 		} else {
 			return fmt.Errorf("unsupported radar job type %q", jobType)
 		}
@@ -250,11 +253,21 @@ UPDATE radar_scan_runs
 SET status = CASE
         WHEN $2 = 'DECODING' AND status = 'RAW_VALIDATING' THEN 'DECODING'
         WHEN $2 = 'QC_RUNNING' AND status IN ('NORMALIZED', 'QC_RUNNING') THEN 'QC_RUNNING'
+		WHEN $2 = 'GRID_RUNNING' AND status IN ('QC_READY', 'GRID_RUNNING') THEN 'GRID_RUNNING'
         ELSE status
     END,
     updated_at = CURRENT_TIMESTAMP
 WHERE run_id = $1`, runID, nextStatus); err != nil {
 			return fmt.Errorf("mark radar scan worker running: %w", err)
+		}
+	case workflow.WorkflowAnalysisCycle:
+		if jobType != orchestration.AnalysisMosaicJobType {
+			return fmt.Errorf("unsupported analysis job type %q", jobType)
+		}
+		if _, err := tx.Exec(ctx, `
+UPDATE analysis_cycles SET updated_at = CURRENT_TIMESTAMP
+WHERE run_id = $1 AND status = 'MOSAIC_RUNNING'`, runID); err != nil {
+			return fmt.Errorf("touch published analysis cycle: %w", err)
 		}
 	default:
 		return fmt.Errorf("unsupported published workflow type %q", runType)
@@ -370,6 +383,17 @@ WHERE run_id = $1`, runID, nextStatus)
 		if err := applyRadarCompletion(ctx, tx, event, jobType); err != nil {
 			return false, err
 		}
+	case workflow.WorkflowAnalysisCycle:
+		if jobType != orchestration.AnalysisMosaicJobType {
+			return false, fmt.Errorf(
+				"%w: unsupported analysis job type %q",
+				orchestration.ErrInvalidEvent,
+				jobType,
+			)
+		}
+		if err := applyAnalysisMosaicCompletion(ctx, tx, event); err != nil {
+			return false, err
+		}
 	default:
 		return false, fmt.Errorf("%w: unsupported completion workflow type %q", orchestration.ErrInvalidEvent, runType)
 	}
@@ -478,6 +502,21 @@ SET status = 'FAILED', degraded_reason = $2, updated_at = CURRENT_TIMESTAMP
 WHERE run_id = $1`, runID, event.Payload.ErrorCode)
 		if err != nil {
 			return false, fmt.Errorf("fail radar scan run: %w", err)
+		}
+	case workflow.WorkflowAnalysisCycle:
+		_, err = tx.Exec(ctx, `
+UPDATE analysis_cycles
+SET status = 'FAILED', degraded_reason = $2, updated_at = CURRENT_TIMESTAMP
+WHERE run_id = $1`, runID, event.Payload.ErrorCode)
+		if err != nil {
+			return false, fmt.Errorf("fail analysis cycle: %w", err)
+		}
+		_, err = tx.Exec(ctx, `
+UPDATE mosaic_runs
+SET status = 'FAILED', updated_at = CURRENT_TIMESTAMP
+WHERE analysis_id = (SELECT analysis_id FROM analysis_cycles WHERE run_id = $1)`, runID)
+		if err != nil {
+			return false, fmt.Errorf("fail mosaic run: %w", err)
 		}
 	default:
 		return false, fmt.Errorf("%w: unsupported failure workflow type %q", orchestration.ErrInvalidEvent, runType)
@@ -866,6 +905,152 @@ WHERE run_id = $1`, event.RunID, gridAsset.URI, metrics.MeanQualityIndex,
 		metrics.OperationalEligible, metrics.OperationalReasons)
 	if err != nil {
 		return fmt.Errorf("complete radar grid run: %w", err)
+	}
+	return nil
+}
+
+func applyAnalysisMosaicCompletion(
+	ctx context.Context,
+	tx pgx.Tx,
+	event orchestration.JobCompleted,
+) error {
+	var mosaicAsset *orchestration.JobCompletedAsset
+	for index := range event.Payload.Assets {
+		if event.Payload.Assets[index].AssetType == "radar_mosaic" {
+			if mosaicAsset != nil {
+				return fmt.Errorf("%w: multiple radar mosaic assets", orchestration.ErrInvalidEvent)
+			}
+			mosaicAsset = &event.Payload.Assets[index]
+		}
+	}
+	if mosaicAsset == nil {
+		return fmt.Errorf("%w: radar mosaic asset is required", orchestration.ErrInvalidEvent)
+	}
+	rawMosaic, ok := event.Payload.Diagnostics["radar_mosaic"]
+	if !ok {
+		return fmt.Errorf("%w: radar mosaic diagnostics are required", orchestration.ErrInvalidEvent)
+	}
+	var metrics workflow.AnalysisMosaicMetrics
+	if err := json.Unmarshal(rawMosaic, &metrics); err != nil {
+		return fmt.Errorf("%w: decode radar mosaic diagnostics: %v", orchestration.ErrInvalidEvent, err)
+	}
+	if metrics.AnalysisTime.IsZero() || metrics.GridID == "" ||
+		metrics.GridConfigVersion == "" || metrics.ProfileVersion == "" ||
+		metrics.AlgorithmVersion == "" || metrics.InputRadarCount <= 0 ||
+		metrics.ActualContributingRadarCount <= 0 ||
+		metrics.ActualContributingRadarCount > metrics.InputRadarCount ||
+		metrics.GridCellCount <= 0 || metrics.ValidCellCount < 0 ||
+		metrics.MissingCellCount < 0 || metrics.LowQualityCellCount < 0 ||
+		metrics.BlendedCellCount < 0 ||
+		metrics.ValidCellCount+metrics.MissingCellCount != metrics.GridCellCount ||
+		metrics.LowQualityCellCount > metrics.ValidCellCount ||
+		metrics.BlendedCellCount > metrics.ValidCellCount ||
+		metrics.ValidCoverageRatio < 0 || metrics.ValidCoverageRatio > 1 ||
+		metrics.MeanQualityIndex < 0 || metrics.MeanQualityIndex > 1 ||
+		len(metrics.Contributors) != metrics.InputRadarCount {
+		return fmt.Errorf("%w: invalid radar mosaic metrics", orchestration.ErrInvalidEvent)
+	}
+	if metrics.OperationalEligible != (len(metrics.OperationalReasons) == 0) {
+		return fmt.Errorf("%w: mosaic operational eligibility is inconsistent", orchestration.ErrInvalidEvent)
+	}
+	seenRadars := make(map[string]struct{}, len(metrics.Contributors))
+	seenScans := make(map[uuid.UUID]struct{}, len(metrics.Contributors))
+	actualCount := 0
+	for _, contributor := range metrics.Contributors {
+		if contributor.RadarID == "" || contributor.ScanID == uuid.Nil ||
+			contributor.GridURI == "" || contributor.HybridScanVersion == "" ||
+			contributor.ContributingCellCount < 0 ||
+			contributor.MeanAdjustedQualityIndex < 0 ||
+			contributor.MeanAdjustedQualityIndex > 1 {
+			return fmt.Errorf("%w: invalid mosaic contributor metrics", orchestration.ErrInvalidEvent)
+		}
+		if _, exists := seenRadars[contributor.RadarID]; exists {
+			return fmt.Errorf("%w: duplicate mosaic contributor radar", orchestration.ErrInvalidEvent)
+		}
+		if _, exists := seenScans[contributor.ScanID]; exists {
+			return fmt.Errorf("%w: duplicate mosaic contributor scan", orchestration.ErrInvalidEvent)
+		}
+		seenRadars[contributor.RadarID] = struct{}{}
+		seenScans[contributor.ScanID] = struct{}{}
+		if contributor.ContributingCellCount > 0 {
+			actualCount++
+		}
+	}
+	if actualCount != metrics.ActualContributingRadarCount {
+		return fmt.Errorf("%w: actual mosaic contributor count is inconsistent", orchestration.ErrInvalidEvent)
+	}
+
+	var analysisID uuid.UUID
+	var status workflow.AnalysisStatus
+	var analysisTime time.Time
+	var gridID, configVersion, algorithmVersion string
+	if err := tx.QueryRow(ctx, `
+SELECT a.analysis_id, a.status, a.analysis_time, a.grid_id, a.config_version,
+       m.mosaic_algorithm_version
+FROM analysis_cycles AS a
+JOIN mosaic_runs AS m ON m.analysis_id = a.analysis_id
+WHERE a.run_id = $1 FOR UPDATE OF a, m`, event.RunID).
+		Scan(&analysisID, &status, &analysisTime, &gridID, &configVersion,
+			&algorithmVersion); err != nil {
+		return fmt.Errorf("lock analysis mosaic completion: %w", err)
+	}
+	if status != workflow.AnalysisMosaic && status != workflow.AnalysisQPE {
+		return fmt.Errorf(
+			"%w: analysis status %q cannot complete mosaic",
+			orchestration.ErrInvalidEvent,
+			status,
+		)
+	}
+	if !metrics.AnalysisTime.Equal(analysisTime) || metrics.GridID != gridID ||
+		metrics.ProfileVersion != configVersion || metrics.AlgorithmVersion != algorithmVersion {
+		return fmt.Errorf("%w: radar mosaic identity does not match analysis", orchestration.ErrInvalidEvent)
+	}
+	metrics.MeasuredAt = event.Payload.FinishedAt
+	diagnostics, err := json.Marshal(metrics)
+	if err != nil {
+		return fmt.Errorf("encode radar mosaic diagnostics: %w", err)
+	}
+	for _, contributor := range metrics.Contributors {
+		result, err := tx.Exec(ctx, `
+UPDATE analysis_cycle_radars
+SET mean_quality_index = $4
+WHERE analysis_id = $1 AND radar_id = $2 AND scan_id = $3
+  AND state = 'PARTICIPATING'`,
+			analysisID, contributor.RadarID, contributor.ScanID,
+			contributor.MeanAdjustedQualityIndex)
+		if err != nil {
+			return fmt.Errorf("update mosaic contributor %s: %w", contributor.RadarID, err)
+		}
+		if result.RowsAffected() != 1 {
+			return fmt.Errorf(
+				"%w: mosaic contributor does not match aligned analysis radar",
+				orchestration.ErrInvalidEvent,
+			)
+		}
+	}
+	_, err = tx.Exec(ctx, `
+UPDATE mosaic_runs
+SET status = 'SUCCEEDED', mosaic_uri = $2, diagnostics = $3,
+    measured_at = $4, updated_at = CURRENT_TIMESTAMP
+WHERE analysis_id = $1`, analysisID, mosaicAsset.URI, diagnostics, metrics.MeasuredAt)
+	if err != nil {
+		return fmt.Errorf("persist mosaic run completion: %w", err)
+	}
+	var degradedReason *string
+	if !metrics.OperationalEligible {
+		reason := strings.Join(metrics.OperationalReasons, ",")
+		degradedReason = &reason
+	}
+	_, err = tx.Exec(ctx, `
+UPDATE analysis_cycles
+SET status = 'QPE_RUNNING', mosaic_uri = $2, radar_count = $3,
+    valid_coverage_ratio = $4, mean_quality_index = $5,
+    degraded_reason = $6, updated_at = CURRENT_TIMESTAMP
+WHERE analysis_id = $1`, analysisID, mosaicAsset.URI,
+		metrics.ActualContributingRadarCount, metrics.ValidCoverageRatio,
+		metrics.MeanQualityIndex, degradedReason)
+	if err != nil {
+		return fmt.Errorf("advance mosaic to QPE: %w", err)
 	}
 	return nil
 }

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/contracts/events/analysis-mosaic-requested-v2.schema.json",
+  "title": "RainPulse analysis.mosaic.requested.v2 event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "event_type", "occurred_at", "run_id", "job_id", "trace_id", "payload"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "event_id": { "type": "string", "format": "uuid" },
+    "event_type": { "const": "analysis.mosaic.requested.v2" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "run_id": { "type": "string", "format": "uuid" },
+    "job_id": { "type": "string", "format": "uuid" },
+    "trace_id": { "type": "string", "format": "uuid" },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["analysis_id", "analysis_time", "grid_id", "grid_config_version", "inputs", "output_prefix", "mosaic_config_version", "mosaic_algorithm_version", "flag_definition_version"],
+      "properties": {
+        "analysis_id": { "type": "string", "format": "uuid" },
+        "analysis_time": { "type": "string", "format": "date-time" },
+        "grid_id": { "type": "string", "minLength": 1 },
+        "grid_config_version": { "type": "string", "minLength": 1 },
+        "inputs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["radar_id", "scan_id", "grid_uri", "time_offset_seconds", "hybrid_scan_version"],
+            "properties": {
+              "radar_id": { "type": "string", "minLength": 1 },
+              "scan_id": { "type": "string", "format": "uuid" },
+              "grid_uri": { "type": "string", "format": "uri" },
+              "time_offset_seconds": { "type": "integer" },
+              "hybrid_scan_version": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "output_prefix": { "type": "string", "format": "uri" },
+        "mosaic_config_version": { "type": "string", "minLength": 1 },
+        "mosaic_algorithm_version": { "type": "string", "minLength": 1 },
+        "flag_definition_version": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

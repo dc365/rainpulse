@@ -14,31 +14,34 @@ import (
 )
 
 const (
-	SchemaVersion                 = "1.0"
-	JobRequestedEventType         = "job.requested"
-	JobCompletedEventType         = "job.completed"
-	JobFailedEventType            = "job.failed"
-	JobRequestedSubject           = "rainpulse.jobs.requested.model_pysteps_lk"
-	RadarDecodeRequestedEventType = "radar.decode.requested.v1"
-	RadarDecodeRequestedSubject   = "rainpulse.jobs.requested.radar_decode"
-	RadarDecodeJobType            = "radar.decode"
-	RadarDecoderVersion           = "cma-rstm-2.0.0"
-	RadarQCRequestedEventType     = "radar.qc.requested.v1"
-	RadarQCRequestedSubject       = "rainpulse.jobs.requested.radar_qc"
-	RadarQCJobType                = "radar.qc"
-	RadarGridRequestedEventType   = "radar.grid.requested.v1"
-	RadarGridRequestedSubject     = "rainpulse.jobs.requested.radar_grid"
-	RadarGridJobType              = "radar.grid"
-	JobCompletedSubject           = "rainpulse.jobs.completed"
-	JobFailedSubject              = "rainpulse.jobs.failed"
-	JobResultsSubject             = "rainpulse.jobs.*"
-	JobStreamName                 = "RAINPULSE_JOBS"
-	ResultConsumerName            = "rainpulse-orchestrator-results-v2"
-	SimulationJobType             = "model.pysteps_lk"
-	SimulationModelID             = "pysteps-lk-sim"
-	SimulationModelVersion        = "pysteps-lk-sim-v1"
-	SimulationConfig              = "rp003-sim-v1"
-	SimulationGrid                = "rp003-sim-grid"
+	SchemaVersion                    = "1.0"
+	JobRequestedEventType            = "job.requested"
+	JobCompletedEventType            = "job.completed"
+	JobFailedEventType               = "job.failed"
+	JobRequestedSubject              = "rainpulse.jobs.requested.model_pysteps_lk"
+	RadarDecodeRequestedEventType    = "radar.decode.requested.v1"
+	RadarDecodeRequestedSubject      = "rainpulse.jobs.requested.radar_decode"
+	RadarDecodeJobType               = "radar.decode"
+	RadarDecoderVersion              = "cma-rstm-2.0.0"
+	RadarQCRequestedEventType        = "radar.qc.requested.v1"
+	RadarQCRequestedSubject          = "rainpulse.jobs.requested.radar_qc"
+	RadarQCJobType                   = "radar.qc"
+	RadarGridRequestedEventType      = "radar.grid.requested.v1"
+	RadarGridRequestedSubject        = "rainpulse.jobs.requested.radar_grid"
+	RadarGridJobType                 = "radar.grid"
+	AnalysisMosaicRequestedEventType = "analysis.mosaic.requested.v2"
+	AnalysisMosaicRequestedSubject   = "rainpulse.jobs.requested.analysis_mosaic"
+	AnalysisMosaicJobType            = "analysis.mosaic"
+	JobCompletedSubject              = "rainpulse.jobs.completed"
+	JobFailedSubject                 = "rainpulse.jobs.failed"
+	JobResultsSubject                = "rainpulse.jobs.*"
+	JobStreamName                    = "RAINPULSE_JOBS"
+	ResultConsumerName               = "rainpulse-orchestrator-results-v2"
+	SimulationJobType                = "model.pysteps_lk"
+	SimulationModelID                = "pysteps-lk-sim"
+	SimulationModelVersion           = "pysteps-lk-sim-v1"
+	SimulationConfig                 = "rp003-sim-v1"
+	SimulationGrid                   = "rp003-sim-grid"
 )
 
 type JobRequested struct {
@@ -127,6 +130,37 @@ type RadarGridRequestedPayload struct {
 	GridID            string    `json:"grid_id"`
 	GridConfig        string    `json:"grid_config_version"`
 	HybridScanVersion string    `json:"hybrid_scan_version"`
+}
+
+type AnalysisMosaicRequested struct {
+	SchemaVersion string                         `json:"schema_version"`
+	EventID       uuid.UUID                      `json:"event_id"`
+	EventType     string                         `json:"event_type"`
+	OccurredAt    time.Time                      `json:"occurred_at"`
+	RunID         uuid.UUID                      `json:"run_id"`
+	JobID         uuid.UUID                      `json:"job_id"`
+	TraceID       uuid.UUID                      `json:"trace_id"`
+	Payload       AnalysisMosaicRequestedPayload `json:"payload"`
+}
+
+type AnalysisMosaicRequestedInput struct {
+	RadarID           string    `json:"radar_id"`
+	ScanID            uuid.UUID `json:"scan_id"`
+	GridURI           string    `json:"grid_uri"`
+	TimeOffsetSeconds int       `json:"time_offset_seconds"`
+	HybridScanVersion string    `json:"hybrid_scan_version"`
+}
+
+type AnalysisMosaicRequestedPayload struct {
+	AnalysisID          uuid.UUID                      `json:"analysis_id"`
+	AnalysisTime        time.Time                      `json:"analysis_time"`
+	GridID              string                         `json:"grid_id"`
+	GridConfigVersion   string                         `json:"grid_config_version"`
+	Inputs              []AnalysisMosaicRequestedInput `json:"inputs"`
+	OutputPrefix        string                         `json:"output_prefix"`
+	MosaicConfigVersion string                         `json:"mosaic_config_version"`
+	MosaicAlgorithm     string                         `json:"mosaic_algorithm_version"`
+	FlagDefinition      string                         `json:"flag_definition_version"`
 }
 
 type JobCompleted struct {

@@ -72,7 +72,7 @@ class RadarGridRequested(DomainRequest):
     payload: RadarGridPayload
 
 
-class AnalysisMosaicInput(ContractModel):
+class AnalysisMosaicInputV1(ContractModel):
     radar_id: str = Field(min_length=1)
     scan_id: UUID
     grid_uri: str
@@ -86,11 +86,11 @@ class AnalysisMosaicInput(ContractModel):
         return value
 
 
-class AnalysisMosaicPayload(ContractModel):
+class AnalysisMosaicPayloadV1(ContractModel):
     analysis_id: UUID
     analysis_time: datetime
     grid_id: str = Field(min_length=1)
-    inputs: list[AnalysisMosaicInput] = Field(min_length=1)
+    inputs: list[AnalysisMosaicInputV1] = Field(min_length=1)
     output_prefix: str
     mosaic_config_version: str = Field(min_length=1)
     qpe_config_version: str = Field(min_length=1)
@@ -103,9 +103,47 @@ class AnalysisMosaicPayload(ContractModel):
         return value
 
 
-class AnalysisMosaicRequested(DomainRequest):
+class AnalysisMosaicRequestedV1(DomainRequest):
     event_type: Literal["analysis.mosaic.requested.v1"]
-    payload: AnalysisMosaicPayload
+    payload: AnalysisMosaicPayloadV1
+
+
+class AnalysisMosaicInputV2(AnalysisMosaicInputV1):
+    hybrid_scan_version: str = Field(min_length=1)
+
+
+class AnalysisMosaicPayloadV2(ContractModel):
+    analysis_id: UUID
+    analysis_time: datetime
+    grid_id: str = Field(min_length=1)
+    grid_config_version: str = Field(min_length=1)
+    inputs: list[AnalysisMosaicInputV2] = Field(min_length=1)
+    output_prefix: str
+    mosaic_config_version: str = Field(min_length=1)
+    mosaic_algorithm_version: str = Field(min_length=1)
+    flag_definition_version: str = Field(min_length=1)
+
+    @field_validator("output_prefix")
+    @classmethod
+    def validate_output_prefix(cls, value: str) -> str:
+        if not urlparse(value).scheme:
+            raise ValueError("URI scheme is required")
+        return value
+
+    @model_validator(mode="after")
+    def validate_input_identity(self) -> AnalysisMosaicPayloadV2:
+        radar_ids = [item.radar_id for item in self.inputs]
+        scan_ids = [item.scan_id for item in self.inputs]
+        if len(radar_ids) != len(set(radar_ids)):
+            raise ValueError("mosaic radar IDs must be unique")
+        if len(scan_ids) != len(set(scan_ids)):
+            raise ValueError("mosaic scan IDs must be unique")
+        return self
+
+
+class AnalysisMosaicRequestedV2(DomainRequest):
+    event_type: Literal["analysis.mosaic.requested.v2"]
+    payload: AnalysisMosaicPayloadV2
 
 
 class NowcastInputPayload(ContractModel):

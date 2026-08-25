@@ -223,6 +223,75 @@ func TestCreateRadarGridUsesQCInputAndVersionIsolatedOutput(t *testing.T) {
 	}
 }
 
+func TestCreateAnalysisMosaicAlignsClosestReadyGridAndUsesV2Contract(t *testing.T) {
+	repository := &fakeRepository{}
+	now := time.Date(2026, 8, 25, 12, 6, 0, 0, time.UTC)
+	analysisTime := time.Date(2026, 8, 25, 12, 5, 0, 0, time.UTC)
+	service := NewService(repository, Options{Now: func() time.Time { return now }})
+	nearScan := uuid.MustParse("10000000-0000-4000-8000-000000000005")
+	farScan := uuid.MustParse("10000000-0000-4000-8000-000000000006")
+	input := AnalysisMosaicInput{
+		AnalysisTime:           analysisTime,
+		GridID:                 "fuzhou_118_123_25_27_0p01deg_v1",
+		GridConfigVersion:      "fuzhou-grid-0p01deg-v1",
+		MosaicConfigVersion:    "rp010-qi-mosaic-v1",
+		MosaicAlgorithmVersion: "qi-mosaic-1.0.0",
+		FlagDefinitionVersion:  "qc-flags-v1",
+		MaximumAbsoluteOffset:  150 * time.Second,
+		MinimumContributors:    1,
+		Candidates: []AnalysisMosaicCandidate{
+			{
+				RadarID: "z9598", ScanID: farScan,
+				GridURI:           "s3://rainpulse/radar/grid/z9598/far/grid.zarr",
+				VolumeEndTime:     analysisTime.Add(-120 * time.Second),
+				CurrentStatus:     workflow.RadarScanGridReady,
+				HybridScanVersion: "hybrid-scan-1.0.1",
+			},
+			{
+				RadarID: "z9598", ScanID: nearScan,
+				GridURI:           "s3://rainpulse/radar/grid/z9598/near/grid.zarr",
+				VolumeEndTime:     analysisTime.Add(-18 * time.Second),
+				CurrentStatus:     workflow.RadarScanGridReady,
+				HybridScanVersion: "hybrid-scan-1.0.1",
+			},
+		},
+		MosaicConfig:       json.RawMessage(`{"profile_version":"rp010-qi-mosaic-v1"}`),
+		MosaicConfigSHA256: "63266c7c72321262a01b945281060abd84153a8f3ad64a95c5b73b9fd510f678",
+	}
+
+	analysis, job, err := service.CreateAnalysisMosaic(context.Background(), input)
+	if err != nil {
+		t.Fatalf("CreateAnalysisMosaic() error = %v", err)
+	}
+	if analysis.Status != workflow.AnalysisMosaic || job.JobType != AnalysisMosaicJobType {
+		t.Fatalf("unexpected mosaic workflow state: analysis=%s job=%s", analysis.Status, job.JobType)
+	}
+	if repository.analysisMosaic.Outbox.Subject != AnalysisMosaicRequestedSubject ||
+		repository.analysisMosaic.Outbox.EventType != AnalysisMosaicRequestedEventType {
+		t.Fatalf("unexpected mosaic worker route: %#v", repository.analysisMosaic.Outbox)
+	}
+	var requested AnalysisMosaicRequested
+	if err := json.Unmarshal(repository.analysisMosaic.Outbox.Payload, &requested); err != nil {
+		t.Fatalf("decode mosaic request: %v", err)
+	}
+	if len(requested.Payload.Inputs) != 1 || requested.Payload.Inputs[0].ScanID != nearScan ||
+		requested.Payload.Inputs[0].TimeOffsetSeconds != -18 {
+		t.Fatalf("mosaic did not select the closest ready grid: %#v", requested.Payload.Inputs)
+	}
+	if requested.Payload.MosaicAlgorithm != input.MosaicAlgorithmVersion ||
+		requested.Payload.OutputPrefix != "s3://rainpulse/analysis/mosaic/"+
+			input.GridID+"/2026/08/25/120500Z/qi-mosaic-1.0.0/" {
+		t.Fatalf("unexpected mosaic request: %#v", requested.Payload)
+	}
+	secondAnalysis, secondJob, err := service.CreateAnalysisMosaic(context.Background(), input)
+	if err != nil {
+		t.Fatalf("repeat CreateAnalysisMosaic() error = %v", err)
+	}
+	if secondAnalysis.ID != analysis.ID || secondJob.ID != job.ID {
+		t.Fatal("analysis mosaic workflow identifiers are not deterministic")
+	}
+}
+
 func TestDispatchOnceMarksPublishedOnlyAfterPublish(t *testing.T) {
 	event := workflow.OutboxEvent{ID: uuid.New(), Subject: JobRequestedSubject, Payload: json.RawMessage(`{}`)}
 	repository := &fakeRepository{claimed: event}
@@ -332,11 +401,20 @@ type fakeRepository struct {
 	radarDecode    workflow.RadarDecodeBundle
 	radarQC        workflow.RadarQCBundle
 	radarGrid      workflow.RadarGridBundle
+	analysisMosaic workflow.AnalysisMosaicBundle
 	domain         workflow.DomainSimulation
 	claimed        workflow.OutboxEvent
 	published      uuid.UUID
 	failed         uuid.UUID
 	appliedFailure JobFailed
+}
+
+func (repository *fakeRepository) CreateAnalysisMosaicBundle(
+	_ context.Context,
+	bundle workflow.AnalysisMosaicBundle,
+) error {
+	repository.analysisMosaic = bundle
+	return nil
 }
 
 func (repository *fakeRepository) CreateRadarGridBundle(

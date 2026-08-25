@@ -242,6 +242,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/analysis-cycles/{analysis_id}/mosaic-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the RP-010 time-aligned quality-aware mosaic summary */
+        get: operations["getAnalysisMosaicSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/products": {
         parameters: {
             query?: never;
@@ -651,6 +668,49 @@ export interface components {
             mean_quality_index?: number | null;
             exclusion_reason?: string | null;
         };
+        AnalysisMosaicContributor: {
+            radar_id: string;
+            /** Format: uuid */
+            scan_id: string;
+            /** Format: uri */
+            grid_uri: string;
+            time_offset_seconds: number;
+            hybrid_scan_version: string;
+            input_operational_eligible: boolean;
+            /** Format: int64 */
+            contributing_cell_count: number;
+            /** Format: float */
+            mean_adjusted_quality_index: number;
+        };
+        AnalysisMosaicMetrics: {
+            /** Format: date-time */
+            analysis_time: string;
+            grid_id: string;
+            grid_config_version: string;
+            profile_version: string;
+            algorithm_version: string;
+            operational_eligible: boolean;
+            operational_reasons: string[];
+            input_radar_count: number;
+            actual_contributing_radar_count: number;
+            /** Format: int64 */
+            grid_cell_count: number;
+            /** Format: int64 */
+            valid_cell_count: number;
+            /** Format: int64 */
+            missing_cell_count: number;
+            /** Format: int64 */
+            low_quality_cell_count: number;
+            /** Format: int64 */
+            blended_cell_count: number;
+            /** Format: float */
+            valid_coverage_ratio: number;
+            /** Format: float */
+            mean_quality_index: number;
+            contributors: components["schemas"]["AnalysisMosaicContributor"][];
+            /** Format: date-time */
+            measured_at: string;
+        };
         AnalysisCycle: {
             /** Format: uuid */
             analysis_id: string;
@@ -667,6 +727,8 @@ export interface components {
             valid_coverage_ratio?: number | null;
             /** Format: float */
             mean_quality_index?: number | null;
+            /** Format: uri */
+            mosaic_uri?: string | null;
             /** Format: uri */
             analysis_uri?: string | null;
             radars: components["schemas"]["AnalysisRadar"][];
@@ -1160,6 +1222,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AnalysisCycle"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getAnalysisMosaicSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                analysis_id: components["parameters"]["AnalysisId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Radar mosaic summary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisMosaicMetrics"];
                 };
             };
             404: components["responses"]["NotFound"];

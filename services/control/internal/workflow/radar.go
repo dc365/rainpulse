@@ -198,6 +198,15 @@ type RadarGridBundle struct {
 	Outbox       OutboxEvent
 }
 
+type AnalysisMosaicBundle struct {
+	Analysis         AnalysisCycle
+	AlgorithmVersion string
+	Config           json.RawMessage
+	ConfigSHA256     string
+	Job              Job
+	Outbox           OutboxEvent
+}
+
 type RadarGridMetrics struct {
 	ScanID                      uuid.UUID         `json:"scan_id"`
 	RadarID                     string            `json:"radar_id"`
@@ -219,6 +228,38 @@ type RadarGridMetrics struct {
 	SelectionCounts             map[string]int64  `json:"selection_counts"`
 	SkippedSweeps               map[string]string `json:"skipped_sweeps"`
 	MeasuredAt                  time.Time         `json:"measured_at"`
+}
+
+type AnalysisMosaicContributor struct {
+	RadarID                  string    `json:"radar_id"`
+	ScanID                   uuid.UUID `json:"scan_id"`
+	GridURI                  string    `json:"grid_uri"`
+	TimeOffsetSeconds        int       `json:"time_offset_seconds"`
+	HybridScanVersion        string    `json:"hybrid_scan_version"`
+	InputOperationalEligible bool      `json:"input_operational_eligible"`
+	ContributingCellCount    int64     `json:"contributing_cell_count"`
+	MeanAdjustedQualityIndex float64   `json:"mean_adjusted_quality_index"`
+}
+
+type AnalysisMosaicMetrics struct {
+	AnalysisTime                 time.Time                   `json:"analysis_time"`
+	GridID                       string                      `json:"grid_id"`
+	GridConfigVersion            string                      `json:"grid_config_version"`
+	ProfileVersion               string                      `json:"profile_version"`
+	AlgorithmVersion             string                      `json:"algorithm_version"`
+	OperationalEligible          bool                        `json:"operational_eligible"`
+	OperationalReasons           []string                    `json:"operational_reasons"`
+	InputRadarCount              int                         `json:"input_radar_count"`
+	ActualContributingRadarCount int                         `json:"actual_contributing_radar_count"`
+	GridCellCount                int64                       `json:"grid_cell_count"`
+	ValidCellCount               int64                       `json:"valid_cell_count"`
+	MissingCellCount             int64                       `json:"missing_cell_count"`
+	LowQualityCellCount          int64                       `json:"low_quality_cell_count"`
+	BlendedCellCount             int64                       `json:"blended_cell_count"`
+	ValidCoverageRatio           float64                     `json:"valid_coverage_ratio"`
+	MeanQualityIndex             float64                     `json:"mean_quality_index"`
+	Contributors                 []AnalysisMosaicContributor `json:"contributors"`
+	MeasuredAt                   time.Time                   `json:"measured_at"`
 }
 
 type RadarQCMetrics struct {
@@ -261,6 +302,7 @@ type AnalysisCycle struct {
 	RadarCount         int
 	ValidCoverageRatio *float64
 	MeanQualityIndex   *float64
+	MosaicURI          *string
 	AnalysisURI        *string
 	Radars             []AnalysisRadar
 	CreatedAt          time.Time

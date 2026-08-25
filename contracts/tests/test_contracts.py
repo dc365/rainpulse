@@ -20,6 +20,7 @@ EVENT_NAMES = (
     "radar-grid-requested",
     "analysis-cycle-opened",
     "analysis-mosaic-requested",
+    "analysis-mosaic-requested-v2",
     "nowcast-input-requested",
     "nowcast-input-ready",
     "forecast-run-requested",
@@ -64,6 +65,7 @@ def test_openapi_exposes_the_planned_v1_operations() -> None:
         "/radar-scans/{scan_id}/grid-summary",
         "/analysis-cycles",
         "/analysis-cycles/{analysis_id}",
+        "/analysis-cycles/{analysis_id}/mosaic-summary",
         "/products",
         "/products/{product_id}",
         "/products/{product_id}/assets",
@@ -104,6 +106,7 @@ def test_v11_radar_contract_chain_is_frozen() -> None:
         "normalized-radar-volume",
         "qc-radar-volume",
         "radar-grid",
+        "radar-mosaic",
         "radar-analysis",
         "nowcast-input",
         "forecast-output",
@@ -117,8 +120,15 @@ def test_v11_radar_contract_chain_is_frozen() -> None:
     assert "original polar sampling geometry" in contracts["normalized-radar-volume"]
     assert "QC runs before" in contracts["qc-radar-volume"]
     assert "Hybrid Scan" in contracts["radar-grid"]
+    assert "Direct dBZ averaging is forbidden" in contracts["radar-mosaic"]
     assert "Direct dBZ averaging is forbidden" in contracts["radar-analysis"]
-    for name in ("qc-radar-volume", "radar-grid", "radar-analysis", "nowcast-input"):
+    for name in (
+        "qc-radar-volume",
+        "radar-grid",
+        "radar-mosaic",
+        "radar-analysis",
+        "nowcast-input",
+    ):
         assert "uint32" in contracts[name]
         assert "uint16` | Versioned bit set" not in contracts[name]
 
@@ -150,13 +160,24 @@ def test_phase1_grid_contract_is_equal_lat_lon_end_to_end() -> None:
 def test_radar_grid_requires_polar_blockage_evidence_and_datum_gate() -> None:
     contract = (CONTRACTS_ROOT / "data" / "radar-grid.md").read_text()
 
-    assert "contract_version=1.2" in contract
+    assert "contract_version=1.3" in contract
     assert "`QI_BLOCKAGE`" in contract
     assert "`QI_BEAM_HEIGHT`" in contract
     assert "`SOURCE_SWEEP`" in contract
     assert "per-sweep polar blockage diagnostics" in contract
     assert "operational_eligible=false" in contract
     assert "Velocity-only" in contract
+
+
+def test_rp010_mosaic_is_separate_from_rp011_qpe() -> None:
+    mosaic = (CONTRACTS_ROOT / "data" / "radar-mosaic.md").read_text()
+    analysis = (CONTRACTS_ROOT / "data" / "radar-analysis.md").read_text()
+
+    assert "does not contain `RATE_QPE`" in mosaic
+    assert "dBZ → linear Z" in mosaic
+    assert "`SOURCE_RADAR`" in mosaic
+    assert "all `QI_*`" in mosaic
+    assert "after RP-011 QPE" in analysis
 
 
 def test_distribution_contracts_preserve_grid_and_missing_semantics() -> None:

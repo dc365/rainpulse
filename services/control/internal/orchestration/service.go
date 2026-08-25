@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -18,6 +20,7 @@ type Repository interface {
 	CreateRadarDecodeBundle(context.Context, workflow.RadarDecodeBundle) error
 	CreateRadarQCBundle(context.Context, workflow.RadarQCBundle) error
 	CreateRadarGridBundle(context.Context, workflow.RadarGridBundle) error
+	CreateAnalysisMosaicBundle(context.Context, workflow.AnalysisMosaicBundle) error
 	CreateDomainSimulation(context.Context, workflow.DomainSimulation) error
 	GetRun(context.Context, uuid.UUID) (workflow.Run, error)
 	GetJob(context.Context, uuid.UUID) (workflow.Job, error)
@@ -71,6 +74,30 @@ type RadarGridInput struct {
 	HybridScanVersion  string
 	GridConfig         json.RawMessage
 	GridConfigSHA256   string
+}
+
+type AnalysisMosaicCandidate struct {
+	RadarID           string
+	ScanID            uuid.UUID
+	GridURI           string
+	VolumeEndTime     time.Time
+	CurrentStatus     workflow.RadarScanStatus
+	HybridScanVersion string
+}
+
+type AnalysisMosaicInput struct {
+	AnalysisTime           time.Time
+	GridID                 string
+	GridConfigVersion      string
+	MosaicConfigVersion    string
+	MosaicAlgorithmVersion string
+	FlagDefinitionVersion  string
+	MaximumAbsoluteOffset  time.Duration
+	MinimumContributors    int
+	ExpectedRadarIDs       []string
+	Candidates             []AnalysisMosaicCandidate
+	MosaicConfig           json.RawMessage
+	MosaicConfigSHA256     string
 }
 
 type Publisher interface {
@@ -365,6 +392,218 @@ func validateRadarGridInput(input RadarGridInput) error {
 		return fmt.Errorf("radar grid input must be an s3 URI")
 	}
 	return nil
+}
+
+func (service *Service) CreateAnalysisMosaic(
+	ctx context.Context,
+	input AnalysisMosaicInput,
+) (workflow.AnalysisCycle, workflow.Job, error) {
+	if err := validateAnalysisMosaicInput(input); err != nil {
+		return workflow.AnalysisCycle{}, workflow.Job{}, err
+	}
+	analysisTime := input.AnalysisTime.UTC()
+	selected, radars := alignMosaicCandidates(input, analysisTime)
+	if len(selected) < input.MinimumContributors {
+		return workflow.AnalysisCycle{}, workflow.Job{}, fmt.Errorf(
+			"aligned radar contributors %d are below configured minimum %d",
+			len(selected), input.MinimumContributors,
+		)
+	}
+	now := service.now().UTC()
+	identity := []string{
+		analysisTime.Format(time.RFC3339), input.GridID, input.GridConfigVersion,
+		input.MosaicConfigVersion, input.MosaicAlgorithmVersion,
+	}
+	analysisID := stableID(append([]string{"analysis"}, identity...)...)
+	runID := stableID(append([]string{"analysis-run"}, identity...)...)
+	jobID := stableID("analysis-mosaic-job", runID.String(), input.MosaicAlgorithmVersion)
+	traceID := stableID("analysis-mosaic-trace", runID.String(), input.MosaicAlgorithmVersion)
+	eventID := stableID("analysis-mosaic-request", jobID.String())
+	outputPrefix := fmt.Sprintf(
+		"s3://rainpulse/analysis/mosaic/%s/%s/%s/",
+		input.GridID,
+		analysisTime.Format("2006/01/02/150405Z"),
+		url.PathEscape(input.MosaicAlgorithmVersion),
+	)
+	requestInputs := make([]AnalysisMosaicRequestedInput, 0, len(selected))
+	for _, candidate := range selected {
+		requestInputs = append(requestInputs, AnalysisMosaicRequestedInput{
+			RadarID: candidate.RadarID, ScanID: candidate.ScanID,
+			GridURI: candidate.GridURI,
+			TimeOffsetSeconds: int(math.Round(
+				candidate.VolumeEndTime.UTC().Sub(analysisTime).Seconds(),
+			)),
+			HybridScanVersion: candidate.HybridScanVersion,
+		})
+	}
+	request := AnalysisMosaicRequested{
+		SchemaVersion: SchemaVersion,
+		EventID:       eventID, EventType: AnalysisMosaicRequestedEventType,
+		OccurredAt: now, RunID: runID, JobID: jobID, TraceID: traceID,
+		Payload: AnalysisMosaicRequestedPayload{
+			AnalysisID: analysisID, AnalysisTime: analysisTime,
+			GridID: input.GridID, GridConfigVersion: input.GridConfigVersion,
+			Inputs: requestInputs, OutputPrefix: outputPrefix,
+			MosaicConfigVersion: input.MosaicConfigVersion,
+			MosaicAlgorithm:     input.MosaicAlgorithmVersion,
+			FlagDefinition:      input.FlagDefinitionVersion,
+		},
+	}
+	payload, err := json.Marshal(request)
+	if err != nil {
+		return workflow.AnalysisCycle{}, workflow.Job{}, fmt.Errorf(
+			"encode analysis mosaic request: %w", err,
+		)
+	}
+	job := workflow.Job{
+		ID: jobID, RunID: runID, TraceID: traceID, JobType: AnalysisMosaicJobType,
+		ConfigVersion: input.MosaicConfigVersion, Status: workflow.JobPending,
+		Attempt: 1, RequestPayload: payload, CreatedAt: now,
+	}
+	analysis := workflow.AnalysisCycle{
+		ID: analysisID, RunID: runID, AnalysisTime: analysisTime,
+		GridID: input.GridID, ConfigVersion: input.MosaicConfigVersion,
+		Status: workflow.AnalysisMosaic, RadarCount: len(selected), Radars: radars,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	bundle := workflow.AnalysisMosaicBundle{
+		Analysis: analysis, AlgorithmVersion: input.MosaicAlgorithmVersion,
+		Config:       input.MosaicConfig,
+		ConfigSHA256: input.MosaicConfigSHA256, Job: job,
+		Outbox: workflow.OutboxEvent{
+			ID: eventID, AggregateID: jobID.String(),
+			EventType: AnalysisMosaicRequestedEventType,
+			Subject:   AnalysisMosaicRequestedSubject, Payload: payload,
+		},
+	}
+	if err := service.repository.CreateAnalysisMosaicBundle(ctx, bundle); err != nil {
+		return workflow.AnalysisCycle{}, workflow.Job{}, err
+	}
+	return analysis, job, nil
+}
+
+func validateAnalysisMosaicInput(input AnalysisMosaicInput) error {
+	if input.AnalysisTime.IsZero() || input.GridID == "" || input.GridConfigVersion == "" ||
+		input.MosaicConfigVersion == "" || input.MosaicAlgorithmVersion == "" ||
+		input.FlagDefinitionVersion == "" {
+		return fmt.Errorf("analysis mosaic identity and version fields are required")
+	}
+	analysisTime := input.AnalysisTime.UTC()
+	if !analysisTime.Equal(analysisTime.Truncate(5 * time.Minute)) {
+		return fmt.Errorf("analysis time must be on a five-minute UTC boundary")
+	}
+	if input.MaximumAbsoluteOffset <= 0 || input.MinimumContributors <= 0 {
+		return fmt.Errorf("analysis alignment tolerance and contributor minimum are required")
+	}
+	if len(input.MosaicConfig) == 0 || !json.Valid(input.MosaicConfig) ||
+		!sha256Pattern.MatchString(input.MosaicConfigSHA256) {
+		return fmt.Errorf("mosaic configuration and SHA-256 are required")
+	}
+	expected := make(map[string]struct{}, len(input.ExpectedRadarIDs))
+	for _, radarID := range input.ExpectedRadarIDs {
+		if radarID == "" {
+			return fmt.Errorf("expected radar ID cannot be empty")
+		}
+		if _, exists := expected[radarID]; exists {
+			return fmt.Errorf("expected radar IDs must be unique")
+		}
+		expected[radarID] = struct{}{}
+	}
+	scans := make(map[uuid.UUID]struct{}, len(input.Candidates))
+	for _, candidate := range input.Candidates {
+		if candidate.RadarID == "" || candidate.ScanID == uuid.Nil ||
+			candidate.VolumeEndTime.IsZero() || candidate.HybridScanVersion == "" {
+			return fmt.Errorf("mosaic candidate identity, time and version are required")
+		}
+		if _, exists := scans[candidate.ScanID]; exists {
+			return fmt.Errorf("mosaic candidate scan IDs must be unique")
+		}
+		scans[candidate.ScanID] = struct{}{}
+		parsed, err := url.ParseRequestURI(candidate.GridURI)
+		if err != nil || parsed.Scheme != "s3" {
+			return fmt.Errorf("mosaic candidate grid must be an s3 URI")
+		}
+	}
+	return nil
+}
+
+func alignMosaicCandidates(
+	input AnalysisMosaicInput,
+	analysisTime time.Time,
+) ([]AnalysisMosaicCandidate, []workflow.AnalysisRadar) {
+	candidates := append([]AnalysisMosaicCandidate(nil), input.Candidates...)
+	sort.Slice(candidates, func(left, right int) bool {
+		if candidates[left].RadarID != candidates[right].RadarID {
+			return candidates[left].RadarID < candidates[right].RadarID
+		}
+		leftOffset := math.Abs(candidates[left].VolumeEndTime.Sub(analysisTime).Seconds())
+		rightOffset := math.Abs(candidates[right].VolumeEndTime.Sub(analysisTime).Seconds())
+		if leftOffset != rightOffset {
+			return leftOffset < rightOffset
+		}
+		return candidates[left].ScanID.String() < candidates[right].ScanID.String()
+	})
+	byRadar := make(map[string][]AnalysisMosaicCandidate)
+	for _, candidate := range candidates {
+		byRadar[candidate.RadarID] = append(byRadar[candidate.RadarID], candidate)
+	}
+	radarSet := make(map[string]struct{})
+	for radarID := range byRadar {
+		radarSet[radarID] = struct{}{}
+	}
+	for _, radarID := range input.ExpectedRadarIDs {
+		radarSet[radarID] = struct{}{}
+	}
+	radarIDs := make([]string, 0, len(radarSet))
+	for radarID := range radarSet {
+		radarIDs = append(radarIDs, radarID)
+	}
+	sort.Strings(radarIDs)
+	selected := make([]AnalysisMosaicCandidate, 0, len(radarIDs))
+	radars := make([]workflow.AnalysisRadar, 0, len(radarIDs))
+	for _, radarID := range radarIDs {
+		var chosen *AnalysisMosaicCandidate
+		for index := range byRadar[radarID] {
+			candidate := &byRadar[radarID][index]
+			if candidate.CurrentStatus != workflow.RadarScanGridReady {
+				continue
+			}
+			if absDuration(candidate.VolumeEndTime.UTC().Sub(analysisTime)) >
+				input.MaximumAbsoluteOffset {
+				continue
+			}
+			chosen = candidate
+			break
+		}
+		if chosen != nil {
+			offset := int(math.Round(chosen.VolumeEndTime.UTC().Sub(analysisTime).Seconds()))
+			scanID := chosen.ScanID
+			selected = append(selected, *chosen)
+			radars = append(radars, workflow.AnalysisRadar{
+				RadarID: radarID, ScanID: &scanID,
+				State:             workflow.AnalysisRadarParticipating,
+				TimeOffsetSeconds: &offset,
+			})
+			continue
+		}
+		reason := "no_ready_grid_within_alignment_window"
+		state := workflow.AnalysisRadarExcluded
+		if len(byRadar[radarID]) == 0 {
+			reason = "expected_radar_missing"
+			state = workflow.AnalysisRadarMissing
+		}
+		radars = append(radars, workflow.AnalysisRadar{
+			RadarID: radarID, State: state, ExclusionReason: &reason,
+		})
+	}
+	return selected, radars
+}
+
+func absDuration(value time.Duration) time.Duration {
+	if value < 0 {
+		return -value
+	}
+	return value
 }
 
 func stableID(parts ...string) uuid.UUID {

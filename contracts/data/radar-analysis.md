@@ -1,7 +1,10 @@
 # RadarAnalysis Zarr contract
 
 `RadarAnalysis` is the quality-aware multi-radar observation for one fixed UTC
-analysis time. It is the only source accepted by `NowcastInput` construction.
+analysis time after RP-011 QPE. RP-010 first publishes an immutable
+`RadarMosaic`; the QPE step consumes it and adds `RATE_QPE` plus its versioned
+diagnostics before atomically publishing `RadarAnalysis`. `RadarAnalysis` is the
+only source accepted by `NowcastInput` construction.
 
 ## Dimensions and coordinates
 

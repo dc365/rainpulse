@@ -263,7 +263,7 @@ def test_rp009_hybrid_profile_is_valid_and_explicitly_engineering_only() -> None
 
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(profile)
-    assert profile["algorithm_version"] == "hybrid-scan-1.0.0"
+    assert profile["algorithm_version"] == "hybrid-scan-1.0.1"
     assert profile["grid_id"] == "fuzhou_118_123_25_27_0p01deg_v1"
     assert profile["dem"]["asset_version"] == "copernicus-dem-glo30-2022-v1"
     assert profile["beam_geometry"]["unverified_vertical_datum_policy"] == (
@@ -273,3 +273,21 @@ def test_rp009_hybrid_profile_is_valid_and_explicitly_engineering_only() -> None
         "maximum_usable_fraction"
     ]
     assert profile["hybrid_scan"]["selection"] == "lowest_usable_elevation"
+
+
+def test_rp010_mosaic_profile_freezes_time_alignment_and_linear_z_fusion() -> None:
+    schema = json.loads(
+        (CONFIG_ROOT / "schemas" / "radar-mosaic-profile.schema.json").read_text()
+    )
+    profile = yaml.safe_load(
+        (CONFIG_ROOT / "mosaic" / "rp010-qi-mosaic-v1.yaml").read_text()
+    )
+
+    Draft202012Validator.check_schema(schema)
+    Draft202012Validator(schema).validate(profile)
+    assert profile["alignment"]["step_seconds"] == 300
+    assert profile["alignment"]["minimum_contributors"] == 1
+    assert profile["alignment"]["minimum_operational_contributors"] >= 2
+    assert profile["alignment"]["expected_radar_ids"] == []
+    assert profile["fusion"]["method"] == "highest_qi_then_linear_z_blend"
+    assert profile["fusion"]["blended_source_code"] == 65535

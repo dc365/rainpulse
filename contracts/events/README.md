@@ -15,8 +15,10 @@ only after validated output is atomically published. Examples in
   `radar.grid.requested.v1` advance the polar-to-Hybrid-Scan workflow.
 - `analysis.cycle.opened.v1` opens a fixed UTC analysis time without waiting
   indefinitely for every radar.
-- `analysis.mosaic.requested.v1` selects versioned RadarGrid inputs and creates
-  the quality mosaic plus basic QPE.
+- `analysis.mosaic.requested.v1` is retained for the original synthetic
+  combined seam. `analysis.mosaic.requested.v2` selects versioned RadarGrid
+  inputs and creates the RP-010 `RadarMosaic` only; RP-011 QPE publishes the
+  final `RadarAnalysis` separately.
 - `nowcast.input.requested.v1` selects 3–6 committed RadarAnalysis frames for
   fixed-step gate evaluation and input construction.
 - `nowcast.input.ready.v1` proves the fixed-step input gate was satisfied.
@@ -33,8 +35,9 @@ machines to those idempotent job records.
 - Existing control-plane simulation task: `rainpulse.jobs.requested.model_pysteps_lk`
 - Real RP-006 task token: `radar_decode`; synthetic decode uses
   `radar_decode_synthetic` so it cannot compete for real commands.
-- Other synthetic domain task tokens: `radar_qc`, `radar_grid`,
-  `analysis_mosaic`, and `nowcast_input`
+- Synthetic domain task tokens use `_synthetic` suffixes and cannot compete
+  with real `radar_qc`, `radar_grid`, `analysis_mosaic`, or `nowcast_input`
+  commands.
 - Completion subject: `rainpulse.jobs.completed`
 - Failure subject: `rainpulse.jobs.failed`
 - Go terminal-result consumer: `rainpulse-orchestrator-results-v2`

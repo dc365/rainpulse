@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/configs/schemas/radar-mosaic-profile.schema.json",
+  "title": "RainPulse time alignment and quality-index mosaic profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profile_version", "algorithm_version", "analysis_cycle_version", "flag_definition_version", "grid_id", "grid_config_version", "alignment", "fusion"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "profile_version": { "$ref": "#/$defs/identifier" },
+    "algorithm_version": { "$ref": "#/$defs/identifier" },
+    "analysis_cycle_version": { "$ref": "#/$defs/identifier" },
+    "flag_definition_version": { "$ref": "#/$defs/identifier" },
+    "grid_id": { "$ref": "#/$defs/identifier" },
+    "grid_config_version": { "$ref": "#/$defs/identifier" },
+    "alignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["step_seconds", "selection", "maximum_absolute_offset_seconds", "minimum_contributors", "minimum_operational_contributors", "expected_radar_ids"],
+      "properties": {
+        "step_seconds": { "const": 300 },
+        "selection": { "const": "closest_volume_end_to_analysis_time" },
+        "maximum_absolute_offset_seconds": { "type": "integer", "minimum": 1, "maximum": 300 },
+        "minimum_contributors": { "type": "integer", "minimum": 1, "maximum": 32 },
+        "minimum_operational_contributors": { "type": "integer", "minimum": 2, "maximum": 32 },
+        "expected_radar_ids": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
+      }
+    },
+    "fusion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "minimum_quality_index", "similar_quality_max_difference", "quality_weight_power", "low_quality_threshold", "blended_source_code", "reject_flags"],
+      "properties": {
+        "method": { "const": "highest_qi_then_linear_z_blend" },
+        "minimum_quality_index": { "$ref": "#/$defs/probability" },
+        "similar_quality_max_difference": { "$ref": "#/$defs/probability" },
+        "quality_weight_power": { "type": "number", "minimum": 1, "maximum": 8 },
+        "low_quality_threshold": { "$ref": "#/$defs/probability" },
+        "blended_source_code": { "const": 65535 },
+        "reject_flags": {
+          "type": "array",
+          "items": { "enum": ["MISSING", "HARDWARE_ANOMALY"] },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    }
+  },
+  "$defs": {
+    "identifier": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$" },
+    "probability": { "type": "number", "minimum": 0, "maximum": 1 }
+  }
+}

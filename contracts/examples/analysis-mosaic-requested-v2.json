@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "event_id": "30000000-0000-4000-8000-000000000001",
+  "event_type": "analysis.mosaic.requested.v2",
+  "occurred_at": "2026-08-25T06:35:00Z",
+  "run_id": "30000000-0000-4000-8000-000000000002",
+  "job_id": "30000000-0000-4000-8000-000000000003",
+  "trace_id": "30000000-0000-4000-8000-000000000004",
+  "payload": {
+    "analysis_id": "30000000-0000-4000-8000-000000000005",
+    "analysis_time": "2026-08-25T06:35:00Z",
+    "grid_id": "fuzhou_118_123_25_27_0p01deg_v1",
+    "grid_config_version": "fuzhou-grid-0p01deg-v1",
+    "inputs": [
+      {"radar_id": "fixture_radar_a", "scan_id": "30000000-0000-4000-8000-000000000006", "grid_uri": "s3://rainpulse/fixtures/rp010/radar-a/grid.zarr", "time_offset_seconds": -20, "hybrid_scan_version": "hybrid-scan-1.0.1"},
+      {"radar_id": "fixture_radar_b", "scan_id": "30000000-0000-4000-8000-000000000007", "grid_uri": "s3://rainpulse/fixtures/rp010/radar-b/grid.zarr", "time_offset_seconds": 15, "hybrid_scan_version": "hybrid-scan-1.0.1"}
+    ],
+    "output_prefix": "s3://rainpulse/analysis/mosaic/fuzhou_118_123_25_27_0p01deg_v1/2026/08/25/063500Z/qi-mosaic-1.0.0/",
+    "mosaic_config_version": "rp010-qi-mosaic-v1",
+    "mosaic_algorithm_version": "qi-mosaic-1.0.0",
+    "flag_definition_version": "qc-flags-v1"
+  }
+}

@@ -28,8 +28,13 @@ versioned geodesic or local projected metric while retaining this output grid.
 |---|---:|---|---|
 | `DBZH_QC` | float32 | dBZ | yes |
 | `QUALITY_INDEX` | float32 | `[0, 1]` | yes |
+| `QI_METEO` | float32 | `[0, 1]`; `NaN` when unavailable | yes |
 | `QI_BLOCKAGE` | float32 | `[0, 1]` | yes |
 | `QI_BEAM_HEIGHT` | float32 | `[0, 1]` | yes |
+| `QI_ATTENUATION` | float32 | `[0, 1]`; `NaN` when unavailable | yes |
+| `QI_INTERFERENCE` | float32 | `[0, 1]`; `NaN` when unavailable | yes |
+| `QI_CALIBRATION` | float32 | `[0, 1]`; `NaN` when unavailable | yes |
+| `QI_RANGE` | float32 | `[0, 1]`; `NaN` when unavailable | yes |
 | `QC_FLAGS` | uint32 | versioned bit set | yes |
 | `SOURCE_SWEEP` | int16 | source sweep index; `-1` where missing | yes |
 | `SOURCE_ELEVATION` | float32 | degree | yes |
@@ -41,7 +46,7 @@ versioned geodesic or local projected metric while retaining this output grid.
 | `LOW_QUALITY_MASK` | uint8 | exactly 0 or 1 | yes |
 
 Required attributes include `contract_name=rainpulse.radar-grid`,
-`contract_version=1.2`, `radar_id`, `scan_id`, `grid_id`, `crs=EPSG:4326`,
+`contract_version=1.3`, `radar_id`, `scan_id`, `grid_id`, `crs=EPSG:4326`,
 inclusive coordinate-centre bounds, `longitude_interval_deg`,
 `latitude_interval_deg`, scan time, `radar_config_version`, `qc_pipeline_version`,
 `grid_config_version`, Hybrid Scan algorithm/version, and all input object
@@ -62,6 +67,11 @@ used by this grid. Each diagnostic retains partial and cumulative blockage,
 beam-centre height, terrain height, and a support mask. This evidence belongs
 to the immutable grid artifact rather than mutating the input
 `QCRadarVolume`.
+
+Every available upstream QI component from the selected polar gate is carried
+to the grid. RP-009 supplies `QI_BLOCKAGE` and `QI_BEAM_HEIGHT`; RP-010 derives
+`QI_TIME` from the actual analysis-time offset. An unavailable component stays
+`NaN` and is never silently replaced by perfect quality.
 
 Invalid or completely blocked cells remain missing. Severe blockage must not be
 compensated by a large reflectivity multiplier. Publication is atomic under
