@@ -38,7 +38,8 @@ NowcastInput gate.
 | RP-008 basic polar QC | Core vertical slice complete | Real Z9598 normalized Zarr to version-isolated QC Zarr, flags/QI/provenance, persistence/API/console and replay acceptance; ancillary-dependent modules still await operational assets |
 | RP-009 | Core vertical slice complete | Versioned polar DEM blockage, lowest-usable-elevation Hybrid Scan and real Z9598 RadarGrid accepted for engineering replay; operational metadata/cases remain gated |
 | RP-010 | Core vertical slice complete | Five-minute alignment, closest-grid selection, QI selection/linear-Z blending, RadarMosaic v1.0, persistence/API and real Z9598 single-radar replay accepted; real two-radar replay remains gated by input inventory |
-| RP-011–RP-016 | Not started | Next is QPE, followed by diagnostics, NowcastInput and nowcast models |
+| RP-011 | Core vertical slice complete | Versioned Z–R QPE, RadarAnalysis v1.2, persistence/API and real Z9598 engineering replay accepted; gauge calibration remains gated |
+| RP-012–RP-016 | Not started | Next is React QC/mosaic/QPE diagnostics, followed by NowcastInput and nowcast models |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -171,10 +172,10 @@ RP-008 now provides:
 
 Z9598 is a real-sample configuration, but it intentionally remains `draft` and
 its decoder output is marked `operational_eligible=false`. RP-008 through
-RP-010 can therefore run the real sample for controlled replay/integration
-acceptance, but it is not an operational QC, grid or mosaic feed. Real
-multi-radar acceptance, QPE, NowcastInput and forecast products remain gated or
-unimplemented until their corresponding tasks are accepted.
+RP-011 can therefore run the real sample for controlled replay/integration
+acceptance, but it is not an operational QC, grid, mosaic or QPE feed. Real
+multi-radar acceptance, gauge-validated QPE, NowcastInput and forecast products
+remain gated or unimplemented until their corresponding tasks are accepted.
 
 RP-009 now provides:
 
@@ -219,13 +220,28 @@ RP-010 now provides:
   single-radar replay, documented in
   `docs/RP010_雷达时空对齐与质量感知拼图验收记录.md`.
 
+RP-011 now provides:
+
+- strict `rp011-basic-qpe-v1` configuration for `Z = 200 R^1.6`, a `10 dBZ`
+  valid-no-rain boundary, `300 mm/h` cap and explicitly disabled gauge
+  adjustment;
+- `RATE_QPE` generation that preserves missing, valid no-rain and low-quality
+  semantics instead of turning missing coverage into zero rainfall;
+- immutable `RadarAnalysis` v1.2 with the full RP-010 mosaic provenance,
+  version-isolated atomic Zarr publication and a QPE summary;
+- deterministic QPE jobs, transactional `qpe_runs`, completion validation,
+  persisted diagnostics, a REST summary and replay-idempotent
+  `QPE_RUNNING → ANALYSIS_READY` transition;
+- a real Z9598 engineering replay documented in
+  `docs/RP011_基础QPE验收记录.md`.
+
 ## Active test environment
 
 - Target: `private-test-host`
 - Project: `<remote-project-dir>`
 - Web: `http://private-test-host:4173`
 - API: `http://private-test-host:8080/api/v1/system/status`
-- Deployed service runtime version: `rp010-v1.1-5f443d2-20260825`
+- Deployed service runtime version: `rp011-v1.1-f8759bb-20260825`
 - RP-009 ancillary runtime: `runtime/ancillary/assets`, accepted 2026-08-25
 - One-time legacy archive: `<remote-legacy-archive>`
 
@@ -239,10 +255,10 @@ Docker Hub access is unreliable. Continue to use local Linux/amd64 builds and
 export/import pinned images through `http://127.0.0.1:7897` when necessary.
 No credentials or secrets belong in this document or repository.
 
-The RP-004–RP-010 code, generated clients, tests and Linux/amd64 binaries pass
+The RP-004–RP-011 code, generated clients, tests and Linux/amd64 binaries pass
 locally. SSH public-key access to the GPU server is active; passwords are not
 stored locally. On 2026-08-24 RP-007 was deployed in place without a new source
-or database backup, followed by RP-008 through RP-010 under the same rule. The Z9598
+or database backup, followed by RP-008 through RP-011 under the same rule. The Z9598
 NAS golden sample decoded to 11 sweeps,
 3994 rays and seven canonical fields, then
 persisted a complete integrity record with no missing radials, 1.08° maximum
@@ -262,7 +278,13 @@ clutter and sea/AP gates are unresolved. RP-010 aligned this volume to
 `2026-06-15T12:05:00Z` with a `-18 s` offset and published a validated
 RadarMosaic with 3,171 valid cells, 97,530 missing cells, 3.15% valid coverage
 and mean adjusted QI `0.28919417`. It remains engineering-only because there is
-one contributor and that input is not operationally eligible. All eleven
+one contributor and that input is not operationally eligible. RP-011 converted
+the 3,171 valid cells with the versioned engineering Z–R rule: 329 are valid
+no-rain, 2,842 are rain, the mean valid-cell rate is `2.10220828 mm/h`, the
+maximum is `31.57593727 mm/h`, and no cell reached the `300 mm/h` cap. It
+published a directly validated 142-object RadarAnalysis and reached
+`ANALYSIS_READY`, while retaining the same operational degradation reasons.
+All twelve
 long-lived Compose services are healthy. Desktop 1280 px and mobile
 375 px browser checks passed without horizontal overflow or console errors. The
 retained PostgreSQL, NATS and MinIO volumes were not deleted.
@@ -276,11 +298,14 @@ of the active test environment and must not be deleted during ordinary updates.
 
 ## Next acceptance target
 
-Start RP-011 from the accepted `RadarMosaic`: freeze versioned Z–R/QPE rules,
-produce `RATE_QPE` without confusing missing coverage with no rain, retain the
-RP-010 QI/source/degradation provenance, and publish the completed
-`RadarAnalysis`. Gauge adjustment must remain disabled until representative
-gauge observations and quality rules are supplied. Real multi-radar mosaic
+Start RP-012 React diagnostics from the accepted polar QC, RadarGrid,
+RadarMosaic and RadarAnalysis products: expose original/QC comparison, QI and
+its components, flags, source radar/elevation, beam height, valid/low-quality/
+missing masks, QPE and analysis-cycle degradation state. The UI must preserve
+the distinction between polar single-radar geometry and the EPSG:4326 analysis
+grid instead of presenting them as interchangeable layers. Gauge adjustment
+remains disabled until representative gauge observations and quality rules are
+supplied. Real multi-radar mosaic
 acceptance still requires at least two ready radar configurations and
 representative synchronized volumes. Static clutter, derived coastline/sea-AP
 probability assets, verified vertical datum and a representative
@@ -343,5 +368,6 @@ make radar-health-smoke
 make radar-qc-smoke
 make radar-grid-smoke
 make test-radar-mosaic
+make test-qpe
 make smoke
 ```

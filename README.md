@@ -35,6 +35,7 @@ make radar-health-smoke
 make radar-qc-smoke
 make test-radar-grid
 make test-radar-mosaic
+make test-qpe
 make smoke
 ```
 
@@ -54,6 +55,7 @@ After `make dev-up`, the public seams are:
 - Per-scan QC summary: `http://127.0.0.1:8080/api/v1/radar-scans/{scan_id}/qc-summary`
 - Per-scan Hybrid Scan summary: `http://127.0.0.1:8080/api/v1/radar-scans/{scan_id}/grid-summary`
 - Per-cycle mosaic summary: `http://127.0.0.1:8080/api/v1/analysis-cycles/{analysis_id}/mosaic-summary`
+- Per-cycle QPE summary: `http://127.0.0.1:8080/api/v1/analysis-cycles/{analysis_id}/qpe-summary`
 - Radar fleet health: `http://127.0.0.1:8080/api/v1/radars/status`
 - Per-radar health: `http://127.0.0.1:8080/api/v1/radars/{radar_id}/status`
 - Analysis cycles: `http://127.0.0.1:8080/api/v1/analysis-cycles`
@@ -76,7 +78,12 @@ reflectivity mosaics: clearly better inputs are selected, similar-quality
 inputs are combined in linear Z, and source/QI/coverage provenance is retained.
 The single-real-radar path is accepted for engineering use; real multi-radar
 acceptance still requires a second configured radar and synchronized volume.
-QPE and downstream meteorological models remain to be implemented.
+RP-011 adds versioned engineering Z–R QPE, strict missing/no-rain/low-quality
+semantics, RadarAnalysis v1.2, persistence/API support and a real Z9598 replay.
+Gauge adjustment remains disabled until quality-controlled rain-gauge data are
+available, so this is an engineering pipeline acceptance rather than an
+operational rainfall-accuracy claim. RP-012 diagnostics and downstream
+meteorological models remain to be implemented.
 
 ## Test deployment artifacts
 
@@ -107,3 +114,5 @@ The RP-009 DEM blockage and Hybrid Scan replay is recorded in
 [`docs/RP009_DEM波束遮挡与HybridScan验收记录.md`](docs/RP009_DEM波束遮挡与HybridScan验收记录.md).
 The RP-010 time-aligned, quality-aware mosaic acceptance is recorded in
 [`docs/RP010_雷达时空对齐与质量感知拼图验收记录.md`](docs/RP010_雷达时空对齐与质量感知拼图验收记录.md).
+The RP-011 basic QPE and RadarAnalysis acceptance is recorded in
+[`docs/RP011_基础QPE验收记录.md`](docs/RP011_基础QPE验收记录.md).
