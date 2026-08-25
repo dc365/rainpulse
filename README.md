@@ -23,6 +23,8 @@ Prerequisites: Go 1.25+, Node.js 22+, pnpm 11, Python 3.11+, `uv`, `ruff`, Docke
 make bootstrap
 make contracts-check
 make test-radar-config
+make test-grid
+make test-ancillary
 make test
 make dev-up
 make infrastructure-smoke
@@ -61,9 +63,10 @@ and a read-only NAS-backed Worker profile. RP-007 adds decoded-volume integrity
 and radar-health diagnostics. RP-008 adds health-gated basic polar QC, a
 separate version-isolated QC Zarr, flags/QI/provenance, persistence/API support,
 and the radar operations console module. Ancillary-dependent clutter, sea/AP
-and DEM modules still require operational assets and representative-case
-acceptance; gridding and all downstream meteorological models are not yet
-implemented.
+modules still require representative-case acceptance. The RP-009 foundation
+freezes the Phase 1 EPSG:4326 `0.01°` Fuzhou grid and versions the accepted
+Fujian–Taiwan Copernicus GLO-30/GSHHG source assets; beam blockage, Hybrid Scan,
+gridding and downstream meteorological models are not yet implemented.
 
 ## Test deployment artifacts
 
@@ -88,3 +91,5 @@ Current implementation and deployment decisions are recorded in
 [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md). The real
 RP-008 server acceptance evidence is in
 [`docs/RP008_基础极坐标质控验收记录.md`](docs/RP008_基础极坐标质控验收记录.md).
+The accepted RP-009 grid/static-source foundation is recorded in
+[`docs/RP009_网格与静态基础数据验收记录.md`](docs/RP009_网格与静态基础数据验收记录.md).

@@ -1,6 +1,6 @@
 # RainPulse implementation status
 
-Updated: 2026-08-24
+Updated: 2026-08-25
 
 ## Active baseline
 
@@ -36,7 +36,8 @@ NowcastInput gate.
 | RP-006 first real radar decoder | Complete | CMA RSTM 2.0 decoder, Z9598 draft config, sweep-group Zarr, real Worker profile and NAS golden-sample acceptance |
 | RP-007 data integrity/radar health | Complete | Versioned health profile, real-volume integrity metrics, persistence/API and responsive React radar console |
 | RP-008 basic polar QC | Core vertical slice complete | Real Z9598 normalized Zarr to version-isolated QC Zarr, flags/QI/provenance, persistence/API/console and replay acceptance; ancillary-dependent modules still await operational assets |
-| RP-009–RP-016 | Not started | Next is DEM blockage and Hybrid Scan, followed by mosaic/QPE and the remaining nowcast chain |
+| RP-009 | In progress | EPSG:4326 grid and Fujian–Taiwan DEM/coastline sources accepted; next is beam blockage and Hybrid Scan |
+| RP-010–RP-016 | Not started | Multi-radar mosaic/QPE follows the accepted RP-009 single-radar grid |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -68,7 +69,7 @@ RP-002 now provides:
 - original-geometry `NormalizedRadarVolume`;
 - polar `QCRadarVolume` with QI components, module provenance and uint32 flags;
 - single-radar `RadarGrid`/Hybrid Scan and multi-radar `RadarAnalysis`;
-- `NowcastInput` v1.1 provenance and unchanged `ForecastOutput` semantics;
+- `NowcastInput` v1.2 and `ForecastOutput` v1.1 equal-lat/lon semantics;
 - radar receive/decode/QC/grid, analysis-cycle/mosaic, input-ready and
   forecast-run event schemas with valid examples;
 - existing common job command/result and product-published schemas;
@@ -172,13 +173,29 @@ run the real sample for controlled replay/integration acceptance, but it is not
 an operational QC feed. Gridding, QPE, NowcastInput and forecast products remain
 synthetic or unimplemented until their corresponding tasks are accepted.
 
+The RP-009 foundation now additionally provides:
+
+- immutable `fuzhou_118_123_25_27_0p01deg_v1`, EPSG:4326, `0.01°`,
+  `501 × 201`, inclusive point-centre coordinates;
+- coordinate SHA-256 and a latitude-aware WGS84 metric instead of the old
+  projected square-cell `resolution_m` assumption;
+- versioned Copernicus GLO-30 and GSHHG 2.3.7 source definitions for
+  `114–127°E`, `21–29°N`;
+- resumable, locked download and SHA/geospatial verification tooling;
+- 62 accepted GLO-30 tiles, 42 source-side ocean slots and full/high GSHHG
+  coastlines on the test server, documented in
+  `docs/RP009_网格与静态基础数据验收记录.md`;
+- distribution contracts for two-dimensional application NetCDF and aligned
+  transparent PNG layers, while retaining Zarr as the canonical internal form.
+
 ## Active test environment
 
 - Target: `private-test-host`
 - Project: `<remote-project-dir>`
 - Web: `http://private-test-host:4173`
 - API: `http://private-test-host:8080/api/v1/system/status`
-- Deployed runtime version: `rp008-v1.1-0748898-20260824`
+- Deployed service runtime version: `rp008-v1.1-0748898-20260824`
+- RP-009 ancillary runtime: `runtime/ancillary/assets`, accepted 2026-08-25
 - One-time legacy archive: `<remote-legacy-archive>`
 
 The target has 24 logical CPUs, about 156 GiB RAM, an RTX 6000D GPU, NVIDIA
@@ -215,13 +232,14 @@ of the active test environment and must not be deleted during ordinary updates.
 
 ## Next acceptance target
 
-RP-009 is next: add versioned DEM/beam-blockage handling and produce the first
-single-radar `RadarGrid`/Hybrid Scan from an accepted `QCRadarVolume`. It must
-consume QC flags and QI rather than only reflectivity, preserve coverage and
-quality masks through polar-to-Cartesian mapping, and reject unavailable or
-unversioned ancillary assets. Static clutter and coastline/sea-AP assets should
-be prepared alongside RP-009 so the currently skipped RP-008 modules can receive
-representative-case operational acceptance before multi-radar mosaic/QPE work.
+Continue RP-009 from the accepted grid/static-source foundation: calculate
+versioned polar beam height and DEM blockage for Z9598, choose the lowest usable
+elevation, and produce the first real `RadarGrid`/Hybrid Scan from an accepted
+`QCRadarVolume`. It must consume QC flags and QI rather than only reflectivity,
+preserve coverage and quality masks through polar-to-grid mapping, and reject
+unavailable or unversioned ancillary assets. Static clutter and derived
+coastline/sea-AP probability assets remain separate work before multi-radar
+mosaic/QPE operational acceptance.
 
 ## Required inputs before operational QC and gridding
 
@@ -237,12 +255,11 @@ or radar-maintainer confirmation:
 4. Business-confirmed integrity and QC thresholds for missing cuts/radials,
    field coverage, noise, anomalous values and each RP-008 rule; the current
    values are engineering defaults, not an operational sign-off.
-5. Target grid CRS, bounds, resolution and masks.
-6. DEM, coastline, static clutter and beam-blockage assets with versions and
-   datum metadata.
-7. Representative clear-air, radial-interference, sea/AP, mountain-blockage,
+5. Static clutter and derived coastline/sea-AP probability assets; DEM and raw
+   coastline sources are accepted and versioned.
+6. Representative clear-air, radial-interference, sea/AP, mountain-blockage,
    ordinary-rain, convection and typhoon cases.
-8. Later QPE truth: gauge locations, observation interval and quality rules.
+7. Later QPE truth: gauge locations, observation interval and quality rules.
 
 Until the ready-state metadata, operational ancillary assets, representative
 case labels and QC thresholds are verified, the deployed decode/QC chain remains
@@ -254,9 +271,16 @@ nowcast.
 ```bash
 make test-radar-config
 make test-contracts
+make test-grid
+make test-ancillary
 make test
 make lint
 make build
+
+# Static ancillary asset preparation on the GPU/runtime server:
+make ancillary-plan
+ANCILLARY_PROXY=http://127.0.0.1:7897 make ancillary-download
+make ancillary-verify
 
 # Deployment artifacts, when runtime code changes:
 make build-linux
