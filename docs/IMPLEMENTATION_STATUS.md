@@ -42,7 +42,7 @@ NowcastInput gate.
 | RP-012 | Core vertical slice complete | Immutable 11-layer grid/PPI diagnostic bundle, controlled PNG API, React evidence workbench and real Z9598 engineering replay accepted |
 | RP-013 | Core vertical slice complete | Strict fixed-step NowcastInput, quality/eligibility gates, immutable Zarr, persistence/events and traceable synthetic server acceptance; real sequence acceptance remains gated |
 | RP-014 | Core vertical slice complete | Real dense Lucas–Kanade and semi-Lagrangian extrapolation, physical U/V, 24 leads, persistence/translation baselines, immutable ForecastOutput, persistence/events and synthetic server replay; real forecast-skill acceptance remains gated |
-| RP-015 | Complete for synthetic vertical acceptance | ForecastOutput-derived PNG/COG/NetCDF products, point/area APIs, product events, server replay and the responsive React short-nowcast workspace are accepted; real forecast skill remains gated |
+| RP-015 | Complete for synthetic vertical acceptance | ForecastOutput-derived PNG/COG/NetCDF products, point/area APIs, product events, server replay and the responsive OpenLayers short-nowcast GIS are accepted; real forecast skill remains gated |
 | RP-016 | Not started | Verification, fault injection and end-to-end operational acceptance follow the accepted RP-015 boundary |
 
 The old execution labels map to v1.1 by capability, not by their previous
@@ -282,10 +282,12 @@ RP-015 application delivery now provides:
   statistics and `PUBLISHED` SSE delivery;
 - server replay idempotency and event-route regression coverage, documented in
   `docs/RP015_应用产品与API验收记录.md`;
-- a responsive React short-nowcast workspace with a georeferenced Fuzhou rain
-  layer, authoritative lightweight GSHHG coastline, frozen rain legend, 24-frame
-  five-minute timeline and direct PNG/COG/NetCDF delivery links;
-- keyboard-operable map point selection, 24-lead point trend and confidence,
+- a responsive React/OpenLayers short-nowcast GIS with a configurable XYZ
+  basemap, EPSG:4326 graticule and scale, correctly georeferenced Fuzhou rain
+  layer, authoritative lightweight GSHHG coastline and frozen rain legend;
+- a 24-frame five-minute playback timeline with previous/next and keyboard
+  scrubbing, plus direct PNG/COG/NetCDF delivery links;
+- map-click point selection, 24-lead point trend and confidence,
   named-area/bbox statistics, source/product SHA provenance and an explicit
   warning that publication status does not prove forecast skill;
 - deployed browser acceptance at 1440, 768, 375 and 320 px with no page-level
@@ -368,7 +370,9 @@ and full replay event routing are pinned by regression tests, and all three
 product publication outbox events are published. All sixteen long-lived Compose
 services are healthy. Desktop 1440 px, tablet 768 px and mobile 375/320 px
 browser checks passed; the default short-nowcast view reads the accepted real
-product APIs and has no console error or warning. The
+product APIs into two OpenLayers canvas layers. Zooming requests a new XYZ tile
+level, map clicks update the EPSG:4326 point query, and timeline playback keeps
+map, time, statistics and assets synchronized. There is no console error or warning. The
 retained PostgreSQL, NATS and MinIO volumes were not deleted.
 
 The local repository is the code source of truth. Deployment and integration
