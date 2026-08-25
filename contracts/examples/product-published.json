@@ -2,27 +2,27 @@
   "schema_version": "1.0",
   "event_id": "398fb42f-7104-40c6-a9bb-a870d1ad55dd",
   "event_type": "product.published",
-  "occurred_at": "2026-08-24T03:01:02Z",
-  "run_id": "f3641335-13a3-4f68-96c0-56a5e0e684d7",
+  "occurred_at": "2026-08-25T10:01:02Z",
+  "run_id": "0ce8e90c-3160-5e5d-874d-1eda09bf1084",
   "job_id": "5ce7b3af-5458-425c-b4ad-2749083357db",
   "trace_id": "0d049a59-754c-4405-8a31-d789685056c2",
   "payload": {
     "product_id": "afef83d9-ae5c-432d-a27e-960456cbfe78",
     "product_type": "rain_rate",
     "model_id": "pysteps-lk",
-    "model_version": "pysteps-lk-v1",
-    "config_version": "baseline-v1",
-    "grid_id": "fuzhou_1km_v1",
-    "issue_time": "2026-08-24T03:00:00Z",
+    "model_version": "pysteps-lk-1.0.0",
+    "config_version": "rp015-application-products-v1",
+    "grid_id": "fuzhou_118_123_25_27_0p01deg_v1",
+    "issue_time": "2026-08-25T10:00:00Z",
     "valid_times": [
-      "2026-08-24T03:05:00Z",
-      "2026-08-24T03:10:00Z"
+      "2026-08-25T10:05:00Z",
+      "2026-08-25T10:10:00Z"
     ],
     "assets": [
       {
         "asset_id": "c4eccf4e-af9b-4090-8238-de1820f60247",
-        "asset_type": "rain_rate_cog",
-        "uri": "s3://rainpulse/products/f3641335-13a3-4f68-96c0-56a5e0e684d7/pysteps-lk/rain-rate-t005.tif",
+        "asset_type": "cloud_optimized_geotiff",
+        "uri": "s3://rainpulse/products/0ce8e90c-3160-5e5d-874d-1eda09bf1084/pysteps-lk/pysteps-lk-1.0.0/distribution/rp015-application-products-v1/application-products/rain_rate/lead-005/field.tif",
         "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
         "size_bytes": 262144,
         "media_type": "image/tiff; application=geotiff; profile=cloud-optimized",

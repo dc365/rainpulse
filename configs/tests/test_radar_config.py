@@ -399,3 +399,21 @@ def test_rp014_pysteps_lk_profile_freezes_motion_and_baselines() -> None:
     assert profile["motion"]["fallback"] == "zero_motion_when_insufficient_features"
     assert profile["extrapolation"]["lead_count"] == 24
     assert profile["extrapolation"]["baselines"] == ["persistence", "translation"]
+
+
+def test_rp015_product_profile_freezes_all_distribution_formats() -> None:
+    schema = json.loads(
+        (CONFIG_ROOT / "schemas" / "product-builder-profile.schema.json").read_text()
+    )
+    profile = yaml.safe_load(
+        (CONFIG_ROOT / "products" / "rp015-application-products-v1.yaml").read_text()
+    )
+
+    Draft202012Validator.check_schema(schema)
+    Draft202012Validator(schema).validate(profile)
+    assert profile["bundle_contract_version"] == "1.0"
+    assert profile["forecast_output_contract_version"] == "1.1"
+    assert profile["outputs"]["png"] == {"enabled": True, "north_up": True}
+    assert profile["outputs"]["cog"]["compression"] == "DEFLATE"
+    assert profile["outputs"]["netcdf"]["format"] == "NETCDF3_CLASSIC"
+    assert profile["outputs"]["netcdf"]["fill_value"] == -9999.0

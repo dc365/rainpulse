@@ -29,6 +29,9 @@ only after validated output is atomically published. Examples in
   together with persistence and whole-field translation diagnostics.
 - `forecast.baseline.ready.v1` proves that the validated 24-step ForecastOutput
   was committed before the forecast run entered `BASELINE_READY`.
+- `product.build.requested.v1` consumes exactly one committed ForecastOutput
+  and atomically publishes the rain-rate, 0 to 1 hour and 0 to 2 hour product
+  suite before the run enters `PUBLISHED`.
 
 `job.requested`, `job.completed`, and `job.failed` remain the common worker
 command/result envelope. RP-004 will map the three domain workflow state
@@ -46,6 +49,8 @@ machines to those idempotent job records.
   commands.
 - The real RP-014 task uses `rainpulse.jobs.requested.pysteps_lk`; the legacy
   simulation remains isolated on `rainpulse.jobs.requested.model_pysteps_lk`.
+- The RP-015 application-product task uses
+  `rainpulse.jobs.requested.product_build`.
 - Completion subject: `rainpulse.jobs.completed`
 - Failure subject: `rainpulse.jobs.failed`
 - Go terminal-result consumer: `rainpulse-orchestrator-results-v2`

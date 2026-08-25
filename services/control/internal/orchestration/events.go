@@ -51,6 +51,11 @@ const (
 	PystepsLKModelVersion                 = "pysteps-lk-1.0.0"
 	ForecastBaselineReadyEventType        = "forecast.baseline.ready.v1"
 	ForecastBaselineReadySubject          = "rainpulse.jobs.lifecycle.forecast_baseline_ready"
+	ProductBuildRequestedEventType        = "product.build.requested.v1"
+	ProductBuildRequestedSubject          = "rainpulse.jobs.requested.product_build"
+	ProductBuildJobType                   = "product.build"
+	ProductPublishedEventType             = "product.published"
+	ProductPublishedSubject               = "rainpulse.products.published"
 	JobCompletedSubject                   = "rainpulse.jobs.completed"
 	JobFailedSubject                      = "rainpulse.jobs.failed"
 	JobResultsSubject                     = "rainpulse.jobs.*"
@@ -321,6 +326,71 @@ type ForecastBaselineReadyPayload struct {
 	LeadStep     int       `json:"lead_step_minutes"`
 	ValidFrom    time.Time `json:"valid_from"`
 	ValidTo      time.Time `json:"valid_to"`
+}
+
+type ProductIDs struct {
+	RainRate        uuid.UUID `json:"rain_rate"`
+	Accumulation60  uuid.UUID `json:"accumulation_60"`
+	Accumulation120 uuid.UUID `json:"accumulation_120"`
+}
+
+type ProductBuildRequested struct {
+	SchemaVersion string                       `json:"schema_version"`
+	EventID       uuid.UUID                    `json:"event_id"`
+	EventType     string                       `json:"event_type"`
+	OccurredAt    time.Time                    `json:"occurred_at"`
+	RunID         uuid.UUID                    `json:"run_id"`
+	JobID         uuid.UUID                    `json:"job_id"`
+	TraceID       uuid.UUID                    `json:"trace_id"`
+	Payload       ProductBuildRequestedPayload `json:"payload"`
+}
+
+type ProductBuildRequestedPayload struct {
+	InputURI              string     `json:"input_uri"`
+	InputSHA256           string     `json:"input_sha256"`
+	OutputPrefix          string     `json:"output_prefix"`
+	ModelRunID            uuid.UUID  `json:"model_run_id"`
+	IssueTime             time.Time  `json:"issue_time"`
+	GridID                string     `json:"grid_id"`
+	ModelID               string     `json:"model_id"`
+	ModelVersion          string     `json:"model_version"`
+	ModelConfigVersion    string     `json:"model_config_version"`
+	ProductConfigVersion  string     `json:"product_config_version"`
+	ProductBundleContract string     `json:"product_bundle_contract_version"`
+	ProductIDs            ProductIDs `json:"product_ids"`
+}
+
+type ProductPublished struct {
+	SchemaVersion string                  `json:"schema_version"`
+	EventID       uuid.UUID               `json:"event_id"`
+	EventType     string                  `json:"event_type"`
+	OccurredAt    time.Time               `json:"occurred_at"`
+	RunID         uuid.UUID               `json:"run_id"`
+	JobID         uuid.UUID               `json:"job_id"`
+	TraceID       uuid.UUID               `json:"trace_id"`
+	Payload       ProductPublishedPayload `json:"payload"`
+}
+
+type ProductPublishedPayload struct {
+	ProductID    uuid.UUID               `json:"product_id"`
+	ProductType  workflow.ProductType    `json:"product_type"`
+	ModelID      string                  `json:"model_id"`
+	ModelVersion string                  `json:"model_version"`
+	Config       string                  `json:"config_version"`
+	GridID       string                  `json:"grid_id"`
+	IssueTime    time.Time               `json:"issue_time"`
+	ValidTimes   []time.Time             `json:"valid_times"`
+	Assets       []ProductPublishedAsset `json:"assets"`
+}
+
+type ProductPublishedAsset struct {
+	AssetID    uuid.UUID `json:"asset_id"`
+	AssetType  string    `json:"asset_type"`
+	URI        string    `json:"uri"`
+	SHA256     string    `json:"sha256"`
+	SizeBytes  int64     `json:"size_bytes"`
+	MediaType  string    `json:"media_type,omitempty"`
+	LeadMinute *int      `json:"lead_time_minutes,omitempty"`
 }
 
 type JobCompleted struct {

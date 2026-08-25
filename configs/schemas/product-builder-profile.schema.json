@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/configs/schemas/product-builder-profile.schema.json",
+  "title": "RainPulse RP-015 application product builder profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_version",
+    "builder_version",
+    "bundle_contract_version",
+    "forecast_output_contract_version",
+    "grid_id",
+    "grid_config_version",
+    "palette",
+    "outputs"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "profile_version": { "type": "string", "minLength": 1 },
+    "builder_version": { "type": "string", "minLength": 1 },
+    "bundle_contract_version": { "const": "1.0" },
+    "forecast_output_contract_version": { "const": "1.1" },
+    "grid_id": { "type": "string", "minLength": 1 },
+    "grid_config_version": { "type": "string", "minLength": 1 },
+    "palette": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "transparent_below_mm",
+        "opacity",
+        "rain_rate",
+        "rainfall_amount"
+      ],
+      "properties": {
+        "version": { "type": "string", "minLength": 1 },
+        "transparent_below_mm": { "type": "number", "minimum": 0 },
+        "opacity": { "type": "integer", "minimum": 1, "maximum": 255 },
+        "rain_rate": { "$ref": "#/$defs/stops" },
+        "rainfall_amount": { "$ref": "#/$defs/stops" }
+      }
+    },
+    "outputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["png", "cog", "netcdf", "point_query_index"],
+      "properties": {
+        "png": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "north_up"],
+          "properties": {
+            "enabled": { "const": true },
+            "north_up": { "const": true }
+          }
+        },
+        "cog": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "compression", "block_size"],
+          "properties": {
+            "enabled": { "const": true },
+            "compression": { "enum": ["DEFLATE"] },
+            "block_size": { "type": "integer", "minimum": 128, "maximum": 512 }
+          }
+        },
+        "netcdf": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "format", "fill_value", "legacy_profile"],
+          "properties": {
+            "enabled": { "const": true },
+            "format": { "const": "NETCDF3_CLASSIC" },
+            "fill_value": { "const": -9999.0 },
+            "legacy_profile": { "const": "numerical-model-example-v1" }
+          }
+        },
+        "point_query_index": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "contract_version"],
+          "properties": {
+            "enabled": { "const": true },
+            "contract_version": { "const": "1.0" }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "stops": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["minimum", "color"],
+        "properties": {
+          "minimum": { "type": "number", "minimum": 0 },
+          "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" }
+        }
+      }
+    }
+  }
+}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -615,6 +616,63 @@ func TestCreatePystepsLKSchedulesOnlyCommittedInputReadyRun(t *testing.T) {
 	}
 }
 
+func TestCreateProductBuildSchedulesThreeProductsFromCommittedBaseline(t *testing.T) {
+	repository := &fakeRepository{}
+	now := time.Date(2026, 8, 25, 12, 10, 2, 0, time.UTC)
+	service := NewService(repository, Options{Now: func() time.Time { return now }})
+	input := ProductBuildInput{
+		RunID:                 uuid.MustParse("97000000-0000-4000-8000-000000000001"),
+		ModelRunID:            uuid.MustParse("97000000-0000-4000-8000-000000000002"),
+		IssueTime:             now.Truncate(5 * time.Minute),
+		GridID:                "fuzhou_118_123_25_27_0p01deg_v1",
+		CurrentStatus:         workflow.RunBaselineReady,
+		ForecastURI:           "s3://rainpulse/products/run/pysteps-lk/pysteps-lk-1.0.0/forecast.zarr",
+		ForecastSHA256:        strings.Repeat("a", 64),
+		InputAssetIDs:         []uuid.UUID{uuid.MustParse("97000000-0000-4000-8000-000000000003")},
+		ModelID:               PystepsLKModelID,
+		ModelVersion:          PystepsLKModelVersion,
+		ModelConfigVersion:    "rp014-pysteps-lk-v1",
+		ProductConfigVersion:  "rp015-application-products-v1",
+		ProductBundleContract: "1.0",
+		ProductConfig:         json.RawMessage(`{"profile_version":"rp015-application-products-v1"}`),
+		ProductConfigSHA256:   strings.Repeat("b", 64),
+	}
+
+	run, job, err := service.CreateProductBuild(context.Background(), input)
+	if err != nil {
+		t.Fatalf("CreateProductBuild() error = %v", err)
+	}
+	if run.Status != workflow.RunProductBuilding || job.JobType != ProductBuildJobType {
+		t.Fatalf("unexpected product workflow state: run=%s job=%s", run.Status, job.JobType)
+	}
+	var requested ProductBuildRequested
+	if err := json.Unmarshal(repository.productBuild.Outbox.Payload, &requested); err != nil {
+		t.Fatalf("decode product request: %v", err)
+	}
+	if requested.EventType != ProductBuildRequestedEventType ||
+		repository.productBuild.Outbox.Subject != ProductBuildRequestedSubject ||
+		requested.Payload.InputSHA256 != input.ForecastSHA256 ||
+		requested.Payload.ProductIDs.RainRate == uuid.Nil ||
+		requested.Payload.ProductIDs.Accumulation60 == uuid.Nil ||
+		requested.Payload.ProductIDs.Accumulation120 == uuid.Nil {
+		t.Fatalf("unexpected product request: %#v", requested)
+	}
+	if !strings.HasSuffix(
+		requested.Payload.OutputPrefix,
+		"/distribution/rp015-application-products-v1/",
+	) {
+		t.Fatalf("unexpected product output prefix: %s", requested.Payload.OutputPrefix)
+	}
+	secondRun, secondJob, err := service.CreateProductBuild(context.Background(), input)
+	if err != nil || secondRun.ID != run.ID || secondJob.ID != job.ID {
+		t.Fatalf("product workflow identifiers are not deterministic: %v", err)
+	}
+	input.CurrentStatus = workflow.RunInputReady
+	if _, _, err := service.CreateProductBuild(context.Background(), input); err == nil {
+		t.Fatal("product build accepted a run before BASELINE_READY")
+	}
+}
+
 type fakeRepository struct {
 	created             workflow.CreateBundle
 	radarDecode         workflow.RadarDecodeBundle
@@ -625,6 +683,7 @@ type fakeRepository struct {
 	analysisDiagnostics workflow.AnalysisDiagnosticsBundle
 	nowcastInput        workflow.NowcastInputBundle
 	pystepsLK           workflow.PystepsLKBundle
+	productBuild        workflow.ProductBuildBundle
 	domain              workflow.DomainSimulation
 	claimed             workflow.OutboxEvent
 	published           uuid.UUID
@@ -645,6 +704,14 @@ func (repository *fakeRepository) CreatePystepsLKBundle(
 	bundle workflow.PystepsLKBundle,
 ) error {
 	repository.pystepsLK = bundle
+	return nil
+}
+
+func (repository *fakeRepository) CreateProductBuildBundle(
+	_ context.Context,
+	bundle workflow.ProductBuildBundle,
+) error {
+	repository.productBuild = bundle
 	return nil
 }
 

@@ -15,6 +15,7 @@ import (
 )
 
 const maximumDiagnosticLayerBytes = 16 << 20
+const MaximumProductAssetBytes = 32 << 20
 
 var ErrNotFound = errors.New("object not found")
 
@@ -81,6 +82,99 @@ func (reader *Reader) Read(
 		return nil, "", fmt.Errorf("diagnostic layer exceeds the API size limit")
 	}
 	return data, strings.Trim(info.ETag, "\""), nil
+}
+
+func (reader *Reader) ReadObject(
+	ctx context.Context,
+	objectURI string,
+	maximumBytes int64,
+) ([]byte, string, error) {
+	bucket, objectName, err := parseObjectURI(objectURI)
+	if err != nil {
+		return nil, "", err
+	}
+	if maximumBytes <= 0 || maximumBytes > MaximumProductAssetBytes {
+		return nil, "", fmt.Errorf("product object size limit is invalid")
+	}
+	info, err := reader.client.StatObject(ctx, bucket, objectName, minio.StatObjectOptions{})
+	if err != nil {
+		if isNotFound(err) {
+			return nil, "", ErrNotFound
+		}
+		return nil, "", fmt.Errorf("stat product object: %w", err)
+	}
+	if info.Size < 0 || info.Size > maximumBytes {
+		return nil, "", fmt.Errorf("product object exceeds the API size limit")
+	}
+	object, err := reader.client.GetObject(ctx, bucket, objectName, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, "", fmt.Errorf("open product object: %w", err)
+	}
+	defer object.Close()
+	data, err := io.ReadAll(io.LimitReader(object, maximumBytes+1))
+	if err != nil {
+		return nil, "", fmt.Errorf("read product object: %w", err)
+	}
+	if int64(len(data)) > maximumBytes {
+		return nil, "", fmt.Errorf("product object exceeds the API size limit")
+	}
+	return data, strings.Trim(info.ETag, "\""), nil
+}
+
+func (reader *Reader) ReadRange(
+	ctx context.Context,
+	objectURI string,
+	offset int64,
+	length int64,
+) ([]byte, int64, string, error) {
+	bucket, objectName, err := parseObjectURI(objectURI)
+	if err != nil {
+		return nil, 0, "", err
+	}
+	if offset < 0 || length <= 0 || length > MaximumProductAssetBytes {
+		return nil, 0, "", fmt.Errorf("product object range is invalid")
+	}
+	info, err := reader.client.StatObject(ctx, bucket, objectName, minio.StatObjectOptions{})
+	if err != nil {
+		if isNotFound(err) {
+			return nil, 0, "", ErrNotFound
+		}
+		return nil, 0, "", fmt.Errorf("stat product object range: %w", err)
+	}
+	if offset > info.Size || length > info.Size-offset {
+		return nil, 0, "", fmt.Errorf("product object range exceeds object size")
+	}
+	options := minio.GetObjectOptions{}
+	if err := options.SetRange(offset, offset+length-1); err != nil {
+		return nil, 0, "", fmt.Errorf("set product object range: %w", err)
+	}
+	object, err := reader.client.GetObject(ctx, bucket, objectName, options)
+	if err != nil {
+		return nil, 0, "", fmt.Errorf("open product object range: %w", err)
+	}
+	defer object.Close()
+	data, err := io.ReadAll(io.LimitReader(object, length+1))
+	if err != nil {
+		return nil, 0, "", fmt.Errorf("read product object range: %w", err)
+	}
+	if int64(len(data)) != length {
+		return nil, 0, "", fmt.Errorf("product object range byte length differs")
+	}
+	return data, info.Size, strings.Trim(info.ETag, "\""), nil
+}
+
+func parseObjectURI(objectURI string) (string, string, error) {
+	parsed, err := url.Parse(objectURI)
+	if err != nil || parsed.Scheme != "s3" || parsed.Host == "" ||
+		parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", "", fmt.Errorf("product object URI is invalid")
+	}
+	objectName := strings.Trim(parsed.Path, "/")
+	if objectName == "" || path.Clean(objectName) != objectName ||
+		strings.HasPrefix(objectName, "../") {
+		return "", "", fmt.Errorf("product object key is invalid")
+	}
+	return parsed.Host, objectName, nil
 }
 
 func isNotFound(err error) bool {

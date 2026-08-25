@@ -61,6 +61,8 @@ func main() {
 			Observations:     store,
 			Commands:         commands,
 			DiagnosticLayers: diagnosticLayers,
+			Products:         store,
+			ProductObjects:   diagnosticLayers,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,

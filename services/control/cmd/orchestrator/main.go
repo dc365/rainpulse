@@ -135,6 +135,15 @@ func main() {
 			slog.Error("create pySTEPS-LK workflow", "error", err)
 			os.Exit(1)
 		}
+	case "product-build":
+		if len(os.Args) != 4 {
+			slog.Error("product-build requires a forecast run UUID and product config YAML")
+			os.Exit(2)
+		}
+		if err := productBuild(ctx, store, service, os.Args[2], os.Args[3]); err != nil {
+			slog.Error("create application product workflow", "error", err)
+			os.Exit(1)
+		}
 	case "complete":
 		if len(os.Args) != 3 {
 			slog.Error("complete requires a job UUID")
@@ -238,6 +247,14 @@ type pystepsLKConfiguration struct {
 		LeadStepMinutes int      `yaml:"lead_step_minutes"`
 		Baselines       []string `yaml:"baselines"`
 	} `yaml:"extrapolation"`
+}
+
+type productConfiguration struct {
+	ProfileVersion                string `yaml:"profile_version"`
+	BundleContractVersion         string `yaml:"bundle_contract_version"`
+	ForecastOutputContractVersion string `yaml:"forecast_output_contract_version"`
+	GridID                        string `yaml:"grid_id"`
+	GridConfigVersion             string `yaml:"grid_config_version"`
 }
 
 func radarDecode(
@@ -766,6 +783,60 @@ func pystepsLK(
 	return json.NewEncoder(os.Stdout).Encode(map[string]any{
 		"run_id": run.ID.String(), "job_id": job.ID.String(),
 		"issue_time": run.IssueTime, "input_asset_count": len(input.InputAssetIDs),
+	})
+}
+
+func productBuild(
+	ctx context.Context,
+	store *postgresstore.Store,
+	service *orchestration.Service,
+	rawRunID string,
+	configPath string,
+) error {
+	runID, err := uuid.Parse(rawRunID)
+	if err != nil {
+		return fmt.Errorf("parse product-build run UUID: %w", err)
+	}
+	configBytes, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("read product-build configuration: %w", err)
+	}
+	var config productConfiguration
+	if err := yaml.Unmarshal(configBytes, &config); err != nil {
+		return fmt.Errorf("decode product-build configuration: %w", err)
+	}
+	if config.BundleContractVersion != "1.0" ||
+		config.ForecastOutputContractVersion != "1.1" ||
+		config.GridID == "" || config.GridConfigVersion == "" {
+		return fmt.Errorf("product-build configuration differs from RP-015")
+	}
+	var configValue map[string]any
+	if err := yaml.Unmarshal(configBytes, &configValue); err != nil {
+		return fmt.Errorf("normalize product-build configuration: %w", err)
+	}
+	configJSON, err := json.Marshal(configValue)
+	if err != nil {
+		return fmt.Errorf("encode product-build configuration: %w", err)
+	}
+	input, err := store.GetProductBuildInput(ctx, runID)
+	if err != nil {
+		return err
+	}
+	if input.GridID != config.GridID {
+		return fmt.Errorf("product-build grid differs from committed ForecastOutput")
+	}
+	configHash := sha256.Sum256(configBytes)
+	input.ProductConfigVersion = config.ProfileVersion
+	input.ProductBundleContract = config.BundleContractVersion
+	input.ProductConfig = configJSON
+	input.ProductConfigSHA256 = fmt.Sprintf("%x", configHash)
+	run, job, err := service.CreateProductBuild(ctx, input)
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(os.Stdout).Encode(map[string]any{
+		"run_id": run.ID.String(), "job_id": job.ID.String(),
+		"issue_time": run.IssueTime, "forecast_uri": input.ForecastURI,
 	})
 }
 

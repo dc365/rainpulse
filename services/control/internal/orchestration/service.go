@@ -25,6 +25,7 @@ type Repository interface {
 	CreateAnalysisDiagnosticsBundle(context.Context, workflow.AnalysisDiagnosticsBundle) error
 	CreateNowcastInputBundle(context.Context, workflow.NowcastInputBundle) error
 	CreatePystepsLKBundle(context.Context, workflow.PystepsLKBundle) error
+	CreateProductBuildBundle(context.Context, workflow.ProductBuildBundle) error
 	CreateDomainSimulation(context.Context, workflow.DomainSimulation) error
 	GetRun(context.Context, uuid.UUID) (workflow.Run, error)
 	GetJob(context.Context, uuid.UUID) (workflow.Job, error)
@@ -178,6 +179,24 @@ type PystepsLKInput struct {
 	BaselineModels          []string
 	Config                  json.RawMessage
 	ConfigSHA256            string
+}
+
+type ProductBuildInput struct {
+	RunID                 uuid.UUID
+	ModelRunID            uuid.UUID
+	IssueTime             time.Time
+	GridID                string
+	CurrentStatus         workflow.RunStatus
+	ForecastURI           string
+	ForecastSHA256        string
+	InputAssetIDs         []uuid.UUID
+	ModelID               string
+	ModelVersion          string
+	ModelConfigVersion    string
+	ProductConfigVersion  string
+	ProductBundleContract string
+	ProductConfig         json.RawMessage
+	ProductConfigSHA256   string
 }
 
 type Publisher interface {
@@ -994,6 +1013,121 @@ func validatePystepsLKInput(input PystepsLKInput) error {
 	if len(input.Config) == 0 || !json.Valid(input.Config) ||
 		!sha256Pattern.MatchString(input.ConfigSHA256) {
 		return fmt.Errorf("pySTEPS-LK configuration and SHA-256 are required")
+	}
+	return nil
+}
+
+func (service *Service) CreateProductBuild(
+	ctx context.Context,
+	input ProductBuildInput,
+) (workflow.Run, workflow.Job, error) {
+	if err := validateProductBuildInput(input); err != nil {
+		return workflow.Run{}, workflow.Job{}, err
+	}
+	now := service.now().UTC()
+	jobID := stableID(
+		"application-product-job",
+		input.RunID.String(),
+		input.ModelRunID.String(),
+		input.ProductConfigVersion,
+	)
+	traceID := stableID("application-product-trace", jobID.String())
+	eventID := stableID("application-product-request", jobID.String())
+	productIDs := map[workflow.ProductType]uuid.UUID{
+		workflow.ProductRainRate: stableID(
+			"application-product", jobID.String(), string(workflow.ProductRainRate),
+		),
+		workflow.ProductAccumulation60: stableID(
+			"application-product", jobID.String(), string(workflow.ProductAccumulation60),
+		),
+		workflow.ProductAccumulation120: stableID(
+			"application-product", jobID.String(), string(workflow.ProductAccumulation120),
+		),
+	}
+	outputPrefix := fmt.Sprintf(
+		"s3://rainpulse/products/%s/%s/%s/distribution/%s/",
+		input.RunID,
+		url.PathEscape(input.ModelID),
+		url.PathEscape(input.ModelVersion),
+		url.PathEscape(input.ProductConfigVersion),
+	)
+	request := ProductBuildRequested{
+		SchemaVersion: SchemaVersion,
+		EventID:       eventID,
+		EventType:     ProductBuildRequestedEventType,
+		OccurredAt:    now,
+		RunID:         input.RunID,
+		JobID:         jobID,
+		TraceID:       traceID,
+		Payload: ProductBuildRequestedPayload{
+			InputURI: input.ForecastURI, InputSHA256: input.ForecastSHA256,
+			OutputPrefix: outputPrefix, ModelRunID: input.ModelRunID,
+			IssueTime: input.IssueTime.UTC(), GridID: input.GridID,
+			ModelID: input.ModelID, ModelVersion: input.ModelVersion,
+			ModelConfigVersion:    input.ModelConfigVersion,
+			ProductConfigVersion:  input.ProductConfigVersion,
+			ProductBundleContract: input.ProductBundleContract,
+			ProductIDs: ProductIDs{
+				RainRate:        productIDs[workflow.ProductRainRate],
+				Accumulation60:  productIDs[workflow.ProductAccumulation60],
+				Accumulation120: productIDs[workflow.ProductAccumulation120],
+			},
+		},
+	}
+	payload, err := json.Marshal(request)
+	if err != nil {
+		return workflow.Run{}, workflow.Job{}, fmt.Errorf("encode product-build request: %w", err)
+	}
+	run := workflow.Run{
+		ID: input.RunID, IssueTime: input.IssueTime.UTC(), GridID: input.GridID,
+		Status: workflow.RunProductBuilding, UpdatedAt: now,
+	}
+	job := workflow.Job{
+		ID: jobID, RunID: input.RunID, TraceID: traceID, JobType: ProductBuildJobType,
+		ModelID: input.ModelID, ModelVersion: input.ModelVersion,
+		ConfigVersion: input.ProductConfigVersion, Status: workflow.JobPending,
+		Attempt: 1, RequestPayload: payload, CreatedAt: now,
+	}
+	bundle := workflow.ProductBuildBundle{
+		Run: run, ModelRunID: input.ModelRunID,
+		ForecastURI: input.ForecastURI, ForecastSHA256: input.ForecastSHA256,
+		InputAssetIDs: input.InputAssetIDs, ProductIDs: productIDs,
+		ModelConfigVersion: input.ModelConfigVersion,
+		ProductConfig:      input.ProductConfig, ProductConfigSHA256: input.ProductConfigSHA256,
+		BundleContract: input.ProductBundleContract, Job: job,
+		Outbox: workflow.OutboxEvent{
+			ID: eventID, AggregateID: jobID.String(),
+			EventType: ProductBuildRequestedEventType,
+			Subject:   ProductBuildRequestedSubject, Payload: payload,
+		},
+	}
+	if err := service.repository.CreateProductBuildBundle(ctx, bundle); err != nil {
+		return workflow.Run{}, workflow.Job{}, err
+	}
+	return run, job, nil
+}
+
+func validateProductBuildInput(input ProductBuildInput) error {
+	parsed, err := url.ParseRequestURI(input.ForecastURI)
+	if input.RunID == uuid.Nil || input.ModelRunID == uuid.Nil || input.IssueTime.IsZero() ||
+		input.GridID == "" || err != nil || parsed.Scheme != "s3" ||
+		!sha256Pattern.MatchString(input.ForecastSHA256) {
+		return fmt.Errorf("product build requires a committed ForecastOutput identity")
+	}
+	if input.CurrentStatus != workflow.RunBaselineReady {
+		return fmt.Errorf("product build requires forecast run state BASELINE_READY")
+	}
+	if !input.IssueTime.UTC().Equal(input.IssueTime.UTC().Truncate(5 * time.Minute)) {
+		return fmt.Errorf("product build issue time must be on a five-minute UTC boundary")
+	}
+	if input.ModelID != PystepsLKModelID || input.ModelVersion != PystepsLKModelVersion ||
+		input.ModelConfigVersion == "" || input.ProductConfigVersion == "" ||
+		input.ProductBundleContract != "1.0" {
+		return fmt.Errorf("product build model or contract identity differs from RP-015")
+	}
+	if len(input.InputAssetIDs) == 0 || len(input.ProductConfig) == 0 ||
+		!json.Valid(input.ProductConfig) || !sha256Pattern.MatchString(input.ProductConfigSHA256) {
+		return fmt.Errorf("product build provenance and configuration are required")
 	}
 	return nil
 }

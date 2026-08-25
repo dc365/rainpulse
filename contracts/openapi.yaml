@@ -375,6 +375,32 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ProductAsset"
+  /products/{product_id}/assets/{asset_id}/content:
+    get:
+      operationId: getProductAssetContent
+      tags: [products]
+      summary: Read one immutable registered product asset
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+        - $ref: "#/components/parameters/AssetId"
+      responses:
+        "200":
+          description: Registered product object bytes
+          headers:
+            ETag:
+              schema:
+                type: string
+          content:
+            image/png:
+              schema: { type: string, format: binary }
+            image/tiff:
+              schema: { type: string, format: binary }
+            application/x-netcdf:
+              schema: { type: string, format: binary }
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "404":
+          $ref: "#/components/responses/NotFound"
   /point-forecast:
     get:
       operationId: getPointForecast
@@ -437,6 +463,14 @@ paths:
               format: double
           style: form
           explode: false
+        - name: lead_time_minutes
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 5
+            maximum: 120
+            multipleOf: 5
       responses:
         "200":
           description: Area statistics
@@ -570,6 +604,13 @@ components:
         format: uuid
     ProductId:
       name: product_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AssetId:
+      name: asset_id
       in: path
       required: true
       schema:
@@ -1707,6 +1748,10 @@ components:
         - config_version
         - grid_id
         - issue_time
+        - valid_times
+        - member_count
+        - source_forecast_uri
+        - source_forecast_sha256
         - created_at
       properties:
         product_id:
@@ -1736,6 +1781,12 @@ components:
         member_count:
           type: integer
           minimum: 1
+        source_forecast_uri:
+          type: string
+          format: uri
+        source_forecast_sha256:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
         created_at:
           type: string
           format: date-time
@@ -1754,7 +1805,7 @@ components:
     ProductAsset:
       type: object
       additionalProperties: false
-      required: [asset_id, asset_type, uri, media_type, sha256, size_bytes, created_at]
+      required: [asset_id, asset_type, uri, content_url, media_type, sha256, size_bytes, created_at]
       properties:
         asset_id:
           type: string
@@ -1764,6 +1815,9 @@ components:
         uri:
           type: string
           format: uri
+        content_url:
+          type: string
+          format: uri-reference
         media_type:
           type: string
         sha256:
@@ -1775,6 +1829,34 @@ components:
           minimum: 0
         lead_time_minutes:
           type: integer
+          minimum: 0
+          nullable: true
+        valid_time:
+          type: string
+          format: date-time
+          nullable: true
+        unit:
+          type: string
+          nullable: true
+        coverage_ratio:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          nullable: true
+        valid_cell_count:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+        missing_cell_count:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+        no_rain_cell_count:
+          type: integer
+          format: int64
           minimum: 0
           nullable: true
         created_at:
@@ -1807,7 +1889,7 @@ components:
     PointForecast:
       type: object
       additionalProperties: false
-      required: [product_id, longitude, latitude, values]
+      required: [product_id, longitude, latitude, grid_longitude, grid_latitude, values]
       properties:
         product_id:
           type: string
@@ -1818,6 +1900,12 @@ components:
         latitude:
           type: number
           format: double
+        grid_longitude:
+          type: number
+          format: double
+        grid_latitude:
+          type: number
+          format: double
         values:
           type: array
           items:
@@ -1825,7 +1913,16 @@ components:
     AreaStatistics:
       type: object
       additionalProperties: false
-      required: [product_id, bbox, valid_pixel_ratio, max_rain_rate, mean_rain_rate]
+      required:
+        - product_id
+        - bbox
+        - valid_time
+        - lead_time_minutes
+        - valid_pixel_ratio
+        - valid_pixel_count
+        - missing_pixel_count
+        - max_rain_rate
+        - mean_rain_rate
       properties:
         product_id:
           type: string
@@ -1837,6 +1934,21 @@ components:
           items:
             type: number
             format: double
+        valid_time:
+          type: string
+          format: date-time
+        lead_time_minutes:
+          type: integer
+          minimum: 5
+          maximum: 120
+        valid_pixel_count:
+          type: integer
+          format: int64
+          minimum: 0
+        missing_pixel_count:
+          type: integer
+          format: int64
+          minimum: 0
         valid_pixel_ratio:
           type: number
           format: float

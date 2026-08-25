@@ -28,8 +28,15 @@ EVENT_NAMES = (
     "forecast-run-requested",
     "forecast-pysteps-lk-requested",
     "forecast-baseline-ready",
+    "product-build-requested",
 )
-JOB_EVENT_NAMES = ("job-requested", "job-completed", "job-failed", "product-published")
+JOB_EVENT_NAMES = (
+    "job-requested",
+    "job-completed",
+    "job-failed",
+    "product-published",
+    "product-build-requested",
+)
 
 
 @pytest.mark.parametrize("event_name", EVENT_NAMES)
@@ -76,6 +83,7 @@ def test_openapi_exposes_the_planned_v1_operations() -> None:
         "/products",
         "/products/{product_id}",
         "/products/{product_id}/assets",
+        "/products/{product_id}/assets/{asset_id}/content",
         "/point-forecast",
         "/area-statistics",
         "/verification/summary",
@@ -218,6 +226,7 @@ def test_rp014_forecast_output_freezes_deterministic_baseline_diagnostics() -> N
 
 
 def test_distribution_contracts_preserve_grid_and_missing_semantics() -> None:
+    bundle = (CONTRACTS_ROOT / "data" / "application-product-bundle.md").read_text()
     netcdf = (CONTRACTS_ROOT / "data" / "application-rainfall-netcdf.md").read_text()
     rendered = (CONTRACTS_ROOT / "data" / "rendered-rainfall-layer.md").read_text()
 
@@ -228,3 +237,7 @@ def test_distribution_contracts_preserve_grid_and_missing_semantics() -> None:
     assert "501 × 201" in rendered
     assert "[117.995, 24.995, 123.005, 27.005]" in rendered
     assert "half-pixel alignment error" in rendered
+    assert "contract_version=1.0" in bundle
+    assert "exactly three immutable product identities" in bundle
+    assert "point-query index" in bundle
+    assert "must never be converted to valid zero" in bundle

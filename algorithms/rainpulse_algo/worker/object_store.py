@@ -239,6 +239,12 @@ def artifact_sha256(objects: Mapping[str, bytes]) -> str:
 def _content_type(key: str) -> str:
     if key.endswith((".json", ".zattrs", ".zarray", ".zgroup")):
         return "application/json"
+    if key.endswith(".png"):
+        return "image/png"
+    if key.endswith((".tif", ".tiff")):
+        return "image/tiff"
+    if key.endswith(".nc"):
+        return "application/x-netcdf"
     return "application/octet-stream"
 
 

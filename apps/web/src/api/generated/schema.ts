@@ -361,6 +361,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/products/{product_id}/assets/{asset_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one immutable registered product asset */
+        get: operations["getProductAssetContent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/point-forecast": {
         parameters: {
             query?: never;
@@ -946,8 +963,11 @@ export interface components {
             grid_id: string;
             /** Format: date-time */
             issue_time: string;
-            valid_times?: string[];
-            member_count?: number;
+            valid_times: string[];
+            member_count: number;
+            /** Format: uri */
+            source_forecast_uri: string;
+            source_forecast_sha256: string;
             /** Format: date-time */
             created_at: string;
         };
@@ -961,11 +981,24 @@ export interface components {
             asset_type: string;
             /** Format: uri */
             uri: string;
+            /** Format: uri-reference */
+            content_url: string;
             media_type: string;
             sha256: string;
             /** Format: int64 */
             size_bytes: number;
             lead_time_minutes?: number | null;
+            /** Format: date-time */
+            valid_time?: string | null;
+            unit?: string | null;
+            /** Format: float */
+            coverage_ratio?: number | null;
+            /** Format: int64 */
+            valid_cell_count?: number | null;
+            /** Format: int64 */
+            missing_cell_count?: number | null;
+            /** Format: int64 */
+            no_rain_cell_count?: number | null;
             /** Format: date-time */
             created_at: string;
         };
@@ -989,12 +1022,23 @@ export interface components {
             longitude: number;
             /** Format: double */
             latitude: number;
+            /** Format: double */
+            grid_longitude: number;
+            /** Format: double */
+            grid_latitude: number;
             values: components["schemas"]["PointForecastValue"][];
         };
         AreaStatistics: {
             /** Format: uuid */
             product_id: string;
             bbox: number[];
+            /** Format: date-time */
+            valid_time: string;
+            lead_time_minutes: number;
+            /** Format: int64 */
+            valid_pixel_count: number;
+            /** Format: int64 */
+            missing_pixel_count: number;
             /** Format: float */
             valid_pixel_ratio: number;
             /** Format: float */
@@ -1053,6 +1097,7 @@ export interface components {
     parameters: {
         RunId: string;
         ProductId: string;
+        AssetId: string;
         ModelId: string;
         RadarId: string;
         ScanId: string;
@@ -1548,6 +1593,34 @@ export interface operations {
             };
         };
     };
+    getProductAssetContent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: components["parameters"]["ProductId"];
+                asset_id: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Registered product object bytes */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                    "image/tiff": string;
+                    "application/x-netcdf": string;
+                    "application/octet-stream": string;
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
     getPointForecast: {
         parameters: {
             query: {
@@ -1579,6 +1652,7 @@ export interface operations {
                 product_id: string;
                 /** @description min longitude, min latitude, max longitude, max latitude */
                 bbox: number[];
+                lead_time_minutes: number;
             };
             header?: never;
             path?: never;

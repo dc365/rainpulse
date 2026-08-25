@@ -3,7 +3,11 @@ package api_test
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
+	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -340,6 +344,134 @@ func TestAnalysisDiagnosticsExposeManifestAndOnlyListedPNGLayer(t *testing.T) {
 	}
 }
 
+func TestProductCatalogContentAndIndexedQueries(t *testing.T) {
+	now := time.Date(2026, 8, 25, 12, 10, 0, 0, time.UTC)
+	productID := uuid.MustParse("98000000-0000-4000-8000-000000000001")
+	pngID := uuid.MustParse("98000000-0000-4000-8000-000000000002")
+	indexID := uuid.MustParse("98000000-0000-4000-8000-000000000003")
+	validTimes := make([]time.Time, 24)
+	for index := range validTimes {
+		validTimes[index] = now.Add(time.Duration(index+1) * 5 * time.Minute)
+	}
+	product := workflow.Product{
+		ID: productID, RunID: uuid.New(), ModelRunID: uuid.New(),
+		ProductType: workflow.ProductRainRate,
+		ModelID:     "pysteps-lk", ModelVersion: "pysteps-lk-1.0.0",
+		ConfigVersion: "rp015-application-products-v1",
+		GridID:        "tiny", IssueTime: now, ValidTimes: validTimes, MemberCount: 1,
+		SourceForecastURI:    "s3://rainpulse/forecast.zarr",
+		SourceForecastSHA256: strings.Repeat("a", 64), CreatedAt: now,
+	}
+	png := []byte("\x89PNG\r\n\x1a\nfixture")
+	pngSHA := fmt.Sprintf("%x", sha256.Sum256(png))
+	pointIndex := pointIndexFixture()
+	pointSHA := fmt.Sprintf("%x", sha256.Sum256(pointIndex))
+	coverage := 5.0 / 6.0
+	lead := 5
+	assets := []workflow.ProductAsset{
+		{
+			ID: pngID, ProductID: productID, AssetType: "rendered_png",
+			ObjectURI: "s3://rainpulse/products/layer.png", MediaType: "image/png",
+			SHA256: pngSHA, SizeBytes: int64(len(png)), LeadMinutes: &lead,
+			ValidTime: &validTimes[0],
+			Metadata: json.RawMessage(fmt.Sprintf(
+				`{"unit":"mm h-1","coverage_ratio":%f,"valid_cell_count":5,"missing_cell_count":1,"no_rain_cell_count":1}`,
+				coverage,
+			)), CreatedAt: now,
+		},
+		{
+			ID: indexID, ProductID: productID, AssetType: "point_query_index",
+			ObjectURI: "s3://rainpulse/products/point-index.bin",
+			MediaType: "application/vnd.rainpulse.point-index",
+			SHA256:    pointSHA, SizeBytes: int64(len(pointIndex)), CreatedAt: now,
+		},
+	}
+	store := &fakeProductStore{product: product, assets: assets}
+	reader := &fakeProductObjectReader{objects: map[string][]byte{
+		assets[0].ObjectURI: png, assets[1].ObjectURI: pointIndex,
+	}}
+	handler := api.NewHandler(api.Options{
+		Version: "test", Products: store, ProductObjects: reader,
+	})
+
+	assert := func(target string, wantStatus int, want string) *httptest.ResponseRecorder {
+		t.Helper()
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, target, nil))
+		if response.Code != wantStatus || !strings.Contains(response.Body.String(), want) {
+			t.Fatalf(
+				"GET %s: status=%d body=%s missing=%q",
+				target, response.Code, response.Body.String(), want,
+			)
+		}
+		return response
+	}
+	assert(
+		"/api/v1/products",
+		http.StatusOK,
+		`"source_forecast_sha256":"`+strings.Repeat("a", 64)+`"`,
+	)
+	assert(
+		"/api/v1/products/"+productID.String()+"/assets",
+		http.StatusOK,
+		`"content_url":"/api/v1/products/`+productID.String()+
+			`/assets/`+pngID.String()+`/content"`,
+	)
+	content := assert(
+		"/api/v1/products/"+productID.String()+"/assets/"+pngID.String()+"/content",
+		http.StatusOK,
+		"fixture",
+	)
+	if content.Header().Get("ETag") != `"`+pngSHA+`"` ||
+		content.Header().Get("Content-Type") != "image/png" {
+		t.Fatalf("unexpected product content headers: %#v", content.Header())
+	}
+	assert(
+		"/api/v1/point-forecast?product_id="+productID.String()+
+			"&longitude=118.01&latitude=25.01",
+		http.StatusOK,
+		`"grid_longitude":118.01`,
+	)
+	area := assert(
+		"/api/v1/area-statistics?product_id="+productID.String()+
+			"&bbox=118,25,118.02,25.01&lead_time_minutes=5",
+		http.StatusOK,
+		`"missing_pixel_count":1`,
+	)
+	if !strings.Contains(
+		area.Body.String(),
+		fmt.Sprintf(`"valid_pixel_ratio":%g`, float32(coverage)),
+	) {
+		t.Fatalf("area response lost coverage ratio: %s", area.Body.String())
+	}
+}
+
+func pointIndexFixture() []byte {
+	const width, height, leads, recordBytes, headerBytes = 3, 2, 24, 5, 64
+	data := make([]byte, headerBytes+width*height*leads*recordBytes)
+	copy(data[:8], []byte{'R', 'P', 'P', 'N', 'T', 'V', '1', 0})
+	binary.BigEndian.PutUint16(data[8:10], width)
+	binary.BigEndian.PutUint16(data[10:12], height)
+	binary.BigEndian.PutUint16(data[12:14], leads)
+	binary.BigEndian.PutUint16(data[14:16], recordBytes)
+	binary.BigEndian.PutUint64(data[16:24], math.Float64bits(118))
+	binary.BigEndian.PutUint64(data[24:32], math.Float64bits(25))
+	binary.BigEndian.PutUint64(data[32:40], math.Float64bits(0.01))
+	binary.BigEndian.PutUint64(data[40:48], math.Float64bits(0.01))
+	for cell := range width * height {
+		for lead := range leads {
+			offset := headerBytes + (cell*leads+lead)*recordBytes
+			binary.BigEndian.PutUint32(
+				data[offset:offset+4], math.Float32bits(float32(cell+lead)),
+			)
+			data[offset+4] = 254
+		}
+	}
+	binary.BigEndian.PutUint32(data[64:68], math.Float32bits(float32(math.NaN())))
+	data[68] = 255
+	return data
+}
+
 type fakeRunStore struct {
 	run  workflow.Run
 	jobs []workflow.Job
@@ -535,4 +667,85 @@ func (reader *fakeDiagnosticLayerReader) Read(
 	reader.artifactURI = artifactURI
 	reader.relativePath = relativePath
 	return reader.data, reader.etag, nil
+}
+
+type fakeProductStore struct {
+	product workflow.Product
+	assets  []workflow.ProductAsset
+}
+
+func (store *fakeProductStore) ListProducts(
+	context.Context,
+	int,
+	*time.Time,
+	*uuid.UUID,
+	*string,
+	*workflow.ProductType,
+) ([]workflow.Product, *time.Time, error) {
+	return []workflow.Product{store.product}, nil, nil
+}
+
+func (store *fakeProductStore) GetProduct(
+	_ context.Context,
+	productID uuid.UUID,
+) (workflow.Product, error) {
+	if store.product.ID != productID {
+		return workflow.Product{}, workflow.ErrNotFound
+	}
+	return store.product, nil
+}
+
+func (store *fakeProductStore) ListProductAssets(
+	_ context.Context,
+	productID uuid.UUID,
+) ([]workflow.ProductAsset, error) {
+	if store.product.ID != productID {
+		return nil, workflow.ErrNotFound
+	}
+	return store.assets, nil
+}
+
+func (store *fakeProductStore) GetProductAsset(
+	_ context.Context,
+	productID uuid.UUID,
+	assetID uuid.UUID,
+) (workflow.ProductAsset, error) {
+	for _, asset := range store.assets {
+		if asset.ProductID == productID && asset.ID == assetID {
+			return asset, nil
+		}
+	}
+	return workflow.ProductAsset{}, workflow.ErrNotFound
+}
+
+type fakeProductObjectReader struct {
+	objects map[string][]byte
+}
+
+func (reader *fakeProductObjectReader) ReadObject(
+	_ context.Context,
+	objectURI string,
+	_ int64,
+) ([]byte, string, error) {
+	data, exists := reader.objects[objectURI]
+	if !exists {
+		return nil, "", workflow.ErrNotFound
+	}
+	return data, "fixture", nil
+}
+
+func (reader *fakeProductObjectReader) ReadRange(
+	_ context.Context,
+	objectURI string,
+	offset int64,
+	length int64,
+) ([]byte, int64, string, error) {
+	data, exists := reader.objects[objectURI]
+	if !exists {
+		return nil, 0, "", workflow.ErrNotFound
+	}
+	if offset < 0 || length < 0 || offset+length > int64(len(data)) {
+		return nil, 0, "", fmt.Errorf("invalid fixture range")
+	}
+	return data[offset : offset+length], int64(len(data)), "fixture", nil
 }

@@ -261,3 +261,34 @@ class PystepsLKPayload(ObjectTaskPayload):
 class PystepsLKRequested(DomainRequest):
     event_type: Literal["forecast.pysteps_lk.requested.v1"]
     payload: PystepsLKPayload
+
+
+class ProductIDs(ContractModel):
+    rain_rate: UUID
+    accumulation_60: UUID
+    accumulation_120: UUID
+
+    @model_validator(mode="after")
+    def validate_unique_ids(self) -> ProductIDs:
+        values = (self.rain_rate, self.accumulation_60, self.accumulation_120)
+        if any(value.int == 0 for value in values) or len(set(values)) != len(values):
+            raise ValueError("product IDs must be non-nil and unique")
+        return self
+
+
+class ProductBuildPayload(ObjectTaskPayload):
+    input_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    model_run_id: UUID
+    issue_time: datetime
+    grid_id: str = Field(min_length=1)
+    model_id: Literal["pysteps-lk"]
+    model_version: str = Field(min_length=1)
+    model_config_version: str = Field(min_length=1)
+    product_config_version: str = Field(min_length=1)
+    product_bundle_contract_version: Literal["1.0"]
+    product_ids: ProductIDs
+
+
+class ProductBuildRequested(DomainRequest):
+    event_type: Literal["product.build.requested.v1"]
+    payload: ProductBuildPayload

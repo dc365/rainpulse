@@ -13,6 +13,7 @@ from .domain_contracts import (
     AnalysisMosaicRequestedV2,
     AnalysisQPERequestedV1,
     NowcastInputRequested,
+    ProductBuildRequested,
     PystepsLKRequested,
     RadarDecodeRequested,
     RadarGridRequested,
@@ -59,6 +60,12 @@ def _execute_pysteps_lk(request: PystepsLKRequested) -> WorkerResult:
     from rainpulse_algo.nowcast.pysteps_worker import execute_pysteps_lk
 
     return execute_pysteps_lk(request)
+
+
+def _execute_product_build(request: ProductBuildRequested) -> WorkerResult:
+    from rainpulse_algo.products.worker import execute_product_build
+
+    return execute_product_build(request)
 
 
 def _synthetic_executor(stage: str) -> Callable[[Any], WorkerResult]:
@@ -212,6 +219,17 @@ HANDLERS = {
         executor=_execute_pysteps_lk,
         asset_type="forecast_output",
         artifact_name="forecast.zarr",
+        ack_wait_seconds=900,
+    ),
+    "product-builder": TaskHandler(
+        profile="product-builder",
+        subject="rainpulse.jobs.requested.product_build",
+        consumer="rainpulse-product-builder-1-0-0",
+        request_model=ProductBuildRequested,
+        executor=_execute_product_build,
+        asset_type="application_product_bundle",
+        artifact_name="application-products",
+        media_type="application/vnd.rainpulse.application-product-bundle+json",
         ack_wait_seconds=900,
     ),
 }

@@ -2,14 +2,17 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"path"
 	"time"
 
 	apiv1 "github.com/fonwee/rainpulse-nowcast/services/control/internal/api/generated"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/objectstore"
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/productquery"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/workflow"
 	"github.com/google/uuid"
 )
@@ -47,12 +50,33 @@ type DiagnosticLayerReader interface {
 	Read(context.Context, string, string) ([]byte, string, error)
 }
 
+type ProductStore interface {
+	ListProducts(
+		context.Context,
+		int,
+		*time.Time,
+		*uuid.UUID,
+		*string,
+		*workflow.ProductType,
+	) ([]workflow.Product, *time.Time, error)
+	GetProduct(context.Context, uuid.UUID) (workflow.Product, error)
+	ListProductAssets(context.Context, uuid.UUID) ([]workflow.ProductAsset, error)
+	GetProductAsset(context.Context, uuid.UUID, uuid.UUID) (workflow.ProductAsset, error)
+}
+
+type ProductObjectReader interface {
+	ReadObject(context.Context, string, int64) ([]byte, string, error)
+	ReadRange(context.Context, string, int64, int64) ([]byte, int64, string, error)
+}
+
 type Options struct {
 	Version          string
 	Runs             RunStore
 	Observations     ObservationStore
 	Commands         RunCommands
 	DiagnosticLayers DiagnosticLayerReader
+	Products         ProductStore
+	ProductObjects   ProductObjectReader
 	SSEPollInterval  time.Duration
 }
 
@@ -63,6 +87,8 @@ type server struct {
 	observations     ObservationStore
 	commands         RunCommands
 	diagnosticLayers DiagnosticLayerReader
+	products         ProductStore
+	productObjects   ProductObjectReader
 	ssePollInterval  time.Duration
 }
 
@@ -77,6 +103,8 @@ func NewHandler(options Options) http.Handler {
 		observations:     options.Observations,
 		commands:         options.Commands,
 		diagnosticLayers: options.DiagnosticLayers,
+		products:         options.Products,
+		productObjects:   options.ProductObjects,
 		ssePollInterval:  pollInterval,
 	}, apiv1.ChiServerOptions{BaseURL: "/api/v1"})
 }
@@ -504,6 +532,298 @@ func (service *server) GetDiagnosticLayer(
 	_, _ = response.Write(data)
 }
 
+func (service *server) ListProducts(
+	response http.ResponseWriter,
+	request *http.Request,
+	params apiv1.ListProductsParams,
+) {
+	if service.products == nil {
+		writeServiceUnavailable(response)
+		return
+	}
+	limit := 50
+	if params.Limit != nil {
+		limit = *params.Limit
+	}
+	var cursor *time.Time
+	if params.Cursor != nil {
+		parsed, err := time.Parse(time.RFC3339Nano, *params.Cursor)
+		if err != nil {
+			writeError(response, http.StatusBadRequest, "invalid_cursor", "cursor must be an RFC3339 timestamp")
+			return
+		}
+		cursor = &parsed
+	}
+	var productType *workflow.ProductType
+	if params.ProductType != nil {
+		value := workflow.ProductType(*params.ProductType)
+		productType = &value
+	}
+	products, next, err := service.products.ListProducts(
+		request.Context(), limit, cursor, params.RunId, params.ModelId, productType,
+	)
+	if err != nil {
+		writeStoreError(response, err)
+		return
+	}
+	items := make([]apiv1.Product, 0, len(products))
+	for _, product := range products {
+		items = append(items, toAPIProduct(product))
+	}
+	page := apiv1.ProductPage{Items: items}
+	if next != nil {
+		value := next.UTC().Format(time.RFC3339Nano)
+		page.NextCursor = &value
+	}
+	writeJSON(response, http.StatusOK, page)
+}
+
+func (service *server) GetProduct(
+	response http.ResponseWriter,
+	request *http.Request,
+	productID apiv1.ProductId,
+) {
+	if service.products == nil {
+		writeServiceUnavailable(response)
+		return
+	}
+	product, err := service.products.GetProduct(request.Context(), productID)
+	if err != nil {
+		writeStoreError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, toAPIProduct(product))
+}
+
+func (service *server) ListProductAssets(
+	response http.ResponseWriter,
+	request *http.Request,
+	productID apiv1.ProductId,
+) {
+	if service.products == nil {
+		writeServiceUnavailable(response)
+		return
+	}
+	assets, err := service.products.ListProductAssets(request.Context(), productID)
+	if err != nil {
+		writeStoreError(response, err)
+		return
+	}
+	items := make([]apiv1.ProductAsset, 0, len(assets))
+	for _, asset := range assets {
+		items = append(items, toAPIProductAsset(asset))
+	}
+	writeJSON(response, http.StatusOK, items)
+}
+
+func (service *server) GetProductAssetContent(
+	response http.ResponseWriter,
+	request *http.Request,
+	productID apiv1.ProductId,
+	assetID apiv1.AssetId,
+) {
+	if service.products == nil || service.productObjects == nil {
+		writeServiceUnavailable(response)
+		return
+	}
+	asset, err := service.products.GetProductAsset(request.Context(), productID, assetID)
+	if err != nil {
+		writeStoreError(response, err)
+		return
+	}
+	data, _, err := service.productObjects.ReadObject(
+		request.Context(), asset.ObjectURI, objectstore.MaximumProductAssetBytes,
+	)
+	if err != nil {
+		writeProductObjectError(response, err)
+		return
+	}
+	if int64(len(data)) != asset.SizeBytes || fmt.Sprintf("%x", sha256.Sum256(data)) != asset.SHA256 ||
+		!validProductSignature(asset.MediaType, data) {
+		writeError(
+			response,
+			http.StatusBadGateway,
+			"invalid_product_asset",
+			"registered product asset failed integrity validation",
+		)
+		return
+	}
+	etag := fmt.Sprintf("%q", asset.SHA256)
+	if request.Header.Get("If-None-Match") == etag {
+		response.WriteHeader(http.StatusNotModified)
+		return
+	}
+	response.Header().Set("Content-Type", asset.MediaType)
+	response.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
+	response.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	response.Header().Set("X-Content-Type-Options", "nosniff")
+	response.Header().Set("ETag", etag)
+	if asset.MediaType != "image/png" {
+		response.Header().Set(
+			"Content-Disposition",
+			fmt.Sprintf("attachment; filename=%q", path.Base(asset.ObjectURI)),
+		)
+	}
+	response.WriteHeader(http.StatusOK)
+	_, _ = response.Write(data)
+}
+
+func (service *server) GetPointForecast(
+	response http.ResponseWriter,
+	request *http.Request,
+	params apiv1.GetPointForecastParams,
+) {
+	product, asset, header, ok := service.loadPointIndex(
+		response, request, params.ProductId,
+	)
+	if !ok {
+		return
+	}
+	row, column, gridLongitude, gridLatitude, err := header.Point(
+		params.Longitude, params.Latitude,
+	)
+	if err != nil {
+		writeError(response, http.StatusBadRequest, "point_outside_grid", err.Error())
+		return
+	}
+	offset, _ := header.CellOffset(row, column)
+	data, totalSize, _, err := service.productObjects.ReadRange(
+		request.Context(), asset.ObjectURI, offset, header.CellBytes(),
+	)
+	if err != nil {
+		writeProductObjectError(response, err)
+		return
+	}
+	if totalSize != asset.SizeBytes || totalSize != header.ExpectedSize() {
+		writeError(response, http.StatusBadGateway, "invalid_point_index", "point index size differs")
+		return
+	}
+	values, err := header.DecodeCell(data)
+	if err != nil || len(product.ValidTimes) != len(values) {
+		writeError(response, http.StatusBadGateway, "invalid_point_index", "point index values differ")
+		return
+	}
+	result := make([]apiv1.PointForecastValue, len(values))
+	for index, value := range values {
+		result[index] = apiv1.PointForecastValue{
+			ValidTime: product.ValidTimes[index].UTC(), LeadTimeMinutes: (index + 1) * 5,
+			RainRate: value.RainRate, Confidence: value.Confidence, Valid: value.Valid,
+		}
+	}
+	writeJSON(response, http.StatusOK, apiv1.PointForecast{
+		ProductId: product.ID, Longitude: params.Longitude, Latitude: params.Latitude,
+		GridLongitude: gridLongitude, GridLatitude: gridLatitude, Values: result,
+	})
+}
+
+func (service *server) GetAreaStatistics(
+	response http.ResponseWriter,
+	request *http.Request,
+	params apiv1.GetAreaStatisticsParams,
+) {
+	product, asset, header, ok := service.loadPointIndex(
+		response, request, params.ProductId,
+	)
+	if !ok {
+		return
+	}
+	window, err := header.BoundingBox(params.Bbox)
+	if err != nil {
+		writeError(response, http.StatusBadRequest, "bbox_outside_grid", err.Error())
+		return
+	}
+	start, _ := header.CellOffset(window.RowStart, window.ColumnStart)
+	end, _ := header.CellOffset(window.RowEnd, window.ColumnEnd)
+	length := end - start + header.CellBytes()
+	data, totalSize, _, err := service.productObjects.ReadRange(
+		request.Context(), asset.ObjectURI, start, length,
+	)
+	if err != nil {
+		writeProductObjectError(response, err)
+		return
+	}
+	if totalSize != asset.SizeBytes || totalSize != header.ExpectedSize() {
+		writeError(response, http.StatusBadGateway, "invalid_point_index", "point index size differs")
+		return
+	}
+	width := window.ColumnEnd - window.ColumnStart + 1
+	rows := make([][]byte, window.RowEnd-window.RowStart+1)
+	rowStride := int64(header.Width) * header.CellBytes()
+	rowLength := int64(width) * header.CellBytes()
+	for index := range rows {
+		offset := int64(index) * rowStride
+		rows[index] = data[offset : offset+rowLength]
+	}
+	statistics, err := header.SummarizeRows(rows, window, params.LeadTimeMinutes)
+	if err != nil {
+		writeError(response, http.StatusBadRequest, "invalid_lead_time", err.Error())
+		return
+	}
+	total := statistics.ValidCount + statistics.MissingCount
+	ratio := float32(0)
+	if total > 0 {
+		ratio = float32(float64(statistics.ValidCount) / float64(total))
+	}
+	writeJSON(response, http.StatusOK, apiv1.AreaStatistics{
+		ProductId: product.ID, Bbox: params.Bbox,
+		ValidTime:       product.IssueTime.UTC().Add(time.Duration(params.LeadTimeMinutes) * time.Minute),
+		LeadTimeMinutes: params.LeadTimeMinutes,
+		ValidPixelRatio: ratio, ValidPixelCount: statistics.ValidCount,
+		MissingPixelCount: statistics.MissingCount,
+		MaxRainRate:       float32(statistics.Maximum), MeanRainRate: float32(statistics.Mean),
+	})
+}
+
+func (service *server) loadPointIndex(
+	response http.ResponseWriter,
+	request *http.Request,
+	productID uuid.UUID,
+) (workflow.Product, workflow.ProductAsset, productquery.Header, bool) {
+	if service.products == nil || service.productObjects == nil {
+		writeServiceUnavailable(response)
+		return workflow.Product{}, workflow.ProductAsset{}, productquery.Header{}, false
+	}
+	product, err := service.products.GetProduct(request.Context(), productID)
+	if err != nil {
+		writeStoreError(response, err)
+		return workflow.Product{}, workflow.ProductAsset{}, productquery.Header{}, false
+	}
+	if product.ProductType != workflow.ProductRainRate {
+		writeError(response, http.StatusBadRequest, "unsupported_product", "point queries require rain_rate")
+		return workflow.Product{}, workflow.ProductAsset{}, productquery.Header{}, false
+	}
+	assets, err := service.products.ListProductAssets(request.Context(), productID)
+	if err != nil {
+		writeStoreError(response, err)
+		return workflow.Product{}, workflow.ProductAsset{}, productquery.Header{}, false
+	}
+	var index workflow.ProductAsset
+	for _, candidate := range assets {
+		if candidate.AssetType == "point_query_index" &&
+			candidate.MediaType == "application/vnd.rainpulse.point-index" {
+			index = candidate
+			break
+		}
+	}
+	if index.ID == uuid.Nil {
+		writeError(response, http.StatusNotFound, "not_found", "point-query index was not found")
+		return workflow.Product{}, workflow.ProductAsset{}, productquery.Header{}, false
+	}
+	headerData, totalSize, _, err := service.productObjects.ReadRange(
+		request.Context(), index.ObjectURI, 0, productquery.HeaderBytes,
+	)
+	if err != nil {
+		writeProductObjectError(response, err)
+		return workflow.Product{}, workflow.ProductAsset{}, productquery.Header{}, false
+	}
+	header, err := productquery.ParseHeader(headerData)
+	if err != nil || totalSize != index.SizeBytes || totalSize != header.ExpectedSize() {
+		writeError(response, http.StatusBadGateway, "invalid_point_index", "point index header differs")
+		return workflow.Product{}, workflow.ProductAsset{}, productquery.Header{}, false
+	}
+	return product, index, header, true
+}
+
 func (service *server) StreamEvents(response http.ResponseWriter, request *http.Request, params apiv1.StreamEventsParams) {
 	selected := 0
 	for _, present := range []bool{params.RunId != nil, params.ScanId != nil, params.AnalysisId != nil} {
@@ -873,6 +1193,53 @@ func toAPIDiagnostics(value workflow.AnalysisDiagnostics) apiv1.DiagnosticBundle
 	}
 }
 
+func toAPIProduct(product workflow.Product) apiv1.Product {
+	validTimes := make([]time.Time, len(product.ValidTimes))
+	for index, value := range product.ValidTimes {
+		validTimes[index] = value.UTC()
+	}
+	return apiv1.Product{
+		ProductId: product.ID, RunId: product.RunID,
+		ProductType: apiv1.ProductType(product.ProductType),
+		ModelId:     product.ModelID, ModelVersion: product.ModelVersion,
+		ConfigVersion: product.ConfigVersion, GridId: product.GridID,
+		IssueTime: product.IssueTime.UTC(), ValidTimes: validTimes,
+		MemberCount:          product.MemberCount,
+		SourceForecastUri:    product.SourceForecastURI,
+		SourceForecastSha256: product.SourceForecastSHA256,
+		CreatedAt:            product.CreatedAt.UTC(),
+	}
+}
+
+func toAPIProductAsset(asset workflow.ProductAsset) apiv1.ProductAsset {
+	var metadata struct {
+		Unit             string   `json:"unit"`
+		CoverageRatio    *float64 `json:"coverage_ratio"`
+		ValidCellCount   *int64   `json:"valid_cell_count"`
+		MissingCellCount *int64   `json:"missing_cell_count"`
+		NoRainCellCount  *int64   `json:"no_rain_cell_count"`
+	}
+	_ = json.Unmarshal(asset.Metadata, &metadata)
+	var unit *string
+	if metadata.Unit != "" {
+		unit = &metadata.Unit
+	}
+	return apiv1.ProductAsset{
+		AssetId: asset.ID, AssetType: asset.AssetType,
+		Uri: asset.ObjectURI,
+		ContentUrl: fmt.Sprintf(
+			"/api/v1/products/%s/assets/%s/content", asset.ProductID, asset.ID,
+		),
+		MediaType: asset.MediaType, Sha256: asset.SHA256, SizeBytes: asset.SizeBytes,
+		LeadTimeMinutes: asset.LeadMinutes, ValidTime: utcPointer(asset.ValidTime),
+		Unit: unit, CoverageRatio: float32Pointer(metadata.CoverageRatio),
+		ValidCellCount:   metadata.ValidCellCount,
+		MissingCellCount: metadata.MissingCellCount,
+		NoRainCellCount:  metadata.NoRainCellCount,
+		CreatedAt:        asset.CreatedAt.UTC(),
+	}
+}
+
 func utcPointer(value *time.Time) *time.Time {
 	if value == nil {
 		return nil
@@ -899,6 +1266,35 @@ func writeStoreError(response http.ResponseWriter, err error) {
 		return
 	}
 	writeError(response, http.StatusInternalServerError, "internal_error", "control-plane operation failed")
+}
+
+func writeProductObjectError(response http.ResponseWriter, err error) {
+	if errors.Is(err, objectstore.ErrNotFound) {
+		writeError(response, http.StatusNotFound, "not_found", "product object was not found")
+		return
+	}
+	writeError(
+		response,
+		http.StatusBadGateway,
+		"object_store_error",
+		"product object could not be read",
+	)
+}
+
+func validProductSignature(mediaType string, data []byte) bool {
+	switch mediaType {
+	case "image/png":
+		return len(data) >= 8 && string(data[:8]) == "\x89PNG\r\n\x1a\n"
+	case "image/tiff; application=geotiff; profile=cloud-optimized":
+		return len(data) >= 4 &&
+			(string(data[:4]) == "II*\x00" || string(data[:4]) == "MM\x00*")
+	case "application/x-netcdf":
+		return len(data) >= 4 && (string(data[:4]) == "CDF\x01" || string(data[:4]) == "CDF\x02")
+	case "application/vnd.rainpulse.point-index":
+		return len(data) >= 8 && string(data[:8]) == "RPPNTV1\x00"
+	default:
+		return false
+	}
 }
 
 func writeServiceUnavailable(response http.ResponseWriter) {

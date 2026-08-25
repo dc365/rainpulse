@@ -519,11 +519,15 @@ type AnalysisRadarState string
 
 // AreaStatistics defines model for AreaStatistics.
 type AreaStatistics struct {
-	Bbox            []float64          `json:"bbox"`
-	MaxRainRate     float32            `json:"max_rain_rate"`
-	MeanRainRate    float32            `json:"mean_rain_rate"`
-	ProductId       openapi_types.UUID `json:"product_id"`
-	ValidPixelRatio float32            `json:"valid_pixel_ratio"`
+	Bbox              []float64          `json:"bbox"`
+	LeadTimeMinutes   int                `json:"lead_time_minutes"`
+	MaxRainRate       float32            `json:"max_rain_rate"`
+	MeanRainRate      float32            `json:"mean_rain_rate"`
+	MissingPixelCount int64              `json:"missing_pixel_count"`
+	ProductId         openapi_types.UUID `json:"product_id"`
+	ValidPixelCount   int64              `json:"valid_pixel_count"`
+	ValidPixelRatio   float32            `json:"valid_pixel_ratio"`
+	ValidTime         time.Time          `json:"valid_time"`
 }
 
 // DiagnosticBundle defines model for DiagnosticBundle.
@@ -632,10 +636,12 @@ type ModelState struct {
 
 // PointForecast defines model for PointForecast.
 type PointForecast struct {
-	Latitude  float64              `json:"latitude"`
-	Longitude float64              `json:"longitude"`
-	ProductId openapi_types.UUID   `json:"product_id"`
-	Values    []PointForecastValue `json:"values"`
+	GridLatitude  float64              `json:"grid_latitude"`
+	GridLongitude float64              `json:"grid_longitude"`
+	Latitude      float64              `json:"latitude"`
+	Longitude     float64              `json:"longitude"`
+	ProductId     openapi_types.UUID   `json:"product_id"`
+	Values        []PointForecastValue `json:"values"`
 }
 
 // PointForecastValue defines model for PointForecastValue.
@@ -651,29 +657,38 @@ type PointForecastValue struct {
 
 // Product defines model for Product.
 type Product struct {
-	ConfigVersion string             `json:"config_version"`
-	CreatedAt     time.Time          `json:"created_at"`
-	GridId        string             `json:"grid_id"`
-	IssueTime     time.Time          `json:"issue_time"`
-	MemberCount   *int               `json:"member_count,omitempty"`
-	ModelId       string             `json:"model_id"`
-	ModelVersion  string             `json:"model_version"`
-	ProductId     openapi_types.UUID `json:"product_id"`
-	ProductType   ProductType        `json:"product_type"`
-	RunId         openapi_types.UUID `json:"run_id"`
-	ValidTimes    *[]time.Time       `json:"valid_times,omitempty"`
+	ConfigVersion        string             `json:"config_version"`
+	CreatedAt            time.Time          `json:"created_at"`
+	GridId               string             `json:"grid_id"`
+	IssueTime            time.Time          `json:"issue_time"`
+	MemberCount          int                `json:"member_count"`
+	ModelId              string             `json:"model_id"`
+	ModelVersion         string             `json:"model_version"`
+	ProductId            openapi_types.UUID `json:"product_id"`
+	ProductType          ProductType        `json:"product_type"`
+	RunId                openapi_types.UUID `json:"run_id"`
+	SourceForecastSha256 string             `json:"source_forecast_sha256"`
+	SourceForecastUri    string             `json:"source_forecast_uri"`
+	ValidTimes           []time.Time        `json:"valid_times"`
 }
 
 // ProductAsset defines model for ProductAsset.
 type ProductAsset struct {
-	AssetId         openapi_types.UUID `json:"asset_id"`
-	AssetType       string             `json:"asset_type"`
-	CreatedAt       time.Time          `json:"created_at"`
-	LeadTimeMinutes *int               `json:"lead_time_minutes,omitempty"`
-	MediaType       string             `json:"media_type"`
-	Sha256          string             `json:"sha256"`
-	SizeBytes       int64              `json:"size_bytes"`
-	Uri             string             `json:"uri"`
+	AssetId          openapi_types.UUID `json:"asset_id"`
+	AssetType        string             `json:"asset_type"`
+	ContentUrl       string             `json:"content_url"`
+	CoverageRatio    *float32           `json:"coverage_ratio,omitempty"`
+	CreatedAt        time.Time          `json:"created_at"`
+	LeadTimeMinutes  *int               `json:"lead_time_minutes,omitempty"`
+	MediaType        string             `json:"media_type"`
+	MissingCellCount *int64             `json:"missing_cell_count,omitempty"`
+	NoRainCellCount  *int64             `json:"no_rain_cell_count,omitempty"`
+	Sha256           string             `json:"sha256"`
+	SizeBytes        int64              `json:"size_bytes"`
+	Unit             *string            `json:"unit,omitempty"`
+	Uri              string             `json:"uri"`
+	ValidCellCount   *int64             `json:"valid_cell_count,omitempty"`
+	ValidTime        *time.Time         `json:"valid_time,omitempty"`
 }
 
 // ProductPage defines model for ProductPage.
@@ -878,6 +893,9 @@ type VerificationSummary struct {
 // AnalysisId defines model for AnalysisId.
 type AnalysisId = openapi_types.UUID
 
+// AssetId defines model for AssetId.
+type AssetId = openapi_types.UUID
+
 // Cursor defines model for Cursor.
 type Cursor = string
 
@@ -922,7 +940,8 @@ type GetAreaStatisticsParams struct {
 	ProductId openapi_types.UUID `form:"product_id" json:"product_id"`
 
 	// Bbox min longitude, min latitude, max longitude, max latitude
-	Bbox []float64 `form:"bbox" json:"bbox"`
+	Bbox            []float64 `form:"bbox" json:"bbox"`
+	LeadTimeMinutes int       `form:"lead_time_minutes" json:"lead_time_minutes"`
 }
 
 // StreamEventsParams defines parameters for StreamEvents.
@@ -1018,6 +1037,9 @@ type ServerInterface interface {
 	// ListProductAssets List files and object-store assets for a product
 	// (GET /products/{product_id}/assets)
 	ListProductAssets(w http.ResponseWriter, r *http.Request, productId ProductId)
+	// GetProductAssetContent Read one immutable registered product asset
+	// (GET /products/{product_id}/assets/{asset_id}/content)
+	GetProductAssetContent(w http.ResponseWriter, r *http.Request, productId ProductId, assetId AssetId)
 	// ListRadarScans List single-radar volume workflows
 	// (GET /radar-scans)
 	ListRadarScans(w http.ResponseWriter, r *http.Request, params ListRadarScansParams)
@@ -1153,6 +1175,12 @@ func (_ Unimplemented) GetProduct(w http.ResponseWriter, r *http.Request, produc
 // ListProductAssets List files and object-store assets for a product
 // (GET /products/{product_id}/assets)
 func (_ Unimplemented) ListProductAssets(w http.ResponseWriter, r *http.Request, productId ProductId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetProductAssetContent Read one immutable registered product asset
+// (GET /products/{product_id}/assets/{asset_id}/content)
+func (_ Unimplemented) GetProductAssetContent(w http.ResponseWriter, r *http.Request, productId ProductId, assetId AssetId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1512,6 +1540,19 @@ func (siw *ServerInterfaceWrapper) GetAreaStatistics(w http.ResponseWriter, r *h
 		return
 	}
 
+	// ------------- Required query parameter "lead_time_minutes" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "lead_time_minutes", r.URL.Query(), &params.LeadTimeMinutes, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "lead_time_minutes"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "lead_time_minutes", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAreaStatistics(w, r, params)
 	}))
@@ -1804,6 +1845,41 @@ func (siw *ServerInterfaceWrapper) ListProductAssets(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListProductAssets(w, r, productId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetProductAssetContent operation middleware
+func (siw *ServerInterfaceWrapper) GetProductAssetContent(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "product_id" -------------
+	var productId ProductId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "product_id", chi.URLParam(r, "product_id"), &productId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "product_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "asset_id" -------------
+	var assetId AssetId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "asset_id", chi.URLParam(r, "asset_id"), &assetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "asset_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetProductAssetContent(w, r, productId, assetId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2377,6 +2453,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/products/{product_id}/assets", wrapper.ListProductAssets)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/products/{product_id}/assets/{asset_id}/content", wrapper.GetProductAssetContent)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/point-forecast", wrapper.GetPointForecast)

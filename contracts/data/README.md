@@ -17,9 +17,11 @@ nowcast operation:
    to model workers.
 8. [`forecast-output.md`](forecast-output.md) defines model output consumed by
    product generation and verification.
-9. [`application-rainfall-netcdf.md`](application-rainfall-netcdf.md) defines
+9. [`application-product-bundle.md`](application-product-bundle.md) defines the
+   atomic RP-015 distribution boundary and its three product identities.
+10. [`application-rainfall-netcdf.md`](application-rainfall-netcdf.md) defines
    the two-dimensional business exchange file derived at the product boundary.
-10. [`rendered-rainfall-layer.md`](rendered-rainfall-layer.md) defines the
+11. [`rendered-rainfall-layer.md`](rendered-rainfall-layer.md) defines the
    transparent PNG and geospatial layer manifest consumed by the frontend.
 
 Every stage preserves valid no-rain, missing, and low-quality states. Full

@@ -388,6 +388,13 @@ WHERE job_id = $1`, event.JobID, event.Payload.StartedAt, event.Payload.Finished
 			}
 			break
 		}
+		if jobType == orchestration.ProductBuildJobType && modelID != nil &&
+			*modelID == orchestration.PystepsLKModelID {
+			if err := applyProductBuildCompletion(ctx, tx, event); err != nil {
+				return false, err
+			}
+			break
+		}
 		nextStatus := completionRunStatus(jobType)
 		var currentStatus workflow.RunStatus
 		if err := tx.QueryRow(ctx, `SELECT status FROM forecast_runs WHERE run_id = $1 FOR UPDATE`, runID).Scan(&currentStatus); err != nil {
@@ -535,6 +542,15 @@ UPDATE nowcast_input_runs
 SET status = 'FAILED', updated_at = CURRENT_TIMESTAMP
 WHERE job_id = $1`, event.JobID); err != nil {
 				return false, fmt.Errorf("fail NowcastInput run: %w", err)
+			}
+		}
+		if jobType == orchestration.ProductBuildJobType && modelID != nil &&
+			*modelID == orchestration.PystepsLKModelID {
+			if _, err = tx.Exec(ctx, `
+UPDATE product_build_runs
+SET status = 'FAILED', updated_at = CURRENT_TIMESTAMP
+WHERE job_id = $1`, event.JobID); err != nil {
+				return false, fmt.Errorf("fail product-build run: %w", err)
 			}
 		}
 		if jobType == orchestration.PystepsLKJobType && modelID != nil &&
