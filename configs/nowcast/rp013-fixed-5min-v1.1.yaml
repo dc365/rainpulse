@@ -1,0 +1,22 @@
+schema_version: "1.0"
+profile_version: rp013-fixed-5min-v1.1
+builder_version: nowcast-input-builder-1.0.1
+nowcast_input_contract_version: "1.2"
+radar_analysis_contract_version: "1.2"
+
+grid_id: fuzhou_118_123_25_27_0p01deg_v1
+grid_config_version: fuzhou-grid-0p01deg-v1
+
+sequence:
+  minimum_frames: 3
+  maximum_frames: 6
+  timestep_minutes: 5
+  selection: latest_contiguous
+
+gates:
+  # RP-013 patch profile: preserve the accepted gates while requiring raw
+  # asset provenance in both Zarr attributes and the committed summary.
+  minimum_valid_coverage_ratio: 0.70
+  minimum_mean_quality_index: 0.45
+  maximum_data_age_minutes: 10.0
+  require_all_frames_operational_eligible: true

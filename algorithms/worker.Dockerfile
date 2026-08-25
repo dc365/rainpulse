@@ -1,7 +1,7 @@
 FROM python:3.13.12-slim-bookworm
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libexpat1 \
+    && apt-get install -y --no-install-recommends libexpat1 libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 ENV HOME=/tmp \

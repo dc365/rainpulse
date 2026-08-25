@@ -26,6 +26,8 @@ EVENT_NAMES = (
     "nowcast-input-requested",
     "nowcast-input-ready",
     "forecast-run-requested",
+    "forecast-pysteps-lk-requested",
+    "forecast-baseline-ready",
 )
 JOB_EVENT_NAMES = ("job-requested", "job-completed", "job-failed", "product-published")
 
@@ -203,6 +205,16 @@ def test_rp012_diagnostics_are_pre_rendered_and_preserve_three_states() -> None:
     assert "Valid no-rain is not transparent" in diagnostics
     assert "Low-quality pixels remain visible" in diagnostics
     assert "arbitrary object-store keys" in diagnostics
+
+
+def test_rp014_forecast_output_freezes_deterministic_baseline_diagnostics() -> None:
+    forecast = (CONTRACTS_ROOT / "data" / "forecast-output.md").read_text()
+
+    assert "24 lead times" in forecast
+    assert "persistence_rain_rate" in forecast
+    assert "translation_rain_rate" in forecast
+    assert "latitude-aware" in forecast
+    assert "must never become zero rainfall" in forecast
 
 
 def test_distribution_contracts_preserve_grid_and_missing_semantics() -> None:

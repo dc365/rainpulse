@@ -44,6 +44,13 @@ const (
 	NowcastInputJobType                   = "nowcast.input"
 	NowcastInputReadyEventType            = "nowcast.input.ready.v1"
 	NowcastInputReadySubject              = "rainpulse.jobs.lifecycle.nowcast_input_ready"
+	PystepsLKRequestedEventType           = "forecast.pysteps_lk.requested.v1"
+	PystepsLKRequestedSubject             = "rainpulse.jobs.requested.pysteps_lk"
+	PystepsLKJobType                      = "model.pysteps_lk"
+	PystepsLKModelID                      = "pysteps-lk"
+	PystepsLKModelVersion                 = "pysteps-lk-1.0.0"
+	ForecastBaselineReadyEventType        = "forecast.baseline.ready.v1"
+	ForecastBaselineReadySubject          = "rainpulse.jobs.lifecycle.forecast_baseline_ready"
 	JobCompletedSubject                   = "rainpulse.jobs.completed"
 	JobFailedSubject                      = "rainpulse.jobs.failed"
 	JobResultsSubject                     = "rainpulse.jobs.*"
@@ -266,6 +273,54 @@ type NowcastInputReadyPayload struct {
 	MeanQualityIndex   float64     `json:"mean_quality_index"`
 	MaxDataAgeMinutes  float64     `json:"max_data_age_minutes"`
 	PreprocessVersion  string      `json:"preprocess_version"`
+}
+
+type PystepsLKRequested struct {
+	SchemaVersion string                    `json:"schema_version"`
+	EventID       uuid.UUID                 `json:"event_id"`
+	EventType     string                    `json:"event_type"`
+	OccurredAt    time.Time                 `json:"occurred_at"`
+	RunID         uuid.UUID                 `json:"run_id"`
+	JobID         uuid.UUID                 `json:"job_id"`
+	TraceID       uuid.UUID                 `json:"trace_id"`
+	Payload       PystepsLKRequestedPayload `json:"payload"`
+}
+
+type PystepsLKRequestedPayload struct {
+	InputURI                string      `json:"input_uri"`
+	OutputPrefix            string      `json:"output_prefix"`
+	IssueTime               time.Time   `json:"issue_time"`
+	GridID                  string      `json:"grid_id"`
+	InputAssetIDs           []uuid.UUID `json:"input_asset_ids"`
+	ModelID                 string      `json:"model_id"`
+	ModelVersion            string      `json:"model_version"`
+	ConfigVersion           string      `json:"config_version"`
+	ForecastContractVersion string      `json:"forecast_contract_version"`
+	BaselineModels          []string    `json:"baseline_models"`
+}
+
+type ForecastBaselineReady struct {
+	SchemaVersion string                       `json:"schema_version"`
+	EventID       uuid.UUID                    `json:"event_id"`
+	EventType     string                       `json:"event_type"`
+	OccurredAt    time.Time                    `json:"occurred_at"`
+	RunID         uuid.UUID                    `json:"run_id"`
+	JobID         uuid.UUID                    `json:"job_id"`
+	TraceID       uuid.UUID                    `json:"trace_id"`
+	Payload       ForecastBaselineReadyPayload `json:"payload"`
+}
+
+type ForecastBaselineReadyPayload struct {
+	ForecastURI  string    `json:"forecast_uri"`
+	IssueTime    time.Time `json:"issue_time"`
+	GridID       string    `json:"grid_id"`
+	ModelID      string    `json:"model_id"`
+	ModelVersion string    `json:"model_version"`
+	Config       string    `json:"config_version"`
+	LeadCount    int       `json:"lead_count"`
+	LeadStep     int       `json:"lead_step_minutes"`
+	ValidFrom    time.Time `json:"valid_from"`
+	ValidTo      time.Time `json:"valid_to"`
 }
 
 type JobCompleted struct {

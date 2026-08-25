@@ -562,6 +562,59 @@ func TestCreateNowcastInputSelectsLatestContiguousOperationalFrames(t *testing.T
 	}
 }
 
+func TestCreatePystepsLKSchedulesOnlyCommittedInputReadyRun(t *testing.T) {
+	repository := &fakeRepository{}
+	now := time.Date(2026, 8, 25, 12, 12, 0, 0, time.UTC)
+	issueTime := time.Date(2026, 8, 25, 12, 10, 0, 0, time.UTC)
+	service := NewService(repository, Options{Now: func() time.Time { return now }})
+	input := PystepsLKInput{
+		RunID:             uuid.MustParse("a78aa324-0832-59e1-b9ea-d97933b2821e"),
+		NowcastInputJobID: uuid.MustParse("498308d8-994e-522b-b976-e1e9ce242e6f"),
+		IssueTime:         issueTime,
+		GridID:            "fuzhou_118_123_25_27_0p01deg_v1",
+		CurrentStatus:     workflow.RunInputReady,
+		InputURI:          "s3://rainpulse/nowcast-input/test/input.zarr",
+		InputAssetIDs: []uuid.UUID{
+			uuid.MustParse("81300000-0000-4000-8000-000000000001"),
+			uuid.MustParse("81300000-0000-4000-8000-000000000002"),
+			uuid.MustParse("81300000-0000-4000-8000-000000000003"),
+		},
+		ModelID: PystepsLKModelID, ModelVersion: PystepsLKModelVersion,
+		ConfigVersion: "rp014-pysteps-lk-v1", ForecastContractVersion: "1.1",
+		BaselineModels: []string{"persistence", "translation"},
+		Config:         json.RawMessage(`{"profile_version":"rp014-pysteps-lk-v1"}`),
+		ConfigSHA256:   "63266c7c72321262a01b945281060abd84153a8f3ad64a95c5b73b9fd510f678",
+	}
+
+	run, job, err := service.CreatePystepsLK(context.Background(), input)
+	if err != nil {
+		t.Fatalf("CreatePystepsLK() error = %v", err)
+	}
+	if run.Status != workflow.RunBaselineRunning || job.JobType != PystepsLKJobType ||
+		job.ModelID != PystepsLKModelID {
+		t.Fatalf("unexpected RP-014 workflow state: run=%s job=%#v", run.Status, job)
+	}
+	var requested PystepsLKRequested
+	if err := json.Unmarshal(repository.pystepsLK.Outbox.Payload, &requested); err != nil {
+		t.Fatalf("decode pySTEPS-LK request: %v", err)
+	}
+	if requested.EventType != PystepsLKRequestedEventType ||
+		repository.pystepsLK.Outbox.Subject != PystepsLKRequestedSubject ||
+		requested.Payload.ForecastContractVersion != "1.1" ||
+		len(requested.Payload.InputAssetIDs) != 3 {
+		t.Fatalf("unexpected RP-014 request: %#v", requested)
+	}
+	secondRun, secondJob, err := service.CreatePystepsLK(context.Background(), input)
+	if err != nil || secondRun.ID != run.ID || secondJob.ID != job.ID {
+		t.Fatalf("pySTEPS-LK identity is not deterministic: %v", err)
+	}
+
+	input.CurrentStatus = workflow.RunPreprocessing
+	if _, _, err := service.CreatePystepsLK(context.Background(), input); err == nil {
+		t.Fatal("pySTEPS-LK must reject a run that is not INPUT_READY")
+	}
+}
+
 type fakeRepository struct {
 	created             workflow.CreateBundle
 	radarDecode         workflow.RadarDecodeBundle
@@ -571,6 +624,7 @@ type fakeRepository struct {
 	analysisQPE         workflow.AnalysisQPEBundle
 	analysisDiagnostics workflow.AnalysisDiagnosticsBundle
 	nowcastInput        workflow.NowcastInputBundle
+	pystepsLK           workflow.PystepsLKBundle
 	domain              workflow.DomainSimulation
 	claimed             workflow.OutboxEvent
 	published           uuid.UUID
@@ -583,6 +637,14 @@ func (repository *fakeRepository) CreateNowcastInputBundle(
 	bundle workflow.NowcastInputBundle,
 ) error {
 	repository.nowcastInput = bundle
+	return nil
+}
+
+func (repository *fakeRepository) CreatePystepsLKBundle(
+	_ context.Context,
+	bundle workflow.PystepsLKBundle,
+) error {
+	repository.pystepsLK = bundle
 	return nil
 }
 

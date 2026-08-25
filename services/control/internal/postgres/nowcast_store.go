@@ -42,6 +42,7 @@ func applyNowcastInputCompletion(
 		metrics.PreprocessVersion == "" || metrics.FrameCount < 3 ||
 		metrics.FrameCount > 6 || metrics.TimestepMinutes != 5 ||
 		len(metrics.AnalysisIDs) != metrics.FrameCount ||
+		len(metrics.InputAssetIDs) == 0 ||
 		len(metrics.InputURIs) != metrics.FrameCount ||
 		metrics.ValidCoverageRatio < 0 || metrics.ValidCoverageRatio > 1 ||
 		metrics.MeanQualityIndex < 0 || metrics.MeanQualityIndex > 1 ||

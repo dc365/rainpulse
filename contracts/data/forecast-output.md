@@ -31,6 +31,10 @@ Phase 1 deterministic output has one member and exactly 24 lead times:
 | `confidence` | `[lead_time, lat, lon]` | `float32` | `1` | yes |
 | `motion_u` | `[lat, lon]` | `float32` | `m s-1` | pySTEPS-LK diagnostic |
 | `motion_v` | `[lat, lon]` | `float32` | `m s-1` | pySTEPS-LK diagnostic |
+| `persistence_rain_rate` | `[lead_time, lat, lon]` | `float32` | `mm h-1` | yes; verification baseline |
+| `translation_rain_rate` | `[lead_time, lat, lon]` | `float32` | `mm h-1` | yes; verification baseline |
+| `persistence_valid_mask` | `[lead_time, lat, lon]` | `uint8` | `1` | yes; persistence support |
+| `translation_valid_mask` | `[lead_time, lat, lon]` | `uint8` | `1` | yes; translation support |
 | `prob_gt_1/5/10/20/50` | `[lead_time, lat, lon]` | `float32` | `1` | no; ensemble phase |
 | `p10/p50/p90` | `[lead_time, lat, lon]` | `float32` | `mm h-1` | no; ensemble phase |
 
@@ -73,6 +77,11 @@ required output support is invalid.
   forbidden for the EPSG:4326 grid.
 - A deterministic model uses one member and cannot emit ensemble probability
   or quantile variables.
+- The persistence and whole-field translation arrays are diagnostic baselines,
+  not extra ensemble members. All three deterministic paths use the same 24 lead times,
+  source mask and accumulation convention.
+- Missing input support is advected separately from the working precipitation
+  copy. Invalid output cells must remain `NaN` and must never become zero rainfall.
 - Assets are written under `_tmp/{job_id}`, validated and checksummed before an
   atomic publish to `products/{run_id}/{model_id}/{model_version}/`.
 - Re-delivery of the same `job_id` must resolve to the same published product,

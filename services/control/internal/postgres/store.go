@@ -320,14 +320,15 @@ ON CONFLICT DO NOTHING`,
 
 	var runID, traceID uuid.UUID
 	var jobType string
+	var modelID *string
 	var jobStatus workflow.JobStatus
 	var runType workflow.WorkflowType
 	err = tx.QueryRow(ctx, `
-SELECT j.run_id, j.trace_id, j.job_type, j.status, wr.run_type
+SELECT j.run_id, j.trace_id, j.job_type, j.model_id, j.status, wr.run_type
 FROM jobs AS j
 JOIN workflow_runs AS wr ON wr.run_id = j.run_id
 WHERE j.job_id = $1 FOR UPDATE OF j`, event.JobID).
-		Scan(&runID, &traceID, &jobType, &jobStatus, &runType)
+		Scan(&runID, &traceID, &jobType, &modelID, &jobStatus, &runType)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, fmt.Errorf("%w: completion job does not exist", orchestration.ErrInvalidEvent)
 	}
@@ -376,6 +377,13 @@ WHERE job_id = $1`, event.JobID, event.Payload.StartedAt, event.Payload.Finished
 	case workflow.WorkflowForecastRun:
 		if jobType == orchestration.NowcastInputJobType {
 			if err := applyNowcastInputCompletion(ctx, tx, event); err != nil {
+				return false, err
+			}
+			break
+		}
+		if jobType == orchestration.PystepsLKJobType && modelID != nil &&
+			*modelID == orchestration.PystepsLKModelID {
+			if err := applyPystepsLKCompletion(ctx, tx, event); err != nil {
 				return false, err
 			}
 			break
@@ -450,13 +458,14 @@ ON CONFLICT DO NOTHING`,
 	var runID, traceID uuid.UUID
 	var jobStatus workflow.JobStatus
 	var jobType string
+	var modelID *string
 	var runType workflow.WorkflowType
 	err = tx.QueryRow(ctx, `
-SELECT j.run_id, j.trace_id, j.status, j.job_type, wr.run_type
+SELECT j.run_id, j.trace_id, j.status, j.job_type, j.model_id, wr.run_type
 FROM jobs AS j
 JOIN workflow_runs AS wr ON wr.run_id = j.run_id
 WHERE j.job_id = $1 FOR UPDATE OF j`, event.JobID).
-		Scan(&runID, &traceID, &jobStatus, &jobType, &runType)
+		Scan(&runID, &traceID, &jobStatus, &jobType, &modelID, &runType)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, fmt.Errorf("%w: failure job does not exist", orchestration.ErrInvalidEvent)
 	}
@@ -526,6 +535,16 @@ UPDATE nowcast_input_runs
 SET status = 'FAILED', updated_at = CURRENT_TIMESTAMP
 WHERE job_id = $1`, event.JobID); err != nil {
 				return false, fmt.Errorf("fail NowcastInput run: %w", err)
+			}
+		}
+		if jobType == orchestration.PystepsLKJobType && modelID != nil &&
+			*modelID == orchestration.PystepsLKModelID {
+			if _, err = tx.Exec(ctx, `
+UPDATE model_runs
+SET status = 'failed', runtime_ms = $2, completed_at = $3
+WHERE job_id = $1`, event.JobID, event.Payload.RuntimeMS,
+				event.Payload.FinishedAt); err != nil {
+				return false, fmt.Errorf("fail pySTEPS-LK model run: %w", err)
 			}
 		}
 	case workflow.WorkflowRadarScan:

@@ -7,7 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from rainpulse_algo.worker.contracts import JobCompleted
-from rainpulse_algo.worker.domain_contracts import NowcastInputRequested
+from rainpulse_algo.worker.domain_contracts import NowcastInputRequested, PystepsLKRequested
 from rainpulse_algo.worker.handlers import HANDLERS, handler_for_profile
 from rainpulse_algo.worker.runtime import Worker, WorkerConfig
 
@@ -126,8 +126,7 @@ def test_handler_registry_has_unique_subjects_and_durable_consumers() -> None:
     assert len({handler.subject for handler in HANDLERS.values()}) == len(HANDLERS)
     assert len({handler.consumer for handler in HANDLERS.values()}) == len(HANDLERS)
     assert all(
-        handler.subject.startswith("rainpulse.jobs.requested.")
-        for handler in HANDLERS.values()
+        handler.subject.startswith("rainpulse.jobs.requested.") for handler in HANDLERS.values()
     )
 
 
@@ -137,3 +136,13 @@ def test_nowcast_input_contract_rejects_mismatched_frame_identities() -> None:
 
     with pytest.raises(ValidationError):
         NowcastInputRequested.model_validate(value)
+
+
+def test_pysteps_lk_contract_freezes_baseline_order_and_unique_inputs() -> None:
+    value = json.loads(example_bytes("forecast-pysteps-lk-requested"))
+    PystepsLKRequested.model_validate(value)
+    value["payload"]["baseline_models"] = ["translation", "persistence"]
+    value["payload"]["input_asset_ids"][1] = value["payload"]["input_asset_ids"][0]
+
+    with pytest.raises(ValidationError):
+        PystepsLKRequested.model_validate(value)

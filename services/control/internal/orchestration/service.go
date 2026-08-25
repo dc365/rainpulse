@@ -24,6 +24,7 @@ type Repository interface {
 	CreateAnalysisQPEBundle(context.Context, workflow.AnalysisQPEBundle) error
 	CreateAnalysisDiagnosticsBundle(context.Context, workflow.AnalysisDiagnosticsBundle) error
 	CreateNowcastInputBundle(context.Context, workflow.NowcastInputBundle) error
+	CreatePystepsLKBundle(context.Context, workflow.PystepsLKBundle) error
 	CreateDomainSimulation(context.Context, workflow.DomainSimulation) error
 	GetRun(context.Context, uuid.UUID) (workflow.Run, error)
 	GetJob(context.Context, uuid.UUID) (workflow.Job, error)
@@ -160,6 +161,23 @@ type NowcastInputInput struct {
 	Candidates                []NowcastInputCandidate
 	Config                    json.RawMessage
 	ConfigSHA256              string
+}
+
+type PystepsLKInput struct {
+	RunID                   uuid.UUID
+	NowcastInputJobID       uuid.UUID
+	IssueTime               time.Time
+	GridID                  string
+	CurrentStatus           workflow.RunStatus
+	InputURI                string
+	InputAssetIDs           []uuid.UUID
+	ModelID                 string
+	ModelVersion            string
+	ConfigVersion           string
+	ForecastContractVersion string
+	BaselineModels          []string
+	Config                  json.RawMessage
+	ConfigSHA256            string
 }
 
 type Publisher interface {
@@ -868,6 +886,116 @@ func (service *Service) CreateNowcastInput(
 		return workflow.Run{}, workflow.Job{}, err
 	}
 	return run, job, nil
+}
+
+func (service *Service) CreatePystepsLK(
+	ctx context.Context,
+	input PystepsLKInput,
+) (workflow.Run, workflow.Job, error) {
+	if err := validatePystepsLKInput(input); err != nil {
+		return workflow.Run{}, workflow.Job{}, err
+	}
+	now := service.now().UTC()
+	issueTime := input.IssueTime.UTC()
+	jobID := stableID(
+		"pysteps-lk-job", input.RunID.String(), input.ModelVersion, input.ConfigVersion,
+	)
+	traceID := stableID("pysteps-lk-trace", input.RunID.String())
+	eventID := stableID("pysteps-lk-request", jobID.String())
+	modelRunID := stableID("pysteps-lk-model-run", jobID.String())
+	outputPrefix := fmt.Sprintf(
+		"s3://rainpulse/products/%s/%s/%s/",
+		input.RunID,
+		url.PathEscape(input.ModelID),
+		url.PathEscape(input.ModelVersion),
+	)
+	request := PystepsLKRequested{
+		SchemaVersion: SchemaVersion,
+		EventID:       eventID,
+		EventType:     PystepsLKRequestedEventType,
+		OccurredAt:    now,
+		RunID:         input.RunID,
+		JobID:         jobID,
+		TraceID:       traceID,
+		Payload: PystepsLKRequestedPayload{
+			InputURI: input.InputURI, OutputPrefix: outputPrefix,
+			IssueTime: issueTime, GridID: input.GridID,
+			InputAssetIDs: input.InputAssetIDs,
+			ModelID:       input.ModelID, ModelVersion: input.ModelVersion,
+			ConfigVersion:           input.ConfigVersion,
+			ForecastContractVersion: input.ForecastContractVersion,
+			BaselineModels:          input.BaselineModels,
+		},
+	}
+	payload, err := json.Marshal(request)
+	if err != nil {
+		return workflow.Run{}, workflow.Job{}, fmt.Errorf("encode pySTEPS-LK request: %w", err)
+	}
+	run := workflow.Run{
+		ID: input.RunID, IssueTime: issueTime, GridID: input.GridID,
+		Status: workflow.RunBaselineRunning, UpdatedAt: now,
+	}
+	job := workflow.Job{
+		ID: jobID, RunID: input.RunID, TraceID: traceID, JobType: PystepsLKJobType,
+		ModelID: input.ModelID, ModelVersion: input.ModelVersion,
+		ConfigVersion: input.ConfigVersion, Status: workflow.JobPending,
+		Attempt: 1, RequestPayload: payload, CreatedAt: now,
+	}
+	bundle := workflow.PystepsLKBundle{
+		Run: run, NowcastInputJob: input.NowcastInputJobID,
+		InputURI: input.InputURI, InputAssetIDs: input.InputAssetIDs,
+		ModelRunID: modelRunID, Config: input.Config, ConfigSHA256: input.ConfigSHA256,
+		Job: job,
+		Outbox: workflow.OutboxEvent{
+			ID: eventID, AggregateID: jobID.String(),
+			EventType: PystepsLKRequestedEventType,
+			Subject:   PystepsLKRequestedSubject, Payload: payload,
+		},
+	}
+	if err := service.repository.CreatePystepsLKBundle(ctx, bundle); err != nil {
+		return workflow.Run{}, workflow.Job{}, err
+	}
+	return run, job, nil
+}
+
+func validatePystepsLKInput(input PystepsLKInput) error {
+	parsed, err := url.ParseRequestURI(input.InputURI)
+	if input.RunID == uuid.Nil || input.NowcastInputJobID == uuid.Nil ||
+		input.IssueTime.IsZero() || input.GridID == "" || err != nil || parsed.Scheme != "s3" {
+		return fmt.Errorf("pySTEPS-LK committed NowcastInput identity is required")
+	}
+	if input.CurrentStatus != workflow.RunInputReady {
+		return fmt.Errorf("pySTEPS-LK requires forecast run state INPUT_READY")
+	}
+	if !input.IssueTime.UTC().Equal(input.IssueTime.UTC().Truncate(5 * time.Minute)) {
+		return fmt.Errorf("pySTEPS-LK issue time must be on a five-minute UTC boundary")
+	}
+	if input.ModelID != PystepsLKModelID || input.ModelVersion != PystepsLKModelVersion ||
+		input.ConfigVersion == "" || input.ForecastContractVersion != "1.1" {
+		return fmt.Errorf("pySTEPS-LK model and contract identity differs from RP-014")
+	}
+	if len(input.BaselineModels) != 2 || input.BaselineModels[0] != "persistence" ||
+		input.BaselineModels[1] != "translation" {
+		return fmt.Errorf("pySTEPS-LK requires persistence and translation baselines")
+	}
+	if len(input.InputAssetIDs) == 0 {
+		return fmt.Errorf("pySTEPS-LK input assets are required")
+	}
+	seen := make(map[uuid.UUID]struct{}, len(input.InputAssetIDs))
+	for _, assetID := range input.InputAssetIDs {
+		if assetID == uuid.Nil {
+			return fmt.Errorf("pySTEPS-LK input asset ID cannot be nil")
+		}
+		if _, exists := seen[assetID]; exists {
+			return fmt.Errorf("pySTEPS-LK input asset IDs must be unique")
+		}
+		seen[assetID] = struct{}{}
+	}
+	if len(input.Config) == 0 || !json.Valid(input.Config) ||
+		!sha256Pattern.MatchString(input.ConfigSHA256) {
+		return fmt.Errorf("pySTEPS-LK configuration and SHA-256 are required")
+	}
+	return nil
 }
 
 func validateAndSelectNowcastFrames(

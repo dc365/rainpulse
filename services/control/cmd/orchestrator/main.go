@@ -126,6 +126,15 @@ func main() {
 			slog.Error("create NowcastInput workflow", "error", err)
 			os.Exit(1)
 		}
+	case "pysteps-lk":
+		if len(os.Args) != 4 {
+			slog.Error("pysteps-lk requires a forecast run UUID and pySTEPS-LK config YAML")
+			os.Exit(2)
+		}
+		if err := pystepsLK(ctx, store, service, os.Args[2], os.Args[3]); err != nil {
+			slog.Error("create pySTEPS-LK workflow", "error", err)
+			os.Exit(1)
+		}
 	case "complete":
 		if len(os.Args) != 3 {
 			slog.Error("complete requires a job UUID")
@@ -215,6 +224,20 @@ type nowcastInputConfiguration struct {
 		MinimumValidCoverageRatio float64 `yaml:"minimum_valid_coverage_ratio"`
 		MinimumMeanQualityIndex   float64 `yaml:"minimum_mean_quality_index"`
 	} `yaml:"gates"`
+}
+
+type pystepsLKConfiguration struct {
+	ProfileVersion                string `yaml:"profile_version"`
+	ModelID                       string `yaml:"model_id"`
+	ModelVersion                  string `yaml:"model_version"`
+	ForecastOutputContractVersion string `yaml:"forecast_output_contract_version"`
+	GridID                        string `yaml:"grid_id"`
+	GridConfigVersion             string `yaml:"grid_config_version"`
+	Extrapolation                 struct {
+		LeadCount       int      `yaml:"lead_count"`
+		LeadStepMinutes int      `yaml:"lead_step_minutes"`
+		Baselines       []string `yaml:"baselines"`
+	} `yaml:"extrapolation"`
 }
 
 func radarDecode(
@@ -690,6 +713,62 @@ func nowcastInput(
 	})
 }
 
+func pystepsLK(
+	ctx context.Context,
+	store *postgresstore.Store,
+	service *orchestration.Service,
+	rawRunID string,
+	configPath string,
+) error {
+	runID, err := uuid.Parse(rawRunID)
+	if err != nil {
+		return fmt.Errorf("parse pySTEPS-LK run UUID: %w", err)
+	}
+	configBytes, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("read pySTEPS-LK configuration: %w", err)
+	}
+	var config pystepsLKConfiguration
+	if err := yaml.Unmarshal(configBytes, &config); err != nil {
+		return fmt.Errorf("decode pySTEPS-LK configuration: %w", err)
+	}
+	if config.GridConfigVersion == "" || config.Extrapolation.LeadCount != 24 ||
+		config.Extrapolation.LeadStepMinutes != 5 {
+		return fmt.Errorf("pySTEPS-LK configuration differs from RP-014")
+	}
+	var configValue map[string]any
+	if err := yaml.Unmarshal(configBytes, &configValue); err != nil {
+		return fmt.Errorf("normalize pySTEPS-LK configuration: %w", err)
+	}
+	configJSON, err := json.Marshal(configValue)
+	if err != nil {
+		return fmt.Errorf("encode pySTEPS-LK configuration: %w", err)
+	}
+	input, err := store.GetPystepsLKInput(ctx, runID)
+	if err != nil {
+		return err
+	}
+	if input.GridID != config.GridID {
+		return fmt.Errorf("pySTEPS-LK grid differs from committed NowcastInput")
+	}
+	configHash := sha256.Sum256(configBytes)
+	input.ModelID = config.ModelID
+	input.ModelVersion = config.ModelVersion
+	input.ConfigVersion = config.ProfileVersion
+	input.ForecastContractVersion = config.ForecastOutputContractVersion
+	input.BaselineModels = config.Extrapolation.Baselines
+	input.Config = configJSON
+	input.ConfigSHA256 = fmt.Sprintf("%x", configHash)
+	run, job, err := service.CreatePystepsLK(ctx, input)
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(os.Stdout).Encode(map[string]any{
+		"run_id": run.ID.String(), "job_id": job.ID.String(),
+		"issue_time": run.IssueTime, "input_asset_count": len(input.InputAssetIDs),
+	})
+}
+
 func dependencies(ctx context.Context) (*pgxpool.Pool, *postgresstore.Store, *messaging.JetStream, *orchestration.Service, error) {
 	databaseURL, err := runtimeconfig.DatabaseURL()
 	if err != nil {
@@ -866,6 +945,8 @@ func replay(ctx context.Context, store *postgresstore.Store, bus *messaging.JetS
 		subject = orchestration.AnalysisMosaicRequestedSubject
 	} else if eventType == orchestration.NowcastInputRequestedEventType {
 		subject = orchestration.NowcastInputRequestedSubject
+	} else if eventType == orchestration.PystepsLKRequestedEventType {
+		subject = orchestration.PystepsLKRequestedSubject
 	}
 	eventID, err := uuid.Parse(event["event_id"].(string))
 	if err != nil {

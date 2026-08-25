@@ -356,20 +356,46 @@ def test_rp013_nowcast_input_profile_freezes_sequence_and_operational_gates() ->
     schema = json.loads(
         (CONFIG_ROOT / "schemas" / "nowcast-input-profile.schema.json").read_text()
     )
+    Draft202012Validator.check_schema(schema)
+    profiles = [
+        yaml.safe_load((CONFIG_ROOT / "nowcast" / name).read_text())
+        for name in ("rp013-fixed-5min-v1.yaml", "rp013-fixed-5min-v1.1.yaml")
+    ]
+    for profile in profiles:
+        Draft202012Validator(schema).validate(profile)
+        assert profile["nowcast_input_contract_version"] == "1.2"
+        assert profile["radar_analysis_contract_version"] == "1.2"
+        assert profile["sequence"] == {
+            "minimum_frames": 3,
+            "maximum_frames": 6,
+            "timestep_minutes": 5,
+            "selection": "latest_contiguous",
+        }
+        assert profile["gates"]["require_all_frames_operational_eligible"] is True
+        assert profile["gates"]["minimum_valid_coverage_ratio"] > 0
+        assert profile["gates"]["minimum_mean_quality_index"] > 0
+    assert profiles[1]["builder_version"] == "nowcast-input-builder-1.0.1"
+
+
+def test_rp014_pysteps_lk_profile_freezes_motion_and_baselines() -> None:
+    schema = json.loads(
+        (CONFIG_ROOT / "schemas" / "pysteps-lk-profile.schema.json").read_text()
+    )
     profile = yaml.safe_load(
-        (CONFIG_ROOT / "nowcast" / "rp013-fixed-5min-v1.yaml").read_text()
+        (CONFIG_ROOT / "nowcast" / "rp014-pysteps-lk-v1.yaml").read_text()
     )
 
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(profile)
-    assert profile["nowcast_input_contract_version"] == "1.2"
-    assert profile["radar_analysis_contract_version"] == "1.2"
+    assert profile["pysteps_version"] == "1.21.5"
+    assert profile["opencv_version"] == "5.0.0.93"
+    assert profile["forecast_output_contract_version"] == "1.1"
     assert profile["sequence"] == {
         "minimum_frames": 3,
         "maximum_frames": 6,
         "timestep_minutes": 5,
-        "selection": "latest_contiguous",
     }
-    assert profile["gates"]["require_all_frames_operational_eligible"] is True
-    assert profile["gates"]["minimum_valid_coverage_ratio"] > 0
-    assert profile["gates"]["minimum_mean_quality_index"] > 0
+    assert profile["motion"]["missing_policy"].endswith("preserve_advected_mask")
+    assert profile["motion"]["fallback"] == "zero_motion_when_insufficient_features"
+    assert profile["extrapolation"]["lead_count"] == 24
+    assert profile["extrapolation"]["baselines"] == ["persistence", "translation"]

@@ -7,6 +7,7 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 required_files=(
   "configs/schemas/nowcast-input-profile.schema.json"
   "configs/nowcast/rp013-fixed-5min-v1.yaml"
+  "configs/nowcast/rp013-fixed-5min-v1.1.yaml"
   "contracts/data/nowcast-input.md"
   "contracts/events/nowcast-input-requested.schema.json"
   "contracts/events/nowcast-input-ready.schema.json"

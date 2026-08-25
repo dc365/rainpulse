@@ -63,6 +63,9 @@ def build_nowcast_input_zarr_store(
     frame_coverages = np.mean(valid, axis=(1, 2))
     valid_quality = quality[valid]
     valid_age = data_age[valid]
+    input_asset_ids = _ordered_unique(
+        asset_id for root in roots for asset_id in root.attrs["input_asset_ids"]
+    )
     summary = {
         "schema_version": "1.0",
         "issue_time_utc": issue_time.isoformat(),
@@ -70,16 +73,13 @@ def build_nowcast_input_zarr_store(
         "profile_version": profile.profile_version,
         "preprocess_version": profile.builder_version,
         "analysis_ids": [str(value) for value in analysis_ids],
+        "input_asset_ids": input_asset_ids,
         "input_uris": list(input_uris),
         "frame_count": len(roots),
         "timestep_minutes": profile.sequence.timestep_minutes,
         "valid_coverage_ratio": float(np.min(frame_coverages)),
-        "mean_quality_index": (
-            float(np.mean(valid_quality)) if valid_quality.size else 0.0
-        ),
-        "max_data_age_minutes": (
-            float(np.max(valid_age)) if valid_age.size else 0.0
-        ),
+        "mean_quality_index": (float(np.mean(valid_quality)) if valid_quality.size else 0.0),
+        "max_data_age_minutes": (float(np.max(valid_age)) if valid_age.size else 0.0),
         "valid_cell_count": int(np.count_nonzero(valid)),
         "missing_cell_count": int(np.count_nonzero(~valid)),
         "low_quality_cell_count": int(np.count_nonzero(low)),
@@ -110,16 +110,10 @@ def build_nowcast_input_zarr_store(
             "source_version": str(roots[0].attrs["qpe_algorithm_version"]),
             "preprocess_version": profile.builder_version,
             "gate_config_version": profile.profile_version,
-            "input_asset_ids": _ordered_unique(
-                asset_id
-                for root in roots
-                for asset_id in root.attrs["input_asset_ids"]
-            ),
+            "input_asset_ids": input_asset_ids,
             "analysis_ids": [str(value) for value in analysis_ids],
             "qc_pipeline_versions": _ordered_unique(
-                version
-                for root in roots
-                for version in root.attrs["qc_pipeline_versions"]
+                version for root in roots for version in root.attrs["qc_pipeline_versions"]
             ),
             "qpe_config_version": qpe_config_version,
             "input_uris": list(input_uris),
@@ -138,10 +132,7 @@ def build_nowcast_input_zarr_store(
     target.create_dataset(
         "time",
         data=np.asarray(
-            [
-                _analysis_time(root).replace(tzinfo=None)
-                for root in roots
-            ],
+            [_analysis_time(root).replace(tzinfo=None) for root in roots],
             dtype="datetime64[ns]",
         ),
         chunks=(len(roots),),
@@ -238,6 +229,7 @@ def validate_nowcast_input_zarr_store(
     summary = json.loads(objects["input/summary.json"])
     if (
         summary.get("analysis_ids") != root.attrs.get("analysis_ids")
+        or summary.get("input_asset_ids") != root.attrs.get("input_asset_ids")
         or summary.get("frame_count") != len(times)
         or summary.get("valid_cell_count") != int(np.count_nonzero(valid))
         or summary.get("missing_cell_count") != int(np.count_nonzero(missing))
@@ -326,8 +318,10 @@ def _validate_sequence_identity(
             raise NowcastInputError("RadarAnalysis coordinates differ from immutable grid")
         for attr in ("input_asset_ids", "qc_pipeline_versions"):
             values = root.attrs.get(attr)
-            if not isinstance(values, list) or not values or not all(
-                isinstance(value, str) and value for value in values
+            if (
+                not isinstance(values, list)
+                or not values
+                or not all(isinstance(value, str) and value for value in values)
             ):
                 raise NowcastInputError(f"RadarAnalysis is missing required {attr}")
         qpe = str(root.attrs.get("qpe_config_version", ""))

@@ -265,6 +265,7 @@ type NowcastInputMetrics struct {
 	ProfileVersion      string      `json:"profile_version"`
 	PreprocessVersion   string      `json:"preprocess_version"`
 	AnalysisIDs         []uuid.UUID `json:"analysis_ids"`
+	InputAssetIDs       []uuid.UUID `json:"input_asset_ids"`
 	InputURIs           []string    `json:"input_uris"`
 	FrameCount          int         `json:"frame_count"`
 	TimestepMinutes     int         `json:"timestep_minutes"`
@@ -277,6 +278,48 @@ type NowcastInputMetrics struct {
 	OperationalEligible bool        `json:"operational_eligible"`
 	OperationalReasons  []string    `json:"operational_reasons"`
 	MeasuredAt          time.Time   `json:"measured_at"`
+}
+
+type PystepsLKBundle struct {
+	Run             Run
+	NowcastInputJob uuid.UUID
+	InputURI        string
+	InputAssetIDs   []uuid.UUID
+	ModelRunID      uuid.UUID
+	Config          json.RawMessage
+	ConfigSHA256    string
+	Job             Job
+	Outbox          OutboxEvent
+}
+
+type PystepsLKMetrics struct {
+	SchemaVersion                   string      `json:"schema_version"`
+	RunID                           uuid.UUID   `json:"run_id"`
+	JobID                           uuid.UUID   `json:"job_id"`
+	IssueTime                       time.Time   `json:"issue_time"`
+	GridID                          string      `json:"grid_id"`
+	ModelID                         string      `json:"model_id"`
+	ModelVersion                    string      `json:"model_version"`
+	ConfigVersion                   string      `json:"config_version"`
+	InputURI                        string      `json:"input_uri"`
+	InputAssetIDs                   []uuid.UUID `json:"input_asset_ids"`
+	LeadCount                       int         `json:"lead_count"`
+	LeadStepMinutes                 int         `json:"lead_step_minutes"`
+	ValidFrom                       time.Time   `json:"valid_from"`
+	ValidTo                         time.Time   `json:"valid_to"`
+	MotionFallbackUsed              bool        `json:"motion_fallback_used"`
+	TrackableRainPixelCount         int64       `json:"trackable_rain_pixel_count"`
+	FirstLeadValidCoverageRatio     float64     `json:"first_lead_valid_coverage_ratio"`
+	LastLeadValidCoverageRatio      float64     `json:"last_lead_valid_coverage_ratio"`
+	MaximumForecastRateMMH          float64     `json:"maximum_forecast_rate_mm_h"`
+	BaselineModels                  []string    `json:"baseline_models"`
+	MissingPolicy                   string      `json:"missing_policy"`
+	RuntimeMS                       int64       `json:"runtime_ms"`
+	GlobalTranslationXPixelsPerStep float64     `json:"global_translation_x_pixels_per_step"`
+	GlobalTranslationYPixelsPerStep float64     `json:"global_translation_y_pixels_per_step"`
+	MeanMotionUMS                   float64     `json:"mean_motion_u_m_s"`
+	MeanMotionVMS                   float64     `json:"mean_motion_v_m_s"`
+	MeasuredAt                      time.Time   `json:"measured_at"`
 }
 
 type DiagnosticLegendEntry struct {

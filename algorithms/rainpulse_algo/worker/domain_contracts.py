@@ -238,3 +238,26 @@ class NowcastInputPayload(ContractModel):
 class NowcastInputRequested(DomainRequest):
     event_type: Literal["nowcast.input.requested.v1"]
     payload: NowcastInputPayload
+
+
+class PystepsLKPayload(ObjectTaskPayload):
+    issue_time: datetime
+    grid_id: str = Field(min_length=1)
+    input_asset_ids: list[UUID] = Field(min_length=1)
+    model_id: Literal["pysteps-lk"]
+    model_version: str = Field(min_length=1)
+    config_version: str = Field(min_length=1)
+    forecast_contract_version: Literal["1.1"]
+    baseline_models: tuple[Literal["persistence"], Literal["translation"]]
+
+    @field_validator("input_asset_ids")
+    @classmethod
+    def validate_input_asset_ids(cls, values: list[UUID]) -> list[UUID]:
+        if len(values) != len(set(values)):
+            raise ValueError("input asset IDs must be unique")
+        return values
+
+
+class PystepsLKRequested(DomainRequest):
+    event_type: Literal["forecast.pysteps_lk.requested.v1"]
+    payload: PystepsLKPayload

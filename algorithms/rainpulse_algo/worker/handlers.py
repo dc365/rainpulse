@@ -13,6 +13,7 @@ from .domain_contracts import (
     AnalysisMosaicRequestedV2,
     AnalysisQPERequestedV1,
     NowcastInputRequested,
+    PystepsLKRequested,
     RadarDecodeRequested,
     RadarGridRequested,
     RadarQCRequested,
@@ -52,6 +53,12 @@ def _execute_nowcast_input(request: NowcastInputRequested) -> WorkerResult:
     from rainpulse_algo.nowcast.input_worker import execute_nowcast_input
 
     return execute_nowcast_input(request)
+
+
+def _execute_pysteps_lk(request: PystepsLKRequested) -> WorkerResult:
+    from rainpulse_algo.nowcast.pysteps_worker import execute_pysteps_lk
+
+    return execute_pysteps_lk(request)
 
 
 def _synthetic_executor(stage: str) -> Callable[[Any], WorkerResult]:
@@ -196,6 +203,16 @@ HANDLERS = {
         asset_type="nowcast_input",
         artifact_name="input.zarr",
         ack_wait_seconds=300,
+    ),
+    "pysteps-lk": TaskHandler(
+        profile="pysteps-lk",
+        subject="rainpulse.jobs.requested.pysteps_lk",
+        consumer="rainpulse-pysteps-lk-1-0-0",
+        request_model=PystepsLKRequested,
+        executor=_execute_pysteps_lk,
+        asset_type="forecast_output",
+        artifact_name="forecast.zarr",
+        ack_wait_seconds=900,
     ),
 }
 

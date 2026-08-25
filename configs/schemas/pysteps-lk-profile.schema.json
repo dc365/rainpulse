@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/configs/schemas/pysteps-lk-profile.schema.json",
+  "title": "RainPulse RP-014 pySTEPS-LK profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_version",
+    "model_id",
+    "model_version",
+    "pysteps_version",
+    "opencv_version",
+    "nowcast_input_contract_version",
+    "forecast_output_contract_version",
+    "grid_id",
+    "grid_config_version",
+    "sequence",
+    "motion",
+    "extrapolation",
+    "confidence"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "profile_version": { "type": "string", "minLength": 1 },
+    "model_id": { "const": "pysteps-lk" },
+    "model_version": { "type": "string", "minLength": 1 },
+    "pysteps_version": { "const": "1.21.5" },
+    "opencv_version": { "const": "5.0.0.93" },
+    "nowcast_input_contract_version": { "const": "1.2" },
+    "forecast_output_contract_version": { "const": "1.1" },
+    "grid_id": { "type": "string", "minLength": 1 },
+    "grid_config_version": { "type": "string", "minLength": 1 },
+    "sequence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minimum_frames", "maximum_frames", "timestep_minutes"],
+      "properties": {
+        "minimum_frames": { "const": 3 },
+        "maximum_frames": { "const": 6 },
+        "timestep_minutes": { "const": 5 }
+      }
+    },
+    "motion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "input_field",
+        "method",
+        "rain_threshold_dbz",
+        "minimum_trackable_rain_pixels",
+        "working_missing_fill_dbz",
+        "missing_policy",
+        "fallback",
+        "lucas_kanade"
+      ],
+      "properties": {
+        "input_field": { "const": "DBZH_QC" },
+        "method": { "const": "dense_lucaskanade" },
+        "rain_threshold_dbz": { "type": "number" },
+        "minimum_trackable_rain_pixels": { "type": "integer", "minimum": 1 },
+        "working_missing_fill_dbz": { "type": "number" },
+        "missing_policy": { "const": "dry_floor_working_copy_preserve_advected_mask" },
+        "fallback": { "const": "zero_motion_when_insufficient_features" },
+        "lucas_kanade": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "feature_detection",
+            "interpolation",
+            "decluster_scale_pixels",
+            "opening_size_pixels",
+            "outlier_stddev",
+            "outlier_neighbours"
+          ],
+          "properties": {
+            "feature_detection": { "const": "shitomasi" },
+            "interpolation": { "const": "idwinterp2d" },
+            "decluster_scale_pixels": { "type": "integer", "minimum": 1 },
+            "opening_size_pixels": { "type": "integer", "minimum": 0 },
+            "outlier_stddev": { "type": "number", "exclusiveMinimum": 0 },
+            "outlier_neighbours": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "extrapolation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "interpolation_order",
+        "lead_count",
+        "lead_step_minutes",
+        "baselines"
+      ],
+      "properties": {
+        "method": { "const": "semilagrangian" },
+        "interpolation_order": { "type": "integer", "enum": [0, 1, 3] },
+        "lead_count": { "const": 24 },
+        "lead_step_minutes": { "const": 5 },
+        "baselines": { "const": ["persistence", "translation"] }
+      }
+    },
+    "confidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decay_minutes", "low_quality_factor"],
+      "properties": {
+        "decay_minutes": { "type": "number", "exclusiveMinimum": 0 },
+        "low_quality_factor": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        }
+      }
+    }
+  }
+}

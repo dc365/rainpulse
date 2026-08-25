@@ -1,0 +1,43 @@
+schema_version: "1.0"
+profile_version: rp014-pysteps-lk-v1
+model_id: pysteps-lk
+model_version: pysteps-lk-1.0.0
+pysteps_version: 1.21.5
+opencv_version: 5.0.0.93
+nowcast_input_contract_version: "1.2"
+forecast_output_contract_version: "1.1"
+
+grid_id: fuzhou_118_123_25_27_0p01deg_v1
+grid_config_version: fuzhou-grid-0p01deg-v1
+
+sequence:
+  minimum_frames: 3
+  maximum_frames: 6
+  timestep_minutes: 5
+
+motion:
+  input_field: DBZH_QC
+  method: dense_lucaskanade
+  rain_threshold_dbz: 10.0
+  minimum_trackable_rain_pixels: 16
+  working_missing_fill_dbz: 0.0
+  missing_policy: dry_floor_working_copy_preserve_advected_mask
+  fallback: zero_motion_when_insufficient_features
+  lucas_kanade:
+    feature_detection: shitomasi
+    interpolation: idwinterp2d
+    decluster_scale_pixels: 20
+    opening_size_pixels: 3
+    outlier_stddev: 3.0
+    outlier_neighbours: 30
+
+extrapolation:
+  method: semilagrangian
+  interpolation_order: 1
+  lead_count: 24
+  lead_step_minutes: 5
+  baselines: [persistence, translation]
+
+confidence:
+  decay_minutes: 120.0
+  low_quality_factor: 0.5
