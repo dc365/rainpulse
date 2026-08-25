@@ -295,29 +295,25 @@ RP-015 application delivery now provides:
 
 ## Active test environment
 
-- Target: `private-test-host`
-- Project: `<remote-project-dir>`
-- Web: `http://private-test-host:4173`
-- API: `http://private-test-host:8080/api/v1/system/status`
+- Host identity, SSH user, deployment paths and externally reachable endpoints
+  are private deployment configuration and are not stored in this repository.
 - API-reported runtime label: `rp008-v1.1-0748898-20260824` (the preserved
   deployment label has not been bumped; the code/acceptance commit is
   authoritative)
 - RP-009 ancillary runtime: `runtime/ancillary/assets`, accepted 2026-08-25
-- One-time legacy archive: `<remote-legacy-archive>`
+- The one-time legacy archive location is configured outside the repository.
 
-The target has 24 logical CPUs, about 156 GiB RAM, an RTX 6000D GPU, NVIDIA
-container runtime, and about 405 GB free disk at the last audit. Phase 1 radar
-QC and pySTEPS are CPU-first. GPU use is reserved for later NowcastNet work.
-Raw-volume retention and expected daily volume must be frozen before continuous
-ingest because free disk is the immediate capacity constraint.
+Phase 1 radar QC and pySTEPS are CPU-first. GPU use is reserved for later
+NowcastNet work. Raw-volume retention and expected daily volume must be frozen
+before continuous ingest based on the private deployment capacity audit.
 
-Docker Hub access is unreliable. Continue to use local Linux/amd64 builds and
-export/import pinned images through `http://127.0.0.1:7897` when necessary.
-No credentials or secrets belong in this document or repository.
+When direct registry access is unavailable, continue to use local Linux/amd64
+builds and export/import pinned images through an externally configured proxy.
+No credentials, private host identities or secrets belong in this document or repository.
 
 The RP-004–RP-015 application code, generated clients, tests and Linux/amd64
-binaries pass locally. SSH public-key access to the GPU server is active;
-passwords are not stored locally. On 2026-08-24 RP-007 was deployed in place
+binaries pass locally. Private test deployment uses public-key authentication;
+passwords are not stored in the repository. On 2026-08-24 RP-007 was deployed in place
 without a new source or database backup, followed by RP-008 through RP-012
 under the same rule. The Z9598
 NAS golden sample decoded to 11 sweeps,

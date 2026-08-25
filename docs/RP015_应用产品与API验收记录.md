@@ -2,7 +2,7 @@
 
 日期：2026-08-26
 代码基线：`ab7748f`
-测试服务器：`private-test-host`
+测试服务器：`deployment-host.internal`
 部署目录：`<remote-project-dir>`
 
 ## 1. 验收结论
@@ -168,7 +168,7 @@ rp015-application-products-v1/application-products
 - 前端功能基线 `ab7748f` 编译为 Linux/amd64 Web 二进制和 Vite 静态产物，只重建
   `web` 服务；`deploy/.env`、`runtime/` 和三个持久化数据卷均保留。
 - 部署后 16 个长期 Compose 服务全部 `healthy`，Web 入口为
-  `http://private-test-host:4173`。
+  `http://deployment-host.internal:4173`。
 - 服务器实际产品目录加载 run
   `0ce8e90c-3160-5e5d-874d-1eda09bf1084`，状态 `PUBLISHED`，24 个降水率时效、
   两个累计产品和三类分发资产均可访问。

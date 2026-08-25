@@ -1,6 +1,6 @@
 # RP-013 NowcastInput 验收记录
 
-日期：2026-08-25  
+日期：2026-08-25
 基线：`RainPulse_技术架构与实施方案_含雷达质控_v1.1.md`
 
 ## 1. 验收结论
@@ -86,8 +86,8 @@ ready 事件发布。
 
 ## 5. 测试服务器验收
 
-部署目录：`<remote-project-dir>`  
-运行版本：`rp013-v1.1-68574c0-20260825`  
+部署目录：`<remote-project-dir>`
+运行版本：`rp013-v1.1-68574c0-20260825`
 运行状态：14 个常驻 Compose 服务全部 healthy；数据库最新迁移为
 `0012_nowcast_input.sql`。既有 PostgreSQL、NATS 和 MinIO 卷原地保留。
 

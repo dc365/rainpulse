@@ -1,8 +1,8 @@
 # RP-014 pySTEPS-LK 验收记录
 
-日期：2026-08-25  
-代码基线：`e40c09b`  
-测试服务器：`private-test-host`  
+日期：2026-08-25
+代码基线：`e40c09b`
+测试服务器：`deployment-host.internal`
 部署目录：`<remote-project-dir>`
 
 ## 1. 验收结论

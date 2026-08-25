@@ -4,8 +4,7 @@
 
 - This repository is the only active workspace for RainPulse short-term precipitation nowcasting work.
 - Treat `docs/RainPulse_技术架构与实施方案_含雷达质控_v1.1.md` as the implementation and acceptance baseline.
-- Treat `docs/短临降水预报技术方案.pptx` as the product goal and algorithm-selection narrative.
-- Treat `docs/福建雷达质控.md` as the regional QC design reference.
+- Product-goal and regional-QC reference materials are private local inputs. They must not be committed.
 - `docs/RainPulse_技术架构与实施方案.md` is the superseded v1.0 history only.
 - If the active documents disagree, follow the v1.1 Markdown implementation plan until the discrepancy is explicitly resolved.
 - Keep unrelated or superseded work outside this repository. The local parent workspace stores old work in `legacy-workspace/`.
@@ -51,16 +50,13 @@
 
 ## Deployment target
 
-- Test deployments may use the GPU server at `private-test-host` with SSH user `<ssh-user>`.
-- Use the installed SSH public key (`ssh <ssh-user>@<private-test-host>`) for routine
-  access; do not persist the account password locally.
-- Remote project directory: `<remote-project-dir>`.
+- Test deployment host, SSH identity and remote paths are configured outside the repository.
+- Use public-key authentication for routine access; do not persist account passwords locally.
 - The local repository is the source of truth for code changes. Use the remote
   directory for deployment, integration debugging, Compose services and
   hardware-dependent verification.
-- The one-time pre-RainPulse archive is
-  `<remote-legacy-archive>`. Keep that
-  archive, but update `rainpulse-nowcast` in place for subsequent test releases;
+- Keep the one-time pre-RainPulse archive, but update the active deployment in
+  place for subsequent test releases;
   do not create per-release source copies or database dumps unless explicitly
   requested.
 - Never store SSH passwords or other secrets in this repository, logs, generated memory, Compose files, or committed environment files.

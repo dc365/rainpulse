@@ -1,6 +1,6 @@
 # RP-012 React 质控与拼图诊断验收记录
 
-日期：2026-08-25  
+日期：2026-08-25
 基线：`RainPulse_技术架构与实施方案_含雷达质控_v1.1.md`
 
 ## 1. 验收结论
@@ -98,8 +98,8 @@ git diff --check
 
 ## 6. 测试服务器真实验收
 
-部署目录：`<remote-project-dir>`  
-运行版本：`rp012-v1.1-ff46a14-20260825`  
+部署目录：`<remote-project-dir>`
+运行版本：`rp012-v1.1-ff46a14-20260825`
 运行状态：13 个常驻 Compose 服务全部 healthy；数据库最新迁移为
 `0011_analysis_diagnostics.sql`。PostgreSQL、NATS 和 MinIO 既有卷原地保留。
 

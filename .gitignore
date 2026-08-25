@@ -18,3 +18,9 @@ __pycache__/
 
 /runtime/
 /data/
+/test_datas/
+/output/
+
+# Private local reference material. Keep these files outside Git history.
+/docs/短临降水预报技术方案.pptx
+/docs/福建雷达质控.md
