@@ -1,6 +1,6 @@
 # RainPulse implementation status
 
-Updated: 2026-08-25
+Updated: 2026-08-26
 
 ## Active baseline
 
@@ -42,8 +42,8 @@ NowcastInput gate.
 | RP-012 | Core vertical slice complete | Immutable 11-layer grid/PPI diagnostic bundle, controlled PNG API, React evidence workbench and real Z9598 engineering replay accepted |
 | RP-013 | Core vertical slice complete | Strict fixed-step NowcastInput, quality/eligibility gates, immutable Zarr, persistence/events and traceable synthetic server acceptance; real sequence acceptance remains gated |
 | RP-014 | Core vertical slice complete | Real dense Lucas–Kanade and semi-Lagrangian extrapolation, physical U/V, 24 leads, persistence/translation baselines, immutable ForecastOutput, persistence/events and synthetic server replay; real forecast-skill acceptance remains gated |
-| RP-015 | Product/API vertical slice complete | ForecastOutput-derived PNG/COG/NetCDF products, point index, catalog/content/query REST, product events and server replay accepted; React map/timeline remains |
-| RP-016 | Not started | Verification, fault injection and end-to-end operational acceptance follow RP-015 UI completion |
+| RP-015 | Complete for synthetic vertical acceptance | ForecastOutput-derived PNG/COG/NetCDF products, point/area APIs, product events, server replay and the responsive React short-nowcast workspace are accepted; real forecast skill remains gated |
+| RP-016 | Not started | Verification, fault injection and end-to-end operational acceptance follow the accepted RP-015 boundary |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -269,7 +269,7 @@ RP-013 now provides:
 - real Z9598 negative-gate evidence plus a clearly isolated full-grid synthetic
   vertical acceptance documented in `docs/RP013_NowcastInput验收记录.md`.
 
-RP-015 product/API delivery now provides:
+RP-015 application delivery now provides:
 
 - an atomic `ApplicationProductBundle` derived only from one committed
   `ForecastOutput` 1.1, with exact source URI/SHA provenance;
@@ -282,7 +282,14 @@ RP-015 product/API delivery now provides:
   statistics and `PUBLISHED` SSE delivery;
 - server replay idempotency and event-route regression coverage, documented in
   `docs/RP015_应用产品与API验收记录.md`;
-- the React short-nowcast map and timeline remain pending direction approval.
+- a responsive React short-nowcast workspace with a georeferenced Fuzhou rain
+  layer, authoritative lightweight GSHHG coastline, frozen rain legend, 24-frame
+  five-minute timeline and direct PNG/COG/NetCDF delivery links;
+- keyboard-operable map point selection, 24-lead point trend and confidence,
+  named-area/bbox statistics, source/product SHA provenance and an explicit
+  warning that publication status does not prove forecast skill;
+- deployed browser acceptance at 1440, 768, 375 and 320 px with no page-level
+  horizontal overflow or browser console errors.
 
 ## Active test environment
 
@@ -306,7 +313,7 @@ Docker Hub access is unreliable. Continue to use local Linux/amd64 builds and
 export/import pinned images through `http://127.0.0.1:7897` when necessary.
 No credentials or secrets belong in this document or repository.
 
-The RP-004–RP-015 product/API code, generated clients, tests and Linux/amd64
+The RP-004–RP-015 application code, generated clients, tests and Linux/amd64
 binaries pass locally. SSH public-key access to the GPU server is active;
 passwords are not stored locally. On 2026-08-24 RP-007 was deployed in place
 without a new source or database backup, followed by RP-008 through RP-012
@@ -359,9 +366,9 @@ content, point, area and SSE endpoints passed; product replay reused the atomic
 marker and left the same database cardinalities. The JetStream product subject
 and full replay event routing are pinned by regression tests, and all three
 product publication outbox events are published. All sixteen long-lived Compose
-services are healthy. Desktop 1440 px, tablet 768 px and
-mobile 375 px browser checks passed; the final default real-analysis view has
-no console error or warning. The
+services are healthy. Desktop 1440 px, tablet 768 px and mobile 375/320 px
+browser checks passed; the default short-nowcast view reads the accepted real
+product APIs and has no console error or warning. The
 retained PostgreSQL, NATS and MinIO volumes were not deleted.
 
 The local repository is the code source of truth. Deployment and integration
@@ -373,13 +380,10 @@ of the active test environment and must not be deleted during ordinary updates.
 
 ## Next acceptance target
 
-Complete the RP-015 React short-nowcast map and five-minute timeline against the
-accepted product/API boundary. The product formats, transparent layers,
-controlled REST/SSE delivery and provenance are now frozen and server-accepted;
-the remaining work is map interaction, point/area presentation, responsive and
-accessibility verification. RP-016 will then add verification, fault injection
-and the full raw-radar-to-React path. Real RP-013/RP-014 meteorological acceptance still
-needs at least three consecutive operational QC→grid→mosaic→QPE cycles with
+Begin RP-016 verification, fault injection and full raw-radar-to-React
+operational acceptance against the frozen RP-015 product and UI boundary. Real
+RP-013/RP-014 meteorological acceptance still needs at least three consecutive
+operational QC→grid→mosaic→QPE cycles with
 trackable precipitation. Gauge adjustment remains disabled until representative
 gauge observations and quality rules are supplied. Real multi-radar mosaic
 acceptance still requires at least two ready radar configurations and
