@@ -79,7 +79,8 @@ export function AnalysisDiagnostics({ refreshToken }: { refreshToken: number }) 
       setCycles(page.items)
       setSelectedID((current) => {
         if (current && page.items.some((item) => item.analysis_id === current)) return current
-        return page.items.find((item) => item.status === 'ANALYSIS_READY' && item.analysis_uri)?.analysis_id
+        return page.items.find((item) => item.status === 'ANALYSIS_READY'
+          && item.analysis_uri && !item.analysis_uri.includes('/simulations/'))?.analysis_id
           ?? page.items.find((item) => item.status === 'ANALYSIS_READY')?.analysis_id
           ?? page.items[0]?.analysis_id
           ?? null

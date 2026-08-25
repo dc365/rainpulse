@@ -177,7 +177,7 @@ describe('RainPulse radar operations overview', () => {
       analysis_time: '2026-08-25T06:25:00Z',
       grid_id: 'rp004-synthetic-grid',
       mosaic_uri: null,
-      analysis_uri: null,
+      analysis_uri: 's3://rainpulse/simulations/analysis/analysis.zarr',
     }
     const fetchStatus = vi.fn().mockImplementation((input: string) => {
       let body: unknown = { service: 'rainpulse-control', status: 'ready', version: 'rp012-test' }
