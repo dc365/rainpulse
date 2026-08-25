@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import type { components } from './api/generated/schema'
 import { AnalysisDiagnostics } from './AnalysisDiagnostics'
+import { NowcastWorkspace } from './NowcastWorkspace'
 import './styles.css'
 
 type SystemStatus = components['schemas']['SystemStatus']
@@ -71,7 +72,8 @@ function percent(value?: number | null) {
 }
 
 export default function App() {
-  const [activeView, setActiveView] = useState<'analysis' | 'radar'>('analysis')
+  const [activeView, setActiveView] = useState<'nowcast' | 'analysis' | 'radar'>('nowcast')
+  const [nowcastRefreshToken, setNowcastRefreshToken] = useState(0)
   const [analysisRefreshToken, setAnalysisRefreshToken] = useState(0)
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null)
   const [radars, setRadars] = useState<RadarStatus[]>([])
@@ -140,8 +142,20 @@ export default function App() {
   ).length
   const readyCount = radars.filter((radar) => radar.lifecycle === 'ready').length
 
+  const refreshActiveView = () => {
+    if (activeView === 'nowcast') {
+      setNowcastRefreshToken((value) => value + 1)
+    } else if (activeView === 'analysis') {
+      setAnalysisRefreshToken((value) => value + 1)
+    } else {
+      void load(undefined, true)
+    }
+  }
+
   return (
-    <main className="app-shell">
+    <>
+      <a className="skip-link" href="#main-content">跳到主要内容</a>
+      <main className="app-shell" id="main-content">
       <header className="topbar">
         <div className="brand-lockup">
           <span className="brand-mark" aria-hidden="true">
@@ -155,6 +169,7 @@ export default function App() {
           </div>
         </div>
         <nav className="workspace-nav" aria-label="业务工作区">
+          <button type="button" className={activeView === 'nowcast' ? 'active' : ''} aria-current={activeView === 'nowcast' ? 'page' : undefined} onClick={() => setActiveView('nowcast')}>短临预报</button>
           <button type="button" className={activeView === 'analysis' ? 'active' : ''} aria-current={activeView === 'analysis' ? 'page' : undefined} onClick={() => setActiveView('analysis')}>分析诊断</button>
           <button type="button" className={activeView === 'radar' ? 'active' : ''} aria-current={activeView === 'radar' ? 'page' : undefined} onClick={() => setActiveView('radar')}>雷达运行</button>
         </nav>
@@ -166,9 +181,9 @@ export default function App() {
           <button
             className="refresh-button"
             type="button"
-            aria-label={activeView === 'analysis' ? '刷新分析诊断' : '刷新雷达状态'}
+            aria-label={activeView === 'nowcast' ? '刷新短临预报' : activeView === 'analysis' ? '刷新分析诊断' : '刷新雷达状态'}
             disabled={activeView === 'radar' && refreshing}
-            onClick={() => activeView === 'analysis' ? setAnalysisRefreshToken((value) => value + 1) : void load(undefined, true)}
+            onClick={refreshActiveView}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M20 7v5h-5M4 17v-5h5" />
@@ -252,8 +267,13 @@ export default function App() {
         </section>
       </section>
         </>
-      ) : <AnalysisDiagnostics refreshToken={analysisRefreshToken} />}
-    </main>
+      ) : activeView === 'analysis' ? (
+        <AnalysisDiagnostics refreshToken={analysisRefreshToken} />
+      ) : (
+        <NowcastWorkspace refreshToken={nowcastRefreshToken} />
+      )}
+      </main>
+    </>
   )
 }
 

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import App from './App'
@@ -71,6 +71,7 @@ const status = {
 
 describe('RainPulse radar operations overview', () => {
   afterEach(() => {
+    cleanup()
     vi.unstubAllGlobals()
   })
 
@@ -203,6 +204,7 @@ describe('RainPulse radar operations overview', () => {
 
     render(<App />)
 
+    fireEvent.click(screen.getByRole('button', { name: '分析诊断' }))
     expect(screen.getByRole('heading', { name: '分析诊断' })).toBeTruthy()
     expect(await screen.findByText('当前分析不可用于业务发布')).toBeTruthy()
     expect(screen.getByAltText('瞬时雨强诊断图层')).toBeTruthy()
