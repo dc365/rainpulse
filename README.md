@@ -36,6 +36,7 @@ make radar-qc-smoke
 make test-radar-grid
 make test-radar-mosaic
 make test-qpe
+make test-diagnostics
 make smoke
 ```
 
@@ -56,6 +57,8 @@ After `make dev-up`, the public seams are:
 - Per-scan Hybrid Scan summary: `http://127.0.0.1:8080/api/v1/radar-scans/{scan_id}/grid-summary`
 - Per-cycle mosaic summary: `http://127.0.0.1:8080/api/v1/analysis-cycles/{analysis_id}/mosaic-summary`
 - Per-cycle QPE summary: `http://127.0.0.1:8080/api/v1/analysis-cycles/{analysis_id}/qpe-summary`
+- Per-cycle diagnostic manifest: `http://127.0.0.1:8080/api/v1/analysis-cycles/{analysis_id}/diagnostics`
+- Immutable diagnostic PNG: `http://127.0.0.1:8080/api/v1/diagnostics/{job_id}/layers/{layer_id}`
 - Radar fleet health: `http://127.0.0.1:8080/api/v1/radars/status`
 - Per-radar health: `http://127.0.0.1:8080/api/v1/radars/{radar_id}/status`
 - Analysis cycles: `http://127.0.0.1:8080/api/v1/analysis-cycles`
@@ -82,8 +85,11 @@ RP-011 adds versioned engineering Z–R QPE, strict missing/no-rain/low-quality
 semantics, RadarAnalysis v1.2, persistence/API support and a real Z9598 replay.
 Gauge adjustment remains disabled until quality-controlled rain-gauge data are
 available, so this is an engineering pipeline acceptance rather than an
-operational rainfall-accuracy claim. RP-012 diagnostics and downstream
-meteorological models remain to be implemented.
+operational rainfall-accuracy claim. RP-012 adds immutable transparent grid/PPI
+diagnostic layers, a controlled Go image API and a responsive React evidence
+workbench with raw/QC comparison, QI, flags, sources, masks and QPE provenance.
+RP-013 NowcastInput and downstream meteorological models remain to be
+implemented.
 
 ## Test deployment artifacts
 
@@ -116,3 +122,5 @@ The RP-010 time-aligned, quality-aware mosaic acceptance is recorded in
 [`docs/RP010_雷达时空对齐与质量感知拼图验收记录.md`](docs/RP010_雷达时空对齐与质量感知拼图验收记录.md).
 The RP-011 basic QPE and RadarAnalysis acceptance is recorded in
 [`docs/RP011_基础QPE验收记录.md`](docs/RP011_基础QPE验收记录.md).
+The RP-012 React QC/mosaic/QPE diagnostic acceptance is recorded in
+[`docs/RP012_React质控与拼图诊断验收记录.md`](docs/RP012_React质控与拼图诊断验收记录.md).
