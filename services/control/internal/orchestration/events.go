@@ -32,6 +32,9 @@ const (
 	AnalysisMosaicRequestedEventType = "analysis.mosaic.requested.v2"
 	AnalysisMosaicRequestedSubject   = "rainpulse.jobs.requested.analysis_mosaic"
 	AnalysisMosaicJobType            = "analysis.mosaic"
+	AnalysisQPERequestedEventType    = "analysis.qpe.requested.v1"
+	AnalysisQPERequestedSubject      = "rainpulse.jobs.requested.analysis_qpe"
+	AnalysisQPEJobType               = "analysis.qpe"
 	JobCompletedSubject              = "rainpulse.jobs.completed"
 	JobFailedSubject                 = "rainpulse.jobs.failed"
 	JobResultsSubject                = "rainpulse.jobs.*"
@@ -161,6 +164,31 @@ type AnalysisMosaicRequestedPayload struct {
 	MosaicConfigVersion string                         `json:"mosaic_config_version"`
 	MosaicAlgorithm     string                         `json:"mosaic_algorithm_version"`
 	FlagDefinition      string                         `json:"flag_definition_version"`
+}
+
+type AnalysisQPERequested struct {
+	SchemaVersion string                      `json:"schema_version"`
+	EventID       uuid.UUID                   `json:"event_id"`
+	EventType     string                      `json:"event_type"`
+	OccurredAt    time.Time                   `json:"occurred_at"`
+	RunID         uuid.UUID                   `json:"run_id"`
+	JobID         uuid.UUID                   `json:"job_id"`
+	TraceID       uuid.UUID                   `json:"trace_id"`
+	Payload       AnalysisQPERequestedPayload `json:"payload"`
+}
+
+type AnalysisQPERequestedPayload struct {
+	AnalysisID            uuid.UUID `json:"analysis_id"`
+	AnalysisTime          time.Time `json:"analysis_time"`
+	GridID                string    `json:"grid_id"`
+	GridConfigVersion     string    `json:"grid_config_version"`
+	InputURI              string    `json:"input_uri"`
+	OutputPrefix          string    `json:"output_prefix"`
+	MosaicConfigVersion   string    `json:"mosaic_config_version"`
+	MosaicAlgorithm       string    `json:"mosaic_algorithm_version"`
+	QPEConfigVersion      string    `json:"qpe_config_version"`
+	QPEAlgorithmVersion   string    `json:"qpe_algorithm_version"`
+	FlagDefinitionVersion string    `json:"flag_definition_version"`
 }
 
 type JobCompleted struct {

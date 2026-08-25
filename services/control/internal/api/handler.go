@@ -35,6 +35,7 @@ type ObservationStore interface {
 	GetRadarQCMetrics(context.Context, uuid.UUID) (workflow.RadarQCMetrics, error)
 	GetRadarGridMetrics(context.Context, uuid.UUID) (workflow.RadarGridMetrics, error)
 	GetAnalysisMosaicMetrics(context.Context, uuid.UUID) (workflow.AnalysisMosaicMetrics, error)
+	GetAnalysisQPEMetrics(context.Context, uuid.UUID) (workflow.AnalysisQPEMetrics, error)
 	ListAnalysisCycles(context.Context, int, *workflow.AnalysisStatus) ([]workflow.AnalysisCycle, error)
 	GetAnalysisCycle(context.Context, uuid.UUID) (workflow.AnalysisCycle, error)
 }
@@ -394,6 +395,25 @@ func (service *server) GetAnalysisMosaicSummary(
 		return
 	}
 	metrics, err := service.observations.GetAnalysisMosaicMetrics(
+		request.Context(), analysisID,
+	)
+	if err != nil {
+		writeStoreError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, metrics)
+}
+
+func (service *server) GetAnalysisQpeSummary(
+	response http.ResponseWriter,
+	request *http.Request,
+	analysisID apiv1.AnalysisId,
+) {
+	if service.observations == nil {
+		writeServiceUnavailable(response)
+		return
+	}
+	metrics, err := service.observations.GetAnalysisQPEMetrics(
 		request.Context(), analysisID,
 	)
 	if err != nil {

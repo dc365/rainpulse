@@ -9,15 +9,17 @@ nowcast operation:
 3. [`qc-radar-volume.md`](qc-radar-volume.md) defines polar QC fields, flags,
    quality components, and module provenance.
 4. [`radar-grid.md`](radar-grid.md) defines one radar's Hybrid Scan grid.
-5. [`radar-analysis.md`](radar-analysis.md) defines the quality-aware multi-radar
-   reflectivity/QPE analysis.
-6. [`nowcast-input.md`](nowcast-input.md) defines the fixed-step sequence passed
+5. [`radar-mosaic.md`](radar-mosaic.md) defines the time-aligned quality-aware
+   reflectivity mosaic before QPE.
+6. [`radar-analysis.md`](radar-analysis.md) adds the versioned QPE field and
+   defines the completed analysis.
+7. [`nowcast-input.md`](nowcast-input.md) defines the fixed-step sequence passed
    to model workers.
-7. [`forecast-output.md`](forecast-output.md) defines model output consumed by
+8. [`forecast-output.md`](forecast-output.md) defines model output consumed by
    product generation and verification.
-8. [`application-rainfall-netcdf.md`](application-rainfall-netcdf.md) defines
+9. [`application-rainfall-netcdf.md`](application-rainfall-netcdf.md) defines
    the two-dimensional business exchange file derived at the product boundary.
-9. [`rendered-rainfall-layer.md`](rendered-rainfall-layer.md) defines the
+10. [`rendered-rainfall-layer.md`](rendered-rainfall-layer.md) defines the
    transparent PNG and geospatial layer manifest consumed by the frontend.
 
 Every stage preserves valid no-rain, missing, and low-quality states. Full

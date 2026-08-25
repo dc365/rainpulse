@@ -146,6 +146,23 @@ class AnalysisMosaicRequestedV2(DomainRequest):
     payload: AnalysisMosaicPayloadV2
 
 
+class AnalysisQPEPayloadV1(ObjectTaskPayload):
+    analysis_id: UUID
+    analysis_time: datetime
+    grid_id: str = Field(min_length=1)
+    grid_config_version: str = Field(min_length=1)
+    mosaic_config_version: str = Field(min_length=1)
+    mosaic_algorithm_version: str = Field(min_length=1)
+    qpe_config_version: str = Field(min_length=1)
+    qpe_algorithm_version: str = Field(min_length=1)
+    flag_definition_version: str = Field(min_length=1)
+
+
+class AnalysisQPERequestedV1(DomainRequest):
+    event_type: Literal["analysis.qpe.requested.v1"]
+    payload: AnalysisQPEPayloadV1
+
+
 class NowcastInputPayload(ContractModel):
     analysis_ids: list[UUID] = Field(min_length=3, max_length=6)
     input_uris: list[str] = Field(min_length=3, max_length=6)

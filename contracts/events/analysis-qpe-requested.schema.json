@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/contracts/events/analysis-qpe-requested.schema.json",
+  "title": "analysis.qpe.requested.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "event_type", "occurred_at", "run_id", "job_id", "trace_id", "payload"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "event_id": { "type": "string", "format": "uuid" },
+    "event_type": { "const": "analysis.qpe.requested.v1" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "run_id": { "type": "string", "format": "uuid" },
+    "job_id": { "type": "string", "format": "uuid" },
+    "trace_id": { "type": "string", "format": "uuid" },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["analysis_id", "analysis_time", "grid_id", "grid_config_version", "input_uri", "output_prefix", "mosaic_config_version", "mosaic_algorithm_version", "qpe_config_version", "qpe_algorithm_version", "flag_definition_version"],
+      "properties": {
+        "analysis_id": { "type": "string", "format": "uuid" },
+        "analysis_time": { "type": "string", "format": "date-time" },
+        "grid_id": { "type": "string", "minLength": 1 },
+        "grid_config_version": { "type": "string", "minLength": 1 },
+        "input_uri": { "type": "string", "format": "uri" },
+        "output_prefix": { "type": "string", "format": "uri" },
+        "mosaic_config_version": { "type": "string", "minLength": 1 },
+        "mosaic_algorithm_version": { "type": "string", "minLength": 1 },
+        "qpe_config_version": { "type": "string", "minLength": 1 },
+        "qpe_algorithm_version": { "type": "string", "minLength": 1 },
+        "flag_definition_version": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

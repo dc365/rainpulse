@@ -10,6 +10,7 @@ from rainpulse_algo.radar.worker import execute_fmt_decode
 from .domain_contracts import (
     AnalysisMosaicRequestedV1,
     AnalysisMosaicRequestedV2,
+    AnalysisQPERequestedV1,
     NowcastInputRequested,
     RadarDecodeRequested,
     RadarGridRequested,
@@ -30,6 +31,12 @@ def _execute_radar_mosaic(request: AnalysisMosaicRequestedV2) -> WorkerResult:
     from rainpulse_algo.radar.mosaic_worker import execute_radar_mosaic
 
     return execute_radar_mosaic(request)
+
+
+def _execute_analysis_qpe(request: AnalysisQPERequestedV1) -> WorkerResult:
+    from rainpulse_algo.radar.qpe_worker import execute_analysis_qpe
+
+    return execute_analysis_qpe(request)
 
 
 def _synthetic_executor(stage: str) -> Callable[[Any], WorkerResult]:
@@ -133,6 +140,16 @@ HANDLERS = {
         executor=_execute_radar_mosaic,
         asset_type="radar_mosaic",
         artifact_name="mosaic.zarr",
+        ack_wait_seconds=300,
+    ),
+    "analysis-qpe-basic": TaskHandler(
+        profile="analysis-qpe-basic",
+        subject="rainpulse.jobs.requested.analysis_qpe",
+        consumer="rainpulse-analysis-qpe-basic-zr-1-0-0",
+        request_model=AnalysisQPERequestedV1,
+        executor=_execute_analysis_qpe,
+        asset_type="radar_analysis",
+        artifact_name="analysis.zarr",
         ack_wait_seconds=300,
     ),
     "nowcast-input-synthetic": TaskHandler(

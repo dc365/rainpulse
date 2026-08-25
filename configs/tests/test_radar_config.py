@@ -292,3 +292,25 @@ def test_rp010_mosaic_profile_freezes_time_alignment_and_linear_z_fusion() -> No
     assert profile["alignment"]["expected_radar_ids"] == []
     assert profile["fusion"]["method"] == "highest_qi_then_linear_z_blend"
     assert profile["fusion"]["blended_source_code"] == 65535
+
+
+def test_rp011_qpe_profile_freezes_basic_zr_and_disables_gauge_adjustment() -> None:
+    schema = json.loads(
+        (CONFIG_ROOT / "schemas" / "qpe-profile.schema.json").read_text()
+    )
+    profile = yaml.safe_load(
+        (CONFIG_ROOT / "qpe" / "rp011-basic-zr-v1.yaml").read_text()
+    )
+
+    Draft202012Validator.check_schema(schema)
+    Draft202012Validator(schema).validate(profile)
+    assert profile["qpe"]["relation"] == "power_law_z_r"
+    assert profile["qpe"]["coefficient_a"] == pytest.approx(200.0)
+    assert profile["qpe"]["exponent_b"] == pytest.approx(1.6)
+    assert profile["qpe"]["overflow_policy"] == "cap_and_report"
+    assert profile["flag_definition_version"] == "qc-flags-v1"
+    assert profile["gauge_adjustment"] == {
+        "enabled": False,
+        "method": "none",
+        "observation_qc_version": None,
+    }

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/configs/schemas/qpe-profile.schema.json",
+  "title": "RainPulse RP-011 basic QPE profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profile_version", "algorithm_version", "radar_analysis_contract_version", "mosaic_contract_version", "flag_definition_version", "grid_id", "grid_config_version", "qpe", "gauge_adjustment"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "profile_version": { "$ref": "#/$defs/identifier" },
+    "algorithm_version": { "$ref": "#/$defs/identifier" },
+    "radar_analysis_contract_version": { "const": "1.2" },
+    "mosaic_contract_version": { "const": "1.0" },
+    "flag_definition_version": { "$ref": "#/$defs/identifier" },
+    "grid_id": { "$ref": "#/$defs/identifier" },
+    "grid_config_version": { "$ref": "#/$defs/identifier" },
+    "qpe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input_field", "relation", "coefficient_a", "exponent_b", "no_rain_below_dbz", "maximum_rate_mm_h", "overflow_policy"],
+      "properties": {
+        "input_field": { "const": "DBZH_QC" },
+        "relation": { "const": "power_law_z_r" },
+        "coefficient_a": { "type": "number", "exclusiveMinimum": 0 },
+        "exponent_b": { "type": "number", "exclusiveMinimum": 0 },
+        "no_rain_below_dbz": { "type": "number", "minimum": -30, "maximum": 40 },
+        "maximum_rate_mm_h": { "type": "number", "exclusiveMinimum": 0, "maximum": 1000 },
+        "overflow_policy": { "const": "cap_and_report" }
+      }
+    },
+    "gauge_adjustment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "method", "observation_qc_version"],
+      "properties": {
+        "enabled": { "const": false },
+        "method": { "const": "none" },
+        "observation_qc_version": { "type": "null" }
+      }
+    }
+  },
+  "$defs": {
+    "identifier": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$" }
+  }
+}

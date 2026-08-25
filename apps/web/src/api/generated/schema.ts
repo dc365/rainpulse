@@ -259,6 +259,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/analysis-cycles/{analysis_id}/qpe-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the RP-011 versioned basic QPE summary */
+        get: operations["getAnalysisQpeSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/products": {
         parameters: {
             query?: never;
@@ -708,6 +725,59 @@ export interface components {
             /** Format: float */
             mean_quality_index: number;
             contributors: components["schemas"]["AnalysisMosaicContributor"][];
+            /** Format: date-time */
+            measured_at: string;
+        };
+        AnalysisQPEMetrics: {
+            /** Format: uuid */
+            analysis_id: string;
+            /** Format: date-time */
+            analysis_time: string;
+            grid_id: string;
+            grid_config_version: string;
+            qpe_config_version: string;
+            qpe_algorithm_version: string;
+            mosaic_config_version: string;
+            mosaic_algorithm_version: string;
+            flag_definition_version: string;
+            /** Format: uri */
+            input_mosaic_uri: string;
+            input_field: string;
+            coefficient_a: number;
+            exponent_b: number;
+            /** Format: float */
+            no_rain_below_dbz: number;
+            /** Format: float */
+            maximum_rate_mm_h: number;
+            gauge_adjustment_enabled: boolean;
+            operational_eligible: boolean;
+            operational_reasons: string[];
+            /** Format: int64 */
+            grid_cell_count: number;
+            /** Format: int64 */
+            valid_cell_count: number;
+            /** Format: int64 */
+            missing_cell_count: number;
+            /** Format: int64 */
+            low_quality_cell_count: number;
+            /** Format: int64 */
+            no_rain_cell_count: number;
+            /** Format: int64 */
+            rain_cell_count: number;
+            /** Format: int64 */
+            capped_cell_count: number;
+            /** Format: float */
+            valid_coverage_ratio: number;
+            /** Format: float */
+            mean_quality_index: number;
+            /** Format: float */
+            mean_rate_mm_h: number;
+            /** Format: float */
+            maximum_observed_rate_mm_h: number;
+            /** Format: float */
+            uncapped_max_rate_mm_h: number;
+            /** Format: float */
+            p95_rate_mm_h: number;
             /** Format: date-time */
             measured_at: string;
         };
@@ -1245,6 +1315,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AnalysisMosaicMetrics"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getAnalysisQpeSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                analysis_id: components["parameters"]["AnalysisId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Basic QPE summary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisQPEMetrics"];
                 };
             };
             404: components["responses"]["NotFound"];

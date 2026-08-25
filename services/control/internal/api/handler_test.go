@@ -189,6 +189,21 @@ func TestRadarAndAnalysisQueriesPreservePartialRadarFailure(t *testing.T) {
 			MeanQualityIndex: 0.75, SelectionCounts: map[string]int64{"sweep_0": 80},
 			SkippedSweeps: map[string]string{"sweep_1": "NO_VALID_DBZH"}, MeasuredAt: now,
 		},
+		qpe: workflow.AnalysisQPEMetrics{
+			AnalysisID: analysis.ID, AnalysisTime: now, GridID: "fuzhou-0p01-v1",
+			GridConfigVersion:      "fuzhou-0p01-v1",
+			QPEConfigVersion:       "rp011-basic-qpe-v1",
+			QPEAlgorithmVersion:    "basic-zr-qpe-1.0.0",
+			MosaicConfigVersion:    "rp010-qi-mosaic-v1",
+			MosaicAlgorithmVersion: "qi-mosaic-1.0.0",
+			FlagDefinitionVersion:  "qc-flags-v1",
+			InputMosaicURI:         "s3://rainpulse/mosaic.zarr", InputField: "DBZH_QC",
+			CoefficientA: 200, ExponentB: 1.6, MaximumRateMMH: 300,
+			GridCellCount: 100, ValidCellCount: 80, MissingCellCount: 20,
+			NoRainCellCount: 40, RainCellCount: 40,
+			ValidCoverageRatio: 0.8, MeanQualityIndex: 0.75,
+			MeasuredAt: now,
+		},
 	}
 	handler := api.NewHandler(api.Options{Version: "test", Observations: store})
 
@@ -209,6 +224,7 @@ func TestRadarAndAnalysisQueriesPreservePartialRadarFailure(t *testing.T) {
 	assertResponse("/api/v1/radar-scans/"+scanAID.String()+"/grid-summary", `"profile_version":"rp009-hybrid-v1"`)
 	assertResponse("/api/v1/analysis-cycles/"+analysis.ID.String(), `"status":"ANALYSIS_READY"`)
 	assertResponse("/api/v1/analysis-cycles/"+analysis.ID.String(), `"state":"FAILED"`)
+	assertResponse("/api/v1/analysis-cycles/"+analysis.ID.String()+"/qpe-summary", `"qpe_config_version":"rp011-basic-qpe-v1"`)
 }
 
 func TestAnalysisEventStreamSendsDomainEvent(t *testing.T) {
@@ -297,6 +313,7 @@ type fakeObservationStore struct {
 	qc       workflow.RadarQCMetrics
 	grid     workflow.RadarGridMetrics
 	mosaic   workflow.AnalysisMosaicMetrics
+	qpe      workflow.AnalysisQPEMetrics
 }
 
 func (store *fakeObservationStore) GetAnalysisMosaicMetrics(
@@ -304,6 +321,13 @@ func (store *fakeObservationStore) GetAnalysisMosaicMetrics(
 	_ uuid.UUID,
 ) (workflow.AnalysisMosaicMetrics, error) {
 	return store.mosaic, nil
+}
+
+func (store *fakeObservationStore) GetAnalysisQPEMetrics(
+	_ context.Context,
+	_ uuid.UUID,
+) (workflow.AnalysisQPEMetrics, error) {
+	return store.qpe, nil
 }
 
 func (store *fakeObservationStore) GetRadarQCMetrics(

@@ -347,6 +347,43 @@ services:
       start_period: 5s
     restart: unless-stopped
 
+  analysis-qpe-worker:
+    image: rainpulse-analysis-qpe-worker
+    build:
+      context: ..
+      dockerfile: algorithms/worker.Dockerfile
+    depends_on:
+      nats:
+        condition: service_healthy
+      minio-worker-policy:
+        condition: service_completed_successfully
+      orchestrator:
+        condition: service_healthy
+    environment:
+      RAINPULSE_NATS_URL: nats://nats:4222
+      RAINPULSE_OBJECT_STORE_ENDPOINT: http://minio:9000
+      RAINPULSE_OBJECT_STORE_ACCESS_KEY: "${RAINPULSE_MINIO_WORKER_ACCESS_KEY:?set RAINPULSE_MINIO_WORKER_ACCESS_KEY in deploy/.env}"
+      RAINPULSE_OBJECT_STORE_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
+      RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
+      RAINPULSE_WORKER_ID: rp011-basic-qpe
+      RAINPULSE_WORKER_PROFILE: analysis-qpe-basic
+      RAINPULSE_QPE_CONFIG: /opt/rainpulse/configs/qpe/rp011-basic-zr-v1.yaml
+      RAINPULSE_GRID_CONFIG: /opt/rainpulse/configs/grids/fuzhou-0p01deg-v1.yaml
+      TZ: UTC
+    volumes:
+      - ../configs:/opt/rainpulse/configs:ro
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import json,urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:8091/healthz', timeout=2))['profile'] == 'analysis-qpe-basic'"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
+
   api:
     build:
       context: ..

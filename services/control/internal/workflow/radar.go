@@ -207,6 +207,19 @@ type AnalysisMosaicBundle struct {
 	Outbox           OutboxEvent
 }
 
+type AnalysisQPEBundle struct {
+	AnalysisID       uuid.UUID
+	RunID            uuid.UUID
+	CurrentStatus    AnalysisStatus
+	MosaicURI        string
+	ConfigVersion    string
+	AlgorithmVersion string
+	Config           json.RawMessage
+	ConfigSHA256     string
+	Job              Job
+	Outbox           OutboxEvent
+}
+
 type RadarGridMetrics struct {
 	ScanID                      uuid.UUID         `json:"scan_id"`
 	RadarID                     string            `json:"radar_id"`
@@ -260,6 +273,41 @@ type AnalysisMosaicMetrics struct {
 	MeanQualityIndex             float64                     `json:"mean_quality_index"`
 	Contributors                 []AnalysisMosaicContributor `json:"contributors"`
 	MeasuredAt                   time.Time                   `json:"measured_at"`
+}
+
+type AnalysisQPEMetrics struct {
+	AnalysisID             uuid.UUID `json:"analysis_id"`
+	AnalysisTime           time.Time `json:"analysis_time"`
+	GridID                 string    `json:"grid_id"`
+	GridConfigVersion      string    `json:"grid_config_version"`
+	QPEConfigVersion       string    `json:"qpe_config_version"`
+	QPEAlgorithmVersion    string    `json:"qpe_algorithm_version"`
+	MosaicConfigVersion    string    `json:"mosaic_config_version"`
+	MosaicAlgorithmVersion string    `json:"mosaic_algorithm_version"`
+	FlagDefinitionVersion  string    `json:"flag_definition_version"`
+	InputMosaicURI         string    `json:"input_mosaic_uri"`
+	InputField             string    `json:"input_field"`
+	CoefficientA           float64   `json:"coefficient_a"`
+	ExponentB              float64   `json:"exponent_b"`
+	NoRainBelowDBZ         float64   `json:"no_rain_below_dbz"`
+	MaximumRateMMH         float64   `json:"maximum_rate_mm_h"`
+	GaugeAdjustmentEnabled bool      `json:"gauge_adjustment_enabled"`
+	OperationalEligible    bool      `json:"operational_eligible"`
+	OperationalReasons     []string  `json:"operational_reasons"`
+	GridCellCount          int64     `json:"grid_cell_count"`
+	ValidCellCount         int64     `json:"valid_cell_count"`
+	MissingCellCount       int64     `json:"missing_cell_count"`
+	LowQualityCellCount    int64     `json:"low_quality_cell_count"`
+	NoRainCellCount        int64     `json:"no_rain_cell_count"`
+	RainCellCount          int64     `json:"rain_cell_count"`
+	CappedCellCount        int64     `json:"capped_cell_count"`
+	ValidCoverageRatio     float64   `json:"valid_coverage_ratio"`
+	MeanQualityIndex       float64   `json:"mean_quality_index"`
+	MeanRateMMH            float64   `json:"mean_rate_mm_h"`
+	MaximumObservedRateMMH float64   `json:"maximum_observed_rate_mm_h"`
+	UncappedMaximumRateMMH float64   `json:"uncapped_max_rate_mm_h"`
+	P95RateMMH             float64   `json:"p95_rate_mm_h"`
+	MeasuredAt             time.Time `json:"measured_at"`
 }
 
 type RadarQCMetrics struct {

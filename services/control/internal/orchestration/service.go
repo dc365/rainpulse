@@ -21,6 +21,7 @@ type Repository interface {
 	CreateRadarQCBundle(context.Context, workflow.RadarQCBundle) error
 	CreateRadarGridBundle(context.Context, workflow.RadarGridBundle) error
 	CreateAnalysisMosaicBundle(context.Context, workflow.AnalysisMosaicBundle) error
+	CreateAnalysisQPEBundle(context.Context, workflow.AnalysisQPEBundle) error
 	CreateDomainSimulation(context.Context, workflow.DomainSimulation) error
 	GetRun(context.Context, uuid.UUID) (workflow.Run, error)
 	GetJob(context.Context, uuid.UUID) (workflow.Job, error)
@@ -98,6 +99,23 @@ type AnalysisMosaicInput struct {
 	Candidates             []AnalysisMosaicCandidate
 	MosaicConfig           json.RawMessage
 	MosaicConfigSHA256     string
+}
+
+type AnalysisQPEInput struct {
+	AnalysisID             uuid.UUID
+	RunID                  uuid.UUID
+	AnalysisTime           time.Time
+	GridID                 string
+	GridConfigVersion      string
+	MosaicConfigVersion    string
+	MosaicAlgorithmVersion string
+	FlagDefinitionVersion  string
+	MosaicURI              string
+	CurrentStatus          workflow.AnalysisStatus
+	QPEConfigVersion       string
+	QPEAlgorithmVersion    string
+	QPEConfig              json.RawMessage
+	QPEConfigSHA256        string
 }
 
 type Publisher interface {
@@ -523,6 +541,96 @@ func validateAnalysisMosaicInput(input AnalysisMosaicInput) error {
 		if err != nil || parsed.Scheme != "s3" {
 			return fmt.Errorf("mosaic candidate grid must be an s3 URI")
 		}
+	}
+	return nil
+}
+
+func (service *Service) CreateAnalysisQPE(
+	ctx context.Context,
+	input AnalysisQPEInput,
+) (workflow.Job, error) {
+	if err := validateAnalysisQPEInput(input); err != nil {
+		return workflow.Job{}, err
+	}
+	now := service.now().UTC()
+	jobID := stableID("analysis-qpe-job", input.RunID.String(), input.QPEAlgorithmVersion)
+	traceID := stableID("analysis-qpe-trace", input.RunID.String(), input.QPEAlgorithmVersion)
+	eventID := stableID("analysis-qpe-request", jobID.String())
+	outputPrefix := fmt.Sprintf(
+		"s3://rainpulse/analysis/%s/%s/%s/",
+		input.GridID,
+		input.AnalysisTime.UTC().Format("2006/01/02/150405Z"),
+		url.PathEscape(input.QPEAlgorithmVersion),
+	)
+	request := AnalysisQPERequested{
+		SchemaVersion: SchemaVersion,
+		EventID:       eventID,
+		EventType:     AnalysisQPERequestedEventType,
+		OccurredAt:    now,
+		RunID:         input.RunID,
+		JobID:         jobID,
+		TraceID:       traceID,
+		Payload: AnalysisQPERequestedPayload{
+			AnalysisID: input.AnalysisID, AnalysisTime: input.AnalysisTime.UTC(),
+			GridID: input.GridID, GridConfigVersion: input.GridConfigVersion,
+			InputURI: input.MosaicURI, OutputPrefix: outputPrefix,
+			MosaicConfigVersion:   input.MosaicConfigVersion,
+			MosaicAlgorithm:       input.MosaicAlgorithmVersion,
+			QPEConfigVersion:      input.QPEConfigVersion,
+			QPEAlgorithmVersion:   input.QPEAlgorithmVersion,
+			FlagDefinitionVersion: input.FlagDefinitionVersion,
+		},
+	}
+	payload, err := json.Marshal(request)
+	if err != nil {
+		return workflow.Job{}, fmt.Errorf("encode analysis QPE request: %w", err)
+	}
+	job := workflow.Job{
+		ID: jobID, RunID: input.RunID, TraceID: traceID, JobType: AnalysisQPEJobType,
+		ConfigVersion: input.QPEConfigVersion, Status: workflow.JobPending,
+		Attempt: 1, RequestPayload: payload, CreatedAt: now,
+	}
+	bundle := workflow.AnalysisQPEBundle{
+		AnalysisID: input.AnalysisID, RunID: input.RunID,
+		CurrentStatus: input.CurrentStatus, MosaicURI: input.MosaicURI,
+		ConfigVersion:    input.QPEConfigVersion,
+		AlgorithmVersion: input.QPEAlgorithmVersion,
+		Config:           input.QPEConfig, ConfigSHA256: input.QPEConfigSHA256,
+		Job: job,
+		Outbox: workflow.OutboxEvent{
+			ID: eventID, AggregateID: jobID.String(),
+			EventType: AnalysisQPERequestedEventType,
+			Subject:   AnalysisQPERequestedSubject, Payload: payload,
+		},
+	}
+	if err := service.repository.CreateAnalysisQPEBundle(ctx, bundle); err != nil {
+		return workflow.Job{}, err
+	}
+	return job, nil
+}
+
+func validateAnalysisQPEInput(input AnalysisQPEInput) error {
+	if input.AnalysisID == uuid.Nil || input.RunID == uuid.Nil ||
+		input.AnalysisTime.IsZero() || input.GridID == "" ||
+		input.GridConfigVersion == "" || input.MosaicConfigVersion == "" ||
+		input.MosaicAlgorithmVersion == "" || input.FlagDefinitionVersion == "" ||
+		input.QPEConfigVersion == "" || input.QPEAlgorithmVersion == "" {
+		return fmt.Errorf("analysis QPE identity and version fields are required")
+	}
+	if !input.AnalysisTime.UTC().Equal(input.AnalysisTime.UTC().Truncate(5 * time.Minute)) {
+		return fmt.Errorf("analysis QPE time must be on a five-minute UTC boundary")
+	}
+	if input.CurrentStatus != workflow.AnalysisQPE &&
+		input.CurrentStatus != workflow.AnalysisReady {
+		return fmt.Errorf("analysis status %q cannot enter QPE", input.CurrentStatus)
+	}
+	parsed, err := url.ParseRequestURI(input.MosaicURI)
+	if err != nil || parsed.Scheme != "s3" {
+		return fmt.Errorf("analysis QPE input must be an s3 URI")
+	}
+	if len(input.QPEConfig) == 0 || !json.Valid(input.QPEConfig) ||
+		!sha256Pattern.MatchString(input.QPEConfigSHA256) {
+		return fmt.Errorf("QPE configuration and SHA-256 are required")
 	}
 	return nil
 }

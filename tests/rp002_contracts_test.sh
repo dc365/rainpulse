@@ -15,6 +15,7 @@ required_files=(
   "contracts/events/analysis-cycle-opened.schema.json"
   "contracts/events/analysis-mosaic-requested.schema.json"
   "contracts/events/analysis-mosaic-requested-v2.schema.json"
+  "contracts/events/analysis-qpe-requested.schema.json"
   "contracts/events/nowcast-input-requested.schema.json"
   "contracts/events/nowcast-input-ready.schema.json"
   "contracts/events/forecast-run-requested.schema.json"

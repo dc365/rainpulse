@@ -99,6 +99,15 @@ func main() {
 			slog.Error("create analysis mosaic workflow", "error", err)
 			os.Exit(1)
 		}
+	case "analysis-qpe":
+		if len(os.Args) != 4 {
+			slog.Error("analysis-qpe requires an analysis UUID and QPE config YAML")
+			os.Exit(2)
+		}
+		if err := analysisQPE(ctx, store, service, os.Args[2], os.Args[3]); err != nil {
+			slog.Error("create analysis QPE workflow", "error", err)
+			os.Exit(1)
+		}
 	case "complete":
 		if len(os.Args) != 3 {
 			slog.Error("complete requires a job UUID")
@@ -157,6 +166,14 @@ type mosaicConfiguration struct {
 		MinimumContributors          int      `yaml:"minimum_contributors"`
 		ExpectedRadarIDs             []string `yaml:"expected_radar_ids"`
 	} `yaml:"alignment"`
+}
+
+type qpeConfiguration struct {
+	ProfileVersion        string `yaml:"profile_version"`
+	AlgorithmVersion      string `yaml:"algorithm_version"`
+	FlagDefinitionVersion string `yaml:"flag_definition_version"`
+	GridID                string `yaml:"grid_id"`
+	GridConfigVersion     string `yaml:"grid_config_version"`
 }
 
 func radarDecode(
@@ -417,6 +434,71 @@ func analysisMosaic(
 		ExpectedRadarIDs:    config.Alignment.ExpectedRadarIDs,
 		Candidates:          candidates, MosaicConfig: configJSON,
 		MosaicConfigSHA256: fmt.Sprintf("%x", configHash),
+	})
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(os.Stdout).Encode(map[string]string{
+		"analysis_id": analysis.ID.String(),
+		"run_id":      analysis.RunID.String(),
+		"job_id":      job.ID.String(),
+	})
+}
+
+func analysisQPE(
+	ctx context.Context,
+	store *postgresstore.Store,
+	service *orchestration.Service,
+	rawAnalysisID string,
+	configPath string,
+) error {
+	analysisID, err := uuid.Parse(rawAnalysisID)
+	if err != nil {
+		return fmt.Errorf("parse analysis UUID: %w", err)
+	}
+	analysis, err := store.GetAnalysisCycle(ctx, analysisID)
+	if err != nil {
+		return err
+	}
+	if analysis.MosaicURI == nil {
+		return fmt.Errorf("analysis %s has no committed RadarMosaic", analysis.ID)
+	}
+	mosaicMetrics, err := store.GetAnalysisMosaicMetrics(ctx, analysisID)
+	if err != nil {
+		return err
+	}
+	configBytes, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("read QPE configuration: %w", err)
+	}
+	var config qpeConfiguration
+	if err := yaml.Unmarshal(configBytes, &config); err != nil {
+		return fmt.Errorf("decode QPE configuration: %w", err)
+	}
+	if config.GridID != analysis.GridID ||
+		config.GridConfigVersion != mosaicMetrics.GridConfigVersion {
+		return fmt.Errorf("QPE configuration uses a different target grid")
+	}
+	var configValue map[string]any
+	if err := yaml.Unmarshal(configBytes, &configValue); err != nil {
+		return fmt.Errorf("normalize QPE configuration: %w", err)
+	}
+	configJSON, err := json.Marshal(configValue)
+	if err != nil {
+		return fmt.Errorf("encode QPE configuration: %w", err)
+	}
+	configHash := sha256.Sum256(configBytes)
+	job, err := service.CreateAnalysisQPE(ctx, orchestration.AnalysisQPEInput{
+		AnalysisID: analysis.ID, RunID: analysis.RunID,
+		AnalysisTime: analysis.AnalysisTime, GridID: analysis.GridID,
+		GridConfigVersion:      mosaicMetrics.GridConfigVersion,
+		MosaicConfigVersion:    mosaicMetrics.ProfileVersion,
+		MosaicAlgorithmVersion: mosaicMetrics.AlgorithmVersion,
+		FlagDefinitionVersion:  config.FlagDefinitionVersion,
+		MosaicURI:              *analysis.MosaicURI, CurrentStatus: analysis.Status,
+		QPEConfigVersion:    config.ProfileVersion,
+		QPEAlgorithmVersion: config.AlgorithmVersion,
+		QPEConfig:           configJSON, QPEConfigSHA256: fmt.Sprintf("%x", configHash),
 	})
 	if err != nil {
 		return err

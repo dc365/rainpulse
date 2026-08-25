@@ -456,6 +456,102 @@ ON CONFLICT (event_id) DO NOTHING`,
 	return nil
 }
 
+func (store *Store) CreateAnalysisQPEBundle(
+	ctx context.Context,
+	bundle workflow.AnalysisQPEBundle,
+) error {
+	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin analysis QPE transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err = tx.Exec(ctx, `
+INSERT INTO config_versions (config_version, sha256, config, description, created_at)
+VALUES ($1, $2, $3, 'Basic QPE configuration registered by RP-011 workflow', $4)
+ON CONFLICT (config_version) DO NOTHING`,
+		bundle.ConfigVersion, bundle.ConfigSHA256, bundle.Config,
+		bundle.Job.CreatedAt); err != nil {
+		return fmt.Errorf("insert QPE config %s: %w", bundle.ConfigVersion, err)
+	}
+	var storedConfigHash string
+	if err = tx.QueryRow(ctx, `SELECT sha256 FROM config_versions WHERE config_version = $1`,
+		bundle.ConfigVersion).Scan(&storedConfigHash); err != nil {
+		return fmt.Errorf("verify QPE config %s: %w", bundle.ConfigVersion, err)
+	}
+	if storedConfigHash != bundle.ConfigSHA256 {
+		return fmt.Errorf("QPE config version %s already has a different SHA-256", bundle.ConfigVersion)
+	}
+
+	var analysisRunID uuid.UUID
+	var status workflow.AnalysisStatus
+	var mosaicURI, mosaicStatus string
+	if err = tx.QueryRow(ctx, `
+SELECT a.run_id, a.status, COALESCE(a.mosaic_uri, ''), m.status
+FROM analysis_cycles AS a
+JOIN mosaic_runs AS m ON m.analysis_id = a.analysis_id
+WHERE a.analysis_id = $1 FOR SHARE OF a, m`, bundle.AnalysisID).
+		Scan(&analysisRunID, &status, &mosaicURI, &mosaicStatus); err != nil {
+		return fmt.Errorf("verify analysis QPE input: %w", err)
+	}
+	if analysisRunID != bundle.RunID || mosaicURI != bundle.MosaicURI ||
+		mosaicStatus != "SUCCEEDED" {
+		return fmt.Errorf("QPE input is not the committed mosaic for the analysis")
+	}
+	if status != workflow.AnalysisQPE {
+		var existingJobID uuid.UUID
+		err = tx.QueryRow(ctx, `
+SELECT job_id FROM qpe_runs
+WHERE job_id = $1 AND analysis_id = $2 AND qpe_config_version = $3
+  AND qpe_algorithm_version = $4`, bundle.Job.ID, bundle.AnalysisID,
+			bundle.ConfigVersion, bundle.AlgorithmVersion).Scan(&existingJobID)
+		if err == nil {
+			return tx.Commit(ctx)
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("verify existing QPE run: %w", err)
+		}
+		return fmt.Errorf("analysis status %q cannot create a new QPE run", status)
+	}
+
+	if _, err = tx.Exec(ctx, `
+INSERT INTO jobs (
+    job_id, run_id, trace_id, job_type, model_id, model_version,
+    config_version, status, max_attempts, scheduled_at, created_at, updated_at,
+    request_payload
+) VALUES ($1, $2, $3, $4, NULL, NULL, $5, $6, 3, $7, $7, $7, $8)
+ON CONFLICT (job_id) DO NOTHING`,
+		bundle.Job.ID, bundle.Job.RunID, bundle.Job.TraceID, bundle.Job.JobType,
+		bundle.Job.ConfigVersion, bundle.Job.Status, bundle.Job.CreatedAt,
+		bundle.Job.RequestPayload); err != nil {
+		return fmt.Errorf("insert analysis QPE job: %w", err)
+	}
+	if _, err = tx.Exec(ctx, `
+INSERT INTO qpe_runs (
+    job_id, analysis_id, qpe_config_version, qpe_algorithm_version,
+    input_mosaic_uri, status, created_at, updated_at
+) VALUES ($1, $2, $3, $4, $5, 'RUNNING', $6, $6)
+ON CONFLICT (job_id) DO NOTHING`,
+		bundle.Job.ID, bundle.AnalysisID, bundle.ConfigVersion,
+		bundle.AlgorithmVersion, bundle.MosaicURI, bundle.Job.CreatedAt); err != nil {
+		return fmt.Errorf("insert QPE run: %w", err)
+	}
+	if _, err = tx.Exec(ctx, `
+INSERT INTO outbox_events (
+    event_id, aggregate_type, aggregate_id, event_type, event_version,
+    subject, payload, status, available_at, created_at
+) VALUES ($1, 'job', $2, $3, 1, $4, $5, 'pending', $6, $6)
+ON CONFLICT (event_id) DO NOTHING`,
+		bundle.Outbox.ID, bundle.Outbox.AggregateID, bundle.Outbox.EventType,
+		bundle.Outbox.Subject, bundle.Outbox.Payload, bundle.Job.CreatedAt); err != nil {
+		return fmt.Errorf("insert analysis QPE outbox event: %w", err)
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit analysis QPE transaction: %w", err)
+	}
+	return nil
+}
+
 func (store *Store) CreateDomainSimulation(ctx context.Context, simulation workflow.DomainSimulation) error {
 	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
@@ -807,6 +903,27 @@ WHERE analysis_id = $1 AND status = 'SUCCEEDED'`, analysisID).Scan(&raw); err !=
 	var metrics workflow.AnalysisMosaicMetrics
 	if err := json.Unmarshal(raw, &metrics); err != nil {
 		return workflow.AnalysisMosaicMetrics{}, fmt.Errorf("decode radar mosaic metrics: %w", err)
+	}
+	return metrics, nil
+}
+
+func (store *Store) GetAnalysisQPEMetrics(
+	ctx context.Context,
+	analysisID uuid.UUID,
+) (workflow.AnalysisQPEMetrics, error) {
+	var raw json.RawMessage
+	if err := store.pool.QueryRow(ctx, `
+SELECT diagnostics FROM qpe_runs
+WHERE analysis_id = $1 AND status = 'SUCCEEDED'
+ORDER BY measured_at DESC LIMIT 1`, analysisID).Scan(&raw); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return workflow.AnalysisQPEMetrics{}, workflow.ErrNotFound
+		}
+		return workflow.AnalysisQPEMetrics{}, fmt.Errorf("get analysis QPE metrics: %w", err)
+	}
+	var metrics workflow.AnalysisQPEMetrics
+	if err := json.Unmarshal(raw, &metrics); err != nil {
+		return workflow.AnalysisQPEMetrics{}, fmt.Errorf("decode analysis QPE metrics: %w", err)
 	}
 	return metrics, nil
 }

@@ -261,12 +261,17 @@ WHERE run_id = $1`, runID, nextStatus); err != nil {
 			return fmt.Errorf("mark radar scan worker running: %w", err)
 		}
 	case workflow.WorkflowAnalysisCycle:
-		if jobType != orchestration.AnalysisMosaicJobType {
+		if jobType != orchestration.AnalysisMosaicJobType &&
+			jobType != orchestration.AnalysisQPEJobType {
 			return fmt.Errorf("unsupported analysis job type %q", jobType)
+		}
+		expectedStatus := workflow.AnalysisMosaic
+		if jobType == orchestration.AnalysisQPEJobType {
+			expectedStatus = workflow.AnalysisQPE
 		}
 		if _, err := tx.Exec(ctx, `
 UPDATE analysis_cycles SET updated_at = CURRENT_TIMESTAMP
-WHERE run_id = $1 AND status = 'MOSAIC_RUNNING'`, runID); err != nil {
+WHERE run_id = $1 AND status = $2`, runID, expectedStatus); err != nil {
 			return fmt.Errorf("touch published analysis cycle: %w", err)
 		}
 	default:
@@ -384,14 +389,20 @@ WHERE run_id = $1`, runID, nextStatus)
 			return false, err
 		}
 	case workflow.WorkflowAnalysisCycle:
-		if jobType != orchestration.AnalysisMosaicJobType {
+		if jobType != orchestration.AnalysisMosaicJobType &&
+			jobType != orchestration.AnalysisQPEJobType {
 			return false, fmt.Errorf(
 				"%w: unsupported analysis job type %q",
 				orchestration.ErrInvalidEvent,
 				jobType,
 			)
 		}
-		if err := applyAnalysisMosaicCompletion(ctx, tx, event); err != nil {
+		if jobType == orchestration.AnalysisMosaicJobType {
+			err = applyAnalysisMosaicCompletion(ctx, tx, event)
+		} else {
+			err = applyAnalysisQPECompletion(ctx, tx, event)
+		}
+		if err != nil {
 			return false, err
 		}
 	default:
@@ -425,13 +436,14 @@ ON CONFLICT DO NOTHING`,
 
 	var runID, traceID uuid.UUID
 	var jobStatus workflow.JobStatus
+	var jobType string
 	var runType workflow.WorkflowType
 	err = tx.QueryRow(ctx, `
-SELECT j.run_id, j.trace_id, j.status, wr.run_type
+SELECT j.run_id, j.trace_id, j.status, j.job_type, wr.run_type
 FROM jobs AS j
 JOIN workflow_runs AS wr ON wr.run_id = j.run_id
 WHERE j.job_id = $1 FOR UPDATE OF j`, event.JobID).
-		Scan(&runID, &traceID, &jobStatus, &runType)
+		Scan(&runID, &traceID, &jobStatus, &jobType, &runType)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, fmt.Errorf("%w: failure job does not exist", orchestration.ErrInvalidEvent)
 	}
@@ -511,12 +523,24 @@ WHERE run_id = $1`, runID, event.Payload.ErrorCode)
 		if err != nil {
 			return false, fmt.Errorf("fail analysis cycle: %w", err)
 		}
-		_, err = tx.Exec(ctx, `
+		if jobType == orchestration.AnalysisMosaicJobType {
+			_, err = tx.Exec(ctx, `
 UPDATE mosaic_runs
 SET status = 'FAILED', updated_at = CURRENT_TIMESTAMP
-WHERE analysis_id = (SELECT analysis_id FROM analysis_cycles WHERE run_id = $1)`, runID)
-		if err != nil {
-			return false, fmt.Errorf("fail mosaic run: %w", err)
+WHERE job_id = $1`, event.JobID)
+			if err != nil {
+				return false, fmt.Errorf("fail mosaic run: %w", err)
+			}
+		} else if jobType == orchestration.AnalysisQPEJobType {
+			_, err = tx.Exec(ctx, `
+UPDATE qpe_runs
+SET status = 'FAILED', updated_at = CURRENT_TIMESTAMP
+WHERE job_id = $1`, event.JobID)
+			if err != nil {
+				return false, fmt.Errorf("fail QPE run: %w", err)
+			}
+		} else {
+			return false, fmt.Errorf("%w: unsupported analysis job type %q", orchestration.ErrInvalidEvent, jobType)
 		}
 	default:
 		return false, fmt.Errorf("%w: unsupported failure workflow type %q", orchestration.ErrInvalidEvent, runType)
@@ -1051,6 +1075,134 @@ WHERE analysis_id = $1`, analysisID, mosaicAsset.URI,
 		metrics.MeanQualityIndex, degradedReason)
 	if err != nil {
 		return fmt.Errorf("advance mosaic to QPE: %w", err)
+	}
+	return nil
+}
+
+func applyAnalysisQPECompletion(
+	ctx context.Context,
+	tx pgx.Tx,
+	event orchestration.JobCompleted,
+) error {
+	var analysisAsset *orchestration.JobCompletedAsset
+	for index := range event.Payload.Assets {
+		if event.Payload.Assets[index].AssetType == "radar_analysis" {
+			if analysisAsset != nil {
+				return fmt.Errorf("%w: multiple radar analysis assets", orchestration.ErrInvalidEvent)
+			}
+			analysisAsset = &event.Payload.Assets[index]
+		}
+	}
+	if analysisAsset == nil {
+		return fmt.Errorf("%w: radar analysis asset is required", orchestration.ErrInvalidEvent)
+	}
+	rawQPE, ok := event.Payload.Diagnostics["analysis_qpe"]
+	if !ok {
+		return fmt.Errorf("%w: analysis QPE diagnostics are required", orchestration.ErrInvalidEvent)
+	}
+	var metrics workflow.AnalysisQPEMetrics
+	if err := json.Unmarshal(rawQPE, &metrics); err != nil {
+		return fmt.Errorf("%w: decode analysis QPE diagnostics: %v", orchestration.ErrInvalidEvent, err)
+	}
+	if metrics.AnalysisID == uuid.Nil || metrics.AnalysisTime.IsZero() || metrics.GridID == "" ||
+		metrics.GridConfigVersion == "" || metrics.QPEConfigVersion == "" ||
+		metrics.QPEAlgorithmVersion == "" || metrics.MosaicConfigVersion == "" ||
+		metrics.MosaicAlgorithmVersion == "" || metrics.FlagDefinitionVersion == "" ||
+		metrics.InputMosaicURI == "" ||
+		metrics.InputField != "DBZH_QC" || metrics.CoefficientA <= 0 ||
+		metrics.ExponentB <= 0 || metrics.MaximumRateMMH <= 0 ||
+		metrics.GaugeAdjustmentEnabled || metrics.GridCellCount <= 0 ||
+		metrics.ValidCellCount < 0 || metrics.MissingCellCount < 0 ||
+		metrics.LowQualityCellCount < 0 || metrics.NoRainCellCount < 0 ||
+		metrics.RainCellCount < 0 || metrics.CappedCellCount < 0 ||
+		metrics.ValidCellCount+metrics.MissingCellCount != metrics.GridCellCount ||
+		metrics.NoRainCellCount+metrics.RainCellCount != metrics.ValidCellCount ||
+		metrics.LowQualityCellCount > metrics.ValidCellCount ||
+		metrics.CappedCellCount > metrics.RainCellCount ||
+		metrics.ValidCoverageRatio < 0 || metrics.ValidCoverageRatio > 1 ||
+		metrics.MeanQualityIndex < 0 || metrics.MeanQualityIndex > 1 ||
+		metrics.MeanRateMMH < 0 || metrics.MaximumObservedRateMMH < 0 ||
+		metrics.UncappedMaximumRateMMH+1e-6 < metrics.MaximumObservedRateMMH ||
+		metrics.P95RateMMH < 0 || metrics.MaximumObservedRateMMH > metrics.MaximumRateMMH {
+		return fmt.Errorf("%w: invalid analysis QPE metrics", orchestration.ErrInvalidEvent)
+	}
+	if metrics.OperationalEligible != (len(metrics.OperationalReasons) == 0) {
+		return fmt.Errorf("%w: QPE operational eligibility is inconsistent", orchestration.ErrInvalidEvent)
+	}
+
+	var analysisID uuid.UUID
+	var status workflow.AnalysisStatus
+	var analysisTime time.Time
+	var gridID, qpeConfigVersion, qpeAlgorithmVersion, inputMosaicURI string
+	var rawRequest json.RawMessage
+	if err := tx.QueryRow(ctx, `
+SELECT a.analysis_id, a.status, a.analysis_time, a.grid_id,
+       q.qpe_config_version, q.qpe_algorithm_version, q.input_mosaic_uri,
+       j.request_payload
+FROM analysis_cycles AS a
+JOIN qpe_runs AS q ON q.analysis_id = a.analysis_id
+JOIN jobs AS j ON j.job_id = q.job_id
+WHERE a.run_id = $1 AND q.job_id = $2 FOR UPDATE OF a, q`,
+		event.RunID, event.JobID).Scan(
+		&analysisID, &status, &analysisTime, &gridID,
+		&qpeConfigVersion, &qpeAlgorithmVersion, &inputMosaicURI, &rawRequest,
+	); err != nil {
+		return fmt.Errorf("lock analysis QPE completion: %w", err)
+	}
+	if status != workflow.AnalysisQPE {
+		return fmt.Errorf(
+			"%w: analysis status %q cannot complete QPE",
+			orchestration.ErrInvalidEvent,
+			status,
+		)
+	}
+	var requested orchestration.AnalysisQPERequested
+	if err := json.Unmarshal(rawRequest, &requested); err != nil {
+		return fmt.Errorf("decode stored analysis QPE request: %w", err)
+	}
+	if metrics.AnalysisID != analysisID || requested.Payload.AnalysisID != analysisID ||
+		!metrics.AnalysisTime.Equal(analysisTime) ||
+		!requested.Payload.AnalysisTime.Equal(analysisTime) ||
+		metrics.GridID != gridID || requested.Payload.GridID != gridID ||
+		metrics.QPEConfigVersion != qpeConfigVersion ||
+		requested.Payload.QPEConfigVersion != qpeConfigVersion ||
+		metrics.QPEAlgorithmVersion != qpeAlgorithmVersion ||
+		requested.Payload.QPEAlgorithmVersion != qpeAlgorithmVersion ||
+		metrics.InputMosaicURI != inputMosaicURI ||
+		requested.Payload.InputURI != inputMosaicURI ||
+		metrics.GridConfigVersion != requested.Payload.GridConfigVersion ||
+		metrics.MosaicConfigVersion != requested.Payload.MosaicConfigVersion ||
+		metrics.MosaicAlgorithmVersion != requested.Payload.MosaicAlgorithm ||
+		metrics.FlagDefinitionVersion != requested.Payload.FlagDefinitionVersion {
+		return fmt.Errorf("%w: QPE identity does not match analysis", orchestration.ErrInvalidEvent)
+	}
+	metrics.MeasuredAt = event.Payload.FinishedAt
+	diagnostics, err := json.Marshal(metrics)
+	if err != nil {
+		return fmt.Errorf("encode analysis QPE diagnostics: %w", err)
+	}
+	if _, err = tx.Exec(ctx, `
+UPDATE qpe_runs
+SET status = 'SUCCEEDED', analysis_uri = $2, diagnostics = $3,
+    measured_at = $4, updated_at = CURRENT_TIMESTAMP
+WHERE job_id = $1`, event.JobID, analysisAsset.URI, diagnostics,
+		metrics.MeasuredAt); err != nil {
+		return fmt.Errorf("persist QPE run completion: %w", err)
+	}
+	var degradedReason *string
+	if !metrics.OperationalEligible {
+		reason := strings.Join(metrics.OperationalReasons, ",")
+		degradedReason = &reason
+	}
+	if _, err = tx.Exec(ctx, `
+UPDATE analysis_cycles
+SET status = 'ANALYSIS_READY', analysis_uri = $2,
+    valid_coverage_ratio = $3, mean_quality_index = $4,
+    degraded_reason = $5, updated_at = CURRENT_TIMESTAMP
+WHERE analysis_id = $1`, analysisID, analysisAsset.URI,
+		metrics.ValidCoverageRatio, metrics.MeanQualityIndex,
+		degradedReason); err != nil {
+		return fmt.Errorf("complete analysis QPE: %w", err)
 	}
 	return nil
 }

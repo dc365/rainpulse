@@ -1,0 +1,25 @@
+schema_version: "1.0"
+profile_version: rp011-basic-qpe-v1
+algorithm_version: basic-zr-qpe-1.0.0
+radar_analysis_contract_version: "1.2"
+mosaic_contract_version: "1.0"
+flag_definition_version: qc-flags-v1
+
+grid_id: fuzhou_118_123_25_27_0p01deg_v1
+grid_config_version: fuzhou-grid-0p01deg-v1
+
+qpe:
+  input_field: DBZH_QC
+  relation: power_law_z_r
+  # Phase-1 engineering default: Z = a * R^b. These values remain
+  # configurable and require local gauge verification before business use.
+  coefficient_a: 200.0
+  exponent_b: 1.6
+  no_rain_below_dbz: 10.0
+  maximum_rate_mm_h: 300.0
+  overflow_policy: cap_and_report
+
+gauge_adjustment:
+  enabled: false
+  method: none
+  observation_qc_version: null

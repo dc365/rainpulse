@@ -261,6 +261,22 @@ paths:
                 $ref: "#/components/schemas/AnalysisMosaicMetrics"
         "404":
           $ref: "#/components/responses/NotFound"
+  /analysis-cycles/{analysis_id}/qpe-summary:
+    get:
+      operationId: getAnalysisQpeSummary
+      tags: [analysis]
+      summary: Get the RP-011 versioned basic QPE summary
+      parameters:
+        - $ref: "#/components/parameters/AnalysisId"
+      responses:
+        "200":
+          description: Basic QPE summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisQPEMetrics"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /products:
     get:
       operationId: listProducts
@@ -1235,6 +1251,117 @@ components:
           minItems: 1
           items:
             $ref: "#/components/schemas/AnalysisMosaicContributor"
+        measured_at:
+          type: string
+          format: date-time
+    AnalysisQPEMetrics:
+      type: object
+      additionalProperties: false
+      required: [analysis_id, analysis_time, grid_id, grid_config_version, qpe_config_version, qpe_algorithm_version, mosaic_config_version, mosaic_algorithm_version, flag_definition_version, input_mosaic_uri, input_field, coefficient_a, exponent_b, no_rain_below_dbz, maximum_rate_mm_h, gauge_adjustment_enabled, operational_eligible, operational_reasons, grid_cell_count, valid_cell_count, missing_cell_count, low_quality_cell_count, no_rain_cell_count, rain_cell_count, capped_cell_count, valid_coverage_ratio, mean_quality_index, mean_rate_mm_h, maximum_observed_rate_mm_h, uncapped_max_rate_mm_h, p95_rate_mm_h, measured_at]
+      properties:
+        analysis_id:
+          type: string
+          format: uuid
+        analysis_time:
+          type: string
+          format: date-time
+        grid_id:
+          type: string
+        grid_config_version:
+          type: string
+        qpe_config_version:
+          type: string
+        qpe_algorithm_version:
+          type: string
+        mosaic_config_version:
+          type: string
+        mosaic_algorithm_version:
+          type: string
+        flag_definition_version:
+          type: string
+        input_mosaic_uri:
+          type: string
+          format: uri
+        input_field:
+          type: string
+        coefficient_a:
+          type: number
+          exclusiveMinimum: true
+          minimum: 0
+        exponent_b:
+          type: number
+          exclusiveMinimum: true
+          minimum: 0
+        no_rain_below_dbz:
+          type: number
+          format: float
+        maximum_rate_mm_h:
+          type: number
+          format: float
+          exclusiveMinimum: true
+          minimum: 0
+        gauge_adjustment_enabled:
+          type: boolean
+        operational_eligible:
+          type: boolean
+        operational_reasons:
+          type: array
+          items:
+            type: string
+        grid_cell_count:
+          type: integer
+          format: int64
+          minimum: 1
+        valid_cell_count:
+          type: integer
+          format: int64
+          minimum: 0
+        missing_cell_count:
+          type: integer
+          format: int64
+          minimum: 0
+        low_quality_cell_count:
+          type: integer
+          format: int64
+          minimum: 0
+        no_rain_cell_count:
+          type: integer
+          format: int64
+          minimum: 0
+        rain_cell_count:
+          type: integer
+          format: int64
+          minimum: 0
+        capped_cell_count:
+          type: integer
+          format: int64
+          minimum: 0
+        valid_coverage_ratio:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        mean_quality_index:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        mean_rate_mm_h:
+          type: number
+          format: float
+          minimum: 0
+        maximum_observed_rate_mm_h:
+          type: number
+          format: float
+          minimum: 0
+        uncapped_max_rate_mm_h:
+          type: number
+          format: float
+          minimum: 0
+        p95_rate_mm_h:
+          type: number
+          format: float
+          minimum: 0
         measured_at:
           type: string
           format: date-time

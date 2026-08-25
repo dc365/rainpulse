@@ -292,6 +292,55 @@ func TestCreateAnalysisMosaicAlignsClosestReadyGridAndUsesV2Contract(t *testing.
 	}
 }
 
+func TestCreateAnalysisQPEUsesCommittedMosaicAndDeterministicIDs(t *testing.T) {
+	repository := &fakeRepository{}
+	now := time.Date(2026, 8, 25, 12, 5, 3, 0, time.UTC)
+	analysisTime := now.Truncate(5 * time.Minute)
+	service := NewService(repository, Options{Now: func() time.Time { return now }})
+	input := AnalysisQPEInput{
+		AnalysisID:             uuid.MustParse("75000000-0000-4000-8000-000000000001"),
+		RunID:                  uuid.MustParse("72000000-0000-4000-8000-000000000001"),
+		AnalysisTime:           analysisTime,
+		GridID:                 "fuzhou_118_123_25_27_0p01deg_v1",
+		GridConfigVersion:      "fuzhou-grid-0p01deg-v1",
+		MosaicConfigVersion:    "rp010-qi-mosaic-v1",
+		MosaicAlgorithmVersion: "qi-mosaic-1.0.0",
+		FlagDefinitionVersion:  "qc-flags-v1",
+		MosaicURI:              "s3://rainpulse/analysis/mosaic/fixture/mosaic.zarr",
+		CurrentStatus:          workflow.AnalysisQPE,
+		QPEConfigVersion:       "rp011-basic-qpe-v1",
+		QPEAlgorithmVersion:    "basic-zr-qpe-1.0.0",
+		QPEConfig:              json.RawMessage(`{"profile_version":"rp011-basic-qpe-v1"}`),
+		QPEConfigSHA256:        "63266c7c72321262a01b945281060abd84153a8f3ad64a95c5b73b9fd510f678",
+	}
+
+	job, err := service.CreateAnalysisQPE(context.Background(), input)
+	if err != nil {
+		t.Fatalf("CreateAnalysisQPE() error = %v", err)
+	}
+	if job.JobType != AnalysisQPEJobType ||
+		repository.analysisQPE.Outbox.Subject != AnalysisQPERequestedSubject {
+		t.Fatalf("unexpected QPE route: job=%s outbox=%#v", job.JobType, repository.analysisQPE.Outbox)
+	}
+	var requested AnalysisQPERequested
+	if err := json.Unmarshal(repository.analysisQPE.Outbox.Payload, &requested); err != nil {
+		t.Fatalf("decode QPE request: %v", err)
+	}
+	if requested.Payload.InputURI != input.MosaicURI ||
+		requested.Payload.OutputPrefix != "s3://rainpulse/analysis/"+input.GridID+
+			"/2026/08/25/120500Z/basic-zr-qpe-1.0.0/" ||
+		requested.Payload.QPEConfigVersion != input.QPEConfigVersion {
+		t.Fatalf("unexpected QPE request: %#v", requested.Payload)
+	}
+	second, err := service.CreateAnalysisQPE(context.Background(), input)
+	if err != nil {
+		t.Fatalf("repeat CreateAnalysisQPE() error = %v", err)
+	}
+	if second.ID != job.ID {
+		t.Fatal("analysis QPE job identifier is not deterministic")
+	}
+}
+
 func TestDispatchOnceMarksPublishedOnlyAfterPublish(t *testing.T) {
 	event := workflow.OutboxEvent{ID: uuid.New(), Subject: JobRequestedSubject, Payload: json.RawMessage(`{}`)}
 	repository := &fakeRepository{claimed: event}
@@ -402,6 +451,7 @@ type fakeRepository struct {
 	radarQC        workflow.RadarQCBundle
 	radarGrid      workflow.RadarGridBundle
 	analysisMosaic workflow.AnalysisMosaicBundle
+	analysisQPE    workflow.AnalysisQPEBundle
 	domain         workflow.DomainSimulation
 	claimed        workflow.OutboxEvent
 	published      uuid.UUID
@@ -414,6 +464,14 @@ func (repository *fakeRepository) CreateAnalysisMosaicBundle(
 	bundle workflow.AnalysisMosaicBundle,
 ) error {
 	repository.analysisMosaic = bundle
+	return nil
+}
+
+func (repository *fakeRepository) CreateAnalysisQPEBundle(
+	_ context.Context,
+	bundle workflow.AnalysisQPEBundle,
+) error {
+	repository.analysisQPE = bundle
 	return nil
 }
 

@@ -21,6 +21,7 @@ EVENT_NAMES = (
     "analysis-cycle-opened",
     "analysis-mosaic-requested",
     "analysis-mosaic-requested-v2",
+    "analysis-qpe-requested",
     "nowcast-input-requested",
     "nowcast-input-ready",
     "forecast-run-requested",
@@ -66,6 +67,7 @@ def test_openapi_exposes_the_planned_v1_operations() -> None:
         "/analysis-cycles",
         "/analysis-cycles/{analysis_id}",
         "/analysis-cycles/{analysis_id}/mosaic-summary",
+        "/analysis-cycles/{analysis_id}/qpe-summary",
         "/products",
         "/products/{product_id}",
         "/products/{product_id}/assets",
@@ -178,6 +180,16 @@ def test_rp010_mosaic_is_separate_from_rp011_qpe() -> None:
     assert "`SOURCE_RADAR`" in mosaic
     assert "all `QI_*`" in mosaic
     assert "after RP-011 QPE" in analysis
+
+
+def test_rp011_qpe_contract_is_versioned_and_never_fabricates_raw_fields() -> None:
+    analysis = (CONTRACTS_ROOT / "data" / "radar-analysis.md").read_text()
+
+    assert "contract_version=1.2" in analysis
+    assert "Z = a R^b" in analysis
+    assert "RATE_QPE=0" in analysis
+    assert "must not be fabricated" in analysis
+    assert "gauge adjustment is disabled" in analysis
 
 
 def test_distribution_contracts_preserve_grid_and_missing_semantics() -> None:

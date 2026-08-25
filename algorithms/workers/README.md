@@ -18,6 +18,7 @@ The registry currently exposes these profiles:
 | `radar-grid-hybrid` | `rainpulse.jobs.requested.radar_grid` | `grid.zarr` |
 | `analysis-mosaic-qi` | `rainpulse.jobs.requested.analysis_mosaic` | `mosaic.zarr` |
 | `mosaic-qpe-synthetic` | `rainpulse.jobs.requested.analysis_mosaic_synthetic` | `analysis.zarr` |
+| `analysis-qpe-basic` | `rainpulse.jobs.requested.analysis_qpe` | `analysis.zarr` |
 | `nowcast-input-synthetic` | `rainpulse.jobs.requested.nowcast_input` | `input.zarr` |
 
 Select one with `RAINPULSE_WORKER_PROFILE`; `simulation` retains the existing
@@ -43,11 +44,16 @@ verifies the immutable grid and actual volume-end offsets, then selects by
 adjusted QI or blends similar candidates in linear Z. It atomically emits an
 RP-010 `RadarMosaic`; rain-rate estimation remains a separate RP-011 worker.
 
+`analysis-qpe-basic` consumes only that committed mosaic, applies the immutable
+Phase-1 power-law Z–R profile, preserves missing/no-rain/low-quality masks, and
+atomically emits `RadarAnalysis` v1.2. It reports capped cells and keeps gauge
+adjustment disabled until quality-controlled gauge input exists.
+
 The synthetic domain handlers write only small JSON contract fixtures whose
 payload explicitly says that no radar array or meteorological algorithm ran.
 They do not QC, grid, mosaic, estimate rain rate, or build real NowcastInput
 data.
 
-Later tasks replace the remaining synthetic QPE/input executors one at a time while
+Later tasks replace the remaining synthetic input executor while
 retaining the same runtime and handler boundary. Production workers remain
 separate long-lived processes with distinct durable consumers.

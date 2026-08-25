@@ -423,6 +423,42 @@ type AnalysisMosaicMetrics struct {
 	ValidCoverageRatio           float32                     `json:"valid_coverage_ratio"`
 }
 
+// AnalysisQPEMetrics defines model for AnalysisQPEMetrics.
+type AnalysisQPEMetrics struct {
+	AnalysisId             openapi_types.UUID `json:"analysis_id"`
+	AnalysisTime           time.Time          `json:"analysis_time"`
+	CappedCellCount        int64              `json:"capped_cell_count"`
+	CoefficientA           float32            `json:"coefficient_a"`
+	ExponentB              float32            `json:"exponent_b"`
+	FlagDefinitionVersion  string             `json:"flag_definition_version"`
+	GaugeAdjustmentEnabled bool               `json:"gauge_adjustment_enabled"`
+	GridCellCount          int64              `json:"grid_cell_count"`
+	GridConfigVersion      string             `json:"grid_config_version"`
+	GridId                 string             `json:"grid_id"`
+	InputField             string             `json:"input_field"`
+	InputMosaicUri         string             `json:"input_mosaic_uri"`
+	LowQualityCellCount    int64              `json:"low_quality_cell_count"`
+	MaximumObservedRateMmH float32            `json:"maximum_observed_rate_mm_h"`
+	MaximumRateMmH         float32            `json:"maximum_rate_mm_h"`
+	MeanQualityIndex       float32            `json:"mean_quality_index"`
+	MeanRateMmH            float32            `json:"mean_rate_mm_h"`
+	MeasuredAt             time.Time          `json:"measured_at"`
+	MissingCellCount       int64              `json:"missing_cell_count"`
+	MosaicAlgorithmVersion string             `json:"mosaic_algorithm_version"`
+	MosaicConfigVersion    string             `json:"mosaic_config_version"`
+	NoRainBelowDbz         float32            `json:"no_rain_below_dbz"`
+	NoRainCellCount        int64              `json:"no_rain_cell_count"`
+	OperationalEligible    bool               `json:"operational_eligible"`
+	OperationalReasons     []string           `json:"operational_reasons"`
+	P95RateMmH             float32            `json:"p95_rate_mm_h"`
+	QpeAlgorithmVersion    string             `json:"qpe_algorithm_version"`
+	QpeConfigVersion       string             `json:"qpe_config_version"`
+	RainCellCount          int64              `json:"rain_cell_count"`
+	UncappedMaxRateMmH     float32            `json:"uncapped_max_rate_mm_h"`
+	ValidCellCount         int64              `json:"valid_cell_count"`
+	ValidCoverageRatio     float32            `json:"valid_coverage_ratio"`
+}
+
 // AnalysisRadar defines model for AnalysisRadar.
 type AnalysisRadar struct {
 	ExclusionReason   *string             `json:"exclusion_reason,omitempty"`
@@ -852,6 +888,9 @@ type ServerInterface interface {
 	// GetAnalysisMosaicSummary Get the RP-010 time-aligned quality-aware mosaic summary
 	// (GET /analysis-cycles/{analysis_id}/mosaic-summary)
 	GetAnalysisMosaicSummary(w http.ResponseWriter, r *http.Request, analysisId AnalysisId)
+	// GetAnalysisQpeSummary Get the RP-011 versioned basic QPE summary
+	// (GET /analysis-cycles/{analysis_id}/qpe-summary)
+	GetAnalysisQpeSummary(w http.ResponseWriter, r *http.Request, analysisId AnalysisId)
 	// GetAreaStatistics Query statistics inside a WGS84 bounding box
 	// (GET /area-statistics)
 	GetAreaStatistics(w http.ResponseWriter, r *http.Request, params GetAreaStatisticsParams)
@@ -951,6 +990,12 @@ func (_ Unimplemented) GetAnalysisCycle(w http.ResponseWriter, r *http.Request, 
 // GetAnalysisMosaicSummary Get the RP-010 time-aligned quality-aware mosaic summary
 // (GET /analysis-cycles/{analysis_id}/mosaic-summary)
 func (_ Unimplemented) GetAnalysisMosaicSummary(w http.ResponseWriter, r *http.Request, analysisId AnalysisId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAnalysisQpeSummary Get the RP-011 versioned basic QPE summary
+// (GET /analysis-cycles/{analysis_id}/qpe-summary)
+func (_ Unimplemented) GetAnalysisQpeSummary(w http.ResponseWriter, r *http.Request, analysisId AnalysisId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1250,6 +1295,32 @@ func (siw *ServerInterfaceWrapper) GetAnalysisMosaicSummary(w http.ResponseWrite
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAnalysisMosaicSummary(w, r, analysisId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAnalysisQpeSummary operation middleware
+func (siw *ServerInterfaceWrapper) GetAnalysisQpeSummary(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "analysis_id" -------------
+	var analysisId AnalysisId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "analysis_id", chi.URLParam(r, "analysis_id"), &analysisId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "analysis_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAnalysisQpeSummary(w, r, analysisId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2106,6 +2177,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/analysis-cycles/{analysis_id}/mosaic-summary", wrapper.GetAnalysisMosaicSummary)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/analysis-cycles/{analysis_id}/qpe-summary", wrapper.GetAnalysisQpeSummary)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/products", wrapper.ListProducts)
