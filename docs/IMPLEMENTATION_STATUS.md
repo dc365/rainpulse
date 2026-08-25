@@ -42,7 +42,8 @@ NowcastInput gate.
 | RP-012 | Core vertical slice complete | Immutable 11-layer grid/PPI diagnostic bundle, controlled PNG API, React evidence workbench and real Z9598 engineering replay accepted |
 | RP-013 | Core vertical slice complete | Strict fixed-step NowcastInput, quality/eligibility gates, immutable Zarr, persistence/events and traceable synthetic server acceptance; real sequence acceptance remains gated |
 | RP-014 | Core vertical slice complete | Real dense Lucas–Kanade and semi-Lagrangian extrapolation, physical U/V, 24 leads, persistence/translation baselines, immutable ForecastOutput, persistence/events and synthetic server replay; real forecast-skill acceptance remains gated |
-| RP-015–RP-016 | Not started | Next is product/API/short-nowcast UI delivery, followed by verification, fault injection and end-to-end acceptance |
+| RP-015 | Product/API vertical slice complete | ForecastOutput-derived PNG/COG/NetCDF products, point index, catalog/content/query REST, product events and server replay accepted; React map/timeline remains |
+| RP-016 | Not started | Verification, fault injection and end-to-end operational acceptance follow RP-015 UI completion |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -75,6 +76,7 @@ RP-002 now provides:
 - polar `QCRadarVolume` with QI components, module provenance and uint32 flags;
 - single-radar `RadarGrid`/Hybrid Scan and multi-radar `RadarAnalysis`;
 - `NowcastInput` v1.2 and `ForecastOutput` v1.1 equal-lat/lon semantics;
+- `ApplicationProductBundle` 1.0 and product-build request contract;
 - radar receive/decode/QC/grid, analysis-cycle/mosaic, input-ready,
   pySTEPS-LK-requested and baseline-ready event schemas with valid examples;
 - existing common job command/result and product-published schemas;
@@ -83,7 +85,7 @@ RP-002 now provides:
 RP-003 remains operational:
 
 - PostgreSQL 17.11;
-- NATS 2.14.5 with persistent JetStream;
+- NATS 2.14.5 with persistent JetStream for job and product-publication subjects;
 - MinIO with a persistent `rainpulse` bucket;
 - UTC migrations, application credentials, health gates and smoke tests.
 
@@ -116,7 +118,7 @@ RP-005 now additionally provides:
   requests, including 3–6-frame identity checks;
 - artifact-specific atomic markers for `volume.zarr`, `grid.zarr`,
   `mosaic.zarr`, `analysis.zarr`, `input.zarr` and the existing
-  `forecast.zarr`;
+  `forecast.zarr` and `application-products`;
 - deterministic replay behavior across all synthetic domain profiles;
 - explicit fixture output stating that no radar array or meteorological
   algorithm ran.
@@ -267,13 +269,30 @@ RP-013 now provides:
 - real Z9598 negative-gate evidence plus a clearly isolated full-grid synthetic
   vertical acceptance documented in `docs/RP013_NowcastInput验收记录.md`.
 
+RP-015 product/API delivery now provides:
+
+- an atomic `ApplicationProductBundle` derived only from one committed
+  `ForecastOutput` 1.1, with exact source URI/SHA provenance;
+- 24 five-minute rain-rate fields, 60/120-minute accumulations, and PNG, COG,
+  NetCDF3 classic distribution artifacts on the fixed Fuzhou grid;
+- explicit valid/no-rain/missing summaries and a fixed-record point-query index;
+- transactional product-build scheduling, three published product identities,
+  79 registered assets and durable product-published events;
+- product catalog, controlled immutable content reads, point series, area
+  statistics and `PUBLISHED` SSE delivery;
+- server replay idempotency and event-route regression coverage, documented in
+  `docs/RP015_应用产品与API验收记录.md`;
+- the React short-nowcast map and timeline remain pending direction approval.
+
 ## Active test environment
 
 - Target: `private-test-host`
 - Project: `<remote-project-dir>`
 - Web: `http://private-test-host:4173`
 - API: `http://private-test-host:8080/api/v1/system/status`
-- Deployed service runtime version: `rp013-v1.1-68574c0-20260825`
+- API-reported runtime label: `rp008-v1.1-0748898-20260824` (the preserved
+  deployment label has not been bumped; the code/acceptance commit is
+  authoritative)
 - RP-009 ancillary runtime: `runtime/ancillary/assets`, accepted 2026-08-25
 - One-time legacy archive: `<remote-legacy-archive>`
 
@@ -287,10 +306,11 @@ Docker Hub access is unreliable. Continue to use local Linux/amd64 builds and
 export/import pinned images through `http://127.0.0.1:7897` when necessary.
 No credentials or secrets belong in this document or repository.
 
-The RP-004–RP-013 code, generated clients, tests and Linux/amd64 binaries pass
-locally. SSH public-key access to the GPU server is active; passwords are not
-stored locally. On 2026-08-24 RP-007 was deployed in place without a new source
-or database backup, followed by RP-008 through RP-012 under the same rule. The Z9598
+The RP-004–RP-015 product/API code, generated clients, tests and Linux/amd64
+binaries pass locally. SSH public-key access to the GPU server is active;
+passwords are not stored locally. On 2026-08-24 RP-007 was deployed in place
+without a new source or database backup, followed by RP-008 through RP-012
+under the same rule. The Z9598
 NAS golden sample decoded to 11 sweeps,
 3994 rays and seven canonical fields, then
 persisted a complete integrity record with no missing radials, 1.08° maximum
@@ -332,7 +352,13 @@ IDs and fed the real `pysteps-lk-1.0.0` worker. It published a validated
 `BASELINE_READY`, and emitted exactly one baseline-ready event. Its static
 acceptance field correctly used the explicit zero-motion fallback; this is
 software-path evidence, not a forecast-skill result. Job replay left one job,
-one model run and one completion inbox record. All fifteen long-lived Compose
+one model run and one completion inbox record. RP-015 then generated three
+published products and 79 registered assets from that ForecastOutput, including
+26 PNG, 26 COG, 26 NetCDF files and one point-query index. Catalog, controlled
+content, point, area and SSE endpoints passed; product replay reused the atomic
+marker and left the same database cardinalities. The JetStream product subject
+and full replay event routing are pinned by regression tests, and all three
+product publication outbox events are published. All sixteen long-lived Compose
 services are healthy. Desktop 1440 px, tablet 768 px and
 mobile 375 px browser checks passed; the final default real-analysis view has
 no console error or warning. The
@@ -347,13 +373,12 @@ of the active test environment and must not be deleted during ordinary updates.
 
 ## Next acceptance target
 
-Start RP-015 product/API/short-nowcast UI delivery from the accepted
-`ForecastOutput` boundary: freeze 0–1 h/0–2 h application products, transparent
-map images/COGs, controlled REST/SSE delivery, time-axis behavior and product
-provenance. Keep the large internal Zarr as the model artifact and only create
-NetCDF for application rainfall products that require the agreed numerical
-grid contract. RP-016 will then add verification, fault injection and the full
-raw-radar-to-React path. Real RP-013/RP-014 meteorological acceptance still
+Complete the RP-015 React short-nowcast map and five-minute timeline against the
+accepted product/API boundary. The product formats, transparent layers,
+controlled REST/SSE delivery and provenance are now frozen and server-accepted;
+the remaining work is map interaction, point/area presentation, responsive and
+accessibility verification. RP-016 will then add verification, fault injection
+and the full raw-radar-to-React path. Real RP-013/RP-014 meteorological acceptance still
 needs at least three consecutive operational QC→grid→mosaic→QPE cycles with
 trackable precipitation. Gauge adjustment remains disabled until representative
 gauge observations and quality rules are supplied. Real multi-radar mosaic
@@ -423,5 +448,6 @@ make test-qpe
 make test-diagnostics
 make test-nowcast-input
 make test-pysteps-lk
+make test-products
 make smoke
 ```

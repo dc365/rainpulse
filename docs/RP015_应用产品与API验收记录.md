@@ -1,0 +1,153 @@
+# RP-015 应用产品与 API 验收记录
+
+日期：2026-08-25
+代码基线：`38b80e4`
+测试服务器：`private-test-host`
+部署目录：`<remote-project-dir>`
+
+## 1. 验收结论
+
+RP-015 的产品构建、发布、目录查询、受控文件交付、点查询、区域统计、SSE 状态和
+幂等重放纵向链路已完成，并通过 测试服务器端到端验收。输入严格限定为一个已提交
+的 `ForecastOutput contract_version=1.1`，内部预报 Zarr 没有直接暴露给前端，也
+没有作为应用 NetCDF 的替代品。
+
+本次仍使用 RP-014 的静态合成预报，因此结果只证明产品和交付链路，不证明真实
+降水预报技巧。React 短临地图和时间轴尚未实施，等待产品交互方向确认后继续，故
+RP-015 整体状态为“产品/API 纵向切片完成，UI 待完成”。
+
+## 2. 冻结的产品边界
+
+- 配置：`rp015-application-products-v1`。
+- 产品 bundle：`rainpulse.application-product-bundle` 1.0。
+- 输入：`ForecastOutput` 1.1，来源 URI 与 SHA-256 必须和已提交 model run 一致。
+- 网格：EPSG:4326，`118–123°E`、`25–27°N`，`0.01°`，`501 × 201`，点中心注册。
+- 像素边界：`117.995, 24.995, 123.005, 27.005`。
+- 瞬时降水率：T+5 至 T+120，共 24 个五分钟时效，单位 `mm h-1`。
+- 累计降水：T+60 和 T+120，单位 `mm`。
+- 每个二维场生成透明 RGBA PNG、WGS84 COG 和 NetCDF3 classic。
+- `rain_rate` 额外生成固定记录点查询索引，不把大网格 JSON 化。
+- 有效无雨保留数值 `0.0`；缺测在 COG/NetCDF 边界使用 nodata/`-9999.0`，不能
+  转为有效零。PNG 中两者都可透明，但 manifest 必须记录有效、缺测和无雨单元数。
+- bundle 使用临时对象、最终复制和最后写 `_SUCCESS.json` 的原子提交协议。
+
+## 3. 实现内容
+
+### 3.1 Python 产品 Worker
+
+- 新增 `product-builder` profile、独立 subject/consumer 和 Compose 健康检查。
+- 构建 24 个降水率场、60/120 分钟累计场和点查询索引。
+- COG 固定 EPSG:4326、北向上、DEFLATE、COG layout 和像素边界。
+- NetCDF 固定二维 `lat × lon`、递增经纬坐标、CF/旧模式样例兼容属性和
+  `_FillValue=-9999.0`。
+- 每个对象记录媒体类型、SHA-256、大小、时效、有效时刻、单位和格点状态摘要。
+- 构建完成后从内存重新打开 COG、NetCDF、PNG 和点索引做强校验，再执行原子发布。
+
+### 3.2 Go 控制面与事件
+
+- 新增 `product.build.requested.v1`，只有 `BASELINE_READY` 可进入
+  `PRODUCT_BUILDING`。
+- 完成事件再次核对 run/job/model-run、源预报 URI/SHA、网格、版本、3 个产品、
+  79 个资产、时效和格点状态计数，成功后才进入 `PUBLISHED`。
+- 数据库迁移 `0014_application_products.sql` 增加构建记录、产品有效时刻、源预报
+  身份和资产有效时刻。
+- 每个产品产生一条确定性的 `product.published` 事件，JetStream 流显式覆盖
+  `rainpulse.products.published`。
+- replay 对所有请求事件显式映射主题，未知事件拒绝发布，避免回退到模拟 Worker。
+
+### 3.3 REST 与查询
+
+- 产品列表、详情和资产列表。
+- 只允许读取已登记的产品资产；响应前校验对象大小、SHA-256 和格式签名。
+- PNG 使用 immutable cache、ETag 和 `nosniff`；COG/NetCDF 以附件交付。
+- 点查询按最近网格点返回 24 个时效的降水率、置信度、有效性和网格坐标。
+- 区域统计按指定 bbox 和 lead 返回有效/缺测数、覆盖率、均值和最大值。
+- SSE 继续输出 `run.updated`，发布后快照为 `PUBLISHED`。
+
+## 4. 本地验证
+
+- RP-015 产品测试 4 项通过。
+- 合约测试 34 项通过，OpenAPI 生成的 Go/TypeScript 类型一致。
+- Go 全包测试通过，新增 JetStream 主题和 replay 全事件路由回归测试。
+- Web 既有 2 项测试和 ESLint 通过；本阶段未改产品 UI。
+- `make lint`、`git diff --check`、Linux/amd64 API、Web、orchestrator 和 Worker
+  制品构建通过。
+- JetStream 与 replay 两个修复均执行了 red/green：修复前测试分别观察到缺少产品
+  发布主题，以及 QPE/diagnostics/product replay 错投模拟主题；修复后全量 Go 测试
+  通过。
+
+## 5. 测试服务器验收
+
+### 5.1 部署状态
+
+- 原地部署并保留 `deploy/.env`、`runtime/`、PostgreSQL、NATS 和 MinIO 卷。
+- `0014_application_products.sql` 已应用。
+- 16 个长期 Compose 服务全部 healthy，新增 `product-builder-worker`。
+- 部署前数据库无历史 `products`/`product_assets`，迁移不存在兼容阻塞。
+
+### 5.2 输入与构建身份
+
+- forecast run：`0ce8e90c-3160-5e5d-874d-1eda09bf1084`
+- model run：`79eff584-e840-5f38-a5fd-d69a0caaf6fc`
+- RP-015 job：`c495e279-5ba0-53fa-a3c9-e2ed51e9aa5f`
+- 最终状态：`PUBLISHED / SUCCEEDED / SUCCEEDED`
+- 输入 ForecastOutput SHA-256：
+  `6344c411c9e3f3b2feb7da959f38563577383487e2efb65092609eaf37a0da9f`
+- bundle SHA-256：
+  `9ec6d6030e67a56e7aa0322bac2c90db2098dec0e122dc2b0d95d8df300feed0`
+- Worker 运行时间：1152 ms。
+- bundle：80 个对象、79 个登记资产、22,887,279 bytes。
+
+```text
+s3://rainpulse/products/0ce8e90c-3160-5e5d-874d-1eda09bf1084/
+pysteps-lk/pysteps-lk-1.0.0/distribution/
+rp015-application-products-v1/application-products
+```
+
+### 5.3 产品与资产
+
+| 产品 | product_id | 有效时刻 | 资产数 |
+|---|---|---:|---:|
+| rain_rate | `c6896a27-dbf4-55b1-b153-fb3d05da3fc7` | 24 | 73 |
+| accumulation_60 | `6f9ecf8f-4aa8-5c47-9728-9a6c61400d6e` | 1 | 3 |
+| accumulation_120 | `60832291-d78e-59b6-af7a-f84edab50b5b` | 1 | 3 |
+
+| 资产类型 | 数量 | 总大小 bytes |
+|---|---:|---:|
+| PNG | 26 | 43,654 |
+| COG | 26 | 96,208 |
+| NetCDF | 26 | 10,612,408 |
+| 点查询索引 | 1 | 12,084,184 |
+
+首时效场记录 100,701 个格点，其中有效 95,676、缺测 5,025、有效无雨 10,050，
+覆盖率 `0.9500998003992016`。测试 PNG 为 `501 × 201`，通过 API 下载后 SHA-256
+与登记值一致。
+
+### 5.4 API 与事件证据
+
+- 产品目录返回 3 个产品及完整源预报身份。
+- T+5 PNG 返回 `200 image/png`、正确长度、immutable cache、ETag 和 `nosniff`。
+- 点 `(120, 26)` 返回 24 个时效；T+5 与 T+120 均为有效 `2 mm/h`，置信度随时效
+  从约 `0.7874` 降至 `0.3031`。
+- bbox `119,25.5,120,26`、T+60 返回 5,151 个有效格点、0 个缺测格点、均值和最大值
+  都为 `2 mm/h`。
+- SSE 首个快照为 `run.updated`，状态 `PUBLISHED`。
+- 3 条 `product.published` outbox 均为 `published`，部署结束时未发布 outbox 为 0。
+
+### 5.5 幂等重放与运行修复
+
+首次验收暴露两个集成缺口：JetStream 流只包含 `rainpulse.jobs.>`，以及 replay 未映射
+新的 product 事件。修复并重新部署后，Worker 明确记录
+`job.idempotent_replay`。数据库仍为 3 个产品、79 个资产、1 个 job attempt、3 条
+产品发布事件，没有重复产品、资产或构建记录。
+
+## 6. 未完成项与下一步
+
+- 依据已冻结产品 API 实施 React 短临地图、5 分钟时间轴、图例、点选曲线和区域统计。
+- UI 开始前确认默认方向：预报员/值班人员、桌面优先、克制的科学业务台、降水图层
+  为主视觉、5 分钟拖动时间轴、保持当前 React 和轻量依赖。
+- 完成 1440 px、768 px、375 px 浏览器实测和键盘/对比度检查后，才能把 RP-015
+  标记为整体完成。
+- RP-016 再加入检验、故障注入和原始雷达到 React 的完整业务验收。
+- 真实预报产品仍需至少三个连续、业务可用、具有可跟踪降水回波的上游时次；当前
+  静态合成场不能用于评价产品业务效果。
