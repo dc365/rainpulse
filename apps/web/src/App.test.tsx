@@ -171,10 +171,18 @@ describe('RainPulse radar operations overview', () => {
         },
       ],
     }
+    const syntheticCycle = {
+      ...cycle,
+      analysis_id: '85000000-0000-4000-8000-000000000099',
+      analysis_time: '2026-08-25T06:25:00Z',
+      grid_id: 'rp004-synthetic-grid',
+      mosaic_uri: null,
+      analysis_uri: null,
+    }
     const fetchStatus = vi.fn().mockImplementation((input: string) => {
       let body: unknown = { service: 'rainpulse-control', status: 'ready', version: 'rp012-test' }
       if (input.includes('/radars/status')) body = [status]
-      else if (input.endsWith('/analysis-cycles?limit=12')) body = { items: [cycle] }
+      else if (input.endsWith('/analysis-cycles?limit=12')) body = { items: [syntheticCycle, cycle] }
       else if (input.endsWith(`/${analysisID}`)) body = cycle
       else if (input.endsWith('/mosaic-summary')) body = {
         profile_version: 'rp010-qi-mosaic-v1', algorithm_version: 'qi-mosaic-1.0.0',
