@@ -322,9 +322,9 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
     <section className="forecast-page" aria-labelledby="forecast-title">
       <header className="page-heading forecast-heading">
         <div>
-          <p className="section-kicker">Operational nowcast / RP-015</p>
+          <p className="section-kicker">工程验证 / RP-016</p>
           <h1 id="forecast-title">0–2 小时降水预报</h1>
-          <p>在固定等经纬网格上查看五分钟短临时效，并查询单点与区域雨强。</p>
+          <p>当前产品用于工程回放与检验；业务可用性由上游质量门控和实况评分共同决定。</p>
         </div>
         <div className="update-time">
           <span>产品目录更新</span>
@@ -423,7 +423,7 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
               {pointError ? <p className="query-error" role="alert">{pointError}</p> : null}
               <div className="point-current">
                 <div><span>当前格点</span><strong>{pointForecast ? `${formatCoordinate(pointForecast.grid_longitude)}°E  ${formatCoordinate(pointForecast.grid_latitude)}°N` : '等待查询'}</strong></div>
-                <div><span>当前雨强</span><strong>{formatRate(currentPointValue)}</strong><small>{currentPointValue?.valid === false ? '缺测' : `置信 ${(currentPointValue?.confidence ?? 0).toFixed(2)}`}</small></div>
+                <div><span>当前雨强</span><strong>{formatRate(currentPointValue)}</strong><small>{currentPointValue?.valid === false ? '缺测' : `技术质量 ${(currentPointValue?.confidence ?? 0).toFixed(2)}（非概率）`}</small></div>
               </div>
               {pointForecast ? (
                 <>
@@ -518,7 +518,7 @@ function PointMilestones({ values }: { values: PointForecastValue[] }) {
   }))
   return (
     <div className="point-milestones" aria-label="关键时效点预报">
-      <header><span>关键时效</span><small>雨强 / 置信</small></header>
+      <header><span>关键时效</span><small>雨强 / 技术质量</small></header>
       {milestones.map(({ lead, value }) => (
         <div key={lead}>
           <strong>T+{lead}</strong>
