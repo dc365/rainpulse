@@ -1,0 +1,47 @@
+name: review-macos
+
+on:
+  push:
+    branches:
+      - review/validation-rp018-macos
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install system test tools
+        run: command -v rg >/dev/null || brew install ripgrep
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.x"
+          cache-dependency-path: services/control/go.sum
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.10.0
+          run_install: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: pnpm
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.10"
+          enable-cache: true
+          cache-dependency-glob: algorithms/uv.lock
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install Ruff
+        run: uv tool install ruff==0.15.12
+      - name: Bootstrap
+        run: make bootstrap
+      - name: Test
+        run: make test
+      - name: Lint
+        run: make lint
+      - name: Build
+        run: make build
