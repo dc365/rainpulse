@@ -2,27 +2,43 @@ schema_version: "1.0"
 profile_version: rp018-mrms-v1
 lifecycle: engineering_validation
 operational_eligible: false
-primary_truth_kind: observed_mrms_10min
+claim_scope:
+  validates:
+    - mrms_adapter
+    - temporal_resampling
+    - native_cadence_sensitivity
+    - pysteps_lk_execution
+    - deterministic_skill
+    - independent_translation_baseline
+    - fixed_truth_domain_coverage
+    - accumulation_skill
+  does_not_validate:
+    - polar_radar_qc
+    - rqi_quality_index
+    - confidence_calibration
+    - production_readiness
 
 source:
-  dataset_id: mrms-preciprate-conus-202108-10min-v1
   product: PrecipRate_00.00
   cadence_minutes: 10
-  raw_state_codes:
+  units: mm/h
+  source_states:
     no_coverage: -3
     missing: -1
-    valid_no_rain: 0
+    no_rain: 0
+    rain: positive
 
 adaptation:
-  model_timestep_minutes: 5
-  method: causal_linear_rate_interpolation
-  observed_source_offsets_minutes: [-20, -10, 0]
-  output_offsets_minutes: [-20, -15, -10, -5, 0]
-  intermediate_data_age_minutes: 5
-  reflectivity_proxy: z_equals_200_r_power_1p6
+  target_timestep_minutes: 5
+  input_offsets_minutes: [-20, -15, -10, -5, 0]
+  observed_offsets_minutes: [-20, -10, 0]
+  interpolation: causal_linear_rate
+  reflectivity: surrogate_from_mrms_rate_z200_r1p6
+  quality_index: neutral_one_on_valid_cells
   native_cadence_comparison: true
 
-nowcast_profile: configs/nowcast/rp016-pysteps-lk-hardened-v1.yaml
+nowcast_profile: configs/nowcast/rp016-pysteps-lk-v1.yaml
+primary_truth_kind: observed_mrms_10min
 lead_minutes: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
 thresholds_mm_h: [0.1, 1, 5, 10, 20, 50]
 fss_windows_pixels: [1, 5, 11, 21, 41]
@@ -49,48 +65,48 @@ cases:
     label: Southern California dry control
     category: dry
     grid:
-      grid_id: mrms-socal-dry-20210805-0p01deg-v1
-      config_version: mrms-socal-dry-20210805-grid-v1
-      bounds: {west: -120.0, east: -115.0, south: 32.5, north: 34.5}
-      coordinate_sha256: c8a5752d67b9f5908a8beaf17bd5c625d14106c376210b1cdd5d2c661c99c4a8
-    issues: {start: "2021-08-05T06:00:00Z", end: "2021-08-05T07:20:00Z", step_minutes: 10}
+      grid_id: mrms_socal_dry_20210805_0p01deg_v1
+      config_version: mrms-socal-dry-20210805-0p01deg-v1
+      bounds: {west: -121.995, east: -116.995, south: 33.005, north: 35.005}
+      coordinate_sha256: 3b1977e44fe9ea2e3326e1afdf47b83fdc05a0de535fe05f8be22801c8c78ec0
+    issues: {start: "2021-08-05T06:00:00Z", end: "2021-08-05T18:00:00Z", step_minutes: 60}
 
   - case_id: midwest_convection_20210810
     label: Midwest convection
     category: wet
     grid:
-      grid_id: mrms-midwest-convection-20210810-0p01deg-v1
-      config_version: mrms-midwest-convection-20210810-grid-v1
-      bounds: {west: -95.0, east: -90.0, south: 39.0, north: 41.0}
-      coordinate_sha256: f090dca6506c6756662385a4288725fdadfe68ab153a017cfcf3359c60a765aa
-    issues: {start: "2021-08-10T17:00:00Z", end: "2021-08-10T18:50:00Z", step_minutes: 10}
+      grid_id: mrms_midwest_20210810_0p01deg_v1
+      config_version: mrms-midwest-20210810-0p01deg-v1
+      bounds: {west: -94.995, east: -89.995, south: 39.005, north: 41.005}
+      coordinate_sha256: d2d40ae1abfc723e787c27f5c65f40b417c438ba9f353231a2dd4de11d5f7a2d
+    issues: {start: "2021-08-10T17:00:00Z", end: "2021-08-10T21:00:00Z", step_minutes: 30}
 
-  - case_id: northeast_ida_20210829
-    label: Northeast Ida precursor rain
+  - case_id: fred_20210816
+    label: Tropical Storm Fred
     category: wet
     grid:
-      grid_id: mrms-northeast-ida-20210829-0p01deg-v1
-      config_version: mrms-northeast-ida-20210829-grid-v1
-      bounds: {west: -78.0, east: -73.0, south: 39.5, north: 41.5}
-      coordinate_sha256: cba2bd2ed7937024b309d6f5fe93679cb79fe270a1475f420a58da40b08619f1
-    issues: {start: "2021-08-29T14:00:00Z", end: "2021-08-29T15:40:00Z", step_minutes: 10}
+      grid_id: mrms_fred_20210816_0p01deg_v1
+      config_version: mrms-fred-20210816-0p01deg-v1
+      bounds: {west: -87.995, east: -82.995, south: 28.005, north: 30.005}
+      coordinate_sha256: 5cd2bf6edcd5b3855b66588e49c55f243f2fa831713ceb1b2e2ad63df2fa23ca
+    issues: {start: "2021-08-16T16:00:00Z", end: "2021-08-16T20:00:00Z", step_minutes: 30}
 
-  - case_id: florida_convection_20210824
-    label: Florida convection
+  - case_id: henri_20210822
+    label: Tropical Storm Henri
     category: wet
     grid:
-      grid_id: mrms-florida-convection-20210824-0p01deg-v1
-      config_version: mrms-florida-convection-20210824-grid-v1
-      bounds: {west: -83.0, east: -78.0, south: 25.0, north: 27.0}
-      coordinate_sha256: 149d23ac66b982032c7e1dc6b36132d439f006f0554d326876aa486b0dc86f57
-    issues: {start: "2021-08-24T18:00:00Z", end: "2021-08-24T19:40:00Z", step_minutes: 10}
+      grid_id: mrms_henri_20210822_0p01deg_v1
+      config_version: mrms-henri-20210822-0p01deg-v1
+      bounds: {west: -74.995, east: -69.995, south: 40.005, north: 42.005}
+      coordinate_sha256: 03b7dd035db2b734976df6d74263b0443077f35b1abfe92dca63f21334be98d0
+    issues: {start: "2021-08-22T13:00:00Z", end: "2021-08-22T17:00:00Z", step_minutes: 30}
 
-  - case_id: ida_gulf_20210829
-    label: Hurricane Ida Gulf rainbands
+  - case_id: ida_20210829
+    label: Hurricane Ida landfall
     category: wet
     grid:
-      grid_id: mrms-ida-gulf-20210829-0p01deg-v1
-      config_version: mrms-ida-gulf-20210829-grid-v1
-      bounds: {west: -92.5, east: -87.5, south: 28.0, north: 30.0}
-      coordinate_sha256: eada47daf8af174465d39fe2e658a91439744cbb85861340650c73d9ead654f6
-    issues: {start: "2021-08-29T14:00:00Z", end: "2021-08-29T15:50:00Z", step_minutes: 10}
+      grid_id: mrms_ida_20210829_0p01deg_v1
+      config_version: mrms-ida-20210829-0p01deg-v1
+      bounds: {west: -92.995, east: -87.995, south: 28.005, north: 30.005}
+      coordinate_sha256: f861a9362d7abc557edf36a73c9d24963ddaa5baadd9437147f47db43f8d6525
+    issues: {start: "2021-08-29T14:00:00Z", end: "2021-08-29T20:00:00Z", step_minutes: 30}
