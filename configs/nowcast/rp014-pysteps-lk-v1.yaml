@@ -20,7 +20,7 @@ motion:
   method: dense_lucaskanade
   rain_threshold_dbz: 10.0
   minimum_trackable_rain_pixels: 64
-  minimum_motion_features: 8
+  minimum_motion_features: 4
   missing_buffer_pixels: 5
   working_missing_fill_dbz: 0.0
   # Missing pixels are extended from the nearest valid observation only in the
