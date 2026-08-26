@@ -20,6 +20,12 @@ Use hexadecimal secret values so the MinIO client endpoint URL remains
 unambiguous. `deploy/.env` is ignored by Git and must have restrictive file
 permissions on shared hosts.
 
+`RAINPULSE_ALGORITHM_VERIFICATION_HOST_ROOT` points at the host directory whose
+children follow `{profile_version}/{run_id}/{summary.json,metrics.csv}`. Compose
+mounts it read-only into the API. Leaving the default local path in place is
+safe when no reports exist; the Web algorithm-verification view then shows an
+empty state.
+
 `make dev-down` stops containers without deleting the named volumes. Intentional
 data deletion requires an explicit `docker compose down --volumes` operation and
 is not part of normal lifecycle commands.

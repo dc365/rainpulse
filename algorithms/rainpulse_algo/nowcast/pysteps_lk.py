@@ -46,6 +46,17 @@ class PystepsLKResult:
     trackable_rain_pixel_count: int
 
 
+@dataclass(frozen=True)
+class PystepsLKFields:
+    """Validated in-memory fields consumed by the shared pySTEPS-LK algorithm core."""
+
+    reflectivity_dbz: np.ndarray
+    rate_mm_h: np.ndarray
+    quality_index: np.ndarray
+    valid_mask: np.ndarray
+    low_quality_mask: np.ndarray
+
+
 MotionEstimator = Callable[[np.ndarray, PystepsLKProfile], np.ndarray]
 Extrapolator = Callable[[np.ndarray, np.ndarray, int, int], np.ndarray]
 
@@ -64,9 +75,67 @@ def run_pysteps_lk(
     root = zarr.open_group(store=store, mode="r")
     _validate_identity(root, profile, grid)
 
-    valid_sequence = root["VALID_MASK"][:] == 1
-    low_quality_sequence = root["LOW_QUALITY_MASK"][:] == 1
-    reflectivity = root[profile.motion.input_field][:].astype("float32", copy=True)
+    return run_pysteps_lk_fields(
+        PystepsLKFields(
+            reflectivity_dbz=root[profile.motion.input_field][:],
+            rate_mm_h=root["RATE_QPE"][:],
+            quality_index=root["QUALITY_INDEX"][:],
+            valid_mask=root["VALID_MASK"][:],
+            low_quality_mask=root["LOW_QUALITY_MASK"][:],
+        ),
+        profile=profile,
+        grid=grid,
+        motion_estimator=motion_estimator,
+        extrapolator=extrapolator,
+    )
+
+
+def run_pysteps_lk_fields(
+    fields: PystepsLKFields,
+    *,
+    profile: PystepsLKProfile,
+    grid: RegularLatLonGrid,
+    motion_estimator: MotionEstimator | None = None,
+    extrapolator: Extrapolator | None = None,
+) -> PystepsLKResult:
+    """Run the production algorithm core on already adapted in-memory fields."""
+
+    reflectivity = np.asarray(fields.reflectivity_dbz, dtype="float32")
+    if reflectivity.ndim != 3:
+        raise PystepsLKInputError("pySTEPS-LK fields must be time x lat x lon")
+    expected_shape = (reflectivity.shape[0], *grid.shape)
+    arrays = {
+        "rate_mm_h": np.asarray(fields.rate_mm_h),
+        "quality_index": np.asarray(fields.quality_index),
+        "valid_mask": np.asarray(fields.valid_mask),
+        "low_quality_mask": np.asarray(fields.low_quality_mask),
+    }
+    if reflectivity.shape != expected_shape or any(
+        values.shape != expected_shape for values in arrays.values()
+    ):
+        raise PystepsLKInputError("pySTEPS-LK field shape differs from the configured grid")
+    if not (
+        profile.sequence.minimum_frames
+        <= reflectivity.shape[0]
+        <= profile.sequence.maximum_frames
+    ):
+        raise PystepsLKInputError("pySTEPS-LK frame count is outside profile bounds")
+
+    valid_sequence = arrays["valid_mask"] == 1
+    low_quality_sequence = arrays["low_quality_mask"] == 1
+    rate_sequence = arrays["rate_mm_h"].astype("float32", copy=True)
+    quality_sequence = arrays["quality_index"].astype("float32", copy=True)
+    if (
+        np.any(~np.isfinite(reflectivity[valid_sequence]))
+        or np.any(~np.isfinite(rate_sequence[valid_sequence]))
+        or np.any(~np.isfinite(quality_sequence[valid_sequence]))
+    ):
+        raise PystepsLKInputError("valid pySTEPS-LK cells must contain finite fields")
+    if np.any(rate_sequence[valid_sequence] < 0.0) or np.any(
+        (quality_sequence[valid_sequence] < 0.0) | (quality_sequence[valid_sequence] > 1.0)
+    ):
+        raise PystepsLKInputError("pySTEPS-LK rate or quality values are outside contract bounds")
+
     motion_valid = _motion_estimation_mask(
         valid_sequence,
         profile.motion.missing_buffer_pixels,
@@ -117,9 +186,9 @@ def run_pysteps_lk(
     velocity = _extend_velocity_to_domain(velocity, motion_valid)
     extrapolate = extrapolator or _semilagrangian
     lead_count = profile.extrapolation.lead_count
-    latest_rate = root["RATE_QPE"][-1].astype("float32")
+    latest_rate = rate_sequence[-1]
     latest_valid = valid_sequence[-1]
-    latest_quality = root["QUALITY_INDEX"][-1].astype("float32")
+    latest_quality = quality_sequence[-1]
     latest_low_quality = low_quality_sequence[-1]
 
     rain_rate, output_valid = _forecast_with_support(

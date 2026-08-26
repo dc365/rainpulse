@@ -1544,3 +1544,319 @@ h1 {
   .gis-coordinate-readout { right: 12px; bottom: 90px; min-width: 0; }
   .gis-legend-cells small { font-size: 5px; }
 }
+
+/* RP-016 source-agnostic algorithm verification */
+
+.verification-page { min-width: 0; }
+.verification-heading { padding-bottom: 22px; }
+
+.verification-boundary {
+  flex: 0 0 auto;
+  padding: 7px 9px;
+  border: 1px solid #dfc8bb;
+  border-radius: 3px;
+  color: #824429;
+  background: var(--risk-soft);
+  font-size: 9px;
+  font-weight: 760;
+  letter-spacing: .05em;
+}
+
+.verification-ledger {
+  display: grid;
+  grid-template-columns: .8fr 1fr .8fr 1.25fr;
+  border: 1px solid var(--line-strong);
+  background: rgb(250 251 249 / 72%);
+}
+
+.verification-ledger > div {
+  min-width: 0;
+  min-height: 92px;
+  display: grid;
+  align-content: space-between;
+  gap: 5px;
+  padding: 14px 17px;
+  border-right: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+
+.verification-ledger > div:last-child { border-right: 0; }
+.verification-ledger span { color: var(--muted); font-size: 9px; letter-spacing: .05em; }
+.verification-ledger strong { overflow: hidden; font-size: 20px; font-weight: 660; letter-spacing: -.025em; text-overflow: ellipsis; white-space: nowrap; }
+.verification-ledger small { color: #78837f; font-size: 8px; }
+.verification-ledger .supported strong { color: var(--teal); }
+.verification-ledger .caution strong { color: var(--risk); }
+
+.verification-layout {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 246px minmax(0, 1fr);
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.verification-navigator,
+.verification-console {
+  min-width: 0;
+  border: 1px solid var(--line-strong);
+  background: var(--paper);
+}
+
+.verification-navigator { align-self: start; }
+.verification-nav-section { padding: 8px; }
+.verification-nav-section.case-section { border-top: 1px solid var(--line); }
+.verification-nav-heading { display: grid; gap: 4px; padding: 8px 8px 10px; }
+.verification-nav-heading span { color: #588077; font-size: 8px; font-weight: 750; letter-spacing: .13em; text-transform: uppercase; }
+.verification-nav-heading strong { font-size: 13px; }
+.verification-run-list, .verification-case-list { display: grid; gap: 2px; }
+
+.verification-run-list button,
+.verification-case-list button {
+  width: 100%;
+  min-width: 0;
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--ink);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.verification-case-list button { grid-template-columns: minmax(0, 1fr) auto; }
+.verification-run-list button:hover, .verification-case-list button:hover { background: #f1f5f2; }
+.verification-run-list button.selected, .verification-case-list button.selected { border-color: #bfd1cb; background: #eaf2ef; }
+.verification-run-list button > span:nth-child(2), .verification-case-list button > span { min-width: 0; display: grid; gap: 4px; }
+.verification-run-list strong, .verification-case-list strong { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.verification-run-list small, .verification-case-list small { overflow: hidden; color: var(--muted); font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
+.verification-run-list em, .verification-case-list em { color: #4b5d57; font-size: 12px; font-style: normal; font-variant-numeric: tabular-nums; }
+.verification-run-mark { width: 5px; height: 24px; border-radius: 1px; background: var(--unknown); }
+.verification-run-mark.supported { background: var(--teal); }
+.verification-run-mark.caution { background: var(--risk); }
+
+.verification-scope-note {
+  margin: 0;
+  padding: 13px 15px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  background: #f5f7f5;
+  font-size: 8px;
+  line-height: 1.65;
+}
+
+.verification-console { padding: 12px; }
+.verification-console-heading { min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 4px 4px 14px; }
+.verification-console-heading > div { min-width: 0; display: grid; gap: 4px; }
+.verification-console-heading > div span { color: #588077; font-size: 8px; font-weight: 740; letter-spacing: .08em; }
+.verification-console-heading > div strong { font-size: 15px; }
+.verification-console-heading > div small { overflow: hidden; color: var(--muted); font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
+.verification-status { flex: 0 0 auto; padding: 6px 8px; border-radius: 3px; color: #6f4a38; background: var(--risk-soft); font-size: 9px; font-weight: 750; }
+.verification-status.supported { color: #0b665a; background: var(--teal-soft); }
+
+.skill-gate-panel { border: 1px solid var(--line); }
+.skill-gate-panel > header, .verification-metric-table > header { min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: #f6f8f6; }
+.skill-gate-panel > header > div, .verification-metric-table > header > div { display: grid; gap: 4px; }
+.skill-gate-panel > header span, .verification-metric-table > header span { color: #588077; font-size: 7px; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
+.skill-gate-panel h2, .verification-metric-table h2 { margin: 0; font-size: 13px; }
+.skill-gate-panel > header small, .verification-metric-table > header small { color: var(--muted); font-size: 8px; }
+
+.skill-gate-grid {
+  --threshold-count: 3;
+  min-width: 660px;
+  display: grid;
+  grid-template-columns: 132px repeat(var(--threshold-count), minmax(150px, 1fr));
+}
+
+.skill-grid-corner, .skill-grid-head, .skill-grid-baseline { display: grid; align-items: center; min-height: 34px; padding: 7px 10px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.skill-grid-corner, .skill-grid-head { color: var(--muted); background: #fafbf9; font-size: 7px; }
+.skill-grid-head { justify-items: center; }
+.skill-grid-baseline { font-size: 9px; }
+.skill-gate-grid button { min-height: 76px; display: grid; place-items: center; align-content: center; gap: 4px; padding: 8px; border: 0; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); color: #5d6763; background: #fff; cursor: pointer; }
+.skill-gate-grid button:hover { background: #f2f6f3; }
+.skill-gate-grid button.active { box-shadow: inset 0 0 0 2px var(--teal); }
+.skill-gate-grid button.passed strong { color: var(--teal); }
+.skill-gate-grid button.failed strong { color: var(--risk); }
+.skill-gate-grid button strong { font-size: 15px; font-variant-numeric: tabular-nums; }
+.skill-gate-grid button small { font-size: 8px; font-weight: 680; }
+.skill-gate-grid button span { color: var(--muted); font-size: 7px; font-variant-numeric: tabular-nums; }
+
+.verification-controls { display: flex; align-items: stretch; gap: 0; margin-top: 10px; overflow-x: auto; border: 1px solid var(--line); background: #f5f7f5; }
+.verification-control-group { flex: 0 0 auto; display: grid; gap: 6px; padding: 8px 10px; border-right: 1px solid var(--line); }
+.verification-control-group:last-child { border-right: 0; }
+.verification-control-group > span { color: var(--muted); font-size: 7px; letter-spacing: .05em; }
+.verification-control-group > div { display: flex; gap: 3px; }
+.verification-control-group button { min-height: 30px; padding: 5px 8px; border: 1px solid transparent; border-radius: 3px; color: #56645f; background: transparent; font-size: 8px; cursor: pointer; white-space: nowrap; }
+.verification-control-group button:hover { color: var(--teal); background: #edf3f0; }
+.verification-control-group button.active { border-color: #b7cec7; color: #0b665a; background: var(--teal-soft); }
+
+.verification-issue-rail, .lead-evidence { margin-top: 10px; border: 1px solid var(--line); background: #fafbf9; }
+.verification-issue-rail > header, .lead-evidence > header { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.verification-issue-rail > header span, .lead-evidence > header span { color: var(--muted); font-size: 7px; letter-spacing: .08em; text-transform: uppercase; }
+.verification-issue-rail > header strong, .lead-evidence > header strong { font-size: 9px; }
+.verification-issue-rail > div { display: flex; overflow-x: auto; padding: 8px 9px 5px; }
+.verification-issue-rail button { position: relative; flex: 1 0 56px; min-width: 56px; min-height: 54px; display: grid; place-items: center; align-content: center; gap: 3px; padding: 16px 3px 4px; border: 0; border-top: 1px solid #bcc9c5; color: #687570; background: transparent; cursor: pointer; }
+.verification-issue-rail button i { position: absolute; top: -4px; width: 7px; height: 7px; border: 1px solid #fafbf9; border-radius: 50%; background: #96a39f; }
+.verification-issue-rail button strong { font-size: 8px; font-variant-numeric: tabular-nums; }
+.verification-issue-rail button small { font-size: 7px; font-variant-numeric: tabular-nums; }
+.verification-issue-rail button.active { color: #0b665a; background: #e7f1ee; }
+.verification-issue-rail button.active::before { content: ""; position: absolute; inset: -1px 0 0; border-top: 2px solid var(--teal); }
+.verification-issue-rail button.active i { top: -6px; width: 11px; height: 11px; border: 2px solid #fafbf9; background: var(--teal); box-shadow: 0 0 0 3px rgb(19 117 104 / 14%); }
+
+.lead-evidence > div { display: grid; grid-template-columns: repeat(12, minmax(42px, 1fr)); overflow-x: auto; padding: 9px; }
+.lead-evidence > div > button { min-width: 42px; min-height: 54px; display: grid; place-items: center; align-content: center; gap: 4px; padding: 4px; border: 0; border-right: 1px solid var(--line); color: #65726e; background: transparent; cursor: pointer; }
+.lead-evidence > div > button:last-child { border-right: 0; }
+.lead-evidence > div > button:hover { background: #f0f5f2; }
+.lead-evidence > div > button.active { color: #0b665a; background: #e5efec; box-shadow: inset 0 -2px var(--teal); }
+.lead-evidence i { width: 6px; height: 6px; border-radius: 50%; background: var(--unknown); }
+.lead-evidence .positive i { background: var(--teal); }
+.lead-evidence .negative i { background: var(--risk); }
+.lead-evidence strong { font-size: 9px; font-variant-numeric: tabular-nums; }
+.lead-evidence small { font-size: 7px; font-variant-numeric: tabular-nums; }
+.lead-evidence .positive small { color: #0b665a; }
+.lead-evidence .negative small { color: var(--risk); }
+
+.verification-map-evidence { margin-top: 10px; overflow: hidden; border: 1px solid var(--line); background: #f5f8f6; }
+.verification-map-heading { min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 10px 12px; border-bottom: 1px solid var(--line); background: #f7f9f7; }
+.verification-map-heading > div:first-child { min-width: 0; display: grid; gap: 3px; }
+.verification-map-heading span { color: #588077; font-size: 7px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
+.verification-map-heading h2 { margin: 0; font-size: 13px; }
+.verification-map-heading small { overflow: hidden; color: var(--muted); font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
+.verification-map-tools { flex: 0 0 auto; display: flex; align-items: center; gap: 3px; }
+.verification-map-tools button { min-height: 30px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 3px; color: #52625d; background: #fbfcfb; font-size: 8px; cursor: pointer; }
+.verification-map-tools button:hover, .verification-map-tools button.active { border-color: #b6ccc5; color: #0b665a; background: var(--teal-soft); }
+.verification-map-tools button:disabled { opacity: .45; cursor: not-allowed; }
+.verification-map-tools label { display: grid; grid-template-columns: auto 70px; align-items: center; gap: 6px; min-height: 30px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 3px; background: #fbfcfb; }
+.verification-map-tools label span { color: var(--muted); font-size: 7px; font-weight: 500; letter-spacing: 0; text-transform: none; }
+.verification-map-tools input { width: 70px; accent-color: var(--teal); }
+.verification-map-mobile-tabs { display: none; }
+.verification-map-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line); }
+.verification-map-panel { min-width: 0; background: #eef3f0; }
+.verification-map-panel > header { min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border-bottom: 1px solid rgb(30 65 57 / 12%); background: #fbfcfb; }
+.verification-map-panel > header > div:first-child { min-width: 0; display: grid; gap: 3px; }
+.verification-map-panel > header span { color: var(--muted); font-size: 7px; letter-spacing: .06em; text-transform: uppercase; }
+.verification-map-panel > header > div:first-child strong { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.verification-map-panel.lk > header { background: #f1f7f4; }
+.verification-map-panel.baseline > header { background: #f8f4f1; }
+.verification-map-metric { flex: 0 0 auto; display: flex; gap: 7px; }
+.verification-map-metric span { display: grid; gap: 2px; color: var(--muted); font-size: 6px; letter-spacing: 0; text-align: right; text-transform: none; }
+.verification-map-metric strong { color: #304a43; font-size: 8px; font-variant-numeric: tabular-nums; }
+.verification-map-metric .positive strong { color: var(--teal); }
+.verification-map-metric .negative strong { color: var(--risk); }
+.nowcast-gis-shell.verification-comparison-map { height: 286px; min-height: 286px; border: 0; border-radius: 0; box-shadow: none; }
+.verification-comparison-map .ol-scale-line { right: 8px; bottom: 8px; }
+.verification-comparison-map .ol-attribution { right: 8px; bottom: 8px; max-width: 68%; }
+.verification-map-legend { display: flex; align-items: center; gap: 7px; padding: 8px 10px; overflow-x: auto; border-top: 1px solid var(--line); background: #fbfcfb; }
+.verification-map-legend > div { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 3px; }
+.verification-map-legend span { width: 14px; height: 8px; border: 1px solid rgb(31 60 53 / 12%); }
+.verification-map-legend span.no-rain { opacity: .55; }
+.verification-map-legend span.missing { background: repeating-conic-gradient(#e2e8e5 0 25%, #f8faf8 0 50%) 0 / 6px 6px; }
+.verification-map-legend small { color: var(--muted); font-size: 6px; white-space: nowrap; }
+.verification-map-legend em { flex: 1 0 auto; color: #74827d; font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 6px; font-style: normal; text-align: right; white-space: nowrap; }
+.verification-motion-note { margin: 0; padding: 8px 10px; border-top: 1px solid var(--line); color: #536660; background: #f3f7f5; font-size: 7px; line-height: 1.55; }
+.verification-motion-note.caution { color: #784b35; background: #fbf2ec; }
+.verification-map-empty { min-height: 286px; display: grid; place-items: center; align-content: center; gap: 6px; padding: 24px; color: var(--muted); background: repeating-conic-gradient(var(--checker-b) 0 25%, var(--checker-a) 0 50%) 0 / 18px 18px; text-align: center; }
+.verification-map-empty strong { color: #455b55; font-size: 11px; }
+.verification-map-empty span { max-width: 460px; font-size: 8px; line-height: 1.6; }
+
+.verification-evidence-grid { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) 250px; margin-top: 10px; border: 1px solid var(--line); }
+.verification-chart { min-width: 0; margin: 0; padding: 14px; border-right: 1px solid var(--line); }
+.verification-chart figcaption, .verification-notes > header { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-bottom: 10px; }
+.verification-chart figcaption > div, .verification-notes > header { min-width: 0; }
+.verification-chart figcaption > div { display: grid; gap: 3px; }
+.verification-chart figcaption span, .verification-notes header span { color: #588077; font-size: 7px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
+.verification-chart figcaption strong, .verification-notes header strong { font-size: 12px; }
+.verification-chart figcaption small { color: var(--muted); font-size: 7px; }
+.verification-chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.verification-chart svg line { stroke: rgb(23 37 34 / 10%); stroke-width: 1; }
+.verification-chart svg text { fill: #75817d; font-size: 8px; font-variant-numeric: tabular-nums; }
+.verification-chart svg polyline { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.verification-chart svg .lk polyline { stroke: var(--teal); }
+.verification-chart svg .baseline polyline { stroke: var(--evidence-rust); }
+.verification-chart svg .lk circle { fill: #f8faf8; stroke: var(--teal); stroke-width: 1.5; }
+.verification-chart svg .baseline circle { fill: #f8faf8; stroke: var(--evidence-rust); stroke-width: 1.5; }
+.verification-chart-empty { min-height: 190px; display: grid; place-items: center; padding: 24px; color: var(--muted); background: repeating-conic-gradient(var(--checker-b) 0 25%, var(--checker-a) 0 50%) 0 / 16px 16px; font-size: 9px; text-align: center; }
+.verification-chart-legend { display: flex; justify-content: center; gap: 18px; color: var(--muted); font-size: 7px; }
+.verification-chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.verification-chart-legend i { width: 16px; height: 2px; background: var(--teal); }
+.verification-chart-legend i.baseline { background: var(--evidence-rust); }
+
+.verification-notes { min-width: 0; padding: 14px; background: #f7f9f7; }
+.verification-notes > header { display: grid; justify-content: start; gap: 4px; border-bottom: 1px solid var(--line); }
+.verification-notes dl { margin: 0; }
+.verification-notes dl div { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 7px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.verification-notes dt { color: var(--muted); font-size: 7px; }
+.verification-notes dd { overflow: hidden; margin: 0; font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 7px; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.verification-notes p { margin: 12px 0 0; color: #744b38; font-size: 8px; line-height: 1.6; }
+
+.verification-metric-table { margin-top: 10px; border: 1px solid var(--line); }
+.verification-table-scroll { overflow-x: auto; }
+.verification-metric-table table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: 8px; font-variant-numeric: tabular-nums; }
+.verification-metric-table th, .verification-metric-table td { height: 36px; padding: 7px 9px; border-right: 1px solid #e6ebe8; border-bottom: 1px solid #e6ebe8; text-align: right; white-space: nowrap; }
+.verification-metric-table thead th { color: var(--muted); background: #f8faf8; font-size: 7px; font-weight: 650; }
+.verification-metric-table th:first-child { text-align: left; }
+.verification-metric-table tbody th { color: #3d534d; background: #fbfcfb; font-size: 8px; }
+.verification-metric-table td.positive { color: #0b665a; font-weight: 720; }
+.verification-metric-table td.negative { color: var(--risk); font-weight: 720; }
+.verification-empty { margin: 14px 0 0; padding: 30px 18px; border: 1px solid var(--line); color: var(--muted); background: var(--paper); font-size: 11px; }
+
+@media (max-width: 1100px) {
+  .verification-layout { grid-template-columns: 210px minmax(0, 1fr); }
+  .verification-evidence-grid { grid-template-columns: 1fr; }
+  .verification-chart { border-right: 0; border-bottom: 1px solid var(--line); }
+  .verification-notes dl { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
+  .verification-map-grid { grid-template-columns: 1fr 1fr; }
+  .verification-map-panel.truth { grid-column: 1 / -1; }
+}
+
+@media (max-width: 800px) {
+  .verification-ledger { grid-template-columns: 1fr 1fr; }
+  .verification-ledger > div:nth-child(2) { border-right: 0; }
+  .verification-ledger > div:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+  .verification-layout { grid-template-columns: 1fr; }
+  .verification-navigator { display: grid; grid-template-columns: 1fr 1fr; }
+  .verification-nav-section.case-section { border-top: 0; border-left: 1px solid var(--line); }
+  .verification-scope-note { grid-column: 1 / -1; }
+  .verification-run-list, .verification-case-list { max-height: 210px; overflow-y: auto; }
+  .skill-gate-panel { overflow-x: auto; }
+}
+
+@media (max-width: 700px) {
+  .verification-heading { align-items: flex-start; flex-direction: column; gap: 14px; }
+  .verification-boundary { align-self: flex-start; }
+  .verification-console { padding: 8px; }
+  .verification-console-heading { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .verification-controls { display: block; overflow: visible; }
+  .verification-control-group { border-right: 0; border-bottom: 1px solid var(--line); }
+  .verification-control-group:last-child { border-bottom: 0; }
+  .verification-control-group > div { overflow-x: auto; }
+  .lead-evidence > div { min-width: 0; grid-template-columns: repeat(12, minmax(52px, 1fr)); }
+  .verification-notes dl { display: block; }
+  .verification-map-heading { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .verification-map-tools { width: 100%; overflow-x: auto; }
+  .verification-map-tools label { display: none; }
+  .verification-map-mobile-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; padding: 1px; border-bottom: 1px solid var(--line); background: var(--line); }
+  .verification-map-mobile-tabs button { min-height: 36px; padding: 6px; border: 0; color: #62706c; background: #f7f9f7; font-size: 8px; cursor: pointer; }
+  .verification-map-mobile-tabs button.active { color: #0b665a; background: #e6f0ed; box-shadow: inset 0 -2px var(--teal); }
+  .verification-map-grid { display: block; }
+  .verification-map-panel { display: none; }
+  .verification-map-panel.mobile-active { display: block; }
+  .nowcast-gis-shell.verification-comparison-map { height: 330px; min-height: 330px; }
+  .verification-map-legend em { display: none; }
+}
+
+@media (max-width: 430px) {
+  .workspace-nav { overflow-x: auto; }
+  .workspace-nav button { min-width: 54px; padding-inline: 5px; font-size: 8px; }
+  .verification-ledger > div { min-height: 80px; padding: 11px; }
+  .verification-ledger strong { font-size: 15px; }
+  .verification-navigator { display: block; }
+  .verification-nav-section.case-section { border-top: 1px solid var(--line); border-left: 0; }
+  .verification-run-list, .verification-case-list { max-height: 180px; }
+  .skill-gate-panel > header, .verification-metric-table > header { align-items: flex-start; flex-direction: column; gap: 5px; }
+  .verification-chart { padding: 10px; }
+}

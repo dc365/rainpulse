@@ -24,6 +24,10 @@ nowcast operation:
 11. [`rendered-rainfall-layer.md`](rendered-rainfall-layer.md) defines the
    transparent PNG and geospatial layer manifest consumed by the frontend.
 
+Offline algorithm verification may additionally publish the presentation-only
+[`algorithm-verification-map-bundle.md`](algorithm-verification-map-bundle.md).
+It is served through a manifest whitelist and never becomes a scientific input.
+
 Every stage preserves valid no-rain, missing, and low-quality states. Full
 arrays live only in versioned object-store artifacts. Database, REST, and event
 payloads carry identities, summaries, and object URIs.

@@ -15,7 +15,7 @@ MINIO_MC_BUILD_VERSION := 2025-08-13T08:35:41Z
 MINIO_MC_COMMIT := 7394ce0dd2a80935aded936b09fa12cbb3cb8096
 MINIO_MC_LDFLAGS := -s -w -X github.com/minio/mc/cmd.Version=$(MINIO_MC_BUILD_VERSION) -X github.com/minio/mc/cmd.CopyrightYear=2025 -X github.com/minio/mc/cmd.ReleaseTag=$(MINIO_MC_VERSION) -X github.com/minio/mc/cmd.CommitID=$(MINIO_MC_COMMIT) -X github.com/minio/mc/cmd.ShortCommitID=7394ce0dd2a8
 
-.PHONY: bootstrap contracts-generate contracts-check test test-structure test-radar-config test-contracts test-infrastructure test-control-plane test-worker-sdk test-radar-decoder test-radar-health test-radar-qc test-radar-grid test-radar-mosaic test-qpe test-diagnostics test-nowcast-input test-pysteps-lk test-products test-ancillary test-grid test-go test-python test-web lint build build-linux build-infrastructure-linux export-postgres-image export-python-image build-worker-linux deploy-up dev-up dev-down smoke infrastructure-smoke control-plane-smoke worker-smoke radar-decode-smoke radar-health-smoke radar-qc-smoke radar-grid-smoke ancillary-plan ancillary-download ancillary-verify
+.PHONY: bootstrap contracts-generate contracts-check test test-structure test-radar-config test-contracts test-infrastructure test-control-plane test-worker-sdk test-radar-decoder test-radar-health test-radar-qc test-radar-grid test-radar-mosaic test-qpe test-diagnostics test-nowcast-input test-pysteps-lk test-products test-ancillary test-grid test-mrms test-go test-python test-web lint build build-linux build-infrastructure-linux export-postgres-image export-python-image build-worker-linux deploy-up dev-up dev-down smoke infrastructure-smoke control-plane-smoke worker-smoke radar-decode-smoke radar-health-smoke radar-qc-smoke radar-grid-smoke ancillary-plan ancillary-download ancillary-verify mrms-download mrms-verify mrms-conformance mrms-hindcast mrms-faults
 
 bootstrap:
 	@command -v rg >/dev/null || { echo "ripgrep is required" >&2; exit 1; }
@@ -96,6 +96,9 @@ test-ancillary:
 
 test-grid:
 	uv run --project algorithms pytest algorithms/tests/test_grid.py
+
+test-mrms:
+	uv run --project algorithms pytest algorithms/tests/test_mrms_archive.py algorithms/tests/test_mrms_precip.py algorithms/tests/test_mrms_verification_profile.py algorithms/tests/test_verification.py algorithms/tests/test_algorithm_verification_map.py algorithms/tests/test_mrms_hindcast.py algorithms/tests/test_pysteps_lk.py
 
 test-go:
 	go test ./services/control/...
@@ -207,3 +210,31 @@ ancillary-download:
 
 ancillary-verify:
 	uv run --project algorithms python -m rainpulse_algo.radar.ancillary --config $(ANCILLARY_CONFIG) verify --root $(ANCILLARY_ROOT)
+
+MRMS_ROOT ?= runtime/datasets/mrms
+MRMS_START ?= 2021-08-01
+MRMS_END ?= 2021-08-31
+MRMS_CADENCE_MINUTES ?= 10
+MRMS_WORKERS ?= 8
+MRMS_PROXY ?=
+MRMS_PROFILE ?= configs/verification/rp016-mrms-v1.yaml
+MRMS_REPORT_ROOT ?= runtime/reports/mrms
+MRMS_CASE ?=
+MRMS_MAX_ISSUES ?=
+MRMS_RUN_ID ?=
+MRMS_SKIP_HASH ?= 0
+
+mrms-download:
+	uv run --project algorithms python -m rainpulse_algo.datasets.mrms_archive download --start $(MRMS_START) --end $(MRMS_END) --root $(MRMS_ROOT) --cadence-minutes $(MRMS_CADENCE_MINUTES) --workers $(MRMS_WORKERS) $(if $(MRMS_PROXY),--proxy $(MRMS_PROXY),)
+
+mrms-verify:
+	uv run --project algorithms python -m rainpulse_algo.datasets.mrms_archive verify --start $(MRMS_START) --end $(MRMS_END) --root $(MRMS_ROOT) --cadence-minutes $(MRMS_CADENCE_MINUTES) --full-hash
+
+mrms-conformance:
+	uv run --project algorithms python -m rainpulse_algo.verification.mrms_hindcast conformance --repository-root $(CURDIR) --profile $(MRMS_PROFILE) --root $(MRMS_ROOT) $(if $(MRMS_CASE),--case $(MRMS_CASE),) $(if $(MRMS_MAX_ISSUES),--max-issues $(MRMS_MAX_ISSUES),) $(if $(filter 1,$(MRMS_SKIP_HASH)),--skip-hash,)
+
+mrms-hindcast:
+	uv run --project algorithms python -m rainpulse_algo.verification.mrms_hindcast hindcast --repository-root $(CURDIR) --profile $(MRMS_PROFILE) --root $(MRMS_ROOT) --output-root $(MRMS_REPORT_ROOT) $(if $(MRMS_CASE),--case $(MRMS_CASE),) $(if $(MRMS_MAX_ISSUES),--max-issues $(MRMS_MAX_ISSUES),) $(if $(MRMS_RUN_ID),--run-id $(MRMS_RUN_ID),) $(if $(filter 1,$(MRMS_SKIP_HASH)),--skip-hash,)
+
+mrms-faults:
+	uv run --project algorithms pytest algorithms/tests/test_mrms_archive.py::test_verify_checks_size_and_optional_hash algorithms/tests/test_mrms_precip.py::test_reader_crops_to_ascending_grid_and_preserves_mrms_source_states algorithms/tests/test_mrms_hindcast.py::test_archive_source_rejects_a_missing_required_source_slot algorithms/tests/test_mrms_hindcast.py::test_archive_source_checks_manifest_hash_before_grib_decode algorithms/tests/test_pysteps_lk.py::test_uses_explicit_zero_motion_fallback_for_no_rain algorithms/tests/test_pysteps_lk.py::test_empty_motion_domain_has_specific_zero_motion_fallback

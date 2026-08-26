@@ -567,7 +567,10 @@ services:
       RAINPULSE_OBJECT_STORE_BUCKET: "${RAINPULSE_MINIO_BUCKET:-rainpulse}"
       RAINPULSE_OBJECT_STORE_ACCESS_KEY: "${RAINPULSE_MINIO_WORKER_ACCESS_KEY:?set RAINPULSE_MINIO_WORKER_ACCESS_KEY in deploy/.env}"
       RAINPULSE_OBJECT_STORE_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
+      RAINPULSE_ALGORITHM_VERIFICATION_ROOT: /var/lib/rainpulse/algorithm-verification
       TZ: UTC
+    volumes:
+      - "${RAINPULSE_ALGORITHM_VERIFICATION_HOST_ROOT:-../runtime/reports/mrms}:/var/lib/rainpulse/algorithm-verification:ro"
     ports:
       - "${RAINPULSE_BIND_ADDRESS:-0.0.0.0}:${RAINPULSE_API_PORT:-8080}:8080"
     healthcheck:

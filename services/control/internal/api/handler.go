@@ -13,6 +13,7 @@ import (
 	apiv1 "github.com/fonwee/rainpulse-nowcast/services/control/internal/api/generated"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/objectstore"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/productquery"
+	verificationstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/verification"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/workflow"
 	"github.com/google/uuid"
 )
@@ -69,6 +70,31 @@ type ProductObjectReader interface {
 	ReadRange(context.Context, string, int64, int64) ([]byte, int64, string, error)
 }
 
+type AlgorithmVerificationStore interface {
+	ListRuns(context.Context) ([]verificationstore.RunSummary, error)
+	GetRun(context.Context, string, string) (verificationstore.RunDetail, error)
+	ListMetrics(
+		context.Context,
+		string,
+		string,
+		verificationstore.MetricFilter,
+	) ([]verificationstore.Metric, error)
+	GetMapFrame(
+		context.Context,
+		string,
+		string,
+		verificationstore.MapFrameFilter,
+	) (verificationstore.MapFrame, error)
+	ReadMapAsset(
+		context.Context,
+		string,
+		string,
+		string,
+		string,
+		string,
+	) (verificationstore.MapAssetContent, error)
+}
+
 type Options struct {
 	Version          string
 	Runs             RunStore
@@ -77,6 +103,7 @@ type Options struct {
 	DiagnosticLayers DiagnosticLayerReader
 	Products         ProductStore
 	ProductObjects   ProductObjectReader
+	Verification     AlgorithmVerificationStore
 	SSEPollInterval  time.Duration
 }
 
@@ -89,6 +116,7 @@ type server struct {
 	diagnosticLayers DiagnosticLayerReader
 	products         ProductStore
 	productObjects   ProductObjectReader
+	verification     AlgorithmVerificationStore
 	ssePollInterval  time.Duration
 }
 
@@ -105,6 +133,7 @@ func NewHandler(options Options) http.Handler {
 		diagnosticLayers: options.DiagnosticLayers,
 		products:         options.Products,
 		productObjects:   options.ProductObjects,
+		verification:     options.Verification,
 		ssePollInterval:  pollInterval,
 	}, apiv1.ChiServerOptions{BaseURL: "/api/v1"})
 }
@@ -123,6 +152,131 @@ func (service *server) GetSystemStatus(response http.ResponseWriter, request *ht
 		Status:  status,
 		Version: service.version,
 	})
+}
+
+func (service *server) ListAlgorithmVerificationRuns(
+	response http.ResponseWriter,
+	request *http.Request,
+) {
+	if service.verification == nil {
+		writeJSON(response, http.StatusOK, apiv1.AlgorithmVerificationRunList{
+			Items: []apiv1.AlgorithmVerificationRunSummary{},
+		})
+		return
+	}
+	runs, err := service.verification.ListRuns(request.Context())
+	if err != nil {
+		writeAlgorithmVerificationError(response, err)
+		return
+	}
+	items := make([]apiv1.AlgorithmVerificationRunSummary, 0, len(runs))
+	for _, run := range runs {
+		items = append(items, toAPIAlgorithmVerificationRun(run))
+	}
+	writeJSON(response, http.StatusOK, apiv1.AlgorithmVerificationRunList{Items: items})
+}
+
+func (service *server) GetAlgorithmVerificationRun(
+	response http.ResponseWriter,
+	request *http.Request,
+	profileVersion apiv1.VerificationProfileVersion,
+	runID apiv1.VerificationRunId,
+) {
+	if service.verification == nil {
+		writeError(response, http.StatusNotFound, "not_found", "algorithm-verification run was not found")
+		return
+	}
+	run, err := service.verification.GetRun(request.Context(), profileVersion, runID)
+	if err != nil {
+		writeAlgorithmVerificationError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, toAPIAlgorithmVerificationRunDetail(run))
+}
+
+func (service *server) ListAlgorithmVerificationMetrics(
+	response http.ResponseWriter,
+	request *http.Request,
+	profileVersion apiv1.VerificationProfileVersion,
+	runID apiv1.VerificationRunId,
+	params apiv1.ListAlgorithmVerificationMetricsParams,
+) {
+	if service.verification == nil {
+		writeError(response, http.StatusNotFound, "not_found", "algorithm-verification run was not found")
+		return
+	}
+	metrics, err := service.verification.ListMetrics(
+		request.Context(),
+		profileVersion,
+		runID,
+		verificationstore.MetricFilter{
+			CaseID: params.CaseId, IssueTime: params.IssueTime,
+			ThresholdMMH: params.ThresholdMmH, WindowPixels: params.WindowPixels,
+		},
+	)
+	if err != nil {
+		writeAlgorithmVerificationError(response, err)
+		return
+	}
+	items := make([]apiv1.AlgorithmVerificationMetric, 0, len(metrics))
+	for _, metric := range metrics {
+		items = append(items, toAPIAlgorithmVerificationMetric(metric))
+	}
+	writeJSON(response, http.StatusOK, apiv1.AlgorithmVerificationMetricList{Items: items})
+}
+
+func (service *server) GetAlgorithmVerificationMapFrame(
+	response http.ResponseWriter,
+	request *http.Request,
+	profileVersion apiv1.VerificationProfileVersion,
+	runID apiv1.VerificationRunId,
+	params apiv1.GetAlgorithmVerificationMapFrameParams,
+) {
+	if service.verification == nil {
+		writeError(response, http.StatusNotFound, "not_found", "algorithm-verification map was not found")
+		return
+	}
+	frame, err := service.verification.GetMapFrame(
+		request.Context(),
+		profileVersion,
+		runID,
+		verificationstore.MapFrameFilter{
+			CaseID: params.CaseId, IssueTime: params.IssueTime, LeadMinutes: params.LeadMinutes,
+		},
+	)
+	if err != nil {
+		writeAlgorithmVerificationError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, toAPIAlgorithmVerificationMapFrame(frame))
+}
+
+func (service *server) GetAlgorithmVerificationMapAsset(
+	response http.ResponseWriter,
+	request *http.Request,
+	profileVersion apiv1.VerificationProfileVersion,
+	runID apiv1.VerificationRunId,
+	caseID string,
+	issueKey string,
+	assetID string,
+) {
+	if service.verification == nil {
+		writeError(response, http.StatusNotFound, "not_found", "algorithm-verification map was not found")
+		return
+	}
+	asset, err := service.verification.ReadMapAsset(
+		request.Context(), profileVersion, runID, caseID, issueKey, assetID,
+	)
+	if err != nil {
+		writeAlgorithmVerificationError(response, err)
+		return
+	}
+	response.Header().Set("Content-Type", "image/png")
+	response.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	response.Header().Set("ETag", fmt.Sprintf("%q", asset.SHA256))
+	response.Header().Set("X-Content-Type-Options", "nosniff")
+	response.WriteHeader(http.StatusOK)
+	_, _ = response.Write(asset.Data)
 }
 
 func (service *server) GetLatestRun(response http.ResponseWriter, request *http.Request) {
@@ -1240,6 +1394,152 @@ func toAPIProductAsset(asset workflow.ProductAsset) apiv1.ProductAsset {
 	}
 }
 
+func toAPIAlgorithmVerificationRun(
+	run verificationstore.RunSummary,
+) apiv1.AlgorithmVerificationRunSummary {
+	return apiv1.AlgorithmVerificationRunSummary{
+		ProfileVersion:           run.ProfileVersion,
+		RunId:                    run.RunID,
+		SchemaVersion:            run.SchemaVersion,
+		PrimaryTruthKind:         run.PrimaryTruthKind,
+		OperationalEligible:      run.OperationalEligible,
+		CompletedIssueCount:      run.CompletedIssueCount,
+		FailedIssueCount:         run.FailedIssueCount,
+		MotionFallbackIssueCount: run.MotionFallbackIssueCount,
+		MetricRowCount:           run.MetricRowCount,
+		SkillStatus:              run.SkillStatus,
+		MapsAvailable:            run.MapsAvailable,
+		MapBundleCount:           run.MapBundleCount,
+		MapLayerCount:            run.MapLayerCount,
+		MapRendererVersion:       stringPointerOrNil(run.MapRendererVersion),
+		ModifiedAt:               run.ModifiedAt.UTC(),
+	}
+}
+
+func toAPIAlgorithmVerificationMapFrame(
+	frame verificationstore.MapFrame,
+) apiv1.AlgorithmVerificationMapFrame {
+	layers := make([]apiv1.AlgorithmVerificationMapLayer, 0, len(frame.Layers))
+	issueKey := frame.IssueTime.UTC().Format("20060102T150405Z")
+	for _, layer := range frame.Layers {
+		layers = append(layers, apiv1.AlgorithmVerificationMapLayer{
+			AssetId: layer.AssetID, Role: apiv1.AlgorithmVerificationMapLayerRole(layer.Role),
+			Model: layer.Model, LeadMinutes: layer.LeadMinutes, ValidTime: layer.ValidTime.UTC(),
+			ImageUrl: fmt.Sprintf(
+				"/api/v1/algorithm-verification/runs/%s/%s/map-assets/%s/%s/%s",
+				frame.ProfileVersion, frame.RunID, frame.CaseID, issueKey, layer.AssetID,
+			),
+			Width: layer.Width, Height: layer.Height, Sha256: layer.SHA256,
+			SizeBytes: layer.SizeBytes, ValidCellCount: layer.ValidCellCount,
+			NoRainCellCount: layer.NoRainCellCount, RainCellCount: layer.RainCellCount,
+			MissingCellCount: layer.MissingCellCount,
+		})
+	}
+	vectors := make([]apiv1.AlgorithmVerificationMapMotionVector, 0, len(frame.Motion.Vectors))
+	for _, vector := range frame.Motion.Vectors {
+		vectors = append(vectors, apiv1.AlgorithmVerificationMapMotionVector{
+			Longitude: vector.Longitude, Latitude: vector.Latitude,
+			EndLongitude: vector.EndLongitude, EndLatitude: vector.EndLatitude,
+			UPixelsPerStep: vector.UPixelsPerStep, VPixelsPerStep: vector.VPixelsPerStep,
+		})
+	}
+	legend := make([]apiv1.AlgorithmVerificationMapLegendEntry, 0, len(frame.Legend))
+	for _, item := range frame.Legend {
+		legend = append(legend, apiv1.AlgorithmVerificationMapLegendEntry{
+			MinimumMmH: item.MinimumMMH, Color: item.Color,
+		})
+	}
+	return apiv1.AlgorithmVerificationMapFrame{
+		ContractVersion: frame.ContractVersion, RendererVersion: frame.RendererVersion,
+		PaletteVersion: frame.PaletteVersion, ProfileVersion: frame.ProfileVersion,
+		RunId: frame.RunID, CaseId: frame.CaseID, IssueTime: frame.IssueTime.UTC(),
+		ValidTime: frame.ValidTime.UTC(), LeadMinutes: frame.LeadMinutes,
+		TruthKind: frame.TruthKind, OperationalEligible: frame.OperationalEligible,
+		Projection:      apiv1.AlgorithmVerificationMapFrameProjection(frame.Projection),
+		PixelEdgeBounds: frame.PixelEdgeBounds, FitBounds: frame.FitBounds,
+		Width: frame.Width, Height: frame.Height,
+		RainThresholdMmH: frame.RainThresholdMMH,
+		ValidNoRainColor: frame.ValidNoRainColor, Legend: legend, Layers: layers,
+		Motion: apiv1.AlgorithmVerificationMapMotion{
+			FallbackUsed:            frame.Motion.FallbackUsed,
+			FallbackReason:          frame.Motion.FallbackReason,
+			FeatureCount:            frame.Motion.FeatureCount,
+			TrackableRainPixelCount: frame.Motion.TrackableRainPixelCount,
+			Unit:                    frame.Motion.Unit, Vectors: vectors,
+		},
+	}
+}
+
+func stringPointerOrNil(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+func toAPIAlgorithmVerificationRunDetail(
+	detail verificationstore.RunDetail,
+) apiv1.AlgorithmVerificationRunDetail {
+	cases := make([]apiv1.AlgorithmVerificationCase, 0, len(detail.Cases))
+	for _, item := range detail.Cases {
+		issueTimes := make([]time.Time, 0, len(item.IssueTimes))
+		for _, issueTime := range item.IssueTimes {
+			issueTimes = append(issueTimes, issueTime.UTC())
+		}
+		cases = append(cases, apiv1.AlgorithmVerificationCase{
+			CaseId: item.CaseID, Category: item.Category, IssueTimes: issueTimes,
+		})
+	}
+	comparisons := make([]apiv1.AlgorithmVerificationSkillComparison, 0, len(detail.SkillSummary.Comparisons))
+	for _, comparison := range detail.SkillSummary.Comparisons {
+		comparisons = append(comparisons, apiv1.AlgorithmVerificationSkillComparison{
+			Baseline:                    comparison.Baseline,
+			BootstrapSampleCount:        comparison.BootstrapSampleCount,
+			CaseMeanDifferences:         comparison.CaseMeanDifferences,
+			EvaluableCaseCount:          comparison.EvaluableCaseCount,
+			MaximumLeadMinutes:          comparison.MaximumLeadMinutes,
+			MeanDifference95pctInterval: comparison.MeanDifference95pctInterval,
+			MeanFssDifference:           comparison.MeanFSSDifference,
+			PassesCaseGate:              comparison.PassesCaseGate,
+			PositiveCaseCount:           comparison.PositiveCaseCount,
+			ThresholdMmH:                comparison.ThresholdMMH,
+			TotalWetCaseCount:           comparison.TotalWetCaseCount,
+			WindowPixels:                comparison.WindowPixels,
+		})
+	}
+	return apiv1.AlgorithmVerificationRunDetail{
+		Run:   toAPIAlgorithmVerificationRun(detail.Run),
+		Cases: cases,
+		Filters: apiv1.AlgorithmVerificationFilterOptions{
+			Models: detail.Filters.Models, LeadMinutes: detail.Filters.LeadMinutes,
+			ThresholdsMmH: detail.Filters.ThresholdsMMH,
+			WindowsPixels: detail.Filters.WindowsPixels,
+		},
+		SkillSummary: apiv1.AlgorithmVerificationSkillSummary{
+			Status:           detail.SkillSummary.Status,
+			ComparisonMetric: detail.SkillSummary.ComparisonMetric,
+			Comparisons:      comparisons,
+		},
+	}
+}
+
+func toAPIAlgorithmVerificationMetric(
+	metric verificationstore.Metric,
+) apiv1.AlgorithmVerificationMetric {
+	return apiv1.AlgorithmVerificationMetric{
+		CaseId: metric.CaseID, CaseCategory: metric.CaseCategory,
+		IssueTime: metric.IssueTime.UTC(), TruthKind: metric.TruthKind,
+		Model: metric.Model, LeadMinutes: metric.LeadMinutes,
+		ThresholdMmH: metric.ThresholdMMH, WindowPixels: metric.WindowPixels,
+		WindowKm: metric.WindowKM, Hits: metric.Hits, Misses: metric.Misses,
+		FalseAlarms: metric.FalseAlarms, CorrectNegatives: metric.CorrectNegatives,
+		Csi: metric.CSI, Pod: metric.POD, Far: metric.FAR, Fss: metric.FSS,
+		MaeMmH: metric.MAEMMH, RmseMmH: metric.RMSEMMH,
+		MeanErrorMmH: metric.MeanErrorMMH, TruthCoverage: metric.TruthCoverage,
+		ForecastCoverage: metric.ForecastCoverage, CommonCoverage: metric.CommonCoverage,
+	}
+}
+
 func utcPointer(value *time.Time) *time.Time {
 	if value == nil {
 		return nil
@@ -1279,6 +1579,18 @@ func writeProductObjectError(response http.ResponseWriter, err error) {
 		"object_store_error",
 		"product object could not be read",
 	)
+}
+
+func writeAlgorithmVerificationError(response http.ResponseWriter, err error) {
+	if errors.Is(err, verificationstore.ErrNotFound) {
+		writeError(response, http.StatusNotFound, "not_found", "algorithm-verification result was not found")
+		return
+	}
+	if errors.Is(err, verificationstore.ErrInvalidReport) {
+		writeError(response, http.StatusBadGateway, "verification_report_invalid", "algorithm-verification report is invalid")
+		return
+	}
+	writeError(response, http.StatusInternalServerError, "internal_error", "algorithm-verification query failed")
 }
 
 func validProductSignature(mediaType string, data []byte) bool {

@@ -87,6 +87,11 @@ def test_openapi_exposes_the_planned_v1_operations() -> None:
         "/point-forecast",
         "/area-statistics",
         "/verification/summary",
+        "/algorithm-verification/runs",
+        "/algorithm-verification/runs/{profile_version}/{run_id}",
+        "/algorithm-verification/runs/{profile_version}/{run_id}/metrics",
+        "/algorithm-verification/runs/{profile_version}/{run_id}/map-frame",
+        "/algorithm-verification/runs/{profile_version}/{run_id}/map-assets/{case_id}/{issue_key}/{asset_id}",
         "/system/status",
         "/events/stream",
         "/admin/runs/{run_id}/rerun",
@@ -213,6 +218,15 @@ def test_rp012_diagnostics_are_pre_rendered_and_preserve_three_states() -> None:
     assert "Valid no-rain is not transparent" in diagnostics
     assert "Low-quality pixels remain visible" in diagnostics
     assert "arbitrary object-store keys" in diagnostics
+
+
+def test_algorithm_verification_maps_are_pre_rendered_and_not_scientific_inputs() -> None:
+    contract = (CONTRACTS_ROOT / "data" / "algorithm-verification-map-bundle.md").read_text()
+
+    assert "presentation-only" in contract
+    assert "Valid no-rain cells remain visible" in contract
+    assert "React receives manifests and image URLs only" in contract
+    assert "SHA-256" in contract
 
 
 def test_rp014_forecast_output_freezes_deterministic_baseline_diagnostics() -> None:

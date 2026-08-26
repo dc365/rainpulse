@@ -429,6 +429,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/algorithm-verification/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List available offline algorithm-verification runs */
+        get: operations["listAlgorithmVerificationRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/algorithm-verification/runs/{profile_version}/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one offline algorithm-verification run and its filter dimensions */
+        get: operations["getAlgorithmVerificationRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/algorithm-verification/runs/{profile_version}/{run_id}/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List one issue's model metrics for a threshold and FSS window */
+        get: operations["listAlgorithmVerificationMetrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/algorithm-verification/runs/{profile_version}/{run_id}/map-frame": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get georeferenced truth and deterministic-forecast map evidence for one lead */
+        get: operations["getAlgorithmVerificationMapFrame"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/algorithm-verification/runs/{profile_version}/{run_id}/map-assets/{case_id}/{issue_key}/{asset_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one immutable PNG explicitly listed by a verification map manifest */
+        get: operations["getAlgorithmVerificationMapAsset"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/system/status": {
         parameters: {
             query?: never;
@@ -1061,6 +1146,189 @@ export interface components {
             /** Format: date-time */
             verified_at: string;
         };
+        AlgorithmVerificationRunSummary: {
+            profile_version: string;
+            run_id: string;
+            schema_version: string;
+            primary_truth_kind: string;
+            operational_eligible: boolean;
+            completed_issue_count: number;
+            failed_issue_count: number;
+            motion_fallback_issue_count: number;
+            metric_row_count: number;
+            skill_status: string;
+            maps_available: boolean;
+            map_bundle_count: number;
+            map_layer_count: number;
+            map_renderer_version: string | null;
+            /** Format: date-time */
+            modified_at: string;
+        };
+        AlgorithmVerificationRunList: {
+            items: components["schemas"]["AlgorithmVerificationRunSummary"][];
+        };
+        AlgorithmVerificationCase: {
+            case_id: string;
+            category: string;
+            issue_times: string[];
+        };
+        AlgorithmVerificationFilterOptions: {
+            models: string[];
+            lead_minutes: number[];
+            thresholds_mm_h: number[];
+            windows_pixels: number[];
+        };
+        AlgorithmVerificationSkillComparison: {
+            baseline: string;
+            /** Format: double */
+            threshold_mm_h: number;
+            maximum_lead_minutes: number;
+            window_pixels: number;
+            positive_case_count: number;
+            evaluable_case_count: number;
+            total_wet_case_count: number;
+            passes_case_gate: boolean;
+            /** Format: double */
+            mean_fss_difference: number | null;
+            mean_difference_95pct_interval: (number | null)[];
+            bootstrap_sample_count: number;
+            case_mean_differences: {
+                [key: string]: number;
+            };
+        };
+        AlgorithmVerificationSkillSummary: {
+            status: string;
+            comparison_metric: string;
+            comparisons: components["schemas"]["AlgorithmVerificationSkillComparison"][];
+        };
+        AlgorithmVerificationRunDetail: {
+            run: components["schemas"]["AlgorithmVerificationRunSummary"];
+            cases: components["schemas"]["AlgorithmVerificationCase"][];
+            filters: components["schemas"]["AlgorithmVerificationFilterOptions"];
+            skill_summary: components["schemas"]["AlgorithmVerificationSkillSummary"];
+        };
+        AlgorithmVerificationMetric: {
+            case_id: string;
+            case_category: string;
+            /** Format: date-time */
+            issue_time: string;
+            truth_kind: string;
+            model: string;
+            lead_minutes: number;
+            /** Format: double */
+            threshold_mm_h: number;
+            window_pixels: number;
+            /** Format: double */
+            window_km: number;
+            /** Format: int64 */
+            hits: number;
+            /** Format: int64 */
+            misses: number;
+            /** Format: int64 */
+            false_alarms: number;
+            /** Format: int64 */
+            correct_negatives: number;
+            /** Format: double */
+            csi: number | null;
+            /** Format: double */
+            pod: number | null;
+            /** Format: double */
+            far: number | null;
+            /** Format: double */
+            fss: number | null;
+            /** Format: double */
+            mae_mm_h: number | null;
+            /** Format: double */
+            rmse_mm_h: number | null;
+            /** Format: double */
+            mean_error_mm_h: number | null;
+            /** Format: double */
+            truth_coverage: number | null;
+            /** Format: double */
+            forecast_coverage: number | null;
+            /** Format: double */
+            common_coverage: number | null;
+        };
+        AlgorithmVerificationMetricList: {
+            items: components["schemas"]["AlgorithmVerificationMetric"][];
+        };
+        AlgorithmVerificationMapMotionVector: {
+            /** Format: double */
+            longitude: number;
+            /** Format: double */
+            latitude: number;
+            /** Format: double */
+            end_longitude: number;
+            /** Format: double */
+            end_latitude: number;
+            /** Format: double */
+            u_pixels_per_step: number;
+            /** Format: double */
+            v_pixels_per_step: number;
+        };
+        AlgorithmVerificationMapMotion: {
+            fallback_used: boolean;
+            fallback_reason: string | null;
+            feature_count: number;
+            trackable_rain_pixel_count: number;
+            unit: string;
+            vectors: components["schemas"]["AlgorithmVerificationMapMotionVector"][];
+        };
+        AlgorithmVerificationMapLayer: {
+            asset_id: string;
+            /** @enum {string} */
+            role: "truth" | "forecast";
+            model: string | null;
+            lead_minutes: number;
+            /** Format: date-time */
+            valid_time: string;
+            image_url: string;
+            width: number;
+            height: number;
+            sha256: string;
+            /** Format: int64 */
+            size_bytes: number;
+            /** Format: int64 */
+            valid_cell_count: number;
+            /** Format: int64 */
+            no_rain_cell_count: number;
+            /** Format: int64 */
+            rain_cell_count: number;
+            /** Format: int64 */
+            missing_cell_count: number;
+        };
+        AlgorithmVerificationMapFrame: {
+            contract_version: string;
+            renderer_version: string;
+            palette_version: string;
+            profile_version: string;
+            run_id: string;
+            case_id: string;
+            /** Format: date-time */
+            issue_time: string;
+            /** Format: date-time */
+            valid_time: string;
+            lead_minutes: number;
+            truth_kind: string;
+            operational_eligible: boolean;
+            /** @enum {string} */
+            projection: "EPSG:4326";
+            pixel_edge_bounds: number[];
+            fit_bounds: number[];
+            width: number;
+            height: number;
+            /** Format: double */
+            rain_threshold_mm_h: number;
+            valid_no_rain_color: string;
+            legend: components["schemas"]["AlgorithmVerificationMapLegendEntry"][];
+            layers: components["schemas"]["AlgorithmVerificationMapLayer"][];
+            motion: components["schemas"]["AlgorithmVerificationMapMotion"];
+        };
+        AlgorithmVerificationMapLegendEntry: {
+            /** Format: double */
+            minimum_mm_h: number;
+            color: string;
+        };
         ModelState: {
             model_id: string;
             enabled: boolean;
@@ -1104,6 +1372,8 @@ export interface components {
         AnalysisId: string;
         JobId: string;
         LayerId: string;
+        VerificationProfileVersion: string;
+        VerificationRunId: string;
         Limit: number;
         Cursor: string;
     };
@@ -1690,6 +1960,136 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VerificationSummary"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listAlgorithmVerificationRuns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Offline algorithm-verification runs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlgorithmVerificationRunList"];
+                };
+            };
+        };
+    };
+    getAlgorithmVerificationRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile_version: components["parameters"]["VerificationProfileVersion"];
+                run_id: components["parameters"]["VerificationRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Offline algorithm-verification run */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlgorithmVerificationRunDetail"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listAlgorithmVerificationMetrics: {
+        parameters: {
+            query: {
+                case_id: string;
+                issue_time: string;
+                threshold_mm_h: number;
+                window_pixels: number;
+            };
+            header?: never;
+            path: {
+                profile_version: components["parameters"]["VerificationProfileVersion"];
+                run_id: components["parameters"]["VerificationRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Filtered offline verification metrics */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlgorithmVerificationMetricList"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getAlgorithmVerificationMapFrame: {
+        parameters: {
+            query: {
+                case_id: string;
+                issue_time: string;
+                lead_minutes: number;
+            };
+            header?: never;
+            path: {
+                profile_version: components["parameters"]["VerificationProfileVersion"];
+                run_id: components["parameters"]["VerificationRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One synchronized algorithm-verification map frame */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlgorithmVerificationMapFrame"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getAlgorithmVerificationMapAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile_version: components["parameters"]["VerificationProfileVersion"];
+                run_id: components["parameters"]["VerificationRunId"];
+                case_id: string;
+                issue_key: string;
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Immutable algorithm-verification PNG */
+            200: {
+                headers: {
+                    ETag?: string;
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
                 };
             };
             404: components["responses"]["NotFound"];

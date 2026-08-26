@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import type { components } from './api/generated/schema'
+import { AlgorithmVerificationWorkspace } from './AlgorithmVerificationWorkspace'
 import { AnalysisDiagnostics } from './AnalysisDiagnostics'
 import { NowcastWorkspace } from './NowcastWorkspace'
 import './styles.css'
@@ -72,9 +73,10 @@ function percent(value?: number | null) {
 }
 
 export default function App() {
-  const [activeView, setActiveView] = useState<'nowcast' | 'analysis' | 'radar'>('nowcast')
+  const [activeView, setActiveView] = useState<'nowcast' | 'analysis' | 'radar' | 'verification'>('nowcast')
   const [nowcastRefreshToken, setNowcastRefreshToken] = useState(0)
   const [analysisRefreshToken, setAnalysisRefreshToken] = useState(0)
+  const [verificationRefreshToken, setVerificationRefreshToken] = useState(0)
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null)
   const [radars, setRadars] = useState<RadarStatus[]>([])
   const [selectedRadarId, setSelectedRadarId] = useState<string | null>(null)
@@ -147,6 +149,8 @@ export default function App() {
       setNowcastRefreshToken((value) => value + 1)
     } else if (activeView === 'analysis') {
       setAnalysisRefreshToken((value) => value + 1)
+    } else if (activeView === 'verification') {
+      setVerificationRefreshToken((value) => value + 1)
     } else {
       void load(undefined, true)
     }
@@ -172,6 +176,7 @@ export default function App() {
           <button type="button" className={activeView === 'nowcast' ? 'active' : ''} aria-current={activeView === 'nowcast' ? 'page' : undefined} onClick={() => setActiveView('nowcast')}>短临预报</button>
           <button type="button" className={activeView === 'analysis' ? 'active' : ''} aria-current={activeView === 'analysis' ? 'page' : undefined} onClick={() => setActiveView('analysis')}>分析诊断</button>
           <button type="button" className={activeView === 'radar' ? 'active' : ''} aria-current={activeView === 'radar' ? 'page' : undefined} onClick={() => setActiveView('radar')}>雷达运行</button>
+          <button type="button" className={activeView === 'verification' ? 'active' : ''} aria-current={activeView === 'verification' ? 'page' : undefined} onClick={() => setActiveView('verification')}>算法验证</button>
         </nav>
         <div className="system-meta" aria-live="polite">
           <span className={`system-dot ${systemStatus?.status ?? 'loading'}`} />
@@ -181,7 +186,7 @@ export default function App() {
           <button
             className="refresh-button"
             type="button"
-            aria-label={activeView === 'nowcast' ? '刷新短临预报' : activeView === 'analysis' ? '刷新分析诊断' : '刷新雷达状态'}
+            aria-label={activeView === 'nowcast' ? '刷新短临预报' : activeView === 'analysis' ? '刷新分析诊断' : activeView === 'verification' ? '刷新算法验证' : '刷新雷达状态'}
             disabled={activeView === 'radar' && refreshing}
             onClick={refreshActiveView}
           >
@@ -269,6 +274,8 @@ export default function App() {
         </>
       ) : activeView === 'analysis' ? (
         <AnalysisDiagnostics refreshToken={analysisRefreshToken} />
+      ) : activeView === 'verification' ? (
+        <AlgorithmVerificationWorkspace refreshToken={verificationRefreshToken} />
       ) : (
         <NowcastWorkspace refreshToken={nowcastRefreshToken} />
       )}

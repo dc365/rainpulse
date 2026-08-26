@@ -1,0 +1,163 @@
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+import { AlgorithmVerificationWorkspace } from './AlgorithmVerificationWorkspace'
+
+const run = {
+  profile_version: 'rp016-mrms-v1',
+  run_id: 'full-202108-v2',
+  schema_version: '1.0',
+  primary_truth_kind: 'observed_mrms_10min',
+  operational_eligible: false,
+  completed_issue_count: 53,
+  failed_issue_count: 0,
+  motion_fallback_issue_count: 13,
+  metric_row_count: 57240,
+  skill_status: 'lk_supported',
+  maps_available: true,
+  map_bundle_count: 53,
+  map_layer_count: 2544,
+  map_renderer_version: 'algorithm-verification-map-renderer-1.0.0',
+  modified_at: '2026-08-26T08:00:00Z',
+}
+
+const legacyRun = {
+  ...run,
+  run_id: 'full-202108-v1',
+  maps_available: false,
+  map_bundle_count: 0,
+  map_layer_count: 0,
+  map_renderer_version: null,
+  modified_at: '2026-08-26T07:00:00Z',
+}
+
+const comparison = (baseline: string, threshold: number, difference: number) => ({
+  baseline,
+  bootstrap_sample_count: 2000,
+  case_mean_differences: { midwest_convection_20210810: difference },
+  evaluable_case_count: 4,
+  maximum_lead_minutes: 60,
+  mean_difference_95pct_interval: [difference / 2, difference * 1.5],
+  mean_fss_difference: difference,
+  passes_case_gate: true,
+  positive_case_count: baseline === 'translation' && threshold === 10 ? 3 : 4,
+  threshold_mm_h: threshold,
+  total_wet_case_count: 4,
+  window_pixels: 11,
+})
+
+const detail = {
+  run,
+  cases: [
+    { case_id: 'socal_dry_20210805', category: 'dry', issue_times: ['2021-08-05T06:00:00Z'] },
+    { case_id: 'midwest_convection_20210810', category: 'wet', issue_times: ['2021-08-10T17:00:00Z'] },
+  ],
+  filters: {
+    models: ['lk', 'persistence', 'translation'],
+    lead_minutes: [10, 20],
+    thresholds_mm_h: [1, 5, 10],
+    windows_pixels: [1, 5, 11],
+  },
+  skill_summary: {
+    status: 'lk_supported',
+    comparison_metric: 'FSS',
+    comparisons: [
+      comparison('persistence', 1, .027), comparison('persistence', 5, .026), comparison('persistence', 10, .042),
+      comparison('translation', 1, .008), comparison('translation', 5, .0072), comparison('translation', 10, .0135),
+    ],
+  },
+}
+
+const metric = (model: string, lead: number, fss: number) => ({
+  case_id: 'midwest_convection_20210810', case_category: 'wet',
+  issue_time: '2021-08-10T17:00:00Z', truth_kind: 'observed_mrms_10min',
+  model, lead_minutes: lead, threshold_mm_h: 5, window_pixels: 11, window_km: 11.1,
+  hits: 10, misses: 2, false_alarms: 1, correct_negatives: 88,
+  csi: .76, pod: .83, far: .09, fss,
+  mae_mm_h: .8, rmse_mm_h: 1.2, mean_error_mm_h: .1,
+  truth_coverage: 1, forecast_coverage: .99, common_coverage: .99,
+})
+
+const mapFrame = {
+  contract_version: '1.0', renderer_version: 'algorithm-verification-map-renderer-1.0.0',
+  palette_version: 'rainfall-operational-v1', profile_version: 'rp016-mrms-v1',
+  run_id: 'full-202108-v2', case_id: 'midwest_convection_20210810',
+  issue_time: '2021-08-10T17:00:00Z', valid_time: '2021-08-10T17:10:00Z', lead_minutes: 10,
+  truth_kind: 'observed_mrms_10min', operational_eligible: false, projection: 'EPSG:4326',
+  pixel_edge_bounds: [-94.995, 38.995, -89.995, 41.005], fit_bounds: [-94.99, 39, -90, 41],
+  width: 501, height: 201, rain_threshold_mm_h: .1, valid_no_rain_color: '#dce6e2',
+  legend: [{ minimum_mm_h: .1, color: '#9dd9ff' }, { minimum_mm_h: 5, color: '#3ca85b' }],
+  layers: [
+    ['truth', null], ['forecast', 'lk'], ['forecast', 'persistence'], ['forecast', 'translation'],
+  ].map(([role, model]) => ({
+    asset_id: `lead-010-${model ?? 'truth'}`, role, model, lead_minutes: 10,
+    valid_time: '2021-08-10T17:10:00Z', image_url: `/maps/${model ?? 'truth'}.png`,
+    width: 501, height: 201, sha256: 'a'.repeat(64), size_bytes: 100,
+    valid_cell_count: 100000, no_rain_cell_count: 90000, rain_cell_count: 10000,
+    missing_cell_count: 701,
+  })),
+  motion: {
+    fallback_used: false, fallback_reason: null, feature_count: 18,
+    trackable_rain_pixel_count: 3400, unit: 'grid_cells_per_5_minutes',
+    vectors: [{
+      longitude: -92, latitude: 40, end_longitude: -91.98, end_latitude: 40.01,
+      u_pixels_per_step: 2, v_pixels_per_step: 1,
+    }],
+  },
+}
+
+describe('AlgorithmVerificationWorkspace', () => {
+  afterEach(() => {
+    cleanup()
+    vi.unstubAllGlobals()
+  })
+
+  it('shows the frozen skill gate and drills into one issue without downloading the full CSV', async () => {
+    const fetchStatus = vi.fn().mockImplementation((input: string) => {
+      let body: unknown = { items: [run, legacyRun] }
+      if (input.includes('/metrics?')) body = { items: [
+        metric('lk', 10, .72), metric('lk', 20, .66),
+        metric('persistence', 10, .68), metric('persistence', 20, .60),
+        metric('translation', 10, .70), metric('translation', 20, .65),
+      ] }
+      else if (input.includes('/map-frame?')) body = mapFrame
+      else if (input.endsWith('/rp016-mrms-v1/full-202108-v2')) body = detail
+      else if (input.endsWith('/rp016-mrms-v1/full-202108-v1')) body = { ...detail, run: legacyRun }
+      return Promise.resolve({ ok: true, status: 200, json: async () => body })
+    })
+    vi.stubGlobal('fetch', fetchStatus)
+
+    render(<AlgorithmVerificationWorkspace refreshToken={0} />)
+
+    expect(screen.getByRole('heading', { name: '算法离线验证' })).toBeTruthy()
+    expect(await screen.findByText('57,240')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'LK 相对基线的 FSS 技巧' })).toBeTruthy()
+    expect((await screen.findAllByText('Midwest Convection')).length).toBeGreaterThan(0)
+    expect(await screen.findByRole('img', { name: 'LK 与基线逐时效 FSS 折线图' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: '同一时效三联检验镜' })).toBeTruthy()
+    expect(await screen.findByText('Observed truth')).toBeTruthy()
+    expect(await screen.findByText(/LK 稀疏矢量 1 个/)).toBeTruthy()
+    expect(screen.getAllByText('+0.0200').length).toBeGreaterThan(0)
+    expect(screen.getByText('工程证据 · 非业务验收')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '持续性' }))
+    expect(screen.getAllByText('+0.0400').length).toBeGreaterThan(0)
+
+    await waitFor(() => expect(fetchStatus).toHaveBeenCalledWith(
+      expect.stringContaining('/metrics?case_id=midwest_convection_20210810'),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    ))
+    expect(fetchStatus.mock.calls.some(([url]) => String(url).endsWith('/metrics.csv'))).toBe(false)
+    expect(fetchStatus.mock.calls.some(([url]) => String(url).includes('/map-frame?case_id=midwest_convection_20210810'))).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: /full-202108-v1/ }))
+    expect(await screen.findByText('该运行没有空间图层')).toBeTruthy()
+    await waitFor(() => expect(screen.queryByText(/LK 稀疏矢量 1 个/)).toBeNull())
+  })
+
+  it('shows a clear empty state when no verification report is mounted', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ items: [] }) }))
+    render(<AlgorithmVerificationWorkspace refreshToken={0} />)
+    expect(await screen.findByText(/尚未挂载算法验证报告/)).toBeTruthy()
+  })
+})

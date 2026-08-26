@@ -18,7 +18,11 @@ from rainpulse_algo.nowcast.forecast_zarr import (
     build_forecast_output_zarr_store,
     validate_forecast_output_zarr_store,
 )
-from rainpulse_algo.nowcast.pysteps_lk import run_pysteps_lk
+from rainpulse_algo.nowcast.pysteps_lk import (
+    PystepsLKFields,
+    run_pysteps_lk,
+    run_pysteps_lk_fields,
+)
 from rainpulse_algo.nowcast.pysteps_profile import load_pysteps_lk_profile
 from rainpulse_algo.nowcast.pysteps_worker import _execute_pysteps_lk
 from rainpulse_algo.worker.domain_contracts import PystepsLKRequested
@@ -209,6 +213,36 @@ def test_uses_explicit_zero_motion_fallback_for_no_rain() -> None:
     assert np.all(result.rain_rate[0, :, :, :-5] == 0)
     assert np.all(result.persistence_rain_rate[:, :, :-5] == 0)
     assert np.all(result.translation_rain_rate[:, :, :-5] == 0)
+    assert np.all(np.isnan(result.rain_rate[0, :, :, -5:]))
+
+
+def test_array_entrypoint_runs_the_same_core_without_claiming_operational_input() -> None:
+    grid = tiny_grid()
+    shape = (5, *grid.shape)
+    valid = np.ones(shape, dtype="uint8")
+    valid[:, :, -5:] = 0
+    rate = np.zeros(shape, dtype="float32")
+    reflectivity = np.zeros(shape, dtype="float32")
+    quality = np.ones(shape, dtype="float32")
+    for values in (rate, reflectivity, quality):
+        values[valid == 0] = np.nan
+
+    result = run_pysteps_lk_fields(
+        PystepsLKFields(
+            reflectivity_dbz=reflectivity,
+            rate_mm_h=rate,
+            quality_index=quality,
+            valid_mask=valid,
+            low_quality_mask=np.zeros(shape, dtype="uint8"),
+        ),
+        profile=profile(),
+        grid=grid,
+    )
+
+    assert result.motion_fallback_used is True
+    assert result.motion_fallback_reason == "insufficient_trackable_rain"
+    assert result.rain_rate.shape == (1, 24, 64, 64)
+    assert np.all(result.rain_rate[0, :, :, :-5] == 0.0)
     assert np.all(np.isnan(result.rain_rate[0, :, :, -5:]))
 
 

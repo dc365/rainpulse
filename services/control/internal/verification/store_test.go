@@ -1,0 +1,313 @@
+package verification
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestFileStoreListsAndFiltersAlgorithmVerificationRuns(t *testing.T) {
+	root := t.TempDir()
+	writeReportFixture(t, root, "rp016-generic-v1", "full-202108-v2", 6)
+	store := NewFileStore(root)
+
+	runs, err := store.ListRuns(context.Background())
+	if err != nil {
+		t.Fatalf("list runs: %v", err)
+	}
+	if len(runs) != 1 || runs[0].RunID != "full-202108-v2" || runs[0].SkillStatus != "lk_supported" {
+		t.Fatalf("unexpected run summaries: %#v", runs)
+	}
+
+	detail, err := store.GetRun(context.Background(), "rp016-generic-v1", "full-202108-v2")
+	if err != nil {
+		t.Fatalf("get run: %v", err)
+	}
+	if len(detail.Cases) != 1 || detail.Cases[0].CaseID != "midwest_case" ||
+		len(detail.Cases[0].IssueTimes) != 1 {
+		t.Fatalf("unexpected cases: %#v", detail.Cases)
+	}
+	if got := fmt.Sprint(detail.Filters.Models); got != "[lk persistence translation]" {
+		t.Fatalf("unexpected models: %s", got)
+	}
+	if got := fmt.Sprint(detail.Filters.LeadMinutes); got != "[10 20]" {
+		t.Fatalf("unexpected leads: %s", got)
+	}
+
+	issueTime := time.Date(2021, 8, 10, 17, 0, 0, 0, time.UTC)
+	metrics, err := store.ListMetrics(
+		context.Background(),
+		"rp016-generic-v1",
+		"full-202108-v2",
+		MetricFilter{CaseID: "midwest_case", IssueTime: issueTime, ThresholdMMH: 5, WindowPixels: 11},
+	)
+	if err != nil {
+		t.Fatalf("list metrics: %v", err)
+	}
+	if len(metrics) != 6 || metrics[0].Model != "lk" || metrics[0].FSS == nil {
+		t.Fatalf("unexpected metrics: %#v", metrics)
+	}
+	if metrics[1].FSS != nil {
+		t.Fatalf("expected CSV nan to be represented as nil, got %v", *metrics[1].FSS)
+	}
+}
+
+func TestFileStoreRejectsUnknownRunsAndCountDrift(t *testing.T) {
+	root := t.TempDir()
+	writeReportFixture(t, root, "rp016-generic-v1", "broken", 7)
+	store := NewFileStore(root)
+
+	if _, err := store.GetRun(context.Background(), "../escape", "broken"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected traversal to be rejected as not found, got %v", err)
+	}
+	if _, err := store.GetRun(context.Background(), "rp016-generic-v1", "missing"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected missing run, got %v", err)
+	}
+	if _, err := store.GetRun(context.Background(), "rp016-generic-v1", "broken"); !errors.Is(err, ErrInvalidReport) {
+		t.Fatalf("expected metric count drift, got %v", err)
+	}
+}
+
+func TestFileStoreTreatsMissingRootAsEmpty(t *testing.T) {
+	store := NewFileStore(filepath.Join(t.TempDir(), "not-created"))
+	runs, err := store.ListRuns(context.Background())
+	if err != nil || len(runs) != 0 {
+		t.Fatalf("expected empty missing root, got runs=%#v err=%v", runs, err)
+	}
+}
+
+func TestFileStoreReadsOnlyManifestListedVerificationMapAssets(t *testing.T) {
+	root := t.TempDir()
+	writeReportFixture(t, root, "rp016-generic-v1", "mapped-run", 6)
+	png := writeMapFixture(t, root, "rp016-generic-v1", "mapped-run")
+	store := NewFileStore(root)
+	issueTime := time.Date(2021, 8, 10, 17, 0, 0, 0, time.UTC)
+
+	frame, err := store.GetMapFrame(
+		context.Background(),
+		"rp016-generic-v1",
+		"mapped-run",
+		MapFrameFilter{CaseID: "midwest_case", IssueTime: issueTime, LeadMinutes: 10},
+	)
+	if err != nil {
+		t.Fatalf("get map frame: %v", err)
+	}
+	if frame.RendererVersion != "verification-renderer-v1" || len(frame.Layers) != 2 ||
+		frame.Layers[0].ValidTime != issueTime.Add(10*time.Minute) || len(frame.Motion.Vectors) != 1 {
+		t.Fatalf("unexpected map frame: %#v", frame)
+	}
+	asset, err := store.ReadMapAsset(
+		context.Background(),
+		"rp016-generic-v1",
+		"mapped-run",
+		"midwest_case",
+		"20210810T170000Z",
+		"lead-010-truth",
+	)
+	if err != nil {
+		t.Fatalf("read map asset: %v", err)
+	}
+	if string(asset.Data) != string(png) || asset.SHA256 != fmt.Sprintf("%x", sha256.Sum256(png)) {
+		t.Fatalf("unexpected map asset content: %#v", asset)
+	}
+	if _, err := store.ReadMapAsset(
+		context.Background(), "rp016-generic-v1", "mapped-run", "../escape",
+		"20210810T170000Z", "lead-010-truth",
+	); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected map path traversal to be rejected, got %v", err)
+	}
+	if _, err := store.ReadMapAsset(
+		context.Background(), "rp016-generic-v1", "mapped-run", "midwest_case",
+		"20210810T170000Z", "unlisted",
+	); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected unlisted map asset to be rejected, got %v", err)
+	}
+}
+
+func writeReportFixture(
+	t *testing.T,
+	root string,
+	profileVersion string,
+	runID string,
+	metricRowCount int,
+) {
+	t.Helper()
+	directory := filepath.Join(root, profileVersion, runID)
+	if err := os.MkdirAll(directory, 0o755); err != nil {
+		t.Fatalf("create report fixture: %v", err)
+	}
+	summary := fmt.Sprintf(`{
+  "schema_version": "1.0",
+  "profile_version": %q,
+  "primary_truth_kind": "observed_rate",
+  "operational_eligible": false,
+  "completed_issue_count": 1,
+  "failed_issue_count": 0,
+  "motion_fallback_issue_count": 0,
+  "metric_row_count": %d,
+  "errors": [],
+  "skill_summary": {
+    "status": "lk_supported",
+    "comparison_metric": "FSS",
+    "comparisons": [{
+      "baseline": "persistence",
+      "bootstrap_sample_count": 2000,
+      "case_mean_differences": {"midwest_case": 0.02},
+      "evaluable_case_count": 1,
+      "maximum_lead_minutes": 60,
+      "mean_difference_95pct_interval": [0.01, 0.03],
+      "mean_fss_difference": 0.02,
+      "passes_case_gate": true,
+      "positive_case_count": 1,
+      "threshold_mm_h": 5,
+      "total_wet_case_count": 1,
+      "window_pixels": 11
+    }]
+  }
+}`, profileVersion, metricRowCount)
+	if err := os.WriteFile(filepath.Join(directory, "summary.json"), []byte(summary), 0o644); err != nil {
+		t.Fatalf("write summary fixture: %v", err)
+	}
+	header := strings.Join(metricColumns, ",") + "\n"
+	rows := []string{
+		metricFixtureRow("lk", 10, "0.72"),
+		metricFixtureRow("lk", 20, "nan"),
+		metricFixtureRow("persistence", 10, "0.68"),
+		metricFixtureRow("persistence", 20, "0.61"),
+		metricFixtureRow("translation", 10, "0.70"),
+		metricFixtureRow("translation", 20, "0.65"),
+	}
+	if err := os.WriteFile(
+		filepath.Join(directory, "metrics.csv"),
+		[]byte(header+strings.Join(rows, "\n")+"\n"),
+		0o644,
+	); err != nil {
+		t.Fatalf("write metrics fixture: %v", err)
+	}
+}
+
+func metricFixtureRow(model string, lead int, fss string) string {
+	return fmt.Sprintf(
+		"%s,%d,5,11,11.1,10,2,1,88,0.76,0.83,0.09,%s,0.8,1.2,0.1,1,0.99,0.99,midwest_case,wet,2021-08-10T17:00:00Z,observed_rate",
+		model,
+		lead,
+		fss,
+	)
+}
+
+func writeMapFixture(t *testing.T, root string, profileVersion string, runID string) []byte {
+	t.Helper()
+	directory := filepath.Join(root, profileVersion, runID)
+	summaryPath := filepath.Join(directory, "summary.json")
+	var summary map[string]any
+	if err := json.Unmarshal(mustReadFile(t, summaryPath), &summary); err != nil {
+		t.Fatalf("decode report summary fixture: %v", err)
+	}
+	summary["map_bundle_count"] = 1
+	summary["map_layer_count"] = 2
+	summary["map_renderer_version"] = "verification-renderer-v1"
+	encodedSummary, err := json.Marshal(summary)
+	if err != nil {
+		t.Fatalf("encode report summary fixture: %v", err)
+	}
+	if err := os.WriteFile(summaryPath, encodedSummary, 0o644); err != nil {
+		t.Fatalf("write report summary fixture: %v", err)
+	}
+
+	png, err := base64.StdEncoding.DecodeString(
+		"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+X7WmAAAAAElFTkSuQmCC",
+	)
+	if err != nil {
+		t.Fatalf("decode PNG fixture: %v", err)
+	}
+	digest := fmt.Sprintf("%x", sha256.Sum256(png))
+	issueDirectory := filepath.Join(directory, "maps", "midwest_case", "20210810T170000Z")
+	if err := os.MkdirAll(filepath.Join(issueDirectory, "layers"), 0o755); err != nil {
+		t.Fatalf("create map fixture: %v", err)
+	}
+	layers := []map[string]any{}
+	for _, identity := range []struct {
+		assetID string
+		role    string
+		model   any
+	}{
+		{assetID: "lead-010-truth", role: "truth", model: nil},
+		{assetID: "lead-010-lk", role: "forecast", model: "lk"},
+	} {
+		objectPath := "layers/" + identity.assetID + ".png"
+		if err := os.WriteFile(filepath.Join(issueDirectory, filepath.FromSlash(objectPath)), png, 0o644); err != nil {
+			t.Fatalf("write map PNG fixture: %v", err)
+		}
+		layers = append(layers, map[string]any{
+			"asset_id": identity.assetID, "role": identity.role, "model": identity.model,
+			"lead_minutes": 10, "valid_time_utc": "2021-08-10T17:10:00Z",
+			"object_path": objectPath, "media_type": "image/png", "sha256": digest,
+			"size_bytes": len(png), "width": 1, "height": 1,
+			"valid_cell_count": 1, "no_rain_cell_count": 1, "rain_cell_count": 0,
+			"missing_cell_count": 0,
+		})
+	}
+	manifest := map[string]any{
+		"contract_version": "1.0", "renderer_version": "verification-renderer-v1",
+		"render_profile_version": "verification-map-v1", "palette_version": "rainfall-operational-v1",
+		"verification_profile_version": profileVersion, "case_id": "midwest_case",
+		"issue_key": "20210810T170000Z", "issue_time_utc": "2021-08-10T17:00:00Z",
+		"truth_kind": "observed_rate", "operational_eligible": false,
+		"grid": map[string]any{
+			"grid_id": "grid", "grid_config_version": "grid-v1", "projection": "EPSG:4326",
+			"fit_bounds":        []float64{-95, 39, -90, 41},
+			"pixel_edge_bounds": []float64{-95.005, 38.995, -89.995, 41.005},
+			"width":             1, "height": 1,
+		},
+		"palette": map[string]any{
+			"rain_threshold_mm_h": 0.1, "valid_no_rain_color": "#dce6e2",
+			"stops": []map[string]any{{"minimum": 0.1, "color": "#9dd9ff"}},
+		},
+		"motion": map[string]any{
+			"fallback_used": false, "fallback_reason": nil, "feature_count": 4,
+			"trackable_rain_pixel_count": 10, "unit": "grid_cells_per_5_minutes",
+			"vectors": []map[string]any{{
+				"longitude": -92.5, "latitude": 40, "end_longitude": -92.49,
+				"end_latitude": 40, "u_pixels_per_step": 1, "v_pixels_per_step": 0,
+			}},
+		},
+		"lead_minutes": []int{10}, "layers": layers,
+	}
+	encodedManifest, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatalf("encode map manifest fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(issueDirectory, "manifest.json"), encodedManifest, 0o644); err != nil {
+		t.Fatalf("write map manifest fixture: %v", err)
+	}
+	index := map[string]any{
+		"contract_version": "1.0", "verification_profile_version": profileVersion,
+		"renderer_version": "verification-renderer-v1", "bundle_count": 1,
+		"layer_count": 2, "issues": []any{},
+	}
+	encodedIndex, err := json.Marshal(index)
+	if err != nil {
+		t.Fatalf("encode map index fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "maps", "index.json"), encodedIndex, 0o644); err != nil {
+		t.Fatalf("write map index fixture: %v", err)
+	}
+	return png
+}
+
+func mustReadFile(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read fixture %s: %v", path, err)
+	}
+	return data
+}

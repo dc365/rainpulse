@@ -43,7 +43,7 @@ NowcastInput gate.
 | RP-013 | Core vertical slice complete | Strict fixed-step NowcastInput, quality/eligibility gates, immutable Zarr, persistence/events and traceable synthetic server acceptance; real sequence acceptance remains gated |
 | RP-014 | Core vertical slice complete | Real dense Lucas–Kanade and semi-Lagrangian extrapolation, physical U/V, 24 leads, persistence/translation baselines, immutable ForecastOutput, persistence/events and synthetic server replay; real forecast-skill acceptance remains gated |
 | RP-015 | Complete for synthetic vertical acceptance | ForecastOutput-derived PNG/COG/NetCDF products, point/area APIs, product events, server replay and the responsive OpenLayers short-nowcast GIS are accepted; real forecast skill remains gated |
-| RP-016 | Not started | Verification, fault injection and end-to-end operational acceptance follow the accepted RP-015 boundary |
+| RP-016 | MRMS engineering and spatial-evidence slice complete | Isolated MRMS conformance/hindcast reuses the production pySTEPS-LK core; 53 August 2021 issues passed three-baseline scoring and generated 2,544 synchronized map layers in the existing Web, while Fujian operational acceptance remains gated |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -383,16 +383,30 @@ of the active test environment and must not be deleted during ordinary updates.
 
 ## Next acceptance target
 
-Begin RP-016 verification, fault injection and full raw-radar-to-React
-operational acceptance against the frozen RP-015 product and UI boundary. Real
-RP-013/RP-014 meteorological acceptance still needs at least three consecutive
-operational QC→grid→mosaic→QPE cycles with
-trackable precipitation. Gauge adjustment remains disabled until representative
-gauge observations and quality rules are supplied. Real multi-radar mosaic
-acceptance still requires at least two ready radar configurations and
-representative synchronized volumes. Static clutter, derived coastline/sea-AP
-probability assets, verified vertical datum and a representative
-mountain-blockage case remain operational gates.
+RP-016 now has an MRMS engineering-validation slice. The frozen August 2021
+suite validated 53 issues and 255 required frames, produced 57,240 common-mask
+metric rows and met its predeclared LK-versus-persistence/translation FSS case
+gate. The current v3 run also produced 53 immutable map bundles and 2,544 PNG
+layers for synchronized truth/LK/baseline display. The result is documented in
+`docs/RP016_MRMS离线验证方案与验收记录.md`; it is not a Fujian operational
+acceptance claim. The existing Web now includes a source-agnostic algorithm
+verification view backed by a read-only Go report adapter; it exposes the
+frozen gate, cases, issues, filtered lead metrics and synchronized maps without
+sending the full CSV or model arrays to the browser. The historical v2/v3
+score-file difference is isolated to one Ida issue; v3 is repeatable in the
+current environment, but future runs must freeze environment and source-manifest
+fingerprints before claiming byte reproducibility. Next, run unchanged
+parameters against additional downloaded months as holdout data and add
+per-issue core-runtime/RSS instrumentation.
+
+Full raw-radar-to-React operational acceptance still needs at least three
+consecutive operational QC→grid→mosaic→QPE cycles with trackable precipitation.
+Gauge adjustment remains disabled until representative gauge observations and
+quality rules are supplied. Real multi-radar mosaic acceptance still requires
+at least two ready radar configurations and representative synchronized
+volumes. Static clutter, derived coastline/sea-AP probability assets, verified
+vertical datum and a representative mountain-blockage case remain operational
+gates.
 
 ## Required inputs before operational QC and gridding
 
@@ -456,5 +470,7 @@ make test-diagnostics
 make test-nowcast-input
 make test-pysteps-lk
 make test-products
+make test-mrms
+make mrms-faults
 make smoke
 ```

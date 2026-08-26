@@ -7,6 +7,7 @@ import { defaults as defaultControls } from 'ol/control/defaults.js'
 import { getCenter } from 'ol/extent.js'
 import Point from 'ol/geom/Point.js'
 import Polygon from 'ol/geom/Polygon.js'
+import LineString from 'ol/geom/LineString.js'
 import Graticule from 'ol/layer/Graticule.js'
 import ImageLayer from 'ol/layer/Image.js'
 import TileLayer from 'ol/layer/Tile.js'
@@ -26,6 +27,12 @@ export type GISLegendEntry = { label: string, color: string }
 export type GISReferenceContext = {
   coastline?: { url: string, extent: GISMapExtent }
   places?: readonly { name: string, coordinate: readonly [number, number] }[]
+}
+export type GISMotionVector = {
+  longitude: number
+  latitude: number
+  end_longitude: number
+  end_latitude: number
 }
 
 const DEFAULT_OPACITY = 0.72
@@ -77,6 +84,36 @@ function createSelectionLayer() {
       : new Style({
           fill: new Fill({ color: 'rgba(19,117,104,.10)' }),
           stroke: new Stroke({ color: '#0b665a', width: 1.5, lineDash: [5, 4] }),
+        }),
+  })
+}
+
+function createMotionLayer(vectors: readonly GISMotionVector[]) {
+  const features = vectors.flatMap((vector) => [
+    new Feature({
+      geometry: new LineString([
+        [vector.longitude, vector.latitude],
+        [vector.end_longitude, vector.end_latitude],
+      ]),
+      kind: 'motion-line',
+    }),
+    new Feature({
+      geometry: new Point([vector.end_longitude, vector.end_latitude]),
+      kind: 'motion-tip',
+    }),
+  ])
+  return new VectorLayer({
+    source: new VectorSource({ features }),
+    style: (feature) => feature.get('kind') === 'motion-tip'
+      ? new Style({
+          image: new CircleStyle({
+            radius: 2.2,
+            fill: new Fill({ color: '#0b665a' }),
+            stroke: new Stroke({ color: 'rgba(250,252,250,.92)', width: 1 }),
+          }),
+        })
+      : new Style({
+          stroke: new Stroke({ color: 'rgba(11,102,90,.82)', width: 1.4 }),
         }),
   })
 }
@@ -143,6 +180,13 @@ interface RasterGISMapProps {
   onSelectPoint?: (point: MapCoordinate) => void
   referenceContext?: GISReferenceContext
   className?: string
+  sharedView?: View
+  comparisonMode?: boolean
+  basemapVisible?: boolean
+  smoothRaster?: boolean
+  rasterOpacity?: number
+  motionVectors?: readonly GISMotionVector[]
+  motionVisible?: boolean
 }
 
 export function RasterGISMap({
@@ -168,6 +212,13 @@ export function RasterGISMap({
   onSelectPoint,
   referenceContext,
   className = '',
+  sharedView,
+  comparisonMode = false,
+  basemapVisible: controlledBasemapVisible,
+  smoothRaster: controlledSmoothRaster,
+  rasterOpacity: controlledRasterOpacity,
+  motionVectors = [],
+  motionVisible = false,
 }: RasterGISMapProps) {
   const targetRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<OLMap | null>(null)
@@ -175,15 +226,19 @@ export function RasterGISMap({
   const coastlineLayerRef = useRef<ImageLayer<ImageStatic> | null>(null)
   const rasterLayerRef = useRef<ImageLayer<ImageStatic> | null>(null)
   const selectionLayerRef = useRef<VectorLayer<VectorSource> | null>(null)
+  const motionLayerRef = useRef<VectorLayer<VectorSource> | null>(null)
   const onSelectPointRef = useRef(onSelectPoint)
   const imageExtentRef = useRef(imageExtent)
   const fitExtentRef = useRef(fitExtent)
   const referenceContextRef = useRef(referenceContext)
-  const [basemapVisible, setBasemapVisible] = useState(true)
+  const [localBasemapVisible, setLocalBasemapVisible] = useState(true)
   const [coastlineVisible, setCoastlineVisible] = useState(true)
-  const [smoothRaster, setSmoothRaster] = useState(true)
-  const [rasterOpacity, setRasterOpacity] = useState(DEFAULT_OPACITY)
+  const [localSmoothRaster, setLocalSmoothRaster] = useState(true)
+  const [localRasterOpacity, setLocalRasterOpacity] = useState(DEFAULT_OPACITY)
   const [hoverCoordinate, setHoverCoordinate] = useState<MapCoordinate | null>(null)
+  const basemapVisible = controlledBasemapVisible ?? localBasemapVisible
+  const smoothRaster = controlledSmoothRaster ?? localSmoothRaster
+  const rasterOpacity = controlledRasterOpacity ?? localRasterOpacity
 
   useEffect(() => {
     onSelectPointRef.current = onSelectPoint
@@ -231,6 +286,8 @@ export function RasterGISMap({
         })
       : null
     const rasterLayer = new ImageLayer<ImageStatic>({ opacity: DEFAULT_OPACITY })
+    const motionLayer = createMotionLayer(motionVectors)
+    motionLayer.setVisible(motionVisible)
     const selectionLayer = createSelectionLayer()
     const referenceLayer = mapReference?.places?.length
       ? createReferenceLayer(mapReference.places)
@@ -251,7 +308,7 @@ export function RasterGISMap({
       }),
     })
     const viewExtent = expandExtent(domainExtent)
-    const view = new View({
+    const view = sharedView ?? new View({
       projection: 'EPSG:4326',
       center: getCenter(domainExtent),
       extent: viewExtent,
@@ -266,6 +323,7 @@ export function RasterGISMap({
         basemapLayer,
         ...(coastlineLayer ? [coastlineLayer] : []),
         rasterLayer,
+        motionLayer,
         graticule,
         ...(referenceLayer ? [referenceLayer] : []),
         selectionLayer,
@@ -294,6 +352,7 @@ export function RasterGISMap({
     basemapLayerRef.current = basemapLayer
     coastlineLayerRef.current = coastlineLayer
     rasterLayerRef.current = rasterLayer
+    motionLayerRef.current = motionLayer
     selectionLayerRef.current = selectionLayer
 
     return () => {
@@ -304,9 +363,21 @@ export function RasterGISMap({
       basemapLayerRef.current = null
       coastlineLayerRef.current = null
       rasterLayerRef.current = null
+      motionLayerRef.current = null
       selectionLayerRef.current = null
     }
-  }, [fitExtentKey, referenceContext])
+  // Motion features and visibility are updated by the dedicated effect below.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitExtentKey, referenceContext, sharedView])
+
+  useEffect(() => {
+    const target = targetRef.current
+    const map = mapRef.current
+    if (!target || !map || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => map.updateSize())
+    observer.observe(target)
+    return () => observer.disconnect()
+  }, [fitExtentKey, referenceContext, sharedView])
 
   useEffect(() => {
     const layer = rasterLayerRef.current
@@ -344,6 +415,14 @@ export function RasterGISMap({
     rasterLayerRef.current?.setOpacity(rasterOpacity)
   }, [fitExtentKey, rasterOpacity, referenceContext])
 
+  useEffect(() => {
+    const layer = motionLayerRef.current
+    if (!layer) return
+    const next = createMotionLayer(motionVectors)
+    layer.setSource(next.getSource())
+    layer.setVisible(motionVisible)
+  }, [fitExtentKey, motionVectors, motionVisible, referenceContext])
+
   const coordinateLabel = useMemo(() => {
     if (!hoverCoordinate) {
       const coordinate = point ?? {
@@ -366,7 +445,7 @@ export function RasterGISMap({
   }
 
   return (
-    <div className={`nowcast-gis-shell ${onSelectPoint ? '' : 'readonly'} ${className}`.trim()}>
+    <div className={`nowcast-gis-shell ${onSelectPoint ? '' : 'readonly'} ${comparisonMode ? 'comparison' : ''} ${className}`.trim()}>
       <div
         ref={targetRef}
         className="nowcast-gis-map"
@@ -376,37 +455,37 @@ export function RasterGISMap({
       />
       <span className="sr-only" role="img" aria-label={imageDescription} data-source={imageUrl} data-extent={imageExtent.join(',')} />
 
-      <div className="gis-display-controls" role="group" aria-label="地图图层控制">
-        <button type="button" aria-pressed={basemapVisible} onClick={() => setBasemapVisible((value) => !value)}>底图</button>
+      {!comparisonMode ? <div className="gis-display-controls" role="group" aria-label="地图图层控制">
+        <button type="button" aria-pressed={basemapVisible} onClick={() => setLocalBasemapVisible((value) => !value)}>底图</button>
         {referenceContext?.coastline ? <button type="button" aria-pressed={coastlineVisible} onClick={() => setCoastlineVisible((value) => !value)}>海岸线</button> : null}
-        <button type="button" aria-pressed={smoothRaster} onClick={() => setSmoothRaster((value) => !value)}>{smoothRaster ? '平滑' : '格点'}</button>
+        <button type="button" aria-pressed={smoothRaster} onClick={() => setLocalSmoothRaster((value) => !value)}>{smoothRaster ? '平滑' : '格点'}</button>
         <label>
           <span>图层 {Math.round(rasterOpacity * 100)}%</span>
-          <input aria-label="栅格图层透明度" type="range" min="0.35" max="0.95" step="0.05" value={rasterOpacity} onChange={(event) => setRasterOpacity(Number(event.target.value))} />
+          <input aria-label="栅格图层透明度" type="range" min="0.35" max="0.95" step="0.05" value={rasterOpacity} onChange={(event) => setLocalRasterOpacity(Number(event.target.value))} />
         </label>
-      </div>
+      </div> : null}
 
-      <div className="gis-valid-time" aria-label={`数据有效时间 ${validTimeLabel}`}>
+      {!comparisonMode ? <div className="gis-valid-time" aria-label={`数据有效时间 ${validTimeLabel}`}>
         <span>DATA VALID TIME</span>
         <code>{contextLabel}</code>
         <strong>{validTimeLabel}</strong>
-      </div>
+      </div> : null}
 
-      <div className="gis-map-controls" aria-label="地图导航">
+      {!comparisonMode ? <div className="gis-map-controls" aria-label="地图导航">
         <button type="button" aria-label="地图放大" onClick={() => zoomBy(1)}>+</button>
         <button type="button" aria-label="地图缩小" onClick={() => zoomBy(-1)}>−</button>
         <button type="button" aria-label={resetViewLabel} onClick={resetView}>⌖</button>
-      </div>
+      </div> : null}
 
-      <div className="gis-coordinate-readout" aria-live="polite">
+      {!comparisonMode ? <div className="gis-coordinate-readout" aria-live="polite">
         <span>{hoverCoordinate ? '指针坐标' : point ? '当前选点' : '图层中心'}</span>
         <strong>{coordinateLabel}</strong>
         {!hoverCoordinate
           ? <small>{pointValueLabel ?? '移动指针读取经纬度'}</small>
           : <small>{onSelectPoint ? '点击选择该格点' : 'EPSG:4326'}</small>}
-      </div>
+      </div> : null}
 
-      <div className={`gis-legend ${legendMode}`} aria-label={`${productLabel}图例`}>
+      {!comparisonMode ? <div className={`gis-legend ${legendMode}`} aria-label={`${productLabel}图例`}>
         <header><span>{productLabel}</span><strong>{legendUnit}</strong></header>
         {legendMode === 'categorical' ? (
           <div className="gis-legend-list">
@@ -420,7 +499,7 @@ export function RasterGISMap({
           </div>
         )}
         <footer><span>{basemapLabel}</span><small>{footerNote}</small></footer>
-      </div>
+      </div> : null}
 
       {(!imageUrl || layerError) ? (
         <div className="gis-layer-empty" role="status">

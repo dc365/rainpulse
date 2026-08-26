@@ -14,6 +14,7 @@ import (
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/orchestration"
 	postgresstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/postgres"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/runtimeconfig"
+	verificationstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/verification"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -52,6 +53,10 @@ func main() {
 		slog.Error("configure diagnostic object reader", "error", err)
 		os.Exit(1)
 	}
+	verificationReports := verificationstore.NewFileStore(environmentOrDefault(
+		"RAINPULSE_ALGORITHM_VERIFICATION_ROOT",
+		"/var/lib/rainpulse/algorithm-verification",
+	))
 
 	server := &http.Server{
 		Addr: address,
@@ -63,6 +68,7 @@ func main() {
 			DiagnosticLayers: diagnosticLayers,
 			Products:         store,
 			ProductObjects:   diagnosticLayers,
+			Verification:     verificationReports,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,

@@ -501,6 +501,156 @@ paths:
                 $ref: "#/components/schemas/VerificationSummary"
         "404":
           $ref: "#/components/responses/NotFound"
+  /algorithm-verification/runs:
+    get:
+      operationId: listAlgorithmVerificationRuns
+      tags: [verification]
+      summary: List available offline algorithm-verification runs
+      responses:
+        "200":
+          description: Offline algorithm-verification runs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlgorithmVerificationRunList"
+  /algorithm-verification/runs/{profile_version}/{run_id}:
+    get:
+      operationId: getAlgorithmVerificationRun
+      tags: [verification]
+      summary: Get one offline algorithm-verification run and its filter dimensions
+      parameters:
+        - $ref: "#/components/parameters/VerificationProfileVersion"
+        - $ref: "#/components/parameters/VerificationRunId"
+      responses:
+        "200":
+          description: Offline algorithm-verification run
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlgorithmVerificationRunDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /algorithm-verification/runs/{profile_version}/{run_id}/metrics:
+    get:
+      operationId: listAlgorithmVerificationMetrics
+      tags: [verification]
+      summary: List one issue's model metrics for a threshold and FSS window
+      parameters:
+        - $ref: "#/components/parameters/VerificationProfileVersion"
+        - $ref: "#/components/parameters/VerificationRunId"
+        - name: case_id
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+        - name: issue_time
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: threshold_mm_h
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: 0
+        - name: window_pixels
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: Filtered offline verification metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlgorithmVerificationMetricList"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /algorithm-verification/runs/{profile_version}/{run_id}/map-frame:
+    get:
+      operationId: getAlgorithmVerificationMapFrame
+      tags: [verification]
+      summary: Get georeferenced truth and deterministic-forecast map evidence for one lead
+      parameters:
+        - $ref: "#/components/parameters/VerificationProfileVersion"
+        - $ref: "#/components/parameters/VerificationRunId"
+        - name: case_id
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+        - name: issue_time
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: lead_minutes
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1440
+      responses:
+        "200":
+          description: One synchronized algorithm-verification map frame
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlgorithmVerificationMapFrame"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /algorithm-verification/runs/{profile_version}/{run_id}/map-assets/{case_id}/{issue_key}/{asset_id}:
+    get:
+      operationId: getAlgorithmVerificationMapAsset
+      tags: [verification]
+      summary: Read one immutable PNG explicitly listed by a verification map manifest
+      parameters:
+        - $ref: "#/components/parameters/VerificationProfileVersion"
+        - $ref: "#/components/parameters/VerificationRunId"
+        - name: case_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+        - name: issue_key
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9]{8}T[0-9]{6}Z$'
+        - name: asset_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-z0-9][a-z0-9-]{0,127}$'
+      responses:
+        "200":
+          description: Immutable algorithm-verification PNG
+          headers:
+            ETag:
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
   /system/status:
     get:
       operationId: getSystemStatus
@@ -658,6 +808,20 @@ components:
       schema:
         type: string
         pattern: "^[a-z0-9][a-z0-9-]{2,127}$"
+    VerificationProfileVersion:
+      name: profile_version
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+    VerificationRunId:
+      name: run_id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
     Limit:
       name: limit
       in: query
@@ -1992,6 +2156,515 @@ components:
         verified_at:
           type: string
           format: date-time
+    AlgorithmVerificationRunSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - profile_version
+        - run_id
+        - schema_version
+        - primary_truth_kind
+        - operational_eligible
+        - completed_issue_count
+        - failed_issue_count
+        - motion_fallback_issue_count
+        - metric_row_count
+        - skill_status
+        - maps_available
+        - map_bundle_count
+        - map_layer_count
+        - map_renderer_version
+        - modified_at
+      properties:
+        profile_version:
+          type: string
+        run_id:
+          type: string
+        schema_version:
+          type: string
+        primary_truth_kind:
+          type: string
+        operational_eligible:
+          type: boolean
+        completed_issue_count:
+          type: integer
+          minimum: 0
+        failed_issue_count:
+          type: integer
+          minimum: 0
+        motion_fallback_issue_count:
+          type: integer
+          minimum: 0
+        metric_row_count:
+          type: integer
+          minimum: 0
+        skill_status:
+          type: string
+        maps_available:
+          type: boolean
+        map_bundle_count:
+          type: integer
+          minimum: 0
+        map_layer_count:
+          type: integer
+          minimum: 0
+        map_renderer_version:
+          type: string
+          nullable: true
+        modified_at:
+          type: string
+          format: date-time
+    AlgorithmVerificationRunList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlgorithmVerificationRunSummary"
+    AlgorithmVerificationCase:
+      type: object
+      additionalProperties: false
+      required: [case_id, category, issue_times]
+      properties:
+        case_id:
+          type: string
+        category:
+          type: string
+        issue_times:
+          type: array
+          items:
+            type: string
+            format: date-time
+    AlgorithmVerificationFilterOptions:
+      type: object
+      additionalProperties: false
+      required: [models, lead_minutes, thresholds_mm_h, windows_pixels]
+      properties:
+        models:
+          type: array
+          items:
+            type: string
+        lead_minutes:
+          type: array
+          items:
+            type: integer
+        thresholds_mm_h:
+          type: array
+          items:
+            type: number
+            format: double
+        windows_pixels:
+          type: array
+          items:
+            type: integer
+    AlgorithmVerificationSkillComparison:
+      type: object
+      additionalProperties: false
+      required:
+        - baseline
+        - threshold_mm_h
+        - maximum_lead_minutes
+        - window_pixels
+        - positive_case_count
+        - evaluable_case_count
+        - total_wet_case_count
+        - passes_case_gate
+        - mean_fss_difference
+        - mean_difference_95pct_interval
+        - bootstrap_sample_count
+        - case_mean_differences
+      properties:
+        baseline:
+          type: string
+        threshold_mm_h:
+          type: number
+          format: double
+        maximum_lead_minutes:
+          type: integer
+        window_pixels:
+          type: integer
+        positive_case_count:
+          type: integer
+        evaluable_case_count:
+          type: integer
+        total_wet_case_count:
+          type: integer
+        passes_case_gate:
+          type: boolean
+        mean_fss_difference:
+          type: number
+          format: double
+          nullable: true
+        mean_difference_95pct_interval:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items:
+            type: number
+            format: double
+            nullable: true
+        bootstrap_sample_count:
+          type: integer
+        case_mean_differences:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+    AlgorithmVerificationSkillSummary:
+      type: object
+      additionalProperties: false
+      required: [status, comparison_metric, comparisons]
+      properties:
+        status:
+          type: string
+        comparison_metric:
+          type: string
+        comparisons:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlgorithmVerificationSkillComparison"
+    AlgorithmVerificationRunDetail:
+      type: object
+      additionalProperties: false
+      required: [run, cases, filters, skill_summary]
+      properties:
+        run:
+          $ref: "#/components/schemas/AlgorithmVerificationRunSummary"
+        cases:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlgorithmVerificationCase"
+        filters:
+          $ref: "#/components/schemas/AlgorithmVerificationFilterOptions"
+        skill_summary:
+          $ref: "#/components/schemas/AlgorithmVerificationSkillSummary"
+    AlgorithmVerificationMetric:
+      type: object
+      additionalProperties: false
+      required:
+        - case_id
+        - case_category
+        - issue_time
+        - truth_kind
+        - model
+        - lead_minutes
+        - threshold_mm_h
+        - window_pixels
+        - window_km
+        - hits
+        - misses
+        - false_alarms
+        - correct_negatives
+        - csi
+        - pod
+        - far
+        - fss
+        - mae_mm_h
+        - rmse_mm_h
+        - mean_error_mm_h
+        - truth_coverage
+        - forecast_coverage
+        - common_coverage
+      properties:
+        case_id:
+          type: string
+        case_category:
+          type: string
+        issue_time:
+          type: string
+          format: date-time
+        truth_kind:
+          type: string
+        model:
+          type: string
+        lead_minutes:
+          type: integer
+        threshold_mm_h:
+          type: number
+          format: double
+        window_pixels:
+          type: integer
+        window_km:
+          type: number
+          format: double
+        hits:
+          type: integer
+          format: int64
+        misses:
+          type: integer
+          format: int64
+        false_alarms:
+          type: integer
+          format: int64
+        correct_negatives:
+          type: integer
+          format: int64
+        csi:
+          type: number
+          format: double
+          nullable: true
+        pod:
+          type: number
+          format: double
+          nullable: true
+        far:
+          type: number
+          format: double
+          nullable: true
+        fss:
+          type: number
+          format: double
+          nullable: true
+        mae_mm_h:
+          type: number
+          format: double
+          nullable: true
+        rmse_mm_h:
+          type: number
+          format: double
+          nullable: true
+        mean_error_mm_h:
+          type: number
+          format: double
+          nullable: true
+        truth_coverage:
+          type: number
+          format: double
+          nullable: true
+        forecast_coverage:
+          type: number
+          format: double
+          nullable: true
+        common_coverage:
+          type: number
+          format: double
+          nullable: true
+    AlgorithmVerificationMetricList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 512
+          items:
+            $ref: "#/components/schemas/AlgorithmVerificationMetric"
+    AlgorithmVerificationMapMotionVector:
+      type: object
+      additionalProperties: false
+      required: [longitude, latitude, end_longitude, end_latitude, u_pixels_per_step, v_pixels_per_step]
+      properties:
+        longitude:
+          type: number
+          format: double
+        latitude:
+          type: number
+          format: double
+        end_longitude:
+          type: number
+          format: double
+        end_latitude:
+          type: number
+          format: double
+        u_pixels_per_step:
+          type: number
+          format: double
+        v_pixels_per_step:
+          type: number
+          format: double
+    AlgorithmVerificationMapMotion:
+      type: object
+      additionalProperties: false
+      required: [fallback_used, fallback_reason, feature_count, trackable_rain_pixel_count, unit, vectors]
+      properties:
+        fallback_used:
+          type: boolean
+        fallback_reason:
+          type: string
+          nullable: true
+        feature_count:
+          type: integer
+          minimum: 0
+        trackable_rain_pixel_count:
+          type: integer
+          minimum: 0
+        unit:
+          type: string
+        vectors:
+          type: array
+          maxItems: 200
+          items:
+            $ref: "#/components/schemas/AlgorithmVerificationMapMotionVector"
+    AlgorithmVerificationMapLayer:
+      type: object
+      additionalProperties: false
+      required:
+        - asset_id
+        - role
+        - model
+        - lead_minutes
+        - valid_time
+        - image_url
+        - width
+        - height
+        - sha256
+        - size_bytes
+        - valid_cell_count
+        - no_rain_cell_count
+        - rain_cell_count
+        - missing_cell_count
+      properties:
+        asset_id:
+          type: string
+        role:
+          type: string
+          enum: [truth, forecast]
+        model:
+          type: string
+          nullable: true
+        lead_minutes:
+          type: integer
+        valid_time:
+          type: string
+          format: date-time
+        image_url:
+          type: string
+        width:
+          type: integer
+          minimum: 1
+        height:
+          type: integer
+          minimum: 1
+        sha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        size_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+        valid_cell_count:
+          type: integer
+          format: int64
+          minimum: 0
+        no_rain_cell_count:
+          type: integer
+          format: int64
+          minimum: 0
+        rain_cell_count:
+          type: integer
+          format: int64
+          minimum: 0
+        missing_cell_count:
+          type: integer
+          format: int64
+          minimum: 0
+    AlgorithmVerificationMapFrame:
+      type: object
+      additionalProperties: false
+      required:
+        - contract_version
+        - renderer_version
+        - palette_version
+        - profile_version
+        - run_id
+        - case_id
+        - issue_time
+        - valid_time
+        - lead_minutes
+        - truth_kind
+        - operational_eligible
+        - projection
+        - pixel_edge_bounds
+        - fit_bounds
+        - width
+        - height
+        - rain_threshold_mm_h
+        - valid_no_rain_color
+        - legend
+        - layers
+        - motion
+      properties:
+        contract_version:
+          type: string
+        renderer_version:
+          type: string
+        palette_version:
+          type: string
+        profile_version:
+          type: string
+        run_id:
+          type: string
+        case_id:
+          type: string
+        issue_time:
+          type: string
+          format: date-time
+        valid_time:
+          type: string
+          format: date-time
+        lead_minutes:
+          type: integer
+        truth_kind:
+          type: string
+        operational_eligible:
+          type: boolean
+        projection:
+          type: string
+          enum: [EPSG:4326]
+        pixel_edge_bounds:
+          type: array
+          minItems: 4
+          maxItems: 4
+          items:
+            type: number
+            format: double
+        fit_bounds:
+          type: array
+          minItems: 4
+          maxItems: 4
+          items:
+            type: number
+            format: double
+        width:
+          type: integer
+          minimum: 1
+        height:
+          type: integer
+          minimum: 1
+        rain_threshold_mm_h:
+          type: number
+          format: double
+          minimum: 0
+        valid_no_rain_color:
+          type: string
+          pattern: '^#[0-9A-Fa-f]{6}$'
+        legend:
+          type: array
+          minItems: 1
+          maxItems: 32
+          items:
+            $ref: "#/components/schemas/AlgorithmVerificationMapLegendEntry"
+        layers:
+          type: array
+          minItems: 2
+          maxItems: 8
+          items:
+            $ref: "#/components/schemas/AlgorithmVerificationMapLayer"
+        motion:
+          $ref: "#/components/schemas/AlgorithmVerificationMapMotion"
+    AlgorithmVerificationMapLegendEntry:
+      type: object
+      additionalProperties: false
+      required: [minimum_mm_h, color]
+      properties:
+        minimum_mm_h:
+          type: number
+          format: double
+        color:
+          type: string
+          pattern: '^#[0-9A-Fa-f]{6}$'
     ModelState:
       type: object
       additionalProperties: false

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/api"
+	verificationstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/verification"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/workflow"
 	"github.com/google/uuid"
 )
@@ -50,6 +51,105 @@ func TestSystemStatusReportsReadyControlPlane(t *testing.T) {
 	}
 	if body.Version != "test-version" {
 		t.Fatalf("expected injected version, got %q", body.Version)
+	}
+}
+
+func TestAlgorithmVerificationEndpointsExposeFilteredEvidence(t *testing.T) {
+	now := time.Date(2026, 8, 26, 8, 0, 0, 0, time.UTC)
+	issueTime := time.Date(2021, 8, 10, 17, 0, 0, 0, time.UTC)
+	meanDifference := 0.027
+	fss := 0.72
+	store := &fakeAlgorithmVerificationStore{
+		detail: verificationstore.RunDetail{
+			Run: verificationstore.RunSummary{
+				ProfileVersion: "rp016-mrms-v1", RunID: "full-202108-v2",
+				SchemaVersion: "1.0", PrimaryTruthKind: "observed_mrms_10min",
+				CompletedIssueCount: 53, MetricRowCount: 57240,
+				SkillStatus: "lk_supported", ModifiedAt: now,
+			},
+			Cases: []verificationstore.Case{{
+				CaseID: "midwest_convection_20210810", Category: "wet",
+				IssueTimes: []time.Time{issueTime},
+			}},
+			Filters: verificationstore.FilterOptions{
+				Models:      []string{"lk", "persistence", "translation"},
+				LeadMinutes: []int{10}, ThresholdsMMH: []float64{5}, WindowsPixels: []int{11},
+			},
+			SkillSummary: verificationstore.SkillSummary{
+				Status: "lk_supported", ComparisonMetric: "FSS",
+				Comparisons: []verificationstore.SkillComparison{{
+					Baseline: "persistence", BootstrapSampleCount: 2000,
+					CaseMeanDifferences: map[string]float64{"midwest_convection_20210810": meanDifference},
+					EvaluableCaseCount:  4, MaximumLeadMinutes: 60,
+					MeanDifference95pctInterval: []*float64{&meanDifference, &meanDifference},
+					MeanFSSDifference:           &meanDifference, PassesCaseGate: true,
+					PositiveCaseCount: 4, ThresholdMMH: 5, TotalWetCaseCount: 4, WindowPixels: 11,
+				}},
+			},
+		},
+		metrics: []verificationstore.Metric{{
+			CaseID: "midwest_convection_20210810", CaseCategory: "wet", IssueTime: issueTime,
+			TruthKind: "observed_mrms_10min", Model: "lk", LeadMinutes: 10,
+			ThresholdMMH: 5, WindowPixels: 11, WindowKM: 11.1, FSS: &fss,
+		}},
+		mapFrame: verificationstore.MapFrame{
+			ContractVersion: "1.0", RendererVersion: "verification-renderer-v1",
+			PaletteVersion: "rainfall-operational-v1", ProfileVersion: "rp016-mrms-v1",
+			RunID: "full-202108-v2", CaseID: "midwest_convection_20210810",
+			IssueTime: issueTime, ValidTime: issueTime.Add(10 * time.Minute), LeadMinutes: 10,
+			TruthKind: "observed_mrms_10min", Projection: "EPSG:4326",
+			PixelEdgeBounds: []float64{-95.005, 38.995, -89.995, 41.005},
+			FitBounds:       []float64{-95, 39, -90, 41}, Width: 501, Height: 201,
+			RainThresholdMMH: 0.1, ValidNoRainColor: "#dce6e2",
+			Legend: []verificationstore.MapLegendEntry{{MinimumMMH: 0.1, Color: "#9dd9ff"}},
+			Layers: []verificationstore.MapLayer{{
+				AssetID: "lead-010-truth", Role: "truth", LeadMinutes: 10,
+				ValidTime: issueTime.Add(10 * time.Minute), Width: 501, Height: 201,
+				SHA256: strings.Repeat("a", 64), SizeBytes: 100, ValidCellCount: 100701,
+			}},
+			Motion: verificationstore.MapMotion{Unit: "grid_cells_per_5_minutes"},
+		},
+		mapAsset: verificationstore.MapAssetContent{
+			Data: []byte("\x89PNG\r\n\x1a\nmap"), SHA256: strings.Repeat("a", 64),
+		},
+	}
+	handler := api.NewHandler(api.Options{Version: "test", Verification: store})
+
+	assert := func(target string, contains string) {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodGet, target, nil)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), contains) {
+			t.Fatalf("GET %s: status=%d body=%s", target, response.Code, response.Body.String())
+		}
+	}
+	assert("/api/v1/algorithm-verification/runs", `"metric_row_count":57240`)
+	assert("/api/v1/algorithm-verification/runs/rp016-mrms-v1/full-202108-v2", `"case_id":"midwest_convection_20210810"`)
+	assert(
+		"/api/v1/algorithm-verification/runs/rp016-mrms-v1/full-202108-v2/metrics"+
+			"?case_id=midwest_convection_20210810&issue_time=2021-08-10T17:00:00Z&threshold_mm_h=5&window_pixels=11",
+		`"fss":0.72`,
+	)
+	assert(
+		"/api/v1/algorithm-verification/runs/rp016-mrms-v1/full-202108-v2/map-frame"+
+			"?case_id=midwest_convection_20210810&issue_time=2021-08-10T17:00:00Z&lead_minutes=10",
+		`"image_url":"/api/v1/algorithm-verification/runs/rp016-mrms-v1/full-202108-v2/map-assets/midwest_convection_20210810/20210810T170000Z/lead-010-truth"`,
+	)
+	mapRequest := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/algorithm-verification/runs/rp016-mrms-v1/full-202108-v2/map-assets/"+
+			"midwest_convection_20210810/20210810T170000Z/lead-010-truth",
+		nil,
+	)
+	mapResponse := httptest.NewRecorder()
+	handler.ServeHTTP(mapResponse, mapRequest)
+	if mapResponse.Code != http.StatusOK || mapResponse.Header().Get("Content-Type") != "image/png" ||
+		!strings.Contains(mapResponse.Header().Get("Cache-Control"), "immutable") {
+		t.Fatalf("unexpected map asset response: status=%d headers=%v", mapResponse.Code, mapResponse.Header())
+	}
+	if store.filter.CaseID != "midwest_convection_20210810" || !store.filter.IssueTime.Equal(issueTime) {
+		t.Fatalf("metric query was not delegated: %#v", store.filter)
 	}
 }
 
@@ -476,6 +576,59 @@ type fakeRunStore struct {
 	run  workflow.Run
 	jobs []workflow.Job
 	err  error
+}
+
+type fakeAlgorithmVerificationStore struct {
+	detail    verificationstore.RunDetail
+	metrics   []verificationstore.Metric
+	filter    verificationstore.MetricFilter
+	mapFrame  verificationstore.MapFrame
+	mapFilter verificationstore.MapFrameFilter
+	mapAsset  verificationstore.MapAssetContent
+	err       error
+}
+
+func (store *fakeAlgorithmVerificationStore) ListRuns(context.Context) ([]verificationstore.RunSummary, error) {
+	return []verificationstore.RunSummary{store.detail.Run}, store.err
+}
+
+func (store *fakeAlgorithmVerificationStore) GetRun(
+	context.Context,
+	string,
+	string,
+) (verificationstore.RunDetail, error) {
+	return store.detail, store.err
+}
+
+func (store *fakeAlgorithmVerificationStore) ListMetrics(
+	_ context.Context,
+	_ string,
+	_ string,
+	filter verificationstore.MetricFilter,
+) ([]verificationstore.Metric, error) {
+	store.filter = filter
+	return store.metrics, store.err
+}
+
+func (store *fakeAlgorithmVerificationStore) GetMapFrame(
+	_ context.Context,
+	_ string,
+	_ string,
+	filter verificationstore.MapFrameFilter,
+) (verificationstore.MapFrame, error) {
+	store.mapFilter = filter
+	return store.mapFrame, store.err
+}
+
+func (store *fakeAlgorithmVerificationStore) ReadMapAsset(
+	context.Context,
+	string,
+	string,
+	string,
+	string,
+	string,
+) (verificationstore.MapAssetContent, error) {
+	return store.mapAsset, store.err
 }
 
 func (store *fakeRunStore) Ping(context.Context) error { return store.err }

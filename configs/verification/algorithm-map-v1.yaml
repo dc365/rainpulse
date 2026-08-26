@@ -1,0 +1,27 @@
+schema_version: "1.0"
+profile_version: algorithm-verification-map-v1
+renderer_version: algorithm-verification-map-renderer-1.0.0
+bundle_contract_version: "1.0"
+projection: EPSG:4326
+
+palette:
+  version: rainfall-operational-v1
+  valid_no_rain_color: "#dce6e2"
+  valid_no_rain_alpha: 56
+  rain_alpha: 218
+  rain_threshold_mm_h: 0.1
+  rain_rate:
+    - { minimum: 0.1, color: "#9dd9ff" }
+    - { minimum: 1.0, color: "#4ba3f2" }
+    - { minimum: 2.5, color: "#2a79c7" }
+    - { minimum: 5.0, color: "#3ca85b" }
+    - { minimum: 10.0, color: "#9acb3c" }
+    - { minimum: 25.0, color: "#efd23a" }
+    - { minimum: 50.0, color: "#ee8a2d" }
+    - { minimum: 100.0, color: "#cf453b" }
+    - { minimum: 200.0, color: "#862f82" }
+
+motion_vectors:
+  maximum_count: 200
+  sample_step_pixels: 25
+  unit: grid_cells_per_5_minutes

@@ -14,6 +14,39 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AlgorithmVerificationMapFrameProjection.
+const (
+	EPSG4326 AlgorithmVerificationMapFrameProjection = "EPSG:4326"
+)
+
+// Valid indicates whether the value is a known member of the AlgorithmVerificationMapFrameProjection enum.
+func (e AlgorithmVerificationMapFrameProjection) Valid() bool {
+	switch e {
+	case EPSG4326:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AlgorithmVerificationMapLayerRole.
+const (
+	Forecast AlgorithmVerificationMapLayerRole = "forecast"
+	Truth    AlgorithmVerificationMapLayerRole = "truth"
+)
+
+// Valid indicates whether the value is a known member of the AlgorithmVerificationMapLayerRole enum.
+func (e AlgorithmVerificationMapLayerRole) Valid() bool {
+	switch e {
+	case Forecast:
+		return true
+	case Truth:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AnalysisCycleStatus.
 const (
 	AnalysisCycleStatusALIGNING         AnalysisCycleStatus = "ALIGNING"
@@ -405,6 +438,183 @@ func (e SystemStatusStatus) Valid() bool {
 	default:
 		return false
 	}
+}
+
+// AlgorithmVerificationCase defines model for AlgorithmVerificationCase.
+type AlgorithmVerificationCase struct {
+	CaseId     string      `json:"case_id"`
+	Category   string      `json:"category"`
+	IssueTimes []time.Time `json:"issue_times"`
+}
+
+// AlgorithmVerificationFilterOptions defines model for AlgorithmVerificationFilterOptions.
+type AlgorithmVerificationFilterOptions struct {
+	LeadMinutes   []int     `json:"lead_minutes"`
+	Models        []string  `json:"models"`
+	ThresholdsMmH []float64 `json:"thresholds_mm_h"`
+	WindowsPixels []int     `json:"windows_pixels"`
+}
+
+// AlgorithmVerificationMapFrame defines model for AlgorithmVerificationMapFrame.
+type AlgorithmVerificationMapFrame struct {
+	CaseId              string                                  `json:"case_id"`
+	ContractVersion     string                                  `json:"contract_version"`
+	FitBounds           []float64                               `json:"fit_bounds"`
+	Height              int                                     `json:"height"`
+	IssueTime           time.Time                               `json:"issue_time"`
+	Layers              []AlgorithmVerificationMapLayer         `json:"layers"`
+	LeadMinutes         int                                     `json:"lead_minutes"`
+	Legend              []AlgorithmVerificationMapLegendEntry   `json:"legend"`
+	Motion              AlgorithmVerificationMapMotion          `json:"motion"`
+	OperationalEligible bool                                    `json:"operational_eligible"`
+	PaletteVersion      string                                  `json:"palette_version"`
+	PixelEdgeBounds     []float64                               `json:"pixel_edge_bounds"`
+	ProfileVersion      string                                  `json:"profile_version"`
+	Projection          AlgorithmVerificationMapFrameProjection `json:"projection"`
+	RainThresholdMmH    float64                                 `json:"rain_threshold_mm_h"`
+	RendererVersion     string                                  `json:"renderer_version"`
+	RunId               string                                  `json:"run_id"`
+	TruthKind           string                                  `json:"truth_kind"`
+	ValidNoRainColor    string                                  `json:"valid_no_rain_color"`
+	ValidTime           time.Time                               `json:"valid_time"`
+	Width               int                                     `json:"width"`
+}
+
+// AlgorithmVerificationMapFrameProjection defines model for AlgorithmVerificationMapFrame.Projection.
+type AlgorithmVerificationMapFrameProjection string
+
+// AlgorithmVerificationMapLayer defines model for AlgorithmVerificationMapLayer.
+type AlgorithmVerificationMapLayer struct {
+	AssetId          string                            `json:"asset_id"`
+	Height           int                               `json:"height"`
+	ImageUrl         string                            `json:"image_url"`
+	LeadMinutes      int                               `json:"lead_minutes"`
+	MissingCellCount int64                             `json:"missing_cell_count"`
+	Model            *string                           `json:"model"`
+	NoRainCellCount  int64                             `json:"no_rain_cell_count"`
+	RainCellCount    int64                             `json:"rain_cell_count"`
+	Role             AlgorithmVerificationMapLayerRole `json:"role"`
+	Sha256           string                            `json:"sha256"`
+	SizeBytes        int64                             `json:"size_bytes"`
+	ValidCellCount   int64                             `json:"valid_cell_count"`
+	ValidTime        time.Time                         `json:"valid_time"`
+	Width            int                               `json:"width"`
+}
+
+// AlgorithmVerificationMapLayerRole defines model for AlgorithmVerificationMapLayer.Role.
+type AlgorithmVerificationMapLayerRole string
+
+// AlgorithmVerificationMapLegendEntry defines model for AlgorithmVerificationMapLegendEntry.
+type AlgorithmVerificationMapLegendEntry struct {
+	Color      string  `json:"color"`
+	MinimumMmH float64 `json:"minimum_mm_h"`
+}
+
+// AlgorithmVerificationMapMotion defines model for AlgorithmVerificationMapMotion.
+type AlgorithmVerificationMapMotion struct {
+	FallbackReason          *string                                `json:"fallback_reason"`
+	FallbackUsed            bool                                   `json:"fallback_used"`
+	FeatureCount            int                                    `json:"feature_count"`
+	TrackableRainPixelCount int                                    `json:"trackable_rain_pixel_count"`
+	Unit                    string                                 `json:"unit"`
+	Vectors                 []AlgorithmVerificationMapMotionVector `json:"vectors"`
+}
+
+// AlgorithmVerificationMapMotionVector defines model for AlgorithmVerificationMapMotionVector.
+type AlgorithmVerificationMapMotionVector struct {
+	EndLatitude    float64 `json:"end_latitude"`
+	EndLongitude   float64 `json:"end_longitude"`
+	Latitude       float64 `json:"latitude"`
+	Longitude      float64 `json:"longitude"`
+	UPixelsPerStep float64 `json:"u_pixels_per_step"`
+	VPixelsPerStep float64 `json:"v_pixels_per_step"`
+}
+
+// AlgorithmVerificationMetric defines model for AlgorithmVerificationMetric.
+type AlgorithmVerificationMetric struct {
+	CaseCategory     string    `json:"case_category"`
+	CaseId           string    `json:"case_id"`
+	CommonCoverage   *float64  `json:"common_coverage"`
+	CorrectNegatives int64     `json:"correct_negatives"`
+	Csi              *float64  `json:"csi"`
+	FalseAlarms      int64     `json:"false_alarms"`
+	Far              *float64  `json:"far"`
+	ForecastCoverage *float64  `json:"forecast_coverage"`
+	Fss              *float64  `json:"fss"`
+	Hits             int64     `json:"hits"`
+	IssueTime        time.Time `json:"issue_time"`
+	LeadMinutes      int       `json:"lead_minutes"`
+	MaeMmH           *float64  `json:"mae_mm_h"`
+	MeanErrorMmH     *float64  `json:"mean_error_mm_h"`
+	Misses           int64     `json:"misses"`
+	Model            string    `json:"model"`
+	Pod              *float64  `json:"pod"`
+	RmseMmH          *float64  `json:"rmse_mm_h"`
+	ThresholdMmH     float64   `json:"threshold_mm_h"`
+	TruthCoverage    *float64  `json:"truth_coverage"`
+	TruthKind        string    `json:"truth_kind"`
+	WindowKm         float64   `json:"window_km"`
+	WindowPixels     int       `json:"window_pixels"`
+}
+
+// AlgorithmVerificationMetricList defines model for AlgorithmVerificationMetricList.
+type AlgorithmVerificationMetricList struct {
+	Items []AlgorithmVerificationMetric `json:"items"`
+}
+
+// AlgorithmVerificationRunDetail defines model for AlgorithmVerificationRunDetail.
+type AlgorithmVerificationRunDetail struct {
+	Cases        []AlgorithmVerificationCase        `json:"cases"`
+	Filters      AlgorithmVerificationFilterOptions `json:"filters"`
+	Run          AlgorithmVerificationRunSummary    `json:"run"`
+	SkillSummary AlgorithmVerificationSkillSummary  `json:"skill_summary"`
+}
+
+// AlgorithmVerificationRunList defines model for AlgorithmVerificationRunList.
+type AlgorithmVerificationRunList struct {
+	Items []AlgorithmVerificationRunSummary `json:"items"`
+}
+
+// AlgorithmVerificationRunSummary defines model for AlgorithmVerificationRunSummary.
+type AlgorithmVerificationRunSummary struct {
+	CompletedIssueCount      int       `json:"completed_issue_count"`
+	FailedIssueCount         int       `json:"failed_issue_count"`
+	MapBundleCount           int       `json:"map_bundle_count"`
+	MapLayerCount            int       `json:"map_layer_count"`
+	MapRendererVersion       *string   `json:"map_renderer_version"`
+	MapsAvailable            bool      `json:"maps_available"`
+	MetricRowCount           int       `json:"metric_row_count"`
+	ModifiedAt               time.Time `json:"modified_at"`
+	MotionFallbackIssueCount int       `json:"motion_fallback_issue_count"`
+	OperationalEligible      bool      `json:"operational_eligible"`
+	PrimaryTruthKind         string    `json:"primary_truth_kind"`
+	ProfileVersion           string    `json:"profile_version"`
+	RunId                    string    `json:"run_id"`
+	SchemaVersion            string    `json:"schema_version"`
+	SkillStatus              string    `json:"skill_status"`
+}
+
+// AlgorithmVerificationSkillComparison defines model for AlgorithmVerificationSkillComparison.
+type AlgorithmVerificationSkillComparison struct {
+	Baseline                    string             `json:"baseline"`
+	BootstrapSampleCount        int                `json:"bootstrap_sample_count"`
+	CaseMeanDifferences         map[string]float64 `json:"case_mean_differences"`
+	EvaluableCaseCount          int                `json:"evaluable_case_count"`
+	MaximumLeadMinutes          int                `json:"maximum_lead_minutes"`
+	MeanDifference95pctInterval []*float64         `json:"mean_difference_95pct_interval"`
+	MeanFssDifference           *float64           `json:"mean_fss_difference"`
+	PassesCaseGate              bool               `json:"passes_case_gate"`
+	PositiveCaseCount           int                `json:"positive_case_count"`
+	ThresholdMmH                float64            `json:"threshold_mm_h"`
+	TotalWetCaseCount           int                `json:"total_wet_case_count"`
+	WindowPixels                int                `json:"window_pixels"`
+}
+
+// AlgorithmVerificationSkillSummary defines model for AlgorithmVerificationSkillSummary.
+type AlgorithmVerificationSkillSummary struct {
+	ComparisonMetric string                                 `json:"comparison_metric"`
+	Comparisons      []AlgorithmVerificationSkillComparison `json:"comparisons"`
+	Status           string                                 `json:"status"`
 }
 
 // AnalysisCycle defines model for AnalysisCycle.
@@ -923,11 +1133,32 @@ type RunId = openapi_types.UUID
 // ScanId defines model for ScanId.
 type ScanId = openapi_types.UUID
 
+// VerificationProfileVersion defines model for VerificationProfileVersion.
+type VerificationProfileVersion = string
+
+// VerificationRunId defines model for VerificationRunId.
+type VerificationRunId = string
+
 // Conflict defines model for Conflict.
 type Conflict = ErrorResponse
 
 // NotFound defines model for NotFound.
 type NotFound = ErrorResponse
+
+// GetAlgorithmVerificationMapFrameParams defines parameters for GetAlgorithmVerificationMapFrame.
+type GetAlgorithmVerificationMapFrameParams struct {
+	CaseId      string    `form:"case_id" json:"case_id"`
+	IssueTime   time.Time `form:"issue_time" json:"issue_time"`
+	LeadMinutes int       `form:"lead_minutes" json:"lead_minutes"`
+}
+
+// ListAlgorithmVerificationMetricsParams defines parameters for ListAlgorithmVerificationMetrics.
+type ListAlgorithmVerificationMetricsParams struct {
+	CaseId       string    `form:"case_id" json:"case_id"`
+	IssueTime    time.Time `form:"issue_time" json:"issue_time"`
+	ThresholdMmH float64   `form:"threshold_mm_h" json:"threshold_mm_h"`
+	WindowPixels int       `form:"window_pixels" json:"window_pixels"`
+}
 
 // ListAnalysisCyclesParams defines parameters for ListAnalysisCycles.
 type ListAnalysisCyclesParams struct {
@@ -1001,6 +1232,21 @@ type ServerInterface interface {
 	// RerunForecastRun Create a new run using the selected run inputs and configuration
 	// (POST /admin/runs/{run_id}/rerun)
 	RerunForecastRun(w http.ResponseWriter, r *http.Request, runId RunId)
+	// ListAlgorithmVerificationRuns List available offline algorithm-verification runs
+	// (GET /algorithm-verification/runs)
+	ListAlgorithmVerificationRuns(w http.ResponseWriter, r *http.Request)
+	// GetAlgorithmVerificationRun Get one offline algorithm-verification run and its filter dimensions
+	// (GET /algorithm-verification/runs/{profile_version}/{run_id})
+	GetAlgorithmVerificationRun(w http.ResponseWriter, r *http.Request, profileVersion VerificationProfileVersion, runId VerificationRunId)
+	// GetAlgorithmVerificationMapAsset Read one immutable PNG explicitly listed by a verification map manifest
+	// (GET /algorithm-verification/runs/{profile_version}/{run_id}/map-assets/{case_id}/{issue_key}/{asset_id})
+	GetAlgorithmVerificationMapAsset(w http.ResponseWriter, r *http.Request, profileVersion VerificationProfileVersion, runId VerificationRunId, caseId string, issueKey string, assetId string)
+	// GetAlgorithmVerificationMapFrame Get georeferenced truth and deterministic-forecast map evidence for one lead
+	// (GET /algorithm-verification/runs/{profile_version}/{run_id}/map-frame)
+	GetAlgorithmVerificationMapFrame(w http.ResponseWriter, r *http.Request, profileVersion VerificationProfileVersion, runId VerificationRunId, params GetAlgorithmVerificationMapFrameParams)
+	// ListAlgorithmVerificationMetrics List one issue's model metrics for a threshold and FSS window
+	// (GET /algorithm-verification/runs/{profile_version}/{run_id}/metrics)
+	ListAlgorithmVerificationMetrics(w http.ResponseWriter, r *http.Request, profileVersion VerificationProfileVersion, runId VerificationRunId, params ListAlgorithmVerificationMetricsParams)
 	// ListAnalysisCycles List fixed-time multi-radar analysis workflows
 	// (GET /analysis-cycles)
 	ListAnalysisCycles(w http.ResponseWriter, r *http.Request, params ListAnalysisCyclesParams)
@@ -1103,6 +1349,36 @@ func (_ Unimplemented) EnableModel(w http.ResponseWriter, r *http.Request, model
 // RerunForecastRun Create a new run using the selected run inputs and configuration
 // (POST /admin/runs/{run_id}/rerun)
 func (_ Unimplemented) RerunForecastRun(w http.ResponseWriter, r *http.Request, runId RunId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListAlgorithmVerificationRuns List available offline algorithm-verification runs
+// (GET /algorithm-verification/runs)
+func (_ Unimplemented) ListAlgorithmVerificationRuns(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAlgorithmVerificationRun Get one offline algorithm-verification run and its filter dimensions
+// (GET /algorithm-verification/runs/{profile_version}/{run_id})
+func (_ Unimplemented) GetAlgorithmVerificationRun(w http.ResponseWriter, r *http.Request, profileVersion VerificationProfileVersion, runId VerificationRunId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAlgorithmVerificationMapAsset Read one immutable PNG explicitly listed by a verification map manifest
+// (GET /algorithm-verification/runs/{profile_version}/{run_id}/map-assets/{case_id}/{issue_key}/{asset_id})
+func (_ Unimplemented) GetAlgorithmVerificationMapAsset(w http.ResponseWriter, r *http.Request, profileVersion VerificationProfileVersion, runId VerificationRunId, caseId string, issueKey string, assetId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAlgorithmVerificationMapFrame Get georeferenced truth and deterministic-forecast map evidence for one lead
+// (GET /algorithm-verification/runs/{profile_version}/{run_id}/map-frame)
+func (_ Unimplemented) GetAlgorithmVerificationMapFrame(w http.ResponseWriter, r *http.Request, profileVersion VerificationProfileVersion, runId VerificationRunId, params GetAlgorithmVerificationMapFrameParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListAlgorithmVerificationMetrics List one issue's model metrics for a threshold and FSS window
+// (GET /algorithm-verification/runs/{profile_version}/{run_id}/metrics)
+func (_ Unimplemented) ListAlgorithmVerificationMetrics(w http.ResponseWriter, r *http.Request, profileVersion VerificationProfileVersion, runId VerificationRunId, params ListAlgorithmVerificationMetricsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1346,6 +1622,284 @@ func (siw *ServerInterfaceWrapper) RerunForecastRun(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RerunForecastRun(w, r, runId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAlgorithmVerificationRuns operation middleware
+func (siw *ServerInterfaceWrapper) ListAlgorithmVerificationRuns(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAlgorithmVerificationRuns(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAlgorithmVerificationRun operation middleware
+func (siw *ServerInterfaceWrapper) GetAlgorithmVerificationRun(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "profile_version" -------------
+	var profileVersion VerificationProfileVersion
+
+	err = runtime.BindStyledParameterWithOptions("simple", "profile_version", chi.URLParam(r, "profile_version"), &profileVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "profile_version", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "run_id" -------------
+	var runId VerificationRunId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "run_id", chi.URLParam(r, "run_id"), &runId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "run_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAlgorithmVerificationRun(w, r, profileVersion, runId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAlgorithmVerificationMapAsset operation middleware
+func (siw *ServerInterfaceWrapper) GetAlgorithmVerificationMapAsset(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "profile_version" -------------
+	var profileVersion VerificationProfileVersion
+
+	err = runtime.BindStyledParameterWithOptions("simple", "profile_version", chi.URLParam(r, "profile_version"), &profileVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "profile_version", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "run_id" -------------
+	var runId VerificationRunId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "run_id", chi.URLParam(r, "run_id"), &runId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "run_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "case_id" -------------
+	var caseId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "case_id", chi.URLParam(r, "case_id"), &caseId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "case_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "issue_key" -------------
+	var issueKey string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "issue_key", chi.URLParam(r, "issue_key"), &issueKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "issue_key", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "asset_id" -------------
+	var assetId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "asset_id", chi.URLParam(r, "asset_id"), &assetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "asset_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAlgorithmVerificationMapAsset(w, r, profileVersion, runId, caseId, issueKey, assetId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAlgorithmVerificationMapFrame operation middleware
+func (siw *ServerInterfaceWrapper) GetAlgorithmVerificationMapFrame(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "profile_version" -------------
+	var profileVersion VerificationProfileVersion
+
+	err = runtime.BindStyledParameterWithOptions("simple", "profile_version", chi.URLParam(r, "profile_version"), &profileVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "profile_version", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "run_id" -------------
+	var runId VerificationRunId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "run_id", chi.URLParam(r, "run_id"), &runId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "run_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAlgorithmVerificationMapFrameParams
+
+	// ------------- Required query parameter "case_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "case_id", r.URL.Query(), &params.CaseId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "case_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "case_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "issue_time" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "issue_time", r.URL.Query(), &params.IssueTime, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "issue_time"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "issue_time", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "lead_minutes" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "lead_minutes", r.URL.Query(), &params.LeadMinutes, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "lead_minutes"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "lead_minutes", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAlgorithmVerificationMapFrame(w, r, profileVersion, runId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAlgorithmVerificationMetrics operation middleware
+func (siw *ServerInterfaceWrapper) ListAlgorithmVerificationMetrics(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "profile_version" -------------
+	var profileVersion VerificationProfileVersion
+
+	err = runtime.BindStyledParameterWithOptions("simple", "profile_version", chi.URLParam(r, "profile_version"), &profileVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "profile_version", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "run_id" -------------
+	var runId VerificationRunId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "run_id", chi.URLParam(r, "run_id"), &runId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "run_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAlgorithmVerificationMetricsParams
+
+	// ------------- Required query parameter "case_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "case_id", r.URL.Query(), &params.CaseId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "case_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "case_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "issue_time" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "issue_time", r.URL.Query(), &params.IssueTime, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "issue_time"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "issue_time", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "threshold_mm_h" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "threshold_mm_h", r.URL.Query(), &params.ThresholdMmH, runtime.BindQueryParameterOptions{Type: "number", Format: "double"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "threshold_mm_h"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "threshold_mm_h", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "window_pixels" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "window_pixels", r.URL.Query(), &params.WindowPixels, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "window_pixels"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "window_pixels", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAlgorithmVerificationMetrics(w, r, profileVersion, runId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2465,6 +3019,21 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/verification/summary", wrapper.GetVerificationSummary)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/algorithm-verification/runs", wrapper.ListAlgorithmVerificationRuns)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/algorithm-verification/runs/{profile_version}/{run_id}", wrapper.GetAlgorithmVerificationRun)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/algorithm-verification/runs/{profile_version}/{run_id}/metrics", wrapper.ListAlgorithmVerificationMetrics)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/algorithm-verification/runs/{profile_version}/{run_id}/map-frame", wrapper.GetAlgorithmVerificationMapFrame)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/algorithm-verification/runs/{profile_version}/{run_id}/map-assets/{case_id}/{issue_key}/{asset_id}", wrapper.GetAlgorithmVerificationMapAsset)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/system/status", wrapper.GetSystemStatus)
