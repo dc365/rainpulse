@@ -11,6 +11,22 @@ class RadarGridConfigError(ValueError):
     """Raised when an RP-009 grid profile is incomplete or inconsistent."""
 
 
+# Phase-1 Hybrid Scan is the first irreversible selection step before QPE and
+# nowcasting. Confirmed non-meteorological echoes must therefore be rejected
+# here rather than merely carried as low-quality observations.
+PHASE1_HARD_REJECT_FLAGS = frozenset(
+    {
+        "MISSING",
+        "HARDWARE_ANOMALY",
+        "RADIAL_INTERFERENCE",
+        "GROUND_CLUTTER",
+        "SEA_CLUTTER",
+        "ANOMALOUS_PROPAGATION",
+        "BIOLOGICAL_ECHO",
+    }
+)
+
+
 @dataclass(frozen=True)
 class DEMConfig:
     asset_version: str
@@ -166,3 +182,9 @@ def _validate_profile(profile: RadarGridProfile) -> None:
         raise RadarGridConfigError("maximum beam height must be positive")
     if profile.hybrid_scan.beam_height_quality_scale_m <= 0:
         raise RadarGridConfigError("beam height quality scale must be positive")
+    reject_flags = set(profile.hybrid_scan.reject_flags)
+    missing = sorted(PHASE1_HARD_REJECT_FLAGS - reject_flags)
+    if missing:
+        raise RadarGridConfigError(
+            "Hybrid Scan reject_flags omit Phase-1 hard rejects: " + ",".join(missing)
+        )
