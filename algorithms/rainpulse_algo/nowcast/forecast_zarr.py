@@ -18,6 +18,7 @@ from .pysteps_profile import PystepsLKProfile
 
 CONTRACT_NAME = "rainpulse.forecast-output"
 CONTRACT_VERSION = "1.1"
+CONFIDENCE_KIND = "technical_forecast_quality_index_not_calibrated_probability"
 
 
 def build_forecast_output_zarr_store(
@@ -45,6 +46,7 @@ def build_forecast_output_zarr_store(
         [issue_time.replace(tzinfo=None) + timedelta(minutes=int(value)) for value in lead_minutes],
         dtype="datetime64[ns]",
     )
+    motion_valid_fraction = float(np.mean(result.motion_valid_mask == 1))
     summary = {
         "schema_version": "1.0",
         "run_id": str(run_id),
@@ -61,6 +63,10 @@ def build_forecast_output_zarr_store(
         "valid_from": (issue_time + timedelta(minutes=5)).isoformat(),
         "valid_to": (issue_time + timedelta(minutes=120)).isoformat(),
         "motion_fallback_used": result.motion_fallback_used,
+        "motion_fallback_reason": result.motion_fallback_reason,
+        "motion_feature_count": result.motion_feature_count,
+        "motion_valid_fraction": motion_valid_fraction,
+        "missing_buffer_pixels": profile.motion.missing_buffer_pixels,
         "trackable_rain_pixel_count": result.trackable_rain_pixel_count,
         "global_translation_x_pixels_per_step": result.global_translation_pixels_per_step[0],
         "global_translation_y_pixels_per_step": result.global_translation_pixels_per_step[1],
@@ -71,6 +77,7 @@ def build_forecast_output_zarr_store(
         "maximum_forecast_rate_mm_h": _finite_max(result.rain_rate),
         "baseline_models": list(profile.extrapolation.baselines),
         "missing_policy": profile.motion.missing_policy,
+        "confidence_kind": CONFIDENCE_KIND,
         "runtime_ms": runtime_ms,
     }
 
@@ -97,7 +104,12 @@ def build_forecast_output_zarr_store(
             "motion_method": profile.motion.method,
             "extrapolation_method": profile.extrapolation.method,
             "missing_policy": profile.motion.missing_policy,
+            "missing_buffer_pixels": profile.motion.missing_buffer_pixels,
             "motion_fallback_used": result.motion_fallback_used,
+            "motion_fallback_reason": result.motion_fallback_reason,
+            "motion_feature_count": result.motion_feature_count,
+            "motion_valid_fraction": motion_valid_fraction,
+            "confidence_kind": CONFIDENCE_KIND,
             "baseline_models": list(profile.extrapolation.baselines),
             "runtime_ms": runtime_ms,
             "created_at": datetime.now(UTC).isoformat(),
@@ -120,6 +132,7 @@ def build_forecast_output_zarr_store(
         "confidence": result.confidence,
         "motion_u": result.motion_u,
         "motion_v": result.motion_v,
+        "motion_valid_mask": result.motion_valid_mask,
         "persistence_rain_rate": result.persistence_rain_rate,
         "persistence_valid_mask": result.persistence_valid_mask,
         "translation_rain_rate": result.translation_rain_rate,
@@ -193,6 +206,16 @@ def validate_forecast_output_zarr_store(
     for name, (field_shape, dtype) in expected.items():
         if name not in root or root[name].shape != field_shape or root[name].dtype != dtype:
             raise PystepsLKInputError(f"ForecastOutput field {name} has invalid shape or dtype")
+    if "motion_valid_mask" in root:
+        motion_mask = root["motion_valid_mask"][:]
+        if motion_mask.shape != latitude.shape + longitude.shape:
+            raise PystepsLKInputError("ForecastOutput motion-valid mask has invalid shape")
+        if motion_mask.dtype != np.dtype("uint8") or np.any(
+            (motion_mask != 0) & (motion_mask != 1)
+        ):
+            raise PystepsLKInputError("ForecastOutput motion-valid mask is not binary")
+    else:
+        motion_mask = np.ones((len(latitude), len(longitude)), dtype="uint8")
     masks = {
         "output_valid_mask": root["output_valid_mask"][:],
         "persistence_valid_mask": root["persistence_valid_mask"][:],
@@ -222,6 +245,9 @@ def validate_forecast_output_zarr_store(
         raise PystepsLKInputError("ForecastOutput confidence missing state is invalid")
     if np.any((confidence[output_valid] < 0) | (confidence[output_valid] > 1)):
         raise PystepsLKInputError("ForecastOutput confidence is outside [0, 1]")
+    confidence_kind = root.attrs.get("confidence_kind")
+    if confidence_kind not in {None, CONFIDENCE_KIND}:
+        raise PystepsLKInputError("ForecastOutput confidence semantic is invalid")
     if np.any(~np.isfinite(root["motion_u"][:])) or np.any(~np.isfinite(root["motion_v"][:])):
         raise PystepsLKInputError("ForecastOutput motion vectors must be finite")
     for name, count in (("accum_60", 12), ("accum_120", 24)):
@@ -247,6 +273,12 @@ def validate_forecast_output_zarr_store(
         or summary.get("lead_step_minutes") != 5
     ):
         raise PystepsLKInputError("ForecastOutput summary identity is invalid")
+    if "motion_valid_mask" in root:
+        actual_fraction = float(np.mean(motion_mask == 1))
+        if not np.isclose(summary.get("motion_valid_fraction"), actual_fraction):
+            raise PystepsLKInputError("ForecastOutput motion-valid summary differs")
+        if summary.get("confidence_kind") != CONFIDENCE_KIND:
+            raise PystepsLKInputError("ForecastOutput confidence kind differs from contract")
     return {
         "shape": (1, *shape),
         "lead_count": 24,
@@ -254,6 +286,9 @@ def validate_forecast_output_zarr_store(
         "last_lead_valid_coverage_ratio": float(np.mean(output_valid[-1])),
         "maximum_forecast_rate_mm_h": _finite_max(root["rain_rate"][:]),
         "motion_fallback_used": bool(summary["motion_fallback_used"]),
+        "motion_fallback_reason": summary.get("motion_fallback_reason"),
+        "motion_feature_count": int(summary.get("motion_feature_count", 0)),
+        "motion_valid_fraction": float(np.mean(motion_mask == 1)),
         "object_count": len(objects),
         "size_bytes": sum(len(value) for value in objects.values()),
     }
@@ -274,7 +309,19 @@ def _attributes(name: str) -> dict[str, Any]:
         return {"units": "mm", "missing_value": "NaN"}
     if name in {"motion_u", "motion_v"}:
         return {"units": "m s-1"}
-    return {"units": "1", "missing_value": "NaN" if name == "confidence" else 0}
+    if name == "motion_valid_mask":
+        return {
+            "units": "1",
+            "long_name": "motion estimation domain after missing-boundary buffering",
+        }
+    if name == "confidence":
+        return {
+            "units": "1",
+            "missing_value": "NaN",
+            "long_name": "technical forecast quality index",
+            "comment": "Not a calibrated forecast probability.",
+        }
+    return {"units": "1", "missing_value": 0}
 
 
 def _finite_max(values: np.ndarray) -> float:
