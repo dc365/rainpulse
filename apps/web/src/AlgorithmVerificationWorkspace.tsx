@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { CSSProperties, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 
 import type { components } from './api/generated/schema'
 import { VerificationMapMatrix } from './VerificationMapMatrix'
+import './verification.css'
 
 type RunSummary = components['schemas']['AlgorithmVerificationRunSummary']
 type RunDetail = components['schemas']['AlgorithmVerificationRunDetail']
@@ -14,13 +15,14 @@ type VerificationMapFrame = components['schemas']['AlgorithmVerificationMapFrame
 const modelLabels: Record<string, string> = {
   lk: 'pySTEPS-LK',
   persistence: '持续性',
-  translation: '平移基线',
+  translation: '基于 LK 的整场平移',
+  phase_correlation: '独立相位相关平移',
 }
 
 const statusLabels: Record<string, string> = {
-  lk_supported: 'LK 获得支持',
-  translation_baseline_retained: '保留平移基线',
-  skill_not_demonstrated: '尚未证明技能',
+  lk_supported: '通过本轮工程门槛',
+  translation_baseline_retained: '尚未稳定超过平移基线',
+  skill_not_demonstrated: '尚未证明稳定增益',
   insufficient_evidence: '证据不足',
 }
 
@@ -32,16 +34,24 @@ interface AlgorithmVerificationWorkspaceProps {
   refreshToken: number
 }
 
+interface LeadRow {
+  lead: number
+  lk?: VerificationMetric
+  baseline?: VerificationMetric
+  delta: number | null
+}
+
 export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerificationWorkspaceProps) {
+  const initialQuery = useMemo(readVerificationQuery, [])
   const [runs, setRuns] = useState<RunSummary[]>([])
-  const [selectedRunKey, setSelectedRunKey] = useState('')
+  const [selectedRunKey, setSelectedRunKey] = useState(initialQuery.run)
   const [detail, setDetail] = useState<RunDetail | null>(null)
-  const [selectedCaseID, setSelectedCaseID] = useState('')
-  const [selectedIssueTime, setSelectedIssueTime] = useState('')
-  const [threshold, setThreshold] = useState(5)
-  const [windowPixels, setWindowPixels] = useState(11)
-  const [baseline, setBaseline] = useState('translation')
-  const [selectedLeadMinutes, setSelectedLeadMinutes] = useState(60)
+  const [selectedCaseID, setSelectedCaseID] = useState(initialQuery.caseID)
+  const [selectedIssueTime, setSelectedIssueTime] = useState(initialQuery.issueTime)
+  const [threshold, setThreshold] = useState(initialQuery.threshold ?? 5)
+  const [windowPixels, setWindowPixels] = useState(initialQuery.windowPixels ?? 11)
+  const [baseline, setBaseline] = useState(initialQuery.baseline || 'translation')
+  const [selectedLeadMinutes, setSelectedLeadMinutes] = useState(initialQuery.leadMinutes ?? 60)
   const [metrics, setMetrics] = useState<VerificationMetric[]>([])
   const [mapFrame, setMapFrame] = useState<VerificationMapFrame | null>(null)
   const [mapError, setMapError] = useState<string | null>(null)
@@ -54,9 +64,8 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
 
   useEffect(() => {
     const controller = new AbortController()
-    const kickoff = window.setTimeout(() => {
-      setLoadingRuns(true)
-      void fetch('/api/v1/algorithm-verification/runs', { signal: controller.signal })
+    setLoadingRuns(true)
+    void fetch('/api/v1/algorithm-verification/runs', { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error(`验证目录响应异常（${response.status}）`)
         return response.json() as Promise<components['schemas']['AlgorithmVerificationRunList']>
@@ -70,18 +79,14 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
         setError(null)
       })
       .catch((requestError: unknown) => {
-        if (!(requestError instanceof DOMException && requestError.name === 'AbortError')) {
+        if (!isAbortError(requestError)) {
           setError(requestError instanceof Error ? requestError.message : '验证目录读取失败')
         }
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoadingRuns(false)
       })
-    }, 0)
-    return () => {
-      controller.abort()
-      window.clearTimeout(kickoff)
-    }
+    return () => controller.abort()
   }, [refreshToken])
 
   const selectedRun = useMemo(
@@ -90,12 +95,15 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
   )
 
   useEffect(() => {
-    if (!selectedRun) return
+    if (!selectedRun) {
+      setDetail(null)
+      return
+    }
     const controller = new AbortController()
-    const kickoff = window.setTimeout(() => {
-      setLoadingDetail(true)
-      const url = `/api/v1/algorithm-verification/runs/${encodeURIComponent(selectedRun.profile_version)}/${encodeURIComponent(selectedRun.run_id)}`
-      void fetch(url, { signal: controller.signal })
+    setLoadingDetail(true)
+    setDetail(null)
+    const url = `/api/v1/algorithm-verification/runs/${encodeURIComponent(selectedRun.profile_version)}/${encodeURIComponent(selectedRun.run_id)}`
+    void fetch(url, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error(`验证运行响应异常（${response.status}）`)
         return response.json() as Promise<RunDetail>
@@ -114,38 +122,36 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
         setError(null)
       })
       .catch((requestError: unknown) => {
-        if (!(requestError instanceof DOMException && requestError.name === 'AbortError')) {
-          setDetail(null)
+        if (!isAbortError(requestError)) {
           setError(requestError instanceof Error ? requestError.message : '验证运行读取失败')
         }
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoadingDetail(false)
       })
-    }, 0)
-    return () => {
-      controller.abort()
-      window.clearTimeout(kickoff)
-    }
-    // Selection is intentionally preserved only when it exists in the next run.
+    return () => controller.abort()
+    // The selected case/issue is intentionally reused only when the next run contains it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedRun])
 
   useEffect(() => {
-    if (!selectedRun || !selectedCaseID || !selectedIssueTime) return
+    if (!selectedRun || !selectedCaseID || !selectedIssueTime) {
+      setMetrics([])
+      return
+    }
     const controller = new AbortController()
-    const kickoff = window.setTimeout(() => {
-      const query = new URLSearchParams({
-        case_id: selectedCaseID,
-        issue_time: selectedIssueTime,
-        threshold_mm_h: String(threshold),
-        window_pixels: String(windowPixels),
-      })
-      setLoadingMetrics(true)
-      void fetch(
-        `/api/v1/algorithm-verification/runs/${encodeURIComponent(selectedRun.profile_version)}/${encodeURIComponent(selectedRun.run_id)}/metrics?${query}`,
-        { signal: controller.signal },
-      )
+    const query = new URLSearchParams({
+      case_id: selectedCaseID,
+      issue_time: selectedIssueTime,
+      threshold_mm_h: String(threshold),
+      window_pixels: String(windowPixels),
+    })
+    setLoadingMetrics(true)
+    setMetrics([])
+    void fetch(
+      `/api/v1/algorithm-verification/runs/${encodeURIComponent(selectedRun.profile_version)}/${encodeURIComponent(selectedRun.run_id)}/metrics?${query}`,
+      { signal: controller.signal },
+    )
       .then(async (response) => {
         if (!response.ok) throw new Error(`验证指标响应异常（${response.status}）`)
         return response.json() as Promise<components['schemas']['AlgorithmVerificationMetricList']>
@@ -155,38 +161,34 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
         setError(null)
       })
       .catch((requestError: unknown) => {
-        if (!(requestError instanceof DOMException && requestError.name === 'AbortError')) {
-          setMetrics([])
+        if (!isAbortError(requestError)) {
           setError(requestError instanceof Error ? requestError.message : '验证指标读取失败')
         }
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoadingMetrics(false)
       })
-    }, 0)
-    return () => {
-      controller.abort()
-      window.clearTimeout(kickoff)
-    }
+    return () => controller.abort()
   }, [selectedCaseID, selectedIssueTime, selectedRun, threshold, windowPixels])
 
   useEffect(() => {
     if (!selectedRun || !selectedRun.maps_available || !selectedCaseID || !selectedIssueTime) {
+      setMapFrame(null)
       return
     }
     const controller = new AbortController()
-    const kickoff = window.setTimeout(() => {
-      const query = new URLSearchParams({
-        case_id: selectedCaseID,
-        issue_time: selectedIssueTime,
-        lead_minutes: String(selectedLeadMinutes),
-      })
-      setLoadingMap(true)
-      setMapError(null)
-      void fetch(
-        `/api/v1/algorithm-verification/runs/${encodeURIComponent(selectedRun.profile_version)}/${encodeURIComponent(selectedRun.run_id)}/map-frame?${query}`,
-        { signal: controller.signal },
-      )
+    const query = new URLSearchParams({
+      case_id: selectedCaseID,
+      issue_time: selectedIssueTime,
+      lead_minutes: String(selectedLeadMinutes),
+    })
+    setLoadingMap(true)
+    setMapFrame(null)
+    setMapError(null)
+    void fetch(
+      `/api/v1/algorithm-verification/runs/${encodeURIComponent(selectedRun.profile_version)}/${encodeURIComponent(selectedRun.run_id)}/map-frame?${query}`,
+      { signal: controller.signal },
+    )
       .then(async (response) => {
         if (!response.ok) throw new Error(`验证地图响应异常（${response.status}）`)
         return response.json() as Promise<VerificationMapFrame>
@@ -196,19 +198,14 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
         setMapError(null)
       })
       .catch((requestError: unknown) => {
-        if (!(requestError instanceof DOMException && requestError.name === 'AbortError')) {
-          setMapFrame(null)
+        if (!isAbortError(requestError)) {
           setMapError(requestError instanceof Error ? requestError.message : '验证地图读取失败')
         }
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoadingMap(false)
       })
-    }, 0)
-    return () => {
-      controller.abort()
-      window.clearTimeout(kickoff)
-    }
+    return () => controller.abort()
   }, [selectedCaseID, selectedIssueTime, selectedLeadMinutes, selectedRun])
 
   const leadMinutes = useMemo(() => detail?.filters.lead_minutes ?? [], [detail])
@@ -219,9 +216,22 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
         const index = leadMinutes.indexOf(current)
         return leadMinutes[(index + 1 + leadMinutes.length) % leadMinutes.length]
       })
-    }, 1400)
+    }, 1800)
     return () => window.clearInterval(timer)
   }, [leadMinutes, playing])
+
+  useEffect(() => {
+    if (!selectedRunKey || !selectedCaseID || !selectedIssueTime) return
+    const query = new URLSearchParams(window.location.search)
+    query.set('run', selectedRunKey)
+    query.set('case', selectedCaseID)
+    query.set('issue', selectedIssueTime)
+    query.set('lead', String(selectedLeadMinutes))
+    query.set('baseline', baseline)
+    query.set('threshold', String(threshold))
+    query.set('window', String(windowPixels))
+    window.history.replaceState(null, '', `${window.location.pathname}?${query}${window.location.hash}`)
+  }, [baseline, selectedCaseID, selectedIssueTime, selectedLeadMinutes, selectedRunKey, threshold, windowPixels])
 
   const activeCase = detail?.cases.find((item) => item.case_id === selectedCaseID) ?? null
   const selectedRows = useMemo(
@@ -240,312 +250,262 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
     : null
 
   return (
-    <section className="verification-page" aria-labelledby="verification-title">
-      <header className="page-heading verification-heading">
+    <section className="verification-page verification-page-rp017" aria-labelledby="verification-title">
+      <header className="page-heading verification-heading verification-heading-rp017">
         <div>
-          <p className="section-kicker">Algorithm evidence / RP-016</p>
+          <p className="section-kicker">算法验证 · RP-017</p>
           <h1 id="verification-title">算法离线验证</h1>
-          <p>用冻结实况与强基线核对通用短临算法；当前数据集为美国 MRMS，后续福建案例沿用同一指标契约。</p>
+          <p>先看结论，再看空间差异，最后展开评分明细。当前数据为美国 MRMS，仅用于工程验证。</p>
         </div>
-        <span className="verification-boundary">工程证据 · 非业务验收</span>
+        <span className="verification-boundary">工程证据 · 非福建业务验收</span>
       </header>
 
       {error ? <div className="error-banner" role="alert"><strong>验证数据读取失败</strong><span>{error}</span></div> : null}
-
-      {selectedRun ? (
-        <section className="verification-ledger" aria-label="验证运行摘要">
-          <LedgerItem label="完成起报" value={`${selectedRun.completed_issue_count}`} note={`${selectedRun.failed_issue_count} 个失败`} />
-          <LedgerItem label="评分记录" value={selectedRun.metric_row_count.toLocaleString('zh-CN')} note="共同有效域" />
-          <LedgerItem label="运动回退" value={`${selectedRun.motion_fallback_issue_count}`} note="可追踪而非隐藏" tone={selectedRun.motion_fallback_issue_count > 0 ? 'caution' : 'neutral'} />
-          <LedgerItem label="技能门禁" value={statusLabels[selectedRun.skill_status] ?? selectedRun.skill_status} note="LK 对两个基线" tone={selectedRun.skill_status === 'lk_supported' ? 'supported' : 'caution'} />
-        </section>
-      ) : null}
-
       {loadingRuns ? <p className="verification-empty">正在读取离线验证目录…</p> : null}
       {!loadingRuns && runs.length === 0 ? (
         <p className="verification-empty">尚未挂载算法验证报告。运行产物保持在服务器，只通过控制面读取。</p>
       ) : null}
 
       {selectedRun ? (
-        <div className="verification-layout">
-          <VerificationNavigator
-            runs={runs}
-            selectedRunKey={selectedRunKey}
-            cases={detail?.cases ?? []}
-            selectedCaseID={selectedCaseID}
-            onRunChange={(key) => {
-              setPlaying(false)
-              setSelectedRunKey(key)
-            }}
-            onCaseChange={(item) => {
-              setPlaying(false)
-              setSelectedCaseID(item.case_id)
-              setSelectedIssueTime(nextIssue(item, ''))
-            }}
-          />
+        <>
+          <VerificationConclusion run={selectedRun} detail={detail} />
 
-          <section className="verification-console" aria-live="polite">
-            {loadingDetail || !detail ? (
-              <p className="verification-empty">正在建立验证索引…</p>
-            ) : (
-              <>
-                <header className="verification-console-heading">
-                  <div>
-                    <span>{truthLabels[detail.run.primary_truth_kind] ?? detail.run.primary_truth_kind}</span>
-                    <strong>{detail.run.profile_version}</strong>
-                    <small>{detail.run.run_id} · {formatUTC(detail.run.modified_at)}</small>
-                  </div>
-                  <span className={`verification-status ${detail.run.skill_status === 'lk_supported' ? 'supported' : 'caution'}`}>
-                    {statusLabels[detail.run.skill_status] ?? detail.run.skill_status}
-                  </span>
-                </header>
+          {loadingDetail || !detail ? (
+            <p className="verification-empty">正在建立验证索引…</p>
+          ) : (
+            <section className="verification-workbench" aria-live="polite">
+              <VerificationSelectionBar
+                runs={runs}
+                selectedRunKey={selectedRunKey}
+                onRunChange={(value) => {
+                  setPlaying(false)
+                  setSelectedRunKey(value)
+                }}
+                cases={detail.cases}
+                selectedCaseID={selectedCaseID}
+                onCaseChange={(caseID) => {
+                  const nextCase = detail.cases.find((item) => item.case_id === caseID) ?? null
+                  setPlaying(false)
+                  setSelectedCaseID(caseID)
+                  setSelectedIssueTime(nextIssue(nextCase, ''))
+                }}
+                activeCase={activeCase}
+                selectedIssueTime={selectedIssueTime}
+                onIssueChange={(value) => {
+                  setPlaying(false)
+                  setSelectedIssueTime(value)
+                }}
+                models={detail.filters.models}
+                baseline={baseline}
+                onBaselineChange={setBaseline}
+                thresholds={detail.filters.thresholds_mm_h}
+                threshold={threshold}
+                onThresholdChange={setThreshold}
+                windows={detail.filters.windows_pixels}
+                windowPixels={windowPixels}
+                onWindowChange={setWindowPixels}
+              />
 
-                <SkillGateMatrix
-                  comparisons={detail.skill_summary.comparisons}
-                  selectedBaseline={baseline}
-                  selectedThreshold={threshold}
-                  onSelect={(nextBaseline, nextThreshold) => {
-                    setBaseline(nextBaseline)
-                    setThreshold(nextThreshold)
-                  }}
-                />
+              <VerificationMapMatrix
+                frame={activeMapFrame}
+                baseline={baseline}
+                lkMetric={selectedLeadRow?.lk}
+                baselineMetric={selectedLeadRow?.baseline}
+                loading={loadingMap}
+                error={mapError}
+                mapsAvailable={detail.run.maps_available}
+              />
 
-                <div className="verification-controls">
-                  <ControlGroup label="比较基线">
-                    {detail.filters.models.filter((model) => model !== 'lk').map((model) => (
-                      <ChoiceButton key={model} active={baseline === model} onClick={() => setBaseline(model)}>
-                        {modelLabels[model] ?? model}
-                      </ChoiceButton>
-                    ))}
-                  </ControlGroup>
-                  <ControlGroup label="降水阈值">
-                    {detail.filters.thresholds_mm_h.map((value) => (
-                      <ChoiceButton key={value} active={threshold === value} onClick={() => setThreshold(value)}>
-                        {value} mm/h
-                      </ChoiceButton>
-                    ))}
-                  </ControlGroup>
-                  <ControlGroup label="FSS 邻域">
-                    {detail.filters.windows_pixels.map((value) => (
-                      <ChoiceButton key={value} active={windowPixels === value} onClick={() => setWindowPixels(value)}>
-                        {value} px
-                      </ChoiceButton>
-                    ))}
-                  </ControlGroup>
-                </div>
+              <LeadTimeline
+                rows={selectedRows}
+                loading={loadingMetrics}
+                selectedLead={selectedLeadMinutes}
+                playing={playing}
+                onTogglePlaying={() => setPlaying((value) => !value)}
+                onSelect={(lead) => {
+                  setPlaying(false)
+                  setSelectedLeadMinutes(lead)
+                }}
+              />
 
-                <IssueRail
+              <CurrentMetricStrip row={selectedLeadRow} baseline={baseline} />
+
+              <div className="verification-evidence-grid verification-evidence-grid-rp017">
+                <FSSChart rows={selectedRows} baseline={baseline} selectedLead={selectedLeadMinutes} />
+                <CurrentSliceCard
                   verificationCase={activeCase}
-                  selectedIssueTime={selectedIssueTime}
-                  onSelect={(value) => {
-                    setPlaying(false)
-                    setSelectedIssueTime(value)
-                  }}
+                  issueTime={selectedIssueTime}
+                  threshold={threshold}
+                  windowPixels={windowPixels}
+                  truthKind={detail.run.primary_truth_kind}
+                  row={selectedLeadRow}
                 />
+              </div>
 
-                <LeadEvidenceRail
-                  rows={selectedRows}
-                  loading={loadingMetrics}
-                  selectedLead={selectedLeadMinutes}
-                  onSelect={setSelectedLeadMinutes}
-                />
+              <details className="verification-details-panel">
+                <summary><span>展开通过门槛</span><small>案例级 FSS 增益与 95% 区间</small></summary>
+                <SkillGateMatrix comparisons={detail.skill_summary.comparisons} />
+              </details>
 
-                <VerificationMapMatrix
-                  frame={activeMapFrame}
-                  baseline={baseline}
-                  lkMetric={selectedLeadRow?.lk}
-                  baselineMetric={selectedLeadRow?.baseline}
-                  loading={loadingMap}
-                  error={mapError}
-                  mapsAvailable={detail.run.maps_available}
-                  playing={playing}
-                  onTogglePlaying={() => setPlaying((value) => !value)}
-                />
-
-                <div className="verification-evidence-grid">
-                  <FSSChart rows={selectedRows} baseline={baseline} />
-                  <EvidenceNotes
-                    verificationCase={activeCase}
-                    issueTime={selectedIssueTime}
-                    threshold={threshold}
-                    windowPixels={windowPixels}
-                    truthKind={detail.run.primary_truth_kind}
-                  />
-                </div>
-
+              <details className="verification-details-panel">
+                <summary><span>展开完整指标</span><small>当前案例、起报、阈值和邻域</small></summary>
                 <MetricTable rows={selectedRows} baseline={baseline} loading={loadingMetrics} />
-              </>
-            )}
-          </section>
-        </div>
+              </details>
+
+              <details className="verification-details-panel">
+                <summary><span>展开运行与数据溯源</span><small>版本、运行 ID 与证据边界</small></summary>
+                <VerificationProvenance run={detail.run} activeCase={activeCase} />
+              </details>
+            </section>
+          )}
+        </>
       ) : null}
     </section>
   )
 }
 
-function VerificationNavigator({
-  runs,
-  selectedRunKey,
-  cases,
-  selectedCaseID,
-  onRunChange,
-  onCaseChange,
-}: {
-  runs: RunSummary[]
-  selectedRunKey: string
-  cases: VerificationCase[]
-  selectedCaseID: string
-  onRunChange: (key: string) => void
-  onCaseChange: (item: VerificationCase) => void
-}) {
+function VerificationConclusion({ run, detail }: { run: RunSummary; detail: RunDetail | null }) {
+  const preferred = detail?.skill_summary.comparisons.find(
+    (item) => item.baseline === 'translation' && item.threshold_mm_h === 5,
+  ) ?? detail?.skill_summary.comparisons.find((item) => item.baseline === 'translation')
   return (
-    <aside className="verification-navigator" aria-label="验证运行与案例">
-      <div className="verification-nav-section">
-        <div className="verification-nav-heading"><span>Runs</span><strong>验证运行</strong></div>
-        <div className="verification-run-list">
-          {runs.map((run) => (
-            <button
-              type="button"
-              key={runKey(run)}
-              className={selectedRunKey === runKey(run) ? 'selected' : ''}
-              aria-pressed={selectedRunKey === runKey(run)}
-              onClick={() => onRunChange(runKey(run))}
-            >
-              <span className={`verification-run-mark ${run.skill_status === 'lk_supported' ? 'supported' : 'caution'}`} />
-              <span><strong>{run.run_id}</strong><small>{run.profile_version}</small></span>
-              <em>{run.completed_issue_count}</em>
-            </button>
-          ))}
-        </div>
+    <section className={`verification-conclusion ${run.skill_status === 'lk_supported' ? 'supported' : 'caution'}`} aria-label="验证结论">
+      <div className="verification-conclusion-copy">
+        <span>当前结论</span>
+        <strong>{statusLabels[run.skill_status] ?? run.skill_status}</strong>
+        <p>{conclusionSentence(run.skill_status)}</p>
       </div>
-      <div className="verification-nav-section case-section">
-        <div className="verification-nav-heading"><span>Frozen cases</span><strong>冻结案例</strong></div>
-        <div className="verification-case-list">
-          {cases.map((item) => (
-            <button
-              type="button"
-              key={item.case_id}
-              className={selectedCaseID === item.case_id ? 'selected' : ''}
-              aria-pressed={selectedCaseID === item.case_id}
-              onClick={() => onCaseChange(item)}
-            >
-              <span><strong>{formatCaseName(item.case_id)}</strong><small>{item.case_id}</small></span>
-              <em>{item.issue_times.length}</em>
-            </button>
-          ))}
-        </div>
+      <div className="verification-conclusion-metrics">
+        <ConclusionMetric label="完成起报" value={`${run.completed_issue_count}/${run.completed_issue_count + run.failed_issue_count}`} note={`${run.failed_issue_count} 个失败`} />
+        <ConclusionMetric label="对平移基线" value={formatSigned(preferred?.mean_fss_difference)} note="平均 FSS 差值" />
+        <ConclusionMetric label="运动回退" value={`${run.motion_fallback_issue_count}`} note="全部显式记录" />
+        <ConclusionMetric label="空间证据" value={`${run.map_bundle_count}`} note={`${run.map_layer_count.toLocaleString('zh-CN')} 个图层`} />
       </div>
-      <p className="verification-scope-note">当前结论只验证算法适配、因果重采样、LK 执行和确定性技巧，不验证福建雷达质控与业务可用性。</p>
-    </aside>
+      <p className="verification-conclusion-boundary">MRMS 结果不能替代福建极坐标质控、QI 拼图、QPE 标定和本地业务检验。</p>
+    </section>
   )
 }
 
-function SkillGateMatrix({
-  comparisons,
-  selectedBaseline,
-  selectedThreshold,
-  onSelect,
+function ConclusionMetric({ label, value, note }: { label: string; value: string; note: string }) {
+  return <div><span>{label}</span><strong>{value}</strong><small>{note}</small></div>
+}
+
+function VerificationSelectionBar({
+  runs,
+  selectedRunKey,
+  onRunChange,
+  cases,
+  selectedCaseID,
+  onCaseChange,
+  activeCase,
+  selectedIssueTime,
+  onIssueChange,
+  models,
+  baseline,
+  onBaselineChange,
+  thresholds,
+  threshold,
+  onThresholdChange,
+  windows,
+  windowPixels,
+  onWindowChange,
 }: {
-  comparisons: SkillComparison[]
-  selectedBaseline: string
-  selectedThreshold: number
-  onSelect: (baseline: string, threshold: number) => void
+  runs: RunSummary[]
+  selectedRunKey: string
+  onRunChange: (value: string) => void
+  cases: VerificationCase[]
+  selectedCaseID: string
+  onCaseChange: (value: string) => void
+  activeCase: VerificationCase | null
+  selectedIssueTime: string
+  onIssueChange: (value: string) => void
+  models: string[]
+  baseline: string
+  onBaselineChange: (value: string) => void
+  thresholds: number[]
+  threshold: number
+  onThresholdChange: (value: number) => void
+  windows: number[]
+  windowPixels: number
+  onWindowChange: (value: number) => void
 }) {
-  const baselines = ['persistence', 'translation'].filter((baseline) =>
-    comparisons.some((comparison) => comparison.baseline === baseline))
-  const thresholds = Array.from(new Set(comparisons.map((comparison) => comparison.threshold_mm_h))).sort((a, b) => a - b)
   return (
-    <section className="skill-gate-panel" aria-labelledby="skill-gate-title">
-      <header>
-        <div><span>Frozen acceptance gate</span><h2 id="skill-gate-title">LK 相对基线的 FSS 技巧</h2></div>
-        <small>湿案例 · +10～+60 分钟 · 11 px · 95% 区间</small>
-      </header>
-      <div className="skill-gate-grid" style={{ '--threshold-count': thresholds.length } as CSSProperties}>
-        <span className="skill-grid-corner">基线</span>
-        {thresholds.map((value) => <strong className="skill-grid-head" key={value}>{value} mm/h</strong>)}
-        {baselines.flatMap((baseline) => [
-          <strong className="skill-grid-baseline" key={`${baseline}-label`}>{modelLabels[baseline] ?? baseline}</strong>,
-          ...thresholds.map((value) => {
-            const comparison = comparisons.find((item) => item.baseline === baseline && item.threshold_mm_h === value)
-            const active = selectedBaseline === baseline && selectedThreshold === value
-            return (
-              <button
-                type="button"
-                key={`${baseline}-${value}`}
-                className={`${comparison?.passes_case_gate ? 'passed' : 'failed'} ${active ? 'active' : ''}`}
-                aria-pressed={active}
-                onClick={() => onSelect(baseline, value)}
-              >
-                <strong>{formatSigned(comparison?.mean_fss_difference)}</strong>
-                <small>{comparison ? `${comparison.positive_case_count}/${comparison.total_wet_case_count} 案例` : '无数据'}</small>
-                <span>{formatInterval(comparison?.mean_difference_95pct_interval)}</span>
-              </button>
-            )
-          }),
-        ])}
-      </div>
+    <section className="verification-filterbar" aria-label="验证筛选">
+      <label>
+        <span>验证运行</span>
+        <select aria-label="验证运行" value={selectedRunKey} onChange={(event) => onRunChange(event.target.value)}>
+          {runs.map((run) => <option key={runKey(run)} value={runKey(run)}>{run.run_id} · {run.profile_version}</option>)}
+        </select>
+      </label>
+      <label>
+        <span>典型案例</span>
+        <select aria-label="典型案例" value={selectedCaseID} onChange={(event) => onCaseChange(event.target.value)}>
+          {cases.map((item) => <option key={item.case_id} value={item.case_id}>{formatCaseName(item.case_id)} · {item.issue_times.length} 起报</option>)}
+        </select>
+      </label>
+      <label>
+        <span>起报时间</span>
+        <select aria-label="起报时间" value={selectedIssueTime} onChange={(event) => onIssueChange(event.target.value)}>
+          {activeCase?.issue_times.map((value) => <option key={value} value={value}>{formatUTC(value)}</option>)}
+        </select>
+      </label>
+      <ControlGroup label="比较基线">
+        {models.filter((model) => model !== 'lk').map((model) => (
+          <ChoiceButton key={model} active={baseline === model} onClick={() => onBaselineChange(model)}>
+            {modelLabels[model] ?? model}
+          </ChoiceButton>
+        ))}
+      </ControlGroup>
+      <ControlGroup label="降水阈值">
+        {thresholds.map((value) => (
+          <ChoiceButton key={value} active={threshold === value} onClick={() => onThresholdChange(value)}>
+            {value} mm/h
+          </ChoiceButton>
+        ))}
+      </ControlGroup>
+      <details className="verification-advanced-filter">
+        <summary>高级设置</summary>
+        <ControlGroup label="FSS 邻域">
+          {windows.map((value) => (
+            <ChoiceButton key={value} active={windowPixels === value} onClick={() => onWindowChange(value)}>
+              {value} px
+            </ChoiceButton>
+          ))}
+        </ControlGroup>
+      </details>
     </section>
   )
 }
 
 function ControlGroup({ label, children }: { label: string; children: ReactNode }) {
-  return <div className="verification-control-group"><span>{label}</span><div>{children}</div></div>
+  return <div className="verification-control-group verification-control-group-rp017"><span>{label}</span><div>{children}</div></div>
 }
 
 function ChoiceButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
   return <button type="button" className={active ? 'active' : ''} aria-pressed={active} onClick={onClick}>{children}</button>
 }
 
-function IssueRail({
-  verificationCase,
-  selectedIssueTime,
-  onSelect,
-}: {
-  verificationCase: VerificationCase | null
-  selectedIssueTime: string
-  onSelect: (value: string) => void
-}) {
-  return (
-    <section className="verification-issue-rail" aria-label="起报时间">
-      <header><span>Issue time / UTC</span><strong>{verificationCase ? formatCaseName(verificationCase.case_id) : '—'}</strong></header>
-      <div>
-        {verificationCase?.issue_times.map((issueTime) => (
-          <button
-            type="button"
-            key={issueTime}
-            className={selectedIssueTime === issueTime ? 'active' : ''}
-            aria-pressed={selectedIssueTime === issueTime}
-            onClick={() => onSelect(issueTime)}
-          >
-            <i /><strong>{formatIssueHour(issueTime)}</strong><small>{formatIssueDate(issueTime)}</small>
-          </button>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-interface LeadRow {
-  lead: number
-  lk?: VerificationMetric
-  baseline?: VerificationMetric
-  delta: number | null
-}
-
-function LeadEvidenceRail({
+function LeadTimeline({
   rows,
   loading,
   selectedLead,
+  playing,
+  onTogglePlaying,
   onSelect,
 }: {
   rows: LeadRow[]
   loading: boolean
   selectedLead: number
+  playing: boolean
+  onTogglePlaying: () => void
   onSelect: (lead: number) => void
 }) {
   return (
-    <section className="lead-evidence" aria-label="时效证据带">
-      <header><span>Lead evidence</span><strong>{loading ? '正在筛选…' : 'LK − 基线 FSS'}</strong></header>
+    <section className="verification-timeline" aria-label="预报时效">
+      <header>
+        <div><span>预报时效</span><strong>{loading ? '正在读取评分…' : '选择地图与评分时效'}</strong></div>
+        <button type="button" className={playing ? 'active' : ''} aria-pressed={playing} onClick={onTogglePlaying}>{playing ? '暂停播放' : '播放时效'}</button>
+      </header>
       <div>
         {rows.map((row) => (
           <button
@@ -555,7 +515,8 @@ function LeadEvidenceRail({
             onClick={() => onSelect(row.lead)}
             key={row.lead}
           >
-            <i /><strong>+{row.lead}</strong><small>{formatSigned(row.delta)}</small>
+            <strong>+{row.lead}</strong>
+            <small>{formatSigned(row.delta)}</small>
           </button>
         ))}
       </div>
@@ -563,13 +524,29 @@ function LeadEvidenceRail({
   )
 }
 
-function FSSChart({ rows, baseline }: { rows: LeadRow[]; baseline: string }) {
+function CurrentMetricStrip({ row, baseline }: { row?: LeadRow; baseline: string }) {
+  return (
+    <section className="verification-current-metrics" aria-label="当前时效核心指标">
+      <CurrentMetric label="LK FSS" value={formatMetric(row?.lk?.fss)} note="越高越好" />
+      <CurrentMetric label={`${modelLabels[baseline] ?? baseline} FSS`} value={formatMetric(row?.baseline?.fss)} note="同一评分域" />
+      <CurrentMetric label="FSS 增益" value={formatSigned(row?.delta)} note="LK − 基线" tone={row?.delta == null ? 'neutral' : row.delta >= 0 ? 'positive' : 'negative'} />
+      <CurrentMetric label="CSI / POD / FAR" value={`${formatMetric(row?.lk?.csi)} / ${formatMetric(row?.lk?.pod)} / ${formatMetric(row?.lk?.far)}`} note="当前阈值" />
+      <CurrentMetric label="共同覆盖" value={formatPercent(row?.lk?.common_coverage)} note={`模型覆盖 ${formatPercent(row?.lk?.forecast_coverage)}`} />
+    </section>
+  )
+}
+
+function CurrentMetric({ label, value, note, tone = 'neutral' }: { label: string; value: string; note: string; tone?: 'neutral' | 'positive' | 'negative' }) {
+  return <div className={tone}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>
+}
+
+function FSSChart({ rows, baseline, selectedLead }: { rows: LeadRow[]; baseline: string; selectedLead: number }) {
   const width = 720
-  const height = 230
-  const left = 44
-  const right = 16
-  const top = 18
-  const bottom = 36
+  const height = 250
+  const left = 48
+  const right = 18
+  const top = 20
+  const bottom = 40
   const plotWidth = width - left - right
   const plotHeight = height - top - bottom
   const point = (index: number, value: number) => ({
@@ -582,24 +559,25 @@ function FSSChart({ rows, baseline }: { rows: LeadRow[]; baseline: string }) {
   ]
   const hasValues = series.some((item) => item.values.some((value) => value != null))
   return (
-    <figure className="verification-chart">
-      <figcaption><div><span>Fractions skill score</span><strong>逐时效 FSS</strong></div><small>0–1，越高越好</small></figcaption>
+    <figure className="verification-chart verification-chart-rp017">
+      <figcaption><div><span>逐时效</span><strong>FSS 对比曲线</strong></div><small>0–1，越高越好</small></figcaption>
       {hasValues ? (
         <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="LK 与基线逐时效 FSS 折线图">
           {[0, .25, .5, .75, 1].map((tick) => {
             const y = top + (1 - tick) * plotHeight
-            return <g key={tick}><line x1={left} x2={width - right} y1={y} y2={y} /><text x={left - 8} y={y + 3} textAnchor="end">{tick.toFixed(2)}</text></g>
+            return <g key={tick}><line x1={left} x2={width - right} y1={y} y2={y} /><text x={left - 8} y={y + 4} textAnchor="end">{tick.toFixed(2)}</text></g>
           })}
+          {rows.map((row, index) => row.lead === selectedLead ? <line className="selected-lead-line" key={`selected-${row.lead}`} x1={point(index, 0).x} x2={point(index, 0).x} y1={top} y2={height - bottom} /> : null)}
           {series.map((item) => {
             const points = item.values.flatMap((value, index) => value == null ? [] : [point(index, value)])
             return (
               <g className={item.className} key={item.key}>
                 {points.length > 1 ? <polyline points={points.map(({ x, y }) => `${x},${y}`).join(' ')} /> : null}
-                {item.values.map((value, index) => value == null ? null : <circle key={rows[index].lead} cx={point(index, value).x} cy={point(index, value).y} r="3.2" />)}
+                {item.values.map((value, index) => value == null ? null : <circle key={rows[index].lead} cx={point(index, value).x} cy={point(index, value).y} r={rows[index].lead === selectedLead ? '4.6' : '3.2'} />)}
               </g>
             )
           })}
-          {rows.map((row, index) => <text key={row.lead} x={point(index, 0).x} y={height - 12} textAnchor="middle">+{row.lead}</text>)}
+          {rows.map((row, index) => <text key={row.lead} x={point(index, 0).x} y={height - 13} textAnchor="middle">+{row.lead}</text>)}
         </svg>
       ) : <div className="verification-chart-empty">该阈值下没有可计算的降水事件，FSS 保持为空，未被改写为 0。</div>}
       <div className="verification-chart-legend"><span><i className="lk" />pySTEPS-LK</span><span><i className="baseline" />{modelLabels[baseline] ?? baseline}</span></div>
@@ -607,39 +585,70 @@ function FSSChart({ rows, baseline }: { rows: LeadRow[]; baseline: string }) {
   )
 }
 
-function EvidenceNotes({
+function CurrentSliceCard({
   verificationCase,
   issueTime,
   threshold,
   windowPixels,
   truthKind,
+  row,
 }: {
   verificationCase: VerificationCase | null
   issueTime: string
   threshold: number
   windowPixels: number
   truthKind: string
+  row?: LeadRow
 }) {
   return (
-    <aside className="verification-notes">
-      <header><span>Evidence identity</span><strong>当前评分切片</strong></header>
+    <aside className="verification-slice-card">
+      <header><span>当前评分切片</span><strong>{verificationCase ? formatCaseName(verificationCase.case_id) : '—'}</strong></header>
       <dl>
-        <div><dt>案例</dt><dd>{verificationCase?.case_id ?? '—'}</dd></div>
         <div><dt>起报</dt><dd>{issueTime ? formatUTC(issueTime) : '—'}</dd></div>
+        <div><dt>预报时效</dt><dd>{row ? `+${row.lead} 分钟` : '—'}</dd></div>
         <div><dt>真值</dt><dd>{truthLabels[truthKind] ?? truthKind}</dd></div>
         <div><dt>阈值</dt><dd>{threshold} mm/h</dd></div>
         <div><dt>邻域</dt><dd>{windowPixels} px</dd></div>
-        <div><dt>有效域</dt><dd>truth 与三模型共同掩膜</dd></div>
+        <div><dt>有效域</dt><dd>实况与全部模型共同有效域</dd></div>
       </dl>
-      <p>中性质量 1.0 只用于 MRMS 有效像素；本页不能证明极坐标质控、RQI、QPE 标定或福建业务迁移效果。</p>
+      <p>当前结论只验证算法适配和确定性技巧，不验证福建极坐标质控、RQI、QPE 标定或生产就绪。</p>
     </aside>
+  )
+}
+
+function SkillGateMatrix({ comparisons }: { comparisons: SkillComparison[] }) {
+  const baselines = Array.from(new Set(comparisons.map((item) => item.baseline)))
+  const thresholds = Array.from(new Set(comparisons.map((item) => item.threshold_mm_h))).sort((a, b) => a - b)
+  return (
+    <section className="skill-gate-panel skill-gate-panel-rp017" aria-labelledby="skill-gate-title">
+      <header>
+        <div><span>冻结门槛</span><h2 id="skill-gate-title">LK 相对基线的 FSS 技巧</h2></div>
+        <small>湿案例 · +10～+60 分钟 · 案例级配对比较</small>
+      </header>
+      <div className="skill-gate-table-wrap">
+        <table>
+          <thead><tr><th>比较基线</th>{thresholds.map((value) => <th key={value}>{value} mm/h</th>)}</tr></thead>
+          <tbody>
+            {baselines.map((candidate) => (
+              <tr key={candidate}>
+                <th>{modelLabels[candidate] ?? candidate}</th>
+                {thresholds.map((value) => {
+                  const item = comparisons.find((comparison) => comparison.baseline === candidate && comparison.threshold_mm_h === value)
+                  return <td className={item?.passes_case_gate ? 'passed' : 'failed'} key={value}><strong>{formatSigned(item?.mean_fss_difference)}</strong><small>{item ? `${item.positive_case_count}/${item.total_wet_case_count} 案例` : '无数据'}</small><span>{formatInterval(item?.mean_difference_95pct_interval)}</span></td>
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   )
 }
 
 function MetricTable({ rows, baseline, loading }: { rows: LeadRow[]; baseline: string; loading: boolean }) {
   return (
-    <section className="verification-metric-table" aria-labelledby="verification-metric-title">
-      <header><div><span>Common-mask metrics</span><h2 id="verification-metric-title">当前 issue 指标</h2></div><small>{loading ? '正在读取…' : `${rows.length} 个实际 10 分钟时效`}</small></header>
+    <section className="verification-metric-table verification-metric-table-rp017" aria-labelledby="verification-metric-title">
+      <header><div><span>完整评分</span><h2 id="verification-metric-title">当前起报指标</h2></div><small>{loading ? '正在读取…' : `${rows.length} 个实际 10 分钟时效`}</small></header>
       <div className="verification-table-scroll">
         <table>
           <thead><tr><th>时效</th><th>LK FSS</th><th>{modelLabels[baseline] ?? baseline} FSS</th><th>Δ FSS</th><th>LK CSI</th><th>LK POD</th><th>LK FAR</th><th>LK MAE</th><th>共同覆盖率</th></tr></thead>
@@ -664,8 +673,20 @@ function MetricTable({ rows, baseline, loading }: { rows: LeadRow[]; baseline: s
   )
 }
 
-function LedgerItem({ label, value, note, tone = 'neutral' }: { label: string; value: string; note: string; tone?: 'neutral' | 'supported' | 'caution' }) {
-  return <div className={tone}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>
+function VerificationProvenance({ run, activeCase }: { run: RunSummary; activeCase: VerificationCase | null }) {
+  return (
+    <section className="verification-provenance-rp017">
+      <dl>
+        <div><dt>验证配置</dt><dd>{run.profile_version}</dd></div>
+        <div><dt>运行 ID</dt><dd>{run.run_id}</dd></div>
+        <div><dt>真值</dt><dd>{truthLabels[run.primary_truth_kind] ?? run.primary_truth_kind}</dd></div>
+        <div><dt>当前案例</dt><dd>{activeCase?.case_id ?? '—'}</dd></div>
+        <div><dt>地图渲染器</dt><dd>{run.map_renderer_version ?? '无地图产物'}</dd></div>
+        <div><dt>更新时间</dt><dd>{formatUTC(run.modified_at)}</dd></div>
+      </dl>
+      <p>验证运行不可直接转为业务产品；福建落地仍需经过原始雷达质控、Hybrid Scan、QI 拼图、QPE 和本地实况评分。</p>
+    </section>
+  )
 }
 
 function buildLeadRows(metrics: VerificationMetric[], leads: number[], baseline: string): LeadRow[] {
@@ -699,6 +720,34 @@ function runKey(run: RunSummary) {
   return `${run.profile_version}/${run.run_id}`
 }
 
+function readVerificationQuery() {
+  const query = new URLSearchParams(window.location.search)
+  const parseNumber = (name: string) => {
+    const value = Number(query.get(name))
+    return Number.isFinite(value) && value > 0 ? value : null
+  }
+  return {
+    run: query.get('run') ?? '',
+    caseID: query.get('case') ?? '',
+    issueTime: query.get('issue') ?? '',
+    leadMinutes: parseNumber('lead'),
+    threshold: parseNumber('threshold'),
+    windowPixels: parseNumber('window'),
+    baseline: query.get('baseline') ?? '',
+  }
+}
+
+function isAbortError(value: unknown) {
+  return value instanceof DOMException && value.name === 'AbortError'
+}
+
+function conclusionSentence(status: string) {
+  if (status === 'lk_supported') return '在当前冻结 MRMS 案例、阈值和近时效门槛下，pySTEPS-LK 获得正向工程证据。'
+  if (status === 'translation_baseline_retained') return 'pySTEPS-LK 已超过持续性，但尚未稳定超过整场平移基线。'
+  if (status === 'skill_not_demonstrated') return '当前案例尚不足以证明 pySTEPS-LK 相对强基线存在稳定增益。'
+  return '当前可评价案例不足，暂不形成算法技巧结论。'
+}
+
 function formatCaseName(caseID: string) {
   return caseID
     .replace(/_20\d{6}$/, '')
@@ -712,14 +761,6 @@ function formatUTC(value: string) {
     timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', hour12: false,
   }).format(new Date(value))} UTC`
-}
-
-function formatIssueHour(value: string) {
-  return new Intl.DateTimeFormat('zh-CN', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(value))
-}
-
-function formatIssueDate(value: string) {
-  return new Intl.DateTimeFormat('zh-CN', { timeZone: 'UTC', month: '2-digit', day: '2-digit' }).format(new Date(value))
 }
 
 function formatMetric(value?: number | null) {
