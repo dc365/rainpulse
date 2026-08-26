@@ -23,6 +23,7 @@ from rainpulse_algo.verification.mrms_profile import load_mrms_verification_prof
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PROFILE_PATH = REPOSITORY_ROOT / "configs" / "verification" / "rp016-mrms-v1.yaml"
+RIGOR_PROFILE_PATH = REPOSITORY_ROOT / "configs" / "verification" / "rp018-mrms-v1.yaml"
 
 
 class DryMRMSFrameSource:
@@ -38,7 +39,7 @@ class DryMRMSFrameSource:
 
 
 def test_hindcast_runs_shared_core_and_writes_non_operational_report(tmp_path: Path) -> None:
-    profile = load_mrms_verification_profile(PROFILE_PATH)
+    profile = load_mrms_verification_profile(RIGOR_PROFILE_PATH)
 
     summary = run_mrms_hindcast(
         profile,
@@ -53,14 +54,24 @@ def test_hindcast_runs_shared_core_and_writes_non_operational_report(tmp_path: P
     assert summary["failed_issue_count"] == 0
     assert summary["operational_eligible"] is False
     assert summary["motion_fallback_issue_count"] == 1
+    assert summary["native_motion_fallback_issue_count"] == 1
+    assert summary["phase_correlation_fallback_issue_count"] == 1
     assert summary["skill_summary"]["status"] == "insufficient_evidence"
+    assert summary["coverage_summary"]["all_models_pass"] is True
     assert (tmp_path / "metrics.csv").is_file()
+    assert (tmp_path / "metrics_truth_domain.csv").is_file()
+    assert (tmp_path / "adaptation_metrics.csv").is_file()
+    assert (tmp_path / "accumulation_metrics.csv").is_file()
     assert "engineering validation" in (tmp_path / "report.md").read_text()
     persisted = json.loads((tmp_path / "summary.json").read_text())
-    assert persisted["profile_version"] == "rp016-mrms-v1"
+    assert persisted["profile_version"] == "rp018-mrms-v1"
+    assert persisted["schema_version"] == "1.1"
+    assert len(persisted["profile_sha256"]) == 64
     assert persisted["map_bundle_count"] == 1
     assert persisted["map_layer_count"] == 48
     assert persisted["map_renderer_version"] == "algorithm-verification-map-renderer-1.0.0"
+    assert persisted["runtime_fingerprint"]["packages"]["pysteps"]
+    assert persisted["report_files"]["fixed_truth_domain"] == "metrics_truth_domain.csv"
     map_index = json.loads((tmp_path / "maps" / "index.json").read_text())
     assert map_index["bundle_count"] == 1
     assert map_index["layer_count"] == 48
@@ -123,6 +134,7 @@ def test_conformance_checks_only_frames_required_by_selected_issues() -> None:
     assert report["checked_frame_count"] == 15
     assert report["failed_frame_count"] == 0
     assert report["complete"] is True
+    assert len(report["profile_sha256"]) == 64
 
 
 def test_conformance_cli_returns_nonzero_and_json_for_missing_required_frames(
