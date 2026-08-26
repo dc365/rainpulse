@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import type { components } from './api/generated/schema'
+import { FUZHOU_GIS_CONTEXT } from './GISMapContexts'
+import {
+  RasterGISMap,
+  type GISMapExtent,
+} from './RasterGISMap'
 
 type AnalysisCycle = components['schemas']['AnalysisCycle']
 type AnalysisCyclePage = components['schemas']['AnalysisCyclePage']
@@ -68,6 +73,7 @@ export function AnalysisDiagnostics({ refreshToken }: { refreshToken: number }) 
   const [selectedLayerID, setSelectedLayerID] = useState<string | null>(null)
   const [scope, setScope] = useState<'grid' | 'polar'>('grid')
   const [loading, setLoading] = useState(true)
+  const [layerError, setLayerError] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null)
 
@@ -133,7 +139,7 @@ export function AnalysisDiagnostics({ refreshToken }: { refreshToken: number }) 
           if (current && diagnosticValue?.layers.some((item) => item.layer_id === current)) {
             return current
           }
-          return gridLayers.find((item) => item.field === 'RATE_QPE')?.layer_id
+          return gridLayers.find((item) => item.field === 'DBZH_QC')?.layer_id
             ?? gridLayers[0]?.layer_id
             ?? null
         })
@@ -158,6 +164,10 @@ export function AnalysisDiagnostics({ refreshToken }: { refreshToken: number }) 
   const activeLayer = diagnostics?.layers.find((item) => item.layer_id === selectedLayerID)
     ?? scopedLayers[0]
     ?? null
+  const activeGridExtent = useMemo(
+    () => activeLayer?.scope === 'grid' ? diagnosticExtent(activeLayer.bounds) : null,
+    [activeLayer],
+  )
   const rawCompare = activeLayer?.scope === 'polar' && activeLayer.field === 'DBZH_QC'
     ? diagnostics?.layers.find((item) => item.scope === 'polar'
       && item.radar_id === activeLayer.radar_id && item.field === 'DBZH_RAW') ?? null
@@ -167,7 +177,7 @@ export function AnalysisDiagnostics({ refreshToken }: { refreshToken: number }) 
     setScope(nextScope)
     const nextLayers = diagnostics?.layers.filter((item) => item.scope === nextScope) ?? []
     const preferred = nextScope === 'grid'
-      ? nextLayers.find((item) => item.field === 'RATE_QPE')
+      ? nextLayers.find((item) => item.field === 'DBZH_QC')
       : nextLayers.find((item) => item.field === 'DBZH_QC')
     setSelectedLayerID(preferred?.layer_id ?? nextLayers[0]?.layer_id ?? null)
   }
@@ -254,9 +264,36 @@ export function AnalysisDiagnostics({ refreshToken }: { refreshToken: number }) 
                 </header>
 
                 <div className="visualization-layout">
-                  <div className={`layer-stage ${scope}`}>
+                  <div className={`layer-stage ${scope} ${scope === 'grid' ? 'gis-stage' : ''}`}>
                     {diagnostics && activeLayer ? (
-                      rawCompare ? (
+                      activeLayer.scope === 'grid' ? (
+                        activeGridExtent ? (
+                          <RasterGISMap
+                            className="diagnostic-gis-shell"
+                            imageUrl={activeLayer.image_url}
+                            imageDescription={`${activeLayer.title}诊断图层`}
+                            imageExtent={activeGridExtent}
+                            validTimeLabel={formatUtc(diagnostics.analysis_time, true)}
+                            contextLabel={activeLayer.field}
+                            productLabel={activeLayer.title}
+                            legend={activeLayer.legend.map((item) => ({ label: item.label, color: item.color }))}
+                            legendUnit={activeLayer.unit ?? ''}
+                            legendMode={activeLayer.rendering === 'scalar' ? 'scale' : 'categorical'}
+                            footerNote={activeLayer.field === 'RATE_QPE' ? '透明缺测 · 0 为有效无雨' : '透明区域为缺测'}
+                            mapLabel={`雷达分析 GIS 地图，${activeLayer.title}，EPSG:4326`}
+                            resetViewLabel="复位分析网格范围"
+                            loading={loading}
+                            layerError={layerError}
+                            onLayerError={setLayerError}
+                            referenceContext={FUZHOU_GIS_CONTEXT}
+                          />
+                        ) : (
+                          <div className="layer-empty">
+                            <strong>图层缺少地理边界</strong>
+                            <span>为避免错误配准，未将该诊断图片叠加到 GIS。</span>
+                          </div>
+                        )
+                      ) : rawCompare ? (
                         <div className="compare-stage">
                           <LayerFigure layer={rawCompare} label="原始" />
                           <LayerFigure layer={activeLayer} label="质控后" />
@@ -360,4 +397,11 @@ function ContributorLedger({ cycle, mosaic, qpe }: { cycle: AnalysisCycle, mosai
 function shortLayerTitle(layer: DiagnosticLayer) {
   const parts = layer.title.split('·')
   return parts[parts.length - 1]?.trim() || layer.field
+}
+
+function diagnosticExtent(bounds?: number[]): GISMapExtent | null {
+  if (!bounds || bounds.length !== 4 || !bounds.every(Number.isFinite)) return null
+  const [west, south, east, north] = bounds
+  if (west >= east || south >= north) return null
+  return [west, south, east, north]
 }

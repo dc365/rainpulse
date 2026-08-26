@@ -567,6 +567,7 @@ h1 {
 .visualization-layout { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) 258px; }
 .layer-stage { min-width: 0; min-height: 420px; display: grid; place-items: center; padding: 18px; border-right: 1px solid var(--line); background: #eef2ef; }
 .layer-stage.grid { min-height: 390px; }
+.layer-stage.gis-stage { place-items: stretch; padding: 12px; }
 .layer-figure { width: 100%; min-width: 0; margin: 0; }
 .layer-figure figcaption { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 7px; color: var(--ink); font-size: 10px; font-weight: 700; }
 .layer-figure figcaption small { color: var(--muted); font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 7px; }
@@ -1262,6 +1263,16 @@ h1 {
   touch-action: manipulation;
 }
 
+.nowcast-gis-shell.readonly .nowcast-gis-map { cursor: grab; }
+.nowcast-gis-shell.readonly .nowcast-gis-map:active { cursor: grabbing; }
+.diagnostic-gis-shell {
+  width: 100%;
+  height: clamp(420px, calc(100svh - 390px), 620px);
+  min-height: 420px;
+  border-radius: 3px;
+  box-shadow: none;
+}
+
 .nowcast-gis-map:focus-visible { outline: 2px solid var(--teal); outline-offset: -3px; }
 .nowcast-gis-shell .rainpulse-basemap-layer { filter: grayscale(.24) brightness(.96) contrast(1.03) saturate(.74); }
 
@@ -1377,6 +1388,18 @@ h1 {
 .gis-legend-cells span { min-width: 0; display: grid; gap: 3px; text-align: center; }
 .gis-legend-cells i { height: 9px; border: 1px solid rgb(23 37 34 / 8%); }
 .gis-legend-cells small { color: var(--gis-muted); font-size: 6px; font-variant-numeric: tabular-nums; }
+.gis-legend-list {
+  max-height: 92px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px 9px;
+  margin: 7px 0 6px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.gis-legend-list span { min-width: 0; display: flex; align-items: center; gap: 6px; }
+.gis-legend-list i { width: 13px; height: 8px; flex: 0 0 auto; border: 1px solid rgb(23 37 34 / 8%); }
+.gis-legend-list small { overflow: hidden; color: var(--gis-muted); font-size: 6px; text-overflow: ellipsis; white-space: nowrap; }
 .gis-legend footer { color: var(--gis-muted); font-size: 6px; }
 .gis-legend footer span { letter-spacing: .08em; }
 
@@ -1495,6 +1518,7 @@ h1 {
 @media (max-width: 700px) {
   .forecast-map-wrap { padding: 8px; }
   .nowcast-gis-shell { height: 480px; min-height: 480px; border-radius: 5px; }
+  .diagnostic-gis-shell { height: 430px; min-height: 430px; }
   .gis-display-controls { max-width: calc(100% - 60px); overflow-x: auto; }
   .gis-display-controls button { min-width: 58px; }
   .gis-display-controls label { grid-template-columns: auto 62px; }

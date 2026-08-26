@@ -145,6 +145,14 @@ describe('RainPulse radar operations overview', () => {
       created_at: '2026-08-25T08:20:00Z',
       layers: [
         {
+          layer_id: 'grid-dbzh-qc', title: '质控后组合反射率', scope: 'grid',
+          field: 'DBZH_QC', rendering: 'scalar', unit: 'dBZ',
+          image_url: '/api/v1/diagnostics/job/layers/grid-dbzh-qc',
+          width: 1002, height: 402, palette_version: 'rainpulse-meteorological-v1',
+          legend: [{ label: '≥ 0 dBZ', color: '#4ba3f2', value: 0 }],
+          bounds: [117.995, 24.995, 123.005, 27.005],
+        },
+        {
           layer_id: 'grid-rate-qpe', title: '瞬时雨强', scope: 'grid',
           field: 'RATE_QPE', rendering: 'scalar', unit: 'mm/h',
           image_url: '/api/v1/diagnostics/job/layers/grid-rate-qpe',
@@ -207,9 +215,13 @@ describe('RainPulse radar operations overview', () => {
     fireEvent.click(screen.getByRole('button', { name: '分析诊断' }))
     expect(screen.getByRole('heading', { name: '分析诊断' })).toBeTruthy()
     expect(await screen.findByText('当前分析不可用于业务发布')).toBeTruthy()
-    expect(screen.getByAltText('瞬时雨强诊断图层')).toBeTruthy()
+    const gridLayer = screen.getByRole('img', { name: '质控后组合反射率诊断图层' })
+    expect(gridLayer.getAttribute('data-source')).toBe('/api/v1/diagnostics/job/layers/grid-dbzh-qc')
+    expect(gridLayer.getAttribute('data-extent')).toBe('117.995,24.995,123.005,27.005')
+    expect(screen.getByRole('application', { name: /雷达分析 GIS 地图/ })).toBeTruthy()
     expect(screen.getByText('2,842')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '单雷达极坐标' }))
+    expect(screen.queryByRole('application', { name: /雷达分析 GIS 地图/ })).toBeNull()
     expect(await screen.findByText('原始')).toBeTruthy()
     expect(screen.getByText('质控后')).toBeTruthy()
     expect(screen.getAllByText('DBZH_QC').length).toBeGreaterThan(0)

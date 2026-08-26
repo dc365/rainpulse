@@ -253,6 +253,9 @@ RP-012 now provides:
   controls instead of exposing object storage or parsing arrays in Go/React;
 - a responsive React evidence workbench with raw/QC comparison, QI, flags,
   source radar, beam height, QPE, three-state masks and provenance ledger;
+- analysis-grid diagnostics now reuse the shared OpenLayers EPSG:4326 raster
+  map with manifest-frozen pixel bounds and field-specific legends, while
+  non-georeferenced polar PPI remains an explicit raw/QC diagnostic view;
 - a real Z9598 engineering replay documented in
   `docs/RP012_React质控与拼图诊断验收记录.md`.
 
