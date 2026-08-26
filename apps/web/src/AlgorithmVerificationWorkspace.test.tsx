@@ -137,10 +137,11 @@ describe('AlgorithmVerificationWorkspace', () => {
     expect(await screen.findByText(/回波运动矢量 1 个/)).toBeTruthy()
     expect(screen.getAllByText('+0.0200').length).toBeGreaterThan(0)
     expect(screen.getByText('工程证据 · 非福建业务验收')).toBeTruthy()
-    expect(screen.getByRole('combobox', { name: '典型案例' })).toHaveValue('midwest_convection_20210810')
+    const caseSelect = screen.getByRole('combobox', { name: '典型案例' }) as HTMLSelectElement
+    expect(caseSelect.value).toBe('midwest_convection_20210810')
 
     fireEvent.click(screen.getByRole('button', { name: '持续性' }))
-    expect(await screen.findAllByText('+0.0400')).not.toHaveLength(0)
+    expect((await screen.findAllByText('+0.0400')).length).toBeGreaterThan(0)
 
     await waitFor(() => {
       expect(window.location.search).toContain('case=midwest_convection_20210810')
