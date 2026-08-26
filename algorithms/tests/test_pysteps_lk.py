@@ -160,10 +160,17 @@ def test_runs_real_lucas_kanade_and_writes_forecast_output() -> None:
 
     storm = np.s_[20:40, 24:42]
     assert result.motion_fallback_used is False
+    assert result.motion_fallback_reason is None
+    assert result.motion_feature_count >= configured.motion.minimum_motion_features
     assert np.median(result.velocity_pixels_per_step[0][storm]) == pytest.approx(2.0, abs=0.35)
     assert np.median(result.velocity_pixels_per_step[1][storm]) == pytest.approx(0.0, abs=0.35)
     assert result.rain_rate.shape == (1, 24, 64, 64)
     assert result.motion_u[30, 30] > 5.0
+    assert result.motion_valid_mask[30, 30] == 1
+    assert np.all(result.motion_valid_mask[:5] == 0)
+    assert np.all(result.motion_valid_mask[-5:] == 0)
+    assert np.all(result.motion_valid_mask[:, :5] == 0)
+    assert np.all(result.motion_valid_mask[:, -10:] == 0)
     assert np.any(result.output_valid_mask == 0)
     assert np.all(np.isnan(result.rain_rate[0][result.output_valid_mask == 0]))
     assert np.all(np.isfinite(result.rain_rate[0][result.output_valid_mask == 1]))
@@ -185,12 +192,17 @@ def test_runs_real_lucas_kanade_and_writes_forecast_output() -> None:
     assert validation["shape"] == (1, 24, 64, 64)
     assert validation["lead_count"] == 24
     assert validation["motion_fallback_used"] is False
+    assert validation["motion_fallback_reason"] is None
+    assert validation["motion_feature_count"] >= configured.motion.minimum_motion_features
+    assert 0 < validation["motion_valid_fraction"] < 1
 
 
 def test_uses_explicit_zero_motion_fallback_for_no_rain() -> None:
     result = run_pysteps_lk(nowcast_input(rain=False), profile=profile(), grid=tiny_grid())
 
     assert result.motion_fallback_used is True
+    assert result.motion_fallback_reason == "insufficient_trackable_rain"
+    assert result.motion_feature_count == 0
     assert result.trackable_rain_pixel_count == 0
     assert np.all(result.velocity_pixels_per_step == 0)
     assert np.all(result.rain_rate[0, :, :, :-5] == 0)
@@ -264,5 +276,6 @@ def test_real_worker_reads_verified_input_and_returns_forecast_bundle(
     validation = validate_forecast_output_zarr_store(worker_result.objects or {})
 
     assert validation["lead_count"] == 24
+    assert validation["motion_feature_count"] >= profile().motion.minimum_motion_features
     assert worker_result.metrics["model_runtime_ms"] >= 0
     assert worker_result.diagnostics["pysteps_lk"]["input_uri"] == request.payload.input_uri
