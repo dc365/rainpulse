@@ -236,8 +236,8 @@ func TestCreateAnalysisMosaicAlignsClosestReadyGridAndUsesV2Contract(t *testing.
 		AnalysisTime:           analysisTime,
 		GridID:                 "fuzhou_118_123_25_27_0p01deg_v1",
 		GridConfigVersion:      "fuzhou-grid-0p01deg-v1",
-		MosaicConfigVersion:    "rp010-qi-mosaic-v1",
-		MosaicAlgorithmVersion: "qi-mosaic-1.0.0",
+		MosaicConfigVersion:    "rp016-qi-mosaic-v1",
+		MosaicAlgorithmVersion: "qi-mosaic-1.1.0",
 		FlagDefinitionVersion:  "qc-flags-v1",
 		MaximumAbsoluteOffset:  150 * time.Second,
 		MinimumContributors:    1,
@@ -247,17 +247,17 @@ func TestCreateAnalysisMosaicAlignsClosestReadyGridAndUsesV2Contract(t *testing.
 				GridURI:           "s3://rainpulse/radar/grid/z9598/far/grid.zarr",
 				VolumeEndTime:     analysisTime.Add(-120 * time.Second),
 				CurrentStatus:     workflow.RadarScanGridReady,
-				HybridScanVersion: "hybrid-scan-1.0.1",
+				HybridScanVersion: "hybrid-scan-1.1.0",
 			},
 			{
 				RadarID: "z9598", ScanID: nearScan,
 				GridURI:           "s3://rainpulse/radar/grid/z9598/near/grid.zarr",
 				VolumeEndTime:     analysisTime.Add(-18 * time.Second),
 				CurrentStatus:     workflow.RadarScanGridReady,
-				HybridScanVersion: "hybrid-scan-1.0.1",
+				HybridScanVersion: "hybrid-scan-1.1.0",
 			},
 		},
-		MosaicConfig:       json.RawMessage(`{"profile_version":"rp010-qi-mosaic-v1"}`),
+		MosaicConfig:       json.RawMessage(`{"profile_version":"rp016-qi-mosaic-v1"}`),
 		MosaicConfigSHA256: "63266c7c72321262a01b945281060abd84153a8f3ad64a95c5b73b9fd510f678",
 	}
 
@@ -282,7 +282,7 @@ func TestCreateAnalysisMosaicAlignsClosestReadyGridAndUsesV2Contract(t *testing.
 	}
 	if requested.Payload.MosaicAlgorithm != input.MosaicAlgorithmVersion ||
 		requested.Payload.OutputPrefix != "s3://rainpulse/analysis/mosaic/"+
-			input.GridID+"/2026/08/25/120500Z/qi-mosaic-1.0.0/" {
+			input.GridID+"/2026/08/25/120500Z/qi-mosaic-1.1.0/" {
 		t.Fatalf("unexpected mosaic request: %#v", requested.Payload)
 	}
 	secondAnalysis, secondJob, err := service.CreateAnalysisMosaic(context.Background(), input)
@@ -305,8 +305,8 @@ func TestCreateAnalysisQPEUsesCommittedMosaicAndDeterministicIDs(t *testing.T) {
 		AnalysisTime:           analysisTime,
 		GridID:                 "fuzhou_118_123_25_27_0p01deg_v1",
 		GridConfigVersion:      "fuzhou-grid-0p01deg-v1",
-		MosaicConfigVersion:    "rp010-qi-mosaic-v1",
-		MosaicAlgorithmVersion: "qi-mosaic-1.0.0",
+		MosaicConfigVersion:    "rp016-qi-mosaic-v1",
+		MosaicAlgorithmVersion: "qi-mosaic-1.1.0",
 		FlagDefinitionVersion:  "qc-flags-v1",
 		MosaicURI:              "s3://rainpulse/analysis/mosaic/fixture/mosaic.zarr",
 		CurrentStatus:          workflow.AnalysisQPE,
@@ -581,9 +581,9 @@ func TestCreatePystepsLKSchedulesOnlyCommittedInputReadyRun(t *testing.T) {
 			uuid.MustParse("81300000-0000-4000-8000-000000000003"),
 		},
 		ModelID: PystepsLKModelID, ModelVersion: PystepsLKModelVersion,
-		ConfigVersion: "rp014-pysteps-lk-v1", ForecastContractVersion: "1.1",
+		ConfigVersion: "rp016-pysteps-lk-v1", ForecastContractVersion: "1.1",
 		BaselineModels: []string{"persistence", "translation"},
-		Config:         json.RawMessage(`{"profile_version":"rp014-pysteps-lk-v1"}`),
+		Config:         json.RawMessage(`{"profile_version":"rp016-pysteps-lk-v1"}`),
 		ConfigSHA256:   "63266c7c72321262a01b945281060abd84153a8f3ad64a95c5b73b9fd510f678",
 	}
 
@@ -593,7 +593,7 @@ func TestCreatePystepsLKSchedulesOnlyCommittedInputReadyRun(t *testing.T) {
 	}
 	if run.Status != workflow.RunBaselineRunning || job.JobType != PystepsLKJobType ||
 		job.ModelID != PystepsLKModelID {
-		t.Fatalf("unexpected RP-014 workflow state: run=%s job=%#v", run.Status, job)
+		t.Fatalf("unexpected pySTEPS-LK workflow state: run=%s job=%#v", run.Status, job)
 	}
 	var requested PystepsLKRequested
 	if err := json.Unmarshal(repository.pystepsLK.Outbox.Payload, &requested); err != nil {
@@ -603,7 +603,7 @@ func TestCreatePystepsLKSchedulesOnlyCommittedInputReadyRun(t *testing.T) {
 		repository.pystepsLK.Outbox.Subject != PystepsLKRequestedSubject ||
 		requested.Payload.ForecastContractVersion != "1.1" ||
 		len(requested.Payload.InputAssetIDs) != 3 {
-		t.Fatalf("unexpected RP-014 request: %#v", requested)
+		t.Fatalf("unexpected pySTEPS-LK request: %#v", requested)
 	}
 	secondRun, secondJob, err := service.CreatePystepsLK(context.Background(), input)
 	if err != nil || secondRun.ID != run.ID || secondJob.ID != job.ID {
@@ -626,12 +626,12 @@ func TestCreateProductBuildSchedulesThreeProductsFromCommittedBaseline(t *testin
 		IssueTime:             now.Truncate(5 * time.Minute),
 		GridID:                "fuzhou_118_123_25_27_0p01deg_v1",
 		CurrentStatus:         workflow.RunBaselineReady,
-		ForecastURI:           "s3://rainpulse/products/run/pysteps-lk/pysteps-lk-1.0.0/forecast.zarr",
+		ForecastURI:           "s3://rainpulse/products/run/pysteps-lk/pysteps-lk-1.1.0/forecast.zarr",
 		ForecastSHA256:        strings.Repeat("a", 64),
 		InputAssetIDs:         []uuid.UUID{uuid.MustParse("97000000-0000-4000-8000-000000000003")},
 		ModelID:               PystepsLKModelID,
 		ModelVersion:          PystepsLKModelVersion,
-		ModelConfigVersion:    "rp014-pysteps-lk-v1",
+		ModelConfigVersion:    "rp016-pysteps-lk-v1",
 		ProductConfigVersion:  "rp015-application-products-v1",
 		ProductBundleContract: "1.0",
 		ProductConfig:         json.RawMessage(`{"profile_version":"rp015-application-products-v1"}`),

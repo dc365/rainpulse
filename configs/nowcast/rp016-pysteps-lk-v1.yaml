@@ -1,7 +1,7 @@
 schema_version: "1.0"
-profile_version: rp014-pysteps-lk-v1
+profile_version: rp016-pysteps-lk-v1
 model_id: pysteps-lk
-model_version: pysteps-lk-1.0.0
+model_version: pysteps-lk-1.1.0
 pysteps_version: 1.21.5
 opencv_version: 5.0.0.93
 nowcast_input_contract_version: "1.2"
@@ -19,9 +19,15 @@ motion:
   input_field: DBZH_QC
   method: dense_lucaskanade
   rain_threshold_dbz: 10.0
-  minimum_trackable_rain_pixels: 16
+  minimum_trackable_rain_pixels: 64
+  minimum_motion_features: 4
+  missing_buffer_pixels: 5
   working_missing_fill_dbz: 0.0
-  missing_policy: dry_floor_working_copy_preserve_advected_mask
+  # Missing pixels are extended from the nearest valid observation only in the
+  # temporary motion-estimation copy. A five-pixel eroded domain excludes
+  # coverage edges and holes from feature detection; the original support mask
+  # is still advected independently and remains authoritative downstream.
+  missing_policy: nearest_valid_buffer_preserve_advected_mask
   fallback: zero_motion_when_insufficient_features
   lucas_kanade:
     feature_detection: shitomasi
@@ -39,5 +45,6 @@ extrapolation:
   baselines: [persistence, translation]
 
 confidence:
+  # This is a technical forecast-quality index, not a calibrated probability.
   decay_minutes: 120.0
   low_quality_factor: 0.5

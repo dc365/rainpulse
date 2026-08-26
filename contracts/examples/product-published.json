@@ -10,7 +10,7 @@
     "product_id": "afef83d9-ae5c-432d-a27e-960456cbfe78",
     "product_type": "rain_rate",
     "model_id": "pysteps-lk",
-    "model_version": "pysteps-lk-1.0.0",
+    "model_version": "pysteps-lk-1.1.0",
     "config_version": "rp015-application-products-v1",
     "grid_id": "fuzhou_118_123_25_27_0p01deg_v1",
     "issue_time": "2026-08-25T10:00:00Z",
@@ -22,7 +22,7 @@
       {
         "asset_id": "c4eccf4e-af9b-4090-8238-de1820f60247",
         "asset_type": "cloud_optimized_geotiff",
-        "uri": "s3://rainpulse/products/0ce8e90c-3160-5e5d-874d-1eda09bf1084/pysteps-lk/pysteps-lk-1.0.0/distribution/rp015-application-products-v1/application-products/rain_rate/lead-005/field.tif",
+        "uri": "s3://rainpulse/products/0ce8e90c-3160-5e5d-874d-1eda09bf1084/pysteps-lk/pysteps-lk-1.1.0/distribution/rp015-application-products-v1/application-products/rain_rate/lead-005/field.tif",
         "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
         "size_bytes": 262144,
         "media_type": "image/tiff; application=geotiff; profile=cloud-optimized",

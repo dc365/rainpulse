@@ -112,7 +112,7 @@ describe('RainPulse radar operations overview', () => {
       run_id: '82000000-0000-4000-8000-000000000001',
       analysis_time: '2026-06-15T12:05:00Z',
       grid_id: 'fuzhou_118_123_25_27_0p01deg_v1',
-      config_version: 'rp010-qi-mosaic-v1',
+      config_version: 'rp016-qi-mosaic-v1',
       status: 'ANALYSIS_READY',
       degraded_reason: 'insufficient_operational_contributors,input_not_operational:z9598',
       radar_count: 1,
@@ -186,7 +186,7 @@ describe('RainPulse radar operations overview', () => {
       else if (input.endsWith('/analysis-cycles?limit=12')) body = { items: [syntheticCycle, cycle] }
       else if (input.endsWith(`/${analysisID}`)) body = cycle
       else if (input.endsWith('/mosaic-summary')) body = {
-        profile_version: 'rp010-qi-mosaic-v1', algorithm_version: 'qi-mosaic-1.0.0',
+        profile_version: 'rp016-qi-mosaic-v1', algorithm_version: 'qi-mosaic-1.1.0',
         valid_coverage_ratio: 0.031489, mean_quality_index: 0.28919,
       }
       else if (input.endsWith('/qpe-summary')) body = {

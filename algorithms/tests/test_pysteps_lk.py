@@ -12,6 +12,7 @@ import pytest
 import zarr
 from zarr.storage import MemoryStore
 
+import rainpulse_algo.nowcast.pysteps_lk as pysteps_lk_module
 from rainpulse_algo.grid import RegularLatLonGrid
 from rainpulse_algo.nowcast.forecast_zarr import (
     build_forecast_output_zarr_store,
@@ -26,7 +27,7 @@ from rainpulse_algo.worker.object_store import artifact_sha256
 from .test_object_store import FakeMinio
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-PROFILE_PATH = REPOSITORY_ROOT / "configs" / "nowcast" / "rp014-pysteps-lk-v1.yaml"
+PROFILE_PATH = REPOSITORY_ROOT / "configs" / "nowcast" / "rp016-pysteps-lk-v1.yaml"
 ISSUE_TIME = datetime(2026, 8, 25, 12, 10, tzinfo=UTC)
 INPUT_ASSET_IDS = [
     UUID("91000000-0000-4000-8000-000000000001"),
@@ -211,6 +212,64 @@ def test_uses_explicit_zero_motion_fallback_for_no_rain() -> None:
     assert np.all(np.isnan(result.rain_rate[0, :, :, -5:]))
 
 
+def test_empty_motion_domain_has_specific_zero_motion_fallback() -> None:
+    configured = profile()
+    configured = replace(
+        configured,
+        motion=replace(configured.motion, missing_buffer_pixels=64),
+    )
+
+    result = run_pysteps_lk(
+        nowcast_input(),
+        profile=configured,
+        grid=tiny_grid(),
+    )
+
+    assert not np.any(result.motion_valid_mask)
+    assert result.motion_fallback_used is True
+    assert result.motion_fallback_reason == "no_motion_valid_domain"
+    assert result.motion_feature_count == 0
+    assert np.all(result.velocity_pixels_per_step == 0)
+
+
+def test_motion_domain_masks_sparse_and_dense_lucas_kanade(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[bool] = []
+    shape = (16, 16)
+    motion_valid = np.zeros(shape, dtype=bool)
+    motion_valid[4:12, 4:12] = True
+
+    def fake_lucas_kanade(images, *, dense: bool, **_):
+        calls.append(dense)
+        assert np.ma.isMaskedArray(images)
+        mask = np.ma.getmaskarray(images)
+        assert mask.shape == images.shape
+        assert np.all(mask[:, ~motion_valid])
+        assert not np.any(mask[:, motion_valid])
+        if dense:
+            return np.zeros((2, *shape), dtype="float32")
+        return (
+            np.asarray([[8.0, 8.0], [1.0, 1.0]], dtype="float32"),
+            np.zeros((2, 2), dtype="float32"),
+        )
+
+    monkeypatch.setattr(
+        pysteps_lk_module,
+        "_pysteps_function",
+        lambda *_: fake_lucas_kanade,
+    )
+    velocity, feature_count = pysteps_lk_module._estimate_dense_lucas_kanade(
+        np.ones((3, *shape), dtype="float32"),
+        profile(),
+        motion_valid,
+    )
+
+    assert calls == [False, True]
+    assert feature_count == 1
+    assert velocity.shape == (2, *shape)
+
+
 def test_real_worker_reads_verified_input_and_returns_forecast_bundle(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -259,13 +318,13 @@ def test_real_worker_reads_verified_input_and_returns_forecast_bundle(
             "trace_id": "95000000-0000-4000-8000-000000000004",
             "payload": {
                 "input_uri": f"s3://rainpulse/{prefix}",
-                "output_prefix": "s3://rainpulse/forecast/test/pysteps-lk-1.0.0/",
+                "output_prefix": "s3://rainpulse/forecast/test/pysteps-lk-1.1.0/",
                 "issue_time": ISSUE_TIME.isoformat(),
                 "grid_id": tiny_grid().grid_id,
                 "input_asset_ids": [str(value) for value in INPUT_ASSET_IDS],
                 "model_id": "pysteps-lk",
-                "model_version": "pysteps-lk-1.0.0",
-                "config_version": "rp014-pysteps-lk-v1",
+                "model_version": "pysteps-lk-1.1.0",
+                "config_version": "rp016-pysteps-lk-v1",
                 "forecast_contract_version": "1.1",
                 "baseline_models": ["persistence", "translation"],
             },

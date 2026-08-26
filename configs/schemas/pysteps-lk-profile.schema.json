@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rainpulse.local/configs/schemas/pysteps-lk-profile.schema.json",
-  "title": "RainPulse RP-014 pySTEPS-LK profile",
+  "title": "RainPulse deterministic pySTEPS-LK profile",
   "type": "object",
   "additionalProperties": false,
   "required": [

@@ -25,7 +25,7 @@ from rainpulse_algo.radar.mosaic_zarr import (
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-PROFILE_PATH = REPOSITORY_ROOT / "configs" / "mosaic" / "rp010-qi-mosaic-v1.yaml"
+PROFILE_PATH = REPOSITORY_ROOT / "configs" / "mosaic" / "rp016-qi-mosaic-v1.yaml"
 FLAG_PATH = REPOSITORY_ROOT / "configs" / "qc" / "flag-definitions.yaml"
 ANALYSIS_TIME = datetime(2026, 8, 25, 12, 0, tzinfo=UTC)
 
@@ -97,7 +97,7 @@ def radar_grid_fixture(
             "coordinate_sha256": grid.coordinate_sha256,
             "crs": "EPSG:4326",
             "registration": "point",
-            "hybrid_scan_version": "hybrid-scan-1.0.1",
+            "hybrid_scan_version": "hybrid-scan-1.1.0",
             "operational_eligible": operational_eligible,
             "operational_reasons": [] if operational_eligible else ["engineering_input"],
             "volume_start_time_utc": (
@@ -174,7 +174,7 @@ def mosaic_input(
         scan_id=scan_id,
         grid_uri=f"s3://rainpulse/grid/{radar_id}/grid.zarr",
         time_offset_seconds=offset_seconds,
-        hybrid_scan_version="hybrid-scan-1.0.1",
+        hybrid_scan_version="hybrid-scan-1.1.0",
         objects=radar_grid_fixture(
             radar_id,
             scan_id,
@@ -323,4 +323,24 @@ def test_rejects_request_time_offset_that_differs_from_grid() -> None:
             grid=small_grid(),
             profile=profile(),
             flag_masks=flag_masks(),
+        )
+
+
+def test_mosaic_rejects_flag_definition_missing_configured_hard_reject() -> None:
+    source = mosaic_input(
+        "radar-a",
+        "10000000-0000-4000-8000-000000000006",
+        np.full((2, 2), 15.0, dtype="float32"),
+        np.full((2, 2), 0.8, dtype="float32"),
+    )
+    incomplete_flags = flag_masks()
+    incomplete_flags.pop("RADIAL_INTERFERENCE")
+
+    with pytest.raises(RadarMosaicInputError, match="RADIAL_INTERFERENCE"):
+        build_radar_mosaic(
+            (source,),
+            analysis_time=ANALYSIS_TIME,
+            grid=small_grid(),
+            profile=profile(),
+            flag_masks=incomplete_flags,
         )

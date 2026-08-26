@@ -16,7 +16,7 @@ from .mosaic_profile import RadarMosaicProfile
 
 
 class RadarMosaicInputError(ValueError):
-    """Raised when committed RadarGrid inputs cannot safely enter RP-010."""
+    """Raised when committed RadarGrid inputs cannot safely enter the mosaic."""
 
 
 QI_COMPONENTS = (
@@ -241,9 +241,17 @@ def _validate_analysis_identity(
     scan_ids = [item.scan_id for item in inputs]
     if len(radar_ids) != len(set(radar_ids)) or len(scan_ids) != len(set(scan_ids)):
         raise RadarMosaicInputError("mosaic radar and scan identities must be unique")
-    required_flags = {"MISSING", "HARDWARE_ANOMALY", "LOW_QUALITY"}
-    if not required_flags <= flag_masks.keys():
-        raise RadarMosaicInputError("flag definition is missing RP-010 flags")
+    required_flags = {
+        "MISSING",
+        "HARDWARE_ANOMALY",
+        "LOW_QUALITY",
+        *profile.fusion.reject_flags,
+    }
+    missing_flags = sorted(required_flags - flag_masks.keys())
+    if missing_flags:
+        raise RadarMosaicInputError(
+            "flag definition is missing mosaic flags: " + ",".join(missing_flags)
+        )
 
 
 def _open_and_validate(

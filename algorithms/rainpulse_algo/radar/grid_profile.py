@@ -6,25 +6,11 @@ from typing import Literal
 
 import yaml
 
+from .qc_flags import PHASE1_HARD_REJECT_FLAGS
+
 
 class RadarGridConfigError(ValueError):
-    """Raised when an RP-009 grid profile is incomplete or inconsistent."""
-
-
-# Phase-1 Hybrid Scan is the first irreversible selection step before QPE and
-# nowcasting. Confirmed non-meteorological echoes must therefore be rejected
-# here rather than merely carried as low-quality observations.
-PHASE1_HARD_REJECT_FLAGS = frozenset(
-    {
-        "MISSING",
-        "HARDWARE_ANOMALY",
-        "RADIAL_INTERFERENCE",
-        "GROUND_CLUTTER",
-        "SEA_CLUTTER",
-        "ANOMALOUS_PROPAGATION",
-        "BIOLOGICAL_ECHO",
-    }
-)
+    """Raised when a radar grid profile is incomplete or inconsistent."""
 
 
 @dataclass(frozen=True)

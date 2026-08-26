@@ -1,6 +1,6 @@
 schema_version: "1.0"
-profile_version: rp010-qi-mosaic-v1
-algorithm_version: qi-mosaic-1.0.0
+profile_version: rp016-qi-mosaic-v1
+algorithm_version: qi-mosaic-1.1.0
 analysis_cycle_version: analysis-cycle-rp010-v1
 flag_definition_version: qc-flags-v1
 
@@ -24,4 +24,14 @@ fusion:
   quality_weight_power: 2.0
   low_quality_threshold: 0.45
   blended_source_code: 65535
-  reject_flags: [MISSING, HARDWARE_ANOMALY]
+  # Keep low-quality observations available for weighted fallback, but never
+  # let confirmed non-meteorological echoes regain eligibility at the mosaic
+  # stage merely because their scalar QI remains above the engineering floor.
+  reject_flags:
+    - MISSING
+    - HARDWARE_ANOMALY
+    - RADIAL_INTERFERENCE
+    - GROUND_CLUTTER
+    - SEA_CLUTTER
+    - ANOMALOUS_PROPAGATION
+    - BIOLOGICAL_ECHO

@@ -30,6 +30,7 @@
 
 - Preserve the three states: valid no-rain, missing, and low-quality. Never convert missing data to zero rainfall.
 - Preserve raw base data unchanged. Perform applicable QC in polar ray/gate space before gridding.
+- Keep confirmed non-meteorological QC causes as diagnostics in polar data, but hard-reject them at both Hybrid Scan and mosaic eligibility gates through the shared Phase 1 flag set.
 - Every correction retains its cause flag, correction diagnostic, QI component, and algorithm/configuration version.
 - Never delete all marine echoes based only on a land/sea mask, amplify severe blockage, or average dBZ directly across radars.
 - Use fixed five-minute Phase 1 steps and do not mix incompatible input intervals inside one model adapter.

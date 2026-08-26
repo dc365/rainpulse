@@ -11,10 +11,10 @@
     "analysis_time": "2026-08-25T12:05:00Z",
     "grid_id": "fuzhou_118_123_25_27_0p01deg_v1",
     "grid_config_version": "fuzhou-grid-0p01deg-v1",
-    "input_uri": "s3://rainpulse/analysis/mosaic/fuzhou_118_123_25_27_0p01deg_v1/2026/08/25/120500Z/qi-mosaic-1.0.0/mosaic.zarr",
+    "input_uri": "s3://rainpulse/analysis/mosaic/fuzhou_118_123_25_27_0p01deg_v1/2026/08/25/120500Z/qi-mosaic-1.1.0/mosaic.zarr",
     "output_prefix": "s3://rainpulse/analysis/fuzhou_118_123_25_27_0p01deg_v1/2026/08/25/120500Z/basic-zr-qpe-1.0.0/",
-    "mosaic_config_version": "rp010-qi-mosaic-v1",
-    "mosaic_algorithm_version": "qi-mosaic-1.0.0",
+    "mosaic_config_version": "rp016-qi-mosaic-v1",
+    "mosaic_algorithm_version": "qi-mosaic-1.1.0",
     "qpe_config_version": "rp011-basic-qpe-v1",
     "qpe_algorithm_version": "basic-zr-qpe-1.0.0",
     "flag_definition_version": "qc-flags-v1"

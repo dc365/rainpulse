@@ -21,7 +21,7 @@ from .pysteps_profile import PystepsLKProfile
 
 
 class PystepsLKInputError(ValueError):
-    """Raised when a committed NowcastInput cannot safely run RP-014."""
+    """Raised when a committed NowcastInput cannot safely run pySTEPS-LK."""
 
 
 @dataclass(frozen=True)
@@ -88,13 +88,13 @@ def run_pysteps_lk(
     fallback = False
     fallback_reason: str | None = None
 
-    if trackable_count < profile.motion.minimum_trackable_rain_pixels:
-        fallback = True
-        fallback_reason = "insufficient_trackable_rain"
-        velocity = np.zeros((2, *grid.shape), dtype="float32")
-    elif not np.any(motion_valid):
+    if not np.any(motion_valid):
         fallback = True
         fallback_reason = "no_motion_valid_domain"
+        velocity = np.zeros((2, *grid.shape), dtype="float32")
+    elif trackable_count < profile.motion.minimum_trackable_rain_pixels:
+        fallback = True
+        fallback_reason = "insufficient_trackable_rain"
         velocity = np.zeros((2, *grid.shape), dtype="float32")
     else:
         if motion_estimator is None:
@@ -210,10 +210,12 @@ def _validate_identity(
     )
     for name, actual, configured in expected:
         if actual != configured:
-            raise PystepsLKInputError(f"NowcastInput {name} differs from the RP-014 profile/grid")
+            raise PystepsLKInputError(
+                f"NowcastInput {name} differs from the active pySTEPS-LK profile/grid"
+            )
     frame_count = len(root["time"])
     if not profile.sequence.minimum_frames <= frame_count <= profile.sequence.maximum_frames:
-        raise PystepsLKInputError("NowcastInput frame count is outside RP-014 bounds")
+        raise PystepsLKInputError("NowcastInput frame count is outside profile bounds")
     if not np.array_equal(root["lat"][:], grid.latitude) or not np.array_equal(
         root["lon"][:], grid.longitude
     ):
@@ -300,12 +302,17 @@ def _estimate_dense_lucas_kanade(
         "decl_scale": lk.decluster_scale_pixels,
         "verbose": False,
     }
-    sparse_xy, _ = dense_lucaskanade(images, dense=False, **parameters)
+    masked_images = np.ma.array(
+        images,
+        mask=np.broadcast_to(~motion_valid, images.shape),
+        copy=False,
+    )
+    sparse_xy, _ = dense_lucaskanade(masked_images, dense=False, **parameters)
     feature_count = _count_features_in_mask(sparse_xy, motion_valid)
     if feature_count == 0:
         return np.zeros((2, *images.shape[-2:]), dtype="float32"), 0
     velocity = dense_lucaskanade(
-        images,
+        masked_images,
         dense=True,
         **parameters,
     )

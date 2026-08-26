@@ -5,26 +5,11 @@ from pathlib import Path
 
 import yaml
 
+from .qc_flags import PHASE1_HARD_REJECT_FLAGS
+
 
 class RadarMosaicConfigError(ValueError):
-    """Raised when an RP-010 mosaic profile is incomplete or inconsistent."""
-
-
-# The mosaic is the final reflectivity field used by QPE and nowcasting. A
-# contributor carrying a confirmed non-meteorological cause must not be allowed
-# back into the analysis merely because its scalar QI is still above a low
-# engineering threshold.
-PHASE1_HARD_REJECT_FLAGS = frozenset(
-    {
-        "MISSING",
-        "HARDWARE_ANOMALY",
-        "RADIAL_INTERFERENCE",
-        "GROUND_CLUTTER",
-        "SEA_CLUTTER",
-        "ANOMALOUS_PROPAGATION",
-        "BIOLOGICAL_ECHO",
-    }
-)
+    """Raised when a radar mosaic profile is incomplete or inconsistent."""
 
 
 @dataclass(frozen=True)

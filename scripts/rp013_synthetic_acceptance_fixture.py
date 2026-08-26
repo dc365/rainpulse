@@ -183,8 +183,8 @@ def build_synthetic_analysis(
             "coordinate_sha256": grid.coordinate_sha256,
             "crs": "EPSG:4326",
             "registration": "point",
-            "profile_version": "rp010-qi-mosaic-v1",
-            "mosaic_algorithm_version": "qi-mosaic-1.0.0",
+            "profile_version": "rp016-qi-mosaic-v1",
+            "mosaic_algorithm_version": "qi-mosaic-1.1.0",
             "flag_definition_version": "qc-flags-v1",
             "input_mosaic_uri": (
                 "s3://rainpulse/rp013-acceptance/synthetic/mosaic/"

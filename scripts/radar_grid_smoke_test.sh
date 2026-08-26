@@ -9,7 +9,7 @@ compose_file=${RAINPULSE_COMPOSE_FILE:-deploy/docker-compose.yaml}
 env_file=${RAINPULSE_COMPOSE_ENV_FILE:-deploy/.env}
 api_url=${RAINPULSE_API_URL:-http://127.0.0.1:8080}
 timeout_seconds=${RAINPULSE_SMOKE_TIMEOUT:-900}
-grid_profile=/opt/rainpulse/configs/gridding/rp009-hybrid-v1.1.yaml
+grid_profile=/opt/rainpulse/configs/gridding/rp016-hybrid-v1.yaml
 
 [[ -f "$env_file" ]] || {
   printf 'Compose environment file not found: %s\n' "$env_file" >&2

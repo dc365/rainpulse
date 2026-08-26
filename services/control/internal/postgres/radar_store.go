@@ -278,7 +278,7 @@ WHERE run_id = $1 FOR UPDATE`, bundle.Job.RunID).Scan(&scanID, &status, &qcURI);
 	}
 	if _, err = tx.Exec(ctx, `
 INSERT INTO config_versions (config_version, sha256, config, description, created_at)
-VALUES ($1, $2, $3, 'Radar grid configuration registered by RP-009 workflow', $4)
+VALUES ($1, $2, $3, 'Radar grid configuration registered by workflow', $4)
 ON CONFLICT (config_version) DO NOTHING`,
 		bundle.Job.ConfigVersion, bundle.ConfigSHA256, bundle.Config, bundle.Job.CreatedAt); err != nil {
 		return fmt.Errorf("insert radar grid config %s: %w", bundle.Job.ConfigVersion, err)
@@ -371,7 +371,7 @@ WHERE s.scan_id = $1 FOR SHARE OF r`, *radar.ScanID).
 	}
 	if _, err = tx.Exec(ctx, `
 INSERT INTO config_versions (config_version, sha256, config, description, created_at)
-VALUES ($1, $2, $3, 'Radar mosaic configuration registered by RP-010 workflow', $4)
+VALUES ($1, $2, $3, 'Radar mosaic configuration registered by workflow', $4)
 ON CONFLICT (config_version) DO NOTHING`,
 		bundle.Job.ConfigVersion, bundle.ConfigSHA256, bundle.Config,
 		bundle.Job.CreatedAt); err != nil {

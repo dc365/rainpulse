@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -257,9 +258,8 @@ def test_rp009_hybrid_profile_is_valid_and_explicitly_engineering_only() -> None
     schema = json.loads(
         (CONFIG_ROOT / "schemas" / "radar-grid-profile.schema.json").read_text()
     )
-    profile = yaml.safe_load(
-        (CONFIG_ROOT / "gridding" / "rp009-hybrid-v1.1.yaml").read_text()
-    )
+    profile_path = CONFIG_ROOT / "gridding" / "rp009-hybrid-v1.1.yaml"
+    profile = yaml.safe_load(profile_path.read_text())
 
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(profile)
@@ -274,15 +274,40 @@ def test_rp009_hybrid_profile_is_valid_and_explicitly_engineering_only() -> None
         "maximum_usable_fraction"
     ]
     assert profile["hybrid_scan"]["selection"] == "lowest_usable_elevation"
+    assert profile["hybrid_scan"]["reject_flags"] == ["MISSING", "HARDWARE_ANOMALY"]
+    assert hashlib.sha256(profile_path.read_bytes()).hexdigest() == (
+        "0c4242370b9c8b7fa0ccb6e33d6e2c1e221400222c73fbe50b433f1ca1798c70"
+    )
+
+
+def test_rp016_hybrid_profile_versions_hard_qc_gate_immutably() -> None:
+    schema = json.loads(
+        (CONFIG_ROOT / "schemas" / "radar-grid-profile.schema.json").read_text()
+    )
+    profile = yaml.safe_load(
+        (CONFIG_ROOT / "gridding" / "rp016-hybrid-v1.yaml").read_text()
+    )
+
+    Draft202012Validator(schema).validate(profile)
+    assert profile["profile_version"] == "rp016-hybrid-v1"
+    assert profile["algorithm_version"] == "hybrid-scan-1.1.0"
+    assert {
+        "MISSING",
+        "HARDWARE_ANOMALY",
+        "RADIAL_INTERFERENCE",
+        "GROUND_CLUTTER",
+        "SEA_CLUTTER",
+        "ANOMALOUS_PROPAGATION",
+        "BIOLOGICAL_ECHO",
+    } <= set(profile["hybrid_scan"]["reject_flags"])
 
 
 def test_rp010_mosaic_profile_freezes_time_alignment_and_linear_z_fusion() -> None:
     schema = json.loads(
         (CONFIG_ROOT / "schemas" / "radar-mosaic-profile.schema.json").read_text()
     )
-    profile = yaml.safe_load(
-        (CONFIG_ROOT / "mosaic" / "rp010-qi-mosaic-v1.yaml").read_text()
-    )
+    profile_path = CONFIG_ROOT / "mosaic" / "rp010-qi-mosaic-v1.yaml"
+    profile = yaml.safe_load(profile_path.read_text())
 
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(profile)
@@ -292,6 +317,32 @@ def test_rp010_mosaic_profile_freezes_time_alignment_and_linear_z_fusion() -> No
     assert profile["alignment"]["expected_radar_ids"] == []
     assert profile["fusion"]["method"] == "highest_qi_then_linear_z_blend"
     assert profile["fusion"]["blended_source_code"] == 65535
+    assert profile["fusion"]["reject_flags"] == ["MISSING", "HARDWARE_ANOMALY"]
+    assert hashlib.sha256(profile_path.read_bytes()).hexdigest() == (
+        "0d675a4aa9d667222e32689b4881a7def04dc063ef5f50c18a910b4d597d7a05"
+    )
+
+
+def test_rp016_mosaic_profile_versions_hard_qc_gate_immutably() -> None:
+    schema = json.loads(
+        (CONFIG_ROOT / "schemas" / "radar-mosaic-profile.schema.json").read_text()
+    )
+    profile = yaml.safe_load(
+        (CONFIG_ROOT / "mosaic" / "rp016-qi-mosaic-v1.yaml").read_text()
+    )
+
+    Draft202012Validator(schema).validate(profile)
+    assert profile["profile_version"] == "rp016-qi-mosaic-v1"
+    assert profile["algorithm_version"] == "qi-mosaic-1.1.0"
+    assert {
+        "MISSING",
+        "HARDWARE_ANOMALY",
+        "RADIAL_INTERFERENCE",
+        "GROUND_CLUTTER",
+        "SEA_CLUTTER",
+        "ANOMALOUS_PROPAGATION",
+        "BIOLOGICAL_ECHO",
+    } <= set(profile["fusion"]["reject_flags"])
 
 
 def test_rp011_qpe_profile_freezes_basic_zr_and_disables_gauge_adjustment() -> None:
@@ -381,9 +432,8 @@ def test_rp014_pysteps_lk_profile_freezes_motion_and_baselines() -> None:
     schema = json.loads(
         (CONFIG_ROOT / "schemas" / "pysteps-lk-profile.schema.json").read_text()
     )
-    profile = yaml.safe_load(
-        (CONFIG_ROOT / "nowcast" / "rp014-pysteps-lk-v1.yaml").read_text()
-    )
+    profile_path = CONFIG_ROOT / "nowcast" / "rp014-pysteps-lk-v1.yaml"
+    profile = yaml.safe_load(profile_path.read_text())
 
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(profile)
@@ -399,6 +449,32 @@ def test_rp014_pysteps_lk_profile_freezes_motion_and_baselines() -> None:
     assert profile["motion"]["fallback"] == "zero_motion_when_insufficient_features"
     assert profile["extrapolation"]["lead_count"] == 24
     assert profile["extrapolation"]["baselines"] == ["persistence", "translation"]
+    assert profile["motion"]["minimum_trackable_rain_pixels"] == 16
+    assert profile["motion"]["missing_policy"] == (
+        "dry_floor_working_copy_preserve_advected_mask"
+    )
+    assert hashlib.sha256(profile_path.read_bytes()).hexdigest() == (
+        "18bc0d11b01b6437f63a79c57997a818d1aaed291d8f16a24efc54709b86a48d"
+    )
+
+
+def test_rp016_pysteps_lk_profile_versions_motion_safeguards_immutably() -> None:
+    schema = json.loads(
+        (CONFIG_ROOT / "schemas" / "pysteps-lk-profile.schema.json").read_text()
+    )
+    profile = yaml.safe_load(
+        (CONFIG_ROOT / "nowcast" / "rp016-pysteps-lk-v1.yaml").read_text()
+    )
+
+    Draft202012Validator(schema).validate(profile)
+    assert profile["profile_version"] == "rp016-pysteps-lk-v1"
+    assert profile["model_version"] == "pysteps-lk-1.1.0"
+    assert profile["motion"]["minimum_trackable_rain_pixels"] == 64
+    assert profile["motion"]["minimum_motion_features"] == 4
+    assert profile["motion"]["missing_buffer_pixels"] == 5
+    assert profile["motion"]["missing_policy"] == (
+        "nearest_valid_buffer_preserve_advected_mask"
+    )
 
 
 def test_rp015_product_profile_freezes_all_distribution_formats() -> None:

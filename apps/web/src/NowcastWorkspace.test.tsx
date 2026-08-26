@@ -18,7 +18,7 @@ const run = {
 const products = [
   {
     product_id: 'rain-product', run_id: run.run_id, product_type: 'rain_rate',
-    model_id: 'pysteps-lk', model_version: 'pysteps-lk-1.0.0',
+    model_id: 'pysteps-lk', model_version: 'pysteps-lk-1.1.0',
     config_version: 'rp015-application-products-v1', grid_id: run.grid_id,
     issue_time: run.issue_time,
     valid_times: ['2026-08-25T10:05:00Z', '2026-08-25T10:10:00Z'],
@@ -28,7 +28,7 @@ const products = [
   },
   {
     product_id: 'accum-60', run_id: run.run_id, product_type: 'accumulation_60',
-    model_id: 'pysteps-lk', model_version: 'pysteps-lk-1.0.0',
+    model_id: 'pysteps-lk', model_version: 'pysteps-lk-1.1.0',
     config_version: 'rp015-application-products-v1', grid_id: run.grid_id,
     issue_time: run.issue_time, valid_times: ['2026-08-25T11:00:00Z'],
     member_count: 1, source_forecast_uri: 's3://rainpulse/forecast.zarr',
@@ -37,7 +37,7 @@ const products = [
   },
   {
     product_id: 'accum-120', run_id: run.run_id, product_type: 'accumulation_120',
-    model_id: 'pysteps-lk', model_version: 'pysteps-lk-1.0.0',
+    model_id: 'pysteps-lk', model_version: 'pysteps-lk-1.1.0',
     config_version: 'rp015-application-products-v1', grid_id: run.grid_id,
     issue_time: run.issue_time, valid_times: ['2026-08-25T12:00:00Z'],
     member_count: 1, source_forecast_uri: 's3://rainpulse/forecast.zarr',

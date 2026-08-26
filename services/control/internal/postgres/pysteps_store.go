@@ -117,7 +117,7 @@ func (store *Store) CreatePystepsLKBundle(
 
 	if _, err = tx.Exec(ctx, `
 INSERT INTO config_versions (config_version, sha256, config, description, created_at)
-VALUES ($1, $2, $3, 'RP-014 pySTEPS-LK configuration', $4)
+VALUES ($1, $2, $3, 'pySTEPS-LK configuration registered by forecast workflow', $4)
 ON CONFLICT (config_version) DO NOTHING`, bundle.Job.ConfigVersion,
 		bundle.ConfigSHA256, bundle.Config, bundle.Job.CreatedAt); err != nil {
 		return fmt.Errorf("insert pySTEPS-LK configuration: %w", err)
@@ -360,15 +360,22 @@ func validatePystepsLKMetrics(
 	event orchestration.JobCompleted,
 ) error {
 	finite := func(value float64) bool { return !math.IsNaN(value) && !math.IsInf(value, 0) }
+	activeMotionDiagnosticsValid := true
+	if metrics.MissingPolicy == "nearest_valid_buffer_preserve_advected_mask" {
+		activeMotionDiagnosticsValid = metrics.MotionFeatureCount >= 0 &&
+			finite(metrics.MotionValidFraction) && metrics.MotionValidFraction >= 0 &&
+			metrics.MotionValidFraction <= 1 && metrics.MissingBufferPixels > 0 &&
+			metrics.ConfidenceKind == orchestration.PystepsLKConfidenceKind &&
+			validPystepsFallback(metrics.MotionFallbackUsed, metrics.MotionFallbackReason)
+	}
 	if metrics.SchemaVersion != "1.0" || metrics.RunID == uuid.Nil ||
 		metrics.JobID == uuid.Nil || metrics.IssueTime.IsZero() || metrics.GridID == "" ||
 		metrics.ModelID != orchestration.PystepsLKModelID ||
-		metrics.ModelVersion != orchestration.PystepsLKModelVersion ||
+		metrics.ModelVersion == "" ||
 		metrics.ConfigVersion == "" || metrics.InputURI == "" ||
 		len(metrics.InputAssetIDs) == 0 || metrics.LeadCount != 24 ||
 		metrics.LeadStepMinutes != 5 || metrics.TrackableRainPixelCount < 0 ||
-		metrics.RuntimeMS < 0 || metrics.MissingPolicy !=
-		"dry_floor_working_copy_preserve_advected_mask" ||
+		metrics.RuntimeMS < 0 || !supportedPystepsMissingPolicy(metrics.MissingPolicy) ||
 		len(metrics.BaselineModels) != 2 || metrics.BaselineModels[0] != "persistence" ||
 		metrics.BaselineModels[1] != "translation" ||
 		!metrics.ValidFrom.Equal(metrics.IssueTime.Add(5*time.Minute)) ||
@@ -378,8 +385,34 @@ func validatePystepsLKMetrics(
 		!finite(metrics.MaximumForecastRateMMH) ||
 		metrics.FirstLeadValidCoverageRatio < 0 || metrics.FirstLeadValidCoverageRatio > 1 ||
 		metrics.LastLeadValidCoverageRatio < 0 || metrics.LastLeadValidCoverageRatio > 1 ||
-		metrics.MaximumForecastRateMMH < 0 || metrics.RuntimeMS > event.Payload.RuntimeMS {
+		metrics.MaximumForecastRateMMH < 0 || metrics.RuntimeMS > event.Payload.RuntimeMS ||
+		!activeMotionDiagnosticsValid {
 		return fmt.Errorf("%w: invalid pySTEPS-LK diagnostics", orchestration.ErrInvalidEvent)
 	}
 	return nil
+}
+
+func validPystepsFallback(used bool, reason *string) bool {
+	if !used {
+		return reason == nil
+	}
+	if reason == nil {
+		return false
+	}
+	switch *reason {
+	case "insufficient_trackable_rain", "no_motion_valid_domain", "insufficient_motion_features":
+		return true
+	default:
+		return false
+	}
+}
+
+func supportedPystepsMissingPolicy(value string) bool {
+	switch value {
+	case "dry_floor_working_copy_preserve_advected_mask",
+		"nearest_valid_buffer_preserve_advected_mask":
+		return true
+	default:
+		return false
+	}
 }
