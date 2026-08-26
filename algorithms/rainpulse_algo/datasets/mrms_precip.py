@@ -149,7 +149,9 @@ def read_mrms_precip_frame(path: Path, grid: RegularLatLonGrid) -> MRMSPrecipFra
     )
 
 
-def _rate_to_surrogate_reflectivity(rate: np.ndarray, valid: np.ndarray) -> np.ndarray:
+def rate_to_surrogate_reflectivity(rate: np.ndarray, valid: np.ndarray) -> np.ndarray:
+    """Create the frozen Z=200R^1.6 motion proxy used only by MRMS validation."""
+
     reflectivity = np.full(rate.shape, np.nan, dtype="float32")
     dry = valid & (rate == 0.0)
     rain = valid & (rate > 0.0)
@@ -160,13 +162,11 @@ def _rate_to_surrogate_reflectivity(rate: np.ndarray, valid: np.ndarray) -> np.n
     return reflectivity
 
 
-def build_mrms_validation_sequence(
+def _validate_observed_frames(
     frames: Mapping[datetime, MRMSPrecipFrame],
     issue_time: datetime,
     grid: RegularLatLonGrid,
-) -> MRMSValidationSequence:
-    """Build a causal five-frame, five-minute sequence from three 10-minute MRMS frames."""
-
+) -> tuple[tuple[datetime, ...], tuple[MRMSPrecipFrame, ...]]:
     if issue_time.tzinfo is None or issue_time.utcoffset() != timedelta(0):
         raise MRMSPrecipError("MRMS validation issue time must be timezone-aware UTC")
     if issue_time.second or issue_time.microsecond or issue_time.minute % 10:
@@ -187,7 +187,46 @@ def build_mrms_validation_sequence(
             or frame.source_state.shape != grid.shape
         ):
             raise MRMSPrecipError("MRMS frame shape differs from the validation grid")
+    return observed_times, observed
 
+
+def build_mrms_observed_sequence(
+    frames: Mapping[datetime, MRMSPrecipFrame],
+    issue_time: datetime,
+    grid: RegularLatLonGrid,
+) -> MRMSValidationSequence:
+    """Build the native three-frame, ten-minute sequence without temporal interpolation."""
+
+    observed_times, observed = _validate_observed_frames(frames, issue_time, grid)
+    rate_sequence = np.stack([frame.rate_mm_h for frame in observed]).astype("float32")
+    valid_sequence = np.stack([frame.valid_mask == 1 for frame in observed])
+    state_sequence = np.stack([frame.source_state for frame in observed]).astype("int8")
+    quality = np.where(valid_sequence, 1.0, np.nan).astype("float32")
+    age = np.zeros(rate_sequence.shape, dtype="float32")
+    age[~valid_sequence] = np.nan
+    return MRMSValidationSequence(
+        issue_time=issue_time,
+        frame_times=observed_times,
+        source_basis_times=tuple((value,) for value in observed_times),
+        rate_mm_h=rate_sequence,
+        reflectivity_dbz=rate_to_surrogate_reflectivity(rate_sequence, valid_sequence),
+        quality_index=quality,
+        valid_mask=valid_sequence.astype("uint8"),
+        low_quality_mask=np.zeros(rate_sequence.shape, dtype="uint8"),
+        data_age_minutes=age,
+        source_state=state_sequence,
+        interpolated_frames=np.zeros(len(observed_times), dtype="uint8"),
+    )
+
+
+def build_mrms_validation_sequence(
+    frames: Mapping[datetime, MRMSPrecipFrame],
+    issue_time: datetime,
+    grid: RegularLatLonGrid,
+) -> MRMSValidationSequence:
+    """Build a causal five-frame, five-minute sequence from three 10-minute MRMS frames."""
+
+    _, observed = _validate_observed_frames(frames, issue_time, grid)
     rates: list[np.ndarray] = []
     valid_masks: list[np.ndarray] = []
     states: list[np.ndarray] = []
@@ -238,7 +277,7 @@ def build_mrms_validation_sequence(
         frame_times=frame_times,
         source_basis_times=tuple(basis_times[index] for index in order),
         rate_mm_h=rate_sequence,
-        reflectivity_dbz=_rate_to_surrogate_reflectivity(rate_sequence, valid_sequence),
+        reflectivity_dbz=rate_to_surrogate_reflectivity(rate_sequence, valid_sequence),
         quality_index=quality,
         valid_mask=valid_sequence.astype("uint8"),
         low_quality_mask=np.zeros(rate_sequence.shape, dtype="uint8"),
