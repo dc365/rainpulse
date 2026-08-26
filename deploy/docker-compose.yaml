@@ -285,9 +285,9 @@ services:
       RAINPULSE_OBJECT_STORE_ACCESS_KEY: "${RAINPULSE_MINIO_WORKER_ACCESS_KEY:?set RAINPULSE_MINIO_WORKER_ACCESS_KEY in deploy/.env}"
       RAINPULSE_OBJECT_STORE_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
       RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
-      RAINPULSE_WORKER_ID: rp009-hybrid-grid
+      RAINPULSE_WORKER_ID: rp016-hybrid-grid
       RAINPULSE_WORKER_PROFILE: radar-grid-hybrid
-      RAINPULSE_RADAR_GRID_CONFIG: /opt/rainpulse/configs/gridding/rp009-hybrid-v1.1.yaml
+      RAINPULSE_RADAR_GRID_CONFIG: /opt/rainpulse/configs/gridding/rp016-hybrid-v1.yaml
       RAINPULSE_GRID_CONFIG: /opt/rainpulse/configs/grids/fuzhou-0p01deg-v1.yaml
       RAINPULSE_ANCILLARY_CONFIG: /opt/rainpulse/configs/ancillary/fujian-taiwan-v1.yaml
       RAINPULSE_ANCILLARY_ROOT: /opt/rainpulse/ancillary
@@ -327,9 +327,9 @@ services:
       RAINPULSE_OBJECT_STORE_ACCESS_KEY: "${RAINPULSE_MINIO_WORKER_ACCESS_KEY:?set RAINPULSE_MINIO_WORKER_ACCESS_KEY in deploy/.env}"
       RAINPULSE_OBJECT_STORE_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
       RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
-      RAINPULSE_WORKER_ID: rp010-qi-mosaic
+      RAINPULSE_WORKER_ID: rp016-qi-mosaic
       RAINPULSE_WORKER_PROFILE: analysis-mosaic-qi
-      RAINPULSE_RADAR_MOSAIC_CONFIG: /opt/rainpulse/configs/mosaic/rp010-qi-mosaic-v1.yaml
+      RAINPULSE_RADAR_MOSAIC_CONFIG: /opt/rainpulse/configs/mosaic/rp016-qi-mosaic-v1.yaml
       RAINPULSE_GRID_CONFIG: /opt/rainpulse/configs/grids/fuzhou-0p01deg-v1.yaml
       RAINPULSE_QC_FLAG_DEFINITIONS: /opt/rainpulse/configs/qc/flag-definitions.yaml
       TZ: UTC
@@ -476,9 +476,9 @@ services:
       RAINPULSE_OBJECT_STORE_ACCESS_KEY: "${RAINPULSE_MINIO_WORKER_ACCESS_KEY:?set RAINPULSE_MINIO_WORKER_ACCESS_KEY in deploy/.env}"
       RAINPULSE_OBJECT_STORE_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
       RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
-      RAINPULSE_WORKER_ID: rp014-pysteps-lk
+      RAINPULSE_WORKER_ID: rp016-pysteps-lk
       RAINPULSE_WORKER_PROFILE: pysteps-lk
-      RAINPULSE_PYSTEPS_LK_CONFIG: /opt/rainpulse/configs/nowcast/rp014-pysteps-lk-v1.yaml
+      RAINPULSE_PYSTEPS_LK_CONFIG: /opt/rainpulse/configs/nowcast/rp016-pysteps-lk-v1.yaml
       RAINPULSE_GRID_CONFIG: /opt/rainpulse/configs/grids/fuzhou-0p01deg-v1.yaml
       TZ: UTC
     volumes:

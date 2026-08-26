@@ -62,10 +62,18 @@ def _execute_pysteps_lk(
             "output_size_bytes": float(validation["size_bytes"]),
             "zarr_object_count": float(validation["object_count"]),
             "lead_count": float(validation["lead_count"]),
-            "first_lead_valid_coverage_ratio": float(validation["first_lead_valid_coverage_ratio"]),
-            "last_lead_valid_coverage_ratio": float(validation["last_lead_valid_coverage_ratio"]),
-            "maximum_forecast_rate_mm_h": float(validation["maximum_forecast_rate_mm_h"]),
+            "first_lead_valid_coverage_ratio": float(
+                validation["first_lead_valid_coverage_ratio"]
+            ),
+            "last_lead_valid_coverage_ratio": float(
+                validation["last_lead_valid_coverage_ratio"]
+            ),
+            "maximum_forecast_rate_mm_h": float(
+                validation["maximum_forecast_rate_mm_h"]
+            ),
             "motion_fallback_used": float(validation["motion_fallback_used"]),
+            "motion_feature_count": float(validation["motion_feature_count"]),
+            "motion_valid_fraction": float(validation["motion_valid_fraction"]),
             "model_runtime_ms": float(runtime_ms),
         },
     )

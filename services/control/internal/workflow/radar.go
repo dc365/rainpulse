@@ -308,12 +308,17 @@ type PystepsLKMetrics struct {
 	ValidFrom                       time.Time   `json:"valid_from"`
 	ValidTo                         time.Time   `json:"valid_to"`
 	MotionFallbackUsed              bool        `json:"motion_fallback_used"`
+	MotionFallbackReason            *string     `json:"motion_fallback_reason"`
+	MotionFeatureCount              int64       `json:"motion_feature_count"`
+	MotionValidFraction             float64     `json:"motion_valid_fraction"`
+	MissingBufferPixels             int         `json:"missing_buffer_pixels"`
 	TrackableRainPixelCount         int64       `json:"trackable_rain_pixel_count"`
 	FirstLeadValidCoverageRatio     float64     `json:"first_lead_valid_coverage_ratio"`
 	LastLeadValidCoverageRatio      float64     `json:"last_lead_valid_coverage_ratio"`
 	MaximumForecastRateMMH          float64     `json:"maximum_forecast_rate_mm_h"`
 	BaselineModels                  []string    `json:"baseline_models"`
 	MissingPolicy                   string      `json:"missing_policy"`
+	ConfidenceKind                  string      `json:"confidence_kind"`
 	RuntimeMS                       int64       `json:"runtime_ms"`
 	GlobalTranslationXPixelsPerStep float64     `json:"global_translation_x_pixels_per_step"`
 	GlobalTranslationYPixelsPerStep float64     `json:"global_translation_y_pixels_per_step"`

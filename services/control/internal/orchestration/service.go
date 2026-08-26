@@ -991,7 +991,7 @@ func validatePystepsLKInput(input PystepsLKInput) error {
 	}
 	if input.ModelID != PystepsLKModelID || input.ModelVersion != PystepsLKModelVersion ||
 		input.ConfigVersion == "" || input.ForecastContractVersion != "1.1" {
-		return fmt.Errorf("pySTEPS-LK model and contract identity differs from RP-014")
+		return fmt.Errorf("pySTEPS-LK model and contract identity differs from the active profile")
 	}
 	if len(input.BaselineModels) != 2 || input.BaselineModels[0] != "persistence" ||
 		input.BaselineModels[1] != "translation" {

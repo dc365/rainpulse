@@ -6,9 +6,11 @@ from typing import Literal
 
 import yaml
 
+from .qc_flags import PHASE1_HARD_REJECT_FLAGS
+
 
 class RadarGridConfigError(ValueError):
-    """Raised when an RP-009 grid profile is incomplete or inconsistent."""
+    """Raised when a radar grid profile is incomplete or inconsistent."""
 
 
 @dataclass(frozen=True)
@@ -166,3 +168,9 @@ def _validate_profile(profile: RadarGridProfile) -> None:
         raise RadarGridConfigError("maximum beam height must be positive")
     if profile.hybrid_scan.beam_height_quality_scale_m <= 0:
         raise RadarGridConfigError("beam height quality scale must be positive")
+    reject_flags = set(profile.hybrid_scan.reject_flags)
+    missing = sorted(PHASE1_HARD_REJECT_FLAGS - reject_flags)
+    if missing:
+        raise RadarGridConfigError(
+            "Hybrid Scan reject_flags omit Phase-1 hard rejects: " + ",".join(missing)
+        )

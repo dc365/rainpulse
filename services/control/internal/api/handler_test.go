@@ -185,8 +185,8 @@ func TestRadarAndAnalysisQueriesPreservePartialRadarFailure(t *testing.T) {
 		},
 		grid: workflow.RadarGridMetrics{
 			ScanID: scanAID, RadarID: "synthetic_radar_a", GridID: "fuzhou-0p01-v1",
-			GridConfigVersion: "fuzhou-0p01-v1", ProfileVersion: "rp009-hybrid-v1",
-			AlgorithmVersion: "hybrid-scan-1.0.0", DEMAssetVersion: "ancillary-fujian-taiwan-v1",
+			GridConfigVersion: "fuzhou-0p01-v1", ProfileVersion: "rp016-hybrid-v1",
+			AlgorithmVersion: "hybrid-scan-1.1.0", DEMAssetVersion: "ancillary-fujian-taiwan-v1",
 			VerticalDatumStatus: "unverified_engineering", OperationalEligible: false,
 			OperationalReasons: []string{"RADAR_CONFIG_DRAFT"}, GridCellCount: 100,
 			ValidCellCount: 80, MissingCellCount: 20, ValidCoverageRatio: 0.8,
@@ -198,8 +198,8 @@ func TestRadarAndAnalysisQueriesPreservePartialRadarFailure(t *testing.T) {
 			GridConfigVersion:      "fuzhou-0p01-v1",
 			QPEConfigVersion:       "rp011-basic-qpe-v1",
 			QPEAlgorithmVersion:    "basic-zr-qpe-1.0.0",
-			MosaicConfigVersion:    "rp010-qi-mosaic-v1",
-			MosaicAlgorithmVersion: "qi-mosaic-1.0.0",
+			MosaicConfigVersion:    "rp016-qi-mosaic-v1",
+			MosaicAlgorithmVersion: "qi-mosaic-1.1.0",
 			FlagDefinitionVersion:  "qc-flags-v1",
 			InputMosaicURI:         "s3://rainpulse/mosaic.zarr", InputField: "DBZH_QC",
 			CoefficientA: 200, ExponentB: 1.6, MaximumRateMMH: 300,
@@ -225,7 +225,7 @@ func TestRadarAndAnalysisQueriesPreservePartialRadarFailure(t *testing.T) {
 	assertResponse("/api/v1/radars/status", `"radar_id":"synthetic_radar_a"`)
 	assertResponse("/api/v1/radar-scans/"+scanBID.String(), `"status":"FAILED"`)
 	assertResponse("/api/v1/radar-scans/"+scanAID.String()+"/qc-summary", `"qc_profile":"rp008-basic-v1"`)
-	assertResponse("/api/v1/radar-scans/"+scanAID.String()+"/grid-summary", `"profile_version":"rp009-hybrid-v1"`)
+	assertResponse("/api/v1/radar-scans/"+scanAID.String()+"/grid-summary", `"profile_version":"rp016-hybrid-v1"`)
 	assertResponse("/api/v1/analysis-cycles/"+analysis.ID.String(), `"status":"ANALYSIS_READY"`)
 	assertResponse("/api/v1/analysis-cycles/"+analysis.ID.String(), `"state":"FAILED"`)
 	assertResponse("/api/v1/analysis-cycles/"+analysis.ID.String()+"/qpe-summary", `"qpe_config_version":"rp011-basic-qpe-v1"`)
@@ -356,7 +356,7 @@ func TestProductCatalogContentAndIndexedQueries(t *testing.T) {
 	product := workflow.Product{
 		ID: productID, RunID: uuid.New(), ModelRunID: uuid.New(),
 		ProductType: workflow.ProductRainRate,
-		ModelID:     "pysteps-lk", ModelVersion: "pysteps-lk-1.0.0",
+		ModelID:     "pysteps-lk", ModelVersion: "pysteps-lk-1.1.0",
 		ConfigVersion: "rp015-application-products-v1",
 		GridID:        "tiny", IssueTime: now, ValidTimes: validTimes, MemberCount: 1,
 		SourceForecastURI:    "s3://rainpulse/forecast.zarr",

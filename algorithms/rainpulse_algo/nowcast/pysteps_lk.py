@@ -11,6 +11,7 @@ from typing import Any
 
 import numpy as np
 import zarr
+from scipy import ndimage
 from zarr.storage import MemoryStore
 
 from rainpulse_algo.grid import RegularLatLonGrid
@@ -20,7 +21,7 @@ from .pysteps_profile import PystepsLKProfile
 
 
 class PystepsLKInputError(ValueError):
-    """Raised when a committed NowcastInput cannot safely run RP-014."""
+    """Raised when a committed NowcastInput cannot safely run pySTEPS-LK."""
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,7 @@ class PystepsLKResult:
     confidence: np.ndarray
     motion_u: np.ndarray
     motion_v: np.ndarray
+    motion_valid_mask: np.ndarray
     persistence_rain_rate: np.ndarray
     persistence_valid_mask: np.ndarray
     translation_rain_rate: np.ndarray
@@ -39,6 +41,8 @@ class PystepsLKResult:
     velocity_pixels_per_step: np.ndarray
     global_translation_pixels_per_step: tuple[float, float]
     motion_fallback_used: bool
+    motion_fallback_reason: str | None
+    motion_feature_count: int
     trackable_rain_pixel_count: int
 
 
@@ -61,38 +65,62 @@ def run_pysteps_lk(
     _validate_identity(root, profile, grid)
 
     valid_sequence = root["VALID_MASK"][:] == 1
+    low_quality_sequence = root["LOW_QUALITY_MASK"][:] == 1
     reflectivity = root[profile.motion.input_field][:].astype("float32", copy=True)
-    working_reflectivity = np.where(
+    motion_valid = _motion_estimation_mask(
         valid_sequence,
-        reflectivity,
-        np.float32(profile.motion.working_missing_fill_dbz),
+        profile.motion.missing_buffer_pixels,
     )
-    trackable = valid_sequence & (working_reflectivity >= profile.motion.rain_threshold_dbz)
+    working_reflectivity = _prepare_motion_images(
+        reflectivity,
+        valid_sequence,
+        motion_valid,
+        profile,
+    )
+    trackable = (
+        valid_sequence
+        & ~low_quality_sequence
+        & motion_valid[np.newaxis, ...]
+        & (reflectivity >= profile.motion.rain_threshold_dbz)
+    )
     trackable_count = int(np.count_nonzero(trackable[-2:]))
-    fallback = trackable_count < profile.motion.minimum_trackable_rain_pixels
-    if fallback:
+    feature_count = 0
+    fallback = False
+    fallback_reason: str | None = None
+
+    if not np.any(motion_valid):
+        fallback = True
+        fallback_reason = "no_motion_valid_domain"
+        velocity = np.zeros((2, *grid.shape), dtype="float32")
+    elif trackable_count < profile.motion.minimum_trackable_rain_pixels:
+        fallback = True
+        fallback_reason = "insufficient_trackable_rain"
         velocity = np.zeros((2, *grid.shape), dtype="float32")
     else:
         if motion_estimator is None:
-            velocity, has_features = _estimate_dense_lucas_kanade(
+            velocity, feature_count = _estimate_dense_lucas_kanade(
                 working_reflectivity,
                 profile,
+                motion_valid,
             )
-            if not has_features:
+            if feature_count < profile.motion.minimum_motion_features:
                 fallback = True
+                fallback_reason = "insufficient_motion_features"
                 velocity = np.zeros((2, *grid.shape), dtype="float32")
         else:
             velocity = motion_estimator(working_reflectivity, profile)
+            feature_count = profile.motion.minimum_motion_features
         velocity = np.asarray(velocity, dtype="float32")
         if velocity.shape != (2, *grid.shape) or np.any(~np.isfinite(velocity)):
             raise PystepsLKInputError("Lucas-Kanade returned an invalid dense motion field")
 
+    velocity = _extend_velocity_to_domain(velocity, motion_valid)
     extrapolate = extrapolator or _semilagrangian
     lead_count = profile.extrapolation.lead_count
     latest_rate = root["RATE_QPE"][-1].astype("float32")
     latest_valid = valid_sequence[-1]
     latest_quality = root["QUALITY_INDEX"][-1].astype("float32")
-    latest_low_quality = root["LOW_QUALITY_MASK"][-1] == 1
+    latest_low_quality = low_quality_sequence[-1]
 
     rain_rate, output_valid = _forecast_with_support(
         latest_rate,
@@ -106,7 +134,7 @@ def run_pysteps_lk(
     persistence_valid = np.repeat(latest_valid[np.newaxis, ...], lead_count, axis=0)
     persistence_rate[~persistence_valid] = np.nan
 
-    translation = _global_translation(velocity, trackable[-1])
+    translation = _global_translation(velocity, trackable[-1] & motion_valid)
     translation_velocity = np.empty_like(velocity)
     translation_velocity[0] = translation[0]
     translation_velocity[1] = translation[1]
@@ -145,6 +173,7 @@ def run_pysteps_lk(
         confidence=confidence.astype("float32"),
         motion_u=motion_u,
         motion_v=motion_v,
+        motion_valid_mask=motion_valid.astype("uint8"),
         persistence_rain_rate=persistence_rate.astype("float32"),
         persistence_valid_mask=persistence_valid.astype("uint8"),
         translation_rain_rate=translation_rate.astype("float32"),
@@ -154,6 +183,8 @@ def run_pysteps_lk(
         velocity_pixels_per_step=velocity,
         global_translation_pixels_per_step=translation,
         motion_fallback_used=fallback,
+        motion_fallback_reason=fallback_reason,
+        motion_feature_count=feature_count,
         trackable_rain_pixel_count=trackable_count,
     )
 
@@ -179,10 +210,12 @@ def _validate_identity(
     )
     for name, actual, configured in expected:
         if actual != configured:
-            raise PystepsLKInputError(f"NowcastInput {name} differs from the RP-014 profile/grid")
+            raise PystepsLKInputError(
+                f"NowcastInput {name} differs from the active pySTEPS-LK profile/grid"
+            )
     frame_count = len(root["time"])
     if not profile.sequence.minimum_frames <= frame_count <= profile.sequence.maximum_frames:
-        raise PystepsLKInputError("NowcastInput frame count is outside RP-014 bounds")
+        raise PystepsLKInputError("NowcastInput frame count is outside profile bounds")
     if not np.array_equal(root["lat"][:], grid.latitude) or not np.array_equal(
         root["lon"][:], grid.longitude
     ):
@@ -193,10 +226,67 @@ def _validate_identity(
             raise PystepsLKInputError(f"NowcastInput is missing {name}")
 
 
+def _motion_estimation_mask(valid_sequence: np.ndarray, buffer_pixels: int) -> np.ndarray:
+    if valid_sequence.ndim != 3:
+        raise PystepsLKInputError("motion support must be time x lat x lon")
+    common = np.all(valid_sequence, axis=0)
+    if buffer_pixels <= 0:
+        return common
+    return ndimage.binary_erosion(
+        common,
+        iterations=buffer_pixels,
+        border_value=0,
+    ).astype(bool)
+
+
+def _prepare_motion_images(
+    reflectivity: np.ndarray,
+    valid_sequence: np.ndarray,
+    motion_valid: np.ndarray,
+    profile: PystepsLKProfile,
+) -> np.ndarray:
+    fill = np.float32(profile.motion.working_missing_fill_dbz)
+    if profile.motion.missing_policy == "dry_floor_working_copy_preserve_advected_mask":
+        return np.where(valid_sequence, reflectivity, fill).astype("float32")
+
+    prepared = np.empty_like(reflectivity, dtype="float32")
+    for index, image in enumerate(reflectivity):
+        observed = valid_sequence[index] & np.isfinite(image)
+        extended = _nearest_valid_fill(image, observed, fill)
+        if np.any(motion_valid):
+            safe_indices = ndimage.distance_transform_edt(
+                ~motion_valid,
+                return_distances=False,
+                return_indices=True,
+            )
+            nearest_safe = extended[tuple(safe_indices)]
+            extended[~motion_valid] = nearest_safe[~motion_valid]
+        prepared[index] = extended
+    return prepared
+
+
+def _nearest_valid_fill(
+    values: np.ndarray,
+    valid: np.ndarray,
+    fallback: np.float32,
+) -> np.ndarray:
+    if not np.any(valid):
+        return np.full(values.shape, fallback, dtype="float32")
+    indices = ndimage.distance_transform_edt(
+        ~valid,
+        return_distances=False,
+        return_indices=True,
+    )
+    filled = values[tuple(indices)].astype("float32", copy=True)
+    filled[valid] = values[valid]
+    return filled
+
+
 def _estimate_dense_lucas_kanade(
     images: np.ndarray,
     profile: PystepsLKProfile,
-) -> tuple[np.ndarray, bool]:
+    motion_valid: np.ndarray,
+) -> tuple[np.ndarray, int]:
     dense_lucaskanade = _pysteps_function(
         "motion.lucaskanade",
         "dense_lucaskanade",
@@ -212,15 +302,55 @@ def _estimate_dense_lucas_kanade(
         "decl_scale": lk.decluster_scale_pixels,
         "verbose": False,
     }
-    sparse_xy, _ = dense_lucaskanade(images, dense=False, **parameters)
-    if len(sparse_xy) == 0:
-        return np.zeros((2, *images.shape[-2:]), dtype="float32"), False
-    velocity = dense_lucaskanade(
+    masked_images = np.ma.array(
         images,
+        mask=np.broadcast_to(~motion_valid, images.shape),
+        copy=False,
+    )
+    sparse_xy, _ = dense_lucaskanade(masked_images, dense=False, **parameters)
+    feature_count = _count_features_in_mask(sparse_xy, motion_valid)
+    if feature_count == 0:
+        return np.zeros((2, *images.shape[-2:]), dtype="float32"), 0
+    velocity = dense_lucaskanade(
+        masked_images,
         dense=True,
         **parameters,
     )
-    return velocity, True
+    return np.asarray(velocity, dtype="float32"), feature_count
+
+
+def _count_features_in_mask(points: np.ndarray, mask: np.ndarray) -> int:
+    values = np.asarray(points)
+    if values.size == 0:
+        return 0
+    if values.ndim != 2 or values.shape[1] != 2:
+        raise PystepsLKInputError("Lucas-Kanade sparse feature coordinates are invalid")
+    x = np.rint(values[:, 0]).astype("int64")
+    y = np.rint(values[:, 1]).astype("int64")
+    inside = (x >= 0) & (x < mask.shape[1]) & (y >= 0) & (y < mask.shape[0])
+    clipped_x = x.clip(0, mask.shape[1] - 1)
+    clipped_y = y.clip(0, mask.shape[0] - 1)
+    safe = mask[clipped_y, clipped_x]
+    return int(np.count_nonzero(inside & safe))
+
+
+def _extend_velocity_to_domain(
+    velocity: np.ndarray,
+    motion_valid: np.ndarray,
+) -> np.ndarray:
+    result = np.asarray(velocity, dtype="float32").copy()
+    if not np.any(motion_valid):
+        result.fill(0.0)
+        return result
+    indices = ndimage.distance_transform_edt(
+        ~motion_valid,
+        return_distances=False,
+        return_indices=True,
+    )
+    for component in range(2):
+        nearest = result[component][tuple(indices)]
+        result[component][~motion_valid] = nearest[~motion_valid]
+    return result
 
 
 def _semilagrangian(

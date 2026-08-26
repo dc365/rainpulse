@@ -12,15 +12,17 @@ service or worker code.
 - `schemas/ancillary-source.schema.json` and
   `ancillary/fujian-taiwan-v1.yaml` freeze DEM/coastline source provenance for
   `114–127°E`, `21–29°N`.
-- `schemas/radar-grid-profile.schema.json` and
-  `gridding/rp009-hybrid-v1.1.yaml` freezes beam geometry, DEM blockage, direct
-  polar mapping and lowest-usable-elevation Hybrid Scan rules.
-- `schemas/radar-mosaic-profile.schema.json` and
-  `mosaic/rp010-qi-mosaic-v1.yaml` freeze five-minute alignment, QI selection
-  and linear-Z blending rules.
+- `gridding/rp009-hybrid-v1.1.yaml` and `mosaic/rp010-qi-mosaic-v1.yaml` remain
+  immutable accepted baselines. The active RP-016 profiles are
+  `gridding/rp016-hybrid-v1.yaml` and `mosaic/rp016-qi-mosaic-v1.yaml`; they add
+  hard rejection of confirmed non-meteorological QC causes without changing
+  the historical configuration hashes.
 - `schemas/nowcast-input-profile.schema.json` and the versioned RP-013 profiles
   freeze the 3–6-frame, five-minute sequence and pre-model quality gates;
   `nowcast/rp013-fixed-5min-v1.1.yaml` is the provenance-complete patch profile.
+- `nowcast/rp014-pysteps-lk-v1.yaml` remains the immutable first LK baseline;
+  `nowcast/rp016-pysteps-lk-v1.yaml` is the active missing-boundary-safe profile
+  and publishes model version `pysteps-lk-1.1.0`.
 - `radars/radar-inventory-template.yaml` records unknown values explicitly and
   cannot become operational until it satisfies all `ready` requirements.
 - `qc/flag-definitions.yaml` freezes the uint32 QC flag bit assignments.

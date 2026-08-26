@@ -28,7 +28,7 @@ from rainpulse_algo.radar.hybrid import RadarGridInputError, build_hybrid_scan
 from .test_fmt_decoder import make_config
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-PROFILE_PATH = REPOSITORY_ROOT / "configs" / "gridding" / "rp009-hybrid-v1.1.yaml"
+PROFILE_PATH = REPOSITORY_ROOT / "configs" / "gridding" / "rp016-hybrid-v1.yaml"
 FLAG_PATH = REPOSITORY_ROOT / "configs" / "qc" / "flag-definitions.yaml"
 
 
@@ -226,6 +226,43 @@ def test_hybrid_scan_selects_higher_sweep_behind_low_beam_ridge(tmp_path: Path) 
     assert "grid/summary.json" in objects
 
 
+def test_hybrid_scan_rejects_confirmed_radial_interference(tmp_path: Path) -> None:
+    radar_config = load_radar_config(make_config(tmp_path))
+    grid = small_grid(
+        float(radar_config.site["longitude_deg"]),
+        float(radar_config.site["latitude_deg"]),
+    )
+    profile = replace(
+        load_radar_grid_profile(PROFILE_PATH),
+        grid_id=grid.grid_id,
+        grid_config_version=grid.config_version,
+    )
+    objects = qc_fixture(radar_config.config_version)
+    store = MemoryStore()
+    store.update(objects)
+    root = zarr.open_group(store=store, mode="a")
+    root["sweep_000/QC_FLAGS"][:] = flag_masks()["RADIAL_INTERFERENCE"]
+    objects = {str(key): bytes(value) for key, value in store.items()}
+
+    result = build_hybrid_scan(
+        objects,
+        radar_config=radar_config,
+        grid=grid,
+        profile=profile,
+        terrain=RidgeTerrain(
+            float(radar_config.site["longitude_deg"]),
+            float(radar_config.site["latitude_deg"]),
+        ),
+        flag_masks=flag_masks(),
+    )
+
+    assert result.summary["selection_counts"]["sweep_000"] == 0
+    selected = result.fields["VALID_MASK"] == 1
+    assert np.any(selected)
+    assert np.all(result.fields["SOURCE_SWEEP"][selected] == 1)
+    assert np.all(result.fields["DBZH_QC"][selected] == pytest.approx(30.0))
+
+
 def test_grid_rejects_qc_volume_from_another_scan(tmp_path: Path) -> None:
     radar_config = load_radar_config(make_config(tmp_path))
     grid = small_grid(
@@ -250,4 +287,34 @@ def test_grid_rejects_qc_volume_from_another_scan(tmp_path: Path) -> None:
             ),
             flag_masks=flag_masks(),
             expected_scan_id="20000000-0000-4000-8000-000000000004",
+        )
+
+
+def test_grid_rejects_flag_definition_missing_configured_hard_reject(
+    tmp_path: Path,
+) -> None:
+    radar_config = load_radar_config(make_config(tmp_path))
+    grid = small_grid(
+        float(radar_config.site["longitude_deg"]),
+        float(radar_config.site["latitude_deg"]),
+    )
+    profile = replace(
+        load_radar_grid_profile(PROFILE_PATH),
+        grid_id=grid.grid_id,
+        grid_config_version=grid.config_version,
+    )
+    incomplete_flags = flag_masks()
+    incomplete_flags.pop("RADIAL_INTERFERENCE")
+
+    with pytest.raises(RadarGridInputError, match="RADIAL_INTERFERENCE"):
+        build_hybrid_scan(
+            qc_fixture(radar_config.config_version),
+            radar_config=radar_config,
+            grid=grid,
+            profile=profile,
+            terrain=RidgeTerrain(
+                float(radar_config.site["longitude_deg"]),
+                float(radar_config.site["latitude_deg"]),
+            ),
+            flag_masks=incomplete_flags,
         )

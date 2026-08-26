@@ -24,7 +24,7 @@ from .grid_profile import RadarGridProfile
 
 
 class RadarGridInputError(ValueError):
-    """Raised when a QC volume cannot safely enter RP-009."""
+    """Raised when a QC volume cannot safely enter Hybrid Scan."""
 
 
 UPSTREAM_QI_COMPONENTS = (
@@ -239,9 +239,18 @@ def _validate_inputs(
         raise RadarGridInputError("target grid differs from the Hybrid Scan profile")
     if root.attrs.get("flag_definition_version") != profile.flag_definition_version:
         raise RadarGridInputError("QC flag definition differs from the grid profile")
-    required_flags = {"MISSING", "HARDWARE_ANOMALY", "BEAM_BLOCKED", "LOW_QUALITY"}
-    if not required_flags <= flag_masks.keys():
-        raise RadarGridInputError("flag definition is missing RP-009 flags")
+    required_flags = {
+        "MISSING",
+        "HARDWARE_ANOMALY",
+        "BEAM_BLOCKED",
+        "LOW_QUALITY",
+        *profile.hybrid_scan.reject_flags,
+    }
+    missing_flags = sorted(required_flags - flag_masks.keys())
+    if missing_flags:
+        raise RadarGridInputError(
+            "flag definition is missing Hybrid Scan flags: " + ",".join(missing_flags)
+        )
 
 
 def _vertical_datum_status(

@@ -7,6 +7,7 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 required_files=(
   "configs/schemas/pysteps-lk-profile.schema.json"
   "configs/nowcast/rp014-pysteps-lk-v1.yaml"
+  "configs/nowcast/rp016-pysteps-lk-v1.yaml"
   "contracts/data/forecast-output.md"
   "contracts/events/forecast-pysteps-lk-requested.schema.json"
   "contracts/events/forecast-baseline-ready.schema.json"
@@ -26,11 +27,19 @@ done
 
 grep -q 'RAINPULSE_WORKER_PROFILE: pysteps-lk' \
   "$repo_root/deploy/docker-compose.yaml"
+grep -q 'RAINPULSE_PYSTEPS_LK_CONFIG: /opt/rainpulse/configs/nowcast/rp016-pysteps-lk-v1.yaml' \
+  "$repo_root/deploy/docker-compose.yaml"
 grep -q 'PystepsLKJobType' \
+  "$repo_root/services/control/internal/orchestration/events.go"
+grep -q 'PystepsLKModelVersion.*pysteps-lk-1.1.0' \
+  "$repo_root/services/control/internal/orchestration/events.go"
+grep -q 'technical_forecast_quality_index_not_calibrated_probability' \
+  "$repo_root/algorithms/rainpulse_algo/nowcast/forecast_zarr.py"
+grep -q 'technical_forecast_quality_index_not_calibrated_probability' \
   "$repo_root/services/control/internal/orchestration/events.go"
 grep -q 'RunBaselineReady' \
   "$repo_root/services/control/internal/workflow/state.go"
 grep -q 'persistence_rain_rate' \
   "$repo_root/contracts/data/forecast-output.md"
 
-printf 'RP-014 pySTEPS-LK baseline artifacts are present.\n'
+printf 'RP-014 baseline and RP-016 hardened pySTEPS-LK artifacts are present.\n'

@@ -8,7 +8,7 @@
   "trace_id": "81400000-0000-4000-8000-000000000003",
   "payload": {
     "input_uri": "s3://rainpulse/nowcast-input/fuzhou_118_123_25_27_0p01deg_v1/2026/08/25/100000Z/nowcast-input-builder-1.0.0/input.zarr",
-    "output_prefix": "s3://rainpulse/products/a78aa324-0832-59e1-b9ea-d97933b2821e/pysteps-lk/pysteps-lk-1.0.0/",
+    "output_prefix": "s3://rainpulse/products/a78aa324-0832-59e1-b9ea-d97933b2821e/pysteps-lk/pysteps-lk-1.1.0/",
     "issue_time": "2026-08-25T10:00:00Z",
     "grid_id": "fuzhou_118_123_25_27_0p01deg_v1",
     "input_asset_ids": [
@@ -17,8 +17,8 @@
       "81300000-0000-4000-8000-000000000003"
     ],
     "model_id": "pysteps-lk",
-    "model_version": "pysteps-lk-1.0.0",
-    "config_version": "rp014-pysteps-lk-v1",
+    "model_version": "pysteps-lk-1.1.0",
+    "config_version": "rp016-pysteps-lk-v1",
     "forecast_contract_version": "1.1",
     "baseline_models": ["persistence", "translation"]
   }

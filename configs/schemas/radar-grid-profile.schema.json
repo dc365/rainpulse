@@ -102,7 +102,7 @@
         "beam_height_quality_scale_m": { "type": "number", "exclusiveMinimum": 0 },
         "reject_flags": {
           "type": "array",
-          "items": { "enum": ["MISSING", "HARDWARE_ANOMALY"] },
+          "items": { "$ref": "#/$defs/hard_reject_flag" },
           "minItems": 1,
           "uniqueItems": true
         }
@@ -118,6 +118,17 @@
       "type": "number",
       "minimum": 0,
       "maximum": 1
+    },
+    "hard_reject_flag": {
+      "enum": [
+        "MISSING",
+        "HARDWARE_ANOMALY",
+        "RADIAL_INTERFERENCE",
+        "GROUND_CLUTTER",
+        "SEA_CLUTTER",
+        "ANOMALOUS_PROPAGATION",
+        "BIOLOGICAL_ECHO"
+      ]
     }
   }
 }

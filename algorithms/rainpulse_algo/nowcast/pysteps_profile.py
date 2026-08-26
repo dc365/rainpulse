@@ -7,7 +7,7 @@ import yaml
 
 
 class PystepsLKConfigError(ValueError):
-    """Raised when the RP-014 deterministic model profile is inconsistent."""
+    """Raised when a deterministic pySTEPS-LK profile is inconsistent."""
 
 
 @dataclass(frozen=True)
@@ -33,6 +33,8 @@ class MotionConfig:
     method: str
     rain_threshold_dbz: float
     minimum_trackable_rain_pixels: int
+    minimum_motion_features: int
+    missing_buffer_pixels: int
     working_missing_fill_dbz: float
     missing_policy: str
     fallback: str
@@ -102,6 +104,8 @@ def load_pysteps_lk_profile(path: str | Path) -> PystepsLKProfile:
                 method=str(motion["method"]),
                 rain_threshold_dbz=float(motion["rain_threshold_dbz"]),
                 minimum_trackable_rain_pixels=int(motion["minimum_trackable_rain_pixels"]),
+                minimum_motion_features=int(motion.get("minimum_motion_features", 1)),
+                missing_buffer_pixels=int(motion.get("missing_buffer_pixels", 0)),
                 working_missing_fill_dbz=float(motion["working_missing_fill_dbz"]),
                 missing_policy=str(motion["missing_policy"]),
                 fallback=str(motion["fallback"]),
@@ -134,28 +138,41 @@ def load_pysteps_lk_profile(path: str | Path) -> PystepsLKProfile:
 
 def _validate(profile: PystepsLKProfile) -> None:
     if profile.model_id != "pysteps-lk":
-        raise PystepsLKConfigError("RP-014 model ID must be pysteps-lk")
+        raise PystepsLKConfigError("model ID must be pysteps-lk")
     if profile.pysteps_version != "1.21.5" or profile.opencv_version != "5.0.0.93":
-        raise PystepsLKConfigError("RP-014 runtime library versions are frozen")
+        raise PystepsLKConfigError("pySTEPS-LK runtime library versions are frozen")
     if profile.nowcast_input_contract_version != "1.2":
-        raise PystepsLKConfigError("RP-014 requires NowcastInput contract 1.2")
+        raise PystepsLKConfigError("pySTEPS-LK requires NowcastInput contract 1.2")
     if profile.forecast_output_contract_version != "1.1":
-        raise PystepsLKConfigError("RP-014 requires ForecastOutput contract 1.1")
+        raise PystepsLKConfigError("pySTEPS-LK requires ForecastOutput contract 1.1")
     if profile.sequence != ModelSequenceConfig(3, 6, 5):
-        raise PystepsLKConfigError("RP-014 requires 3-6 frames at five-minute steps")
+        raise PystepsLKConfigError("pySTEPS-LK requires 3-6 frames at five-minute steps")
     if profile.motion.input_field != "DBZH_QC":
-        raise PystepsLKConfigError("RP-014 motion must consume DBZH_QC")
+        raise PystepsLKConfigError("pySTEPS-LK motion must consume DBZH_QC")
     if profile.motion.method != "dense_lucaskanade":
-        raise PystepsLKConfigError("RP-014 motion method must be dense_lucaskanade")
+        raise PystepsLKConfigError("pySTEPS-LK motion method must be dense_lucaskanade")
     if profile.motion.minimum_trackable_rain_pixels <= 0:
         raise PystepsLKConfigError("minimum trackable rain pixels must be positive")
-    if profile.motion.missing_policy != "dry_floor_working_copy_preserve_advected_mask":
-        raise PystepsLKConfigError("unsupported RP-014 missing-data policy")
+    if profile.motion.minimum_motion_features <= 0:
+        raise PystepsLKConfigError("minimum motion features must be positive")
+    if profile.motion.missing_buffer_pixels < 0:
+        raise PystepsLKConfigError("missing-data buffer cannot be negative")
+    supported_missing_policies = {
+        "dry_floor_working_copy_preserve_advected_mask",
+        "nearest_valid_buffer_preserve_advected_mask",
+    }
+    if profile.motion.missing_policy not in supported_missing_policies:
+        raise PystepsLKConfigError("unsupported pySTEPS-LK missing-data policy")
+    if (
+        profile.motion.missing_policy == "nearest_valid_buffer_preserve_advected_mask"
+        and profile.motion.missing_buffer_pixels <= 0
+    ):
+        raise PystepsLKConfigError("nearest-valid missing policy requires a positive buffer")
     if profile.motion.fallback != "zero_motion_when_insufficient_features":
-        raise PystepsLKConfigError("unsupported RP-014 motion fallback")
+        raise PystepsLKConfigError("unsupported pySTEPS-LK motion fallback")
     lk = profile.motion.lucas_kanade
     if lk.feature_detection != "shitomasi" or lk.interpolation != "idwinterp2d":
-        raise PystepsLKConfigError("unsupported RP-014 Lucas-Kanade adapter")
+        raise PystepsLKConfigError("unsupported pySTEPS-LK Lucas-Kanade adapter")
     if min(lk.decluster_scale_pixels, lk.outlier_neighbours) <= 0:
         raise PystepsLKConfigError("Lucas-Kanade neighbourhoods must be positive")
     if lk.opening_size_pixels < 0 or lk.outlier_stddev <= 0:
@@ -167,7 +184,7 @@ def _validate(profile: PystepsLKProfile) -> None:
         5,
         ("persistence", "translation"),
     ):
-        raise PystepsLKConfigError("RP-014 extrapolation identity or lead times differ")
+        raise PystepsLKConfigError("pySTEPS-LK extrapolation identity or lead times differ")
     if profile.extrapolation.interpolation_order not in {0, 1, 3}:
         raise PystepsLKConfigError("unsupported semi-Lagrangian interpolation order")
     if profile.confidence.decay_minutes <= 0:

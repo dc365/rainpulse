@@ -25,7 +25,7 @@ from rainpulse_algo.radar.mosaic_zarr import (
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-PROFILE_PATH = REPOSITORY_ROOT / "configs" / "mosaic" / "rp010-qi-mosaic-v1.yaml"
+PROFILE_PATH = REPOSITORY_ROOT / "configs" / "mosaic" / "rp016-qi-mosaic-v1.yaml"
 FLAG_PATH = REPOSITORY_ROOT / "configs" / "qc" / "flag-definitions.yaml"
 ANALYSIS_TIME = datetime(2026, 8, 25, 12, 0, tzinfo=UTC)
 
@@ -69,6 +69,7 @@ def radar_grid_fixture(
     *,
     offset_seconds: int = 0,
     operational_eligible: bool = True,
+    flag_name: str | None = None,
 ) -> dict[str, bytes]:
     grid = small_grid()
     flags = flag_masks()
@@ -96,7 +97,7 @@ def radar_grid_fixture(
             "coordinate_sha256": grid.coordinate_sha256,
             "crs": "EPSG:4326",
             "registration": "point",
-            "hybrid_scan_version": "hybrid-scan-1.0.1",
+            "hybrid_scan_version": "hybrid-scan-1.1.0",
             "operational_eligible": operational_eligible,
             "operational_reasons": [] if operational_eligible else ["engineering_input"],
             "volume_start_time_utc": (
@@ -130,7 +131,9 @@ def radar_grid_fixture(
         values[missing] = np.nan
         root.create_dataset(name, data=values)
     qc_flags = np.zeros(grid.shape, dtype="uint32")
-    qc_flags[missing] = flags["MISSING"]
+    if flag_name is not None:
+        qc_flags[valid == 1] |= flags[flag_name]
+    qc_flags[missing] |= flags["MISSING"]
     root.create_dataset("QC_FLAGS", data=qc_flags)
     source_sweep = np.zeros(grid.shape, dtype="int16")
     source_sweep[missing] = -1
@@ -164,13 +167,14 @@ def mosaic_input(
     *,
     offset_seconds: int = 0,
     operational_eligible: bool = True,
+    flag_name: str | None = None,
 ) -> RadarMosaicInput:
     return RadarMosaicInput(
         radar_id=radar_id,
         scan_id=scan_id,
         grid_uri=f"s3://rainpulse/grid/{radar_id}/grid.zarr",
         time_offset_seconds=offset_seconds,
-        hybrid_scan_version="hybrid-scan-1.0.1",
+        hybrid_scan_version="hybrid-scan-1.1.0",
         objects=radar_grid_fixture(
             radar_id,
             scan_id,
@@ -178,6 +182,7 @@ def mosaic_input(
             quality,
             offset_seconds=offset_seconds,
             operational_eligible=operational_eligible,
+            flag_name=flag_name,
         ),
     )
 
@@ -253,6 +258,36 @@ def test_time_quality_changes_selection_and_tracks_data_age() -> None:
     assert result.fields["DATA_AGE"][0, 0] == pytest.approx(0.0)
 
 
+def test_rejects_flagged_high_qi_contributor_before_blending() -> None:
+    contaminated = mosaic_input(
+        "radar-a",
+        "10000000-0000-4000-8000-000000000005",
+        np.full((2, 2), 45.0, dtype="float32"),
+        np.full((2, 2), 0.99, dtype="float32"),
+        flag_name="RADIAL_INTERFERENCE",
+    )
+    clean = mosaic_input(
+        "radar-b",
+        "20000000-0000-4000-8000-000000000005",
+        np.full((2, 2), 18.0, dtype="float32"),
+        np.full((2, 2), 0.60, dtype="float32"),
+    )
+
+    result = build_radar_mosaic(
+        (contaminated, clean),
+        analysis_time=ANALYSIS_TIME,
+        grid=small_grid(),
+        profile=profile(),
+        flag_masks=flag_masks(),
+    )
+
+    assert np.allclose(result.fields["DBZH_QC"], 18.0)
+    assert np.all(result.fields["CONTRIBUTOR_COUNT"] == 1)
+    assert set(result.fields["SOURCE_RADAR"].ravel()) == {2}
+    assert result.contributors[0]["contributing_cell_count"] == 0
+    assert result.contributors[1]["contributing_cell_count"] == 4
+
+
 def test_single_engineering_input_is_valid_but_not_operational() -> None:
     only = mosaic_input(
         "radar-a",
@@ -288,4 +323,24 @@ def test_rejects_request_time_offset_that_differs_from_grid() -> None:
             grid=small_grid(),
             profile=profile(),
             flag_masks=flag_masks(),
+        )
+
+
+def test_mosaic_rejects_flag_definition_missing_configured_hard_reject() -> None:
+    source = mosaic_input(
+        "radar-a",
+        "10000000-0000-4000-8000-000000000006",
+        np.full((2, 2), 15.0, dtype="float32"),
+        np.full((2, 2), 0.8, dtype="float32"),
+    )
+    incomplete_flags = flag_masks()
+    incomplete_flags.pop("RADIAL_INTERFERENCE")
+
+    with pytest.raises(RadarMosaicInputError, match="RADIAL_INTERFERENCE"):
+        build_radar_mosaic(
+            (source,),
+            analysis_time=ANALYSIS_TIME,
+            grid=small_grid(),
+            profile=profile(),
+            flag_masks=incomplete_flags,
         )
