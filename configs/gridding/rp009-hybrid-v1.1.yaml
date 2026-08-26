@@ -40,4 +40,14 @@ hybrid_scan:
   low_quality_threshold: 0.45
   maximum_beam_height_agl_m: 10000.0
   beam_height_quality_scale_m: 6000.0
-  reject_flags: [MISSING, HARDWARE_ANOMALY]
+  # Phase-1 safety gate: confirmed non-meteorological causes are retained in
+  # the immutable polar QC volume for diagnosis, but cannot enter Hybrid Scan,
+  # QPE or nowcasting. LOW_SNR/LOW_QUALITY remain soft QI penalties.
+  reject_flags:
+    - MISSING
+    - HARDWARE_ANOMALY
+    - RADIAL_INTERFERENCE
+    - GROUND_CLUTTER
+    - SEA_CLUTTER
+    - ANOMALOUS_PROPAGATION
+    - BIOLOGICAL_ECHO
