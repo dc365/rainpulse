@@ -111,11 +111,13 @@ describe('RainPulse short-nowcast workspace', () => {
     render(<NowcastWorkspace refreshToken={0} />)
 
     expect(screen.getByRole('heading', { name: '0–2 小时降水预报' })).toBeTruthy()
+    expect(screen.getByText('工程验证 / RP-016')).toBeTruthy()
     const firstLayer = await screen.findByRole('img', { name: 'T+5 分钟降水率图层' })
     expect(firstLayer.getAttribute('data-source')).toBe('/api/lead-5.png')
     expect(screen.getByRole('application', { name: /可交互降水 GIS 地图/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: '播放全部时效' })).toBeTruthy()
     expect(await screen.findByText('1.83 mm/h')).toBeTruthy()
+    expect(await screen.findByText('技术质量 0.78（非概率）')).toBeTruthy()
     expect(screen.getByText(/峰值 2.40/)).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'T+10，10:10 UTC' }))
