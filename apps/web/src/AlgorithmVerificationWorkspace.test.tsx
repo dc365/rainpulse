@@ -110,9 +110,10 @@ describe('AlgorithmVerificationWorkspace', () => {
   afterEach(() => {
     cleanup()
     vi.unstubAllGlobals()
+    window.history.replaceState(null, '', '/')
   })
 
-  it('shows the frozen skill gate and drills into one issue without downloading the full CSV', async () => {
+  it('shows one conclusion-first workflow and keeps the selected evidence in the URL', async () => {
     const fetchStatus = vi.fn().mockImplementation((input: string) => {
       let body: unknown = { items: [run, legacyRun] }
       if (input.includes('/metrics?')) body = { items: [
@@ -130,29 +131,35 @@ describe('AlgorithmVerificationWorkspace', () => {
     render(<AlgorithmVerificationWorkspace refreshToken={0} />)
 
     expect(screen.getByRole('heading', { name: '算法离线验证' })).toBeTruthy()
-    expect(await screen.findByText('57,240')).toBeTruthy()
-    expect(await screen.findByRole('heading', { name: 'LK 相对基线的 FSS 技巧' })).toBeTruthy()
-    expect((await screen.findAllByText('Midwest Convection')).length).toBeGreaterThan(0)
-    expect(await screen.findByRole('img', { name: 'LK 与基线逐时效 FSS 折线图' })).toBeTruthy()
-    expect(await screen.findByRole('heading', { name: '同一时效三联检验镜' })).toBeTruthy()
-    expect(await screen.findByText('Observed truth')).toBeTruthy()
-    expect(await screen.findByText(/LK 稀疏矢量 1 个/)).toBeTruthy()
+    expect(await screen.findByText('通过本轮工程门槛')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: '同一时效空间对比' })).toBeTruthy()
+    expect(await screen.findByText('MRMS 实况')).toBeTruthy()
+    expect(await screen.findByText(/回波运动矢量 1 个/)).toBeTruthy()
     expect(screen.getAllByText('+0.0200').length).toBeGreaterThan(0)
-    expect(screen.getByText('工程证据 · 非业务验收')).toBeTruthy()
+    expect(screen.getByText('工程证据 · 非福建业务验收')).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: '典型案例' })).toHaveValue('midwest_convection_20210810')
 
     fireEvent.click(screen.getByRole('button', { name: '持续性' }))
-    expect(screen.getAllByText('+0.0400').length).toBeGreaterThan(0)
+    expect(await screen.findAllByText('+0.0400')).not.toHaveLength(0)
 
+    await waitFor(() => {
+      expect(window.location.search).toContain('case=midwest_convection_20210810')
+      expect(window.location.search).toContain('baseline=persistence')
+    })
     await waitFor(() => expect(fetchStatus).toHaveBeenCalledWith(
       expect.stringContaining('/metrics?case_id=midwest_convection_20210810'),
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     ))
     expect(fetchStatus.mock.calls.some(([url]) => String(url).endsWith('/metrics.csv'))).toBe(false)
-    expect(fetchStatus.mock.calls.some(([url]) => String(url).includes('/map-frame?case_id=midwest_convection_20210810'))).toBe(true)
 
-    fireEvent.click(screen.getByRole('button', { name: /full-202108-v1/ }))
+    fireEvent.click(screen.getByText('展开通过门槛'))
+    expect(await screen.findByRole('heading', { name: 'LK 相对基线的 FSS 技巧' })).toBeTruthy()
+
+    fireEvent.change(screen.getByRole('combobox', { name: '验证运行' }), {
+      target: { value: 'rp016-mrms-v1/full-202108-v1' },
+    })
     expect(await screen.findByText('该运行没有空间图层')).toBeTruthy()
-    await waitFor(() => expect(screen.queryByText(/LK 稀疏矢量 1 个/)).toBeNull())
+    await waitFor(() => expect(screen.queryByText(/回波运动矢量 1 个/)).toBeNull())
   })
 
   it('shows a clear empty state when no verification report is mounted', async () => {
