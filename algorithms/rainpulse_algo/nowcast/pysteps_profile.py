@@ -33,6 +33,8 @@ class MotionConfig:
     method: str
     rain_threshold_dbz: float
     minimum_trackable_rain_pixels: int
+    minimum_motion_features: int
+    missing_buffer_pixels: int
     working_missing_fill_dbz: float
     missing_policy: str
     fallback: str
@@ -102,6 +104,8 @@ def load_pysteps_lk_profile(path: str | Path) -> PystepsLKProfile:
                 method=str(motion["method"]),
                 rain_threshold_dbz=float(motion["rain_threshold_dbz"]),
                 minimum_trackable_rain_pixels=int(motion["minimum_trackable_rain_pixels"]),
+                minimum_motion_features=int(motion.get("minimum_motion_features", 1)),
+                missing_buffer_pixels=int(motion.get("missing_buffer_pixels", 0)),
                 working_missing_fill_dbz=float(motion["working_missing_fill_dbz"]),
                 missing_policy=str(motion["missing_policy"]),
                 fallback=str(motion["fallback"]),
@@ -149,8 +153,21 @@ def _validate(profile: PystepsLKProfile) -> None:
         raise PystepsLKConfigError("RP-014 motion method must be dense_lucaskanade")
     if profile.motion.minimum_trackable_rain_pixels <= 0:
         raise PystepsLKConfigError("minimum trackable rain pixels must be positive")
-    if profile.motion.missing_policy != "dry_floor_working_copy_preserve_advected_mask":
+    if profile.motion.minimum_motion_features <= 0:
+        raise PystepsLKConfigError("minimum motion features must be positive")
+    if profile.motion.missing_buffer_pixels < 0:
+        raise PystepsLKConfigError("missing-data buffer cannot be negative")
+    supported_missing_policies = {
+        "dry_floor_working_copy_preserve_advected_mask",
+        "nearest_valid_buffer_preserve_advected_mask",
+    }
+    if profile.motion.missing_policy not in supported_missing_policies:
         raise PystepsLKConfigError("unsupported RP-014 missing-data policy")
+    if (
+        profile.motion.missing_policy == "nearest_valid_buffer_preserve_advected_mask"
+        and profile.motion.missing_buffer_pixels <= 0
+    ):
+        raise PystepsLKConfigError("nearest-valid missing policy requires a positive buffer")
     if profile.motion.fallback != "zero_motion_when_insufficient_features":
         raise PystepsLKConfigError("unsupported RP-014 motion fallback")
     lk = profile.motion.lucas_kanade
