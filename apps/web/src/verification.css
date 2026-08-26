@@ -131,6 +131,7 @@
 .verification-workbench {
   display: grid;
   gap: 16px;
+  min-width: 0;
 }
 
 .verification-filterbar {
@@ -225,9 +226,15 @@
 }
 
 .verification-map-evidence-rp017 {
+  min-width: 0;
+  max-width: 100%;
   padding: 0;
   border: 0;
   background: transparent;
+}
+
+.verification-page-rp017 .verification-map-mobile-tabs {
+  display: none;
 }
 
 .verification-map-heading-rp017 {
@@ -284,10 +291,16 @@
   padding-left: 5px;
 }
 
+.verification-map-tools-rp017 label span {
+  font-size: 11px;
+}
+
 .verification-map-grid-rp017 {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .verification-map-grid-rp017 .verification-map-panel {
@@ -311,7 +324,7 @@
 
 .verification-map-grid-rp017 .verification-map-panel > header span {
   color: var(--verification-muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .verification-map-grid-rp017 .verification-map-panel > header strong {
@@ -321,15 +334,25 @@
   font-size: 13px;
 }
 
-.verification-comparison-map-rp017,
+.verification-page-rp017 .verification-map-grid-rp017 .verification-map-panel > header > div:first-child strong {
+  font-size: 13px;
+}
+
+.verification-page-rp017 .nowcast-gis-shell.verification-comparison-map-rp017,
 .verification-comparison-map-rp017 .nowcast-gis-map {
+  max-width: 100%;
   min-height: 380px;
   height: 380px;
 }
 
-.verification-map-grid-rp017 .ol-attribution,
 .verification-map-grid-rp017 .ol-scale-line {
   display: none;
+}
+
+.verification-map-grid-rp017 .verification-map-metric span,
+.verification-map-grid-rp017 .verification-map-metric strong,
+.verification-map-grid-rp017 .ol-attribution ul {
+  font-size: 11px;
 }
 
 .verification-map-legend-rp017 {
@@ -357,10 +380,14 @@
   border-radius: 2px;
 }
 
+.verification-map-legend-rp017 small {
+  font-size: 11px;
+}
+
 .verification-map-legend-rp017 em {
   margin-left: auto;
   font-style: normal;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .verification-motion-note {
@@ -420,7 +447,7 @@
 
 .verification-timeline > div button small {
   color: var(--verification-muted);
-  font-size: 9px;
+  font-size: 11px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -463,7 +490,7 @@
   display: block;
   margin-top: 4px;
   color: var(--verification-muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .verification-current-metrics .positive strong {
@@ -518,7 +545,7 @@
 
 .verification-chart-rp017 svg text {
   fill: #667871;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .verification-chart-rp017 svg line {
@@ -536,13 +563,21 @@
   stroke-width: 2.5;
 }
 
-.verification-chart-rp017 svg .lk polyline,
+.verification-chart-rp017 svg .lk polyline {
+  stroke: #0f7669;
+  fill: none;
+}
+
 .verification-chart-rp017 svg .lk circle {
   stroke: #0f7669;
   fill: #0f7669;
 }
 
-.verification-chart-rp017 svg .baseline polyline,
+.verification-chart-rp017 svg .baseline polyline {
+  stroke: #b86b32;
+  fill: none;
+}
+
 .verification-chart-rp017 svg .baseline circle {
   stroke: #b86b32;
   fill: #b86b32;
@@ -717,6 +752,14 @@
   text-align: left;
 }
 
+.verification-metric-table-rp017 thead th {
+  font-size: 11px;
+}
+
+.verification-metric-table-rp017 tbody th {
+  font-size: 12px;
+}
+
 .skill-gate-table-wrap td strong,
 .skill-gate-table-wrap td small,
 .skill-gate-table-wrap td span {
@@ -727,7 +770,7 @@
 .skill-gate-table-wrap td span {
   margin-top: 3px;
   color: var(--verification-muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .skill-gate-table-wrap td.passed strong,
@@ -761,8 +804,32 @@
     display: block;
   }
 
-  .verification-map-mobile-tabs {
-    display: flex;
+  .verification-page-rp017 .verification-map-mobile-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1px;
+    padding: 1px;
+    border-bottom: 1px solid var(--verification-line);
+    background: var(--verification-line);
+  }
+
+  .verification-page-rp017 .verification-map-mobile-tabs button {
+    min-width: 0;
+    min-height: 38px;
+    padding: 6px 8px;
+    border: 0;
+    background: #f7faf8;
+    color: var(--verification-muted);
+    font: inherit;
+    font-size: 11px;
+    font-weight: 680;
+    cursor: pointer;
+  }
+
+  .verification-page-rp017 .verification-map-mobile-tabs button.active {
+    color: #075d53;
+    background: #e8f4f0;
+    box-shadow: inset 0 -2px var(--verification-accent);
   }
 
   .verification-current-metrics {
@@ -802,7 +869,7 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .verification-comparison-map-rp017,
+  .verification-page-rp017 .nowcast-gis-shell.verification-comparison-map-rp017,
   .verification-comparison-map-rp017 .nowcast-gis-map {
     min-height: 360px;
     height: 360px;

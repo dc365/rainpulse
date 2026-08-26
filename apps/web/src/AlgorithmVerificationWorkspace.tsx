@@ -3,7 +3,6 @@ import type { ReactNode } from 'react'
 
 import type { components } from './api/generated/schema'
 import { VerificationMapMatrix } from './VerificationMapMatrix'
-import './verification.css'
 
 type RunSummary = components['schemas']['AlgorithmVerificationRunSummary']
 type RunDetail = components['schemas']['AlgorithmVerificationRunDetail']
@@ -42,7 +41,7 @@ interface LeadRow {
 }
 
 export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerificationWorkspaceProps) {
-  const initialQuery = useMemo(readVerificationQuery, [])
+  const initialQuery = useMemo(() => readVerificationQuery(), [])
   const [runs, setRuns] = useState<RunSummary[]>([])
   const [selectedRunKey, setSelectedRunKey] = useState(initialQuery.run)
   const [detail, setDetail] = useState<RunDetail | null>(null)
@@ -223,6 +222,7 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
   useEffect(() => {
     if (!selectedRunKey || !selectedCaseID || !selectedIssueTime) return
     const query = new URLSearchParams(window.location.search)
+    query.set('view', 'verification')
     query.set('run', selectedRunKey)
     query.set('case', selectedCaseID)
     query.set('issue', selectedIssueTime)

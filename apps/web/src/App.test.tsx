@@ -73,6 +73,7 @@ describe('RainPulse radar operations overview', () => {
   afterEach(() => {
     cleanup()
     vi.unstubAllGlobals()
+    window.history.replaceState(null, '', '/')
   })
 
   it('renders real radar integrity status and refreshes both APIs', async () => {
@@ -226,4 +227,28 @@ describe('RainPulse radar operations overview', () => {
     expect(screen.getByText('质控后')).toBeTruthy()
     expect(screen.getAllByText('DBZH_QC').length).toBeGreaterThan(0)
   })
+
+  it('opens the verification workspace from the URL and keeps navigation state shareable', () => {
+    window.history.replaceState(null, '', '/?view=verification&case=midwest_convection_20210810')
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((input: string) => Promise.resolve({
+      ok: true,
+      status: 200,
+      json: async () => {
+        if (input.includes('/radars/status')) return []
+        if (input.includes('/algorithm-verification/runs')) return { items: [] }
+        return { service: 'rainpulse-control', status: 'ready', version: 'rp017-test' }
+      },
+    })))
+
+    render(<App />)
+
+    expect(screen.getByRole('heading', { name: '算法离线验证' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '算法验证' }).getAttribute('aria-current')).toBe('page')
+
+    fireEvent.click(screen.getByRole('button', { name: '短临预报' }))
+    expect(screen.getByRole('button', { name: '短临预报' }).getAttribute('aria-current')).toBe('page')
+    expect(window.location.search).not.toContain('view=verification')
+    expect(window.location.search).toContain('case=midwest_convection_20210810')
+  })
+
 })

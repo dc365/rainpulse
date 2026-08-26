@@ -144,6 +144,7 @@ describe('AlgorithmVerificationWorkspace', () => {
     expect((await screen.findAllByText('+0.0400')).length).toBeGreaterThan(0)
 
     await waitFor(() => {
+      expect(window.location.search).toContain('view=verification')
       expect(window.location.search).toContain('case=midwest_convection_20210810')
       expect(window.location.search).toContain('baseline=persistence')
     })

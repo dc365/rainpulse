@@ -5,10 +5,31 @@ import { AlgorithmVerificationWorkspace } from './AlgorithmVerificationWorkspace
 import { AnalysisDiagnostics } from './AnalysisDiagnostics'
 import { NowcastWorkspace } from './NowcastWorkspace'
 import './styles.css'
+import './verification.css'
 
 type SystemStatus = components['schemas']['SystemStatus']
 type RadarStatus = components['schemas']['RadarStatusSummary']
 type HealthState = components['schemas']['RadarHealthState']
+type WorkspaceView = 'nowcast' | 'analysis' | 'radar' | 'verification'
+
+const workspaceViews = new Set<WorkspaceView>(['nowcast', 'analysis', 'radar', 'verification'])
+
+function readWorkspaceView(): WorkspaceView {
+  const view = new URLSearchParams(window.location.search).get('view') as WorkspaceView | null
+  return view && workspaceViews.has(view) ? view : 'nowcast'
+}
+
+function writeWorkspaceView(view: WorkspaceView) {
+  const query = new URLSearchParams(window.location.search)
+  if (view === 'nowcast') query.delete('view')
+  else query.set('view', view)
+  const search = query.toString()
+  window.history.replaceState(
+    null,
+    '',
+    `${window.location.pathname}${search ? `?${search}` : ''}${window.location.hash}`,
+  )
+}
 
 const healthLabels: Record<HealthState, string> = {
   UNKNOWN: '状态未知',
@@ -73,7 +94,7 @@ function percent(value?: number | null) {
 }
 
 export default function App() {
-  const [activeView, setActiveView] = useState<'nowcast' | 'analysis' | 'radar' | 'verification'>('nowcast')
+  const [activeView, setActiveView] = useState<WorkspaceView>(readWorkspaceView)
   const [nowcastRefreshToken, setNowcastRefreshToken] = useState(0)
   const [analysisRefreshToken, setAnalysisRefreshToken] = useState(0)
   const [verificationRefreshToken, setVerificationRefreshToken] = useState(0)
@@ -156,6 +177,11 @@ export default function App() {
     }
   }
 
+  const selectView = (view: WorkspaceView) => {
+    setActiveView(view)
+    writeWorkspaceView(view)
+  }
+
   return (
     <>
       <a className="skip-link" href="#main-content">跳到主要内容</a>
@@ -173,10 +199,10 @@ export default function App() {
           </div>
         </div>
         <nav className="workspace-nav" aria-label="业务工作区">
-          <button type="button" className={activeView === 'nowcast' ? 'active' : ''} aria-current={activeView === 'nowcast' ? 'page' : undefined} onClick={() => setActiveView('nowcast')}>短临预报</button>
-          <button type="button" className={activeView === 'analysis' ? 'active' : ''} aria-current={activeView === 'analysis' ? 'page' : undefined} onClick={() => setActiveView('analysis')}>分析诊断</button>
-          <button type="button" className={activeView === 'radar' ? 'active' : ''} aria-current={activeView === 'radar' ? 'page' : undefined} onClick={() => setActiveView('radar')}>雷达运行</button>
-          <button type="button" className={activeView === 'verification' ? 'active' : ''} aria-current={activeView === 'verification' ? 'page' : undefined} onClick={() => setActiveView('verification')}>算法验证</button>
+          <button type="button" className={activeView === 'nowcast' ? 'active' : ''} aria-current={activeView === 'nowcast' ? 'page' : undefined} onClick={() => selectView('nowcast')}>短临预报</button>
+          <button type="button" className={activeView === 'analysis' ? 'active' : ''} aria-current={activeView === 'analysis' ? 'page' : undefined} onClick={() => selectView('analysis')}>分析诊断</button>
+          <button type="button" className={activeView === 'radar' ? 'active' : ''} aria-current={activeView === 'radar' ? 'page' : undefined} onClick={() => selectView('radar')}>雷达运行</button>
+          <button type="button" className={activeView === 'verification' ? 'active' : ''} aria-current={activeView === 'verification' ? 'page' : undefined} onClick={() => selectView('verification')}>算法验证</button>
         </nav>
         <div className="system-meta" aria-live="polite">
           <span className={`system-dot ${systemStatus?.status ?? 'loading'}`} />

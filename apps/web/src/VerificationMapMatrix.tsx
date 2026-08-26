@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { getCenter } from 'ol/extent.js'
 import View from 'ol/View.js'
@@ -50,6 +50,16 @@ export function VerificationMapMatrix({
   const [layerErrors, setLayerErrors] = useState<Record<PanelID, boolean>>({
     truth: false, lk: false, baseline: false,
   })
+  const updateLayerError = useCallback((panelID: PanelID, failed: boolean) => {
+    setLayerErrors((current) => current[panelID] === failed
+      ? current
+      : { ...current, [panelID]: failed })
+  }, [])
+  const layerErrorHandlers = useMemo<Record<PanelID, (failed: boolean) => void>>(() => ({
+    truth: (failed) => updateLayerError('truth', failed),
+    lk: (failed) => updateLayerError('lk', failed),
+    baseline: (failed) => updateLayerError('baseline', failed),
+  }), [updateLayerError])
 
   useEffect(() => {
     setLayerErrors({ truth: false, lk: false, baseline: false })
@@ -139,7 +149,7 @@ export function VerificationMapMatrix({
                 resetViewLabel="复位验证案例范围"
                 loading={loading}
                 layerError={layerErrors[panel.id]}
-                onLayerError={(failed) => setLayerErrors((current) => ({ ...current, [panel.id]: failed }))}
+                onLayerError={layerErrorHandlers[panel.id]}
                 sharedView={sharedView}
                 comparisonMode
                 basemapVisible={basemapVisible}
