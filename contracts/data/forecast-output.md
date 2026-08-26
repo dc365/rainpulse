@@ -28,9 +28,10 @@ Phase 1 deterministic output has one member and exactly 24 lead times:
 | `accum_60` | `[member, lat, lon]` | `float32` | `mm` | yes |
 | `accum_120` | `[member, lat, lon]` | `float32` | `mm` | yes |
 | `output_valid_mask` | `[lead_time, lat, lon]` | `uint8` | `1` | yes |
-| `confidence` | `[lead_time, lat, lon]` | `float32` | `1` | yes |
+| `confidence` | `[lead_time, lat, lon]` | `float32` | `1` | yes; technical quality index, not probability |
 | `motion_u` | `[lat, lon]` | `float32` | `m s-1` | pySTEPS-LK diagnostic |
 | `motion_v` | `[lat, lon]` | `float32` | `m s-1` | pySTEPS-LK diagnostic |
+| `motion_valid_mask` | `[lat, lon]` | `uint8` | `1` | optional pySTEPS-LK diagnostic |
 | `persistence_rain_rate` | `[lead_time, lat, lon]` | `float32` | `mm h-1` | yes; verification baseline |
 | `translation_rain_rate` | `[lead_time, lat, lon]` | `float32` | `mm h-1` | yes; verification baseline |
 | `persistence_valid_mask` | `[lead_time, lat, lon]` | `uint8` | `1` | yes; persistence support |
@@ -42,6 +43,19 @@ Probability variables are reserved but must not be published until the
 threshold accumulation period, event definition and calibration rules are
 frozen in `products.yaml`. A deterministic single-member field must never be
 presented as a calibrated probability.
+
+`confidence` is the Phase-1 **technical forecast-quality index** produced from
+advected input quality, lead-time decay and low-quality penalties. It is not a
+probability that the forecast is correct. Producers using this meaning set
+`confidence_kind=technical_forecast_quality_index_not_calibrated_probability`;
+product APIs and user interfaces must label it as technical quality rather than
+forecast probability or calibrated confidence.
+
+`motion_valid_mask` marks the domain retained for motion-feature qualification
+after missing-data boundaries and holes are buffered. It does not replace
+`output_valid_mask`: the former diagnoses where optical-flow evidence was
+trusted, while the latter remains the authoritative forecast support after the
+original observation mask is advected.
 
 Accumulations use the fixed five-minute integration interval. `accum_60`
 integrates lead times 5–60 minutes and `accum_120` integrates lead times
@@ -63,14 +77,27 @@ required output support is invalid.
 | `issue_time` | string | RFC 3339 UTC issue time |
 | `grid_id` | string | Must match the input grid |
 | `grid_metric_version` | string | Degree-to-distance conversion used for physical motion fields |
+| `missing_buffer_pixels` | integer | Width excluded from motion-feature qualification |
+| `motion_feature_count` | integer | Safe-domain sparse features used to qualify LK |
+| `motion_valid_fraction` | number | Fraction of grid retained for motion qualification |
+| `motion_fallback_used` | boolean | Whether deterministic motion fallback was used |
+| `motion_fallback_reason` | string or null | Structured reason for the fallback |
+| `confidence_kind` | string | Declares technical-quality, non-probabilistic meaning |
 | `runtime_ms` | integer | Non-negative compute runtime |
 | `created_at` | string | RFC 3339 UTC publication timestamp |
+
+The motion and confidence attributes are required for outputs produced by the
+RP-016-hardened pySTEPS adapter. The version-1.1 validator remains able to read
+older committed RP-014 artifacts that predate these optional diagnostics.
 
 ## Validity and publication rules
 
 - `output_valid_mask` uses exactly `0` and `1`; invalid forecast cells are
   `NaN`, not zero.
-- `confidence` is in `[0, 1]` where valid and `NaN` where invalid.
+- `motion_valid_mask`, when present, uses exactly `0` and `1` and has the target
+  grid shape.
+- `confidence` is in `[0, 1]` where valid and `NaN` where invalid; it is not a
+  calibrated forecast probability.
 - Every `valid_time` equals the issue time plus its lead time.
 - pySTEPS pixel displacement is converted to `motion_u`/`motion_v` with the
   latitude-aware `grid_metric_version`; a constant one-kilometre conversion is
@@ -78,10 +105,16 @@ required output support is invalid.
 - A deterministic model uses one member and cannot emit ensemble probability
   or quantile variables.
 - The persistence and whole-field translation arrays are diagnostic baselines,
-  not extra ensemble members. All three deterministic paths use the same 24 lead times,
-  source mask and accumulation convention.
+  not extra ensemble members. All three deterministic paths use the same 24
+  lead times, source mask and accumulation convention.
 - Missing input support is advected separately from the working precipitation
   copy. Invalid output cells must remain `NaN` and must never become zero rainfall.
+- Missing values used only by optical-flow estimation may be filled on a
+  temporary working copy, but features inside the configured missing-boundary
+  buffer must not qualify the motion field.
+- If safe-domain rain pixels or motion features are insufficient, the output
+  records a structured fallback reason instead of silently presenting an
+  unsupported dense motion field as observed motion.
 - Assets are written under `_tmp/{job_id}`, validated and checksummed before an
   atomic publish to `products/{run_id}/{model_id}/{model_version}/`.
 - Re-delivery of the same `job_id` must resolve to the same published product,
