@@ -10,6 +10,23 @@ class RadarMosaicConfigError(ValueError):
     """Raised when an RP-010 mosaic profile is incomplete or inconsistent."""
 
 
+# The mosaic is the final reflectivity field used by QPE and nowcasting. A
+# contributor carrying a confirmed non-meteorological cause must not be allowed
+# back into the analysis merely because its scalar QI is still above a low
+# engineering threshold.
+PHASE1_HARD_REJECT_FLAGS = frozenset(
+    {
+        "MISSING",
+        "HARDWARE_ANOMALY",
+        "RADIAL_INTERFERENCE",
+        "GROUND_CLUTTER",
+        "SEA_CLUTTER",
+        "ANOMALOUS_PROPAGATION",
+        "BIOLOGICAL_ECHO",
+    }
+)
+
+
 @dataclass(frozen=True)
 class MosaicAlignmentConfig:
     step_seconds: int
@@ -120,4 +137,9 @@ def _validate_profile(profile: RadarMosaicProfile) -> None:
         raise RadarMosaicConfigError("quality weight power must be at least one")
     if fusion.blended_source_code != 65535:
         raise RadarMosaicConfigError("the reserved blended source code must be 65535")
-
+    reject_flags = set(fusion.reject_flags)
+    missing = sorted(PHASE1_HARD_REJECT_FLAGS - reject_flags)
+    if missing:
+        raise RadarMosaicConfigError(
+            "mosaic reject_flags omit Phase-1 hard rejects: " + ",".join(missing)
+        )
