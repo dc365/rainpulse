@@ -1,0 +1,96 @@
+schema_version: "1.0"
+profile_version: rp018-mrms-v1
+lifecycle: engineering_validation
+operational_eligible: false
+primary_truth_kind: observed_mrms_10min
+
+source:
+  dataset_id: mrms-preciprate-conus-202108-10min-v1
+  product: PrecipRate_00.00
+  cadence_minutes: 10
+  raw_state_codes:
+    no_coverage: -3
+    missing: -1
+    valid_no_rain: 0
+
+adaptation:
+  model_timestep_minutes: 5
+  method: causal_linear_rate_interpolation
+  observed_source_offsets_minutes: [-20, -10, 0]
+  output_offsets_minutes: [-20, -15, -10, -5, 0]
+  intermediate_data_age_minutes: 5
+  reflectivity_proxy: z_equals_200_r_power_1p6
+  native_cadence_comparison: true
+
+nowcast_profile: configs/nowcast/rp016-pysteps-lk-hardened-v1.yaml
+lead_minutes: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
+thresholds_mm_h: [0.1, 1, 5, 10, 20, 50]
+fss_windows_pixels: [1, 5, 11, 21, 41]
+
+rigor:
+  independent_baseline: phase_correlation
+  fss_windows_km: [1, 5, 10, 20, 40]
+  coverage_gate:
+    minimum_forecast_to_truth_ratio: 0.95
+  lead_bands:
+    near_minutes: [10, 60]
+    far_minutes: [70, 120]
+  accumulation:
+    windows_minutes: [60, 120]
+    thresholds_mm: [1, 5, 10, 25, 50]
+  outputs:
+    primary_common_domain: metrics.csv
+    fixed_truth_domain: metrics_truth_domain.csv
+    native_cadence_comparison: adaptation_metrics.csv
+    accumulations: accumulation_metrics.csv
+
+cases:
+  - case_id: socal_dry_20210805
+    label: Southern California dry control
+    category: dry
+    grid:
+      grid_id: mrms-socal-dry-20210805-0p01deg-v1
+      config_version: mrms-socal-dry-20210805-grid-v1
+      bounds: {west: -120.0, east: -115.0, south: 32.5, north: 34.5}
+      coordinate_sha256: c8a5752d67b9f5908a8beaf17bd5c625d14106c376210b1cdd5d2c661c99c4a8
+    issues: {start: "2021-08-05T06:00:00Z", end: "2021-08-05T07:20:00Z", step_minutes: 10}
+
+  - case_id: midwest_convection_20210810
+    label: Midwest convection
+    category: wet
+    grid:
+      grid_id: mrms-midwest-convection-20210810-0p01deg-v1
+      config_version: mrms-midwest-convection-20210810-grid-v1
+      bounds: {west: -95.0, east: -90.0, south: 39.0, north: 41.0}
+      coordinate_sha256: f090dca6506c6756662385a4288725fdadfe68ab153a017cfcf3359c60a765aa
+    issues: {start: "2021-08-10T17:00:00Z", end: "2021-08-10T18:50:00Z", step_minutes: 10}
+
+  - case_id: northeast_ida_20210829
+    label: Northeast Ida precursor rain
+    category: wet
+    grid:
+      grid_id: mrms-northeast-ida-20210829-0p01deg-v1
+      config_version: mrms-northeast-ida-20210829-grid-v1
+      bounds: {west: -78.0, east: -73.0, south: 39.5, north: 41.5}
+      coordinate_sha256: cba2bd2ed7937024b309d6f5fe93679cb79fe270a1475f420a58da40b08619f1
+    issues: {start: "2021-08-29T14:00:00Z", end: "2021-08-29T15:40:00Z", step_minutes: 10}
+
+  - case_id: florida_convection_20210824
+    label: Florida convection
+    category: wet
+    grid:
+      grid_id: mrms-florida-convection-20210824-0p01deg-v1
+      config_version: mrms-florida-convection-20210824-grid-v1
+      bounds: {west: -83.0, east: -78.0, south: 25.0, north: 27.0}
+      coordinate_sha256: 149d23ac66b982032c7e1dc6b36132d439f006f0554d326876aa486b0dc86f57
+    issues: {start: "2021-08-24T18:00:00Z", end: "2021-08-24T19:40:00Z", step_minutes: 10}
+
+  - case_id: ida_gulf_20210829
+    label: Hurricane Ida Gulf rainbands
+    category: wet
+    grid:
+      grid_id: mrms-ida-gulf-20210829-0p01deg-v1
+      config_version: mrms-ida-gulf-20210829-grid-v1
+      bounds: {west: -92.5, east: -87.5, south: 28.0, north: 30.0}
+      coordinate_sha256: eada47daf8af174465d39fe2e658a91439744cbb85861340650c73d9ead654f6
+    issues: {start: "2021-08-29T14:00:00Z", end: "2021-08-29T15:50:00Z", step_minutes: 10}
