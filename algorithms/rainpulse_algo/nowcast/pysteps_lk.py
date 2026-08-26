@@ -321,7 +321,10 @@ def _count_features_in_mask(points: np.ndarray, mask: np.ndarray) -> int:
     x = np.rint(values[:, 0]).astype("int64")
     y = np.rint(values[:, 1]).astype("int64")
     inside = (x >= 0) & (x < mask.shape[1]) & (y >= 0) & (y < mask.shape[0])
-    return int(np.count_nonzero(inside & mask[y.clip(0, mask.shape[0] - 1), x.clip(0, mask.shape[1] - 1)]))
+    clipped_x = x.clip(0, mask.shape[1] - 1)
+    clipped_y = y.clip(0, mask.shape[0] - 1)
+    safe = mask[clipped_y, clipped_x]
+    return int(np.count_nonzero(inside & safe))
 
 
 def _extend_velocity_to_domain(
