@@ -59,8 +59,15 @@
         "method": { "const": "dense_lucaskanade" },
         "rain_threshold_dbz": { "type": "number" },
         "minimum_trackable_rain_pixels": { "type": "integer", "minimum": 1 },
+        "minimum_motion_features": { "type": "integer", "minimum": 1, "default": 1 },
+        "missing_buffer_pixels": { "type": "integer", "minimum": 0, "default": 0 },
         "working_missing_fill_dbz": { "type": "number" },
-        "missing_policy": { "const": "dry_floor_working_copy_preserve_advected_mask" },
+        "missing_policy": {
+          "enum": [
+            "dry_floor_working_copy_preserve_advected_mask",
+            "nearest_valid_buffer_preserve_advected_mask"
+          ]
+        },
         "fallback": { "const": "zero_motion_when_insufficient_features" },
         "lucas_kanade": {
           "type": "object",
