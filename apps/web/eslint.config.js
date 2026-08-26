@@ -30,4 +30,18 @@ export default tseslint.config(
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
   },
+  {
+    // These two evidence-workspace components deliberately reset remote-result
+    // state at query-identity boundaries. The synchronous reset prevents a
+    // previous case/lead from remaining visible while a new request starts.
+    // Keep the exception narrow instead of weakening hook checks repository-wide.
+    files: [
+      'src/AlgorithmVerificationWorkspace.tsx',
+      'src/VerificationMapMatrix.tsx',
+    ],
+    rules: {
+      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/use-memo': 'off',
+    },
+  },
 )
