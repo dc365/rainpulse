@@ -98,7 +98,7 @@ test-grid:
 	uv run --project algorithms pytest algorithms/tests/test_grid.py
 
 test-mrms:
-	uv run --project algorithms pytest algorithms/tests/test_mrms_archive.py algorithms/tests/test_mrms_precip.py algorithms/tests/test_mrms_verification_profile.py algorithms/tests/test_verification.py algorithms/tests/test_algorithm_verification_map.py algorithms/tests/test_mrms_hindcast.py algorithms/tests/test_pysteps_lk.py
+	uv run --project algorithms pytest algorithms/tests/test_mrms_archive.py algorithms/tests/test_mrms_precip.py algorithms/tests/test_mrms_verification_profile.py algorithms/tests/test_verification.py algorithms/tests/test_verification_baselines.py algorithms/tests/test_algorithm_verification_map.py algorithms/tests/test_mrms_hindcast.py algorithms/tests/test_pysteps_lk.py
 
 test-go:
 	go test ./services/control/...

@@ -11,6 +11,7 @@ import rainpulse_algo.datasets.mrms_precip as mrms_precip_module
 from rainpulse_algo.datasets.mrms_precip import (
     MRMSPrecipFrame,
     MRMSSourceState,
+    build_mrms_observed_sequence,
     build_mrms_validation_sequence,
     read_mrms_precip_frame,
 )
@@ -96,8 +97,7 @@ def test_reader_crops_to_ascending_grid_and_preserves_mrms_source_states(
     assert frame.valid_time.isoformat() == "2021-08-01T02:00:00+00:00"
 
 
-def test_sequence_uses_only_past_ten_minute_frames_for_exact_five_minute_input() -> None:
-    issue_time = datetime(2021, 8, 29, 18, 0, tzinfo=UTC)
+def example_frames(issue_time: datetime) -> dict[datetime, MRMSPrecipFrame]:
     frames: dict[datetime, MRMSPrecipFrame] = {}
     for minutes_before, value in ((20, 0.0), (10, 2.0), (0, 4.0)):
         valid_time = issue_time - timedelta(minutes=minutes_before)
@@ -113,8 +113,16 @@ def test_sequence_uses_only_past_ten_minute_frames_for_exact_five_minute_input()
             ),
             source_path=f"frame-{valid_time:%H%M}.grib2.gz",
         )
+    return frames
 
-    sequence = build_mrms_validation_sequence(frames, issue_time, tiny_mrms_grid())
+
+def test_sequence_uses_only_past_ten_minute_frames_for_exact_five_minute_input() -> None:
+    issue_time = datetime(2021, 8, 29, 18, 0, tzinfo=UTC)
+    sequence = build_mrms_validation_sequence(
+        example_frames(issue_time),
+        issue_time,
+        tiny_mrms_grid(),
+    )
 
     assert sequence.frame_times == tuple(
         issue_time - timedelta(minutes=minutes) for minutes in (20, 15, 10, 5, 0)
@@ -134,3 +142,20 @@ def test_sequence_uses_only_past_ten_minute_frames_for_exact_five_minute_input()
     )
     assert sequence.operational_eligible is False
     assert sequence.reflectivity_provenance == "surrogate_from_mrms_rate_z200_r1p6"
+
+
+def test_native_sequence_keeps_only_the_three_observed_ten_minute_frames() -> None:
+    issue_time = datetime(2021, 8, 29, 18, 0, tzinfo=UTC)
+    sequence = build_mrms_observed_sequence(
+        example_frames(issue_time),
+        issue_time,
+        tiny_mrms_grid(),
+    )
+
+    assert sequence.frame_times == tuple(
+        issue_time - timedelta(minutes=minutes) for minutes in (20, 10, 0)
+    )
+    np.testing.assert_allclose(sequence.rate_mm_h[:, 0, 0], [0.0, 2.0, 4.0])
+    np.testing.assert_array_equal(sequence.interpolated_frames, [0, 0, 0])
+    np.testing.assert_allclose(sequence.data_age_minutes[:, 0, 0], [0.0, 0.0, 0.0])
+    assert sequence.source_basis_times == tuple((value,) for value in sequence.frame_times)
