@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -26,12 +27,19 @@ class MRMSVerificationCase:
 @dataclass(frozen=True)
 class MRMSVerificationProfile:
     profile_version: str
+    profile_sha256: str
     source_cadence_minutes: int
     nowcast_profile: str
     primary_truth_kind: str
     lead_minutes: tuple[int, ...]
     thresholds_mm_h: tuple[float, ...]
     fss_windows_pixels: tuple[int, ...]
+    fss_windows_km: tuple[float, ...]
+    coverage_minimum_ratio: float
+    near_lead_minutes: tuple[int, int]
+    far_lead_minutes: tuple[int, int]
+    accumulation_windows_minutes: tuple[int, ...]
+    accumulation_thresholds_mm: tuple[float, ...]
     cases: tuple[MRMSVerificationCase, ...]
     operational_eligible: bool
 
@@ -85,17 +93,31 @@ def _grid(raw: dict[str, Any]) -> RegularLatLonGrid:
     return grid
 
 
+def _lead_band(raw: Any, default: tuple[int, int]) -> tuple[int, int]:
+    if raw is None:
+        return default
+    values = tuple(int(value) for value in raw)
+    if len(values) != 2 or values[0] < 0 or values[1] < values[0]:
+        raise MRMSVerificationProfileError("verification lead band is invalid")
+    return values[0], values[1]
+
+
 def load_mrms_verification_profile(path: Path) -> MRMSVerificationProfile:
     try:
-        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+        profile_bytes = path.read_bytes()
+        raw = yaml.safe_load(profile_bytes)
         if raw["schema_version"] != "1.0" or raw["lifecycle"] != "engineering_validation":
             raise MRMSVerificationProfileError("unsupported MRMS verification profile lifecycle")
         cadence = int(raw["source"]["cadence_minutes"])
         if cadence != 10:
-            raise MRMSVerificationProfileError("RP016 MRMS validation requires 10-minute input")
+            raise MRMSVerificationProfileError("MRMS validation requires 10-minute source input")
         lead_minutes = tuple(int(value) for value in raw["lead_minutes"])
         if lead_minutes != tuple(range(10, 121, 10)):
             raise MRMSVerificationProfileError("primary leads must be observed 10-minute slots")
+        rigor = raw.get("rigor", {})
+        coverage = rigor.get("coverage_gate", {})
+        accumulation = rigor.get("accumulation", {})
+        lead_bands = rigor.get("lead_bands", {})
         cases = tuple(
             MRMSVerificationCase(
                 case_id=str(case["case_id"]),
@@ -108,12 +130,25 @@ def load_mrms_verification_profile(path: Path) -> MRMSVerificationProfile:
         )
         profile = MRMSVerificationProfile(
             profile_version=str(raw["profile_version"]),
+            profile_sha256=hashlib.sha256(profile_bytes).hexdigest(),
             source_cadence_minutes=cadence,
             nowcast_profile=str(raw["nowcast_profile"]),
             primary_truth_kind=str(raw["primary_truth_kind"]),
             lead_minutes=lead_minutes,
             thresholds_mm_h=tuple(float(value) for value in raw["thresholds_mm_h"]),
             fss_windows_pixels=tuple(int(value) for value in raw["fss_windows_pixels"]),
+            fss_windows_km=tuple(
+                float(value) for value in rigor.get("fss_windows_km", (1, 5, 10, 20, 40))
+            ),
+            coverage_minimum_ratio=float(coverage.get("minimum_forecast_to_truth_ratio", 0.95)),
+            near_lead_minutes=_lead_band(lead_bands.get("near_minutes"), (10, 60)),
+            far_lead_minutes=_lead_band(lead_bands.get("far_minutes"), (70, 120)),
+            accumulation_windows_minutes=tuple(
+                int(value) for value in accumulation.get("windows_minutes", (60, 120))
+            ),
+            accumulation_thresholds_mm=tuple(
+                float(value) for value in accumulation.get("thresholds_mm", (1, 5, 10, 25, 50))
+            ),
             cases=cases,
             operational_eligible=bool(raw["operational_eligible"]),
         )
@@ -129,5 +164,21 @@ def load_mrms_verification_profile(path: Path) -> MRMSVerificationProfile:
             "MRMS engineering profile cannot be operationally eligible"
         )
     if len(profile.cases) != 5 or sum(len(case.issue_times) for case in profile.cases) != 53:
-        raise MRMSVerificationProfileError("frozen RP016 MRMS case count differs from 5/53")
+        raise MRMSVerificationProfileError("frozen MRMS case count differs from 5/53")
+    if not profile.thresholds_mm_h or any(value < 0.0 for value in profile.thresholds_mm_h):
+        raise MRMSVerificationProfileError("MRMS rate thresholds are invalid")
+    if not profile.fss_windows_pixels or any(
+        value < 1 or value % 2 == 0 for value in profile.fss_windows_pixels
+    ):
+        raise MRMSVerificationProfileError("MRMS pixel FSS windows must be positive and odd")
+    if not profile.fss_windows_km or any(value <= 0.0 for value in profile.fss_windows_km):
+        raise MRMSVerificationProfileError("MRMS physical FSS windows must be positive")
+    if not 0.0 < profile.coverage_minimum_ratio <= 1.0:
+        raise MRMSVerificationProfileError("MRMS coverage gate must be within (0, 1]")
+    if any(value not in profile.lead_minutes for value in profile.accumulation_windows_minutes):
+        raise MRMSVerificationProfileError("accumulation windows must align to observed leads")
+    if not profile.accumulation_thresholds_mm or any(
+        value < 0.0 for value in profile.accumulation_thresholds_mm
+    ):
+        raise MRMSVerificationProfileError("accumulation thresholds are invalid")
     return profile
