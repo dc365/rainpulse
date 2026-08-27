@@ -173,7 +173,7 @@ interface RasterGISMapProps {
   mapLabel: string
   resetViewLabel: string
   point?: MapCoordinate
-  pointValueLabel?: string
+  emptyStateHint?: string
   bbox?: readonly number[]
   loading: boolean
   layerError: boolean
@@ -206,7 +206,7 @@ export function RasterGISMap({
   mapLabel,
   resetViewLabel,
   point,
-  pointValueLabel,
+  emptyStateHint,
   bbox,
   loading,
   layerError,
@@ -522,14 +522,14 @@ export function RasterGISMap({
       {!comparisonMode ? <div className="gis-coordinate-readout" aria-live="polite">
         <span>{hoverCoordinate ? '指针坐标' : point ? '当前选点' : '图层中心'}</span>
         <strong>{coordinateLabel}</strong>
-        {!hoverCoordinate
-          ? <small>{pointValueLabel ?? '移动指针读取经纬度'}</small>
-          : <small>{onSelectPoint ? '点击选择该格点' : 'EPSG:4326'}</small>}
+        <small>{hoverCoordinate
+          ? (onSelectPoint ? '点击选择该格点' : 'EPSG:4326')
+          : '移动指针读取经纬度'}</small>
       </div> : null}
 
       {!comparisonMode && picker ? <div ref={pickerRef} className="gis-picker-wrap">{point ? picker : null}</div> : null}
 
-      {!comparisonMode ? <div className={`gis-legend ${legendMode}`} aria-label={`${productLabel}图例`}>
+      {!comparisonMode ? <div className={`gis-legend ${legendMode}`} aria-label={`${productLabel}图例`} tabIndex={0}>
         <header><span>{productLabel}</span><strong>{legendUnit}</strong></header>
         {legendMode === 'categorical' ? (
           <div className="gis-legend-list">
@@ -548,7 +548,7 @@ export function RasterGISMap({
       {(!imageUrl || layerError) ? (
         <div className="gis-layer-empty" role="status">
           <strong>{loading ? '正在读取降水图层' : '降水图层暂不可用'}</strong>
-          <small>{layerError ? '图层校验或网络请求失败' : '等待已发布的透明 PNG 产品'}</small>
+          <small>{layerError ? '图层校验或网络请求失败' : (emptyStateHint ?? '等待已发布的透明 PNG 产品')}</small>
         </div>
       ) : null}
     </div>

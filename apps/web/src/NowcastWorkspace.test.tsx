@@ -152,4 +152,39 @@ describe('RainPulse short-nowcast workspace', () => {
       expect(fetchStatus.mock.calls.some(([url]) => String(url).includes('/area-statistics?'))).toBe(true)
     })
   })
+
+  it('keeps the map picker compact when the selected cell is missing', async () => {
+    const fetchStatus = vi.fn().mockImplementation((input: string) => {
+      let body: unknown = {}
+      if (input.endsWith('/runs/latest')) body = run
+      else if (input.includes('/products?run_id=')) body = { items: products }
+      else if (input.endsWith('/products/rain-product/assets')) body = rainAssets
+      else if (input.endsWith('/products/accum-60/assets')) body = accumulationAsset('accum-60', 60)
+      else if (input.endsWith('/products/accum-120/assets')) body = accumulationAsset('accum-120', 120)
+      else if (input.includes('/point-forecast?')) body = {
+        product_id: 'rain-product', longitude: 119.3, latitude: 26.08,
+        grid_longitude: 119.3, grid_latitude: 26.08,
+        values: [
+          { valid_time: '2026-08-25T10:05:00Z', lead_time_minutes: 5, rain_rate: null, valid: false, confidence: null },
+        ],
+      }
+      else if (input.includes('/area-statistics?')) body = {
+        product_id: 'rain-product', bbox: [119, 25.9, 119.6, 26.3],
+        valid_time: '2026-08-25T10:05:00Z', lead_time_minutes: 5,
+        valid_pixel_count: 0, missing_pixel_count: 5151, valid_pixel_ratio: 0,
+        max_rain_rate: 0, mean_rain_rate: 0,
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => body })
+    })
+    vi.stubGlobal('fetch', fetchStatus)
+
+    const { container } = render(<NowcastWorkspace refreshToken={0} />)
+
+    expect((await screen.findAllByText('缺测')).length).toBeGreaterThan(0)
+    const picker = container.querySelector('.gis-picker')
+    expect(picker).toBeTruthy()
+    expect(picker?.textContent).toContain('119.30°E')
+    expect(picker?.textContent).not.toContain('缺测')
+    expect(picker?.querySelector('button')).toBeNull()
+  })
 })

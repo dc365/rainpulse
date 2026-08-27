@@ -18,7 +18,7 @@ interface NowcastMapProps {
   legend: readonly (readonly [number, string])[]
   legendUnit: string
   point: MapCoordinate
-  pointValueLabel: string
+  emptyStateHint?: string
   bbox: readonly number[]
   loading: boolean
   layerError: boolean
@@ -43,7 +43,7 @@ export function NowcastMap(props: NowcastMapProps) {
       mapLabel={`可交互降水 GIS 地图，${props.imageDescription}，点击地图选择预报点`}
       resetViewLabel="复位福州网格范围"
       point={props.point}
-      pointValueLabel={props.pointValueLabel}
+      emptyStateHint={props.emptyStateHint}
       bbox={props.bbox}
       loading={props.loading}
       layerError={props.layerError}
