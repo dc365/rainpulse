@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { components } from './api/generated/schema'
 
@@ -50,6 +50,24 @@ export function NowcastTimeline({
       active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
     }
   }, [activeIndex])
+
+  const scrubbingRef = useRef(false)
+
+  const scrubTo = useCallback((clientX: number) => {
+    const rail = railRef.current
+    if (!rail || fixedWindow || assets.length < 2) return
+    const rect = rail.getBoundingClientRect()
+    if (rect.width <= 0) return
+    const x = clientX - rect.left + rail.scrollLeft
+    const ratio = Math.min(1, Math.max(0, x / rail.scrollWidth))
+    const index = Math.round(ratio * (assets.length - 1))
+    const asset = assets[index]
+    if (asset) onSelect(asset)
+  }, [assets, fixedWindow, onSelect])
+
+  const endScrub = useCallback(() => {
+    scrubbingRef.current = false
+  }, [])
 
   const move = (delta: number) => {
     if (fixedWindow || !assets.length) return
@@ -109,7 +127,21 @@ export function NowcastTimeline({
         </div>
       ) : null}
 
-      <div className="nowcast-timeline-rail" ref={railRef}>
+      <div
+        className="nowcast-timeline-rail"
+        ref={railRef}
+        onPointerDown={(event) => {
+          if (fixedWindow || assets.length < 2) return
+          scrubbingRef.current = true
+          event.currentTarget.setPointerCapture?.(event.pointerId)
+          scrubTo(event.clientX)
+        }}
+        onPointerMove={(event) => {
+          if (scrubbingRef.current) scrubTo(event.clientX)
+        }}
+        onPointerUp={endScrub}
+        onPointerCancel={endScrub}
+      >
         {assets.map((asset) => {
           const lead = asset.lead_time_minutes ?? 0
           const active = asset.asset_id === selectedAsset?.asset_id

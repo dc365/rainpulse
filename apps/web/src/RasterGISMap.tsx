@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import Feature from 'ol/Feature.js'
 import Attribution from 'ol/control/Attribution.js'
@@ -13,6 +13,7 @@ import ImageLayer from 'ol/layer/Image.js'
 import TileLayer from 'ol/layer/Tile.js'
 import VectorLayer from 'ol/layer/Vector.js'
 import OLMap from 'ol/Map.js'
+import Overlay from 'ol/Overlay.js'
 import { unByKey } from 'ol/Observable.js'
 import ImageStatic from 'ol/source/ImageStatic.js'
 import VectorSource from 'ol/source/Vector.js'
@@ -187,6 +188,7 @@ interface RasterGISMapProps {
   rasterOpacity?: number
   motionVectors?: readonly GISMotionVector[]
   motionVisible?: boolean
+  picker?: ReactNode
 }
 
 export function RasterGISMap({
@@ -219,6 +221,7 @@ export function RasterGISMap({
   rasterOpacity: controlledRasterOpacity,
   motionVectors = [],
   motionVisible = false,
+  picker,
 }: RasterGISMapProps) {
   const targetRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<OLMap | null>(null)
@@ -227,6 +230,8 @@ export function RasterGISMap({
   const rasterLayerRef = useRef<ImageLayer<ImageStatic> | null>(null)
   const selectionLayerRef = useRef<VectorLayer<VectorSource> | null>(null)
   const motionLayerRef = useRef<VectorLayer<VectorSource> | null>(null)
+  const pickerRef = useRef<HTMLDivElement>(null)
+  const pickerOverlayRef = useRef<Overlay | null>(null)
   const onSelectPointRef = useRef(onSelectPoint)
   const imageExtentRef = useRef(imageExtent)
   const fitExtentRef = useRef(fitExtent)
@@ -239,6 +244,7 @@ export function RasterGISMap({
   const basemapVisible = controlledBasemapVisible ?? localBasemapVisible
   const smoothRaster = controlledSmoothRaster ?? localSmoothRaster
   const rasterOpacity = controlledRasterOpacity ?? localRasterOpacity
+  const rasterOpacityRef = useRef(rasterOpacity)
 
   useEffect(() => {
     onSelectPointRef.current = onSelectPoint
@@ -348,6 +354,17 @@ export function RasterGISMap({
     const clearHover = () => setHoverCoordinate(null)
     viewport.addEventListener('pointerleave', clearHover)
 
+    if (pickerRef.current) {
+      const pickerOverlay = new Overlay({
+        element: pickerRef.current,
+        positioning: 'bottom-center',
+        offset: [0, -16],
+        stopEvent: true,
+      })
+      map.addOverlay(pickerOverlay)
+      pickerOverlayRef.current = pickerOverlay
+    }
+
     mapRef.current = map
     basemapLayerRef.current = basemapLayer
     coastlineLayerRef.current = coastlineLayer
@@ -365,6 +382,7 @@ export function RasterGISMap({
       rasterLayerRef.current = null
       motionLayerRef.current = null
       selectionLayerRef.current = null
+      pickerOverlayRef.current = null
     }
   // Motion features and visibility are updated by the dedicated effect below.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -394,6 +412,23 @@ export function RasterGISMap({
     })
     source.once('imageloaderror', () => onLayerError(true))
     layer.setSource(source)
+
+    const reduceMotion = typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (!reduceMotion) {
+      const from = Math.min(0.25, rasterOpacityRef.current)
+      const startAt = performance.now()
+      layer.setOpacity(from)
+      const step = (now: number) => {
+        if (rasterLayerRef.current !== layer || layer.getSource() !== source) return
+        const ratio = Math.min(1, (now - startAt) / 160)
+        const targetOpacity = rasterOpacityRef.current
+        layer.setOpacity(from + (targetOpacity - from) * ratio)
+        if (ratio < 1) requestAnimationFrame(step)
+      }
+      requestAnimationFrame(step)
+    }
   }, [fitExtentKey, imageExtent, imageUrl, onLayerError, referenceContext, smoothRaster])
 
   useEffect(() => {
@@ -404,6 +439,12 @@ export function RasterGISMap({
   }, [bbox, fitExtentKey, point, referenceContext])
 
   useEffect(() => {
+    pickerOverlayRef.current?.setPosition(
+      point && !comparisonMode ? [point.longitude, point.latitude] : undefined,
+    )
+  }, [comparisonMode, fitExtentKey, point, referenceContext])
+
+  useEffect(() => {
     basemapLayerRef.current?.setVisible(basemapVisible)
   }, [basemapVisible, fitExtentKey, referenceContext])
 
@@ -412,6 +453,7 @@ export function RasterGISMap({
   }, [coastlineVisible, fitExtentKey, referenceContext])
 
   useEffect(() => {
+    rasterOpacityRef.current = rasterOpacity
     rasterLayerRef.current?.setOpacity(rasterOpacity)
   }, [fitExtentKey, rasterOpacity, referenceContext])
 
@@ -484,6 +526,8 @@ export function RasterGISMap({
           ? <small>{pointValueLabel ?? '移动指针读取经纬度'}</small>
           : <small>{onSelectPoint ? '点击选择该格点' : 'EPSG:4326'}</small>}
       </div> : null}
+
+      {!comparisonMode && picker ? <div ref={pickerRef} className="gis-picker-wrap">{point ? picker : null}</div> : null}
 
       {!comparisonMode ? <div className={`gis-legend ${legendMode}`} aria-label={`${productLabel}图例`}>
         <header><span>{productLabel}</span><strong>{legendUnit}</strong></header>

@@ -116,11 +116,30 @@ describe('RainPulse short-nowcast workspace', () => {
     expect(firstLayer.getAttribute('data-source')).toBe('/api/lead-5.png')
     expect(screen.getByRole('application', { name: /可交互降水 GIS 地图/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: '播放全部时效' })).toBeTruthy()
-    expect(await screen.findByText('1.83 mm/h')).toBeTruthy()
+    expect((await screen.findAllByText('1.83 mm/h')).length).toBeGreaterThan(0)
     expect(await screen.findByText('技术质量 0.78（非概率）')).toBeTruthy()
     expect(screen.getByText(/峰值 2.40/)).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'T+10，10:10 UTC' }))
+    const drawer = screen.getByRole('region', { name: '预报细节抽屉' })
+    expect(drawer.classList.contains('open')).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: '展开单点曲线' }))
+    expect(drawer.classList.contains('open')).toBe(true)
+    fireEvent.click(screen.getByRole('tab', { name: '区域统计' }))
+    expect(screen.getByRole('tab', { name: '区域统计' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('tabpanel', { name: '区域统计' }).classList.contains('active')).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: '收起 ▴' }))
+    expect(drawer.classList.contains('open')).toBe(false)
+
+    const timeline = screen.getByLabelText('五分钟预报时间轴')
+    const rail = timeline.querySelector<HTMLElement>('.nowcast-timeline-rail')
+    expect(rail).toBeTruthy()
+    Object.defineProperty(rail as HTMLElement, 'scrollWidth', { configurable: true, value: 200 })
+    vi.spyOn(rail as HTMLElement, 'getBoundingClientRect').mockReturnValue({
+      bottom: 42, height: 42, left: 0, right: 200, top: 0, width: 200, x: 0, y: 0,
+      toJSON: () => ({}),
+    })
+    fireEvent.pointerDown(rail as HTMLElement, { clientX: 200, pointerId: 1 })
+    fireEvent.pointerUp(rail as HTMLElement, { pointerId: 1 })
     expect(await screen.findByRole('img', { name: 'T+10 分钟降水率图层' })).toBeTruthy()
     expect(screen.getByText('95.0%')).toBeTruthy()
 

@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 import {
   RasterGISMap,
   type MapCoordinate,
@@ -22,6 +24,7 @@ interface NowcastMapProps {
   layerError: boolean
   onLayerError: (failed: boolean) => void
   onSelectPoint: (point: MapCoordinate) => void
+  picker?: ReactNode
 }
 
 export function NowcastMap(props: NowcastMapProps) {
@@ -46,6 +49,7 @@ export function NowcastMap(props: NowcastMapProps) {
       layerError={props.layerError}
       onLayerError={props.onLayerError}
       onSelectPoint={props.onSelectPoint}
+      picker={props.picker}
       referenceContext={FUZHOU_GIS_CONTEXT}
     />
   )
