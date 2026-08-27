@@ -76,7 +76,14 @@ def _window_specs(
             raise VerificationInputError("FSS physical windows must be positive")
         pixels = max(1, int(round(target / pixel_spacing_km)))
         if pixels % 2 == 0:
-            pixels += 1
+            candidates = (max(1, pixels - 1), pixels + 1)
+            pixels = min(
+                candidates,
+                key=lambda candidate: (
+                    abs(candidate * pixel_spacing_km - target),
+                    candidate,
+                ),
+            )
         actual = float(pixels * pixel_spacing_km)
         specs.append((pixels, actual, target))
     if not specs:
@@ -318,7 +325,11 @@ def summarize_coverage(
             value = row.get("forecast_to_truth_coverage")
             if value is None or not np.isfinite(float(value)):
                 continue
-            key = (str(row.get("case_id", "")), str(row.get("issue_time_utc", "")), int(row["lead_minutes"]))
+            key = (
+                str(row.get("case_id", "")),
+                str(row.get("issue_time_utc", "")),
+                int(row["lead_minutes"]),
+            )
             unique[key] = float(value)
         values = list(unique.values())
         summaries[model] = {
@@ -540,9 +551,17 @@ def summarize_fss_skill(
         strong_passes = bool(strong_baselines) and all(
             comparison["passes_case_gate"] for comparison in strong_baselines
         )
+        translation_comparisons = [
+            comparison
+            for comparison in comparisons
+            if comparison["baseline"] == "translation"
+        ]
+        translation_passes = bool(translation_comparisons) and all(
+            comparison["passes_case_gate"] for comparison in translation_comparisons
+        )
         if persistence_passes and strong_passes:
             status = "lk_supported"
-        elif persistence_passes:
+        elif persistence_passes and translation_comparisons and not translation_passes:
             status = "translation_baseline_retained"
         else:
             status = "skill_not_demonstrated"

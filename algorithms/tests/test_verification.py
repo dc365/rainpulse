@@ -117,6 +117,24 @@ def test_physical_fss_window_is_converted_to_an_odd_pixel_count() -> None:
     assert rows[0]["window_km"] == pytest.approx(10.8)
 
 
+def test_physical_fss_window_uses_the_nearest_odd_pixel_count() -> None:
+    truth = np.ones((1, 5, 5), dtype="float32")
+    valid = np.ones(truth.shape, dtype="uint8")
+    rows = score_deterministic_forecasts(
+        truth,
+        valid,
+        {"lk": DeterministicForecast(truth, valid)},
+        lead_minutes=(10,),
+        thresholds_mm_h=(0.5,),
+        windows_pixels=(),
+        windows_km=(10.0,),
+        pixel_spacing_km=1.0123544539894458,
+    )
+
+    assert rows[0]["window_pixels"] == 9
+    assert rows[0]["window_km"] == pytest.approx(9.111190085905012)
+
+
 def test_accumulation_scores_use_the_observed_lead_intervals() -> None:
     truth = np.full((6, 2, 2), 6.0, dtype="float32")
     forecast = np.full((6, 2, 2), 3.0, dtype="float32")
@@ -207,3 +225,47 @@ def test_coverage_gate_blocks_an_otherwise_positive_skill_summary() -> None:
     assert summary["status"] == "skill_not_demonstrated"
     assert all(not item["coverage_gate_passes"] for item in summary["comparisons"])
     assert not coverage["all_models_pass"]
+
+
+def test_skill_status_does_not_blame_translation_when_only_phase_correlation_wins() -> None:
+    rows: list[dict[str, object]] = []
+    for case_index in range(4):
+        for threshold in (1.0, 5.0, 10.0):
+            for model, fss in (
+                ("lk", 0.7),
+                ("persistence", 0.4),
+                ("translation", 0.5),
+                ("phase_correlation", 0.8),
+            ):
+                rows.append(
+                    {
+                        "case_id": f"wet-{case_index}",
+                        "case_category": "wet",
+                        "issue_time_utc": f"2021-08-{case_index + 1:02d}T00:00:00Z",
+                        "model": model,
+                        "lead_minutes": 10,
+                        "threshold_mm_h": threshold,
+                        "window_pixels": 11,
+                        "fss": fss,
+                        "forecast_to_truth_coverage": 1.0,
+                    }
+                )
+
+    summary = summarize_fss_skill(
+        rows,
+        baselines=("persistence", "translation", "phase_correlation"),
+        bootstrap_samples=20,
+        minimum_forecast_to_truth_coverage=0.95,
+    )
+
+    comparison_gates = {
+        item["baseline"]: item["passes_case_gate"]
+        for item in summary["comparisons"]
+        if item["threshold_mm_h"] == 1.0
+    }
+    assert comparison_gates == {
+        "persistence": True,
+        "translation": True,
+        "phase_correlation": False,
+    }
+    assert summary["status"] == "skill_not_demonstrated"

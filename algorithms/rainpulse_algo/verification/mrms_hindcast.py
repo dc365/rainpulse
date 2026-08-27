@@ -142,9 +142,15 @@ def _write_report(path: Path, summary: Mapping[str, Any]) -> None:
         f"- Completed issues: {summary['completed_issue_count']}",
         f"- Failed issues: {summary['failed_issue_count']}",
         f"- Motion-fallback issues: {summary['motion_fallback_issue_count']}",
-        f"- Independent-baseline fallback issues: {summary['phase_correlation_fallback_issue_count']}",
+        (
+            "- Independent-baseline fallback issues: "
+            f"{summary['phase_correlation_fallback_issue_count']}"
+        ),
         f"- Skill status: `{skill['status']}`",
-        f"- Coverage gate: `{coverage['all_models_pass']}` at {coverage['minimum_required_ratio']:.0%}",
+        (
+            f"- Coverage gate: `{coverage['all_models_pass']}` at "
+            f"{coverage['minimum_required_ratio']:.0%}"
+        ),
         f"- Adapted-minus-native LK mean FSS: {adaptation['mean_fss_difference']}",
         "- Primary truth: observed 10-minute MRMS PrecipRate frames",
         "- Primary report: common-domain legacy metrics for API compatibility",
