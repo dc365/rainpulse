@@ -114,6 +114,9 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
   const [areaLoading, setAreaLoading] = useState(false)
   const [areaError, setAreaError] = useState<string | null>(null)
 
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [drawerTab, setDrawerTab] = useState<'point' | 'area' | 'provenance'>('point')
+
   useEffect(() => {
     const controller = new AbortController()
     const load = async () => {
@@ -265,6 +268,11 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
     setLayerError(false)
   }
 
+  const openDrawer = (tab: 'point' | 'area' | 'provenance') => {
+    setDrawerTab(tab)
+    setDrawerOpen(true)
+  }
+
   const selectPoint = useCallback((nextPoint: Coordinate) => {
     const normalized = {
       longitude: Number(nextPoint.longitude.toFixed(2)),
@@ -335,16 +343,33 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
 
       {error ? <div className="error-banner" role="alert"><strong>产品读取异常</strong><span>{error}</span></div> : null}
 
-      <section className="forecast-status-strip" aria-label="短临产品状态">
-        <ForecastMetric label="起报时间" value={formatUtc(run?.issue_time, true)} note={run?.status === 'PUBLISHED' ? '产品已发布' : run?.status ?? '等待产品'} tone={run?.status === 'PUBLISHED' ? 'healthy' : 'neutral'} />
-        <ForecastMetric label="当前时效" value={formatLead(currentLead)} note={formatUtc(selectedAsset?.valid_time)} />
-        <ForecastMetric label="有效覆盖" value={percent(selectedAsset?.coverage_ratio)} note={`${selectedAsset?.missing_cell_count?.toLocaleString('zh-CN') ?? '暂无'} 缺测格点`} />
-        <ForecastMetric label="预报模型" value={selectedProduct?.model_id ?? '暂无'} note={selectedProduct?.model_version ?? '等待模型产品'} />
-      </section>
+      <section className="forecast-stage">
+        <div className="forecast-map-host">
+          <NowcastMap
+            imageUrl={selectedAsset?.content_url}
+            imageDescription={layerAlt(productType, currentLead)}
+            validTimeLabel={formatUtc(selectedAsset?.valid_time)}
+            leadLabel={formatLead(currentLead)}
+            productLabel={productLabels[productType]}
+            legend={legend}
+            legendUnit={productType === 'rain_rate' ? 'mm/h' : 'mm'}
+            point={point}
+            pointValueLabel={formatRate(currentPointValue)}
+            bbox={bbox}
+            loading={loading}
+            layerError={layerError}
+            onLayerError={setLayerError}
+            onSelectPoint={selectPoint}
+            picker={(
+              <div className="gis-picker">
+                <strong>{formatRate(currentPointValue)}</strong>
+                <span>{formatCoordinate(point.longitude)}°E  {formatCoordinate(point.latitude)}°N</span>
+                <button type="button" onClick={() => openDrawer('point')}>展开单点曲线</button>
+              </div>
+            )}
+          />
 
-      <section className="forecast-console">
-        <header className="forecast-toolbar">
-          <div className="product-switcher" aria-label="降水产品">
+          <div className="stage-float stage-products" role="group" aria-label="降水产品">
             {(Object.keys(productLabels) as SupportedProductType[]).map((type) => {
               const available = products.some((item) => item.product_type === type)
               return (
@@ -362,58 +387,66 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
               )
             })}
           </div>
-          <div className="publication-note">
-            <span className={`run-state ${run?.status === 'PUBLISHED' ? 'published' : ''}`}>{run?.status ?? (loading ? '读取中' : '无产品')}</span>
+
+          <div className="stage-float stage-status" aria-label="短临产品状态">
+            <div className="stage-status-row">
+              <span className={`run-state ${run?.status === 'PUBLISHED' ? 'published' : ''}`}>{run?.status ?? (loading ? '读取中' : '无产品')}</span>
+              <strong>{formatLead(currentLead)}</strong>
+            </div>
+            <div className="stage-status-row"><span>起报</span><strong>{formatUtc(run?.issue_time, true)}</strong></div>
+            <div className="stage-status-row"><span>有效覆盖</span><strong>{percent(selectedAsset?.coverage_ratio)}</strong></div>
+            <div className="stage-status-row"><span>缺测格点</span><strong>{selectedAsset?.missing_cell_count?.toLocaleString('zh-CN') ?? '暂无'}</strong></div>
             <small>发布状态不等同于预报技巧通过</small>
           </div>
-        </header>
 
-        <div className="forecast-workspace">
-          <div className="forecast-visual-column">
-            <div className="forecast-map-wrap">
-              <NowcastMap
-                imageUrl={selectedAsset?.content_url}
-                imageDescription={layerAlt(productType, currentLead)}
-                validTimeLabel={formatUtc(selectedAsset?.valid_time)}
-                leadLabel={formatLead(currentLead)}
-                productLabel={productLabels[productType]}
-                legend={legend}
-                legendUnit={productType === 'rain_rate' ? 'mm/h' : 'mm'}
-                point={point}
-                pointValueLabel={formatRate(currentPointValue)}
-                bbox={bbox}
-                loading={loading}
-                layerError={layerError}
-                onLayerError={setLayerError}
-                onSelectPoint={selectPoint}
-              />
-            </div>
-
-            <NowcastTimeline
-              key={productType}
-              assets={renderedAssets}
-              selectedAsset={selectedAsset}
-              issueTime={run?.issue_time}
-              fixedWindow={productType !== 'rain_rate'}
-              productLabel={productLabels[productType]}
-              onSelect={selectTimelineAsset}
-            />
-
-            <div className="asset-delivery">
-              <div><span>当前产品交付</span><strong>{formatLead(currentLead)} · {productLabels[productType]}</strong></div>
-              <div className="asset-links">
-                {currentAssets.map((asset) => (
-                  <a key={asset.asset_id} href={asset.content_url} download>
-                    <span>{assetFormat(asset)}</span>
-                    <small>{formatBytes(asset.size_bytes)}</small>
-                  </a>
-                ))}
-              </div>
-            </div>
+          <div className="stage-float stage-assets" aria-label="产品交付与溯源">
+            <button type="button" onClick={() => openDrawer('provenance')}>
+              <span>溯源</span>
+              <small>{selectedProduct?.model_id ?? '暂无'}</small>
+            </button>
+            {currentAssets.map((asset) => (
+              <a key={asset.asset_id} href={asset.content_url} download>
+                <span>{assetFormat(asset)}</span>
+                <small>{formatBytes(asset.size_bytes)}</small>
+              </a>
+            ))}
           </div>
+        </div>
 
-          <aside className="forecast-insight-rail" aria-label="单点降水预报">
-            <section className="query-panel point-panel">
+        <NowcastTimeline
+          key={productType}
+          assets={renderedAssets}
+          selectedAsset={selectedAsset}
+          issueTime={run?.issue_time}
+          fixedWindow={productType !== 'rain_rate'}
+          productLabel={productLabels[productType]}
+          onSelect={selectTimelineAsset}
+        />
+
+        <section className={`forecast-drawer${drawerOpen ? ' open' : ''}`} aria-label="预报细节抽屉">
+          <header className="drawer-bar">
+            <div className="drawer-tabs" role="tablist" aria-label="预报细节">
+              {([['point', '单点雨强'], ['area', '区域统计'], ['provenance', '产品溯源']] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={drawerTab === key}
+                  className={drawerTab === key ? 'active' : ''}
+                  onClick={() => openDrawer(key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="drawer-summary">{formatCoordinate(point.longitude)}°E {formatCoordinate(point.latitude)}°N · {formatRate(currentPointValue)} · {formatLead(currentLead)}</p>
+            <button type="button" className="drawer-toggle" aria-expanded={drawerOpen} onClick={() => setDrawerOpen((value) => !value)}>
+              {drawerOpen ? '收起 ▴' : '展开 ▾'}
+            </button>
+          </header>
+          <div className="drawer-panels">
+            <div className={`drawer-tabpanel${drawerTab === 'point' ? ' active' : ''}`} role="tabpanel" aria-label="单点雨强">
+              <section className="query-panel point-panel">
               <header><div><p className="panel-label">Point forecast</p><h2>单点雨强</h2></div><span>{pointLoading ? '读取中' : formatLead(currentLead)}</span></header>
               <form className="coordinate-form" onSubmit={submitPoint}>
                 <label><span>经度 °E</span><input aria-label="点预报经度" type="number" min="118" max="123" step="0.01" value={pointDraft.longitude} onChange={(event) => setPointDraft((current) => ({ ...current, longitude: event.target.value }))} /></label>
@@ -432,9 +465,9 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
                 </>
               ) : <div className="query-empty">点击地图或输入经纬度。</div>}
             </section>
-          </aside>
-
-          <section className="query-panel area-panel">
+            </div>
+            <div className={`drawer-tabpanel${drawerTab === 'area' ? ' active' : ''}`} role="tabpanel" aria-label="区域统计">
+              <section className="query-panel area-panel">
               <header><div><p className="panel-label">Area statistics</p><h2>区域雨强</h2></div><span>{areaLoading ? '读取中' : formatLead(areaStatistics?.lead_time_minutes)}</span></header>
               <div className="area-presets" aria-label="区域快捷选择">
                 {areaPresets.map((preset) => <button type="button" key={preset.label} onClick={() => applyAreaPreset(preset.bbox)}>{preset.label}</button>)}
@@ -453,8 +486,9 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
                 <div><dt>格点数</dt><dd>{areaStatistics ? `${areaStatistics.valid_pixel_count.toLocaleString('zh-CN')} / ${areaStatistics.missing_pixel_count.toLocaleString('zh-CN')} 缺测` : '暂无'}</dd></div>
               </dl>
             </section>
-
-          <section className="provenance-panel">
+            </div>
+            <div className={`drawer-tabpanel${drawerTab === 'provenance' ? ' active' : ''}`} role="tabpanel" aria-label="产品溯源">
+              <section className="provenance-panel">
               <header><p className="panel-label">Product provenance</p><h2>产品溯源</h2></header>
               <dl>
                 <div><dt>Run ID</dt><dd>{run?.run_id ?? '暂无'}</dd></div>
@@ -467,20 +501,14 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
                 <div><dt>成员数</dt><dd>{selectedProduct?.member_count ?? '暂无'}</dd></div>
               </dl>
           </section>
-        </div>
+            </div>
+          </div>
+        </section>
       </section>
     </section>
   )
 }
 
-function ForecastMetric({ label, value, note, tone = 'neutral' }: {
-  label: string
-  value: string
-  note: string
-  tone?: 'neutral' | 'healthy'
-}) {
-  return <div className={`forecast-metric ${tone}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>
-}
 
 function PointForecastChart({ values, currentLead }: { values: PointForecastValue[], currentLead: number | null }) {
   const width = 440
