@@ -204,6 +204,7 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
     const controller = new AbortController()
     const loadPoint = async () => {
       setPointLoading(true)
+      setPointForecast(null)
       try {
         const query = new URLSearchParams({
           product_id: rainProduct.product_id,
@@ -324,6 +325,8 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
   const currentPointValue = pointForecast?.values.find(
     (value) => value.lead_time_minutes === currentLead,
   ) ?? pointForecast?.values[0] ?? null
+  const hasCurrentPointValue = currentPointValue?.valid === true
+    && currentPointValue.rain_rate != null
   const legend = productType === 'rain_rate' ? rainRateLegend : rainfallAmountLegend
 
   return (
@@ -354,7 +357,9 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
             legend={legend}
             legendUnit={productType === 'rain_rate' ? 'mm/h' : 'mm'}
             point={point}
-            pointValueLabel={formatRate(currentPointValue)}
+            emptyStateHint={run?.status === 'FAILED'
+              ? `当前起报 ${formatUtc(run.issue_time, true)} 发布失败，等待下一次起报`
+              : undefined}
             bbox={bbox}
             loading={loading}
             layerError={layerError}
@@ -362,9 +367,11 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
             onSelectPoint={selectPoint}
             picker={(
               <div className="gis-picker">
-                <strong>{formatRate(currentPointValue)}</strong>
+                {hasCurrentPointValue ? <strong>{formatRate(currentPointValue)}</strong> : null}
                 <span>{formatCoordinate(point.longitude)}°E  {formatCoordinate(point.latitude)}°N</span>
-                <button type="button" onClick={() => openDrawer('point')}>展开单点曲线</button>
+                {hasCurrentPointValue
+                  ? <button type="button" onClick={() => openDrawer('point')}>展开单点曲线</button>
+                  : null}
               </div>
             )}
           />
@@ -379,21 +386,23 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
                   className={productType === type ? 'active' : ''}
                   aria-pressed={productType === type}
                   disabled={!available}
+                  title={productNotes[type]}
                   onClick={() => switchProduct(type)}
                 >
                   <strong>{productLabels[type]}</strong>
-                  <small>{productNotes[type]}</small>
                 </button>
               )
             })}
+            <small className="stage-products-note">{productNotes[productType]}</small>
           </div>
 
           <div className="stage-float stage-status" aria-label="短临产品状态">
             <div className="stage-status-row">
-              <span className={`run-state ${run?.status === 'PUBLISHED' ? 'published' : ''}`}>{run?.status ?? (loading ? '读取中' : '无产品')}</span>
+              <span className={`run-state${run?.status === 'PUBLISHED' ? ' published' : ''}${run?.status === 'FAILED' ? ' failed' : ''}`}>{run?.status ?? (loading ? '读取中' : '无产品')}</span>
               <strong>{formatLead(currentLead)}</strong>
             </div>
             <div className="stage-status-row"><span>起报</span><strong>{formatUtc(run?.issue_time, true)}</strong></div>
+            <div className="stage-status-row stage-status-valid-time"><span>有效时间</span><strong>{formatUtc(selectedAsset?.valid_time, true)}</strong></div>
             <div className="stage-status-row"><span>有效覆盖</span><strong>{percent(selectedAsset?.coverage_ratio)}</strong></div>
             <div className="stage-status-row"><span>缺测格点</span><strong>{selectedAsset?.missing_cell_count?.toLocaleString('zh-CN') ?? '暂无'}</strong></div>
             <small>发布状态不等同于预报技巧通过</small>
