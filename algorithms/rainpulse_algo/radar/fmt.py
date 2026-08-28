@@ -15,7 +15,8 @@ import numpy as np
 from .config import FieldMapping, RadarDecoderConfig
 
 DECODER_ID = "rainpulse.cma-rstm"
-DECODER_VERSION = "cma-rstm-2.0.0"
+DECODER_VERSION = "cma-rstm-2.1.0"
+ABSENT_RAW_GATE_CODE = np.uint32(np.iinfo("uint32").max)
 MAGIC_NUMBER = 0x4D545352
 
 GENERIC_HEADER = struct.Struct("<Ihhii16s")
@@ -115,6 +116,7 @@ class DecodedSweep:
     vertical_noise_dbm: np.ndarray
     range_m: np.ndarray
     fields: dict[str, np.ndarray]
+    raw_gate_codes: dict[str, np.ndarray]
     field_metadata: dict[str, FieldMetadata]
     source_moments: tuple[str, ...]
     radial_state_counts: dict[int, int]
@@ -357,6 +359,7 @@ def _finalize_sweep(
 
     geometry: set[tuple[int, int]] = set()
     fields: dict[str, np.ndarray] = {}
+    raw_gate_codes: dict[str, np.ndarray] = {}
     metadata: dict[str, FieldMetadata] = {}
     for mapping, values in selected:
         present = [moment for moment in values if moment is not None]
@@ -384,14 +387,21 @@ def _finalize_sweep(
                 f"cut {builder.number} field {mapping.source_name} scale/offset differs from config"
             )
         decoded = np.full((len(radials), gate_count), np.nan, dtype="float32")
+        raw_codes = np.full(
+            (len(radials), gate_count),
+            ABSENT_RAW_GATE_CODE,
+            dtype="uint32",
+        )
         for ray_index, moment in enumerate(values):
             if moment is None:
                 continue
+            raw_codes[ray_index] = moment.raw.astype("uint32", copy=False)
             valid = moment.raw >= 5
             decoded[ray_index, valid] = (
                 moment.raw[valid].astype("float32") - float(offset)
             ) / float(scale)
         fields[mapping.canonical_name] = decoded
+        raw_gate_codes[mapping.canonical_name] = raw_codes
         metadata[mapping.canonical_name] = FieldMetadata(
             mapping=mapping,
             source_code=mapping.source_code,
@@ -423,6 +433,7 @@ def _finalize_sweep(
         ),
         range_m=range_m,
         fields=fields,
+        raw_gate_codes=raw_gate_codes,
         field_metadata=metadata,
         source_moments=source_moments,
         radial_state_counts=dict(sorted(states.items())),

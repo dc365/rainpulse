@@ -21,7 +21,7 @@ for path in "${required_files[@]}"; do
   test -f "$path" || { printf 'missing RP-003 file: %s\n' "$path" >&2; exit 1; }
 done
 
-required_services=(postgres migrate nats minio minio-init api web)
+required_services=(postgres migrate nats minio minio-init minio-versioning api web)
 for service in "${required_services[@]}"; do
   rg --quiet "^  ${service}:" deploy/docker-compose.yaml || {
     printf 'Compose service is missing: %s\n' "$service" >&2

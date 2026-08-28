@@ -919,6 +919,9 @@ func (store *Store) ListRadarScans(
 	radarID *string,
 	status *workflow.RadarScanStatus,
 ) ([]workflow.RadarScan, error) {
+	if err := validatePageLimit(limit); err != nil {
+		return nil, err
+	}
 	radarValue := ""
 	if radarID != nil {
 		radarValue = *radarID
@@ -1109,6 +1112,9 @@ func (store *Store) ListAnalysisCycles(
 	limit int,
 	status *workflow.AnalysisStatus,
 ) ([]workflow.AnalysisCycle, error) {
+	if err := validatePageLimit(limit); err != nil {
+		return nil, err
+	}
 	statusValue := ""
 	if status != nil {
 		statusValue = string(*status)

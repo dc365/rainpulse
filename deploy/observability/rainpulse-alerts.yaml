@@ -1,0 +1,31 @@
+groups:
+  - name: rainpulse-control-plane
+    rules:
+      - alert: RainPulseControlPlaneDown
+        expr: up{job=~"rainpulse-api|rainpulse-orchestrator"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: RainPulse control-plane component is unavailable
+      - alert: RainPulseRadarDataStale
+        expr: max(rainpulse_radar_data_delay_seconds) > 600
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: No radar volume newer than ten minutes is registered
+      - alert: RainPulseJobStuck
+        expr: max(rainpulse_oldest_pending_job_seconds) > 600
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: A RainPulse job has been pending or running for over ten minutes
+      - alert: RainPulseOutboxFailure
+        expr: max(rainpulse_outbox_events{status="failed"}) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: RainPulse has outbox events awaiting a publish retry

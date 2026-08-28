@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/rainpulse-alerts.yaml
+
+scrape_configs:
+  - job_name: rainpulse-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: [api:8080]
+  - job_name: rainpulse-orchestrator
+    metrics_path: /metrics
+    static_configs:
+      - targets: [orchestrator:8090]

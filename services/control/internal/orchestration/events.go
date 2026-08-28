@@ -23,7 +23,7 @@ const (
 	RadarDecodeRequestedEventType         = "radar.decode.requested.v1"
 	RadarDecodeRequestedSubject           = "rainpulse.jobs.requested.radar_decode"
 	RadarDecodeJobType                    = "radar.decode"
-	RadarDecoderVersion                   = "cma-rstm-2.0.0"
+	RadarDecoderVersion                   = "cma-rstm-2.1.0"
 	RadarQCRequestedEventType             = "radar.qc.requested.v1"
 	RadarQCRequestedSubject               = "rainpulse.jobs.requested.radar_qc"
 	RadarQCJobType                        = "radar.qc"
@@ -108,6 +108,8 @@ type RadarDecodeRequestedPayload struct {
 	AssetID        uuid.UUID `json:"asset_id"`
 	RadarID        string    `json:"radar_id"`
 	InputURI       string    `json:"input_uri"`
+	InputSHA256    string    `json:"input_sha256"`
+	InputSizeBytes int64     `json:"input_size_bytes"`
 	OutputPrefix   string    `json:"output_prefix"`
 	SourceFormat   string    `json:"source_format"`
 	RadarConfig    string    `json:"radar_config_version"`

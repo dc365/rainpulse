@@ -35,6 +35,8 @@ class RadarDecodePayload(ObjectTaskPayload):
     scan_id: UUID
     asset_id: UUID
     radar_id: str = Field(min_length=1)
+    input_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    input_size_bytes: int = Field(gt=0)
     source_format: str = Field(min_length=1)
     radar_config_version: str = Field(min_length=1)
     decoder_version: str = Field(min_length=1)

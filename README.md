@@ -65,6 +65,8 @@ After `make dev-up`, the public seams are:
 - Per-radar health: `http://127.0.0.1:8080/api/v1/radars/{radar_id}/status`
 - Analysis cycles: `http://127.0.0.1:8080/api/v1/analysis-cycles`
 - Run updates: `http://127.0.0.1:8080/api/v1/events/stream`
+- Operational metrics: `http://127.0.0.1:8080/metrics`
+- Prometheus (loopback only by default): `http://127.0.0.1:9090`
 
 Use `make dev-down` to stop the composed runtime without deleting its named
 volumes. PostgreSQL, NATS JetStream and MinIO are persistent RP-003 services;
@@ -123,6 +125,10 @@ toolchain.
 
 Current implementation and deployment decisions are recorded in
 [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md). The real
+ingest, automatic pipeline, retry/atomic-publication, security and observability
+foundation is recorded in
+[`docs/RP019_运行可靠性与自动化实施记录.md`](docs/RP019_运行可靠性与自动化实施记录.md).
+The real
 RP-008 server acceptance evidence is in
 [`docs/RP008_基础极坐标质控验收记录.md`](docs/RP008_基础极坐标质控验收记录.md).
 The accepted RP-009 grid/static-source foundation is recorded in

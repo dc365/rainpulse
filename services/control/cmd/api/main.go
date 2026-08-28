@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/api"
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/healthcheck"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/objectstore"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/orchestration"
@@ -28,7 +29,10 @@ func main() {
 		return
 	}
 
-	version := environmentOrDefault("RAINPULSE_VERSION", "dev")
+	version := os.Getenv("RAINPULSE_VERSION")
+	if version == "" {
+		version = buildinfo.Identity()
+	}
 	databaseURL, err := runtimeconfig.DatabaseURL()
 	if err != nil {
 		slog.Error("configure control database", "error", err)
@@ -62,6 +66,7 @@ func main() {
 		Addr: address,
 		Handler: api.NewHandler(api.Options{
 			Version:          version,
+			AdminToken:       os.Getenv("RAINPULSE_ADMIN_TOKEN"),
 			Runs:             store,
 			Observations:     store,
 			Commands:         commands,
@@ -69,6 +74,7 @@ func main() {
 			Products:         store,
 			ProductObjects:   diagnosticLayers,
 			Verification:     verificationReports,
+			Metrics:          store,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,

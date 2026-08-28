@@ -71,7 +71,7 @@ if [[ "$migration_count" -lt 1 ]]; then
   exit 1
 fi
 
-bucket=${RAINPULSE_MINIO_BUCKET:-rainpulse}
+bucket=rainpulse
 "${compose[@]}" run --rm --no-deps minio-init \
   ls "rainpulse/${bucket}" >/dev/null
 

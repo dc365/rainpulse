@@ -1,6 +1,6 @@
 # RainPulse implementation status
 
-Updated: 2026-08-26
+Updated: 2026-08-29
 
 ## Active baseline
 
@@ -44,6 +44,9 @@ NowcastInput gate.
 | RP-014 | Core vertical slice complete | Real dense Lucas–Kanade and semi-Lagrangian extrapolation, physical U/V, 24 leads, persistence/translation baselines, immutable ForecastOutput, persistence/events and synthetic server replay; real forecast-skill acceptance remains gated |
 | RP-015 | Complete for synthetic vertical acceptance | ForecastOutput-derived PNG/COG/NetCDF products, point/area APIs, product events, server replay and the responsive OpenLayers short-nowcast GIS are accepted; real forecast skill remains gated |
 | RP-016 | MRMS engineering and spatial-evidence slice complete | Isolated MRMS conformance/hindcast reuses the production pySTEPS-LK core; 53 August 2021 issues passed three-baseline scoring and generated 2,544 synchronized map layers in the existing Web, while Fujian operational acceptance remains gated |
+| RP-017 | Complete | The engineering Web workspace and GIS/timeline hierarchy were consolidated and verified across desktop and mobile widths |
+| RP-018 | Complete for the frozen MRMS suite | Verification manifests, environment/source fingerprints, reproducibility checks and failure gates were tightened without treating MRMS as Fujian acceptance |
+| RP-019 | Engineering foundation complete | Immutable raw archive, continuous ingest seam, persistent automatic planner, bounded Worker retries/atomic commit, control-plane security, build identity and Prometheus operational metrics are implemented; real ingest and the planner remain disabled pending Fujian data/config acceptance |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -51,6 +54,17 @@ old control-plane work is an RP-004 foundation, and the old simulated Worker is
 the RP-005 foundation.
 
 ## Completed engineering foundation
+
+RP-019 adds the non-data-dependent operational foundation described in
+`docs/RP019_运行可靠性与自动化实施记录.md`: raw files are stabilized, probed,
+hashed and archived before decode registration; exact raw gate codes survive in
+NormalizedRadarVolume 1.1; a database-state planner can advance the full Phase
+1 chain while isolating real radar/grid identities; workers renew ACKs, retry
+transient failures and commit content-addressed artifacts with a first-writer
+marker; admin APIs, NATS and MinIO receive explicit access controls; build
+identity, bounded reads, Prometheus metrics and engineering alerts are present.
+Both continuous ingest and automatic planning default to off until the Fujian
+radar configuration and source semantics are accepted.
 
 RP-000 provides:
 
@@ -407,6 +421,12 @@ at least two ready radar configurations and representative synchronized
 volumes. Static clutter, derived coastline/sea-AP probability assets, verified
 vertical datum and a representative mountain-blockage case remain operational
 gates.
+
+Before that real-data acceptance, enable RP-019 in stages: archive-only ingest,
+then decode/QC/grid, then mosaic/QPE, and only then NowcastInput/LK/product
+automation. Do not enable the full chain merely because the Compose services are
+healthy. The activation and rollback checklist is in
+`docs/RP019_运行可靠性与自动化实施记录.md`.
 
 ## Required inputs before operational QC and gridding
 

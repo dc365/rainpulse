@@ -35,8 +35,9 @@ the different gate counts at higher elevations.
 ## Canonical fields
 
 Each available moment is `[ray, gate]` `float32` with `NaN` for source missing
-values. Only fields present and verified in the radar configuration are
-written.
+values. A matching `[ray, gate]` `uint32` `<FIELD>_RAW_CODE` array preserves
+every source integer gate code before scale/offset decoding. Only fields present
+and verified in the radar configuration are written.
 
 | Variable | Canonical unit | Required |
 |---|---|---|
@@ -48,13 +49,18 @@ written.
 | `SW` | m s-1 | optional |
 | `SNR` | dB | optional |
 
-No decoder may synthesize an absent optional field. Raw integer codes, scale,
-offset, missing values, and source units remain recorded in the field-mapping
-metadata.
+No decoder may synthesize an absent optional field. Source codes `0..4` are
+preserved losslessly in `<FIELD>_RAW_CODE`; they still decode to `NaN` until a
+vendor-verified semantic table is registered. `4294967295` is reserved only for
+a moment absent from an entire source radial and is declared as
+`absent_moment_code`. Scale, offset, source bin length, reserved-code status,
+and source units remain recorded in field metadata. This keeps unknown/no-echo/
+folded/reserved states distinguishable for later QC without inventing their
+meaning.
 
 ## Required attributes
 
-`contract_name=rainpulse.normalized-radar-volume`, `contract_version=1.0`,
+`contract_name=rainpulse.normalized-radar-volume`, `contract_version=1.1`,
 `asset_id`, `radar_id`, `radar_config_version`, `decoder_id`,
 `decoder_version`, `source_format`, `source_format_version`,
 `field_mapping_version`, `geometry_encoding`, station longitude/latitude/
@@ -66,7 +72,9 @@ and the input SHA-256.
 - Geometry, units, field ranges, sweep boundaries, and time coverage are
   validated before publication.
 - Source missing values become `NaN`, never zero.
-- The decoder writes below `_temporary/{job_id}`, validates the complete Zarr
-  hierarchy, and publishes `_SUCCESS.json` last.
+- The publisher writes content-addressed objects below `_objects/{sha256}`,
+  validates the complete Zarr hierarchy, and conditionally creates
+  `_SUCCESS.json` last. Concurrent duplicate workers reuse the first committed
+  marker instead of overwriting its artifact.
 - Output is stored at
   `radar/normalized/{radar_id}/{yyyy}/{mm}/{dd}/{scan_time}/volume.zarr`.

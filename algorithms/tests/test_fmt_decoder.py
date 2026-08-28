@@ -1,5 +1,7 @@
 import bz2
+import hashlib
 import json
+import shutil
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -13,6 +15,7 @@ from zarr.storage import MemoryStore
 
 from rainpulse_algo.radar.config import load_radar_config
 from rainpulse_algo.radar.fmt import (
+    ABSENT_RAW_GATE_CODE,
     CUT_CONFIG,
     DECODER_VERSION,
     GENERIC_HEADER,
@@ -172,6 +175,8 @@ def test_fmt_decoder_preserves_sweeps_geometry_and_missing_values(tmp_path: Path
     assert np.isnan(volume.sweeps[0].fields["DBZH"][0, :2]).all()
     assert volume.sweeps[0].fields["DBZH"][0, 2] == pytest.approx(-30.5)
     assert volume.sweeps[0].fields["DBZH"][0, 3] == pytest.approx(0.0)
+    assert volume.sweeps[0].raw_gate_codes["DBZH"][0].tolist() == [0, 4, 5, 66, 70, 100]
+    assert volume.sweeps[0].raw_gate_codes["DBZH"].dtype == np.dtype("uint32")
     assert volume.sweeps[0].range_m.tolist() == [500, 1500, 2500, 3500, 4500, 5500]
     assert volume.warnings and "header time is authoritative" in volume.warnings[0]
 
@@ -219,6 +224,11 @@ def test_normalized_zarr_round_trip(tmp_path: Path) -> None:
     assert root.attrs["operational_eligible"] is False
     assert root.attrs["radar_health"] == "DEGRADED"
     assert root["sweep_000/DBZH"].dtype == np.dtype("float32")
+    assert root["sweep_000/DBZH_RAW_CODE"].dtype == np.dtype("uint32")
+    assert root["sweep_000/DBZH_RAW_CODE"][0, :5].tolist() == [0, 4, 5, 66, 70]
+    assert root["sweep_000/DBZH_RAW_CODE"].attrs["absent_moment_code"] == int(
+        ABSENT_RAW_GATE_CODE
+    )
     assert np.isnan(root["sweep_000/DBZH"][0, 0])
     assert "health/summary.json" in objects
 
@@ -272,6 +282,8 @@ def test_real_worker_executor_enforces_allowed_root_and_builds_zarr(
         {
             "radar_id": "z9598",
             "input_uri": source.as_uri(),
+            "input_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+            "input_size_bytes": source.stat().st_size,
             "source_format": "cma-rstm-level2",
             "radar_config_version": "z9598-test-v1",
             "decoder_version": DECODER_VERSION,
@@ -290,3 +302,72 @@ def test_real_worker_executor_enforces_allowed_root_and_builds_zarr(
     assert result.diagnostics["radar_health"]["health"] == "DEGRADED"
     assert result.metrics["sweep_count"] == 2.0
     assert validate_zarr_store(result.objects)["fields"] == ["DBZH"]
+
+
+def test_real_worker_materializes_immutable_s3_raw_archive(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = make_config(tmp_path)
+    source = make_fmt_fixture(tmp_path)
+    value = json.loads(
+        (REPOSITORY_ROOT / "contracts" / "examples" / "radar-decode-requested.json").read_text()
+    )
+    value["payload"].update(
+        {
+            "radar_id": "z9598",
+            "input_uri": "s3://rainpulse/radar/raw/z9598/2026/06/15/hash/volume.bin.bz2",
+            "input_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+            "input_size_bytes": source.stat().st_size,
+            "source_format": "cma-rstm-level2",
+            "radar_config_version": "z9598-test-v1",
+            "decoder_version": DECODER_VERSION,
+        }
+    )
+
+    class ArchiveClient:
+        def fget_object(self, bucket: str, key: str, destination: str) -> None:
+            assert bucket == "rainpulse"
+            assert key.startswith("radar/raw/z9598/")
+            shutil.copyfile(source, destination)
+
+    monkeypatch.setenv("RAINPULSE_OBJECT_STORE_BUCKET", "rainpulse")
+    monkeypatch.setenv("RAINPULSE_RADAR_CONFIG_DIR", str(config_path.parent))
+    monkeypatch.setenv("RAINPULSE_RADAR_HEALTH_CONFIG", str(HEALTH_CONFIG))
+    monkeypatch.setattr(
+        "rainpulse_algo.radar.worker.minio_client_from_environment",
+        lambda: ArchiveClient(),
+    )
+
+    result = execute_fmt_decode(RadarDecodeRequested.model_validate(value))
+
+    assert result.objects is not None
+    assert validate_zarr_store(result.objects)["raw_gate_code_fields"] == ["DBZH"]
+
+
+def test_real_worker_rejects_raw_archive_checksum_mismatch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = make_config(tmp_path)
+    source = make_fmt_fixture(tmp_path)
+    value = json.loads(
+        (REPOSITORY_ROOT / "contracts" / "examples" / "radar-decode-requested.json").read_text()
+    )
+    value["payload"].update(
+        {
+            "radar_id": "z9598",
+            "input_uri": source.as_uri(),
+            "input_sha256": "0" * 64,
+            "input_size_bytes": source.stat().st_size,
+            "source_format": "cma-rstm-level2",
+            "radar_config_version": "z9598-test-v1",
+            "decoder_version": DECODER_VERSION,
+        }
+    )
+    monkeypatch.setenv("RAINPULSE_RADAR_INPUT_ROOTS", str(tmp_path))
+    monkeypatch.setenv("RAINPULSE_RADAR_CONFIG_DIR", str(config_path.parent))
+    monkeypatch.setenv("RAINPULSE_RADAR_HEALTH_CONFIG", str(HEALTH_CONFIG))
+
+    with pytest.raises(ValueError, match="SHA-256"):
+        execute_fmt_decode(RadarDecodeRequested.model_validate(value))

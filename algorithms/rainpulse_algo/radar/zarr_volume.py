@@ -11,11 +11,17 @@ from numcodecs import Blosc
 from zarr.storage import MemoryStore
 
 from .config import RadarDecoderConfig
-from .fmt import DECODER_ID, DECODER_VERSION, DecodedRadarVolume, DecodeError
+from .fmt import (
+    ABSENT_RAW_GATE_CODE,
+    DECODER_ID,
+    DECODER_VERSION,
+    DecodedRadarVolume,
+    DecodeError,
+)
 from .health import RadarHealthSummary
 
 CONTRACT_NAME = "rainpulse.normalized-radar-volume"
-CONTRACT_VERSION = "1.0"
+CONTRACT_VERSION = "1.1"
 GEOMETRY_ENCODING = "sweep_groups_v1"
 
 
@@ -57,6 +63,8 @@ def build_zarr_store(
             "input_size_bytes": volume.input_size_bytes,
             "field_mapping_version": config.config_version,
             "geometry_encoding": GEOMETRY_ENCODING,
+            "raw_gate_code_encoding": "uint32_source_code_with_absent_moment_sentinel",
+            "absent_raw_gate_code": int(ABSENT_RAW_GATE_CODE),
             "site_name": volume.site.name,
             "site_longitude_deg": volume.site.longitude_deg,
             "site_latitude_deg": volume.site.latitude_deg,
@@ -157,6 +165,26 @@ def build_zarr_store(
                     "missing_value": "NaN",
                 }
             )
+            raw_codes = sweep.raw_gate_codes[name]
+            raw_array = group.create_dataset(
+                f"{name}_RAW_CODE",
+                data=raw_codes,
+                chunks=chunks,
+                compressor=compressor,
+                overwrite=True,
+                fill_value=ABSENT_RAW_GATE_CODE,
+            )
+            raw_array.attrs.update(
+                {
+                    "source_field": name,
+                    "source_name": field.mapping.source_name,
+                    "source_data_type_code": field.source_code,
+                    "source_bin_length": field.raw_bin_length,
+                    "reserved_codes": [0, 1, 2, 3, 4],
+                    "reserved_code_semantics": "vendor_mapping_pending",
+                    "absent_moment_code": int(ABSENT_RAW_GATE_CODE),
+                }
+            )
 
     zarr.consolidate_metadata(store)
     objects = {str(key): bytes(value) for key, value in store.items()}
@@ -185,6 +213,7 @@ def validate_zarr_store(objects: Mapping[str, bytes]) -> dict[str, Any]:
         raise DecodeError("normalized Zarr sweep ray boundaries are invalid")
 
     field_names: set[str] = set()
+    raw_code_names: set[str] = set()
     for sweep_number in sweep_numbers:
         group = root[f"sweep_{int(sweep_number):03d}"]
         azimuth = group["azimuth"][:]
@@ -225,15 +254,29 @@ def validate_zarr_store(objects: Mapping[str, bytes]) -> dict[str, Any]:
                 "range",
             }:
                 continue
+            if name.endswith("_RAW_CODE"):
+                source_field = name.removesuffix("_RAW_CODE")
+                if array.shape != (len(azimuth), len(ranges)) or array.dtype != np.dtype(
+                    "uint32"
+                ):
+                    raise DecodeError(f"normalized raw gate codes {name} are invalid")
+                absent_code = int(array.attrs.get("absent_moment_code", -1))
+                if absent_code != int(ABSENT_RAW_GATE_CODE):
+                    raise DecodeError(f"normalized raw gate codes {name} lack sentinel metadata")
+                raw_code_names.add(source_field)
+                continue
             if array.shape != (len(azimuth), len(ranges)) or array.dtype != np.dtype("float32"):
                 raise DecodeError(f"normalized field {name} has invalid shape or dtype")
             field_names.add(name)
     if "DBZH" not in field_names:
         raise DecodeError("normalized Zarr store has no DBZH field")
+    if raw_code_names != field_names:
+        raise DecodeError("normalized Zarr raw gate codes do not match canonical fields")
     return {
         "sweep_count": int(len(sweep_numbers)),
         "ray_count": int(ends[-1] + 1),
         "fields": sorted(field_names),
+        "raw_gate_code_fields": sorted(raw_code_names),
         "object_count": len(objects),
         "size_bytes": sum(len(value) for value in objects.values()),
     }

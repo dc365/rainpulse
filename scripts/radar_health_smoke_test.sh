@@ -84,9 +84,15 @@ assert {item["field"] for item in health["field_availability"]} == {"DBZH", "PHI
 assert any(item["radar_id"] == "z9598" and item["health"] == "DEGRADED" for item in statuses), statuses
 ' "$status" "$statuses"
 
-marker="rainpulse/${RAINPULSE_MINIO_BUCKET:-rainpulse}/radar/normalized/z9598/$scan_id/volume.zarr/_SUCCESS.json"
-health_object="rainpulse/${RAINPULSE_MINIO_BUCKET:-rainpulse}/radar/normalized/z9598/$scan_id/volume.zarr/health/summary.json"
+marker="rainpulse/rainpulse/radar/normalized/z9598/$scan_id/volume.zarr/_SUCCESS.json"
 "${compose[@]}" run --rm --no-deps minio-init stat "$marker" >/dev/null
+marker_json=$("${compose[@]}" run --rm --no-deps minio-init cat "$marker")
+data_prefix=$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("data_prefix", ""))' <<<"$marker_json")
+artifact_root=${marker%/_SUCCESS.json}
+if [[ -n "$data_prefix" ]]; then
+  artifact_root="$artifact_root/$data_prefix"
+fi
+health_object="$artifact_root/health/summary.json"
 object_health=$("${compose[@]}" run --rm --no-deps minio-init cat "$health_object")
 python3 -c '
 import json

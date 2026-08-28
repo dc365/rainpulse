@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/api"
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/orchestration"
 	verificationstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/verification"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/workflow"
 	"github.com/google/uuid"
@@ -32,6 +33,10 @@ func TestSystemStatusReportsReadyControlPlane(t *testing.T) {
 	}
 	if got := response.Header().Get("Content-Type"); got != "application/json" {
 		t.Fatalf("expected application/json content type, got %q", got)
+	}
+	if response.Header().Get("X-Content-Type-Options") != "nosniff" ||
+		response.Header().Get("Content-Security-Policy") == "" {
+		t.Fatal("API security headers are missing")
 	}
 
 	var body struct {
@@ -51,6 +56,67 @@ func TestSystemStatusReportsReadyControlPlane(t *testing.T) {
 	}
 	if body.Version != "test-version" {
 		t.Fatalf("expected injected version, got %q", body.Version)
+	}
+}
+
+func TestListEndpointsRejectLimitsOutsideContract(t *testing.T) {
+	handler := api.NewHandler(api.Options{
+		Runs:         &fakeRunStore{},
+		Observations: &fakeObservationStore{},
+		Products:     &fakeProductStore{},
+	})
+	paths := []string{
+		"/api/v1/runs?limit=0",
+		"/api/v1/radar-scans?limit=-1",
+		"/api/v1/analysis-cycles?limit=201",
+		"/api/v1/products?limit=2147483647",
+	}
+	for _, target := range paths {
+		t.Run(target, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, target, nil)
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_limit") {
+				t.Fatalf("GET %s: status=%d body=%s", target, response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestAdministrativeEndpointsFailClosed(t *testing.T) {
+	runID := uuid.MustParse("f3641335-13a3-4f68-96c0-56a5e0e684d7")
+	target := "/api/v1/admin/runs/" + runID.String() + "/rerun"
+
+	disabled := api.NewHandler(api.Options{})
+	request := httptest.NewRequest(http.MethodPost, target, nil)
+	response := httptest.NewRecorder()
+	disabled.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "admin_disabled") {
+		t.Fatalf("disabled admin route: status=%d body=%s", response.Code, response.Body.String())
+	}
+
+	protected := api.NewHandler(api.Options{AdminToken: "test-admin-token"})
+	request = httptest.NewRequest(http.MethodPost, target, nil)
+	request.Header.Set("Authorization", "Bearer wrong-token")
+	response = httptest.NewRecorder()
+	protected.ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized || response.Header().Get("WWW-Authenticate") != "Bearer" {
+		t.Fatalf("protected admin route: status=%d headers=%v", response.Code, response.Header())
+	}
+}
+
+func TestRerunReportsUnsupportedRealWorkflowAsConflict(t *testing.T) {
+	runID := uuid.MustParse("f3641335-13a3-4f68-96c0-56a5e0e684d7")
+	handler := api.NewHandler(api.Options{
+		AdminToken: "test-admin-token",
+		Commands:   &fakeRunCommands{err: orchestration.ErrUnsupportedRerun},
+	})
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/runs/"+runID.String()+"/rerun", nil)
+	request.Header.Set("Authorization", "Bearer test-admin-token")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "unsupported_rerun") {
+		t.Fatalf("unsupported rerun: status=%d body=%s", response.Code, response.Body.String())
 	}
 }
 
@@ -184,11 +250,16 @@ func TestRunQueriesAndRerunUseControlPlane(t *testing.T) {
 		CreatedAt:     now.Add(time.Minute),
 		UpdatedAt:     now.Add(time.Minute),
 	}}
-	handler := api.NewHandler(api.Options{Version: "test", Runs: store, Commands: commands})
+	handler := api.NewHandler(api.Options{
+		Version: "test", Runs: store, Commands: commands, AdminToken: "test-admin-token",
+	})
 
 	assertStatus := func(method, target string, want int) *httptest.ResponseRecorder {
 		t.Helper()
 		request := httptest.NewRequest(method, target, nil)
+		if strings.Contains(target, "/admin/") {
+			request.Header.Set("Authorization", "Bearer test-admin-token")
+		}
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)
 		if response.Code != want {
@@ -661,11 +732,12 @@ func (store *fakeRunStore) ListJobs(_ context.Context, runID uuid.UUID) ([]workf
 type fakeRunCommands struct {
 	run    workflow.Run
 	source uuid.UUID
+	err    error
 }
 
 func (commands *fakeRunCommands) Rerun(_ context.Context, source uuid.UUID) (workflow.Run, error) {
 	commands.source = source
-	return commands.run, nil
+	return commands.run, commands.err
 }
 
 type fakeObservationStore struct {

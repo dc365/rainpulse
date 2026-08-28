@@ -214,6 +214,8 @@ type Service struct {
 	newID      func() uuid.UUID
 }
 
+var ErrUnsupportedRerun = errors.New("forecast rerun is unsupported for this run type")
+
 func NewService(repository Repository, options Options) *Service {
 	now := options.Now
 	if now == nil {
@@ -255,7 +257,8 @@ func (service *Service) CreateRadarDecode(
 		TraceID:       traceID,
 		Payload: RadarDecodeRequestedPayload{
 			ScanID: scanID, AssetID: assetID, RadarID: input.RadarID,
-			InputURI: input.InputURI, OutputPrefix: outputPrefix,
+			InputURI: input.InputURI, InputSHA256: input.InputSHA256,
+			InputSizeBytes: input.InputSizeBytes, OutputPrefix: outputPrefix,
 			SourceFormat: input.SourceFormat, RadarConfig: input.ConfigVersion,
 			DecoderVersion: RadarDecoderVersion,
 		},
@@ -320,10 +323,11 @@ func validateRadarDecodeInput(input RadarDecodeInput) error {
 		return fmt.Errorf("radar configuration and input SHA-256 values are required")
 	}
 	parsed, err := url.ParseRequestURI(input.InputURI)
-	if err != nil || parsed.Scheme != "file" {
-		return fmt.Errorf("radar decoder input must be a file URI")
+	expectedPrefix := "/radar/raw/" + input.RadarID + "/"
+	if err != nil || parsed.Scheme != "s3" || parsed.Host == "" || !strings.HasPrefix(parsed.Path, expectedPrefix) {
+		return fmt.Errorf("radar decoder input must be an immutable radar raw-archive URI")
 	}
-	if input.InputSizeBytes < 0 || input.VolumeStartTime.IsZero() || input.VolumeEndTime.Before(input.VolumeStartTime) {
+	if input.InputSizeBytes <= 0 || input.VolumeStartTime.IsZero() || input.VolumeEndTime.Before(input.VolumeStartTime) {
 		return fmt.Errorf("invalid radar input size or volume time range")
 	}
 	return nil
@@ -1386,6 +1390,10 @@ func (service *Service) Rerun(ctx context.Context, sourceRunID uuid.UUID) (workf
 	}
 	if len(jobs) == 0 {
 		return workflow.Run{}, fmt.Errorf("source run has no jobs")
+	}
+	if source.GridID != SimulationGrid || source.ConfigVersion != SimulationConfig ||
+		jobs[0].ModelID != SimulationModelID {
+		return workflow.Run{}, ErrUnsupportedRerun
 	}
 
 	requested, err := decodeJobRequested(jobs[0].RequestPayload)

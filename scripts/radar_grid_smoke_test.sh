@@ -56,9 +56,15 @@ raise SystemExit(0 if json.load(sys.stdin).get("status") == "RADAR_GRID_READY" e
   sleep 2
 done
 
-summary_object="rainpulse/${RAINPULSE_MINIO_BUCKET:-rainpulse}/radar/grid/z9598/$scan_id/hybrid-scan-1.0.0/grid.zarr/grid/summary.json"
-marker="rainpulse/${RAINPULSE_MINIO_BUCKET:-rainpulse}/radar/grid/z9598/$scan_id/hybrid-scan-1.0.0/grid.zarr/_SUCCESS.json"
+marker="rainpulse/rainpulse/radar/grid/z9598/$scan_id/hybrid-scan-1.1.0/grid.zarr/_SUCCESS.json"
 "${compose[@]}" run --rm --no-deps minio-init stat "$marker" >/dev/null
+marker_json=$("${compose[@]}" run --rm --no-deps minio-init cat "$marker")
+data_prefix=$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("data_prefix", ""))' <<<"$marker_json")
+artifact_root=${marker%/_SUCCESS.json}
+if [[ -n "$data_prefix" ]]; then
+  artifact_root="$artifact_root/$data_prefix"
+fi
+summary_object="$artifact_root/grid/summary.json"
 summary=$("${compose[@]}" run --rm --no-deps minio-init cat "$summary_object")
 python3 -c '
 import json,sys
@@ -67,7 +73,7 @@ scan=json.loads(sys.argv[2])
 assert summary["scan_id"] == scan["scan_id"], (summary,scan)
 assert summary["radar_id"] == "z9598", summary
 assert summary["grid_id"] == "fuzhou_118_123_25_27_0p01deg_v1", summary
-assert summary["algorithm_version"] == "hybrid-scan-1.0.0", summary
+assert summary["algorithm_version"] == "hybrid-scan-1.1.0", summary
 assert summary["dem_asset_version"] == "copernicus-dem-glo30-2022-v1", summary
 assert summary["vertical_datum_status"] == "unverified_engineering", summary
 assert summary["operational_eligible"] is False, summary
@@ -78,7 +84,7 @@ assert 0 < summary["valid_coverage_ratio"] < 1, summary
 assert 0 <= summary["mean_quality_index"] <= 1, summary
 assert summary["selection_counts"], summary
 assert scan["status"] == "RADAR_GRID_READY", scan
-assert scan["grid_uri"].endswith("/hybrid-scan-1.0.0/grid.zarr"), scan
+assert scan["grid_uri"].endswith("/hybrid-scan-1.1.0/grid.zarr"), scan
 ' "$summary" "$scan"
 
 "${compose[@]}" run --rm --no-deps orchestrator replay "$job_id" >/dev/null

@@ -69,7 +69,7 @@ func TestCreateRadarDecodeUsesStableIdentityAndRealWorkerSubject(t *testing.T) {
 		RadarID: "z9598", DisplayName: &displayName, Lifecycle: workflow.RadarDraft,
 		ConfigVersion: "z9598-fmt-v1", Config: json.RawMessage(`{"radar_id":"z9598"}`),
 		ConfigSHA256: "63266c7c72321262a01b945281060abd84153a8f3ad64a95c5b73b9fd510f678",
-		SourceFormat: "cma-rstm-level2", InputURI: "file:///data/Weather/sample.bin.bz2",
+		SourceFormat: "cma-rstm-level2", InputURI: "s3://rainpulse/radar/raw/z9598/2026/08/24/030000Z/hash/sample.bin.bz2",
 		InputSHA256:     "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
 		InputSizeBytes:  3,
 		VolumeStartTime: time.Date(2026, 6, 15, 11, 58, 29, 0, time.UTC),
@@ -92,7 +92,9 @@ func TestCreateRadarDecodeUsesStableIdentityAndRealWorkerSubject(t *testing.T) {
 		t.Fatalf("decode radar request: %v", err)
 	}
 	if requested.Payload.ScanID != scan.ID || requested.Payload.DecoderVersion != RadarDecoderVersion ||
-		requested.Payload.InputURI != input.InputURI {
+		requested.Payload.InputURI != input.InputURI ||
+		requested.Payload.InputSHA256 != input.InputSHA256 ||
+		requested.Payload.InputSizeBytes != input.InputSizeBytes {
 		t.Fatalf("unexpected radar decode request: %#v", requested)
 	}
 

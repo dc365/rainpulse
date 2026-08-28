@@ -180,6 +180,10 @@ func applyProductBuildCompletion(
 	if bundleAsset == nil || bundleAsset.MediaType != applicationProductBundleMediaType {
 		return fmt.Errorf("%w: application product bundle is required", orchestration.ErrInvalidEvent)
 	}
+	bundleDataURI, err := artifactDataURI(*bundleAsset, event.Payload.Diagnostics)
+	if err != nil {
+		return fmt.Errorf("%w: %v", orchestration.ErrInvalidEvent, err)
+	}
 	rawManifest, ok := event.Payload.Diagnostics["product_bundle"]
 	if !ok {
 		return fmt.Errorf("%w: product bundle manifest is required", orchestration.ErrInvalidEvent)
@@ -245,6 +249,7 @@ FOR UPDATE OF build, f, mr`, event.JobID, event.RunID).Scan(
 	for _, product := range manifest.Products {
 		metadata, err := json.Marshal(map[string]any{
 			"bundle_uri":               bundleAsset.URI,
+			"bundle_data_uri":          bundleDataURI,
 			"source_forecast_uri":      record.ForecastURI,
 			"source_forecast_sha256":   record.ForecastSHA256,
 			"model_config_version":     modelConfig,
@@ -278,7 +283,7 @@ INSERT INTO products (
 		publishedAssets := make([]orchestration.ProductPublishedAsset, 0, len(product.Assets))
 		for _, asset := range product.Assets {
 			assetID := productAssetID(product.ProductID, asset.ObjectPath)
-			objectURI := strings.TrimRight(bundleAsset.URI, "/") + "/" + asset.ObjectPath
+			objectURI := bundleDataURI + "/" + asset.ObjectPath
 			assetMetadata, err := json.Marshal(asset)
 			if err != nil {
 				return fmt.Errorf("encode product asset metadata: %w", err)
@@ -526,6 +531,9 @@ func (store *Store) ListProducts(
 	modelID *string,
 	productType *workflow.ProductType,
 ) ([]workflow.Product, *time.Time, error) {
+	if err := validatePageLimit(limit); err != nil {
+		return nil, nil, err
+	}
 	var cursorValue any
 	if cursor != nil {
 		cursorValue = cursor.UTC()

@@ -16,12 +16,14 @@
     "payload": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["scan_id", "asset_id", "radar_id", "input_uri", "output_prefix", "source_format", "radar_config_version", "decoder_version"],
+      "required": ["scan_id", "asset_id", "radar_id", "input_uri", "input_sha256", "input_size_bytes", "output_prefix", "source_format", "radar_config_version", "decoder_version"],
       "properties": {
         "scan_id": { "type": "string", "format": "uuid" },
         "asset_id": { "type": "string", "format": "uuid" },
         "radar_id": { "type": "string", "minLength": 1 },
         "input_uri": { "type": "string", "format": "uri" },
+        "input_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "input_size_bytes": { "type": "integer", "minimum": 1 },
         "output_prefix": { "type": "string", "format": "uri" },
         "source_format": { "type": "string", "minLength": 1 },
         "radar_config_version": { "type": "string", "minLength": 1 },

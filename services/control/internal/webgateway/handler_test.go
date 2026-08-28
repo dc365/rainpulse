@@ -59,6 +59,10 @@ func TestHandlerServesSPAAndProxiesAPI(t *testing.T) {
 			if got := result.Header.Get("Content-Type"); !strings.HasPrefix(got, testCase.contentType) {
 				t.Fatalf("expected content type %q, got %q", testCase.contentType, got)
 			}
+			if result.Header.Get("X-Content-Type-Options") != "nosniff" ||
+				result.Header.Get("Content-Security-Policy") == "" {
+				t.Fatal("security headers are missing")
+			}
 			body, err := io.ReadAll(result.Body)
 			if err != nil {
 				t.Fatalf("read response: %v", err)
@@ -67,5 +71,31 @@ func TestHandlerServesSPAAndProxiesAPI(t *testing.T) {
 				t.Fatalf("expected body to contain %q, got %q", testCase.body, body)
 			}
 		})
+	}
+}
+
+func TestPublicGatewayDoesNotProxyAdministrativeAPI(t *testing.T) {
+	webRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(webRoot, "index.html"), []byte("ok"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	upstreamCalled := false
+	upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		upstreamCalled = true
+	}))
+	t.Cleanup(upstream.Close)
+	handler, err := webgateway.NewHandler(webgateway.Options{
+		WebRoot: webRoot, APIBaseURL: upstream.URL,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(
+		response,
+		httptest.NewRequest(http.MethodPost, "/api/v1/admin/runs/id/rerun", nil),
+	)
+	if response.Code != http.StatusNotFound || upstreamCalled {
+		t.Fatalf("admin response=%d, upstream_called=%t", response.Code, upstreamCalled)
 	}
 }

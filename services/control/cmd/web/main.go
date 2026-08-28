@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/healthcheck"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/webgateway"
 )
@@ -39,7 +40,7 @@ func main() {
 		IdleTimeout:       60 * time.Second,
 	}
 
-	slog.Info("starting RainPulse web gateway", "address", address)
+	slog.Info("starting RainPulse web gateway", "address", address, "version", buildinfo.Identity())
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		slog.Error("web gateway stopped", "error", err)
 		os.Exit(1)

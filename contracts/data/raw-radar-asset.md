@@ -14,7 +14,7 @@ never pass through REST, NATS, or PostgreSQL.
 | `source_format` | string | Verified decoder-adapter identifier |
 | `source_format_version` | string or null | Null only when the source format has no version |
 | `sha256` | string | Lowercase 64-character SHA-256 of the raw bytes |
-| `file_size_bytes` | integer | Non-negative raw size |
+| `file_size_bytes` | integer | Positive raw size |
 | `volume_start_time` | datetime | RFC 3339 UTC |
 | `volume_end_time` | datetime | RFC 3339 UTC, not earlier than start |
 | `received_at` | datetime | RFC 3339 UTC arrival time |
@@ -32,6 +32,9 @@ decoded arrays, or guessed scan geometry.
 - Archive keys use
   `radar/raw/{radar_id}/{yyyy}/{mm}/{dd}/{scan_time}/{sha256}/{filename}`.
 - Raw objects are never overwritten or modified by decode/QC jobs.
+- The decode request repeats the registered SHA-256 and byte size. The decoder
+  hashes the materialized archive object and rejects any mismatch before QC or
+  normalized-volume publication.
 - A raw asset may be rejected or quarantined, but its quality state must not be
   represented as valid no-rain.
 - Retention is a separate, explicit policy. No ingest or worker task deletes a

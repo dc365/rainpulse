@@ -94,6 +94,9 @@ func (store *Store) LatestRun(ctx context.Context) (workflow.Run, error) {
 }
 
 func (store *Store) ListRuns(ctx context.Context, limit int, cursor *time.Time, status *workflow.RunStatus) ([]workflow.Run, *time.Time, error) {
+	if err := validatePageLimit(limit); err != nil {
+		return nil, nil, err
+	}
 	var cursorValue any
 	if cursor != nil {
 		cursorValue = cursor.UTC()
@@ -131,6 +134,13 @@ LIMIT $3`, statusValue, cursorValue, limit+1)
 		runs = runs[:limit]
 	}
 	return runs, next, nil
+}
+
+func validatePageLimit(limit int) error {
+	if limit < 1 || limit > 200 {
+		return fmt.Errorf("list limit must be between 1 and 200")
+	}
+	return nil
 }
 
 func (store *Store) GetJob(ctx context.Context, jobID uuid.UUID) (workflow.Job, error) {
@@ -351,16 +361,17 @@ WHERE j.job_id = $1 FOR UPDATE OF j`, event.JobID).
 	if err != nil {
 		return false, fmt.Errorf("encode completion metadata: %w", err)
 	}
+	attemptNumber := completionDeliveryAttempt(event)
 	_, err = tx.Exec(ctx, `
 INSERT INTO job_attempts (
     job_id, attempt_no, status, started_at, completed_at, metadata
-) VALUES ($1, 1, 'SUCCEEDED', $2, $3, $4)
+) VALUES ($1, $2, 'SUCCEEDED', $3, $4, $5)
 ON CONFLICT (job_id, attempt_no) DO UPDATE
 SET status = EXCLUDED.status,
     started_at = EXCLUDED.started_at,
     completed_at = EXCLUDED.completed_at,
     metadata = EXCLUDED.metadata`,
-		event.JobID, event.Payload.StartedAt, event.Payload.FinishedAt, metadata)
+		event.JobID, attemptNumber, event.Payload.StartedAt, event.Payload.FinishedAt, metadata)
 	if err != nil {
 		return false, fmt.Errorf("record completed attempt: %w", err)
 	}
@@ -494,11 +505,12 @@ WHERE j.job_id = $1 FOR UPDATE OF j`, event.JobID).
 	if err != nil {
 		return false, fmt.Errorf("encode failure metadata: %w", err)
 	}
+	attemptNumber := failureDeliveryAttempt(event)
 	_, err = tx.Exec(ctx, `
 INSERT INTO job_attempts (
     job_id, attempt_no, status, error_code, error_message,
     started_at, completed_at, metadata
-) VALUES ($1, 1, 'FAILED', $2, $3, $4, $5, $6)
+) VALUES ($1, $2, 'FAILED', $3, $4, $5, $6, $7)
 ON CONFLICT (job_id, attempt_no) DO UPDATE
 SET status = EXCLUDED.status,
     error_code = EXCLUDED.error_code,
@@ -506,7 +518,7 @@ SET status = EXCLUDED.status,
     started_at = EXCLUDED.started_at,
     completed_at = EXCLUDED.completed_at,
     metadata = EXCLUDED.metadata`,
-		event.JobID, event.Payload.ErrorCode, event.Payload.ErrorMessage,
+		event.JobID, attemptNumber, event.Payload.ErrorCode, event.Payload.ErrorMessage,
 		event.Payload.StartedAt, event.Payload.FinishedAt, metadata)
 	if err != nil {
 		return false, fmt.Errorf("record failed attempt: %w", err)
@@ -616,6 +628,39 @@ WHERE job_id = $1`, event.JobID)
 		return false, fmt.Errorf("commit failure transaction: %w", err)
 	}
 	return true, nil
+}
+
+func completionDeliveryAttempt(event orchestration.JobCompleted) int {
+	raw, exists := event.Payload.Diagnostics["worker_delivery"]
+	if !exists {
+		return 1
+	}
+	var delivery struct {
+		Attempt int `json:"attempt"`
+	}
+	if json.Unmarshal(raw, &delivery) != nil || delivery.Attempt < 1 || delivery.Attempt > 100 {
+		return 1
+	}
+	return delivery.Attempt
+}
+
+func failureDeliveryAttempt(event orchestration.JobFailed) int {
+	value, exists := event.Payload.Details["delivery_attempt"]
+	if !exists {
+		return 1
+	}
+	switch attempt := value.(type) {
+	case float64:
+		integer := int(attempt)
+		if attempt == float64(integer) && integer >= 1 && integer <= 100 {
+			return integer
+		}
+	case int:
+		if attempt >= 1 && attempt <= 100 {
+			return attempt
+		}
+	}
+	return 1
 }
 
 func applyRadarCompletion(
@@ -1293,6 +1338,10 @@ func applyAnalysisDiagnosticsCompletion(
 	if diagnosticAsset == nil {
 		return fmt.Errorf("%w: analysis diagnostic asset is required", orchestration.ErrInvalidEvent)
 	}
+	diagnosticDataURI, err := artifactDataURI(*diagnosticAsset, event.Payload.Diagnostics)
+	if err != nil {
+		return fmt.Errorf("%w: %v", orchestration.ErrInvalidEvent, err)
+	}
 	rawManifest, ok := event.Payload.Diagnostics["analysis_diagnostics"]
 	if !ok {
 		return fmt.Errorf("%w: analysis diagnostic manifest is required", orchestration.ErrInvalidEvent)
@@ -1447,7 +1496,7 @@ WHERE d.job_id = $1 AND a.run_id = $2 FOR UPDATE OF d, a`,
 UPDATE diagnostic_runs
 SET status = 'SUCCEEDED', bundle_uri = $2, manifest = $3,
     measured_at = $4, updated_at = CURRENT_TIMESTAMP
-WHERE job_id = $1`, event.JobID, diagnosticAsset.URI, manifestJSON,
+WHERE job_id = $1`, event.JobID, diagnosticDataURI, manifestJSON,
 		event.Payload.FinishedAt); err != nil {
 		return fmt.Errorf("persist analysis diagnostic completion: %w", err)
 	}

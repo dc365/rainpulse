@@ -9,13 +9,14 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import urlparse
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from minio import Minio
-from minio.commonconfig import CopySource
 from minio.error import S3Error
 
 from .contracts import JobCompleted
+
+MAX_ARTIFACT_MARKER_BYTES = 16 * 1024 * 1024
 
 
 def minio_client_from_environment() -> Minio:
@@ -36,17 +37,30 @@ class PublishedObject:
     sha256: str
     size_bytes: int
     marker_key: str
+    completion: JobCompleted
+    reused: bool = False
 
 
 def parse_s3_uri(uri: str) -> tuple[str, str]:
     parsed = urlparse(uri)
-    if parsed.scheme != "s3" or not parsed.netloc:
+    key = parsed.path.strip("/")
+    key_path = PurePosixPath(key)
+    if (
+        parsed.scheme != "s3"
+        or not parsed.netloc
+        or parsed.username is not None
+        or parsed.query
+        or parsed.fragment
+        or not key
+        or ".." in key_path.parts
+        or str(key_path) != key
+    ):
         raise ValueError(f"expected s3 URI, got {uri!r}")
-    return parsed.netloc, parsed.path.lstrip("/")
+    return parsed.netloc, key
 
 
 class AtomicObjectPublisher:
-    """Publishes an object and commits the prefix by writing a marker last."""
+    """Publishes immutable content and claims the stable marker exactly once."""
 
     def __init__(self, client: Minio) -> None:
         self._client = client
@@ -59,16 +73,11 @@ class AtomicObjectPublisher:
         bucket, prefix = parse_s3_uri(output_prefix)
         marker_key = self._marker_key(prefix, artifact_name)
         try:
-            response = self._client.get_object(bucket, marker_key)
+            marker = self._load_marker(bucket, marker_key)
         except S3Error as error:
             if error.code in {"NoSuchKey", "NoSuchObject"}:
                 return None
             raise
-        try:
-            marker = json.loads(response.read())
-        finally:
-            response.close()
-            response.release_conn()
         return JobCompleted.model_validate(marker["completion_event"])
 
     def publish(
@@ -84,59 +93,95 @@ class AtomicObjectPublisher:
         bucket, prefix = parse_s3_uri(output_prefix)
         prefix = prefix.rstrip("/")
         payloads = normalize_artifact_objects(data=data, objects=objects)
-        temporary_root = f"_temporary/{job_id}/{uuid4()}"
-        temporary_keys: list[str] = []
         marker_key = self._marker_key(prefix, artifact_name)
         digest = artifact_sha256(payloads)
         total_size = sum(len(value) for value in payloads.values())
+        data_prefix = f"_objects/{digest}"
+        expected_asset_uri = f"s3://{bucket}/{prefix}/{artifact_name}"
+        matching_assets = [
+            asset for asset in completion.payload.assets if asset.uri == expected_asset_uri
+        ]
+        if (
+            completion.job_id != job_id
+            or len(matching_assets) != 1
+            or matching_assets[0].sha256 != digest
+            or matching_assets[0].size_bytes != total_size
+        ):
+            raise ValueError("completion asset identity differs from the artifact bundle")
+        diagnostics = dict(completion.payload.diagnostics)
+        diagnostics["artifact_publication"] = {
+            "schema_version": "2.0",
+            "data_prefix": data_prefix,
+        }
+        committed_completion = completion.model_copy(
+            update={
+                "payload": completion.payload.model_copy(
+                    update={"diagnostics": diagnostics}
+                )
+            }
+        )
         manifest: list[dict[str, Any]] = []
 
-        try:
-            for relative_key, value in payloads.items():
-                temporary_key = f"{temporary_root}/{relative_key}"
-                data_key = f"{prefix}/{artifact_name}/{relative_key}"
-                temporary_keys.append(temporary_key)
-                self._put_bytes(bucket, temporary_key, value, _content_type(relative_key))
-                temporary = self._client.stat_object(bucket, temporary_key)
-                if temporary.size != len(value):
-                    raise RuntimeError("temporary object size validation failed")
-
-                self._client.copy_object(bucket, data_key, CopySource(bucket, temporary_key))
-                published = self._client.stat_object(bucket, data_key)
-                if published.size != len(value):
-                    raise RuntimeError("published object size validation failed")
-                manifest.append(
-                    {
-                        "key": relative_key,
-                        "sha256": hashlib.sha256(value).hexdigest(),
-                        "size_bytes": len(value),
-                    }
-                )
-
-            marker = json.dumps(
+        for relative_key, value in payloads.items():
+            data_key = f"{prefix}/{artifact_name}/{data_prefix}/{relative_key}"
+            self._put_bytes(bucket, data_key, value, _content_type(relative_key))
+            published = self._client.stat_object(bucket, data_key)
+            if published.size != len(value):
+                raise RuntimeError("published object size validation failed")
+            manifest.append(
                 {
-                    "schema_version": "1.0",
-                    "sha256": digest,
-                    "size_bytes": total_size,
-                    "objects": manifest,
-                    "completion_event": completion.model_dump(mode="json"),
-                },
-                separators=(",", ":"),
-                sort_keys=True,
-            ).encode()
-            self._put_bytes(bucket, marker_key, marker, "application/json")
-        finally:
-            for temporary_key in temporary_keys:
-                try:
-                    self._client.remove_object(bucket, temporary_key)
-                except S3Error:
-                    pass
+                    "key": relative_key,
+                    "sha256": hashlib.sha256(value).hexdigest(),
+                    "size_bytes": len(value),
+                }
+            )
+
+        marker = json.dumps(
+            {
+                "schema_version": "2.0",
+                "sha256": digest,
+                "size_bytes": total_size,
+                "data_prefix": data_prefix,
+                "objects": manifest,
+                "completion_event": committed_completion.model_dump(mode="json"),
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode()
+        try:
+            self._put_marker_if_absent(bucket, marker_key, marker)
+        except S3Error as error:
+            if error.code not in {"ConditionalRequestConflict", "PreconditionFailed"}:
+                raise
+            existing = self._load_marker(bucket, marker_key)
+            existing_completion = JobCompleted.model_validate(existing["completion_event"])
+            if existing_completion.job_id != job_id:
+                raise RuntimeError(
+                    "artifact marker is already owned by a different job"
+                ) from error
+            return PublishedObject(
+                asset_uri=f"s3://{bucket}/{prefix}/{artifact_name}",
+                sha256=str(existing["sha256"]),
+                size_bytes=int(existing["size_bytes"]),
+                marker_key=marker_key,
+                completion=existing_completion,
+                reused=True,
+            )
 
         return PublishedObject(
             asset_uri=f"s3://{bucket}/{prefix}/{artifact_name}",
             sha256=digest,
             size_bytes=total_size,
             marker_key=marker_key,
+            completion=committed_completion,
+        )
+
+    def _put_marker_if_absent(self, bucket: str, key: str, data: bytes) -> Any:
+        return self._client._put_object(  # noqa: SLF001 - MinIO exposes no public conditional PUT
+            bucket,
+            key,
+            data,
+            headers={"Content-Type": "application/json", "If-None-Match": "*"},
         )
 
     def _put_bytes(self, bucket: str, key: str, data: bytes, content_type: str) -> Any:
@@ -147,6 +192,17 @@ class AtomicObjectPublisher:
             len(data),
             content_type=content_type,
         )
+
+    def _load_marker(self, bucket: str, marker_key: str) -> dict[str, Any]:
+        response = self._client.get_object(bucket, marker_key)
+        try:
+            marker = json.loads(response.read())
+        finally:
+            response.close()
+            response.release_conn()
+        if not isinstance(marker, dict):
+            raise RuntimeError("published artifact marker must be an object")
+        return marker
 
     @staticmethod
     def _marker_key(prefix: str, artifact_name: str) -> str:
@@ -159,17 +215,58 @@ class AtomicObjectPublisher:
 class ArtifactObjectReader:
     """Loads and verifies an atomically published multi-object artifact."""
 
-    def __init__(self, client: Minio) -> None:
+    def __init__(self, client: Minio, max_size_bytes: int | None = None) -> None:
         self._client = client
+        if max_size_bytes is None:
+            max_size_bytes = int(
+                os.getenv("RAINPULSE_MAX_INPUT_ARTIFACT_BYTES", str(2 * 1024**3))
+            )
+        if max_size_bytes <= 0:
+            raise ValueError("artifact input byte limit must be positive")
+        self._max_size_bytes = max_size_bytes
 
     def load(self, artifact_uri: str) -> dict[str, bytes]:
         bucket, prefix = parse_s3_uri(artifact_uri)
         prefix = prefix.rstrip("/")
-        marker = json.loads(self._get_bytes(bucket, f"{prefix}/_SUCCESS.json"))
+        marker = json.loads(
+            self._get_bytes(
+                bucket,
+                f"{prefix}/_SUCCESS.json",
+                max_bytes=MAX_ARTIFACT_MARKER_BYTES,
+            )
+        )
+        if not isinstance(marker, dict):
+            raise RuntimeError("published artifact marker must be an object")
+        data_prefix = marker.get("data_prefix", "")
+        if data_prefix:
+            normalized_prefix = normalize_artifact_prefix(data_prefix)
+        else:
+            normalized_prefix = ""
         manifest = marker.get("objects")
         if not isinstance(manifest, list) or not manifest:
             raise RuntimeError("published artifact marker has no object manifest")
+        if len(manifest) > 100_000:
+            raise RuntimeError("published artifact exceeds the object-count safety limit")
+        declared_size = marker.get("size_bytes")
+        object_sizes: list[int] = []
+        for item in manifest:
+            if not isinstance(item, dict):
+                raise RuntimeError("published artifact marker has an invalid object entry")
+            object_size = item.get("size_bytes")
+            if type(object_size) is not int or object_size < 0:
+                raise RuntimeError("published artifact marker has an invalid object size")
+            object_sizes.append(object_size)
+        manifest_size = sum(object_sizes)
+        if (
+            type(declared_size) is not int
+            or declared_size < 0
+            or manifest_size != declared_size
+        ):
+            raise RuntimeError("published artifact marker has inconsistent size metadata")
+        if declared_size > self._max_size_bytes:
+            raise RuntimeError("published artifact exceeds the configured input byte limit")
         objects: dict[str, bytes] = {}
+        seen_keys: set[str] = set()
         for item in manifest:
             relative_key = item.get("key")
             if not isinstance(relative_key, str):
@@ -179,7 +276,15 @@ class ArtifactObjectReader:
                 objects={relative_key: b""},
             )
             key = next(iter(normalized))
-            value = self._get_bytes(bucket, f"{prefix}/{key}")
+            if key in seen_keys:
+                raise RuntimeError(f"published artifact manifest repeats object {key}")
+            seen_keys.add(key)
+            object_prefix = f"{prefix}/{normalized_prefix}" if normalized_prefix else prefix
+            value = self._get_bytes(
+                bucket,
+                f"{object_prefix}/{key}",
+                max_bytes=item["size_bytes"],
+            )
             if len(value) != item.get("size_bytes"):
                 raise RuntimeError(f"published artifact size differs for {key}")
             if hashlib.sha256(value).hexdigest() != item.get("sha256"):
@@ -189,10 +294,15 @@ class ArtifactObjectReader:
             raise RuntimeError("published artifact bundle checksum differs")
         return objects
 
-    def _get_bytes(self, bucket: str, key: str) -> bytes:
+    def _get_bytes(self, bucket: str, key: str, max_bytes: int | None = None) -> bytes:
         response = self._client.get_object(bucket, key)
         try:
-            return response.read()
+            if max_bytes is None:
+                return response.read()
+            value = response.read(max_bytes + 1)
+            if len(value) > max_bytes:
+                raise RuntimeError(f"published artifact object exceeds its declared size: {key}")
+            return value
         finally:
             response.close()
             response.release_conn()
@@ -223,6 +333,13 @@ def normalize_artifact_objects(
             raise TypeError(f"artifact object {key!r} must contain bytes")
         normalized[key] = value
     return dict(sorted(normalized.items()))
+
+
+def normalize_artifact_prefix(prefix: str) -> str:
+    path = PurePosixPath(prefix)
+    if not prefix or path.is_absolute() or ".." in path.parts or str(path) != prefix:
+        raise RuntimeError("published artifact marker has an invalid data prefix")
+    return prefix.rstrip("/")
 
 
 def artifact_sha256(objects: Mapping[str, bytes]) -> str:

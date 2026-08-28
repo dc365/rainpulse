@@ -3,15 +3,19 @@ package api
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"path"
+	"strings"
 	"time"
 
 	apiv1 "github.com/fonwee/rainpulse-nowcast/services/control/internal/api/generated"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/objectstore"
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/operationalmetrics"
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/orchestration"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/productquery"
 	verificationstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/verification"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/workflow"
@@ -97,6 +101,7 @@ type AlgorithmVerificationStore interface {
 
 type Options struct {
 	Version          string
+	AdminToken       string
 	Runs             RunStore
 	Observations     ObservationStore
 	Commands         RunCommands
@@ -104,6 +109,7 @@ type Options struct {
 	Products         ProductStore
 	ProductObjects   ProductObjectReader
 	Verification     AlgorithmVerificationStore
+	Metrics          operationalmetrics.Provider
 	SSEPollInterval  time.Duration
 }
 
@@ -125,7 +131,7 @@ func NewHandler(options Options) http.Handler {
 	if pollInterval <= 0 {
 		pollInterval = time.Second
 	}
-	return apiv1.HandlerWithOptions(&server{
+	handler := apiv1.HandlerWithOptions(&server{
 		version:          options.Version,
 		runs:             options.Runs,
 		observations:     options.Observations,
@@ -136,6 +142,69 @@ func NewHandler(options Options) http.Handler {
 		verification:     options.Verification,
 		ssePollInterval:  pollInterval,
 	}, apiv1.ChiServerOptions{BaseURL: "/api/v1"})
+	protected := protectAdminRoutes(handler, options.AdminToken)
+	if options.Metrics != nil {
+		metricsHandler := operationalmetrics.Handler(options.Metrics, options.Version)
+		next := protected
+		protected = http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+			if request.URL.Path == "/metrics" {
+				metricsHandler.ServeHTTP(response, request)
+				return
+			}
+			next.ServeHTTP(response, request)
+		})
+	}
+	return securityHeaders(protected)
+}
+
+const (
+	defaultListLimit = 50
+	maximumListLimit = 200
+)
+
+func protectAdminRoutes(next http.Handler, adminToken string) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if !strings.HasPrefix(request.URL.Path, "/api/v1/admin/") {
+			next.ServeHTTP(response, request)
+			return
+		}
+		response.Header().Set("Cache-Control", "no-store")
+		if adminToken == "" {
+			writeError(response, http.StatusForbidden, "admin_disabled", "administrative API is disabled")
+			return
+		}
+		const prefix = "Bearer "
+		authorization := request.Header.Get("Authorization")
+		if !strings.HasPrefix(authorization, prefix) ||
+			subtle.ConstantTimeCompare([]byte(strings.TrimPrefix(authorization, prefix)), []byte(adminToken)) != 1 {
+			response.Header().Set("WWW-Authenticate", "Bearer")
+			writeError(response, http.StatusUnauthorized, "unauthorized", "administrator credentials are required")
+			return
+		}
+		next.ServeHTTP(response, request)
+	})
+}
+
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+		response.Header().Set("Referrer-Policy", "no-referrer")
+		response.Header().Set("X-Content-Type-Options", "nosniff")
+		response.Header().Set("X-Frame-Options", "DENY")
+		next.ServeHTTP(response, request)
+	})
+}
+
+func listLimit(response http.ResponseWriter, requested *int) (int, bool) {
+	limit := defaultListLimit
+	if requested != nil {
+		limit = *requested
+	}
+	if limit < 1 || limit > maximumListLimit {
+		writeError(response, http.StatusBadRequest, "invalid_limit", "limit must be between 1 and 200")
+		return 0, false
+	}
+	return limit, true
 }
 
 func (service *server) GetSystemStatus(response http.ResponseWriter, request *http.Request) {
@@ -310,9 +379,9 @@ func (service *server) ListRuns(response http.ResponseWriter, request *http.Requ
 		writeServiceUnavailable(response)
 		return
 	}
-	limit := 50
-	if params.Limit != nil {
-		limit = *params.Limit
+	limit, ok := listLimit(response, params.Limit)
+	if !ok {
+		return
 	}
 	var cursor *time.Time
 	if params.Cursor != nil {
@@ -456,9 +525,9 @@ func (service *server) ListRadarScans(
 		writeServiceUnavailable(response)
 		return
 	}
-	limit := 50
-	if params.Limit != nil {
-		limit = *params.Limit
+	limit, ok := listLimit(response, params.Limit)
+	if !ok {
+		return
 	}
 	var status *workflow.RadarScanStatus
 	if params.Status != nil {
@@ -539,9 +608,9 @@ func (service *server) ListAnalysisCycles(
 		writeServiceUnavailable(response)
 		return
 	}
-	limit := 50
-	if params.Limit != nil {
-		limit = *params.Limit
+	limit, ok := listLimit(response, params.Limit)
+	if !ok {
+		return
 	}
 	var status *workflow.AnalysisStatus
 	if params.Status != nil {
@@ -695,9 +764,9 @@ func (service *server) ListProducts(
 		writeServiceUnavailable(response)
 		return
 	}
-	limit := 50
-	if params.Limit != nil {
-		limit = *params.Limit
+	limit, ok := listLimit(response, params.Limit)
+	if !ok {
+		return
 	}
 	var cursor *time.Time
 	if params.Cursor != nil {
@@ -1563,6 +1632,10 @@ func float32ValuePointer(value *float64) *float32 {
 func writeStoreError(response http.ResponseWriter, err error) {
 	if errors.Is(err, workflow.ErrNotFound) {
 		writeError(response, http.StatusNotFound, "not_found", "resource was not found")
+		return
+	}
+	if errors.Is(err, orchestration.ErrUnsupportedRerun) {
+		writeError(response, http.StatusConflict, "unsupported_rerun", "this run cannot be replayed through the legacy rerun endpoint")
 		return
 	}
 	writeError(response, http.StatusInternalServerError, "internal_error", "control-plane operation failed")

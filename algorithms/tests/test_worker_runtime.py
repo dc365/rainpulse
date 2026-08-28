@@ -1,19 +1,24 @@
 import asyncio
+import time
+from types import SimpleNamespace
 from typing import Any
 
 from rainpulse_algo.worker.contracts import JobCompleted, JobFailed, JobRequested
-from rainpulse_algo.worker.runtime import Worker, WorkerConfig
+from rainpulse_algo.worker.runtime import TaskHandler, Worker, WorkerConfig, WorkerResult
 from rainpulse_algo.worker.simulation import execute
 
 from .test_worker_contracts import requested_data
 
 
 class FakeMessage:
-    def __init__(self, data: bytes) -> None:
+    def __init__(self, data: bytes, delivery_attempt: int = 1) -> None:
         self.data = data
+        self.metadata = SimpleNamespace(num_delivered=delivery_attempt)
         self.acked = False
         self.terminated = False
         self.nacked = False
+        self.nak_delay: float | None = None
+        self.in_progress_count = 0
 
     async def ack(self) -> None:
         self.acked = True
@@ -21,8 +26,12 @@ class FakeMessage:
     async def term(self) -> None:
         self.terminated = True
 
-    async def nak(self) -> None:
+    async def nak(self, delay: float | None = None) -> None:
         self.nacked = True
+        self.nak_delay = delay
+
+    async def in_progress(self) -> None:
+        self.in_progress_count += 1
 
 
 class FakeJetStream:
@@ -46,12 +55,36 @@ class FakePublisher:
         self.existing = values["completion"]
 
 
-def make_message(parameters: dict[str, object] | None = None) -> FakeMessage:
+def make_message(
+    parameters: dict[str, object] | None = None,
+    *,
+    delivery_attempt: int = 1,
+) -> FakeMessage:
     data = requested_data()
     if parameters is not None:
         data["payload"]["parameters"] = parameters  # type: ignore[index]
     request = JobRequested.model_validate(data)
-    return FakeMessage(request.model_dump_json().encode())
+    return FakeMessage(request.model_dump_json().encode(), delivery_attempt)
+
+
+def make_handler(
+    executor: Any,
+    *,
+    max_deliveries: int = 3,
+    ack_progress_interval_seconds: float | None = None,
+) -> TaskHandler:
+    return TaskHandler(
+        profile="test",
+        subject="rainpulse.jobs.requested.test",
+        consumer="rainpulse-test-worker",
+        request_model=JobRequested,
+        executor=executor,
+        asset_type="test_artifact",
+        artifact_name="result.zarr",
+        ack_wait_seconds=30,
+        max_deliveries=max_deliveries,
+        ack_progress_interval_seconds=ack_progress_interval_seconds,
+    )
 
 
 def test_success_is_published_before_ack_and_replay_reuses_marker() -> None:
@@ -73,6 +106,11 @@ def test_success_is_published_before_ack_and_replay_reuses_marker() -> None:
         first_result = JobCompleted.model_validate_json(jetstream.events[0][1])
         replay_result = JobCompleted.model_validate_json(jetstream.events[1][1])
         assert first_result.event_id == replay_result.event_id
+        assert first_result.payload.diagnostics["worker_delivery"]["attempt"] == 1
+        assert first_result.payload.diagnostics["artifact_publication"] == {
+            "schema_version": "2.0",
+            "data_prefix": f"_objects/{first_result.payload.assets[0].sha256}",
+        }
 
     asyncio.run(scenario())
 
@@ -91,6 +129,118 @@ def test_failure_event_is_published_then_message_is_acked() -> None:
         assert message.acked and not message.nacked
         failure = JobFailed.model_validate_json(jetstream.events[0][1])
         assert failure.payload.error_code == "SIMULATED_FAILURE"
+        assert failure.payload.details["retry_exhausted"] is False
+
+    asyncio.run(scenario())
+
+
+def test_transient_failure_is_nacked_without_terminal_event() -> None:
+    def fail_transiently(_: JobRequested) -> WorkerResult:
+        raise TimeoutError("object store timed out")
+
+    async def scenario() -> None:
+        worker = Worker(
+            WorkerConfig("nats://test", "127.0.0.1", 8091, "test-worker"),
+            FakePublisher(),  # type: ignore[arg-type]
+            handler=make_handler(fail_transiently),
+        )
+        jetstream = FakeJetStream()
+        message = make_message()
+        await worker.process_message(message, jetstream)
+
+        assert message.nacked and not message.acked
+        assert message.nak_delay == 1
+        assert jetstream.events == []
+
+    asyncio.run(scenario())
+
+
+def test_exhausted_transient_failure_publishes_terminal_event() -> None:
+    def fail_transiently(_: JobRequested) -> WorkerResult:
+        raise ConnectionError("dependency unavailable")
+
+    async def scenario() -> None:
+        worker = Worker(
+            WorkerConfig("nats://test", "127.0.0.1", 8091, "test-worker"),
+            FakePublisher(),  # type: ignore[arg-type]
+            handler=make_handler(fail_transiently, max_deliveries=3),
+        )
+        jetstream = FakeJetStream()
+        message = make_message(delivery_attempt=3)
+        await worker.process_message(message, jetstream)
+
+        assert message.acked and not message.nacked
+        failure = JobFailed.model_validate_json(jetstream.events[0][1])
+        assert failure.payload.retryable is False
+        assert failure.payload.details["delivery_attempt"] == 3
+        assert failure.payload.details["retry_exhausted"] is True
+
+    asyncio.run(scenario())
+
+
+def test_slow_work_refreshes_ack_deadline_until_completion() -> None:
+    def execute_slowly(_: JobRequested) -> WorkerResult:
+        time.sleep(0.04)
+        return WorkerResult(data=b"done")
+
+    async def scenario() -> None:
+        worker = Worker(
+            WorkerConfig("nats://test", "127.0.0.1", 8091, "test-worker"),
+            FakePublisher(),  # type: ignore[arg-type]
+            handler=make_handler(execute_slowly, ack_progress_interval_seconds=0.01),
+        )
+        jetstream = FakeJetStream()
+        message = make_message()
+        await worker.process_message(message, jetstream)
+
+        assert message.acked
+        assert message.in_progress_count >= 2
+
+    asyncio.run(scenario())
+
+
+def test_ack_progress_failure_does_not_override_successful_job() -> None:
+    class FailingProgressMessage(FakeMessage):
+        async def in_progress(self) -> None:
+            self.in_progress_count += 1
+            raise ConnectionError("NATS progress update failed")
+
+    def execute_slowly(_: JobRequested) -> WorkerResult:
+        time.sleep(0.03)
+        return WorkerResult(data=b"done")
+
+    async def scenario() -> None:
+        worker = Worker(
+            WorkerConfig("nats://test", "127.0.0.1", 8091, "test-worker"),
+            FakePublisher(),  # type: ignore[arg-type]
+            handler=make_handler(execute_slowly, ack_progress_interval_seconds=0.01),
+        )
+        message = FailingProgressMessage(make_message().data)
+        await worker.process_message(message, FakeJetStream())
+
+        assert message.acked
+        assert message.in_progress_count == 1
+
+    asyncio.run(scenario())
+
+
+def test_ack_failure_after_completion_does_not_publish_contradictory_failure() -> None:
+    class FailingAckMessage(FakeMessage):
+        async def ack(self) -> None:
+            raise ConnectionError("ack connection failed")
+
+    async def scenario() -> None:
+        worker = Worker(
+            WorkerConfig("nats://test", "127.0.0.1", 8091, "test-worker"),
+            FakePublisher(),  # type: ignore[arg-type]
+            execute,
+        )
+        jetstream = FakeJetStream()
+        message = FailingAckMessage(make_message().data)
+        await worker.process_message(message, jetstream)
+
+        assert len(jetstream.events) == 1
+        assert isinstance(JobCompleted.model_validate_json(jetstream.events[0][1]), JobCompleted)
 
     asyncio.run(scenario())
 

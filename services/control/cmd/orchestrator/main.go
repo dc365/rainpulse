@@ -9,16 +9,19 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/messaging"
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/operationalmetrics"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/orchestration"
 	postgresstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/postgres"
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/radaringest"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/runtimeconfig"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/workflow"
 	"github.com/google/uuid"
@@ -70,6 +73,15 @@ func main() {
 		}
 		if err := radarDecode(ctx, service, os.Args[2], os.Args[3], os.Args[4], os.Args[5]); err != nil {
 			slog.Error("create radar decode workflow", "error", err)
+			os.Exit(1)
+		}
+	case "radar-ingest":
+		if len(os.Args) != 4 {
+			slog.Error("radar-ingest requires config YAML and input path")
+			os.Exit(2)
+		}
+		if err := radarIngest(ctx, service, os.Args[2], os.Args[3], true); err != nil {
+			slog.Error("archive and ingest radar volume", "error", err)
 			os.Exit(1)
 		}
 	case "radar-qc":
@@ -257,6 +269,14 @@ type productConfiguration struct {
 	GridConfigVersion             string `yaml:"grid_config_version"`
 }
 
+type radarIngestSettings struct {
+	configPath string
+	root       string
+	interval   time.Duration
+	minAge     time.Duration
+	lookback   time.Duration
+}
+
 func radarDecode(
 	ctx context.Context,
 	service *orchestration.Service,
@@ -304,6 +324,103 @@ func radarDecode(
 	if err != nil {
 		return fmt.Errorf("parse volume end: %w", err)
 	}
+	probedStart, probedEnd, err := radaringest.ProbeVolumeTimes(absoluteInput)
+	if err != nil {
+		return err
+	}
+	if !start.Equal(probedStart) || !end.Equal(probedEnd) {
+		return fmt.Errorf("provided volume times differ from the authoritative RSTM radial headers")
+	}
+	stableInfo, err := os.Stat(absoluteInput)
+	if err != nil {
+		return fmt.Errorf("restat radar input after inspection: %w", err)
+	}
+	if stableInfo.Size() != info.Size() || !stableInfo.ModTime().Equal(info.ModTime()) {
+		return fmt.Errorf("radar input changed while it was being inspected")
+	}
+	scan, job, err := createRadarDecode(ctx, service, config, configBytes, configJSON, absoluteInput, inputHash, info.Size(), start, end)
+	if err != nil {
+		return err
+	}
+	return writeRadarDecodeResult(scan, job)
+}
+
+func radarIngest(
+	ctx context.Context,
+	service *orchestration.Service,
+	configPath string,
+	inputPath string,
+	emitResult bool,
+) error {
+	configBytes, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("read radar configuration: %w", err)
+	}
+	var config radarConfiguration
+	if err := yaml.Unmarshal(configBytes, &config); err != nil {
+		return fmt.Errorf("decode radar configuration: %w", err)
+	}
+	var configValue map[string]any
+	if err := yaml.Unmarshal(configBytes, &configValue); err != nil {
+		return fmt.Errorf("normalize radar configuration: %w", err)
+	}
+	configJSON, err := json.Marshal(configValue)
+	if err != nil {
+		return fmt.Errorf("encode radar configuration: %w", err)
+	}
+	absoluteInput, err := filepath.Abs(inputPath)
+	if err != nil {
+		return fmt.Errorf("resolve radar input path: %w", err)
+	}
+	info, err := os.Stat(absoluteInput)
+	if err != nil {
+		return fmt.Errorf("stat radar input: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("radar input is not a regular file")
+	}
+	start, end, err := radaringest.ProbeVolumeTimes(absoluteInput)
+	if err != nil {
+		return err
+	}
+	inputHash, err := sha256File(absoluteInput)
+	if err != nil {
+		return err
+	}
+	stableInfo, err := os.Stat(absoluteInput)
+	if err != nil {
+		return fmt.Errorf("restat radar input after inspection: %w", err)
+	}
+	if stableInfo.Size() != info.Size() || !stableInfo.ModTime().Equal(info.ModTime()) {
+		return fmt.Errorf("radar input changed while it was being inspected")
+	}
+	scan, job, err := createRadarDecode(ctx, service, config, configBytes, configJSON, absoluteInput, inputHash, info.Size(), start, end)
+	if err != nil || !emitResult {
+		return err
+	}
+	return writeRadarDecodeResult(scan, job)
+}
+
+func createRadarDecode(
+	ctx context.Context,
+	service *orchestration.Service,
+	config radarConfiguration,
+	configBytes []byte,
+	configJSON json.RawMessage,
+	absoluteInput string,
+	inputHash string,
+	inputSize int64,
+	start time.Time,
+	end time.Time,
+) (workflow.RadarScan, workflow.Job, error) {
+	archive, err := radarArchiveFromEnvironment()
+	if err != nil {
+		return workflow.RadarScan{}, workflow.Job{}, err
+	}
+	inputURI, err := archive.File(ctx, config.RadarID, start, inputHash, absoluteInput)
+	if err != nil {
+		return workflow.RadarScan{}, workflow.Job{}, err
+	}
 	configHash := sha256.Sum256(configBytes)
 	displayName := config.DisplayName
 	scan, job, err := service.CreateRadarDecode(ctx, orchestration.RadarDecodeInput{
@@ -311,16 +428,29 @@ func radarDecode(
 		Lifecycle:     workflow.RadarLifecycle(config.Lifecycle),
 		ConfigVersion: config.ConfigVersion, Config: configJSON,
 		ConfigSHA256: fmt.Sprintf("%x", configHash), SourceFormat: config.Source.Format,
-		InputURI:    (&url.URL{Scheme: "file", Path: absoluteInput}).String(),
-		InputSHA256: inputHash, InputSizeBytes: info.Size(),
+		InputURI:    inputURI,
+		InputSHA256: inputHash, InputSizeBytes: inputSize,
 		VolumeStartTime: start, VolumeEndTime: end,
 	})
 	if err != nil {
-		return err
+		return workflow.RadarScan{}, workflow.Job{}, err
 	}
+	return scan, job, nil
+}
+
+func writeRadarDecodeResult(scan workflow.RadarScan, job workflow.Job) error {
 	return json.NewEncoder(os.Stdout).Encode(map[string]string{
 		"scan_id": scan.ID.String(), "run_id": scan.RunID.String(), "job_id": job.ID.String(),
 	})
+}
+
+func radarArchiveFromEnvironment() (*radaringest.Archive, error) {
+	return radaringest.NewArchive(
+		environmentOrDefault("RAINPULSE_OBJECT_STORE_ENDPOINT", "http://127.0.0.1:9000"),
+		os.Getenv("RAINPULSE_MINIO_WORKER_ACCESS_KEY"),
+		os.Getenv("RAINPULSE_MINIO_WORKER_SECRET_KEY"),
+		environmentOrDefault("RAINPULSE_OBJECT_STORE_BUCKET", "rainpulse"),
+	)
 }
 
 func sha256File(path string) (string, error) {
@@ -868,10 +998,37 @@ func dependencies(ctx context.Context) (*pgxpool.Pool, *postgresstore.Store, *me
 }
 
 func serve(ctx context.Context, store *postgresstore.Store, bus *messaging.JetStream, service *orchestration.Service) error {
+	ingestSettings, err := radarIngestSettingsFromEnvironment()
+	if err != nil {
+		return err
+	}
+	if ingestSettings != nil {
+		scanner, err := radaringest.NewScanner(
+			ingestSettings.root,
+			ingestSettings.minAge,
+			ingestSettings.lookback,
+		)
+		if err != nil {
+			return err
+		}
+		go radarIngestLoop(ctx, scanner, *ingestSettings, service)
+	}
+	pipelineSettings, err := pipelineSettingsFromEnvironment()
+	if err != nil {
+		return err
+	}
+	if pipelineSettings != nil {
+		go newPipelinePlanner(*pipelineSettings, store, service).Run(ctx)
+	}
+	metricsHandler := operationalmetrics.Handler(store, buildinfo.Identity())
 	healthServer := &http.Server{
 		Addr:              environmentOrDefault("RAINPULSE_ORCHESTRATOR_HEALTH_ADDR", ":8090"),
 		ReadHeaderTimeout: 3 * time.Second,
 		Handler: http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+			if request.URL.Path == "/metrics" {
+				metricsHandler.ServeHTTP(response, request)
+				return
+			}
 			if request.URL.Path != "/healthz" {
 				http.NotFound(response, request)
 				return
@@ -898,7 +1055,7 @@ func serve(ctx context.Context, store *postgresstore.Store, bus *messaging.JetSt
 		consumerErrors <- bus.ConsumeResults(ctx, service.HandleResult)
 	}()
 
-	slog.Info("RainPulse orchestrator ready")
+	slog.Info("RainPulse orchestrator ready", "version", buildinfo.Identity())
 	select {
 	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -908,6 +1065,75 @@ func serve(ctx context.Context, store *postgresstore.Store, bus *messaging.JetSt
 		return fmt.Errorf("orchestrator health server: %w", err)
 	case err := <-consumerErrors:
 		return err
+	}
+}
+
+func radarIngestSettingsFromEnvironment() (*radarIngestSettings, error) {
+	rawEnabled := environmentOrDefault("RAINPULSE_RADAR_INGEST_ENABLED", "false")
+	enabled, err := strconv.ParseBool(rawEnabled)
+	if err != nil {
+		return nil, fmt.Errorf("parse RAINPULSE_RADAR_INGEST_ENABLED: %w", err)
+	}
+	if !enabled {
+		return nil, nil
+	}
+	settings := radarIngestSettings{
+		configPath: os.Getenv("RAINPULSE_RADAR_INGEST_CONFIG"),
+		root:       os.Getenv("RAINPULSE_RADAR_INGEST_ROOT"),
+	}
+	if settings.configPath == "" || settings.root == "" {
+		return nil, fmt.Errorf("enabled radar ingest requires config and arrival root")
+	}
+	if info, statErr := os.Stat(settings.configPath); statErr != nil || !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("radar ingest config must be a readable regular file")
+	}
+	for name, item := range map[string]struct {
+		fallback string
+		target   *time.Duration
+	}{
+		"RAINPULSE_RADAR_INGEST_INTERVAL": {"15s", &settings.interval},
+		"RAINPULSE_RADAR_INGEST_MIN_AGE":  {"30s", &settings.minAge},
+		"RAINPULSE_RADAR_INGEST_LOOKBACK": {"24h", &settings.lookback},
+	} {
+		value, parseErr := time.ParseDuration(environmentOrDefault(name, item.fallback))
+		if parseErr != nil || value < 0 {
+			return nil, fmt.Errorf("parse %s as a non-negative duration", name)
+		}
+		*item.target = value
+	}
+	if settings.interval <= 0 {
+		return nil, fmt.Errorf("RAINPULSE_RADAR_INGEST_INTERVAL must be positive")
+	}
+	return &settings, nil
+}
+
+func radarIngestLoop(
+	ctx context.Context,
+	scanner *radaringest.Scanner,
+	settings radarIngestSettings,
+	service *orchestration.Service,
+) {
+	ticker := time.NewTicker(settings.interval)
+	defer ticker.Stop()
+	for {
+		paths, err := scanner.Scan(time.Now().UTC())
+		if err != nil {
+			slog.Error("scan radar arrival directory", "error", err)
+		} else {
+			for _, path := range paths {
+				if err := radarIngest(ctx, service, settings.configPath, path, false); err != nil {
+					slog.Error("ingest radar arrival file", "path", path, "error", err)
+					continue
+				}
+				scanner.MarkProcessed(path)
+				slog.Info("radar arrival archived and registered", "path", path)
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
 	}
 }
 

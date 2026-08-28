@@ -47,6 +47,9 @@ services:
     ports:
       - "${RAINPULSE_INFRA_BIND_ADDRESS:-127.0.0.1}:${RAINPULSE_NATS_PORT:-4222}:4222"
       - "${RAINPULSE_INFRA_BIND_ADDRESS:-127.0.0.1}:${RAINPULSE_NATS_MONITOR_PORT:-8222}:8222"
+    environment:
+      RAINPULSE_NATS_USER: "${RAINPULSE_NATS_USER:?set RAINPULSE_NATS_USER in deploy/.env}"
+      RAINPULSE_NATS_PASSWORD: "${RAINPULSE_NATS_PASSWORD:?set RAINPULSE_NATS_PASSWORD in deploy/.env}"
     volumes:
       - nats-data:/data/jetstream
     healthcheck:
@@ -90,13 +93,23 @@ services:
         condition: service_healthy
     environment:
       MC_HOST_rainpulse: "http://${RAINPULSE_MINIO_ROOT_USER:?set RAINPULSE_MINIO_ROOT_USER in deploy/.env}:${RAINPULSE_MINIO_ROOT_PASSWORD:?set RAINPULSE_MINIO_ROOT_PASSWORD in deploy/.env}@minio:9000"
-    command: ["mb", "--ignore-existing", "rainpulse/${RAINPULSE_MINIO_BUCKET:-rainpulse}"]
+    command: ["mb", "--ignore-existing", "rainpulse/rainpulse"]
+    restart: "no"
+
+  minio-versioning:
+    image: rainpulse/minio-client:RELEASE.2025-08-13T08-35-41Z
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      MC_HOST_rainpulse: "http://${RAINPULSE_MINIO_ROOT_USER:?set RAINPULSE_MINIO_ROOT_USER in deploy/.env}:${RAINPULSE_MINIO_ROOT_PASSWORD:?set RAINPULSE_MINIO_ROOT_PASSWORD in deploy/.env}@minio:9000"
+    command: ["version", "enable", "rainpulse/rainpulse"]
     restart: "no"
 
   minio-worker-user:
     image: rainpulse/minio-client:RELEASE.2025-08-13T08-35-41Z
     depends_on:
-      minio-init:
+      minio-versioning:
         condition: service_completed_successfully
     environment:
       MC_HOST_rainpulse: "http://${RAINPULSE_MINIO_ROOT_USER:?set RAINPULSE_MINIO_ROOT_USER in deploy/.env}:${RAINPULSE_MINIO_ROOT_PASSWORD:?set RAINPULSE_MINIO_ROOT_PASSWORD in deploy/.env}@minio:9000"
@@ -109,10 +122,28 @@ services:
       - "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
     restart: "no"
 
-  minio-worker-policy:
+  minio-worker-policy-create:
     image: rainpulse/minio-client:RELEASE.2025-08-13T08-35-41Z
     depends_on:
       minio-worker-user:
+        condition: service_completed_successfully
+    environment:
+      MC_HOST_rainpulse: "http://${RAINPULSE_MINIO_ROOT_USER:?set RAINPULSE_MINIO_ROOT_USER in deploy/.env}:${RAINPULSE_MINIO_ROOT_PASSWORD:?set RAINPULSE_MINIO_ROOT_PASSWORD in deploy/.env}@minio:9000"
+    volumes:
+      - ./minio/worker-policy.json:/policies/worker-policy.json:ro
+    command:
+      - admin
+      - policy
+      - create
+      - rainpulse
+      - rainpulse-worker
+      - /policies/worker-policy.json
+    restart: "no"
+
+  minio-worker-policy:
+    image: rainpulse/minio-client:RELEASE.2025-08-13T08-35-41Z
+    depends_on:
+      minio-worker-policy-create:
         condition: service_completed_successfully
     environment:
       MC_HOST_rainpulse: "http://${RAINPULSE_MINIO_ROOT_USER:?set RAINPULSE_MINIO_ROOT_USER in deploy/.env}:${RAINPULSE_MINIO_ROOT_PASSWORD:?set RAINPULSE_MINIO_ROOT_PASSWORD in deploy/.env}@minio:9000"
@@ -121,7 +152,7 @@ services:
       - policy
       - attach
       - rainpulse
-      - readwrite
+      - rainpulse-worker
       - --user
       - "${RAINPULSE_MINIO_WORKER_ACCESS_KEY:?set RAINPULSE_MINIO_WORKER_ACCESS_KEY in deploy/.env}"
     restart: "no"
@@ -136,15 +167,30 @@ services:
         condition: service_completed_successfully
       nats:
         condition: service_healthy
-      minio-init:
+      minio-worker-policy:
         condition: service_completed_successfully
     environment:
       RAINPULSE_DATABASE_HOST: postgres
       RAINPULSE_DATABASE_NAME: rainpulse
       RAINPULSE_DATABASE_USER: rainpulse
       RAINPULSE_DATABASE_PASSWORD: "${RAINPULSE_POSTGRES_PASSWORD:?set RAINPULSE_POSTGRES_PASSWORD in deploy/.env}"
-      RAINPULSE_NATS_URL: nats://nats:4222
+      RAINPULSE_NATS_URL: "nats://${RAINPULSE_NATS_USER:?set RAINPULSE_NATS_USER in deploy/.env}:${RAINPULSE_NATS_PASSWORD:?set RAINPULSE_NATS_PASSWORD in deploy/.env}@nats:4222"
+      RAINPULSE_OBJECT_STORE_ENDPOINT: http://minio:9000
+      RAINPULSE_OBJECT_STORE_BUCKET: rainpulse
+      RAINPULSE_MINIO_WORKER_ACCESS_KEY: "${RAINPULSE_MINIO_WORKER_ACCESS_KEY:?set RAINPULSE_MINIO_WORKER_ACCESS_KEY in deploy/.env}"
+      RAINPULSE_MINIO_WORKER_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
       RAINPULSE_ORCHESTRATOR_HEALTH_ADDR: ":8090"
+      RAINPULSE_RADAR_INGEST_ENABLED: "${RAINPULSE_RADAR_INGEST_ENABLED:-false}"
+      RAINPULSE_RADAR_INGEST_CONFIG: "${RAINPULSE_RADAR_INGEST_CONFIG:-/opt/rainpulse/configs/radars/z9598.yaml}"
+      RAINPULSE_RADAR_INGEST_ROOT: "${RAINPULSE_RADAR_INGEST_ROOT:-/data/Weather/RADA/FMT_L2_Z959X_SBD}"
+      RAINPULSE_RADAR_INGEST_INTERVAL: "${RAINPULSE_RADAR_INGEST_INTERVAL:-15s}"
+      RAINPULSE_RADAR_INGEST_MIN_AGE: "${RAINPULSE_RADAR_INGEST_MIN_AGE:-30s}"
+      RAINPULSE_RADAR_INGEST_LOOKBACK: "${RAINPULSE_RADAR_INGEST_LOOKBACK:-24h}"
+      RAINPULSE_PIPELINE_ENABLED: "${RAINPULSE_PIPELINE_ENABLED:-false}"
+      RAINPULSE_PIPELINE_RADAR_IDS: "${RAINPULSE_PIPELINE_RADAR_IDS:-z9598}"
+      RAINPULSE_PIPELINE_INTERVAL: "${RAINPULSE_PIPELINE_INTERVAL:-2s}"
+      RAINPULSE_PIPELINE_LOOKBACK: "${RAINPULSE_PIPELINE_LOOKBACK:-1h}"
+      RAINPULSE_PIPELINE_MOSAIC_DELAY: "${RAINPULSE_PIPELINE_MOSAIC_DELAY:-2m}"
       TZ: UTC
     volumes:
       - ../configs:/opt/rainpulse/configs:ro
@@ -170,10 +216,12 @@ services:
       orchestrator:
         condition: service_healthy
     environment:
-      RAINPULSE_NATS_URL: nats://nats:4222
+      RAINPULSE_NATS_URL: "nats://${RAINPULSE_NATS_USER:?set RAINPULSE_NATS_USER in deploy/.env}:${RAINPULSE_NATS_PASSWORD:?set RAINPULSE_NATS_PASSWORD in deploy/.env}@nats:4222"
       RAINPULSE_OBJECT_STORE_ENDPOINT: http://minio:9000
+      RAINPULSE_OBJECT_STORE_BUCKET: rainpulse
       RAINPULSE_OBJECT_STORE_ACCESS_KEY: "${RAINPULSE_MINIO_WORKER_ACCESS_KEY:?set RAINPULSE_MINIO_WORKER_ACCESS_KEY in deploy/.env}"
       RAINPULSE_OBJECT_STORE_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
+      RAINPULSE_MAX_INPUT_ARTIFACT_BYTES: "${RAINPULSE_MAX_INPUT_ARTIFACT_BYTES:-2147483648}"
       RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
       RAINPULSE_WORKER_ID: pysteps-lk-sim
       RAINPULSE_WORKER_PROFILE: simulation
@@ -203,20 +251,20 @@ services:
       orchestrator:
         condition: service_healthy
     environment:
-      RAINPULSE_NATS_URL: nats://nats:4222
+      RAINPULSE_NATS_URL: "nats://${RAINPULSE_NATS_USER:?set RAINPULSE_NATS_USER in deploy/.env}:${RAINPULSE_NATS_PASSWORD:?set RAINPULSE_NATS_PASSWORD in deploy/.env}@nats:4222"
       RAINPULSE_OBJECT_STORE_ENDPOINT: http://minio:9000
+      RAINPULSE_OBJECT_STORE_BUCKET: rainpulse
       RAINPULSE_OBJECT_STORE_ACCESS_KEY: "${RAINPULSE_MINIO_WORKER_ACCESS_KEY:?set RAINPULSE_MINIO_WORKER_ACCESS_KEY in deploy/.env}"
       RAINPULSE_OBJECT_STORE_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
+      RAINPULSE_MAX_INPUT_ARTIFACT_BYTES: "${RAINPULSE_MAX_INPUT_ARTIFACT_BYTES:-2147483648}"
       RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
       RAINPULSE_WORKER_ID: cma-rstm-z9598
       RAINPULSE_WORKER_PROFILE: radar-decode-fmt
       RAINPULSE_RADAR_CONFIG_DIR: /opt/rainpulse/configs/radars
       RAINPULSE_RADAR_HEALTH_CONFIG: /opt/rainpulse/configs/health/rp007-integrity-v1.yaml
-      RAINPULSE_RADAR_INPUT_ROOTS: /data/Weather/RADA/FMT_L2_Z959X_SBD
       TZ: UTC
     volumes:
       - ../configs:/opt/rainpulse/configs:ro
-      - /data/Weather/RADA/FMT_L2_Z959X_SBD:/data/Weather/RADA/FMT_L2_Z959X_SBD:ro
     healthcheck:
       test:
         - CMD
@@ -242,10 +290,11 @@ services:
       orchestrator:
         condition: service_healthy
     environment:
-      RAINPULSE_NATS_URL: nats://nats:4222
+      RAINPULSE_NATS_URL: "nats://${RAINPULSE_NATS_USER:?set RAINPULSE_NATS_USER in deploy/.env}:${RAINPULSE_NATS_PASSWORD:?set RAINPULSE_NATS_PASSWORD in deploy/.env}@nats:4222"
       RAINPULSE_OBJECT_STORE_ENDPOINT: http://minio:9000
       RAINPULSE_OBJECT_STORE_ACCESS_KEY: "${RAINPULSE_MINIO_WORKER_ACCESS_KEY:?set RAINPULSE_MINIO_WORKER_ACCESS_KEY in deploy/.env}"
       RAINPULSE_OBJECT_STORE_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
+      RAINPULSE_MAX_INPUT_ARTIFACT_BYTES: "${RAINPULSE_MAX_INPUT_ARTIFACT_BYTES:-2147483648}"
       RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
       RAINPULSE_WORKER_ID: rp008-basic-qc
       RAINPULSE_WORKER_PROFILE: radar-qc-basic
@@ -280,10 +329,11 @@ services:
       orchestrator:
         condition: service_healthy
     environment:
-      RAINPULSE_NATS_URL: nats://nats:4222
+      RAINPULSE_NATS_URL: "nats://${RAINPULSE_NATS_USER:?set RAINPULSE_NATS_USER in deploy/.env}:${RAINPULSE_NATS_PASSWORD:?set RAINPULSE_NATS_PASSWORD in deploy/.env}@nats:4222"
       RAINPULSE_OBJECT_STORE_ENDPOINT: http://minio:9000
       RAINPULSE_OBJECT_STORE_ACCESS_KEY: "${RAINPULSE_MINIO_WORKER_ACCESS_KEY:?set RAINPULSE_MINIO_WORKER_ACCESS_KEY in deploy/.env}"
       RAINPULSE_OBJECT_STORE_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
+      RAINPULSE_MAX_INPUT_ARTIFACT_BYTES: "${RAINPULSE_MAX_INPUT_ARTIFACT_BYTES:-2147483648}"
       RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
       RAINPULSE_WORKER_ID: rp016-hybrid-grid
       RAINPULSE_WORKER_PROFILE: radar-grid-hybrid
@@ -322,10 +372,11 @@ services:
       orchestrator:
         condition: service_healthy
     environment:
-      RAINPULSE_NATS_URL: nats://nats:4222
+      RAINPULSE_NATS_URL: "nats://${RAINPULSE_NATS_USER:?set RAINPULSE_NATS_USER in deploy/.env}:${RAINPULSE_NATS_PASSWORD:?set RAINPULSE_NATS_PASSWORD in deploy/.env}@nats:4222"
       RAINPULSE_OBJECT_STORE_ENDPOINT: http://minio:9000
       RAINPULSE_OBJECT_STORE_ACCESS_KEY: "${RAINPULSE_MINIO_WORKER_ACCESS_KEY:?set RAINPULSE_MINIO_WORKER_ACCESS_KEY in deploy/.env}"
       RAINPULSE_OBJECT_STORE_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
+      RAINPULSE_MAX_INPUT_ARTIFACT_BYTES: "${RAINPULSE_MAX_INPUT_ARTIFACT_BYTES:-2147483648}"
       RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
       RAINPULSE_WORKER_ID: rp016-qi-mosaic
       RAINPULSE_WORKER_PROFILE: analysis-mosaic-qi
@@ -360,10 +411,11 @@ services:
       orchestrator:
         condition: service_healthy
     environment:
-      RAINPULSE_NATS_URL: nats://nats:4222
+      RAINPULSE_NATS_URL: "nats://${RAINPULSE_NATS_USER:?set RAINPULSE_NATS_USER in deploy/.env}:${RAINPULSE_NATS_PASSWORD:?set RAINPULSE_NATS_PASSWORD in deploy/.env}@nats:4222"
       RAINPULSE_OBJECT_STORE_ENDPOINT: http://minio:9000
       RAINPULSE_OBJECT_STORE_ACCESS_KEY: "${RAINPULSE_MINIO_WORKER_ACCESS_KEY:?set RAINPULSE_MINIO_WORKER_ACCESS_KEY in deploy/.env}"
       RAINPULSE_OBJECT_STORE_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
+      RAINPULSE_MAX_INPUT_ARTIFACT_BYTES: "${RAINPULSE_MAX_INPUT_ARTIFACT_BYTES:-2147483648}"
       RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
       RAINPULSE_WORKER_ID: rp011-basic-qpe
       RAINPULSE_WORKER_PROFILE: analysis-qpe-basic
@@ -397,10 +449,11 @@ services:
       orchestrator:
         condition: service_healthy
     environment:
-      RAINPULSE_NATS_URL: nats://nats:4222
+      RAINPULSE_NATS_URL: "nats://${RAINPULSE_NATS_USER:?set RAINPULSE_NATS_USER in deploy/.env}:${RAINPULSE_NATS_PASSWORD:?set RAINPULSE_NATS_PASSWORD in deploy/.env}@nats:4222"
       RAINPULSE_OBJECT_STORE_ENDPOINT: http://minio:9000
       RAINPULSE_OBJECT_STORE_ACCESS_KEY: "${RAINPULSE_MINIO_WORKER_ACCESS_KEY:?set RAINPULSE_MINIO_WORKER_ACCESS_KEY in deploy/.env}"
       RAINPULSE_OBJECT_STORE_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
+      RAINPULSE_MAX_INPUT_ARTIFACT_BYTES: "${RAINPULSE_MAX_INPUT_ARTIFACT_BYTES:-2147483648}"
       RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
       RAINPULSE_WORKER_ID: rp012-analysis-diagnostics
       RAINPULSE_WORKER_PROFILE: analysis-diagnostics
@@ -434,10 +487,11 @@ services:
       orchestrator:
         condition: service_healthy
     environment:
-      RAINPULSE_NATS_URL: nats://nats:4222
+      RAINPULSE_NATS_URL: "nats://${RAINPULSE_NATS_USER:?set RAINPULSE_NATS_USER in deploy/.env}:${RAINPULSE_NATS_PASSWORD:?set RAINPULSE_NATS_PASSWORD in deploy/.env}@nats:4222"
       RAINPULSE_OBJECT_STORE_ENDPOINT: http://minio:9000
       RAINPULSE_OBJECT_STORE_ACCESS_KEY: "${RAINPULSE_MINIO_WORKER_ACCESS_KEY:?set RAINPULSE_MINIO_WORKER_ACCESS_KEY in deploy/.env}"
       RAINPULSE_OBJECT_STORE_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
+      RAINPULSE_MAX_INPUT_ARTIFACT_BYTES: "${RAINPULSE_MAX_INPUT_ARTIFACT_BYTES:-2147483648}"
       RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
       RAINPULSE_WORKER_ID: rp013-nowcast-input
       RAINPULSE_WORKER_PROFILE: nowcast-input
@@ -471,10 +525,11 @@ services:
       orchestrator:
         condition: service_healthy
     environment:
-      RAINPULSE_NATS_URL: nats://nats:4222
+      RAINPULSE_NATS_URL: "nats://${RAINPULSE_NATS_USER:?set RAINPULSE_NATS_USER in deploy/.env}:${RAINPULSE_NATS_PASSWORD:?set RAINPULSE_NATS_PASSWORD in deploy/.env}@nats:4222"
       RAINPULSE_OBJECT_STORE_ENDPOINT: http://minio:9000
       RAINPULSE_OBJECT_STORE_ACCESS_KEY: "${RAINPULSE_MINIO_WORKER_ACCESS_KEY:?set RAINPULSE_MINIO_WORKER_ACCESS_KEY in deploy/.env}"
       RAINPULSE_OBJECT_STORE_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
+      RAINPULSE_MAX_INPUT_ARTIFACT_BYTES: "${RAINPULSE_MAX_INPUT_ARTIFACT_BYTES:-2147483648}"
       RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
       RAINPULSE_WORKER_ID: rp016-pysteps-lk
       RAINPULSE_WORKER_PROFILE: pysteps-lk
@@ -508,10 +563,11 @@ services:
       orchestrator:
         condition: service_healthy
     environment:
-      RAINPULSE_NATS_URL: nats://nats:4222
+      RAINPULSE_NATS_URL: "nats://${RAINPULSE_NATS_USER:?set RAINPULSE_NATS_USER in deploy/.env}:${RAINPULSE_NATS_PASSWORD:?set RAINPULSE_NATS_PASSWORD in deploy/.env}@nats:4222"
       RAINPULSE_OBJECT_STORE_ENDPOINT: http://minio:9000
       RAINPULSE_OBJECT_STORE_ACCESS_KEY: "${RAINPULSE_MINIO_WORKER_ACCESS_KEY:?set RAINPULSE_MINIO_WORKER_ACCESS_KEY in deploy/.env}"
       RAINPULSE_OBJECT_STORE_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
+      RAINPULSE_MAX_INPUT_ARTIFACT_BYTES: "${RAINPULSE_MAX_INPUT_ARTIFACT_BYTES:-2147483648}"
       RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
       RAINPULSE_WORKER_ID: rp015-product-builder
       RAINPULSE_WORKER_PROFILE: product-builder
@@ -557,22 +613,24 @@ services:
         condition: service_healthy
     environment:
       RAINPULSE_HTTP_ADDR: ":8080"
-      RAINPULSE_VERSION: "${RAINPULSE_VERSION:-dev}"
+      RAINPULSE_VERSION: "${RAINPULSE_VERSION:-}"
       RAINPULSE_DATABASE_HOST: postgres
       RAINPULSE_DATABASE_NAME: rainpulse
       RAINPULSE_DATABASE_USER: rainpulse
       RAINPULSE_DATABASE_PASSWORD: "${RAINPULSE_POSTGRES_PASSWORD:?set RAINPULSE_POSTGRES_PASSWORD in deploy/.env}"
-      RAINPULSE_NATS_URL: nats://nats:4222
+      RAINPULSE_NATS_URL: "nats://${RAINPULSE_NATS_USER:?set RAINPULSE_NATS_USER in deploy/.env}:${RAINPULSE_NATS_PASSWORD:?set RAINPULSE_NATS_PASSWORD in deploy/.env}@nats:4222"
       RAINPULSE_OBJECT_STORE_ENDPOINT: http://minio:9000
-      RAINPULSE_OBJECT_STORE_BUCKET: "${RAINPULSE_MINIO_BUCKET:-rainpulse}"
+      RAINPULSE_OBJECT_STORE_BUCKET: rainpulse
       RAINPULSE_OBJECT_STORE_ACCESS_KEY: "${RAINPULSE_MINIO_WORKER_ACCESS_KEY:?set RAINPULSE_MINIO_WORKER_ACCESS_KEY in deploy/.env}"
       RAINPULSE_OBJECT_STORE_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
+      RAINPULSE_MAX_INPUT_ARTIFACT_BYTES: "${RAINPULSE_MAX_INPUT_ARTIFACT_BYTES:-2147483648}"
       RAINPULSE_ALGORITHM_VERIFICATION_ROOT: /var/lib/rainpulse/algorithm-verification
+      RAINPULSE_ADMIN_TOKEN: "${RAINPULSE_ADMIN_TOKEN:-}"
       TZ: UTC
     volumes:
       - "${RAINPULSE_ALGORITHM_VERIFICATION_HOST_ROOT:-../runtime/reports/mrms}:/var/lib/rainpulse/algorithm-verification:ro"
     ports:
-      - "${RAINPULSE_BIND_ADDRESS:-0.0.0.0}:${RAINPULSE_API_PORT:-8080}:8080"
+      - "${RAINPULSE_API_BIND_ADDRESS:-127.0.0.1}:${RAINPULSE_API_PORT:-8080}:8080"
     healthcheck:
       test: ["CMD", "/rainpulse-api", "healthcheck"]
       interval: 5s
@@ -600,7 +658,28 @@ services:
       retries: 12
     restart: unless-stopped
 
+  prometheus:
+    image: prom/prometheus:v3.13.1
+    depends_on:
+      api:
+        condition: service_healthy
+      orchestrator:
+        condition: service_healthy
+    command:
+      - --config.file=/etc/prometheus/prometheus.yaml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --storage.tsdb.retention.size=5GB
+    volumes:
+      - ./observability/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - ./observability/rainpulse-alerts.yaml:/etc/prometheus/rainpulse-alerts.yaml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "${RAINPULSE_INFRA_BIND_ADDRESS:-127.0.0.1}:${RAINPULSE_PROMETHEUS_PORT:-9090}:9090"
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   nats-data:
   minio-data:
+  prometheus-data:

@@ -14,6 +14,9 @@ MINIO_LDFLAGS := -s -w -X github.com/minio/minio/cmd.Version=$(MINIO_BUILD_VERSI
 MINIO_MC_BUILD_VERSION := 2025-08-13T08:35:41Z
 MINIO_MC_COMMIT := 7394ce0dd2a80935aded936b09fa12cbb3cb8096
 MINIO_MC_LDFLAGS := -s -w -X github.com/minio/mc/cmd.Version=$(MINIO_MC_BUILD_VERSION) -X github.com/minio/mc/cmd.CopyrightYear=2025 -X github.com/minio/mc/cmd.ReleaseTag=$(MINIO_MC_VERSION) -X github.com/minio/mc/cmd.CommitID=$(MINIO_MC_COMMIT) -X github.com/minio/mc/cmd.ShortCommitID=7394ce0dd2a8
+BUILD_REVISION ?= $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
+BUILD_VERSION ?= $(BUILD_REVISION)
+RAINPULSE_GO_LDFLAGS := -X github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo.Version=$(BUILD_VERSION) -X github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo.Revision=$(BUILD_REVISION)
 
 .PHONY: bootstrap contracts-generate contracts-check test test-structure test-radar-config test-contracts test-infrastructure test-control-plane test-worker-sdk test-radar-decoder test-radar-health test-radar-qc test-radar-grid test-radar-mosaic test-qpe test-diagnostics test-nowcast-input test-pysteps-lk test-products test-ancillary test-grid test-mrms test-go test-python test-web lint build build-linux build-infrastructure-linux export-postgres-image export-python-image build-worker-linux deploy-up dev-up dev-down smoke infrastructure-smoke control-plane-smoke worker-smoke radar-decode-smoke radar-health-smoke radar-qc-smoke radar-grid-smoke ancillary-plan ancillary-download ancillary-verify mrms-download mrms-verify mrms-conformance mrms-hindcast mrms-faults
 
@@ -120,9 +123,9 @@ lint:
 
 build:
 	mkdir -p .build/python
-	go build -buildvcs=false -trimpath -o .build/rainpulse-api ./services/control/cmd/api
-	go build -buildvcs=false -trimpath -o .build/rainpulse-web ./services/control/cmd/web
-	go build -buildvcs=false -trimpath -o .build/rainpulse-orchestrator ./services/control/cmd/orchestrator
+	go build -buildvcs=false -trimpath -ldflags="$(RAINPULSE_GO_LDFLAGS)" -o .build/rainpulse-api ./services/control/cmd/api
+	go build -buildvcs=false -trimpath -ldflags="$(RAINPULSE_GO_LDFLAGS)" -o .build/rainpulse-web ./services/control/cmd/web
+	go build -buildvcs=false -trimpath -ldflags="$(RAINPULSE_GO_LDFLAGS)" -o .build/rainpulse-orchestrator ./services/control/cmd/orchestrator
 	uv build --project algorithms --out-dir .build/python
 	pnpm --filter @rainpulse/web build
 
@@ -138,9 +141,9 @@ build-infrastructure-linux:
 
 build-linux: build-infrastructure-linux
 	mkdir -p .build/linux-amd64
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags="-s -w" -o .build/linux-amd64/rainpulse-api ./services/control/cmd/api
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags="-s -w" -o .build/linux-amd64/rainpulse-web ./services/control/cmd/web
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags="-s -w" -o .build/linux-amd64/rainpulse-orchestrator ./services/control/cmd/orchestrator
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags="-s -w $(RAINPULSE_GO_LDFLAGS)" -o .build/linux-amd64/rainpulse-api ./services/control/cmd/api
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags="-s -w $(RAINPULSE_GO_LDFLAGS)" -o .build/linux-amd64/rainpulse-web ./services/control/cmd/web
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags="-s -w $(RAINPULSE_GO_LDFLAGS)" -o .build/linux-amd64/rainpulse-orchestrator ./services/control/cmd/orchestrator
 	pnpm --filter @rainpulse/web build
 
 export-postgres-image:

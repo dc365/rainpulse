@@ -59,7 +59,7 @@ wait_for_state "$api_url/api/v1/runs/$success_run" status BASELINE_READY
 wait_for_state "$api_url/api/v1/runs/$success_run/jobs" status SUCCEEDED
 
 "${compose[@]}" run --rm --no-deps minio-init stat \
-  "rainpulse/${RAINPULSE_MINIO_BUCKET:-rainpulse}/simulations/$success_run/forecast.zarr/_SUCCESS.json" >/dev/null
+  "rainpulse/rainpulse/simulations/$success_run/forecast.zarr/_SUCCESS.json" >/dev/null
 
 # Replay with a new request event UUID. The Worker must reuse the committed
 # marker and the control plane must still have exactly one terminal inbox row.
@@ -94,7 +94,7 @@ if [[ "$success_inbox" -ne 1 || "$failure_inbox" -ne 1 ]]; then
 fi
 
 temporary_objects=$("${compose[@]}" run --rm --no-deps minio-init find \
-  "rainpulse/${RAINPULSE_MINIO_BUCKET:-rainpulse}/_temporary" 2>/dev/null || true)
+  "rainpulse/rainpulse/_temporary" 2>/dev/null || true)
 if [[ -n "$temporary_objects" ]]; then
   printf 'temporary Worker objects were not cleaned up\n' >&2
   exit 1

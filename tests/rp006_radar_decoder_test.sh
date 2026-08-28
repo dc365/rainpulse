@@ -22,7 +22,7 @@ for path in "${required_files[@]}"; do
   }
 done
 
-rg --quiet 'DECODER_VERSION = "cma-rstm-2.0.0"' algorithms/rainpulse_algo/radar/fmt.py
+rg --quiet 'DECODER_VERSION = "cma-rstm-2.1.0"' algorithms/rainpulse_algo/radar/fmt.py
 rg --quiet 'geometry_encoding.*sweep_groups_v1|GEOMETRY_ENCODING = "sweep_groups_v1"' algorithms/rainpulse_algo/radar/zarr_volume.py
 rg --quiet 'raw_reserved_codes' algorithms/rainpulse_algo/radar/zarr_volume.py
 rg --quiet 'radar-decode-fmt' algorithms/rainpulse_algo/worker/handlers.py

@@ -31,3 +31,10 @@ It is served through a manifest whitelist and never becomes a scientific input.
 Every stage preserves valid no-rain, missing, and low-quality states. Full
 arrays live only in versioned object-store artifacts. Database, REST, and event
 payloads carry identities, summaries, and object URIs.
+
+Worker publication schema 2.0 stores bytes below the content-addressed
+`_objects/{artifact_sha256}` prefix and conditionally commits `_SUCCESS.json` at
+the stable artifact URI. `job.completed` diagnostics include the matching
+`artifact_publication.data_prefix`; control-plane consumers use it when they
+must register a directly downloadable child object. Completion events without
+that diagnostic remain the legacy direct-layout form.

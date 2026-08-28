@@ -101,9 +101,15 @@ assert status["qc_metrics"]["qc_profile"] == "rp008-basic-v1", status
 assert scan.get("degraded_reason") == "CONFIG_NOT_READY,SOURCE_TIME_MISMATCH", scan
 ' "$summary" "$status" "$scan"
 
-marker="rainpulse/${RAINPULSE_MINIO_BUCKET:-rainpulse}/radar/qc/z9598/$scan_id/rp008-basic-1.0.4/volume.zarr/_SUCCESS.json"
-summary_object="rainpulse/${RAINPULSE_MINIO_BUCKET:-rainpulse}/radar/qc/z9598/$scan_id/rp008-basic-1.0.4/volume.zarr/qc/summary.json"
+marker="rainpulse/rainpulse/radar/qc/z9598/$scan_id/rp008-basic-1.0.4/volume.zarr/_SUCCESS.json"
 "${compose[@]}" run --rm --no-deps minio-init stat "$marker" >/dev/null
+marker_json=$("${compose[@]}" run --rm --no-deps minio-init cat "$marker")
+data_prefix=$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("data_prefix", ""))' <<<"$marker_json")
+artifact_root=${marker%/_SUCCESS.json}
+if [[ -n "$data_prefix" ]]; then
+  artifact_root="$artifact_root/$data_prefix"
+fi
+summary_object="$artifact_root/qc/summary.json"
 object_summary=$("${compose[@]}" run --rm --no-deps minio-init cat "$summary_object")
 python3 -c '
 import json,sys

@@ -5,11 +5,13 @@ import json
 import os
 import time
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
 import nats
+from minio.error import S3Error
 from nats.errors import TimeoutError as NATSTimeoutError
 from nats.js.api import AckPolicy, ConsumerConfig
 from pydantic import BaseModel, ValidationError
@@ -82,6 +84,12 @@ class TaskHandler:
     artifact_name: str
     media_type: str = "application/vnd+zarr"
     ack_wait_seconds: int = 30
+    max_deliveries: int = 3
+    ack_progress_interval_seconds: float | None = None
+
+
+class RetryableWorkerError(RuntimeError):
+    """Signals a transient dependency failure that JetStream should redeliver."""
 
 
 class Worker:
@@ -123,7 +131,7 @@ class Worker:
             config=ConsumerConfig(
                 ack_policy=AckPolicy.EXPLICIT,
                 ack_wait=self._handler.ack_wait_seconds,
-                max_deliver=10,
+                max_deliver=self._handler.max_deliveries,
             ),
         )
         health_server = await asyncio.start_server(
@@ -165,6 +173,17 @@ class Worker:
             await message.term()
             return
 
+        heartbeat = asyncio.create_task(self._refresh_ack_deadline(message))
+        try:
+            await self._process_request(message, jetstream, request)
+        finally:
+            heartbeat.cancel()
+            with suppress(asyncio.CancelledError):
+                await heartbeat
+
+    async def _process_request(self, message: Any, jetstream: Any, request: Any) -> None:
+        delivery_attempt = self._delivery_attempt(message)
+
         started_at = datetime.now(UTC)
         started_tick = time.perf_counter()
         context = {
@@ -173,6 +192,7 @@ class Worker:
             "trace_id": str(request.trace_id),
             "event_type": request.event_type,
             "worker_profile": self._handler.profile,
+            "delivery_attempt": delivery_attempt,
         }
         log_event("info", "job.started", **context)
 
@@ -185,7 +205,8 @@ class Worker:
             if existing is not None:
                 self._validate_existing(existing, request)
                 await self._publish_result(jetstream, existing)
-                await message.ack()
+                if not await self._ack_terminal_result(message, context):
+                    return
                 log_event("info", "job.idempotent_replay", **context)
                 return
 
@@ -196,8 +217,9 @@ class Worker:
                 started_at=started_at,
                 started_tick=started_tick,
                 result=result,
+                delivery_attempt=delivery_attempt,
             )
-            await asyncio.to_thread(
+            published = await asyncio.to_thread(
                 self._publisher.publish,
                 output_prefix=request.payload.output_prefix,
                 job_id=request.job_id,
@@ -206,16 +228,43 @@ class Worker:
                 completion=completion,
                 artifact_name=self._handler.artifact_name,
             )
-            await self._publish_result(jetstream, completion)
-            await message.ack()
+            authoritative_completion = getattr(published, "completion", completion)
+            self._validate_existing(authoritative_completion, request)
+            await self._publish_result(jetstream, authoritative_completion)
+            if not await self._ack_terminal_result(message, context):
+                return
             log_event(
                 "info",
                 "job.completed",
-                duration_ms=completion.payload.runtime_ms,
+                duration_ms=authoritative_completion.payload.runtime_ms,
+                publication_reused=bool(getattr(published, "reused", False)),
                 **context,
             )
-        except Exception as error:  # noqa: BLE001 - converted to the failure contract below
-            failure = self._build_failure(request, started_at, started_tick, error)
+        except Exception as error:  # noqa: BLE001 - classified before delivery handling
+            retryable = self._is_retryable(error)
+            if retryable and delivery_attempt < self._handler.max_deliveries:
+                delay = min(30, 2 ** (delivery_attempt - 1))
+                await message.nak(delay=delay)
+                log_event(
+                    "warning",
+                    "job.retry_scheduled",
+                    error_code="TRANSIENT_WORKER_ERROR",
+                    exception=type(error).__name__,
+                    retry_delay_seconds=delay,
+                    max_deliveries=self._handler.max_deliveries,
+                    **context,
+                )
+                return
+
+            failure = self._build_failure(
+                request,
+                started_at,
+                started_tick,
+                error,
+                delivery_attempt=delivery_attempt,
+                originally_retryable=retryable,
+                retry_exhausted=retryable,
+            )
             try:
                 await self._publish_result(jetstream, failure)
             except Exception as publish_error:  # noqa: BLE001 - NAK must preserve delivery
@@ -228,7 +277,8 @@ class Worker:
                 )
                 await message.nak()
                 return
-            await message.ack()
+            if not await self._ack_terminal_result(message, context):
+                return
             log_event(
                 "error",
                 "job.failed",
@@ -236,6 +286,36 @@ class Worker:
                 error_code=failure.payload.error_code,
                 **context,
             )
+
+    async def _ack_terminal_result(self, message: Any, context: dict[str, Any]) -> bool:
+        try:
+            await message.ack()
+            return True
+        except Exception as error:  # noqa: BLE001 - redelivery replays the committed result
+            log_event(
+                "warning",
+                "job.result_ack_failed",
+                exception=type(error).__name__,
+                **context,
+            )
+            return False
+
+    async def _refresh_ack_deadline(self, message: Any) -> None:
+        interval = self._handler.ack_progress_interval_seconds
+        if interval is None:
+            interval = max(1.0, self._handler.ack_wait_seconds / 3)
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                await message.in_progress()
+            except Exception as error:  # noqa: BLE001 - main task still owns final ACK/NAK
+                log_event(
+                    "warning",
+                    "job.ack_progress_failed",
+                    worker_id=self._config.worker_id,
+                    exception=type(error).__name__,
+                )
+                return
 
     async def _publish_result(self, jetstream: Any, event: JobCompleted | JobFailed) -> None:
         subject = (
@@ -254,12 +334,24 @@ class Worker:
         started_at: datetime,
         started_tick: float,
         result: WorkerResult,
+        delivery_attempt: int = 1,
     ) -> JobCompleted:
         finished_at = datetime.now(UTC)
         runtime_ms = max(0, round((time.perf_counter() - started_tick) * 1000))
         bucket, prefix = parse_s3_uri(request.payload.output_prefix)
         asset_uri = f"s3://{bucket}/{prefix.rstrip('/')}/{self._handler.artifact_name}"
         payloads = result.payloads()
+        diagnostics = dict(result.diagnostics)
+        diagnostics["worker_delivery"] = {
+            "attempt": delivery_attempt,
+            "max_deliveries": self._handler.max_deliveries,
+            "worker_id": self._config.worker_id,
+        }
+        artifact_digest = artifact_sha256(payloads)
+        diagnostics["artifact_publication"] = {
+            "schema_version": "2.0",
+            "data_prefix": f"_objects/{artifact_digest}",
+        }
         return JobCompleted(
             event_id=result_event_id(request.job_id, "job.completed"),
             occurred_at=finished_at,
@@ -275,13 +367,13 @@ class Worker:
                     CompletedAsset(
                         asset_type=self._handler.asset_type,
                         uri=asset_uri,
-                        sha256=artifact_sha256(payloads),
+                        sha256=artifact_digest,
                         size_bytes=sum(len(value) for value in payloads.values()),
                         media_type=self._handler.media_type,
                     )
                 ],
                 metrics=result.metrics,
-                diagnostics=result.diagnostics,
+                diagnostics=diagnostics,
             ),
         )
 
@@ -291,6 +383,10 @@ class Worker:
         started_at: datetime,
         started_tick: float,
         error: Exception,
+        *,
+        delivery_attempt: int = 1,
+        originally_retryable: bool = False,
+        retry_exhausted: bool = False,
     ) -> JobFailed:
         finished_at = datetime.now(UTC)
         simulated = isinstance(error, SimulatedFailure)
@@ -309,9 +405,41 @@ class Worker:
                     "RP-005 simulated worker failure" if simulated else "Worker processing failed"
                 ),
                 retryable=False,
-                details={"worker_id": self._config.worker_id, "exception": type(error).__name__},
+                details={
+                    "worker_id": self._config.worker_id,
+                    "exception": type(error).__name__,
+                    "delivery_attempt": delivery_attempt,
+                    "max_deliveries": self._handler.max_deliveries,
+                    "originally_retryable": originally_retryable,
+                    "retry_exhausted": retry_exhausted,
+                },
             ),
         )
+
+    @staticmethod
+    def _delivery_attempt(message: Any) -> int:
+        metadata = getattr(message, "metadata", None)
+        try:
+            return max(1, int(getattr(metadata, "num_delivered", 1)))
+        except (TypeError, ValueError):
+            return 1
+
+    @staticmethod
+    def _is_retryable(error: Exception) -> bool:
+        if isinstance(
+            error,
+            (RetryableWorkerError, TimeoutError, ConnectionError, OSError, NATSTimeoutError),
+        ):
+            return True
+        if isinstance(error, S3Error):
+            response_status = getattr(error.response, "status", 0)
+            return error.code in {
+                "InternalError",
+                "RequestTimeout",
+                "ServiceUnavailable",
+                "SlowDown",
+            } or response_status >= 500
+        return False
 
     @staticmethod
     def _validate_existing(completion: JobCompleted, request: Any) -> None:

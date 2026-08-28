@@ -78,8 +78,9 @@ Missing cells must never be silently converted to zero rainfall.
 - Rain rate and data age are never negative when finite; angular intervals are positive.
 - `LOW_QUALITY_MASK <= VALID_MASK` element-wise.
 - Time coordinates are UTC, regular and exactly five minutes apart in Phase 1.
-- Dataset publication is atomic: write under `_temporary/{job_id}`, validate,
-  then publish to
+- Dataset publication is atomic: write immutable content-addressed objects,
+  validate them, then conditionally create `_SUCCESS.json`; a concurrent
+  duplicate reuses the first committed marker. The stable artifact URI is
   `nowcast-input/{grid_id}/{yyyy}/{mm}/{dd}/{issue_time}/input.zarr`.
 
 Model adapters may work in pixel space, but physical motion conversion must use

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
+import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlparse
 
 from rainpulse_algo.worker.domain_contracts import RadarDecodeRequested
+from rainpulse_algo.worker.object_store import minio_client_from_environment
 from rainpulse_algo.worker.runtime import WorkerResult
 
 from .config import RadarConfigError, load_radar_config
@@ -18,7 +22,6 @@ def execute_fmt_decode(request: RadarDecodeRequested) -> WorkerResult:
         raise RadarConfigError(
             f"requested decoder {request.payload.decoder_version!r} is not {DECODER_VERSION!r}"
         )
-    input_path = _allowed_input_path(request.payload.input_uri)
     config_dir = _required_directory("RAINPULSE_RADAR_CONFIG_DIR")
     config = load_radar_config(config_dir / f"{request.payload.radar_id}.yaml")
     health_config = load_radar_health_config(
@@ -31,21 +34,26 @@ def execute_fmt_decode(request: RadarDecodeRequested) -> WorkerResult:
     if config.source["format"] != request.payload.source_format:
         raise RadarConfigError("request source_format differs from decoder configuration")
 
-    volume = decode_fmt_volume(input_path, config)
-    health = assess_volume_health(volume, config, health_config)
-    objects = build_zarr_store(
-        volume,
-        config,
-        asset_id=request.payload.asset_id,
-        source_uri=request.payload.input_uri,
-        health=health,
-        provenance={
-            "scan_id": str(request.payload.scan_id),
-            "run_id": str(request.run_id),
-            "job_id": str(request.job_id),
-            "trace_id": str(request.trace_id),
-        },
-    )
+    with _materialized_input(request.payload.input_uri, request.payload.radar_id) as input_path:
+        volume = decode_fmt_volume(input_path, config)
+        if volume.input_sha256 != request.payload.input_sha256:
+            raise ValueError("raw radar archive SHA-256 differs from the registered asset")
+        if volume.input_size_bytes != request.payload.input_size_bytes:
+            raise ValueError("raw radar archive size differs from the registered asset")
+        health = assess_volume_health(volume, config, health_config)
+        objects = build_zarr_store(
+            volume,
+            config,
+            asset_id=request.payload.asset_id,
+            source_uri=request.payload.input_uri,
+            health=health,
+            provenance={
+                "scan_id": str(request.payload.scan_id),
+                "run_id": str(request.run_id),
+                "job_id": str(request.job_id),
+                "trace_id": str(request.trace_id),
+            },
+        )
     return WorkerResult(
         objects=objects,
         diagnostics={"radar_health": health.value},
@@ -76,6 +84,30 @@ def _allowed_input_path(uri: str) -> Path:
     if not path.is_file():
         raise ValueError("radar input path is not a file")
     return path
+
+
+@contextmanager
+def _materialized_input(uri: str, radar_id: str) -> Iterator[Path]:
+    parsed = urlparse(uri)
+    if parsed.scheme == "file":
+        yield _allowed_input_path(uri)
+        return
+    expected_bucket = os.getenv("RAINPULSE_OBJECT_STORE_BUCKET", "rainpulse")
+    expected_prefix = f"radar/raw/{radar_id}/"
+    key = unquote(parsed.path).lstrip("/")
+    if parsed.scheme != "s3" or parsed.netloc != expected_bucket or not key.startswith(
+        expected_prefix
+    ):
+        raise ValueError("RP-006 decoder requires a configured immutable raw-archive URI")
+    suffix = "".join(PurePosixPath(key).suffixes)
+    if len(suffix) > 32:
+        suffix = ".bin"
+    with tempfile.TemporaryDirectory(prefix="rainpulse-radar-") as directory:
+        target = Path(directory) / f"volume{suffix}"
+        minio_client_from_environment().fget_object(parsed.netloc, key, str(target))
+        if not target.is_file():
+            raise ValueError("raw radar archive download did not create a regular file")
+        yield target
 
 
 def _required_directory(name: str) -> Path:
