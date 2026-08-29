@@ -626,7 +626,7 @@ function CurrentSliceCard({
         <div><dt>阈值</dt><dd>{threshold} mm/h</dd></div>
         <div>
           <dt>FSS 邻域尺度</dt>
-          <dd>{fssScale ? `${formatFSSScale(fssScale.target_km)} · 实际 ${formatFSSActualKM(row, fssScale)} · ${fssScale.window_pixels}×${fssScale.window_pixels} 网格` : '—'}</dd>
+          <dd>{fssScale ? `${formatFSSScale(fssScale.target_km)} · 实际 ${formatFSSActualKM(row, fssScale)} · ${row?.lk?.window_pixels ?? fssScale.window_pixels}×${row?.lk?.window_pixels ?? fssScale.window_pixels} 网格` : '—'}</dd>
         </div>
         <div><dt>有效域</dt><dd>{fixedTruthDomain ? '实况固定有效域（模型缺测按无预报）' : '实况与全部模型共同有效域'}</dd></div>
       </dl>

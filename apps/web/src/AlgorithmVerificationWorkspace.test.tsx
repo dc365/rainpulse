@@ -196,10 +196,11 @@ describe('AlgorithmVerificationWorkspace', () => {
     const rigorousDetail = {
       ...detail,
       run: rigorousRun,
-      cases: [{ case_id: 'socal_dry_20210805', category: 'dry', issue_times: ['2021-08-05T06:00:00Z'] }],
+      cases: [{ case_id: 'fred_20210816', category: 'wet', issue_times: ['2021-08-16T12:00:00Z'] }],
       filters: {
         ...detail.filters,
         models: ['lk', 'persistence', 'translation', 'phase_correlation'],
+        lead_minutes: [60],
         windows_pixels: [1, 5, 9],
         fss_scales: [
           { window_pixels: 1, target_km: 1, actual_km_min: 1.01, actual_km_max: 1.01 },
@@ -210,7 +211,16 @@ describe('AlgorithmVerificationWorkspace', () => {
     }
     const fetchStatus = vi.fn().mockImplementation((input: string) => {
       let body: unknown = { items: [run, rigorousRun] }
-      if (input.includes('/metrics?')) body = { items: [] }
+      if (input.includes('/metrics?')) body = input.includes('/rp018-mrms-v1/rp018-smoke/')
+        ? { items: [{
+            ...metric('lk', 60, .7),
+            case_id: 'fred_20210816',
+            issue_time: '2021-08-16T12:00:00Z',
+            window_pixels: 11,
+            window_km: 10.7,
+            window_target_km: 10,
+          }] }
+        : { items: [] }
       else if (input.includes('/map-frame?')) body = mapFrame
       else if (input.endsWith('/rp016-mrms-v1/full-202108-v2')) body = detail
       else if (input.endsWith('/rp018-mrms-v1/rp018-smoke')) body = rigorousDetail
@@ -225,7 +235,7 @@ describe('AlgorithmVerificationWorkspace', () => {
       target: { value: 'rp018-mrms-v1/rp018-smoke' },
     })
 
-    expect(await screen.findByText('Southern California Dry')).toBeTruthy()
+    expect(await screen.findByText('Fred')).toBeTruthy()
     expect(fetchStatus.mock.calls.some(([url]) => (
       String(url).includes('/rp018-mrms-v1/rp018-smoke/metrics?case_id=midwest_convection_20210810')
     ))).toBe(false)
@@ -236,5 +246,6 @@ describe('AlgorithmVerificationWorkspace', () => {
     fireEvent.click(screen.getByText('高级设置'))
     expect(screen.getByRole('button', { name: '10 km' }).getAttribute('aria-pressed')).toBe('true')
     await waitFor(() => expect(window.location.search).toContain('window=9'))
+    expect(await screen.findByText('10 km · 实际 10.7 km · 11×11 网格')).toBeTruthy()
   })
 })
