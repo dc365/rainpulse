@@ -67,6 +67,7 @@ type SkillComparison struct {
 }
 
 type SkillSummary struct {
+	CandidateModel   string            `json:"candidate_model"`
 	Status           string            `json:"status"`
 	ComparisonMetric string            `json:"comparison_metric"`
 	Comparisons      []SkillComparison `json:"comparisons"`
@@ -212,19 +213,25 @@ type MapAssetContent struct {
 }
 
 type reportSummary struct {
-	SchemaVersion            string       `json:"schema_version"`
-	ProfileVersion           string       `json:"profile_version"`
-	PrimaryTruthKind         string       `json:"primary_truth_kind"`
-	OperationalEligible      bool         `json:"operational_eligible"`
-	CompletedIssueCount      int          `json:"completed_issue_count"`
-	FailedIssueCount         int          `json:"failed_issue_count"`
-	MotionFallbackIssueCount int          `json:"motion_fallback_issue_count"`
-	MetricRowCount           int          `json:"metric_row_count"`
-	MapBundleCount           int          `json:"map_bundle_count"`
-	MapLayerCount            int          `json:"map_layer_count"`
-	MapRendererVersion       string       `json:"map_renderer_version"`
-	Errors                   []any        `json:"errors"`
-	SkillSummary             SkillSummary `json:"skill_summary"`
+	SchemaVersion             string       `json:"schema_version"`
+	ProfileVersion            string       `json:"profile_version"`
+	PrimaryTruthKind          string       `json:"primary_truth_kind"`
+	OperationalEligible       bool         `json:"operational_eligible"`
+	CompletedIssueCount       int          `json:"completed_issue_count"`
+	FailedIssueCount          int          `json:"failed_issue_count"`
+	MotionFallbackIssueCount  int          `json:"motion_fallback_issue_count"`
+	MetricRowCount            int          `json:"metric_row_count"`
+	TruthDomainMetricRowCount int          `json:"truth_domain_metric_row_count"`
+	MapBundleCount            int          `json:"map_bundle_count"`
+	MapLayerCount             int          `json:"map_layer_count"`
+	MapRendererVersion        string       `json:"map_renderer_version"`
+	Errors                    []any        `json:"errors"`
+	SkillSummary              SkillSummary `json:"skill_summary"`
+	ReportFiles               reportFiles  `json:"report_files"`
+}
+
+type reportFiles struct {
+	FixedTruthDomain string `json:"fixed_truth_domain"`
 }
 
 type mapManifest struct {
@@ -550,7 +557,16 @@ func (store *FileStore) loadRun(
 	if err != nil {
 		return cachedRun{}, reportFileError(err)
 	}
-	metricsStamp, err := statFile(filepath.Join(directory, "metrics.csv"))
+	summary, report, err := store.readSummary(profileVersion, runID)
+	if err != nil {
+		return cachedRun{}, err
+	}
+	metricsFilename, expectedMetricCount, usesTruthDomain, err := report.displayMetricSource()
+	if err != nil {
+		return cachedRun{}, err
+	}
+	metricsPath := filepath.Join(directory, metricsFilename)
+	metricsStamp, err := statFile(metricsPath)
 	if err != nil {
 		return cachedRun{}, reportFileError(err)
 	}
@@ -562,21 +578,23 @@ func (store *FileStore) loadRun(
 		return cached, nil
 	}
 
-	summary, report, err := store.readSummary(profileVersion, runID)
+	metrics, cases, filters, err := readMetricsCSV(ctx, metricsPath)
 	if err != nil {
 		return cachedRun{}, err
 	}
-	metrics, cases, filters, err := readMetricsCSV(ctx, filepath.Join(directory, "metrics.csv"))
-	if err != nil {
-		return cachedRun{}, err
-	}
-	if len(metrics) != summary.MetricRowCount {
+	if len(metrics) != expectedMetricCount {
 		return cachedRun{}, fmt.Errorf(
-			"%w: summary metric_row_count=%d differs from CSV rows=%d",
+			"%w: summary display metric count=%d differs from CSV rows=%d",
 			ErrInvalidReport,
-			summary.MetricRowCount,
+			expectedMetricCount,
 			len(metrics),
 		)
+	}
+	if usesTruthDomain {
+		filters.Models, err = report.displayModels(filters.Models)
+		if err != nil {
+			return cachedRun{}, err
+		}
 	}
 	loaded := cachedRun{
 		SummaryStamp: summaryStamp,
@@ -591,6 +609,52 @@ func (store *FileStore) loadRun(
 	store.cache[cacheKey] = loaded
 	store.mu.Unlock()
 	return loaded, nil
+}
+
+func (report reportSummary) displayMetricSource() (string, int, bool, error) {
+	if report.ReportFiles.FixedTruthDomain == "" {
+		return "metrics.csv", report.MetricRowCount, false, nil
+	}
+	if report.ReportFiles.FixedTruthDomain != "metrics_truth_domain.csv" ||
+		report.TruthDomainMetricRowCount < 1 {
+		return "", 0, false, fmt.Errorf(
+			"%w: fixed truth-domain metric source is invalid",
+			ErrInvalidReport,
+		)
+	}
+	return report.ReportFiles.FixedTruthDomain, report.TruthDomainMetricRowCount, true, nil
+}
+
+func (report reportSummary) displayModels(available []string) ([]string, error) {
+	candidate := report.SkillSummary.CandidateModel
+	if candidate == "" {
+		candidate = "lk"
+	}
+	wanted := []string{candidate}
+	seen := map[string]bool{candidate: true}
+	for _, comparison := range report.SkillSummary.Comparisons {
+		if comparison.Baseline != "" && !seen[comparison.Baseline] {
+			seen[comparison.Baseline] = true
+			wanted = append(wanted, comparison.Baseline)
+		}
+	}
+	availableSet := make(map[string]bool, len(available))
+	for _, model := range available {
+		availableSet[model] = true
+	}
+	for _, model := range wanted {
+		if !availableSet[model] {
+			return nil, fmt.Errorf(
+				"%w: display model %s is absent from fixed truth-domain metrics",
+				ErrInvalidReport,
+				model,
+			)
+		}
+	}
+	if len(wanted) < 2 {
+		return nil, fmt.Errorf("%w: fixed truth-domain report has no comparison baseline", ErrInvalidReport)
+	}
+	return wanted, nil
 }
 
 func (store *FileStore) readSummary(
@@ -623,8 +687,12 @@ func (store *FileStore) readSummary(
 		report.PrimaryTruthKind == "" || report.SkillSummary.Status == "" ||
 		report.CompletedIssueCount < 0 || report.FailedIssueCount < 0 ||
 		report.MotionFallbackIssueCount < 0 || report.MetricRowCount < 0 ||
+		report.TruthDomainMetricRowCount < 0 ||
 		report.MapBundleCount < 0 || report.MapLayerCount < 0 {
 		return RunSummary{}, reportSummary{}, fmt.Errorf("%w: summary identity or counts differ", ErrInvalidReport)
+	}
+	if _, _, _, err := report.displayMetricSource(); err != nil {
+		return RunSummary{}, reportSummary{}, err
 	}
 	mapsAvailable := false
 	if report.MapBundleCount == 0 {

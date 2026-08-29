@@ -64,6 +64,40 @@ func TestFileStoreListsAndFiltersAlgorithmVerificationRuns(t *testing.T) {
 	}
 }
 
+func TestFileStoreUsesFixedTruthDomainForRigorousReports(t *testing.T) {
+	root := t.TempDir()
+	writeRigorousReportFixture(t, root, "rp018-mrms-v1", "full-v1")
+	store := NewFileStore(root)
+
+	detail, err := store.GetRun(context.Background(), "rp018-mrms-v1", "full-v1")
+	if err != nil {
+		t.Fatalf("get rigorous run: %v", err)
+	}
+	if got := fmt.Sprint(detail.Filters.Models); got != "[lk persistence translation phase_correlation]" {
+		t.Fatalf("unexpected rigorous display models: %s", got)
+	}
+	issueTime := time.Date(2021, 8, 10, 17, 0, 0, 0, time.UTC)
+	metrics, err := store.ListMetrics(
+		context.Background(),
+		"rp018-mrms-v1",
+		"full-v1",
+		MetricFilter{CaseID: "midwest_case", IssueTime: issueTime, ThresholdMMH: 5, WindowPixels: 11},
+	)
+	if err != nil {
+		t.Fatalf("list rigorous metrics: %v", err)
+	}
+	if len(metrics) != 10 {
+		t.Fatalf("expected all fixed-domain metric rows, got %d", len(metrics))
+	}
+	models := make(map[string]bool)
+	for _, metric := range metrics {
+		models[metric.Model] = true
+	}
+	if !models["phase_correlation"] || !models["lk_native_10min"] {
+		t.Fatalf("fixed truth-domain models are incomplete: %#v", models)
+	}
+}
+
 func TestFileStoreRejectsUnknownRunsAndCountDrift(t *testing.T) {
 	root := t.TempDir()
 	writeReportFixture(t, root, "rp016-generic-v1", "broken", 7)
@@ -212,6 +246,54 @@ func writeReportFixture(
 		0o644,
 	); err != nil {
 		t.Fatalf("write metrics fixture: %v", err)
+	}
+}
+
+func writeRigorousReportFixture(
+	t *testing.T,
+	root string,
+	profileVersion string,
+	runID string,
+) {
+	t.Helper()
+	writeReportFixture(t, root, profileVersion, runID, 6)
+	directory := filepath.Join(root, profileVersion, runID)
+	summaryPath := filepath.Join(directory, "summary.json")
+	var summary map[string]any
+	if err := json.Unmarshal(mustReadFile(t, summaryPath), &summary); err != nil {
+		t.Fatalf("decode rigorous summary fixture: %v", err)
+	}
+	summary["schema_version"] = "1.2"
+	summary["truth_domain_metric_row_count"] = 10
+	summary["report_files"] = map[string]any{"fixed_truth_domain": "metrics_truth_domain.csv"}
+	skill := summary["skill_summary"].(map[string]any)
+	skill["candidate_model"] = "lk"
+	skill["comparisons"] = []map[string]any{
+		{"baseline": "persistence"},
+		{"baseline": "translation"},
+		{"baseline": "phase_correlation"},
+	}
+	encoded, err := json.Marshal(summary)
+	if err != nil {
+		t.Fatalf("encode rigorous summary fixture: %v", err)
+	}
+	if err := os.WriteFile(summaryPath, encoded, 0o644); err != nil {
+		t.Fatalf("write rigorous summary fixture: %v", err)
+	}
+	header := strings.Join(metricColumns, ",") + "\n"
+	rows := make([]string, 0, 10)
+	for _, model := range []string{
+		"lk", "persistence", "translation", "phase_correlation", "lk_native_10min",
+	} {
+		rows = append(rows, metricFixtureRow(model, 10, "0.72"))
+		rows = append(rows, metricFixtureRow(model, 20, "0.68"))
+	}
+	if err := os.WriteFile(
+		filepath.Join(directory, "metrics_truth_domain.csv"),
+		[]byte(header+strings.Join(rows, "\n")+"\n"),
+		0o644,
+	); err != nil {
+		t.Fatalf("write fixed truth-domain metrics fixture: %v", err)
 	}
 }
 
