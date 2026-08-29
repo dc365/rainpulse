@@ -98,6 +98,42 @@ def score_probabilistic_forecast(
     return rows
 
 
+def score_deterministic_probability_baseline(
+    truth_rate_mm_h: np.ndarray,
+    truth_valid_mask: np.ndarray,
+    forecast_rate_mm_h: np.ndarray,
+    forecast_valid_mask: np.ndarray,
+    *,
+    lead_minutes: Sequence[int],
+    thresholds_mm_h: Sequence[float],
+    reliability_bin_edges: Sequence[float] = tuple(np.linspace(0.0, 1.0, 11)),
+) -> list[dict[str, Any]]:
+    """Score a deterministic field as a degenerate probability forecast.
+
+    A deterministic forecast has event probabilities of exactly zero or one.
+    Representing it with two identical members lets the shared implementation
+    preserve the same strict event operator, support mask, CRPS, and
+    reliability-bin semantics used for the STEPS ensemble. The reported member
+    count remains one because this is a baseline, not an ensemble.
+    """
+
+    forecast = np.asarray(forecast_rate_mm_h, dtype="float32")
+    duplicated = np.stack((forecast, forecast), axis=0)
+    rows = score_probabilistic_forecast(
+        truth_rate_mm_h,
+        truth_valid_mask,
+        duplicated,
+        forecast_valid_mask,
+        lead_minutes=lead_minutes,
+        thresholds_mm_h=thresholds_mm_h,
+        reliability_bin_edges=reliability_bin_edges,
+    )
+    for row in rows:
+        row["member_count"] = 1
+        row["forecast_kind"] = "deterministic_degenerate_probability"
+    return rows
+
+
 def _ensemble_crps(members: np.ndarray, truth: np.ndarray) -> float:
     if truth.size == 0:
         return float("nan")

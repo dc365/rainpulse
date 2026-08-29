@@ -86,3 +86,24 @@ def test_observation_only_selector_freezes_four_wet_two_dry_and_fifty_issues() -
             if case["category"] == "wet"
         }
         assert len(wet_regions) == 2
+
+
+def test_split_v2_assigns_distinct_development_namespace_without_changing_selection() -> None:
+    catalog = load_holdout_region_catalog(CATALOG_PATH)
+    regions = tuple(region.region_id for region in catalog.regions[:3])
+    rows = _rows("2022-01", regions)
+
+    evidence = build_selection_evidence(
+        rows=rows,
+        catalog=catalog,
+        months=("2022-01",),
+        manifests=[{"month": "2022-01", "complete": True}],
+        generated_at=datetime(2026, 8, 29, tzinfo=UTC),
+        selection_role="development",
+    )
+
+    assert evidence["selection_protocol_version"] == "mrms-observation-split-v2"
+    assert evidence["selection_role"] == "development"
+    assert evidence["case_namespace"] == "development"
+    assert all(case["case_id"].startswith("development_") for case in evidence["selected_cases"])
+    assert evidence["model_forecast_or_skill_fields_read"] is False

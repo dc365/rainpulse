@@ -1,0 +1,57 @@
+schema_version: "1.0"
+profile_version: rp024-mrms-ensemble-v1
+description: >-
+  Frozen development and independent MRMS verification boundary for the first
+  12-member STEPS probability hindcast. This profile is engineering-only and
+  cannot enable operational probability publication.
+lifecycle: engineering_validation
+operational_eligible: false
+
+source:
+  product: PrecipRate_00.00
+  cadence_minutes: 10
+  temporal_adaptation: causal_linear_midpoints_to_5_minutes
+
+forecast:
+  steps_profile: configs/nowcast/rp022-pysteps-steps-v1.yaml
+  steps_profile_sha256: f3a99f4e451b1024b1e6d98d213c56238e646ed374722efd96214b56e706bb16
+  lk_profile: configs/nowcast/rp016-pysteps-lk-v1.yaml
+  lk_profile_sha256: 2e31c4a99a823eec665973798c222659f8da7f3239f16ac66fed3e4fd79b066b
+  member_count: 12
+
+splits:
+  development:
+    role: development
+    months: ["2022-01", "2022-12"]
+    selection_evidence_path: configs/verification/rp024-development-selection-v1.json
+    selection_evidence_sha256: 0a6c2979396c7b58ef99265d96b501880c200b41d03d5087237d3847cd558c67
+    expected_case_count: 6
+    expected_issue_count: 50
+  holdout:
+    role: independent_holdout
+    months: ["2023-06", "2023-12"]
+    selection_evidence_path: configs/verification/rp024-holdout-selection-v1.json
+    selection_evidence_sha256: 7425900932f950a9ad0dbdda58b27ab02482c73a3c1659ea4405eb50bca06697
+    expected_case_count: 6
+    expected_issue_count: 50
+
+verification:
+  lead_minutes: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
+  thresholds_mm_h: [1, 5, 10, 20, 50]
+  reliability_bin_edges: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+  near_minutes: [10, 60]
+  far_minutes: [70, 120]
+  baselines: [lk, persistence, phase_correlation]
+  common_support_policy: truth_and_all_forecast_models_valid
+  member_coverage_policy: report_mean_and_minimum_against_truth_valid_domain
+  category_reporting: [wet, dry]
+
+leakage:
+  forbidden_months: ["2021-08", "2024-06", "2025-01"]
+  development_holdout_months_must_be_disjoint: true
+  selection_must_not_read_forecast_or_skill_fields: true
+
+holdout_gate:
+  status: development_pending
+  artifact_path: null
+  artifact_sha256: null

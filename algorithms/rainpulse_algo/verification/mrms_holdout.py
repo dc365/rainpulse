@@ -17,6 +17,7 @@ from rainpulse_algo.datasets.mrms_precip import read_mrms_precip_frames
 from rainpulse_algo.grid import RegularLatLonGrid
 
 SELECTION_PROTOCOL_VERSION = "mrms-observation-holdout-v1"
+SPLIT_SELECTION_PROTOCOL_VERSION = "mrms-observation-split-v2"
 SCREEN_CADENCE_MINUTES = 60
 COVERAGE_MINIMUM_RATIO = 0.99
 WET_ACTIVE_FRACTION_MINIMUM = 0.005
@@ -297,14 +298,20 @@ def _candidate(
     }
 
 
-def _selected_case(candidate: dict[str, Any], region: HoldoutRegion, rank: int) -> dict[str, Any]:
+def _selected_case(
+    candidate: dict[str, Any],
+    region: HoldoutRegion,
+    rank: int,
+    *,
+    case_prefix: str,
+) -> dict[str, Any]:
     anchor = _parse_time(str(candidate["anchor_time_utc"]))
     is_wet = candidate["category"] == "wet"
     issue_start = anchor - timedelta(hours=2 if is_wet else 3)
     issue_end = anchor + timedelta(hours=2 if is_wet else 3)
     step = 30 if is_wet else 60
     case_id = (
-        f"holdout_{anchor:%Y%m%d}_{region.region_id}_"
+        f"{case_prefix}_{anchor:%Y%m%d}_{region.region_id}_"
         f"{'wet' if is_wet else 'dry'}_{rank}"
     )
     return {
@@ -336,6 +343,8 @@ def select_observation_holdout(
     rows: list[dict[str, Any]],
     catalog: HoldoutRegionCatalog,
     months: tuple[str, ...],
+    *,
+    case_prefix: str = "holdout",
 ) -> list[dict[str, Any]]:
     """Select balanced wet/dry cases from hourly observation statistics only."""
 
@@ -422,10 +431,20 @@ def select_observation_holdout(
 
         for rank, candidate in enumerate(selected_wet, start=1):
             selected_cases.append(
-                _selected_case(candidate, region_by_id[str(candidate["region_id"])], rank)
+                _selected_case(
+                    candidate,
+                    region_by_id[str(candidate["region_id"])],
+                    rank,
+                    case_prefix=case_prefix,
+                )
             )
         selected_cases.append(
-            _selected_case(selected_dry, region_by_id[str(selected_dry["region_id"])], 1)
+            _selected_case(
+                selected_dry,
+                region_by_id[str(selected_dry["region_id"])],
+                1,
+                case_prefix=case_prefix,
+            )
         )
     return selected_cases
 
@@ -437,8 +456,17 @@ def build_selection_evidence(
     months: tuple[str, ...],
     manifests: list[dict[str, Any]],
     generated_at: datetime | None = None,
+    selection_role: str | None = None,
 ) -> dict[str, Any]:
-    selected = select_observation_holdout(rows, catalog, months)
+    if selection_role not in {None, "development", "independent_holdout"}:
+        raise MRMSHoldoutSelectionError("selection role is unsupported")
+    case_prefix = "development" if selection_role == "development" else "holdout"
+    selected = select_observation_holdout(
+        rows,
+        catalog,
+        months,
+        case_prefix=case_prefix,
+    )
     issue_count = sum(
         int(
             (
@@ -451,13 +479,21 @@ def build_selection_evidence(
         + 1
         for case in selected
     )
-    return {
+    evidence = {
         "schema_version": "1.0",
-        "selection_protocol_version": SELECTION_PROTOCOL_VERSION,
+        "selection_protocol_version": (
+            SPLIT_SELECTION_PROTOCOL_VERSION
+            if selection_role is not None
+            else SELECTION_PROTOCOL_VERSION
+        ),
         "generated_at_utc": (generated_at or datetime.now(UTC))
         .isoformat()
         .replace("+00:00", "Z"),
-        "claim": "Cases were frozen from MRMS observations before any holdout forecast run.",
+        "claim": (
+            "Cases were frozen from MRMS observations before any forecast run for this split."
+            if selection_role is not None
+            else "Cases were frozen from MRMS observations before any holdout forecast run."
+        ),
         "model_forecast_or_skill_fields_read": False,
         "source": {
             "product": "PrecipRate_00.00",
@@ -495,6 +531,10 @@ def build_selection_evidence(
         "selected_issue_count": issue_count,
         "selected_cases": selected,
     }
+    if selection_role is not None:
+        evidence["selection_role"] = selection_role
+        evidence["case_namespace"] = case_prefix
+    return evidence
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -503,6 +543,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--catalog", type=Path, required=True)
     parser.add_argument("--month", action="append", required=True)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--role", choices=("development", "independent_holdout"))
     return parser
 
 
@@ -524,6 +565,7 @@ def main(argv: list[str] | None = None) -> int:
             catalog=catalog,
             months=months,
             manifests=manifests,
+            selection_role=args.role,
         )
         payload = json.dumps(evidence, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
         if args.output is not None:

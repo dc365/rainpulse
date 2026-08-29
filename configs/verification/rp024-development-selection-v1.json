@@ -1,0 +1,309 @@
+{
+  "candidate_catalog": {
+    "catalog_sha256": "17d2bd95d76815fb3b9fcaaae9b043415935336eac3365b27cdd94674e310526",
+    "catalog_version": "mrms-holdout-regions-v1",
+    "region_count": 10
+  },
+  "case_namespace": "development",
+  "claim": "Cases were frozen from MRMS observations before any forecast run for this split.",
+  "generated_at_utc": "2026-08-29T12:50:36.651199Z",
+  "model_forecast_or_skill_fields_read": false,
+  "schema_version": "1.0",
+  "screened_observation_row_count": 14880,
+  "screened_observation_statistics_sha256": "e9c5060320afe6920174ba938578dd3d066dd8b65be1cff3eac110195dbf8591",
+  "selected_case_count": 6,
+  "selected_cases": [
+    {
+      "anchor_time_utc": "2022-01-17T05:00:00Z",
+      "case_id": "development_20220117_northeast_wet_1",
+      "category": "wet",
+      "grid": {
+        "bounds": {
+          "east": -71.995,
+          "north": 42.005,
+          "south": 40.005,
+          "west": -76.995
+        },
+        "config_version": "mrms-holdout-northeast-0p01deg-v1",
+        "coordinate_sha256": "7c2bd9871e09bf783e3458bab6fb6fc7a019e4f3cfbecb00b661691b8790ccb5",
+        "grid_id": "mrms_holdout_northeast_0p01deg_v1"
+      },
+      "issues": {
+        "end": "2022-01-17T07:00:00Z",
+        "start": "2022-01-17T03:00:00Z",
+        "step_minutes": 30
+      },
+      "label": "Northeast observation-screened wet event",
+      "observation_screen": {
+        "anchor_time_utc": "2022-01-17T05:00:00Z",
+        "category": "wet",
+        "maximum_rain_fraction_ge_0p1": 0.999394246333,
+        "maximum_rate_mm_h": 48.600002,
+        "mean_rain_fraction_ge_0p1": 0.976290205658,
+        "mean_rain_fraction_ge_1": 0.873004240276,
+        "mean_rain_fraction_ge_10": 0.007320682019,
+        "minimum_valid_fraction": 1.0,
+        "month": "2022-01",
+        "region_id": "northeast",
+        "region_label": "Northeast",
+        "wet_active_hour_count": 5,
+        "wet_score": 0.887645604313
+      }
+    },
+    {
+      "anchor_time_utc": "2022-01-20T04:00:00Z",
+      "case_id": "development_20220120_lower_mississippi_wet_2",
+      "category": "wet",
+      "grid": {
+        "bounds": {
+          "east": -88.995,
+          "north": 33.005,
+          "south": 31.005,
+          "west": -93.995
+        },
+        "config_version": "mrms-holdout-lower-mississippi-0p01deg-v1",
+        "coordinate_sha256": "6da73609eb77d715eaf8306e8e566809f59ef3d8c6e9b6cd80f957f7fe7e34ad",
+        "grid_id": "mrms_holdout_lower_mississippi_0p01deg_v1"
+      },
+      "issues": {
+        "end": "2022-01-20T06:00:00Z",
+        "start": "2022-01-20T02:00:00Z",
+        "step_minutes": 30
+      },
+      "label": "Lower Mississippi Valley observation-screened wet event",
+      "observation_screen": {
+        "anchor_time_utc": "2022-01-20T04:00:00Z",
+        "category": "wet",
+        "maximum_rain_fraction_ge_0p1": 0.647361992433,
+        "maximum_rate_mm_h": 150.0,
+        "mean_rain_fraction_ge_0p1": 0.616403014866,
+        "mean_rain_fraction_ge_1": 0.469260484007,
+        "mean_rain_fraction_ge_10": 0.025765384654,
+        "minimum_valid_fraction": 1.0,
+        "month": "2022-01",
+        "region_id": "lower_mississippi",
+        "region_label": "Lower Mississippi Valley",
+        "wet_active_hour_count": 5,
+        "wet_score": 0.520791253314
+      }
+    },
+    {
+      "anchor_time_utc": "2022-01-01T03:00:00Z",
+      "case_id": "development_20220101_pacific_northwest_dry_1",
+      "category": "dry",
+      "grid": {
+        "bounds": {
+          "east": -119.995,
+          "north": 46.005,
+          "south": 44.005,
+          "west": -124.995
+        },
+        "config_version": "mrms-holdout-pacific-northwest-0p01deg-v1",
+        "coordinate_sha256": "499d9b1e8a7b5e650af8d2d0cfbe92708ba22ef1acc0180df97feaca8db0c083",
+        "grid_id": "mrms_holdout_pacific_northwest_0p01deg_v1"
+      },
+      "issues": {
+        "end": "2022-01-01T06:00:00Z",
+        "start": "2022-01-01T00:00:00Z",
+        "step_minutes": 60
+      },
+      "label": "Pacific Northwest observation-screened dry control",
+      "observation_screen": {
+        "anchor_time_utc": "2022-01-01T03:00:00Z",
+        "category": "dry",
+        "maximum_rain_fraction_ge_0p1": 0.0,
+        "maximum_rate_mm_h": 0.0,
+        "mean_rain_fraction_ge_0p1": 0.0,
+        "mean_rain_fraction_ge_1": 0.0,
+        "mean_rain_fraction_ge_10": 0.0,
+        "minimum_valid_fraction": 1.0,
+        "month": "2022-01",
+        "region_id": "pacific_northwest",
+        "region_label": "Pacific Northwest",
+        "wet_active_hour_count": 0,
+        "wet_score": 0.0
+      }
+    },
+    {
+      "anchor_time_utc": "2022-12-19T22:00:00Z",
+      "case_id": "development_20221219_lower_mississippi_wet_1",
+      "category": "wet",
+      "grid": {
+        "bounds": {
+          "east": -88.995,
+          "north": 33.005,
+          "south": 31.005,
+          "west": -93.995
+        },
+        "config_version": "mrms-holdout-lower-mississippi-0p01deg-v1",
+        "coordinate_sha256": "6da73609eb77d715eaf8306e8e566809f59ef3d8c6e9b6cd80f957f7fe7e34ad",
+        "grid_id": "mrms_holdout_lower_mississippi_0p01deg_v1"
+      },
+      "issues": {
+        "end": "2022-12-20T00:00:00Z",
+        "start": "2022-12-19T20:00:00Z",
+        "step_minutes": 30
+      },
+      "label": "Lower Mississippi Valley observation-screened wet event",
+      "observation_screen": {
+        "anchor_time_utc": "2022-12-19T22:00:00Z",
+        "category": "wet",
+        "maximum_rain_fraction_ge_0p1": 0.981360661761,
+        "maximum_rate_mm_h": 56.400002,
+        "mean_rain_fraction_ge_0p1": 0.944723488347,
+        "mean_rain_fraction_ge_1": 0.797094368477,
+        "mean_rain_fraction_ge_10": 0.018146790995,
+        "minimum_valid_fraction": 1.0,
+        "month": "2022-12",
+        "region_id": "lower_mississippi",
+        "region_label": "Lower Mississippi Valley",
+        "wet_active_hour_count": 5,
+        "wet_score": 0.833387950467
+      }
+    },
+    {
+      "anchor_time_utc": "2022-12-30T19:00:00Z",
+      "case_id": "development_20221230_gulf_coast_wet_2",
+      "category": "wet",
+      "grid": {
+        "bounds": {
+          "east": -86.995,
+          "north": 30.005,
+          "south": 28.005,
+          "west": -91.995
+        },
+        "config_version": "mrms-holdout-gulf-coast-0p01deg-v1",
+        "coordinate_sha256": "885ff6f701346f54b914d0c10d997bd66c7141d1c1c0a6f0695117cbcd443bfd",
+        "grid_id": "mrms_holdout_gulf_coast_0p01deg_v1"
+      },
+      "issues": {
+        "end": "2022-12-30T21:00:00Z",
+        "start": "2022-12-30T17:00:00Z",
+        "step_minutes": 30
+      },
+      "label": "Gulf Coast observation-screened wet event",
+      "observation_screen": {
+        "anchor_time_utc": "2022-12-30T19:00:00Z",
+        "category": "wet",
+        "maximum_rain_fraction_ge_0p1": 0.835036394872,
+        "maximum_rate_mm_h": 150.0,
+        "mean_rain_fraction_ge_0p1": 0.781259371804,
+        "mean_rain_fraction_ge_1": 0.648609249164,
+        "mean_rain_fraction_ge_10": 0.060978540431,
+        "minimum_valid_fraction": 1.0,
+        "month": "2022-12",
+        "region_id": "gulf_coast",
+        "region_label": "Gulf Coast",
+        "wet_active_hour_count": 5,
+        "wet_score": 0.770566330026
+      }
+    },
+    {
+      "anchor_time_utc": "2022-12-01T03:00:00Z",
+      "case_id": "development_20221201_gulf_coast_dry_1",
+      "category": "dry",
+      "grid": {
+        "bounds": {
+          "east": -86.995,
+          "north": 30.005,
+          "south": 28.005,
+          "west": -91.995
+        },
+        "config_version": "mrms-holdout-gulf-coast-0p01deg-v1",
+        "coordinate_sha256": "885ff6f701346f54b914d0c10d997bd66c7141d1c1c0a6f0695117cbcd443bfd",
+        "grid_id": "mrms_holdout_gulf_coast_0p01deg_v1"
+      },
+      "issues": {
+        "end": "2022-12-01T06:00:00Z",
+        "start": "2022-12-01T00:00:00Z",
+        "step_minutes": 60
+      },
+      "label": "Gulf Coast observation-screened dry control",
+      "observation_screen": {
+        "anchor_time_utc": "2022-12-01T03:00:00Z",
+        "category": "dry",
+        "maximum_rain_fraction_ge_0p1": 0.0,
+        "maximum_rate_mm_h": 0.0,
+        "mean_rain_fraction_ge_0p1": 0.0,
+        "mean_rain_fraction_ge_1": 0.0,
+        "mean_rain_fraction_ge_10": 0.0,
+        "minimum_valid_fraction": 1.0,
+        "month": "2022-12",
+        "region_id": "gulf_coast",
+        "region_label": "Gulf Coast",
+        "wet_active_hour_count": 0,
+        "wet_score": 0.0
+      }
+    }
+  ],
+  "selected_issue_count": 50,
+  "selection_protocol_version": "mrms-observation-split-v2",
+  "selection_role": "development",
+  "selection_rules": {
+    "dry_cases_per_month": 1,
+    "dry_issue_step_minutes": 60,
+    "dry_issue_window_hours": [
+      -3,
+      3
+    ],
+    "dry_rank": "minimum max(area_fraction_rate_ge_0.1), then minimum mean",
+    "dry_screen_offsets_hours": [
+      -3,
+      -2,
+      -1,
+      0,
+      1,
+      2,
+      3
+    ],
+    "minimum_case_anchor_separation_hours": 48,
+    "minimum_valid_fraction": 0.99,
+    "wet_active_fraction_minimum": 0.005,
+    "wet_active_hour_minimum": 4,
+    "wet_cases_per_month": 2,
+    "wet_issue_step_minutes": 30,
+    "wet_issue_window_hours": [
+      -2,
+      2
+    ],
+    "wet_regions_must_be_distinct_within_month": true,
+    "wet_score": "mean(area_fraction_rate_ge_1)+2*mean(area_fraction_rate_ge_10)",
+    "wet_screen_offsets_hours": [
+      -2,
+      -1,
+      0,
+      1,
+      2
+    ]
+  },
+  "source": {
+    "manifest_summaries": [
+      {
+        "complete": true,
+        "daily_manifest_count": 31,
+        "daily_manifests_sha256": "6706e1d9433cad6892a596b2946e7ec0d1ae048464843c1123e223dc34a56c49",
+        "described_asset_count": 4464,
+        "month": "2022-01",
+        "screened_asset_size_checks_passed": true,
+        "screened_hourly_asset_count": 744
+      },
+      {
+        "complete": true,
+        "daily_manifest_count": 31,
+        "daily_manifests_sha256": "5eeab6800a7969aefa064c788826582db746ebd70c9a6cd32baf02391537632e",
+        "described_asset_count": 4464,
+        "month": "2022-12",
+        "screened_asset_size_checks_passed": true,
+        "screened_hourly_asset_count": 744
+      }
+    ],
+    "months": [
+      "2022-01",
+      "2022-12"
+    ],
+    "product": "PrecipRate_00.00",
+    "screen_cadence_minutes": 60,
+    "selected_assets_require_full_hash_conformance_before_hindcast": true,
+    "units": "mm/h"
+  }
+}

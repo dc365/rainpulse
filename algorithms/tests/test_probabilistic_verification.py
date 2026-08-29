@@ -4,7 +4,10 @@ import numpy as np
 import pytest
 
 from rainpulse_algo.verification.deterministic import VerificationInputError
-from rainpulse_algo.verification.probabilistic import score_probabilistic_forecast
+from rainpulse_algo.verification.probabilistic import (
+    score_deterministic_probability_baseline,
+    score_probabilistic_forecast,
+)
 
 
 def test_scores_brier_crps_reliability_and_spread_with_worked_values() -> None:
@@ -82,3 +85,25 @@ def test_probabilistic_scoring_rejects_single_member_input() -> None:
             lead_minutes=(5,),
             thresholds_mm_h=(1.0,),
         )
+
+
+def test_deterministic_probability_baseline_uses_zero_one_events_and_mae_crps() -> None:
+    truth = np.asarray([[[0.0, 1.0]]], dtype="float32")
+    forecast = np.asarray([[[0.0, 2.0]]], dtype="float32")
+    valid = np.ones_like(truth, dtype="uint8")
+
+    row = score_deterministic_probability_baseline(
+        truth,
+        valid,
+        forecast,
+        valid,
+        lead_minutes=(10,),
+        thresholds_mm_h=(1.0,),
+        reliability_bin_edges=(0.0, 0.5, 1.0),
+    )[0]
+
+    assert row["member_count"] == 1
+    assert row["forecast_kind"] == "deterministic_degenerate_probability"
+    assert row["brier_score"] == pytest.approx(0.5)
+    assert row["crps_mm_h"] == pytest.approx(0.5)
+    assert row["mean_ensemble_spread_mm_h"] == pytest.approx(0.0)

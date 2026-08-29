@@ -18,7 +18,7 @@ BUILD_REVISION ?= $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo unkn
 BUILD_VERSION ?= $(BUILD_REVISION)
 RAINPULSE_GO_LDFLAGS := -X github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo.Version=$(BUILD_VERSION) -X github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo.Revision=$(BUILD_REVISION)
 
-.PHONY: bootstrap contracts-generate contracts-check test test-structure test-radar-config test-contracts test-infrastructure test-control-plane test-worker-sdk test-radar-decoder test-radar-health test-radar-qc test-radar-grid test-radar-mosaic test-qpe test-diagnostics test-nowcast-input test-pysteps-lk test-pysteps-steps test-products test-ensemble-products test-ancillary test-grid test-mrms test-go test-python test-web lint build build-linux build-infrastructure-linux export-postgres-image export-python-image build-worker-linux deploy-up dev-up dev-down smoke infrastructure-smoke control-plane-smoke worker-smoke radar-decode-smoke radar-health-smoke radar-qc-smoke radar-grid-smoke ancillary-plan ancillary-download ancillary-verify mrms-download mrms-verify mrms-holdout-select mrms-conformance mrms-hindcast mrms-faults
+.PHONY: bootstrap contracts-generate contracts-check test test-structure test-radar-config test-contracts test-infrastructure test-control-plane test-worker-sdk test-radar-decoder test-radar-health test-radar-qc test-radar-grid test-radar-mosaic test-qpe test-diagnostics test-nowcast-input test-pysteps-lk test-pysteps-steps test-products test-ensemble-products test-ancillary test-grid test-mrms test-mrms-ensemble test-go test-python test-web lint build build-linux build-infrastructure-linux export-postgres-image export-python-image build-worker-linux deploy-up dev-up dev-down smoke infrastructure-smoke control-plane-smoke worker-smoke radar-decode-smoke radar-health-smoke radar-qc-smoke radar-grid-smoke ancillary-plan ancillary-download ancillary-verify mrms-download mrms-verify mrms-holdout-select mrms-conformance mrms-hindcast mrms-faults mrms-ensemble-conformance mrms-ensemble-hindcast mrms-ensemble-freeze-gate
 
 bootstrap:
 	@command -v rg >/dev/null || { echo "ripgrep is required" >&2; exit 1; }
@@ -35,7 +35,7 @@ contracts-generate:
 contracts-check:
 	bash scripts/check_generated_contracts.sh
 
-test: test-structure test-radar-config test-contracts test-infrastructure test-control-plane test-worker-sdk test-radar-decoder test-radar-health test-radar-qc test-radar-grid test-radar-mosaic test-qpe test-diagnostics test-nowcast-input test-pysteps-lk test-pysteps-steps test-products test-ensemble-products test-ancillary test-grid test-go test-python test-web
+test: test-structure test-radar-config test-contracts test-infrastructure test-control-plane test-worker-sdk test-radar-decoder test-radar-health test-radar-qc test-radar-grid test-radar-mosaic test-qpe test-diagnostics test-nowcast-input test-pysteps-lk test-pysteps-steps test-products test-ensemble-products test-ancillary test-grid test-mrms-ensemble test-go test-python test-web
 
 test-structure:
 	bash tests/rp000_structure_test.sh
@@ -109,6 +109,9 @@ test-grid:
 
 test-mrms:
 	uv run --project algorithms pytest algorithms/tests/test_mrms_archive.py algorithms/tests/test_mrms_precip.py algorithms/tests/test_mrms_verification_profile.py algorithms/tests/test_verification.py algorithms/tests/test_verification_baselines.py algorithms/tests/test_algorithm_verification_map.py algorithms/tests/test_mrms_hindcast.py algorithms/tests/test_pysteps_lk.py
+
+test-mrms-ensemble:
+	uv run --project algorithms pytest algorithms/tests/test_mrms_holdout.py algorithms/tests/test_mrms_ensemble_profile.py algorithms/tests/test_mrms_ensemble_gate.py algorithms/tests/test_mrms_ensemble_hindcast.py algorithms/tests/test_probabilistic_verification.py
 
 test-go:
 	go test ./services/control/...
@@ -236,6 +239,10 @@ MRMS_SKIP_HASH ?= 0
 MRMS_HOLDOUT_CATALOG ?= configs/verification/mrms-holdout-regions-v1.yaml
 MRMS_HOLDOUT_MONTHS ?= 2024-06 2025-01
 MRMS_HOLDOUT_OUTPUT ?= runtime/reports/mrms/rp021-mrms-holdout-selection-v1.json
+MRMS_ENSEMBLE_PROFILE ?= configs/verification/rp024-mrms-ensemble-v1.yaml
+MRMS_ENSEMBLE_SPLIT ?= development
+MRMS_DEVELOPMENT_SUMMARY ?=
+MRMS_ENSEMBLE_GATE_OUTPUT ?= configs/verification/rp024-development-gate-v1.json
 
 mrms-download:
 	uv run --project algorithms python -m rainpulse_algo.datasets.mrms_archive download --start $(MRMS_START) --end $(MRMS_END) --root $(MRMS_ROOT) --cadence-minutes $(MRMS_CADENCE_MINUTES) --workers $(MRMS_WORKERS) $(if $(MRMS_PROXY),--proxy $(MRMS_PROXY),)
@@ -251,6 +258,16 @@ mrms-conformance:
 
 mrms-hindcast:
 	uv run --project algorithms python -m rainpulse_algo.verification.mrms_hindcast hindcast --repository-root $(CURDIR) --profile $(MRMS_PROFILE) --root $(MRMS_ROOT) --output-root $(MRMS_REPORT_ROOT) $(if $(MRMS_CASE),--case $(MRMS_CASE),) $(if $(MRMS_MAX_ISSUES),--max-issues $(MRMS_MAX_ISSUES),) $(if $(MRMS_RUN_ID),--run-id $(MRMS_RUN_ID),) $(if $(filter 1,$(MRMS_SKIP_HASH)),--skip-hash,)
+
+mrms-ensemble-conformance:
+	uv run --project algorithms python -m rainpulse_algo.verification.mrms_ensemble_hindcast conformance --repository-root $(CURDIR) --profile $(MRMS_ENSEMBLE_PROFILE) --split $(MRMS_ENSEMBLE_SPLIT) --root $(MRMS_ROOT) $(if $(MRMS_CASE),--case $(MRMS_CASE),) $(if $(MRMS_MAX_ISSUES),--max-issues $(MRMS_MAX_ISSUES),) $(if $(filter 1,$(MRMS_SKIP_HASH)),--skip-hash,)
+
+mrms-ensemble-hindcast:
+	uv run --project algorithms python -m rainpulse_algo.verification.mrms_ensemble_hindcast hindcast --repository-root $(CURDIR) --profile $(MRMS_ENSEMBLE_PROFILE) --split $(MRMS_ENSEMBLE_SPLIT) --root $(MRMS_ROOT) --output-root $(MRMS_REPORT_ROOT) $(if $(MRMS_CASE),--case $(MRMS_CASE),) $(if $(MRMS_MAX_ISSUES),--max-issues $(MRMS_MAX_ISSUES),) $(if $(MRMS_RUN_ID),--run-id $(MRMS_RUN_ID),) $(if $(filter 1,$(MRMS_SKIP_HASH)),--skip-hash,)
+
+mrms-ensemble-freeze-gate:
+	@test -n "$(MRMS_DEVELOPMENT_SUMMARY)" || { echo "set MRMS_DEVELOPMENT_SUMMARY to a completed development summary.json" >&2; exit 1; }
+	uv run --project algorithms python -m rainpulse_algo.verification.mrms_ensemble_gate --repository-root $(CURDIR) --profile $(MRMS_ENSEMBLE_PROFILE) --development-summary $(MRMS_DEVELOPMENT_SUMMARY) --output $(MRMS_ENSEMBLE_GATE_OUTPUT)
 
 mrms-faults:
 	uv run --project algorithms pytest algorithms/tests/test_mrms_archive.py::test_verify_checks_size_and_optional_hash algorithms/tests/test_mrms_precip.py::test_reader_crops_to_ascending_grid_and_preserves_mrms_source_states algorithms/tests/test_mrms_hindcast.py::test_archive_source_rejects_a_missing_required_source_slot algorithms/tests/test_mrms_hindcast.py::test_archive_source_checks_manifest_hash_before_grib_decode algorithms/tests/test_pysteps_lk.py::test_uses_explicit_zero_motion_fallback_for_no_rain algorithms/tests/test_pysteps_lk.py::test_empty_motion_domain_has_specific_zero_motion_fallback
