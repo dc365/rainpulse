@@ -266,10 +266,11 @@ describe('RainPulse short-nowcast workspace', () => {
     })
     vi.stubGlobal('fetch', fetchStatus)
 
-    render(<NowcastWorkspace refreshToken={0} />)
+    const { container } = render(<NowcastWorkspace refreshToken={0} />)
 
     const ensembleButton = await screen.findByRole('button', { name: 'STEPS 集合' })
     expect(ensembleButton.hasAttribute('disabled')).toBe(false)
+    expect(container.querySelector('.gis-picker-wrap')).toBeTruthy()
     fireEvent.click(ensembleButton)
     const probabilityLayer = await screen.findByRole('img', {
       name: 'T+5 超过 5 mm/h 概率图层',
@@ -278,6 +279,8 @@ describe('RainPulse short-nowcast workspace', () => {
     expect(screen.getByText('OFFLINE')).toBeTruthy()
     expect(screen.getByText('离线 · 原始未校准 · 不进入业务发布')).toBeTruthy()
     expect(screen.getByRole('tab', { name: '单点雨强' }).hasAttribute('disabled')).toBe(true)
+    expect(container.querySelector('.gis-picker-wrap')).toBeTruthy()
+    expect(container.querySelector('.gis-picker')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'P90' }))
     const quantileLayer = await screen.findByRole('img', { name: 'T+5 P90 雨强分位数图层' })

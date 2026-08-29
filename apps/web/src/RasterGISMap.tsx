@@ -527,7 +527,7 @@ export function RasterGISMap({
           : '移动指针读取经纬度'}</small>
       </div> : null}
 
-      {!comparisonMode && picker ? <div ref={pickerRef} className="gis-picker-wrap">{point ? picker : null}</div> : null}
+      {!comparisonMode ? <div ref={pickerRef} className="gis-picker-wrap">{point ? picker : null}</div> : null}
 
       {!comparisonMode ? <div className={`gis-legend ${legendMode}`} aria-label={`${productLabel}图例`} tabIndex={0}>
         <header><span>{productLabel}</span><strong>{legendUnit}</strong></header>
