@@ -151,6 +151,36 @@ func TestParseMetricReadsExplicitPhysicalFSSTarget(t *testing.T) {
 	}
 }
 
+func TestParseMetricReadsOptionalCoverageProvenance(t *testing.T) {
+	provenanceColumns := []string{
+		"forecast_to_truth_coverage",
+		"advection_domain_to_truth_coverage",
+		"advection_boundary_loss_ratio",
+		"interior_missing_loss_ratio",
+		"boundary_adjusted_forecast_to_truth_coverage",
+		"coverage_decomposition_closure_error",
+	}
+	header := append(append([]string{}, metricColumns...), provenanceColumns...)
+	columns := make(map[string]int, len(header))
+	for index, name := range header {
+		columns[name] = index
+	}
+	row := strings.Split(metricFixtureRow("lk", 10, "0.72")+",0.98,0.98,0.02,0,1,0", ",")
+
+	metric, err := parseMetric(row, columns)
+	if err != nil {
+		t.Fatalf("parse metric coverage provenance: %v", err)
+	}
+	if metric.ForecastToTruthCoverage == nil || *metric.ForecastToTruthCoverage != 0.98 ||
+		metric.AdvectionBoundaryLossRatio == nil || *metric.AdvectionBoundaryLossRatio != 0.02 ||
+		metric.InteriorMissingLossRatio == nil || *metric.InteriorMissingLossRatio != 0 ||
+		metric.BoundaryAdjustedCoverage == nil || *metric.BoundaryAdjustedCoverage != 1 ||
+		metric.CoverageDecompositionClosureErr == nil ||
+		*metric.CoverageDecompositionClosureErr != 0 {
+		t.Fatalf("unexpected coverage provenance: %#v", metric)
+	}
+}
+
 func TestFileStoreReadsOnlyManifestListedVerificationMapAssets(t *testing.T) {
 	root := t.TempDir()
 	writeReportFixture(t, root, "rp016-generic-v1", "mapped-run", 6)

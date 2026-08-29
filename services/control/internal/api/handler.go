@@ -1617,6 +1617,12 @@ func toAPIAlgorithmVerificationMetric(
 		MaeMmH: metric.MAEMMH, RmseMmH: metric.RMSEMMH,
 		MeanErrorMmH: metric.MeanErrorMMH, TruthCoverage: metric.TruthCoverage,
 		ForecastCoverage: metric.ForecastCoverage, CommonCoverage: metric.CommonCoverage,
+		ForecastToTruthCoverage:                 metric.ForecastToTruthCoverage,
+		AdvectionDomainToTruthCoverage:          metric.AdvectionDomainToTruthCoverage,
+		AdvectionBoundaryLossRatio:              metric.AdvectionBoundaryLossRatio,
+		InteriorMissingLossRatio:                metric.InteriorMissingLossRatio,
+		BoundaryAdjustedForecastToTruthCoverage: metric.BoundaryAdjustedCoverage,
+		CoverageDecompositionClosureError:       metric.CoverageDecompositionClosureErr,
 	}
 }
 

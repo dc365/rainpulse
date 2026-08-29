@@ -102,30 +102,36 @@ type RunDetail struct {
 }
 
 type Metric struct {
-	CaseID           string
-	CaseCategory     string
-	IssueTime        time.Time
-	TruthKind        string
-	Model            string
-	LeadMinutes      int
-	ThresholdMMH     float64
-	WindowPixels     int
-	WindowKM         float64
-	WindowTargetKM   float64
-	Hits             int64
-	Misses           int64
-	FalseAlarms      int64
-	CorrectNegatives int64
-	CSI              *float64
-	POD              *float64
-	FAR              *float64
-	FSS              *float64
-	MAEMMH           *float64
-	RMSEMMH          *float64
-	MeanErrorMMH     *float64
-	TruthCoverage    *float64
-	ForecastCoverage *float64
-	CommonCoverage   *float64
+	CaseID                          string
+	CaseCategory                    string
+	IssueTime                       time.Time
+	TruthKind                       string
+	Model                           string
+	LeadMinutes                     int
+	ThresholdMMH                    float64
+	WindowPixels                    int
+	WindowKM                        float64
+	WindowTargetKM                  float64
+	Hits                            int64
+	Misses                          int64
+	FalseAlarms                     int64
+	CorrectNegatives                int64
+	CSI                             *float64
+	POD                             *float64
+	FAR                             *float64
+	FSS                             *float64
+	MAEMMH                          *float64
+	RMSEMMH                         *float64
+	MeanErrorMMH                    *float64
+	TruthCoverage                   *float64
+	ForecastCoverage                *float64
+	CommonCoverage                  *float64
+	ForecastToTruthCoverage         *float64
+	AdvectionDomainToTruthCoverage  *float64
+	AdvectionBoundaryLossRatio      *float64
+	InteriorMissingLossRatio        *float64
+	BoundaryAdjustedCoverage        *float64
+	CoverageDecompositionClosureErr *float64
 }
 
 type MetricFilter struct {
@@ -1003,6 +1009,16 @@ func parseMetric(row []string, columns map[string]int) (Metric, error) {
 		}
 		return row[index], nil
 	}
+	optionalValue := func(name string) (string, error) {
+		index, exists := columns[name]
+		if !exists {
+			return "", nil
+		}
+		if index >= len(row) {
+			return "", fmt.Errorf("column %s is absent from row", name)
+		}
+		return row[index], nil
+	}
 	stringValue := func(name string) (string, error) {
 		result, err := value(name)
 		if err != nil || result == "" {
@@ -1091,6 +1107,24 @@ func parseMetric(row []string, columns map[string]int) (Metric, error) {
 		TruthCoverage:    nullableFloat(value, "truth_coverage"),
 		ForecastCoverage: nullableFloat(value, "forecast_coverage"),
 		CommonCoverage:   nullableFloat(value, "common_coverage"),
+		ForecastToTruthCoverage: nullableFloat(
+			optionalValue, "forecast_to_truth_coverage",
+		),
+		AdvectionDomainToTruthCoverage: nullableFloat(
+			optionalValue, "advection_domain_to_truth_coverage",
+		),
+		AdvectionBoundaryLossRatio: nullableFloat(
+			optionalValue, "advection_boundary_loss_ratio",
+		),
+		InteriorMissingLossRatio: nullableFloat(
+			optionalValue, "interior_missing_loss_ratio",
+		),
+		BoundaryAdjustedCoverage: nullableFloat(
+			optionalValue, "boundary_adjusted_forecast_to_truth_coverage",
+		),
+		CoverageDecompositionClosureErr: nullableFloat(
+			optionalValue, "coverage_decomposition_closure_error",
+		),
 	}, nil
 }
 

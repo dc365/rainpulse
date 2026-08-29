@@ -539,13 +539,21 @@ function LeadTimeline({
 }
 
 function CurrentMetricStrip({ row, baseline }: { row?: LeadRow; baseline: string }) {
+  const coverageProvenanceAvailable = row?.lk?.boundary_adjusted_forecast_to_truth_coverage != null
+  const coverageNote = coverageProvenanceAvailable
+    ? `原始 ${formatPercent(row?.lk?.forecast_to_truth_coverage)} · 边界 ${formatPercent(row?.lk?.advection_boundary_loss_ratio)} · 域内缺测 ${formatPercent(row?.lk?.interior_missing_loss_ratio)}`
+    : `模型覆盖 ${formatPercent(row?.lk?.forecast_coverage)}`
   return (
     <section className="verification-current-metrics" aria-label="当前时效核心指标">
       <CurrentMetric label="LK FSS" value={formatMetric(row?.lk?.fss)} note="越高越好" />
       <CurrentMetric label={`${modelLabels[baseline] ?? baseline} FSS`} value={formatMetric(row?.baseline?.fss)} note="同一评分域" />
       <CurrentMetric label="FSS 增益" value={formatSigned(row?.delta)} note="LK − 基线" tone={row?.delta == null ? 'neutral' : row.delta >= 0 ? 'positive' : 'negative'} />
       <CurrentMetric label="CSI / POD / FAR" value={`${formatMetric(row?.lk?.csi)} / ${formatMetric(row?.lk?.pod)} / ${formatMetric(row?.lk?.far)}`} note="当前阈值" />
-      <CurrentMetric label="共同覆盖" value={formatPercent(row?.lk?.common_coverage)} note={`模型覆盖 ${formatPercent(row?.lk?.forecast_coverage)}`} />
+      <CurrentMetric
+        label={coverageProvenanceAvailable ? '排除边界后的域内覆盖' : '共同覆盖'}
+        value={formatPercent(coverageProvenanceAvailable ? row?.lk?.boundary_adjusted_forecast_to_truth_coverage : row?.lk?.common_coverage)}
+        note={coverageNote}
+      />
     </section>
   )
 }
@@ -665,12 +673,13 @@ function SkillGateMatrix({ comparisons }: { comparisons: SkillComparison[] }) {
 }
 
 function MetricTable({ rows, baseline, loading }: { rows: LeadRow[]; baseline: string; loading: boolean }) {
+  const coverageProvenanceAvailable = rows.some((row) => row.lk?.boundary_adjusted_forecast_to_truth_coverage != null)
   return (
     <section className="verification-metric-table verification-metric-table-rp017" aria-labelledby="verification-metric-title">
       <header><div><span>完整评分</span><h2 id="verification-metric-title">当前起报指标</h2></div><small>{loading ? '正在读取…' : `${rows.length} 个实际 10 分钟时效`}</small></header>
       <div className="verification-table-scroll">
         <table>
-          <thead><tr><th>时效</th><th>LK FSS</th><th>{modelLabels[baseline] ?? baseline} FSS</th><th>Δ FSS</th><th>LK CSI</th><th>LK POD</th><th>LK FAR</th><th>LK MAE</th><th>共同覆盖率</th></tr></thead>
+          <thead><tr><th>时效</th><th>LK FSS</th><th>{modelLabels[baseline] ?? baseline} FSS</th><th>Δ FSS</th><th>LK CSI</th><th>LK POD</th><th>LK FAR</th><th>LK MAE</th>{coverageProvenanceAvailable ? <><th>原始覆盖</th><th>边界损失</th><th>域内缺测</th><th>排边界覆盖</th></> : <th>共同覆盖率</th>}</tr></thead>
           <tbody>
             {rows.map((row) => (
               <tr key={row.lead}>
@@ -682,7 +691,12 @@ function MetricTable({ rows, baseline, loading }: { rows: LeadRow[]; baseline: s
                 <td>{formatMetric(row.lk?.pod)}</td>
                 <td>{formatMetric(row.lk?.far)}</td>
                 <td>{formatRate(row.lk?.mae_mm_h)}</td>
-                <td>{formatPercent(row.lk?.common_coverage)}</td>
+                {coverageProvenanceAvailable ? <>
+                  <td>{formatPercent(row.lk?.forecast_to_truth_coverage)}</td>
+                  <td>{formatPercent(row.lk?.advection_boundary_loss_ratio)}</td>
+                  <td>{formatPercent(row.lk?.interior_missing_loss_ratio)}</td>
+                  <td>{formatPercent(row.lk?.boundary_adjusted_forecast_to_truth_coverage)}</td>
+                </> : <td>{formatPercent(row.lk?.common_coverage)}</td>}
               </tr>
             ))}
           </tbody>

@@ -1260,6 +1260,18 @@ export interface components {
             forecast_coverage: number | null;
             /** Format: double */
             common_coverage: number | null;
+            /** Format: double */
+            forecast_to_truth_coverage: number | null;
+            /** Format: double */
+            advection_domain_to_truth_coverage: number | null;
+            /** Format: double */
+            advection_boundary_loss_ratio: number | null;
+            /** Format: double */
+            interior_missing_loss_ratio: number | null;
+            /** Format: double */
+            boundary_adjusted_forecast_to_truth_coverage: number | null;
+            /** Format: double */
+            coverage_decomposition_closure_error: number | null;
         };
         AlgorithmVerificationMetricList: {
             items: components["schemas"]["AlgorithmVerificationMetric"][];

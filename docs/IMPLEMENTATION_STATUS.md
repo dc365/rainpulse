@@ -47,6 +47,7 @@ NowcastInput gate.
 | RP-017 | Complete | The engineering Web workspace and GIS/timeline hierarchy were consolidated and verified across desktop and mobile widths |
 | RP-018 | Frozen MRMS suite executed; strict skill gate not passed | 53/53 issues produced fixed-truth-domain metrics, independent phase-correlation and 3,180 map layers with runtime/RSS evidence; the declared 95% coverage gate correctly keeps the result at `skill_not_demonstrated` |
 | RP-019 | Engineering foundation complete | Immutable raw archive, continuous ingest seam, persistent automatic planner, bounded Worker retries/atomic commit, control-plane security, build identity and Prometheus operational metrics are implemented; real ingest and the planner remain disabled pending Fujian data/config acceptance |
+| RP-020 | Coverage provenance complete | 53/53 frozen MRMS issues separate geometric advection-boundary loss from in-domain missing data with zero closure error; all 636 LK slices have zero in-domain loss, while the original RP-018 result remains unchanged |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -421,11 +422,20 @@ minimum at +10–60 minutes and 0.683 at +70–120 minutes). The adapted 5-minut
 chain also trails native 10-minute LK by -0.0467 mean FSS. Details are recorded
 in `docs/RP018_MRMS验证严谨化实施记录.md`.
 
-Next, separate unavoidable advection boundary loss from internal missing-data
-loss without changing the frozen result, then freeze that treatment and run
-unchanged parameters against additional downloaded months as holdout data.
-Do not tune the coverage threshold, drop the independent baseline, or use the
-holdout months to select parameters merely to recover a passing label.
+RP-020 now separates finite-grid advection-boundary loss from in-domain missing
+data without changing the frozen RP-018 result. Across all 636 LK issue/lead
+slices, mean raw forecast-to-truth coverage is 0.9651 and the minimum is 0.6831;
+mean boundary loss is 0.0349, in-domain loss is always zero, boundary-adjusted
+coverage is always 1.0 and the decomposition closure error is zero. Fixed-truth
+skill scores continue to penalize boundary no-forecast cells. Future data
+integrity gates use the frozen 95% boundary-adjusted coverage threshold, while
+raw coverage and boundary loss remain required diagnostics. Details are in
+`docs/RP020_覆盖率损失归因与验收口径.md`.
+
+Next, run unchanged parameters and this frozen coverage treatment against
+additional downloaded months as holdout data. Do not tune the coverage
+threshold, drop the independent baseline, or use the holdout months to select
+parameters merely to recover a passing label.
 
 Full raw-radar-to-React operational acceptance still needs at least three
 consecutive operational QC→grid→mosaic→QPE cycles with trackable precipitation.

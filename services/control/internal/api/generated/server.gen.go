@@ -541,30 +541,36 @@ type AlgorithmVerificationMapMotionVector struct {
 
 // AlgorithmVerificationMetric defines model for AlgorithmVerificationMetric.
 type AlgorithmVerificationMetric struct {
-	CaseCategory     string    `json:"case_category"`
-	CaseId           string    `json:"case_id"`
-	CommonCoverage   *float64  `json:"common_coverage"`
-	CorrectNegatives int64     `json:"correct_negatives"`
-	Csi              *float64  `json:"csi"`
-	FalseAlarms      int64     `json:"false_alarms"`
-	Far              *float64  `json:"far"`
-	ForecastCoverage *float64  `json:"forecast_coverage"`
-	Fss              *float64  `json:"fss"`
-	Hits             int64     `json:"hits"`
-	IssueTime        time.Time `json:"issue_time"`
-	LeadMinutes      int       `json:"lead_minutes"`
-	MaeMmH           *float64  `json:"mae_mm_h"`
-	MeanErrorMmH     *float64  `json:"mean_error_mm_h"`
-	Misses           int64     `json:"misses"`
-	Model            string    `json:"model"`
-	Pod              *float64  `json:"pod"`
-	RmseMmH          *float64  `json:"rmse_mm_h"`
-	ThresholdMmH     float64   `json:"threshold_mm_h"`
-	TruthCoverage    *float64  `json:"truth_coverage"`
-	TruthKind        string    `json:"truth_kind"`
-	WindowKm         float64   `json:"window_km"`
-	WindowPixels     int       `json:"window_pixels"`
-	WindowTargetKm   float64   `json:"window_target_km"`
+	AdvectionBoundaryLossRatio              *float64  `json:"advection_boundary_loss_ratio"`
+	AdvectionDomainToTruthCoverage          *float64  `json:"advection_domain_to_truth_coverage"`
+	BoundaryAdjustedForecastToTruthCoverage *float64  `json:"boundary_adjusted_forecast_to_truth_coverage"`
+	CaseCategory                            string    `json:"case_category"`
+	CaseId                                  string    `json:"case_id"`
+	CommonCoverage                          *float64  `json:"common_coverage"`
+	CorrectNegatives                        int64     `json:"correct_negatives"`
+	CoverageDecompositionClosureError       *float64  `json:"coverage_decomposition_closure_error"`
+	Csi                                     *float64  `json:"csi"`
+	FalseAlarms                             int64     `json:"false_alarms"`
+	Far                                     *float64  `json:"far"`
+	ForecastCoverage                        *float64  `json:"forecast_coverage"`
+	ForecastToTruthCoverage                 *float64  `json:"forecast_to_truth_coverage"`
+	Fss                                     *float64  `json:"fss"`
+	Hits                                    int64     `json:"hits"`
+	InteriorMissingLossRatio                *float64  `json:"interior_missing_loss_ratio"`
+	IssueTime                               time.Time `json:"issue_time"`
+	LeadMinutes                             int       `json:"lead_minutes"`
+	MaeMmH                                  *float64  `json:"mae_mm_h"`
+	MeanErrorMmH                            *float64  `json:"mean_error_mm_h"`
+	Misses                                  int64     `json:"misses"`
+	Model                                   string    `json:"model"`
+	Pod                                     *float64  `json:"pod"`
+	RmseMmH                                 *float64  `json:"rmse_mm_h"`
+	ThresholdMmH                            float64   `json:"threshold_mm_h"`
+	TruthCoverage                           *float64  `json:"truth_coverage"`
+	TruthKind                               string    `json:"truth_kind"`
+	WindowKm                                float64   `json:"window_km"`
+	WindowPixels                            int       `json:"window_pixels"`
+	WindowTargetKm                          float64   `json:"window_target_km"`
 }
 
 // AlgorithmVerificationMetricList defines model for AlgorithmVerificationMetricList.

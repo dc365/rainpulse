@@ -2399,6 +2399,12 @@ components:
         - truth_coverage
         - forecast_coverage
         - common_coverage
+        - forecast_to_truth_coverage
+        - advection_domain_to_truth_coverage
+        - advection_boundary_loss_ratio
+        - interior_missing_loss_ratio
+        - boundary_adjusted_forecast_to_truth_coverage
+        - coverage_decomposition_closure_error
       properties:
         case_id:
           type: string
@@ -2473,6 +2479,30 @@ components:
           format: double
           nullable: true
         common_coverage:
+          type: number
+          format: double
+          nullable: true
+        forecast_to_truth_coverage:
+          type: number
+          format: double
+          nullable: true
+        advection_domain_to_truth_coverage:
+          type: number
+          format: double
+          nullable: true
+        advection_boundary_loss_ratio:
+          type: number
+          format: double
+          nullable: true
+        interior_missing_loss_ratio:
+          type: number
+          format: double
+          nullable: true
+        boundary_adjusted_forecast_to_truth_coverage:
+          type: number
+          format: double
+          nullable: true
+        coverage_decomposition_closure_error:
           type: number
           format: double
           nullable: true

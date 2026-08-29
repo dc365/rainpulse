@@ -93,6 +93,10 @@ const metric = (model: string, lead: number, fss: number) => ({
   csi: .76, pod: .83, far: .09, fss,
   mae_mm_h: .8, rmse_mm_h: 1.2, mean_error_mm_h: .1,
   truth_coverage: 1, forecast_coverage: .99, common_coverage: .99,
+  forecast_to_truth_coverage: .98, advection_domain_to_truth_coverage: .98,
+  advection_boundary_loss_ratio: .02, interior_missing_loss_ratio: 0,
+  boundary_adjusted_forecast_to_truth_coverage: 1,
+  coverage_decomposition_closure_error: 0,
 })
 
 const mapFrame = {
@@ -152,6 +156,8 @@ describe('AlgorithmVerificationWorkspace', () => {
     expect(await screen.findByRole('heading', { name: '同一时效空间对比' })).toBeTruthy()
     expect(await screen.findByText('MRMS 实况')).toBeTruthy()
     expect(await screen.findByText(/回波运动矢量 1 个/)).toBeTruthy()
+    expect(await screen.findByText('排除边界后的域内覆盖')).toBeTruthy()
+    expect(screen.getByText('原始 98.0% · 边界 2.0% · 域内缺测 0.0%')).toBeTruthy()
     expect(screen.getAllByText('+0.0200').length).toBeGreaterThan(0)
     expect(screen.getByText('工程证据 · 非福建业务验收')).toBeTruthy()
     fireEvent.click(screen.getByText('高级设置'))
