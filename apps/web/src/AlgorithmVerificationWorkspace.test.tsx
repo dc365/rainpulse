@@ -31,6 +31,18 @@ const legacyRun = {
   modified_at: '2026-08-26T07:00:00Z',
 }
 
+const rigorousRun = {
+  ...run,
+  profile_version: 'rp018-mrms-v1',
+  run_id: 'rp018-smoke',
+  schema_version: '1.2',
+  completed_issue_count: 1,
+  metric_row_count: 1080,
+  skill_status: 'insufficient_evidence',
+  map_bundle_count: 1,
+  map_layer_count: 60,
+}
+
 const comparison = (baseline: string, threshold: number, difference: number) => ({
   baseline,
   bootstrap_sample_count: 2000,
@@ -178,5 +190,48 @@ describe('AlgorithmVerificationWorkspace', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ items: [] }) }))
     render(<AlgorithmVerificationWorkspace refreshToken={0} />)
     expect(await screen.findByText(/尚未挂载算法验证报告/)).toBeTruthy()
+  })
+
+  it('does not query a newly selected run with stale selectors and labels its fixed truth domain', async () => {
+    const rigorousDetail = {
+      ...detail,
+      run: rigorousRun,
+      cases: [{ case_id: 'socal_dry_20210805', category: 'dry', issue_times: ['2021-08-05T06:00:00Z'] }],
+      filters: {
+        ...detail.filters,
+        models: ['lk', 'persistence', 'translation', 'phase_correlation'],
+        windows_pixels: [1, 5, 9],
+        fss_scales: [
+          { window_pixels: 1, target_km: 1, actual_km_min: 1.01, actual_km_max: 1.01 },
+          { window_pixels: 5, target_km: 5, actual_km_min: 5.06, actual_km_max: 5.06 },
+          { window_pixels: 9, target_km: 10, actual_km_min: 9.11, actual_km_max: 9.11 },
+        ],
+      },
+    }
+    const fetchStatus = vi.fn().mockImplementation((input: string) => {
+      let body: unknown = { items: [run, rigorousRun] }
+      if (input.includes('/metrics?')) body = { items: [] }
+      else if (input.includes('/map-frame?')) body = mapFrame
+      else if (input.endsWith('/rp016-mrms-v1/full-202108-v2')) body = detail
+      else if (input.endsWith('/rp018-mrms-v1/rp018-smoke')) body = rigorousDetail
+      return Promise.resolve({ ok: true, status: 200, json: async () => body })
+    })
+    vi.stubGlobal('fetch', fetchStatus)
+
+    render(<AlgorithmVerificationWorkspace refreshToken={0} />)
+    expect(await screen.findByText('Midwest Convection')).toBeTruthy()
+
+    fireEvent.change(screen.getByRole('combobox', { name: '验证运行' }), {
+      target: { value: 'rp018-mrms-v1/rp018-smoke' },
+    })
+
+    expect(await screen.findByText('Southern California Dry')).toBeTruthy()
+    expect(fetchStatus.mock.calls.some(([url]) => (
+      String(url).includes('/rp018-mrms-v1/rp018-smoke/metrics?case_id=midwest_convection_20210810')
+    ))).toBe(false)
+    expect(fetchStatus.mock.calls.some(([url]) => (
+      String(url).includes('/rp018-mrms-v1/rp018-smoke/map-frame?case_id=midwest_convection_20210810')
+    ))).toBe(false)
+    expect(screen.getByText('实况固定有效域（模型缺测按无预报）')).toBeTruthy()
   })
 })

@@ -93,6 +93,9 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
     () => runs.find((run) => runKey(run) === selectedRunKey) ?? null,
     [runs, selectedRunKey],
   )
+  const activeDetail = detail && selectedRun && runKey(detail.run) === selectedRunKey
+    ? detail
+    : null
 
   useEffect(() => {
     if (!selectedRun) {
@@ -135,7 +138,7 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
   }, [selectedRun])
 
   useEffect(() => {
-    if (!selectedRun || !selectedCaseID || !selectedIssueTime) {
+    if (!selectedRun || !activeDetail || !selectedCaseID || !selectedIssueTime) {
       setMetrics([])
       return
     }
@@ -169,10 +172,10 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
         if (!controller.signal.aborted) setLoadingMetrics(false)
       })
     return () => controller.abort()
-  }, [selectedCaseID, selectedIssueTime, selectedRun, threshold, windowPixels])
+  }, [activeDetail, selectedCaseID, selectedIssueTime, selectedRun, threshold, windowPixels])
 
   useEffect(() => {
-    if (!selectedRun || !selectedRun.maps_available || !selectedCaseID || !selectedIssueTime) {
+    if (!selectedRun || !activeDetail || !selectedRun.maps_available || !selectedCaseID || !selectedIssueTime) {
       setMapFrame(null)
       return
     }
@@ -206,9 +209,9 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
         if (!controller.signal.aborted) setLoadingMap(false)
       })
     return () => controller.abort()
-  }, [selectedCaseID, selectedIssueTime, selectedLeadMinutes, selectedRun])
+  }, [activeDetail, selectedCaseID, selectedIssueTime, selectedLeadMinutes, selectedRun])
 
-  const leadMinutes = useMemo(() => detail?.filters.lead_minutes ?? [], [detail])
+  const leadMinutes = useMemo(() => activeDetail?.filters.lead_minutes ?? [], [activeDetail])
   useEffect(() => {
     if (!playing || leadMinutes.length < 2) return
     const timer = window.setInterval(() => {
@@ -221,7 +224,7 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
   }, [leadMinutes, playing])
 
   useEffect(() => {
-    if (!selectedRunKey || !selectedCaseID || !selectedIssueTime) return
+    if (!activeDetail || !selectedRunKey || !selectedCaseID || !selectedIssueTime) return
     const query = new URLSearchParams(window.location.search)
     query.set('view', 'verification')
     query.set('run', selectedRunKey)
@@ -232,13 +235,13 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
     query.set('threshold', String(threshold))
     query.set('window', String(windowPixels))
     window.history.replaceState(null, '', `${window.location.pathname}?${query}${window.location.hash}`)
-  }, [baseline, selectedCaseID, selectedIssueTime, selectedLeadMinutes, selectedRunKey, threshold, windowPixels])
+  }, [activeDetail, baseline, selectedCaseID, selectedIssueTime, selectedLeadMinutes, selectedRunKey, threshold, windowPixels])
 
-  const activeCase = detail?.cases.find((item) => item.case_id === selectedCaseID) ?? null
-  const selectedFSSScale = detail?.filters.fss_scales.find((item) => item.window_pixels === windowPixels)
+  const activeCase = activeDetail?.cases.find((item) => item.case_id === selectedCaseID) ?? null
+  const selectedFSSScale = activeDetail?.filters.fss_scales.find((item) => item.window_pixels === windowPixels)
   const selectedRows = useMemo(
-    () => buildLeadRows(metrics, detail?.filters.lead_minutes ?? [], baseline),
-    [baseline, detail?.filters.lead_minutes, metrics],
+    () => buildLeadRows(metrics, activeDetail?.filters.lead_minutes ?? [], baseline),
+    [activeDetail?.filters.lead_minutes, baseline, metrics],
   )
   const selectedLeadRow = selectedRows.find((row) => row.lead === selectedLeadMinutes)
   const activeMapFrame = mapFrame
@@ -270,9 +273,9 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
 
       {selectedRun ? (
         <>
-          <VerificationConclusion run={selectedRun} detail={detail} />
+          <VerificationConclusion run={selectedRun} detail={activeDetail} />
 
-          {loadingDetail || !detail ? (
+          {loadingDetail || !activeDetail ? (
             <p className="verification-empty">正在建立验证索引…</p>
           ) : (
             <section className="verification-workbench" aria-live="polite">
@@ -283,10 +286,10 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
                   setPlaying(false)
                   setSelectedRunKey(value)
                 }}
-                cases={detail.cases}
+                cases={activeDetail.cases}
                 selectedCaseID={selectedCaseID}
                 onCaseChange={(caseID) => {
-                  const nextCase = detail.cases.find((item) => item.case_id === caseID) ?? null
+                  const nextCase = activeDetail.cases.find((item) => item.case_id === caseID) ?? null
                   setPlaying(false)
                   setSelectedCaseID(caseID)
                   setSelectedIssueTime(nextIssue(nextCase, ''))
@@ -297,13 +300,13 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
                   setPlaying(false)
                   setSelectedIssueTime(value)
                 }}
-                models={detail.filters.models}
+                models={activeDetail.filters.models}
                 baseline={baseline}
                 onBaselineChange={setBaseline}
-                thresholds={detail.filters.thresholds_mm_h}
+                thresholds={activeDetail.filters.thresholds_mm_h}
                 threshold={threshold}
                 onThresholdChange={setThreshold}
-                fssScales={detail.filters.fss_scales}
+                fssScales={activeDetail.filters.fss_scales}
                 windowPixels={windowPixels}
                 onWindowChange={setWindowPixels}
               />
@@ -315,7 +318,7 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
                 baselineMetric={selectedLeadRow?.baseline}
                 loading={loadingMap}
                 error={mapError}
-                mapsAvailable={detail.run.maps_available}
+                mapsAvailable={activeDetail.run.maps_available}
               />
 
               <LeadTimeline
@@ -339,14 +342,15 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
                   issueTime={selectedIssueTime}
                   threshold={threshold}
                   fssScale={selectedFSSScale}
-                  truthKind={detail.run.primary_truth_kind}
+                  truthKind={activeDetail.run.primary_truth_kind}
+                  fixedTruthDomain={usesFixedTruthDomain(activeDetail.run.schema_version)}
                   row={selectedLeadRow}
                 />
               </div>
 
               <details className="verification-details-panel">
                 <summary><span>展开通过门槛</span><small>案例级 FSS 增益与 95% 区间</small></summary>
-                <SkillGateMatrix comparisons={detail.skill_summary.comparisons} />
+                <SkillGateMatrix comparisons={activeDetail.skill_summary.comparisons} />
               </details>
 
               <details className="verification-details-panel">
@@ -356,7 +360,7 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
 
               <details className="verification-details-panel">
                 <summary><span>展开运行与数据溯源</span><small>版本、运行 ID 与证据边界</small></summary>
-                <VerificationProvenance run={detail.run} activeCase={activeCase} />
+                <VerificationProvenance run={activeDetail.run} activeCase={activeCase} />
               </details>
             </section>
           )}
@@ -601,6 +605,7 @@ function CurrentSliceCard({
   threshold,
   fssScale,
   truthKind,
+  fixedTruthDomain,
   row,
 }: {
   verificationCase: VerificationCase | null
@@ -608,6 +613,7 @@ function CurrentSliceCard({
   threshold: number
   fssScale?: FSSScale
   truthKind: string
+  fixedTruthDomain: boolean
   row?: LeadRow
 }) {
   return (
@@ -622,7 +628,7 @@ function CurrentSliceCard({
           <dt>FSS 邻域尺度</dt>
           <dd>{fssScale ? `${formatFSSScale(fssScale.target_km)} · 实际 ${formatFSSActualKM(row, fssScale)} · ${fssScale.window_pixels}×${fssScale.window_pixels} 网格` : '—'}</dd>
         </div>
-        <div><dt>有效域</dt><dd>实况与全部模型共同有效域</dd></div>
+        <div><dt>有效域</dt><dd>{fixedTruthDomain ? '实况固定有效域（模型缺测按无预报）' : '实况与全部模型共同有效域'}</dd></div>
       </dl>
       <p>当前结论只验证算法适配和确定性技巧，不验证福建极坐标质控、RQI、QPE 标定或生产就绪。</p>
     </aside>
@@ -731,6 +737,12 @@ function pickNumber(values: number[], current: number, preferred: number) {
 
 function runKey(run: RunSummary) {
   return `${run.profile_version}/${run.run_id}`
+}
+
+function usesFixedTruthDomain(schemaVersion: string) {
+  const [major, minor] = schemaVersion.split('.', 2).map(Number)
+  return Number.isInteger(major) && Number.isInteger(minor)
+    && (major > 1 || (major === 1 && minor >= 2))
 }
 
 function readVerificationQuery() {
