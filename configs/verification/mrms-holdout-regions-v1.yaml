@@ -1,0 +1,90 @@
+schema_version: "1.0"
+catalog_version: mrms-holdout-regions-v1
+description: Fixed CONUS screening regions used only for observation-side holdout selection.
+grid_contract:
+  spacing_degrees: 0.01
+  longitude_count: 501
+  latitude_count: 201
+  registration: point
+  ancillary_domain_id: mrms-validation-conus-v1
+
+regions:
+  - region_id: pacific_northwest
+    label: Pacific Northwest
+    grid:
+      grid_id: mrms_holdout_pacific_northwest_0p01deg_v1
+      config_version: mrms-holdout-pacific-northwest-0p01deg-v1
+      bounds: {west: -124.995, east: -119.995, south: 44.005, north: 46.005}
+      coordinate_sha256: 499d9b1e8a7b5e650af8d2d0cfbe92708ba22ef1acc0180df97feaca8db0c083
+
+  - region_id: northern_california
+    label: Northern California
+    grid:
+      grid_id: mrms_holdout_northern_california_0p01deg_v1
+      config_version: mrms-holdout-northern-california-0p01deg-v1
+      bounds: {west: -123.995, east: -118.995, south: 38.005, north: 40.005}
+      coordinate_sha256: 7b097be51b2d9586f4c233479130ece7a50d39036eca1611785b788bfc50eaee
+
+  - region_id: southern_california
+    label: Southern California
+    grid:
+      grid_id: mrms_holdout_southern_california_0p01deg_v1
+      config_version: mrms-holdout-southern-california-0p01deg-v1
+      bounds: {west: -121.995, east: -116.995, south: 33.005, north: 35.005}
+      coordinate_sha256: b6a1ac76c7ab2c3adf2237638765e51388e228e7e1937f6858886f838b60bbac
+
+  - region_id: northern_plains
+    label: Northern Plains
+    grid:
+      grid_id: mrms_holdout_northern_plains_0p01deg_v1
+      config_version: mrms-holdout-northern-plains-0p01deg-v1
+      bounds: {west: -103.995, east: -98.995, south: 45.005, north: 47.005}
+      coordinate_sha256: 0c57195fab3ac3164c9333a322b545759548b5851892ef218615e52d4e18e1f1
+
+  - region_id: central_plains
+    label: Central Plains
+    grid:
+      grid_id: mrms_holdout_central_plains_0p01deg_v1
+      config_version: mrms-holdout-central-plains-0p01deg-v1
+      bounds: {west: -101.995, east: -96.995, south: 37.005, north: 39.005}
+      coordinate_sha256: 9d604a857f235fd694e680636a01df64eb4340dbed3b011195d1f0bd3372bfb0
+
+  - region_id: midwest
+    label: Midwest
+    grid:
+      grid_id: mrms_holdout_midwest_0p01deg_v1
+      config_version: mrms-holdout-midwest-0p01deg-v1
+      bounds: {west: -94.995, east: -89.995, south: 39.005, north: 41.005}
+      coordinate_sha256: 682d65165a7bce8a4c0177f960310ccfe998b4eabb044d07365720ccbd2ba221
+
+  - region_id: lower_mississippi
+    label: Lower Mississippi Valley
+    grid:
+      grid_id: mrms_holdout_lower_mississippi_0p01deg_v1
+      config_version: mrms-holdout-lower-mississippi-0p01deg-v1
+      bounds: {west: -93.995, east: -88.995, south: 31.005, north: 33.005}
+      coordinate_sha256: 6da73609eb77d715eaf8306e8e566809f59ef3d8c6e9b6cd80f957f7fe7e34ad
+
+  - region_id: gulf_coast
+    label: Gulf Coast
+    grid:
+      grid_id: mrms_holdout_gulf_coast_0p01deg_v1
+      config_version: mrms-holdout-gulf-coast-0p01deg-v1
+      bounds: {west: -91.995, east: -86.995, south: 28.005, north: 30.005}
+      coordinate_sha256: 885ff6f701346f54b914d0c10d997bd66c7141d1c1c0a6f0695117cbcd443bfd
+
+  - region_id: southeast
+    label: Southeast
+    grid:
+      grid_id: mrms_holdout_southeast_0p01deg_v1
+      config_version: mrms-holdout-southeast-0p01deg-v1
+      bounds: {west: -86.995, east: -81.995, south: 32.005, north: 34.005}
+      coordinate_sha256: 66867f10b5078469b7a869174684afff171f26567cf698e60192e3515825c2a7
+
+  - region_id: northeast
+    label: Northeast
+    grid:
+      grid_id: mrms_holdout_northeast_0p01deg_v1
+      config_version: mrms-holdout-northeast-0p01deg-v1
+      bounds: {west: -76.995, east: -71.995, south: 40.005, north: 42.005}
+      coordinate_sha256: 7c2bd9871e09bf783e3458bab6fb6fc7a019e4f3cfbecb00b661691b8790ccb5

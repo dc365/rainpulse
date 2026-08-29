@@ -377,6 +377,7 @@ def summarize_coverage(
     models: Sequence[str],
     minimum_ratio: float,
     maximum_lead_minutes: int = 120,
+    coverage_field: str = "forecast_to_truth_coverage",
 ) -> dict[str, Any]:
     if not 0.0 <= minimum_ratio <= 1.0:
         raise VerificationInputError("coverage threshold must be within [0, 1]")
@@ -386,7 +387,7 @@ def summarize_coverage(
         for row in rows:
             if row.get("model") != model or int(row["lead_minutes"]) > maximum_lead_minutes:
                 continue
-            value = row.get("forecast_to_truth_coverage")
+            value = row.get(coverage_field)
             if value is None or not np.isfinite(float(value)):
                 continue
             key = (
@@ -405,6 +406,7 @@ def summarize_coverage(
             "passes": bool(values) and all(value >= minimum_ratio for value in values),
         }
     return {
+        "coverage_metric": coverage_field,
         "minimum_required_ratio": minimum_ratio,
         "models": summaries,
         "all_models_pass": bool(summaries) and all(
@@ -534,6 +536,7 @@ def summarize_fss_skill(
     candidate_model: str = "lk",
     baselines: Sequence[str] = ("persistence", "translation"),
     minimum_forecast_to_truth_coverage: float | None = None,
+    coverage_field: str = "forecast_to_truth_coverage",
 ) -> dict[str, Any]:
     """Summarize paired candidate FSS skill with case/issue block bootstrap intervals."""
 
@@ -574,7 +577,7 @@ def summarize_fss_skill(
                     )
                     issue_scores.setdefault(key, []).append(fss)
                 if row.get("model") == candidate_model:
-                    coverage = row.get("forecast_to_truth_coverage")
+                    coverage = row.get(coverage_field)
                     if coverage is not None and np.isfinite(float(coverage)):
                         coverage_values[(
                             str(row["case_id"]),
@@ -652,6 +655,9 @@ def summarize_fss_skill(
                         positive_count >= required_positive_cases and coverage_passes
                     ),
                     "coverage_gate_passes": coverage_passes,
+                    "coverage_metric": coverage_field,
+                    "minimum_coverage_ratio": minimum_coverage,
+                    "required_coverage_ratio": minimum_forecast_to_truth_coverage,
                     "minimum_forecast_to_truth_coverage": minimum_coverage,
                     "required_forecast_to_truth_coverage": (
                         minimum_forecast_to_truth_coverage
@@ -700,5 +706,6 @@ def summarize_fss_skill(
         "status": status,
         "comparison_metric": "FSS",
         "candidate_model": candidate_model,
+        "coverage_metric": coverage_field,
         "comparisons": comparisons,
     }

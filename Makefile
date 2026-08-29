@@ -18,7 +18,7 @@ BUILD_REVISION ?= $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo unkn
 BUILD_VERSION ?= $(BUILD_REVISION)
 RAINPULSE_GO_LDFLAGS := -X github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo.Version=$(BUILD_VERSION) -X github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo.Revision=$(BUILD_REVISION)
 
-.PHONY: bootstrap contracts-generate contracts-check test test-structure test-radar-config test-contracts test-infrastructure test-control-plane test-worker-sdk test-radar-decoder test-radar-health test-radar-qc test-radar-grid test-radar-mosaic test-qpe test-diagnostics test-nowcast-input test-pysteps-lk test-products test-ancillary test-grid test-mrms test-go test-python test-web lint build build-linux build-infrastructure-linux export-postgres-image export-python-image build-worker-linux deploy-up dev-up dev-down smoke infrastructure-smoke control-plane-smoke worker-smoke radar-decode-smoke radar-health-smoke radar-qc-smoke radar-grid-smoke ancillary-plan ancillary-download ancillary-verify mrms-download mrms-verify mrms-conformance mrms-hindcast mrms-faults
+.PHONY: bootstrap contracts-generate contracts-check test test-structure test-radar-config test-contracts test-infrastructure test-control-plane test-worker-sdk test-radar-decoder test-radar-health test-radar-qc test-radar-grid test-radar-mosaic test-qpe test-diagnostics test-nowcast-input test-pysteps-lk test-products test-ancillary test-grid test-mrms test-go test-python test-web lint build build-linux build-infrastructure-linux export-postgres-image export-python-image build-worker-linux deploy-up dev-up dev-down smoke infrastructure-smoke control-plane-smoke worker-smoke radar-decode-smoke radar-health-smoke radar-qc-smoke radar-grid-smoke ancillary-plan ancillary-download ancillary-verify mrms-download mrms-verify mrms-holdout-select mrms-conformance mrms-hindcast mrms-faults
 
 bootstrap:
 	@command -v rg >/dev/null || { echo "ripgrep is required" >&2; exit 1; }
@@ -226,12 +226,18 @@ MRMS_CASE ?=
 MRMS_MAX_ISSUES ?=
 MRMS_RUN_ID ?=
 MRMS_SKIP_HASH ?= 0
+MRMS_HOLDOUT_CATALOG ?= configs/verification/mrms-holdout-regions-v1.yaml
+MRMS_HOLDOUT_MONTHS ?= 2024-06 2025-01
+MRMS_HOLDOUT_OUTPUT ?= runtime/reports/mrms/rp021-mrms-holdout-selection-v1.json
 
 mrms-download:
 	uv run --project algorithms python -m rainpulse_algo.datasets.mrms_archive download --start $(MRMS_START) --end $(MRMS_END) --root $(MRMS_ROOT) --cadence-minutes $(MRMS_CADENCE_MINUTES) --workers $(MRMS_WORKERS) $(if $(MRMS_PROXY),--proxy $(MRMS_PROXY),)
 
 mrms-verify:
 	uv run --project algorithms python -m rainpulse_algo.datasets.mrms_archive verify --start $(MRMS_START) --end $(MRMS_END) --root $(MRMS_ROOT) --cadence-minutes $(MRMS_CADENCE_MINUTES) --full-hash
+
+mrms-holdout-select:
+	uv run --project algorithms python -m rainpulse_algo.verification.mrms_holdout --root $(MRMS_ROOT) --catalog $(MRMS_HOLDOUT_CATALOG) $(foreach month,$(MRMS_HOLDOUT_MONTHS),--month $(month)) --output $(MRMS_HOLDOUT_OUTPUT)
 
 mrms-conformance:
 	uv run --project algorithms python -m rainpulse_algo.verification.mrms_hindcast conformance --repository-root $(CURDIR) --profile $(MRMS_PROFILE) --root $(MRMS_ROOT) $(if $(MRMS_CASE),--case $(MRMS_CASE),) $(if $(MRMS_MAX_ISSUES),--max-issues $(MRMS_MAX_ISSUES),) $(if $(filter 1,$(MRMS_SKIP_HASH)),--skip-hash,)

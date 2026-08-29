@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import IntEnum
@@ -110,22 +110,12 @@ def _crop_window(dataset, grid: RegularLatLonGrid):
     return window
 
 
-def read_mrms_precip_frame(path: Path, grid: RegularLatLonGrid) -> MRMSPrecipFrame:
-    """Read one gzip-compressed MRMS frame directly into an ascending-latitude ROI."""
-
-    valid_time = _valid_time_from_path(path)
-    source = f"/vsigzip/{path.resolve()}"
-    try:
-        with rasterio.open(source) as dataset:
-            if dataset.driver != "GRIB" or dataset.count != 1:
-                raise MRMSPrecipError("MRMS asset must contain one GRIB raster band")
-            _validate_product(dataset.tags(1), valid_time)
-            values = dataset.read(1, window=_crop_window(dataset, grid))
-    except MRMSPrecipError:
-        raise
-    except Exception as exc:  # noqa: BLE001 - normalize raster driver failures at the seam
-        raise MRMSPrecipError(f"cannot read MRMS asset {path}: {exc}") from exc
-
+def _decode_frame_values(
+    path: Path,
+    valid_time: datetime,
+    grid: RegularLatLonGrid,
+    values: np.ndarray,
+) -> MRMSPrecipFrame:
     values = np.flipud(np.asarray(values, dtype="float32"))
     if values.shape != grid.shape:
         raise MRMSPrecipError("decoded MRMS crop shape differs from the validation grid")
@@ -147,6 +137,46 @@ def read_mrms_precip_frame(path: Path, grid: RegularLatLonGrid) -> MRMSPrecipFra
         source_state=state,
         source_path=str(path),
     )
+
+
+def read_mrms_precip_frames(
+    path: Path,
+    grids: Sequence[RegularLatLonGrid],
+) -> dict[str, MRMSPrecipFrame]:
+    """Read multiple MRMS ROIs while opening the gzip-compressed GRIB asset only once."""
+
+    if not grids:
+        raise MRMSPrecipError("at least one MRMS crop grid is required")
+    grid_ids = [grid.grid_id for grid in grids]
+    if len(set(grid_ids)) != len(grid_ids):
+        raise MRMSPrecipError("MRMS crop grid identifiers must be unique")
+
+    valid_time = _valid_time_from_path(path)
+    source = f"/vsigzip/{path.resolve()}"
+    try:
+        with rasterio.open(source) as dataset:
+            if dataset.driver != "GRIB" or dataset.count != 1:
+                raise MRMSPrecipError("MRMS asset must contain one GRIB raster band")
+            _validate_product(dataset.tags(1), valid_time)
+            return {
+                grid.grid_id: _decode_frame_values(
+                    path,
+                    valid_time,
+                    grid,
+                    dataset.read(1, window=_crop_window(dataset, grid)),
+                )
+                for grid in grids
+            }
+    except MRMSPrecipError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - normalize raster driver failures at the seam
+        raise MRMSPrecipError(f"cannot read MRMS asset {path}: {exc}") from exc
+
+
+def read_mrms_precip_frame(path: Path, grid: RegularLatLonGrid) -> MRMSPrecipFrame:
+    """Read one gzip-compressed MRMS frame directly into an ascending-latitude ROI."""
+
+    return read_mrms_precip_frames(path, (grid,))[grid.grid_id]
 
 
 def rate_to_surrogate_reflectivity(rate: np.ndarray, valid: np.ndarray) -> np.ndarray:

@@ -276,6 +276,46 @@ def test_coverage_gate_blocks_an_otherwise_positive_skill_summary() -> None:
     assert not coverage["all_models_pass"]
 
 
+def test_boundary_adjusted_coverage_can_gate_future_holdout_without_erasing_raw_loss() -> None:
+    rows: list[dict[str, object]] = []
+    for case_index in range(4):
+        for threshold in (1.0, 5.0, 10.0):
+            for model, fss in (("lk", 0.7), ("persistence", 0.5), ("translation", 0.55)):
+                rows.append(
+                    {
+                        "case_id": f"wet-{case_index}",
+                        "case_category": "wet",
+                        "issue_time_utc": f"2025-01-{case_index + 1:02d}T00:00:00Z",
+                        "model": model,
+                        "lead_minutes": 10,
+                        "threshold_mm_h": threshold,
+                        "window_pixels": 11,
+                        "fss": fss,
+                        "forecast_to_truth_coverage": 0.9 if model == "lk" else 1.0,
+                        "boundary_adjusted_forecast_to_truth_coverage": 1.0,
+                    }
+                )
+
+    summary = summarize_fss_skill(
+        rows,
+        bootstrap_samples=20,
+        minimum_forecast_to_truth_coverage=0.95,
+        coverage_field="boundary_adjusted_forecast_to_truth_coverage",
+    )
+    coverage = summarize_coverage(
+        rows,
+        models=("lk",),
+        minimum_ratio=0.95,
+        coverage_field="boundary_adjusted_forecast_to_truth_coverage",
+    )
+
+    assert summary["status"] == "lk_supported"
+    assert summary["coverage_metric"] == "boundary_adjusted_forecast_to_truth_coverage"
+    assert all(item["coverage_gate_passes"] for item in summary["comparisons"])
+    assert coverage["all_models_pass"]
+    assert coverage["coverage_metric"] == "boundary_adjusted_forecast_to_truth_coverage"
+
+
 def test_skill_status_does_not_blame_translation_when_only_phase_correlation_wins() -> None:
     rows: list[dict[str, object]] = []
     for case_index in range(4):

@@ -7,6 +7,9 @@ from rainpulse_algo.verification.mrms_profile import load_mrms_verification_prof
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PROFILE_PATH = REPOSITORY_ROOT / "configs" / "verification" / "rp016-mrms-v1.yaml"
 RIGOR_PROFILE_PATH = REPOSITORY_ROOT / "configs" / "verification" / "rp018-mrms-v1.yaml"
+HOLDOUT_PROFILE_PATH = (
+    REPOSITORY_ROOT / "configs" / "verification" / "rp021-mrms-holdout-v1.yaml"
+)
 
 
 EXPECTED_CASE_IDS = {
@@ -50,7 +53,29 @@ def test_rp018_keeps_cases_but_adds_physical_windows_coverage_and_accumulation()
     assert_frozen_cases(profile)
     assert profile.fss_windows_km == (1.0, 5.0, 10.0, 20.0, 40.0)
     assert profile.coverage_minimum_ratio == 0.95
+    assert profile.coverage_gate_metric == "forecast_to_truth_coverage"
+    assert profile.frozen_case_count == 5
+    assert profile.frozen_issue_count == 53
     assert profile.near_lead_minutes == (10, 60)
     assert profile.far_lead_minutes == (70, 120)
     assert profile.accumulation_windows_minutes == (60, 120)
     assert profile.accumulation_thresholds_mm == (1.0, 5.0, 10.0, 25.0, 50.0)
+
+
+def test_rp021_freezes_observation_selected_holdout_and_boundary_adjusted_gate() -> None:
+    profile = load_mrms_verification_profile(HOLDOUT_PROFILE_PATH)
+
+    assert profile.profile_version == "rp021-mrms-holdout-v1"
+    assert profile.frozen_case_count == 6
+    assert profile.frozen_issue_count == 50
+    assert len(profile.cases) == 6
+    assert sum(len(case.issue_times) for case in profile.cases) == 50
+    assert sum(case.category == "wet" for case in profile.cases) == 4
+    assert sum(case.category == "dry" for case in profile.cases) == 2
+    assert profile.coverage_gate_metric == "boundary_adjusted_forecast_to_truth_coverage"
+    assert profile.coverage_minimum_ratio == 0.95
+    assert profile.selection_evidence_path == "rp021-mrms-holdout-selection-v1.json"
+    assert (
+        profile.selection_evidence_sha256
+        == "db2c217d69417d0ffec13872dab2c41633589628d4df525a7f42adc04c6eea03"
+    )

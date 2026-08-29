@@ -782,6 +782,7 @@ def run_mrms_hindcast(
         maximum_lead_minutes=near_maximum,
         baselines=rigorous_baselines,
         minimum_forecast_to_truth_coverage=profile.coverage_minimum_ratio,
+        coverage_field=profile.coverage_gate_metric,
     )
     far_skill_summary = summarize_fss_skill(
         gate_rows,
@@ -789,11 +790,13 @@ def run_mrms_hindcast(
         maximum_lead_minutes=far_maximum,
         baselines=rigorous_baselines,
         minimum_forecast_to_truth_coverage=profile.coverage_minimum_ratio,
+        coverage_field=profile.coverage_gate_metric,
     )
     coverage_summary = summarize_coverage(
         gate_rows,
         models=("lk", "persistence", "translation", "phase_correlation", "lk_native_10min"),
         minimum_ratio=profile.coverage_minimum_ratio,
+        coverage_field=profile.coverage_gate_metric,
     )
     coverage_provenance_summary = summarize_coverage_provenance(
         gate_rows,

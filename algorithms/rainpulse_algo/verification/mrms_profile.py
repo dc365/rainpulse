@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -36,11 +37,16 @@ class MRMSVerificationProfile:
     fss_windows_pixels: tuple[int, ...]
     fss_windows_km: tuple[float, ...]
     coverage_minimum_ratio: float
+    coverage_gate_metric: str
     near_lead_minutes: tuple[int, int]
     far_lead_minutes: tuple[int, int]
     accumulation_windows_minutes: tuple[int, ...]
     accumulation_thresholds_mm: tuple[float, ...]
     cases: tuple[MRMSVerificationCase, ...]
+    frozen_case_count: int
+    frozen_issue_count: int
+    selection_evidence_path: str | None
+    selection_evidence_sha256: str | None
     operational_eligible: bool
 
 
@@ -102,6 +108,45 @@ def _lead_band(raw: Any, default: tuple[int, int]) -> tuple[int, int]:
     return values[0], values[1]
 
 
+def _validate_selection_evidence(
+    raw: dict[str, Any],
+    cases: tuple[MRMSVerificationCase, ...],
+    expected_protocol_version: str | None,
+) -> None:
+    if raw.get("model_forecast_or_skill_fields_read") is not False:
+        raise MRMSVerificationProfileError(
+            "holdout selection evidence must exclude model forecasts and skill fields"
+        )
+    if expected_protocol_version and raw.get("selection_protocol_version") != (
+        expected_protocol_version
+    ):
+        raise MRMSVerificationProfileError("holdout selection protocol version differs")
+    selected = raw.get("selected_cases")
+    if not isinstance(selected, list) or len(selected) != len(cases):
+        raise MRMSVerificationProfileError("holdout evidence case count differs")
+    evidence_by_id = {str(item["case_id"]): item for item in selected}
+    if len(evidence_by_id) != len(selected):
+        raise MRMSVerificationProfileError("holdout evidence case identifiers are not unique")
+    for case in cases:
+        try:
+            evidence = evidence_by_id[case.case_id]
+            issue_times = _issue_times(evidence["issues"], 10)
+            grid_hash = str(evidence["grid"]["coordinate_sha256"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise MRMSVerificationProfileError(
+                f"holdout evidence does not describe profile case {case.case_id}"
+            ) from exc
+        if (
+            str(evidence["label"]) != case.label
+            or str(evidence["category"]) != case.category
+            or issue_times != case.issue_times
+            or grid_hash != case.grid.coordinate_sha256
+        ):
+            raise MRMSVerificationProfileError(
+                f"holdout evidence differs from profile case {case.case_id}"
+            )
+
+
 def load_mrms_verification_profile(path: Path) -> MRMSVerificationProfile:
     try:
         profile_bytes = path.read_bytes()
@@ -118,6 +163,33 @@ def load_mrms_verification_profile(path: Path) -> MRMSVerificationProfile:
         coverage = rigor.get("coverage_gate", {})
         accumulation = rigor.get("accumulation", {})
         lead_bands = rigor.get("lead_bands", {})
+        freeze = raw.get("freeze", {})
+        if not freeze and str(raw["profile_version"]) not in {
+            "rp016-mrms-v1",
+            "rp018-mrms-v1",
+        }:
+            raise MRMSVerificationProfileError(
+                "new MRMS verification profiles must freeze expected case and issue counts"
+            )
+        selection_evidence_path = freeze.get("selection_evidence_path")
+        selection_evidence_sha256 = freeze.get("selection_evidence_sha256")
+        selection_evidence: dict[str, Any] | None = None
+        if bool(selection_evidence_path) != bool(selection_evidence_sha256):
+            raise MRMSVerificationProfileError(
+                "selection evidence path and SHA-256 must be configured together"
+            )
+        if selection_evidence_path:
+            relative = Path(str(selection_evidence_path))
+            if relative.is_absolute() or ".." in relative.parts:
+                raise MRMSVerificationProfileError("selection evidence path must remain local")
+            evidence_path = path.parent / relative
+            evidence_bytes = evidence_path.read_bytes()
+            evidence_digest = hashlib.sha256(evidence_bytes).hexdigest()
+            if evidence_digest != str(selection_evidence_sha256):
+                raise MRMSVerificationProfileError(
+                    "selection evidence SHA-256 differs from the frozen profile"
+                )
+            selection_evidence = json.loads(evidence_bytes)
         cases = tuple(
             MRMSVerificationCase(
                 case_id=str(case["case_id"]),
@@ -141,6 +213,9 @@ def load_mrms_verification_profile(path: Path) -> MRMSVerificationProfile:
                 float(value) for value in rigor.get("fss_windows_km", (1, 5, 10, 20, 40))
             ),
             coverage_minimum_ratio=float(coverage.get("minimum_forecast_to_truth_ratio", 0.95)),
+            coverage_gate_metric=str(
+                coverage.get("metric", "forecast_to_truth_coverage")
+            ),
             near_lead_minutes=_lead_band(lead_bands.get("near_minutes"), (10, 60)),
             far_lead_minutes=_lead_band(lead_bands.get("far_minutes"), (70, 120)),
             accumulation_windows_minutes=tuple(
@@ -150,11 +225,29 @@ def load_mrms_verification_profile(path: Path) -> MRMSVerificationProfile:
                 float(value) for value in accumulation.get("thresholds_mm", (1, 5, 10, 25, 50))
             ),
             cases=cases,
+            frozen_case_count=int(freeze.get("expected_case_count", 5)),
+            frozen_issue_count=int(freeze.get("expected_issue_count", 53)),
+            selection_evidence_path=(
+                str(selection_evidence_path) if selection_evidence_path else None
+            ),
+            selection_evidence_sha256=(
+                str(selection_evidence_sha256) if selection_evidence_sha256 else None
+            ),
             operational_eligible=bool(raw["operational_eligible"]),
         )
+        if selection_evidence is not None:
+            _validate_selection_evidence(
+                selection_evidence,
+                cases,
+                (
+                    str(freeze["selection_protocol_version"])
+                    if freeze.get("selection_protocol_version")
+                    else None
+                ),
+            )
     except MRMSVerificationProfileError:
         raise
-    except (KeyError, TypeError, ValueError, yaml.YAMLError) as exc:
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError, yaml.YAMLError) as exc:
         raise MRMSVerificationProfileError(
             f"invalid MRMS verification profile {path}: {exc}"
         ) from exc
@@ -163,8 +256,12 @@ def load_mrms_verification_profile(path: Path) -> MRMSVerificationProfile:
         raise MRMSVerificationProfileError(
             "MRMS engineering profile cannot be operationally eligible"
         )
-    if len(profile.cases) != 5 or sum(len(case.issue_times) for case in profile.cases) != 53:
-        raise MRMSVerificationProfileError("frozen MRMS case count differs from 5/53")
+    if len(profile.cases) != profile.frozen_case_count or sum(
+        len(case.issue_times) for case in profile.cases
+    ) != profile.frozen_issue_count:
+        raise MRMSVerificationProfileError(
+            "MRMS case or issue count differs from the frozen profile"
+        )
     if not profile.thresholds_mm_h or any(value < 0.0 for value in profile.thresholds_mm_h):
         raise MRMSVerificationProfileError("MRMS rate thresholds are invalid")
     if not profile.fss_windows_pixels or any(
@@ -175,6 +272,11 @@ def load_mrms_verification_profile(path: Path) -> MRMSVerificationProfile:
         raise MRMSVerificationProfileError("MRMS physical FSS windows must be positive")
     if not 0.0 < profile.coverage_minimum_ratio <= 1.0:
         raise MRMSVerificationProfileError("MRMS coverage gate must be within (0, 1]")
+    if profile.coverage_gate_metric not in {
+        "forecast_to_truth_coverage",
+        "boundary_adjusted_forecast_to_truth_coverage",
+    }:
+        raise MRMSVerificationProfileError("MRMS coverage gate metric is unsupported")
     if any(value not in profile.lead_minutes for value in profile.accumulation_windows_minutes):
         raise MRMSVerificationProfileError("accumulation windows must align to observed leads")
     if not profile.accumulation_thresholds_mm or any(

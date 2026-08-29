@@ -14,6 +14,7 @@ from rainpulse_algo.datasets.mrms_precip import (
     build_mrms_observed_sequence,
     build_mrms_validation_sequence,
     read_mrms_precip_frame,
+    read_mrms_precip_frames,
 )
 from rainpulse_algo.grid import RegularLatLonGrid
 
@@ -95,6 +96,35 @@ def test_reader_crops_to_ascending_grid_and_preserves_mrms_source_states(
         ),
     )
     assert frame.valid_time.isoformat() == "2021-08-01T02:00:00+00:00"
+
+
+def test_multi_region_reader_opens_one_asset_and_rejects_duplicate_grid_ids(
+    monkeypatch,
+) -> None:
+    opened: list[str] = []
+
+    def fake_open(source: str):
+        opened.append(source)
+        return nullcontext(FakeMRMSDataset())
+
+    monkeypatch.setattr(mrms_precip_module.rasterio, "open", fake_open)
+    first = tiny_mrms_grid()
+    second = RegularLatLonGrid(
+        **{**first.__dict__, "grid_id": "tiny_mrms_grid_second_v1"}
+    )
+
+    frames = read_mrms_precip_frames(
+        Path("MRMS_PrecipRate_00.00_20210801-020000.grib2.gz"),
+        (first, second),
+    )
+
+    assert list(frames) == [first.grid_id, second.grid_id]
+    assert len(opened) == 1
+    with np.testing.assert_raises_regex(ValueError, "identifiers must be unique"):
+        read_mrms_precip_frames(
+            Path("MRMS_PrecipRate_00.00_20210801-020000.grib2.gz"),
+            (first, first),
+        )
 
 
 def example_frames(issue_time: datetime) -> dict[datetime, MRMSPrecipFrame]:

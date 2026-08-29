@@ -1,0 +1,136 @@
+schema_version: "1.0"
+profile_version: rp021-mrms-holdout-v1
+lifecycle: engineering_validation
+operational_eligible: false
+claim_scope:
+  validates:
+    - independent_holdout_replay
+    - observation_only_case_selection
+    - mrms_adapter
+    - temporal_resampling
+    - native_cadence_sensitivity
+    - pysteps_lk_execution
+    - deterministic_skill
+    - independent_translation_baseline
+    - fixed_truth_domain_coverage
+    - boundary_adjusted_data_integrity_gate
+    - accumulation_skill
+  does_not_validate:
+    - polar_radar_qc
+    - rqi_quality_index
+    - confidence_calibration
+    - fujian_transferability
+    - production_readiness
+
+freeze:
+  expected_case_count: 6
+  expected_issue_count: 50
+  selection_protocol_version: mrms-observation-holdout-v1
+  selection_evidence_path: rp021-mrms-holdout-selection-v1.json
+  selection_evidence_sha256: db2c217d69417d0ffec13872dab2c41633589628d4df525a7f42adc04c6eea03
+  forecast_parameters_changed_after_selection: false
+  skill_thresholds_changed_after_selection: false
+
+source:
+  product: PrecipRate_00.00
+  cadence_minutes: 10
+  units: mm/h
+  source_states:
+    no_coverage: -3
+    missing: -1
+    no_rain: 0
+    rain: positive
+
+adaptation:
+  target_timestep_minutes: 5
+  input_offsets_minutes: [-20, -15, -10, -5, 0]
+  observed_offsets_minutes: [-20, -10, 0]
+  interpolation: causal_linear_rate
+  reflectivity: surrogate_from_mrms_rate_z200_r1p6
+  quality_index: neutral_one_on_valid_cells
+  native_cadence_comparison: true
+
+nowcast_profile: configs/nowcast/rp016-pysteps-lk-v1.yaml
+primary_truth_kind: observed_mrms_10min
+lead_minutes: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
+thresholds_mm_h: [0.1, 1, 5, 10, 20, 50]
+fss_windows_pixels: [1, 5, 11, 21, 41]
+
+rigor:
+  independent_baseline: phase_correlation
+  fss_windows_km: [1, 5, 10, 20, 40]
+  coverage_gate:
+    metric: boundary_adjusted_forecast_to_truth_coverage
+    minimum_forecast_to_truth_ratio: 0.95
+  lead_bands:
+    near_minutes: [10, 60]
+    far_minutes: [70, 120]
+  accumulation:
+    windows_minutes: [60, 120]
+    thresholds_mm: [1, 5, 10, 25, 50]
+  outputs:
+    primary_common_domain: metrics.csv
+    fixed_truth_domain: metrics_truth_domain.csv
+    native_cadence_comparison: adaptation_metrics.csv
+    accumulations: accumulation_metrics.csv
+
+cases:
+  - case_id: holdout_20240626_midwest_wet_1
+    label: Midwest observation-screened wet event
+    category: wet
+    grid:
+      grid_id: mrms_holdout_midwest_0p01deg_v1
+      config_version: mrms-holdout-midwest-0p01deg-v1
+      bounds: {west: -94.995, east: -89.995, south: 39.005, north: 41.005}
+      coordinate_sha256: 682d65165a7bce8a4c0177f960310ccfe998b4eabb044d07365720ccbd2ba221
+    issues: {start: "2024-06-26T06:00:00Z", end: "2024-06-26T10:00:00Z", step_minutes: 30}
+
+  - case_id: holdout_20240609_central_plains_wet_2
+    label: Central Plains observation-screened wet event
+    category: wet
+    grid:
+      grid_id: mrms_holdout_central_plains_0p01deg_v1
+      config_version: mrms-holdout-central-plains-0p01deg-v1
+      bounds: {west: -101.995, east: -96.995, south: 37.005, north: 39.005}
+      coordinate_sha256: 9d604a857f235fd694e680636a01df64eb4340dbed3b011195d1f0bd3372bfb0
+    issues: {start: "2024-06-09T04:00:00Z", end: "2024-06-09T08:00:00Z", step_minutes: 30}
+
+  - case_id: holdout_20240601_northeast_dry_1
+    label: Northeast observation-screened dry control
+    category: dry
+    grid:
+      grid_id: mrms_holdout_northeast_0p01deg_v1
+      config_version: mrms-holdout-northeast-0p01deg-v1
+      bounds: {west: -76.995, east: -71.995, south: 40.005, north: 42.005}
+      coordinate_sha256: 7c2bd9871e09bf783e3458bab6fb6fc7a019e4f3cfbecb00b661691b8790ccb5
+    issues: {start: "2024-06-01T00:00:00Z", end: "2024-06-01T06:00:00Z", step_minutes: 60}
+
+  - case_id: holdout_20250110_lower_mississippi_wet_1
+    label: Lower Mississippi Valley observation-screened wet event
+    category: wet
+    grid:
+      grid_id: mrms_holdout_lower_mississippi_0p01deg_v1
+      config_version: mrms-holdout-lower-mississippi-0p01deg-v1
+      bounds: {west: -93.995, east: -88.995, south: 31.005, north: 33.005}
+      coordinate_sha256: 6da73609eb77d715eaf8306e8e566809f59ef3d8c6e9b6cd80f957f7fe7e34ad
+    issues: {start: "2025-01-10T06:00:00Z", end: "2025-01-10T10:00:00Z", step_minutes: 30}
+
+  - case_id: holdout_20250118_southeast_wet_2
+    label: Southeast observation-screened wet event
+    category: wet
+    grid:
+      grid_id: mrms_holdout_southeast_0p01deg_v1
+      config_version: mrms-holdout-southeast-0p01deg-v1
+      bounds: {west: -86.995, east: -81.995, south: 32.005, north: 34.005}
+      coordinate_sha256: 66867f10b5078469b7a869174684afff171f26567cf698e60192e3515825c2a7
+    issues: {start: "2025-01-18T10:00:00Z", end: "2025-01-18T14:00:00Z", step_minutes: 30}
+
+  - case_id: holdout_20250101_gulf_coast_dry_1
+    label: Gulf Coast observation-screened dry control
+    category: dry
+    grid:
+      grid_id: mrms_holdout_gulf_coast_0p01deg_v1
+      config_version: mrms-holdout-gulf-coast-0p01deg-v1
+      bounds: {west: -91.995, east: -86.995, south: 28.005, north: 30.005}
+      coordinate_sha256: 885ff6f701346f54b914d0c10d997bd66c7141d1c1c0a6f0695117cbcd443bfd
+    issues: {start: "2025-01-01T00:00:00Z", end: "2025-01-01T06:00:00Z", step_minutes: 60}
