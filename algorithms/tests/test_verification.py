@@ -128,6 +128,74 @@ def test_coverage_provenance_separates_boundary_and_interior_loss() -> None:
     summary = summarize_coverage_provenance([row], models=("lk",))
     assert summary["all_models_have_provenance"] is True
     assert summary["models"]["lk"]["interior_missing_slice_count"] == 1
+    assert summary["all_models_pass_integrity"] is False
+
+
+def test_empty_advection_domain_is_complete_without_hiding_truth_domain_misses() -> None:
+    truth = np.ones((1, 1, 3), dtype="float32")
+    truth_valid = np.ones(truth.shape, dtype="uint8")
+    forecast = np.full(truth.shape, np.nan, dtype="float32")
+    forecast_valid = np.zeros(truth.shape, dtype="uint8")
+    domain_valid = np.zeros(truth.shape, dtype="uint8")
+
+    row = score_deterministic_forecasts(
+        truth,
+        truth_valid,
+        {"phase_correlation": DeterministicForecast(forecast, forecast_valid, domain_valid)},
+        lead_minutes=(120,),
+        thresholds_mm_h=(0.5,),
+        windows_pixels=(1,),
+        pixel_spacing_km=1.0,
+        validity_domain="truth",
+    )[0]
+
+    assert row["misses"] == 3
+    assert row["forecast_to_truth_coverage"] == 0.0
+    assert row["advection_boundary_loss_ratio"] == 1.0
+    assert row["interior_missing_loss_ratio"] == 0.0
+    assert row["advection_domain_empty"] is True
+    assert row["boundary_adjusted_forecast_to_truth_coverage"] == 1.0
+    assert row["coverage_decomposition_closure_error"] == 0.0
+    coverage = summarize_coverage(
+        [row],
+        models=("phase_correlation",),
+        minimum_ratio=0.95,
+        coverage_field="boundary_adjusted_forecast_to_truth_coverage",
+    )
+    provenance = summarize_coverage_provenance([row], models=("phase_correlation",))
+    assert coverage["all_models_pass"] is True
+    assert coverage["models"]["phase_correlation"]["missing_slice_count"] == 0
+    assert provenance["all_models_pass_integrity"] is True
+    assert provenance["models"]["phase_correlation"][
+        "zero_advection_domain_slice_count"
+    ] == 1
+
+
+def test_coverage_summaries_fail_closed_when_a_slice_has_no_finite_gate_value() -> None:
+    row = {
+        "case_id": "wet-0",
+        "issue_time_utc": "2025-01-01T00:00:00Z",
+        "model": "lk",
+        "lead_minutes": 10,
+        "boundary_adjusted_forecast_to_truth_coverage": float("nan"),
+        "forecast_to_truth_coverage": 0.0,
+        "advection_boundary_loss_ratio": 1.0,
+        "interior_missing_loss_ratio": 0.0,
+        "coverage_decomposition_closure_error": 0.0,
+    }
+
+    coverage = summarize_coverage(
+        [row],
+        models=("lk",),
+        minimum_ratio=0.95,
+        coverage_field="boundary_adjusted_forecast_to_truth_coverage",
+    )
+    provenance = summarize_coverage_provenance([row], models=("lk",))
+
+    assert coverage["all_models_pass"] is False
+    assert coverage["models"]["lk"]["missing_slice_count"] == 1
+    assert provenance["all_models_have_provenance"] is False
+    assert provenance["integrity_status"] == "failed"
 
 
 def test_coverage_provenance_rejects_valid_forecast_outside_advection_domain() -> None:

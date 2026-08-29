@@ -191,6 +191,7 @@ def score_deterministic_forecasts(
                 boundary_adjusted_coverage = float("nan")
                 coverage_closure_error = float("nan")
                 coverage_provenance_available = False
+                advection_domain_empty = False
             else:
                 domain_inside_truth = truth_domain & forecast_domain_valid[lead_index]
                 domain_inside_truth_count = int(np.count_nonzero(domain_inside_truth))
@@ -204,9 +205,11 @@ def score_deterministic_forecasts(
                 )
                 advection_boundary_loss_ratio = _ratio(boundary_loss_count, truth_count)
                 interior_missing_loss_ratio = _ratio(interior_missing_count, truth_count)
-                boundary_adjusted_coverage = _ratio(
-                    forecast_inside_truth_count,
-                    domain_inside_truth_count,
+                advection_domain_empty = truth_count > 0 and domain_inside_truth_count == 0
+                boundary_adjusted_coverage = (
+                    1.0
+                    if advection_domain_empty
+                    else _ratio(forecast_inside_truth_count, domain_inside_truth_count)
                 )
                 closure = _ratio(
                     forecast_inside_truth_count
@@ -262,6 +265,7 @@ def score_deterministic_forecasts(
                             ),
                             "forecast_to_truth_coverage": forecast_to_truth_coverage,
                             "coverage_provenance_available": coverage_provenance_available,
+                            "advection_domain_empty": advection_domain_empty,
                             "advection_domain_to_truth_coverage": (
                                 advection_domain_to_truth_coverage
                             ),
@@ -384,26 +388,35 @@ def summarize_coverage(
     summaries: dict[str, Any] = {}
     for model in models:
         unique: dict[tuple[str, str, int], float] = {}
+        expected: set[tuple[str, str, int]] = set()
         for row in rows:
             if row.get("model") != model or int(row["lead_minutes"]) > maximum_lead_minutes:
-                continue
-            value = row.get(coverage_field)
-            if value is None or not np.isfinite(float(value)):
                 continue
             key = (
                 str(row.get("case_id", "")),
                 str(row.get("issue_time_utc", "")),
                 int(row["lead_minutes"]),
             )
+            expected.add(key)
+            value = row.get(coverage_field)
+            if value is None or not np.isfinite(float(value)):
+                continue
             unique[key] = float(value)
         values = list(unique.values())
+        missing_count = len(expected) - len(unique)
         summaries[model] = {
             "minimum_required_ratio": minimum_ratio,
+            "expected_slice_count": len(expected),
             "evaluated_slice_count": len(values),
+            "missing_slice_count": missing_count,
             "minimum_ratio": min(values) if values else None,
             "mean_ratio": float(np.mean(values)) if values else None,
             "failed_slice_count": sum(value < minimum_ratio for value in values),
-            "passes": bool(values) and all(value >= minimum_ratio for value in values),
+            "passes": (
+                bool(expected)
+                and missing_count == 0
+                and all(value >= minimum_ratio for value in values)
+            ),
         }
     return {
         "coverage_metric": coverage_field,
@@ -425,10 +438,19 @@ def summarize_coverage_provenance(
 
     summaries: dict[str, Any] = {}
     for model in models:
-        unique: dict[tuple[str, str, int], tuple[float, float, float, float, float]] = {}
+        unique: dict[
+            tuple[str, str, int], tuple[float, float, float, float, float, bool]
+        ] = {}
+        expected: set[tuple[str, str, int]] = set()
         for row in rows:
             if row.get("model") != model or int(row["lead_minutes"]) > maximum_lead_minutes:
                 continue
+            key = (
+                str(row.get("case_id", "")),
+                str(row.get("issue_time_utc", "")),
+                int(row["lead_minutes"]),
+            )
+            expected.add(key)
             values = tuple(
                 float(row[name])
                 for name in (
@@ -441,15 +463,12 @@ def summarize_coverage_provenance(
             )
             if not all(np.isfinite(value) for value in values):
                 continue
-            key = (
-                str(row.get("case_id", "")),
-                str(row.get("issue_time_utc", "")),
-                int(row["lead_minutes"]),
-            )
-            unique[key] = values
+            unique[key] = (*values, bool(row.get("advection_domain_empty", False)))
         slices = list(unique.values())
         summaries[model] = {
+            "expected_slice_count": len(expected),
             "evaluated_slice_count": len(slices),
+            "missing_provenance_slice_count": len(expected) - len(slices),
             "mean_forecast_to_truth_coverage": (
                 float(np.mean([item[0] for item in slices])) if slices else None
             ),
@@ -473,12 +492,26 @@ def summarize_coverage_provenance(
             ),
             "interior_missing_slice_count": sum(item[2] > 0.0 for item in slices),
             "maximum_closure_error": max(item[4] for item in slices) if slices else None,
+            "zero_advection_domain_slice_count": sum(item[5] for item in slices),
+            "passes_integrity": (
+                bool(expected)
+                and len(expected) == len(slices)
+                and all(item[2] == 0.0 and item[4] == 0.0 for item in slices)
+            ),
         }
+    all_have_provenance = bool(summaries) and all(
+        item["expected_slice_count"] == item["evaluated_slice_count"]
+        for item in summaries.values()
+    )
+    all_pass_integrity = all_have_provenance and all(
+        item["passes_integrity"] for item in summaries.values()
+    )
     return {
         "method": "advected_all_ones_domain_support_v1",
         "models": summaries,
-        "all_models_have_provenance": bool(summaries)
-        and all(item["evaluated_slice_count"] > 0 for item in summaries.values()),
+        "all_models_have_provenance": all_have_provenance,
+        "all_models_pass_integrity": all_pass_integrity,
+        "integrity_status": "pass" if all_pass_integrity else "failed",
     }
 
 
@@ -557,6 +590,7 @@ def summarize_fss_skill(
         for threshold in thresholds_mm_h:
             issue_scores: dict[tuple[str, str, str], list[float]] = {}
             coverage_values: dict[tuple[str, str, int], float] = {}
+            expected_coverage: set[tuple[str, str, int]] = set()
             for row in rows:
                 lead = int(row["lead_minutes"])
                 if (
@@ -577,13 +611,15 @@ def summarize_fss_skill(
                     )
                     issue_scores.setdefault(key, []).append(fss)
                 if row.get("model") == candidate_model:
+                    coverage_key = (
+                        str(row["case_id"]),
+                        str(row["issue_time_utc"]),
+                        lead,
+                    )
+                    expected_coverage.add(coverage_key)
                     coverage = row.get(coverage_field)
                     if coverage is not None and np.isfinite(float(coverage)):
-                        coverage_values[(
-                            str(row["case_id"]),
-                            str(row["issue_time_utc"]),
-                            lead,
-                        )] = float(coverage)
+                        coverage_values[coverage_key] = float(coverage)
 
             issue_means = {key: float(np.mean(values)) for key, values in issue_scores.items()}
             case_differences: dict[str, list[float]] = {}
@@ -636,9 +672,13 @@ def summarize_fss_skill(
                 coverage_passes = True
                 minimum_coverage = None
             else:
-                coverage_passes = bool(coverage_values) and all(
-                    value >= minimum_forecast_to_truth_coverage
-                    for value in coverage_values.values()
+                coverage_passes = (
+                    bool(expected_coverage)
+                    and len(expected_coverage) == len(coverage_values)
+                    and all(
+                        value >= minimum_forecast_to_truth_coverage
+                        for value in coverage_values.values()
+                    )
                 )
                 minimum_coverage = min(coverage_values.values()) if coverage_values else None
             comparisons.append(
@@ -655,6 +695,10 @@ def summarize_fss_skill(
                         positive_count >= required_positive_cases and coverage_passes
                     ),
                     "coverage_gate_passes": coverage_passes,
+                    "expected_coverage_slice_count": len(expected_coverage),
+                    "missing_coverage_slice_count": (
+                        len(expected_coverage) - len(coverage_values)
+                    ),
                     "coverage_metric": coverage_field,
                     "minimum_coverage_ratio": minimum_coverage,
                     "required_coverage_ratio": minimum_forecast_to_truth_coverage,
