@@ -345,10 +345,10 @@ func (store *FileStore) ListRuns(ctx context.Context) ([]RunSummary, error) {
 		}
 	}
 	sort.Slice(runs, func(i, j int) bool {
-		if runs[i].CompletedIssueCount != runs[j].CompletedIssueCount {
-			return runs[i].CompletedIssueCount > runs[j].CompletedIssueCount
+		if !runs[i].ModifiedAt.Equal(runs[j].ModifiedAt) {
+			return runs[i].ModifiedAt.After(runs[j].ModifiedAt)
 		}
-		return runs[i].ModifiedAt.After(runs[j].ModifiedAt)
+		return runs[i].CompletedIssueCount > runs[j].CompletedIssueCount
 	})
 	return runs, nil
 }

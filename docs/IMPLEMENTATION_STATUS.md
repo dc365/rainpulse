@@ -48,6 +48,7 @@ NowcastInput gate.
 | RP-018 | Frozen MRMS suite executed; strict skill gate not passed | 53/53 issues produced fixed-truth-domain metrics, independent phase-correlation and 3,180 map layers with runtime/RSS evidence; the declared 95% coverage gate correctly keeps the result at `skill_not_demonstrated` |
 | RP-019 | Engineering foundation complete | Immutable raw archive, continuous ingest seam, persistent automatic planner, bounded Worker retries/atomic commit, control-plane security, build identity and Prometheus operational metrics are implemented; real ingest and the planner remain disabled pending Fujian data/config acceptance |
 | RP-020 | Coverage provenance complete | 53/53 frozen MRMS issues separate geometric advection-boundary loss from in-domain missing data with zero closure error; all 636 LK slices have zero in-domain loss, while the original RP-018 result remains unchanged |
+| RP-021 | Independent MRMS holdout complete | Observation-only selection froze 4 wet and 2 dry cases from 2024-06/2025-01 before forecast execution; 50/50 issues pass complete provenance, near-lead LK meets the frozen three-baseline gate, while far-lead translation remains a required baseline |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -432,10 +433,24 @@ integrity gates use the frozen 95% boundary-adjusted coverage threshold, while
 raw coverage and boundary loss remain required diagnostics. Details are in
 `docs/RP020_覆盖率损失归因与验收口径.md`.
 
-Next, run unchanged parameters and this frozen coverage treatment against
-additional downloaded months as holdout data. Do not tune the coverage
-threshold, drop the independent baseline, or use the holdout months to select
-parameters merely to recover a passing label.
+RP-021 has now executed the unchanged parameters and frozen RP-020 coverage
+treatment against independent 2024-06 and 2025-01 holdout months. Cases were
+selected from hourly observation rain fractions before forecast execution;
+the frozen evidence explicitly records that no model forecast or skill fields
+were read. All 50 issues and 258 unique dependencies passed, and all five
+models have 600/600 coverage-provenance slices with no interior loss or closure
+error. Near-lead status is `lk_supported`; far-lead status is
+`translation_baseline_retained`. The MRMS five-minute adaptation still trails
+native ten-minute LK by -0.0385 mean FSS. Details are in
+`docs/RP021_MRMS独立留出验证与验收记录.md`.
+
+The 2024-06 and 2025-01 months are now spent holdout data. Do not tune against
+their results and reuse them as independent acceptance. If forecast, temporal
+adaptation or skill-gate parameters change, freeze different months before the
+next claim. Until Fujian data arrives, retain both translation baselines,
+label 70–120 minute evidence conservatively, and improve only fail-closed
+verification/reporting and operational seams that do not reinterpret this
+holdout result.
 
 Full raw-radar-to-React operational acceptance still needs at least three
 consecutive operational QC→grid→mosaic→QPE cycles with trackable precipitation.
@@ -516,5 +531,6 @@ make test-pysteps-lk
 make test-products
 make test-mrms
 make mrms-faults
+make mrms-holdout-select
 make smoke
 ```

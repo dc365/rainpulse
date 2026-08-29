@@ -64,6 +64,43 @@ func TestFileStoreListsAndFiltersAlgorithmVerificationRuns(t *testing.T) {
 	}
 }
 
+func TestFileStoreListsNewestRunFirstAcrossProfilesWithDifferentCaseCounts(t *testing.T) {
+	root := t.TempDir()
+	writeReportFixture(t, root, "rp018-mrms-v1", "older-53-issues", 6)
+	writeReportFixture(t, root, "rp021-mrms-holdout-v1", "newer-50-issues", 6)
+	olderPath := filepath.Join(root, "rp018-mrms-v1", "older-53-issues", "summary.json")
+	newerPath := filepath.Join(root, "rp021-mrms-holdout-v1", "newer-50-issues", "summary.json")
+	olderPayload, err := os.ReadFile(olderPath)
+	if err != nil {
+		t.Fatalf("read older summary: %v", err)
+	}
+	olderPayload = []byte(strings.Replace(
+		string(olderPayload),
+		`"completed_issue_count": 1`,
+		`"completed_issue_count": 53`,
+		1,
+	))
+	if err := os.WriteFile(olderPath, olderPayload, 0o644); err != nil {
+		t.Fatalf("write older summary: %v", err)
+	}
+	olderTime := time.Date(2026, 8, 28, 0, 0, 0, 0, time.UTC)
+	newerTime := olderTime.Add(24 * time.Hour)
+	if err := os.Chtimes(olderPath, olderTime, olderTime); err != nil {
+		t.Fatalf("set older summary time: %v", err)
+	}
+	if err := os.Chtimes(newerPath, newerTime, newerTime); err != nil {
+		t.Fatalf("set newer summary time: %v", err)
+	}
+
+	runs, err := NewFileStore(root).ListRuns(context.Background())
+	if err != nil {
+		t.Fatalf("list runs: %v", err)
+	}
+	if len(runs) != 2 || runs[0].RunID != "newer-50-issues" || runs[1].RunID != "older-53-issues" {
+		t.Fatalf("expected reports to be sorted by recency across profiles: %#v", runs)
+	}
+}
+
 func TestFileStoreUsesFixedTruthDomainForRigorousReports(t *testing.T) {
 	root := t.TempDir()
 	writeRigorousReportFixture(t, root, "rp018-mrms-v1", "full-v1")
