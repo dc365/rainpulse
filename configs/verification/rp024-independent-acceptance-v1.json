@@ -1,0 +1,47 @@
+{
+  "acceptance_status": "passed",
+  "accepted_scope": "independent_mrms_engineering_validation",
+  "calibration_status": "raw_ensemble_relative_frequency_uncalibrated",
+  "configuration_sha256": "2c170f6f911036c1d6a05159c40474bc4afa0abaec9e88e4e356cfc14ca6045a",
+  "development": {
+    "gate_path": "configs/verification/rp024-development-gate-v1.json",
+    "gate_sha256": "60c25fcf9b0e53b7b75fc9d59abebf3b0b1e4ae77ba2e43bae1158e424c3f564",
+    "reliability_path": "configs/verification/rp024-development-reliability-v1.json",
+    "reliability_sha256": "ff2ac4cc4bff6f2675c72bab3b90919ae5cdc2aed897219481b79fc91b7fa3a8",
+    "selection_path": "configs/verification/rp024-development-selection-v1.json",
+    "selection_sha256": "0a6c2979396c7b58ef99265d96b501880c200b41d03d5087237d3847cd558c67",
+    "summary_path": "configs/verification/rp024-development-summary-v1.json",
+    "summary_sha256": "b45966e225fd5430a6a3d82e5fca65446ea87bb0fb39ad5678083e1dec6bdb87"
+  },
+  "generated_at_utc": "2026-08-29T15:09:36Z",
+  "holdout": {
+    "completed_issue_count": 50,
+    "conformance_path": "configs/verification/rp024-holdout-conformance-v1.json",
+    "conformance_sha256": "8fd2ec3838312180d54b57975b9c8e63b4d77435be0dea68c69d58657e6d765b",
+    "failed_issue_count": 0,
+    "gate_passed": true,
+    "reliability_path": "configs/verification/rp024-holdout-reliability-v1.json",
+    "reliability_sha256": "468aae6604e2a3b0e74a446f8ab16703a019a49c478f9eadd6c39d4ed1b50a72",
+    "runtime_git_commit": "db2cc6f75786445cb968d96ee9ce748361fd1977",
+    "selection_path": "configs/verification/rp024-holdout-selection-v1.json",
+    "selection_sha256": "7425900932f950a9ad0dbdda58b27ab02482c73a3c1659ea4405eb50bca06697",
+    "summary_path": "configs/verification/rp024-holdout-summary-v1.json",
+    "summary_sha256": "527d43c441320bab55dab1f34083ab276f4a2fb447dc282a924d663a617e9107"
+  },
+  "lead_policy": {
+    "10_to_60_minutes": "independent_skill_gate_passed",
+    "70_to_120_minutes": "descriptive_only_retain_all_deterministic_baselines"
+  },
+  "member_count": 12,
+  "operational_eligible": false,
+  "operational_blockers": [
+    "representative_fujian_qc_qpe_sequences_not_yet_available",
+    "raw_probabilities_not_calibrated_for_fujian",
+    "ensemble_is_underdispersive_on_mrms_holdout",
+    "parallel_operational_acceptance_not_completed"
+  ],
+  "profile_path": "configs/verification/rp024-mrms-ensemble-v1.yaml",
+  "profile_sha256": "fad6eff91f9cbe7b68c9b310c7bb241ec8d76d211cdc7aa90f2ad97554cf47f4",
+  "profile_version": "rp024-mrms-ensemble-v1",
+  "schema_version": "1.0"
+}

@@ -1,0 +1,653 @@
+{
+  "calibration_status": "raw_ensemble_relative_frequency_uncalibrated",
+  "category_lead_band_summary": {
+    "dry": {
+      "far": {
+        "lead_minutes": [
+          70,
+          120
+        ],
+        "minimum_common_verification_coverage": 1.0,
+        "minimum_steps_member_mean_coverage": 1.0,
+        "scores": {
+          "lk": {
+            "brier_score_by_threshold": {
+              "1.0": 2.3643780905377117e-07,
+              "10.0": 0.0,
+              "20.0": 0.0,
+              "5.0": 0.0,
+              "50.0": 0.0
+            },
+            "crps_mm_h": 5.438069495494404e-07,
+            "ensemble_mean_rmse_mm_h": 0.00013763419840307463,
+            "mean_ensemble_spread_mm_h": 0.0
+          },
+          "persistence": {
+            "brier_score_by_threshold": {
+              "1.0": 2.3643780905377117e-07,
+              "10.0": 0.0,
+              "20.0": 0.0,
+              "5.0": 0.0,
+              "50.0": 0.0
+            },
+            "crps_mm_h": 5.438069495494404e-07,
+            "ensemble_mean_rmse_mm_h": 0.00013763419840307463,
+            "mean_ensemble_spread_mm_h": 0.0
+          },
+          "phase_correlation": {
+            "brier_score_by_threshold": {
+              "1.0": 2.3643780905377117e-07,
+              "10.0": 0.0,
+              "20.0": 0.0,
+              "5.0": 0.0,
+              "50.0": 0.0
+            },
+            "crps_mm_h": 5.438069495494404e-07,
+            "ensemble_mean_rmse_mm_h": 0.00013763419840307463,
+            "mean_ensemble_spread_mm_h": 0.0
+          },
+          "steps": {
+            "brier_score_by_threshold": {
+              "1.0": 2.3643780905377117e-07,
+              "10.0": 0.0,
+              "20.0": 0.0,
+              "5.0": 0.0,
+              "50.0": 0.0
+            },
+            "crps_mm_h": 5.43806963642232e-07,
+            "ensemble_mean_rmse_mm_h": 0.00013763419840307463,
+            "mean_ensemble_spread_mm_h": 0.0
+          }
+        },
+        "steps_skill_against_deterministic_baselines": {
+          "lk": {
+            "brier_skill_by_threshold": {
+              "1.0": 0.0,
+              "10.0": null,
+              "20.0": null,
+              "5.0": null,
+              "50.0": null
+            },
+            "crps_skill": -2.5915063428527674e-08
+          },
+          "persistence": {
+            "brier_skill_by_threshold": {
+              "1.0": 0.0,
+              "10.0": null,
+              "20.0": null,
+              "5.0": null,
+              "50.0": null
+            },
+            "crps_skill": -2.5915063428527674e-08
+          },
+          "phase_correlation": {
+            "brier_skill_by_threshold": {
+              "1.0": 0.0,
+              "10.0": null,
+              "20.0": null,
+              "5.0": null,
+              "50.0": null
+            },
+            "crps_skill": -2.5915063428527674e-08
+          }
+        }
+      },
+      "near": {
+        "lead_minutes": [
+          10,
+          60
+        ],
+        "minimum_common_verification_coverage": 1.0,
+        "minimum_steps_member_mean_coverage": 1.0,
+        "scores": {
+          "lk": {
+            "brier_score_by_threshold": {
+              "1.0": 0.0,
+              "10.0": 0.0,
+              "20.0": 0.0,
+              "5.0": 0.0,
+              "50.0": 0.0
+            },
+            "crps_mm_h": 0.0,
+            "ensemble_mean_rmse_mm_h": 0.0,
+            "mean_ensemble_spread_mm_h": 0.0
+          },
+          "persistence": {
+            "brier_score_by_threshold": {
+              "1.0": 0.0,
+              "10.0": 0.0,
+              "20.0": 0.0,
+              "5.0": 0.0,
+              "50.0": 0.0
+            },
+            "crps_mm_h": 0.0,
+            "ensemble_mean_rmse_mm_h": 0.0,
+            "mean_ensemble_spread_mm_h": 0.0
+          },
+          "phase_correlation": {
+            "brier_score_by_threshold": {
+              "1.0": 0.0,
+              "10.0": 0.0,
+              "20.0": 0.0,
+              "5.0": 0.0,
+              "50.0": 0.0
+            },
+            "crps_mm_h": 0.0,
+            "ensemble_mean_rmse_mm_h": 0.0,
+            "mean_ensemble_spread_mm_h": 0.0
+          },
+          "steps": {
+            "brier_score_by_threshold": {
+              "1.0": 0.0,
+              "10.0": 0.0,
+              "20.0": 0.0,
+              "5.0": 0.0,
+              "50.0": 0.0
+            },
+            "crps_mm_h": 0.0,
+            "ensemble_mean_rmse_mm_h": 0.0,
+            "mean_ensemble_spread_mm_h": 0.0
+          }
+        },
+        "steps_skill_against_deterministic_baselines": {
+          "lk": {
+            "brier_skill_by_threshold": {
+              "1.0": null,
+              "10.0": null,
+              "20.0": null,
+              "5.0": null,
+              "50.0": null
+            },
+            "crps_skill": null
+          },
+          "persistence": {
+            "brier_skill_by_threshold": {
+              "1.0": null,
+              "10.0": null,
+              "20.0": null,
+              "5.0": null,
+              "50.0": null
+            },
+            "crps_skill": null
+          },
+          "phase_correlation": {
+            "brier_skill_by_threshold": {
+              "1.0": null,
+              "10.0": null,
+              "20.0": null,
+              "5.0": null,
+              "50.0": null
+            },
+            "crps_skill": null
+          }
+        }
+      }
+    },
+    "wet": {
+      "far": {
+        "lead_minutes": [
+          70,
+          120
+        ],
+        "minimum_common_verification_coverage": 0.3138896336679874,
+        "minimum_steps_member_mean_coverage": 0.92410452726388,
+        "scores": {
+          "lk": {
+            "brier_score_by_threshold": {
+              "1.0": 0.2088590042188776,
+              "10.0": 0.045672227629890365,
+              "20.0": 0.01643398593047955,
+              "5.0": 0.13631559361525167,
+              "50.0": 0.003468036375195088
+            },
+            "crps_mm_h": 2.0477385982101652,
+            "ensemble_mean_rmse_mm_h": 4.828602885456922,
+            "mean_ensemble_spread_mm_h": 0.0
+          },
+          "persistence": {
+            "brier_score_by_threshold": {
+              "1.0": 0.22755430200317328,
+              "10.0": 0.04641783432039218,
+              "20.0": 0.018098994919684003,
+              "5.0": 0.13578705134836627,
+              "50.0": 0.004218877583877031
+            },
+            "crps_mm_h": 2.159450190532909,
+            "ensemble_mean_rmse_mm_h": 5.191851237331792,
+            "mean_ensemble_spread_mm_h": 0.0
+          },
+          "phase_correlation": {
+            "brier_score_by_threshold": {
+              "1.0": 0.22896190716260253,
+              "10.0": 0.045592077071701036,
+              "20.0": 0.01760526940216184,
+              "5.0": 0.13425453809915244,
+              "50.0": 0.003848331324446914
+            },
+            "crps_mm_h": 2.132233817052282,
+            "ensemble_mean_rmse_mm_h": 5.10758685232801,
+            "mean_ensemble_spread_mm_h": 0.0
+          },
+          "steps": {
+            "brier_score_by_threshold": {
+              "1.0": 0.1479418059938264,
+              "10.0": 0.024368671085336364,
+              "20.0": 0.009020874690228978,
+              "5.0": 0.07929509198182322,
+              "50.0": 0.0019171256087842025
+            },
+            "crps_mm_h": 1.24241008995286,
+            "ensemble_mean_rmse_mm_h": 3.802235488465382,
+            "mean_ensemble_spread_mm_h": 2.514535099441843
+          }
+        },
+        "steps_skill_against_deterministic_baselines": {
+          "lk": {
+            "brier_skill_by_threshold": {
+              "1.0": 0.2916666123774674,
+              "10.0": 0.46644443790194734,
+              "20.0": 0.4510841905068038,
+              "5.0": 0.41829771723965636,
+              "50.0": 0.44720141273709735
+            },
+            "crps_skill": 0.3932770076030242
+          },
+          "persistence": {
+            "brier_skill_by_threshold": {
+              "1.0": 0.34986152891206024,
+              "10.0": 0.47501490661681356,
+              "20.0": 0.5015814563040677,
+              "5.0": 0.41603347893320863,
+              "50.0": 0.5455839685629329
+            },
+            "crps_skill": 0.4246636966207319
+          },
+          "phase_correlation": {
+            "brier_skill_by_threshold": {
+              "1.0": 0.35385843074428036,
+              "10.0": 0.4655064508903022,
+              "20.0": 0.48760371203855246,
+              "5.0": 0.4093675111134004,
+              "50.0": 0.5018293782020617
+            },
+            "crps_skill": 0.4173199580567405
+          }
+        }
+      },
+      "near": {
+        "lead_minutes": [
+          10,
+          60
+        ],
+        "minimum_common_verification_coverage": 0.9303482587064676,
+        "minimum_steps_member_mean_coverage": 0.9930586588017993,
+        "scores": {
+          "lk": {
+            "brier_score_by_threshold": {
+              "1.0": 0.1348556994335288,
+              "10.0": 0.04206742490567093,
+              "20.0": 0.016411859499828693,
+              "5.0": 0.11188192977788278,
+              "50.0": 0.00391341892410581
+            },
+            "crps_mm_h": 1.731555733299643,
+            "ensemble_mean_rmse_mm_h": 4.497689376170121,
+            "mean_ensemble_spread_mm_h": 0.0
+          },
+          "persistence": {
+            "brier_score_by_threshold": {
+              "1.0": 0.1481327481306229,
+              "10.0": 0.044333144178388566,
+              "20.0": 0.01793503521262819,
+              "5.0": 0.11644662684108666,
+              "50.0": 0.004423290861792137
+            },
+            "crps_mm_h": 1.855628511940313,
+            "ensemble_mean_rmse_mm_h": 4.870648842978028,
+            "mean_ensemble_spread_mm_h": 0.0
+          },
+          "phase_correlation": {
+            "brier_score_by_threshold": {
+              "1.0": 0.1451299593832077,
+              "10.0": 0.042558344548307925,
+              "20.0": 0.01726213673694472,
+              "5.0": 0.11312109706923917,
+              "50.0": 0.0041631568120252494
+            },
+            "crps_mm_h": 1.803223883160819,
+            "ensemble_mean_rmse_mm_h": 4.727856731546637,
+            "mean_ensemble_spread_mm_h": 0.0
+          },
+          "steps": {
+            "brier_score_by_threshold": {
+              "1.0": 0.09372842566413074,
+              "10.0": 0.02647122774296239,
+              "20.0": 0.010155426363566516,
+              "5.0": 0.07258752227865795,
+              "50.0": 0.0023295558081914886
+            },
+            "crps_mm_h": 1.1191029259498817,
+            "ensemble_mean_rmse_mm_h": 3.7415964176071435,
+            "mean_ensemble_spread_mm_h": 2.0860934522987318
+          }
+        },
+        "steps_skill_against_deterministic_baselines": {
+          "lk": {
+            "brier_skill_by_threshold": {
+              "1.0": 0.3049724553145041,
+              "10.0": 0.3707428538276438,
+              "20.0": 0.3812141540894548,
+              "5.0": 0.3512131724688279,
+              "50.0": 0.40472618613817934
+            },
+            "crps_skill": 0.35370089196186283
+          },
+          "persistence": {
+            "brier_skill_by_threshold": {
+              "1.0": 0.36726735413373035,
+              "10.0": 0.40290208976726416,
+              "20.0": 0.433766020352388,
+              "5.0": 0.37664555644263287,
+              "50.0": 0.4733432910067217
+            },
+            "crps_skill": 0.39691435071791026
+          },
+          "phase_correlation": {
+            "brier_skill_by_threshold": {
+              "1.0": 0.35417589819173045,
+              "10.0": 0.3780014701249732,
+              "20.0": 0.4116935511331168,
+              "5.0": 0.3583202058743422,
+              "50.0": 0.4404352482081427
+            },
+            "crps_skill": 0.3793876975563131
+          }
+        }
+      }
+    }
+  },
+  "completed_issue_count": 50,
+  "compute_halo_cells": 100,
+  "compute_halo_degrees": 1.0,
+  "configuration_sha256": "2c170f6f911036c1d6a05159c40474bc4afa0abaec9e88e4e356cfc14ca6045a",
+  "coverage_row_count": 2400,
+  "ensemble_fallback_issue_count": 14,
+  "errors": [],
+  "failed_issue_count": 0,
+  "holdout_gate_evaluation": {
+    "checks": {
+      "completed_issue_count": true,
+      "failed_issue_count": true,
+      "far_common_verification_coverage": true,
+      "far_steps_member_mean_coverage": true,
+      "near_common_verification_coverage": true,
+      "near_steps_member_mean_coverage": true,
+      "near_wet_crps_skill_against_persistence": true,
+      "near_wet_finite_brier_skill_threshold_count": true,
+      "near_wet_mean_brier_skill_against_persistence": true
+    },
+    "expected_issue_count": 50,
+    "observed": {
+      "completed_issue_count": 50,
+      "failed_issue_count": 0,
+      "far_minimum_common_verification_coverage": 0.3138896336679874,
+      "far_minimum_steps_member_mean_coverage": 0.92410452726388,
+      "near_minimum_common_verification_coverage": 0.9303482587064676,
+      "near_minimum_steps_member_mean_coverage": 0.9930586588017993,
+      "near_wet_brier_skill_against_persistence": {
+        "1.0": 0.36726735413373035,
+        "10.0": 0.40290208976726416,
+        "5.0": 0.37664555644263287
+      },
+      "near_wet_crps_skill_against_persistence": 0.39691435071791026,
+      "near_wet_mean_brier_skill_against_persistence": 0.38227166678120916
+    },
+    "passed": true
+  },
+  "holdout_gate_status": "frozen_before_holdout",
+  "lead_band_summary": {
+    "far": {
+      "lead_minutes": [
+        70,
+        120
+      ],
+      "minimum_common_verification_coverage": 0.3138896336679874,
+      "minimum_steps_member_mean_coverage": 0.92410452726388,
+      "scores": {
+        "lk": {
+          "brier_score_by_threshold": {
+            "1.0": 0.14852499957738824,
+            "10.0": 0.03247867859632791,
+            "20.0": 0.011686623902340654,
+            "5.0": 0.09693747343735673,
+            "50.0": 0.0024662085612092944
+          },
+          "crps_mm_h": 1.4561989726943017,
+          "ensemble_mean_rmse_mm_h": 3.433781648236602,
+          "mean_ensemble_spread_mm_h": 0.0
+        },
+        "persistence": {
+          "brier_score_by_threshold": {
+            "1.0": 0.16181969965024823,
+            "10.0": 0.03300889841079195,
+            "20.0": 0.01287065399298106,
+            "5.0": 0.09656161363586302,
+            "50.0": 0.003000150774216209
+          },
+          "crps_mm_h": 1.5356399172424036,
+          "ensemble_mean_rmse_mm_h": 3.692096757514709,
+          "mean_ensemble_spread_mm_h": 0.0
+        },
+        "phase_correlation": {
+          "brier_score_by_threshold": {
+            "1.0": 0.16282068335382643,
+            "10.0": 0.03242168150304306,
+            "20.0": 0.012519553264364233,
+            "5.0": 0.09547180462393615,
+            "50.0": 0.002736645937915515
+          },
+          "crps_mm_h": 1.516285664281543,
+          "ensemble_mean_rmse_mm_h": 3.6321742177202205,
+          "mean_ensemble_spread_mm_h": 0.0
+        },
+        "steps": {
+          "brier_score_by_threshold": {
+            "1.0": 0.10520523601837604,
+            "10.0": 0.017329179614665728,
+            "20.0": 0.006414972619595855,
+            "5.0": 0.05638874958353058,
+            "50.0": 0.001363316608532174
+          },
+          "crps_mm_h": 0.8835094600191824,
+          "ensemble_mean_rmse_mm_h": 2.703905779715977,
+          "mean_ensemble_spread_mm_h": 1.7881496382389854
+        }
+      },
+      "steps_skill_against_deterministic_baselines": {
+        "lk": {
+          "brier_skill_by_threshold": {
+            "1.0": 0.291666478251297,
+            "10.0": 0.46644443790194734,
+            "20.0": 0.4510841905068038,
+            "5.0": 0.41829771723965636,
+            "50.0": 0.44720141273709724
+          },
+          "crps_skill": 0.3932769651770269
+        },
+        "persistence": {
+          "brier_skill_by_threshold": {
+            "1.0": 0.34986138124243726,
+            "10.0": 0.47501490661681356,
+            "20.0": 0.5015814563040677,
+            "5.0": 0.4160334789332085,
+            "50.0": 0.5455839685629329
+          },
+          "crps_skill": 0.42466365317871657
+        },
+        "phase_correlation": {
+          "brier_skill_by_threshold": {
+            "1.0": 0.35385828230585403,
+            "10.0": 0.4655064508903022,
+            "20.0": 0.4876037120385526,
+            "5.0": 0.4093675111134003,
+            "50.0": 0.5018293782020617
+          },
+          "crps_skill": 0.4173199148210551
+        }
+      }
+    },
+    "near": {
+      "lead_minutes": [
+        10,
+        60
+      ],
+      "minimum_common_verification_coverage": 0.9303482587064676,
+      "minimum_steps_member_mean_coverage": 0.9930586588017993,
+      "scores": {
+        "lk": {
+          "brier_score_by_threshold": {
+            "1.0": 0.09708031836622129,
+            "10.0": 0.03028362182573255,
+            "20.0": 0.01181461778714362,
+            "5.0": 0.08054189335629669,
+            "50.0": 0.0028172035490413236
+          },
+          "crps_mm_h": 1.2465174446738356,
+          "ensemble_mean_rmse_mm_h": 3.237809884084193,
+          "mean_ensemble_spread_mm_h": 0.0
+        },
+        "persistence": {
+          "brier_score_by_threshold": {
+            "1.0": 0.10663823931351539,
+            "10.0": 0.03191467449349414,
+            "20.0": 0.01291112600850476,
+            "5.0": 0.08382794093161341,
+            "50.0": 0.003184251662280236
+          },
+          "crps_mm_h": 1.3358353222393666,
+          "ensemble_mean_rmse_mm_h": 3.506297044267248,
+          "mean_ensemble_spread_mm_h": 0.0
+        },
+        "phase_correlation": {
+          "brier_score_by_threshold": {
+            "1.0": 0.10447658289995561,
+            "10.0": 0.03063702650495356,
+            "20.0": 0.012426717870606997,
+            "5.0": 0.08143394875817596,
+            "50.0": 0.00299698559584519
+          },
+          "crps_mm_h": 1.298110123622273,
+          "ensemble_mean_rmse_mm_h": 3.403503438241147,
+          "mean_ensemble_spread_mm_h": 0.0
+        },
+        "steps": {
+          "brier_score_by_threshold": {
+            "1.0": 0.06747349531136104,
+            "10.0": 0.019056185445823343,
+            "20.0": 0.007310718261527439,
+            "5.0": 0.05225451947398572,
+            "50.0": 0.0016770075010628853
+          },
+          "crps_mm_h": 0.805623112646678,
+          "ensemble_mean_rmse_mm_h": 2.6935114566533804,
+          "mean_ensemble_spread_mm_h": 1.5017431027501604
+        }
+      },
+      "steps_skill_against_deterministic_baselines": {
+        "lk": {
+          "brier_skill_by_threshold": {
+            "1.0": 0.304972455314504,
+            "10.0": 0.3707428538276438,
+            "20.0": 0.3812141540894548,
+            "5.0": 0.3512131724688279,
+            "50.0": 0.40472618613817934
+          },
+          "crps_skill": 0.35370089196186283
+        },
+        "persistence": {
+          "brier_skill_by_threshold": {
+            "1.0": 0.36726735413373035,
+            "10.0": 0.40290208976726427,
+            "20.0": 0.43376602035238787,
+            "5.0": 0.37664555644263287,
+            "50.0": 0.4733432910067217
+          },
+          "crps_skill": 0.39691435071791026
+        },
+        "phase_correlation": {
+          "brier_skill_by_threshold": {
+            "1.0": 0.35417589819173045,
+            "10.0": 0.3780014701249732,
+            "20.0": 0.4116935511331168,
+            "5.0": 0.3583202058743422,
+            "50.0": 0.4404352482081427
+          },
+          "crps_skill": 0.37938769755631296
+        }
+      }
+    }
+  },
+  "member_count": 12,
+  "metric_row_count": 12000,
+  "motion_fallback_issue_count": 14,
+  "operational_eligible": false,
+  "performance_summary": {
+    "forecast_runtime_ms": {
+      "max": 40669,
+      "p50": 38251,
+      "p95": 40266
+    },
+    "peak_rss_bytes": {
+      "max": 4894519296,
+      "p50": 4514545664,
+      "p95": 4867399680
+    },
+    "rss_sample_interval_ms": 50,
+    "rss_scope": "whole_process_resident_set_sampled_per_issue",
+    "schema_version": "1.0",
+    "scoring_runtime_ms": {
+      "max": 767,
+      "p50": 738,
+      "p95": 765
+    },
+    "total_runtime_ms": {
+      "max": 44211,
+      "p50": 40750,
+      "p95": 42744
+    }
+  },
+  "phase_correlation_fallback_issue_count": 14,
+  "profile_sha256": "fad6eff91f9cbe7b68c9b310c7bb241ec8d76d211cdc7aa90f2ad97554cf47f4",
+  "profile_version": "rp024-mrms-ensemble-v1",
+  "reliability_row_count": 120000,
+  "report_files": {
+    "coverage": "coverage.csv",
+    "probabilistic_metrics": "probabilistic_metrics.csv",
+    "reliability": "reliability.json",
+    "runtime": "runtime_metrics.csv"
+  },
+  "runtime_fingerprint": {
+    "git_commit": "db2cc6f75786445cb968d96ee9ce748361fd1977",
+    "git_commit_source": "environment",
+    "machine": "x86_64",
+    "packages": {
+      "numpy": "2.5.2",
+      "opencv-python-headless": "5.0.0.93",
+      "pysteps": "1.21.5",
+      "rasterio": "1.5.1",
+      "scipy": "1.18.1"
+    },
+    "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.35",
+    "processor": "x86_64",
+    "python": "3.12.13",
+    "thread_environment": {
+      "MKL_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1"
+    },
+    "verification_profile_sha256": "fad6eff91f9cbe7b68c9b310c7bb241ec8d76d211cdc7aa90f2ad97554cf47f4"
+  },
+  "schema_version": "1.0",
+  "selection_evidence_sha256": "7425900932f950a9ad0dbdda58b27ab02482c73a3c1659ea4405eb50bca06697",
+  "split": "holdout"
+}

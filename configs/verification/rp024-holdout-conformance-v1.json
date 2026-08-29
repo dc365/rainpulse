@@ -1,0 +1,13 @@
+{
+  "checked_frame_count": 390,
+  "checked_issue_count": 50,
+  "complete": true,
+  "errors": [],
+  "failed_frame_count": 0,
+  "operational_eligible": false,
+  "profile_sha256": "fad6eff91f9cbe7b68c9b310c7bb241ec8d76d211cdc7aa90f2ad97554cf47f4",
+  "profile_version": "rp024-mrms-ensemble-v1",
+  "schema_version": "1.0",
+  "selection_evidence_sha256": "7425900932f950a9ad0dbdda58b27ab02482c73a3c1659ea4405eb50bca06697",
+  "split": "holdout"
+}

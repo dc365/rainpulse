@@ -51,6 +51,7 @@ NowcastInput gate.
 | RP-021 | Independent MRMS holdout complete | Observation-only selection froze 4 wet and 2 dry cases from 2024-06/2025-01 before forecast execution; 50/50 issues pass complete provenance, near-lead LK meets the frozen three-baseline gate, while far-lead translation remains a required baseline |
 | RP-022 | Offline STEPS ensemble foundation complete | ForecastOutput 1.2, frozen 12-member seeded STEPS, member-specific support, raw exceedance probabilities/P10-P50-P90 and Brier/CRPS/reliability verification pass real-library and full-grid deployment-server acceptance; operational publication remains disabled |
 | RP-023 | Offline ensemble product and GIS loop complete | Eight probability/quantile layers produce 384 PNG/NetCDF assets behind a checksum-validated read-only API and shared OpenLayers timeline; 12/24-member full-grid resource evidence keeps the first hindcast at 12 members and operational publication disabled |
+| RP-024 | Independent MRMS probability validation complete | Frozen 2022 development and 2023 holdout splits verify 12-member STEPS on 50/50 independent issues; near-lead CRPS/Brier skill passes the precommitted gate, while raw probabilities remain uncalibrated and operational publication disabled |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -455,13 +456,24 @@ publication is explicitly disabled until a new independent evaluation and
 Fujian operational gate pass. Details are in
 `docs/RP022_STEPS概率集合基础实施记录.md`.
 
-The 2024-06 and 2025-01 months are now spent holdout data. Do not tune against
+RP-024 completes that independent MRMS engineering evaluation. Observation-only
+selection froze 2022-01/2022-12 for development and 2023-06/2023-12 for the
+untouched holdout; the development gate was committed before holdout input
+conformance or forecast execution. All 50 holdout issues completed without
+failure. The +10–60 minute STEPS CRPS skill is 0.3969 against persistence, and
+its 1/5/10 mm/h Brier skills are 0.3673/0.3766/0.4029; every frozen gate check
+passed. The 70–120 minute result remains descriptive, and all deterministic
+baselines remain required. Raw probabilities are underdispersive and not
+Fujian-calibrated, so this does not enable operational probability publication.
+Details are in `docs/RP024_MRMS概率集合独立验证与验收记录.md`.
+
+The 2021-08, 2024-06, 2025-01, 2022-01, 2022-12, 2023-06 and 2023-12 months are
+now spent verification data for their respective claims. Do not tune against
 their results and reuse them as independent acceptance. If forecast, temporal
-adaptation or skill-gate parameters change, freeze different months before the
-next claim. Until Fujian data arrives, retain both translation baselines,
-label 70–120 minute evidence conservatively, and improve only fail-closed
-verification/reporting and operational seams that do not reinterpret this
-holdout result.
+adaptation, ensemble or skill-gate parameters change, freeze different months
+before the next claim. Until Fujian data arrives, retain all three deterministic
+baselines, label 70–120 minute evidence conservatively, and improve only
+fail-closed operational seams that do not reinterpret these results.
 
 Full raw-radar-to-React operational acceptance still needs at least three
 consecutive operational QC→grid→mosaic→QPE cycles with trackable precipitation.
@@ -474,8 +486,10 @@ gates.
 
 Before that real-data acceptance, enable RP-019 in stages: archive-only ingest,
 then decode/QC/grid, then mosaic/QPE, and only then NowcastInput/LK/product
-automation. Do not enable the full chain merely because the Compose services are
-healthy. The activation and rollback checklist is in
+automation. The next probability milestone is a Fujian continuous five-minute
+QC/QPE archive, independent probability calibration and publication-disabled
+parallel replay; do not enable the full chain merely because the Compose
+services are healthy. The activation and rollback checklist is in
 `docs/RP019_运行可靠性与自动化实施记录.md`.
 
 ## Required inputs before operational QC and gridding
