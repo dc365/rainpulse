@@ -76,12 +76,21 @@ func TestFileStoreUsesFixedTruthDomainForRigorousReports(t *testing.T) {
 	if got := fmt.Sprint(detail.Filters.Models); got != "[lk persistence translation phase_correlation]" {
 		t.Fatalf("unexpected rigorous display models: %s", got)
 	}
+	if got := fmt.Sprint(detail.Filters.WindowsPixels); got != "[9]" {
+		t.Fatalf("unexpected rigorous scale selectors: %s", got)
+	}
+	if len(detail.Filters.FSSScales) != 1 || detail.Filters.FSSScales[0].TargetKM != 10 ||
+		detail.Filters.FSSScales[0].WindowPixels != 9 ||
+		detail.Filters.FSSScales[0].ActualKMMin != 9.1 ||
+		detail.Filters.FSSScales[0].ActualKMMax != 11.1 {
+		t.Fatalf("unexpected rigorous FSS scales: %#v", detail.Filters.FSSScales)
+	}
 	issueTime := time.Date(2021, 8, 10, 17, 0, 0, 0, time.UTC)
 	metrics, err := store.ListMetrics(
 		context.Background(),
 		"rp018-mrms-v1",
 		"full-v1",
-		MetricFilter{CaseID: "midwest_case", IssueTime: issueTime, ThresholdMMH: 5, WindowPixels: 11},
+		MetricFilter{CaseID: "midwest_case", IssueTime: issueTime, ThresholdMMH: 5, WindowPixels: 9},
 	)
 	if err != nil {
 		t.Fatalf("list rigorous metrics: %v", err)
@@ -95,6 +104,9 @@ func TestFileStoreUsesFixedTruthDomainForRigorousReports(t *testing.T) {
 	}
 	if !models["phase_correlation"] || !models["lk_native_10min"] {
 		t.Fatalf("fixed truth-domain models are incomplete: %#v", models)
+	}
+	if metrics[0].WindowPixels != 11 || metrics[0].WindowTargetKM != 10 {
+		t.Fatalf("expected case-specific 11-pixel realization of 10 km, got %#v", metrics[0])
 	}
 }
 
@@ -264,7 +276,7 @@ func writeRigorousReportFixture(
 		t.Fatalf("decode rigorous summary fixture: %v", err)
 	}
 	summary["schema_version"] = "1.2"
-	summary["truth_domain_metric_row_count"] = 10
+	summary["truth_domain_metric_row_count"] = 20
 	summary["report_files"] = map[string]any{"fixed_truth_domain": "metrics_truth_domain.csv"}
 	skill := summary["skill_summary"].(map[string]any)
 	skill["candidate_model"] = "lk"
@@ -280,13 +292,15 @@ func writeRigorousReportFixture(
 	if err := os.WriteFile(summaryPath, encoded, 0o644); err != nil {
 		t.Fatalf("write rigorous summary fixture: %v", err)
 	}
-	header := strings.Join(metricColumns, ",") + "\n"
-	rows := make([]string, 0, 10)
+	header := strings.Join(append(append([]string{}, metricColumns...), "window_target_km"), ",") + "\n"
+	rows := make([]string, 0, 20)
 	for _, model := range []string{
 		"lk", "persistence", "translation", "phase_correlation", "lk_native_10min",
 	} {
-		rows = append(rows, metricFixtureRow(model, 10, "0.72"))
-		rows = append(rows, metricFixtureRow(model, 20, "0.68"))
+		rows = append(rows, rigorousMetricFixtureRow(model, 10, "0.72", 9, 9.1, "socal_case"))
+		rows = append(rows, rigorousMetricFixtureRow(model, 20, "0.68", 9, 9.1, "socal_case"))
+		rows = append(rows, rigorousMetricFixtureRow(model, 10, "0.72", 11, 11.1, "midwest_case"))
+		rows = append(rows, rigorousMetricFixtureRow(model, 20, "0.68", 11, 11.1, "midwest_case"))
 	}
 	if err := os.WriteFile(
 		filepath.Join(directory, "metrics_truth_domain.csv"),
@@ -295,6 +309,25 @@ func writeRigorousReportFixture(
 	); err != nil {
 		t.Fatalf("write fixed truth-domain metrics fixture: %v", err)
 	}
+}
+
+func rigorousMetricFixtureRow(
+	model string,
+	lead int,
+	fss string,
+	windowPixels int,
+	windowKM float64,
+	caseID string,
+) string {
+	return fmt.Sprintf(
+		"%s,%d,5,%d,%.1f,10,2,1,88,0.76,0.83,0.09,%s,0.8,1.2,0.1,1,0.99,0.99,%s,wet,2021-08-10T17:00:00Z,observed_rate,10",
+		model,
+		lead,
+		windowPixels,
+		windowKM,
+		fss,
+		caseID,
+	)
 }
 
 func metricFixtureRow(model string, lead int, fss string) string {

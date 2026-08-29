@@ -117,7 +117,7 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
         setSelectedCaseID(nextCase?.case_id ?? '')
         setSelectedIssueTime(nextIssue(nextCase, selectedIssueTime))
         setThreshold((current) => pickNumber(payload.filters.thresholds_mm_h, current, 5))
-        setWindowPixels((current) => pickNumber(payload.filters.windows_pixels, current, 11))
+        setWindowPixels((current) => pickFSSWindow(payload.filters.fss_scales, current, 10))
         setSelectedLeadMinutes((current) => pickNumber(payload.filters.lead_minutes, current, 60))
         setBaseline((current) => payload.filters.models.includes(current)
           ? current
@@ -733,6 +733,16 @@ function pickNumber(values: number[], current: number, preferred: number) {
   if (values.includes(current)) return current
   if (values.includes(preferred)) return preferred
   return values[0] ?? preferred
+}
+
+function pickFSSWindow(scales: FSSScale[], current: number, preferredTargetKM: number) {
+  const exact = scales.find((scale) => scale.window_pixels === current)
+  if (exact) return exact.window_pixels
+  const legacyTargetKM: Record<number, number> = { 1: 1, 5: 5, 11: 10, 21: 20, 41: 40 }
+  const targetKM = legacyTargetKM[current] ?? preferredTargetKM
+  return scales.find((scale) => Math.abs(scale.target_km - targetKM) < 1e-6)?.window_pixels
+    ?? scales[0]?.window_pixels
+    ?? current
 }
 
 function runKey(run: RunSummary) {

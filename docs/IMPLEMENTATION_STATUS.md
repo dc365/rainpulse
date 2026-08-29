@@ -45,7 +45,7 @@ NowcastInput gate.
 | RP-015 | Complete for synthetic vertical acceptance | ForecastOutput-derived PNG/COG/NetCDF products, point/area APIs, product events, server replay and the responsive OpenLayers short-nowcast GIS are accepted; real forecast skill remains gated |
 | RP-016 | MRMS engineering and spatial-evidence slice complete | Isolated MRMS conformance/hindcast reuses the production pySTEPS-LK core; 53 August 2021 issues passed three-baseline scoring and generated 2,544 synchronized map layers in the existing Web, while Fujian operational acceptance remains gated |
 | RP-017 | Complete | The engineering Web workspace and GIS/timeline hierarchy were consolidated and verified across desktop and mobile widths |
-| RP-018 | Complete for the frozen MRMS suite | Verification manifests, environment/source fingerprints, reproducibility checks and failure gates were tightened without treating MRMS as Fujian acceptance |
+| RP-018 | Frozen MRMS suite executed; strict skill gate not passed | 53/53 issues produced fixed-truth-domain metrics, independent phase-correlation and 3,180 map layers with runtime/RSS evidence; the declared 95% coverage gate correctly keeps the result at `skill_not_demonstrated` |
 | RP-019 | Engineering foundation complete | Immutable raw archive, continuous ingest seam, persistent automatic planner, bounded Worker retries/atomic commit, control-plane security, build identity and Prometheus operational metrics are implemented; real ingest and the planner remain disabled pending Fujian data/config acceptance |
 
 The old execution labels map to v1.1 by capability, not by their previous
@@ -409,9 +409,23 @@ frozen gate, cases, issues, filtered lead metrics and synchronized maps without
 sending the full CSV or model arrays to the browser. The historical v2/v3
 score-file difference is isolated to one Ida issue; v3 is repeatable in the
 current environment, but future runs must freeze environment and source-manifest
-fingerprints before claiming byte reproducibility. Next, run unchanged
-parameters against additional downloaded months as holdout data and add
-per-issue core-runtime/RSS instrumentation.
+fingerprints before claiming byte reproducibility.
+
+RP-018 has now added the independent phase-correlation baseline, fixed truth
+domain, physical-kilometre FSS scales, native 10-minute sensitivity,
+accumulation metrics and per-issue runtime/RSS evidence. The full 53-issue run
+completed without failures, but the strict result is `skill_not_demonstrated`:
+LK FSS is positive relative to persistence and LK whole-field translation,
+while forecast-to-truth coverage falls below the frozen 95% threshold (0.826
+minimum at +10–60 minutes and 0.683 at +70–120 minutes). The adapted 5-minute
+chain also trails native 10-minute LK by -0.0467 mean FSS. Details are recorded
+in `docs/RP018_MRMS验证严谨化实施记录.md`.
+
+Next, separate unavoidable advection boundary loss from internal missing-data
+loss without changing the frozen result, then freeze that treatment and run
+unchanged parameters against additional downloaded months as holdout data.
+Do not tune the coverage threshold, drop the independent baseline, or use the
+holdout months to select parameters merely to recover a passing label.
 
 Full raw-radar-to-React operational acceptance still needs at least three
 consecutive operational QC→grid→mosaic→QPE cycles with trackable precipitation.

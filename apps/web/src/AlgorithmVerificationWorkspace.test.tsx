@@ -233,5 +233,8 @@ describe('AlgorithmVerificationWorkspace', () => {
       String(url).includes('/rp018-mrms-v1/rp018-smoke/map-frame?case_id=midwest_convection_20210810')
     ))).toBe(false)
     expect(screen.getByText('实况固定有效域（模型缺测按无预报）')).toBeTruthy()
+    fireEvent.click(screen.getByText('高级设置'))
+    expect(screen.getByRole('button', { name: '10 km' }).getAttribute('aria-pressed')).toBe('true')
+    await waitFor(() => expect(window.location.search).toContain('window=9'))
   })
 })

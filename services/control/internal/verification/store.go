@@ -281,10 +281,11 @@ type fileStamp struct {
 }
 
 type cachedRun struct {
-	SummaryStamp fileStamp
-	MetricsStamp fileStamp
-	Detail       RunDetail
-	Metrics      []Metric
+	SummaryStamp    fileStamp
+	MetricsStamp    fileStamp
+	Detail          RunDetail
+	Metrics         []Metric
+	UsesTruthDomain bool
 }
 
 type FileStore struct {
@@ -374,14 +375,32 @@ func (store *FileStore) ListMetrics(
 	}
 	items := make([]Metric, 0, 36)
 	issueTime := filter.IssueTime.UTC()
+	targetKM := 0.0
+	if loaded.UsesTruthDomain {
+		found := false
+		for _, scale := range loaded.Detail.Filters.FSSScales {
+			if scale.WindowPixels == filter.WindowPixels {
+				targetKM = scale.TargetKM
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, ErrNotFound
+		}
+	}
 	for index, metric := range loaded.Metrics {
 		if index%1024 == 0 {
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
 		}
+		windowMatches := metric.WindowPixels == filter.WindowPixels
+		if loaded.UsesTruthDomain {
+			windowMatches = math.Abs(metric.WindowTargetKM-targetKM) < 1e-6
+		}
 		if metric.CaseID == filter.CaseID && metric.IssueTime.Equal(issueTime) &&
-			metric.WindowPixels == filter.WindowPixels &&
+			windowMatches &&
 			math.Abs(metric.ThresholdMMH-filter.ThresholdMMH) < 1e-9 {
 			items = append(items, metric)
 		}
@@ -591,6 +610,7 @@ func (store *FileStore) loadRun(
 		)
 	}
 	if usesTruthDomain {
+		filters = consolidateTargetFSSScales(filters)
 		filters.Models, err = report.displayModels(filters.Models)
 		if err != nil {
 			return cachedRun{}, err
@@ -603,12 +623,41 @@ func (store *FileStore) loadRun(
 			Run: summary, Cases: cases, Filters: filters,
 			SkillSummary: report.SkillSummary,
 		},
-		Metrics: metrics,
+		Metrics: metrics, UsesTruthDomain: usesTruthDomain,
 	}
 	store.mu.Lock()
 	store.cache[cacheKey] = loaded
 	store.mu.Unlock()
 	return loaded, nil
+}
+
+func consolidateTargetFSSScales(filters FilterOptions) FilterOptions {
+	scales := make([]FSSScale, 0, len(filters.FSSScales))
+	for _, candidate := range filters.FSSScales {
+		matched := false
+		for index := range scales {
+			if math.Abs(scales[index].TargetKM-candidate.TargetKM) >= 1e-6 {
+				continue
+			}
+			scales[index].ActualKMMin = math.Min(scales[index].ActualKMMin, candidate.ActualKMMin)
+			scales[index].ActualKMMax = math.Max(scales[index].ActualKMMax, candidate.ActualKMMax)
+			matched = true
+			break
+		}
+		if !matched {
+			scales = append(scales, candidate)
+		}
+	}
+	sort.Slice(scales, func(i, j int) bool {
+		return scales[i].TargetKM < scales[j].TargetKM
+	})
+	selectors := make([]int, 0, len(scales))
+	for _, scale := range scales {
+		selectors = append(selectors, scale.WindowPixels)
+	}
+	filters.FSSScales = scales
+	filters.WindowsPixels = selectors
+	return filters
 }
 
 func (report reportSummary) displayMetricSource() (string, int, bool, error) {
