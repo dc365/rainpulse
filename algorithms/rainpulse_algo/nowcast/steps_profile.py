@@ -26,6 +26,7 @@ class StepsEnsembleConfig:
     autoregressive_order: int
     transformation: str
     precipitation_threshold_mm_h: float
+    minimum_trackable_precipitation_pixels: int
     decomposition_method: str
     bandpass_filter_method: str
     precipitation_noise_method: str
@@ -100,6 +101,9 @@ def load_pysteps_steps_profile(path: str | Path) -> PystepsStepsProfile:
                 precipitation_threshold_mm_h=float(
                     ensemble["precipitation_threshold_mm_h"]
                 ),
+                minimum_trackable_precipitation_pixels=int(
+                    ensemble.get("minimum_trackable_precipitation_pixels", 1)
+                ),
                 decomposition_method=str(ensemble["decomposition_method"]),
                 bandpass_filter_method=str(ensemble["bandpass_filter_method"]),
                 precipitation_noise_method=str(ensemble["precipitation_noise_method"]),
@@ -154,6 +158,8 @@ def _validate(profile: PystepsStepsProfile) -> None:
         raise PystepsStepsConfigError("invalid STEPS cascade or autoregressive order")
     if ensemble.transformation != "dB" or ensemble.precipitation_threshold_mm_h <= 0:
         raise PystepsStepsConfigError("STEPS precipitation transform is invalid")
+    if ensemble.minimum_trackable_precipitation_pixels < 1:
+        raise PystepsStepsConfigError("STEPS minimum trackable precipitation area is invalid")
     if ensemble.decomposition_method != "fft":
         raise PystepsStepsConfigError("STEPS decomposition must use fft")
     if ensemble.bandpass_filter_method not in {"gaussian", "uniform"}:

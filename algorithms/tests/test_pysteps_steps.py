@@ -26,6 +26,9 @@ from .test_pysteps_lk import profile as lk_profile
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PROFILE_PATH = REPOSITORY_ROOT / "configs" / "nowcast" / "rp022-pysteps-steps-v1.yaml"
+RP024_PROFILE_PATH = (
+    REPOSITORY_ROOT / "configs" / "nowcast" / "rp024-pysteps-steps-v1.yaml"
+)
 SCHEMA_PATH = REPOSITORY_ROOT / "configs" / "schemas" / "pysteps-steps-profile.schema.json"
 PRODUCT_PROFILE_PATH = (
     REPOSITORY_ROOT / "configs" / "products" / "rp022-ensemble-products-v1.yaml"
@@ -99,6 +102,10 @@ def test_profile_conforms_to_schema_and_freezes_probability_semantics() -> None:
     assert configured.ensemble.random_seed == 20260829
     assert configured.probability_products.event_operator == "greater_than"
     assert configured.probability_products.calibration_status.endswith("_uncalibrated")
+    rp024_raw = yaml.safe_load(RP024_PROFILE_PATH.read_text())
+    Draft202012Validator(schema).validate(rp024_raw)
+    rp024 = load_pysteps_steps_profile(RP024_PROFILE_PATH)
+    assert rp024.ensemble.minimum_trackable_precipitation_pixels == 64
 
 
 def test_probability_product_profile_matches_the_model_profile_and_stays_offline() -> None:
@@ -252,3 +259,35 @@ def test_no_rain_uses_explicit_zero_ensemble_without_calling_stochastic_backend(
     assert result.ensemble_fallback_reason == "no_trackable_precipitation"
     assert np.all(result.rain_rate == 0.0)
     assert np.all(result.probability_exceedance[1.0] == 0.0)
+
+
+def test_sparse_precipitation_uses_persistence_ensemble_without_stochastic_backend() -> None:
+    def unexpected_backend(*_args, **_kwargs):
+        raise AssertionError("STEPS backend must not run for a sparse non-trackable field")
+
+    configured = load_pysteps_steps_profile(RP024_PROFILE_PATH)
+    grid = tiny_grid()
+    configured = replace(
+        configured,
+        grid_id=grid.grid_id,
+        grid_config_version=grid.config_version,
+    )
+    fields = steps_fields(rain=False)
+    fields.rate_mm_h[:, 30, 30] = 0.1
+    fields.reflectivity_dbz[:, 30, 30] = 8.0
+
+    result = run_pysteps_steps_fields(
+        fields,
+        profile=configured,
+        lk_profile=lk_profile(),
+        grid=grid,
+        backend=unexpected_backend,
+    )
+
+    assert result.ensemble_fallback_used is True
+    assert result.ensemble_fallback_reason == "insufficient_trackable_precipitation"
+    np.testing.assert_allclose(
+        result.rain_rate,
+        np.repeat(result.deterministic.persistence_rain_rate[np.newaxis], 12, axis=0),
+        equal_nan=True,
+    )

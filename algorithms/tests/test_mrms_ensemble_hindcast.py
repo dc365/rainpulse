@@ -12,6 +12,7 @@ import pytest
 from rainpulse_algo.datasets.mrms_precip import MRMSPrecipFrame, MRMSSourceState
 from rainpulse_algo.grid import RegularLatLonGrid
 from rainpulse_algo.verification.mrms_ensemble_hindcast import (
+    _select_member_leads,
     conform_ensemble_split,
     run_mrms_ensemble_hindcast,
 )
@@ -193,3 +194,16 @@ def test_conformance_checks_unique_required_frames_and_holdout_is_locked(
             output_directory=tmp_path,
             maximum_issues=1,
         )
+
+
+def test_member_lead_selection_never_swaps_equal_sized_axes() -> None:
+    values = np.arange(3 * 5 * 4 * 6).reshape(3, 5, 4, 6)
+    selected = _select_member_leads(
+        values,
+        np.asarray([1, 3]),
+        (slice(1, 3), slice(2, 5)),
+    )
+
+    assert selected.shape == (3, 2, 2, 3)
+    np.testing.assert_array_equal(selected[2, 0], values[2, 1, 1:3, 2:5])
+    np.testing.assert_array_equal(selected[0, 1], values[0, 3, 1:3, 2:5])

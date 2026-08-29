@@ -101,6 +101,15 @@ def _compute_grid(
     return compute, crop
 
 
+def _select_member_leads(
+    values: np.ndarray,
+    lead_indices: np.ndarray,
+    crop: tuple[slice, slice],
+) -> np.ndarray:
+    selected = np.take(values, lead_indices, axis=1)
+    return selected[:, :, crop[0], crop[1]]
+
+
 def _fields(sequence) -> PystepsLKFields:
     return PystepsLKFields(
         reflectivity_dbz=sequence.reflectivity_dbz,
@@ -591,9 +600,9 @@ def run_mrms_ensemble_hindcast(
                 truth_rate = np.stack([frame.rate_mm_h for frame in truth_frames])
                 truth_valid = np.stack([frame.valid_mask for frame in truth_frames]) == 1
                 indices = np.asarray([lead // 5 - 1 for lead in profile.lead_minutes])
-                members = result.rain_rate[:, indices, crop[0], crop[1]]
+                members = _select_member_leads(result.rain_rate, indices, crop)
                 member_valid = (
-                    result.member_valid_mask[:, indices, crop[0], crop[1]] == 1
+                    _select_member_leads(result.member_valid_mask, indices, crop) == 1
                 )
                 steps_valid = result.output_valid_mask[indices, crop[0], crop[1]] == 1
                 deterministic = result.deterministic

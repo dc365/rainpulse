@@ -13,8 +13,8 @@ source:
   temporal_adaptation: causal_linear_midpoints_to_5_minutes
 
 forecast:
-  steps_profile: configs/nowcast/rp022-pysteps-steps-v1.yaml
-  steps_profile_sha256: f3a99f4e451b1024b1e6d98d213c56238e646ed374722efd96214b56e706bb16
+  steps_profile: configs/nowcast/rp024-pysteps-steps-v1.yaml
+  steps_profile_sha256: a74e3381222e14b3c5597dee602d0a7d8f629db5db5a99adda0e75f65d0647f7
   lk_profile: configs/nowcast/rp016-pysteps-lk-v1.yaml
   lk_profile_sha256: 2e31c4a99a823eec665973798c222659f8da7f3239f16ac66fed3e4fd79b066b
   member_count: 12

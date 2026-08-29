@@ -67,6 +67,10 @@
         "autoregressive_order": { "const": 2 },
         "transformation": { "const": "dB" },
         "precipitation_threshold_mm_h": { "type": "number", "exclusiveMinimum": 0 },
+        "minimum_trackable_precipitation_pixels": {
+          "type": "integer",
+          "minimum": 1
+        },
         "decomposition_method": { "const": "fft" },
         "bandpass_filter_method": { "enum": ["gaussian", "uniform"] },
         "precipitation_noise_method": {

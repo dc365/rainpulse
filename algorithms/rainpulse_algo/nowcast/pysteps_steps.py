@@ -108,11 +108,22 @@ def run_pysteps_steps_fields(
     fallback = False
     fallback_reason: str | None = None
 
-    latest_trackable = rate[-1] >= profile.ensemble.precipitation_threshold_mm_h
-    if not np.any(latest_trackable):
+    latest_trackable = valid[-1] & (
+        rate[-1] >= profile.ensemble.precipitation_threshold_mm_h
+    )
+    latest_trackable_count = int(np.count_nonzero(latest_trackable))
+    if latest_trackable_count == 0:
         members = np.zeros((member_count, lead_count, *grid.shape), dtype="float32")
         fallback = True
         fallback_reason = "no_trackable_precipitation"
+    elif latest_trackable_count < profile.ensemble.minimum_trackable_precipitation_pixels:
+        members = np.repeat(
+            deterministic.persistence_rain_rate[np.newaxis, ...],
+            member_count,
+            axis=0,
+        ).astype("float32")
+        fallback = True
+        fallback_reason = "insufficient_trackable_precipitation"
     else:
         ar_frames = profile.ensemble.autoregressive_order + 1
         transformed, metadata = _transform_to_db(
