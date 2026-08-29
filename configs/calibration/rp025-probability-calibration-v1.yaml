@@ -1,0 +1,46 @@
+schema_version: "1.0"
+profile_version: rp025-probability-calibration-v1
+artifact_contract_version: "1.0"
+source_forecast_output_contract_version: "1.2"
+source_probability_status: raw_ensemble_relative_frequency_uncalibrated
+event_operator: greater_than
+thresholds_mm_h: [1.0, 5.0, 10.0, 20.0, 50.0]
+
+lead_bands:
+  - band_id: near
+    minimum_lead_minutes: 5
+    maximum_lead_minutes: 60
+  - band_id: far
+    minimum_lead_minutes: 65
+    maximum_lead_minutes: 120
+
+method:
+  name: isotonic_pav
+  interpolation: linear
+  out_of_bounds: clip
+  threshold_coherence: cumulative_minimum
+
+# These are fit-readiness floors, not a Fujian promotion gate. Operational
+# sample-size and performance gates must be frozen after source/QPE semantics
+# and the independent Fujian split are available.
+fit_policy:
+  minimum_sample_count: 1000
+  minimum_event_count: 50
+  minimum_non_event_count: 50
+  minimum_unique_probability_count: 5
+  minimum_case_count: 6
+  minimum_issue_count: 50
+  sample_weighting: equal_valid_grid_cell
+
+split_policy:
+  training_role: calibration_training
+  validation_role: calibration_validation
+  require_disjoint_namespaces: true
+  require_disjoint_case_ids: true
+  validation_untouched_at_fit: true
+
+activation:
+  artifact_fitting_enabled: false
+  shadow_application_enabled: false
+  calibrated_product_publication_enabled: false
+  required_gate: independent_fujian_calibration_acceptance_required

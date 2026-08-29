@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/configs/schemas/probability-calibration-artifact.schema.json",
+  "title": "RainPulse ProbabilityCalibrationArtifact 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_id",
+    "artifact_contract_version",
+    "profile_version",
+    "created_at_utc",
+    "source",
+    "method",
+    "training_evidence",
+    "reserved_validation",
+    "curves",
+    "operational"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "artifact_id": { "type": "string", "minLength": 1 },
+    "artifact_contract_version": { "const": "1.0" },
+    "profile_version": { "const": "rp025-probability-calibration-v1" },
+    "created_at_utc": { "type": "string", "format": "date-time" },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model_id",
+        "model_profile_version",
+        "forecast_output_contract_version",
+        "probability_status",
+        "event_operator",
+        "grid_id"
+      ],
+      "properties": {
+        "model_id": { "const": "pysteps-steps" },
+        "model_profile_version": { "type": "string", "minLength": 1 },
+        "forecast_output_contract_version": { "const": "1.2" },
+        "probability_status": {
+          "const": "raw_ensemble_relative_frequency_uncalibrated"
+        },
+        "event_operator": { "const": "greater_than" },
+        "grid_id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "method": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "interpolation", "out_of_bounds", "threshold_coherence"],
+      "properties": {
+        "name": { "const": "isotonic_pav" },
+        "interpolation": { "const": "linear" },
+        "out_of_bounds": { "const": "clip" },
+        "threshold_coherence": { "const": "cumulative_minimum" }
+      }
+    },
+    "training_evidence": { "$ref": "#/$defs/trainingEvidence" },
+    "reserved_validation": { "$ref": "#/$defs/validationEvidence" },
+    "curves": {
+      "type": "array",
+      "minItems": 10,
+      "maxItems": 10,
+      "items": { "$ref": "#/$defs/curve" }
+    },
+    "operational": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "shadow_only",
+        "operational_eligible",
+        "publication_enabled",
+        "blockers"
+      ],
+      "properties": {
+        "shadow_only": { "const": true },
+        "operational_eligible": { "const": false },
+        "publication_enabled": { "const": false },
+        "blockers": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "caseIds": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "trainingEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "namespace",
+        "role",
+        "source_manifest_sha256",
+        "case_ids",
+        "case_count",
+        "issue_count"
+      ],
+      "properties": {
+        "namespace": { "type": "string", "minLength": 1 },
+        "role": { "const": "calibration_training" },
+        "source_manifest_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "case_ids": { "$ref": "#/$defs/caseIds" },
+        "case_count": { "type": "integer", "minimum": 1 },
+        "issue_count": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "validationEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["namespace", "role", "case_ids", "untouched_at_fit"],
+      "properties": {
+        "namespace": { "type": "string", "minLength": 1 },
+        "role": { "const": "calibration_validation" },
+        "case_ids": { "$ref": "#/$defs/caseIds" },
+        "untouched_at_fit": { "const": true }
+      }
+    },
+    "point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input_probability", "calibrated_probability"],
+      "properties": {
+        "input_probability": { "type": "number", "minimum": 0, "maximum": 1 },
+        "calibrated_probability": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "curve": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lead_band",
+        "minimum_lead_minutes",
+        "maximum_lead_minutes",
+        "threshold_mm_h",
+        "sample_count",
+        "event_count",
+        "non_event_count",
+        "unique_probability_count",
+        "training_brier_raw",
+        "training_brier_calibrated",
+        "points"
+      ],
+      "properties": {
+        "lead_band": { "enum": ["near", "far"] },
+        "minimum_lead_minutes": { "type": "integer", "minimum": 1 },
+        "maximum_lead_minutes": { "type": "integer", "minimum": 1 },
+        "threshold_mm_h": { "enum": [1.0, 5.0, 10.0, 20.0, 50.0] },
+        "sample_count": { "type": "integer", "minimum": 1 },
+        "event_count": { "type": "integer", "minimum": 1 },
+        "non_event_count": { "type": "integer", "minimum": 1 },
+        "unique_probability_count": { "type": "integer", "minimum": 2 },
+        "training_brier_raw": { "type": "number", "minimum": 0, "maximum": 1 },
+        "training_brier_calibrated": { "type": "number", "minimum": 0, "maximum": 1 },
+        "points": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/point" }
+        }
+      }
+    }
+  }
+}

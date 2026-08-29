@@ -24,6 +24,11 @@ nowcast operation:
    the two-dimensional business exchange file derived at the product boundary.
 11. [`rendered-rainfall-layer.md`](rendered-rainfall-layer.md) defines the
    transparent PNG and geospatial layer manifest consumed by the frontend.
+12. [`ensemble-application-product-bundle.md`](ensemble-application-product-bundle.md)
+    defines the offline probability/quantile GIS bundle.
+13. [`probability-calibration-artifact.md`](probability-calibration-artifact.md)
+    defines the disabled-by-default RP-025 calibration and shadow-evaluation
+    boundary.
 
 Offline algorithm verification may additionally publish the presentation-only
 [`algorithm-verification-map-bundle.md`](algorithm-verification-map-bundle.md).

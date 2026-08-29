@@ -52,6 +52,7 @@ NowcastInput gate.
 | RP-022 | Offline STEPS ensemble foundation complete | ForecastOutput 1.2, frozen 12-member seeded STEPS, member-specific support, raw exceedance probabilities/P10-P50-P90 and Brier/CRPS/reliability verification pass real-library and full-grid deployment-server acceptance; operational publication remains disabled |
 | RP-023 | Offline ensemble product and GIS loop complete | Eight probability/quantile layers produce 384 PNG/NetCDF assets behind a checksum-validated read-only API and shared OpenLayers timeline; 12/24-member full-grid resource evidence keeps the first hindcast at 12 members and operational publication disabled |
 | RP-024 | Independent MRMS probability validation complete | Frozen 2022 development and 2023 holdout splits verify 12-member STEPS on 50/50 independent issues; near-lead CRPS/Brier skill passes the precommitted gate, while raw probabilities remain uncalibrated and operational publication disabled |
+| RP-025 | Probability calibration and shadow foundation complete | Versioned isotonic calibration artifacts, fit-readiness checks, split-leakage rejection, threshold coherence and shadow-only scoring pass synthetic acceptance; fitting, shadow application and publication remain disabled pending Fujian QC/QPE data |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -467,6 +468,16 @@ baselines remain required. Raw probabilities are underdispersive and not
 Fujian-calibrated, so this does not enable operational probability publication.
 Details are in `docs/RP024_MRMS概率集合独立验证与验收记录.md`.
 
+RP-025 adds the data-independent probability-calibration seam without consuming
+or reinterpreting the RP-024 splits. A versioned PAV isotonic artifact preserves
+training/source identity, requires disjoint calibration-training and reserved
+validation namespaces, rejects insufficient samples and keeps missing cells
+missing. Applied 1/5/10/20/50 mm/h probabilities are projected to retain strict
+exceedance-threshold ordering. Synthetic tests cover fitting, application,
+leakage and shadow scoring, but all fitting, shadow and publication switches
+remain false until Fujian QC/QPE data and a new independent gate exist. Details
+are in `docs/RP025_概率校准与影子运行基础实施记录.md`.
+
 The 2021-08, 2024-06, 2025-01, 2022-01, 2022-12, 2023-06 and 2023-12 months are
 now spent verification data for their respective claims. Do not tune against
 their results and reuse them as independent acceptance. If forecast, temporal
@@ -487,9 +498,9 @@ gates.
 Before that real-data acceptance, enable RP-019 in stages: archive-only ingest,
 then decode/QC/grid, then mosaic/QPE, and only then NowcastInput/LK/product
 automation. The next probability milestone is a Fujian continuous five-minute
-QC/QPE archive, independent probability calibration and publication-disabled
-parallel replay; do not enable the full chain merely because the Compose
-services are healthy. The activation and rollback checklist is in
+QC/QPE archive, a frozen calibration split and publication-disabled parallel
+replay using the RP-025 seam; do not enable the full chain merely because the
+Compose services are healthy. The activation and rollback checklist is in
 `docs/RP019_运行可靠性与自动化实施记录.md`.
 
 ## Required inputs before operational QC and gridding
@@ -526,6 +537,7 @@ make test-radar-config
 make test-contracts
 make test-grid
 make test-ancillary
+make test-probability-calibration
 make test
 make lint
 make build

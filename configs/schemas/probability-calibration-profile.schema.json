@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/configs/schemas/probability-calibration-profile.schema.json",
+  "title": "RainPulse RP-025 probability calibration profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_version",
+    "artifact_contract_version",
+    "source_forecast_output_contract_version",
+    "source_probability_status",
+    "event_operator",
+    "thresholds_mm_h",
+    "lead_bands",
+    "method",
+    "fit_policy",
+    "split_policy",
+    "activation"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "profile_version": { "const": "rp025-probability-calibration-v1" },
+    "artifact_contract_version": { "const": "1.0" },
+    "source_forecast_output_contract_version": { "const": "1.2" },
+    "source_probability_status": {
+      "const": "raw_ensemble_relative_frequency_uncalibrated"
+    },
+    "event_operator": { "const": "greater_than" },
+    "thresholds_mm_h": { "const": [1.0, 5.0, 10.0, 20.0, 50.0] },
+    "lead_bands": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["band_id", "minimum_lead_minutes", "maximum_lead_minutes"],
+          "properties": {
+            "band_id": { "const": "near" },
+            "minimum_lead_minutes": { "const": 5 },
+            "maximum_lead_minutes": { "const": 60 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["band_id", "minimum_lead_minutes", "maximum_lead_minutes"],
+          "properties": {
+            "band_id": { "const": "far" },
+            "minimum_lead_minutes": { "const": 65 },
+            "maximum_lead_minutes": { "const": 120 }
+          }
+        }
+      ],
+      "items": false,
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "method": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "interpolation", "out_of_bounds", "threshold_coherence"],
+      "properties": {
+        "name": { "const": "isotonic_pav" },
+        "interpolation": { "const": "linear" },
+        "out_of_bounds": { "const": "clip" },
+        "threshold_coherence": { "const": "cumulative_minimum" }
+      }
+    },
+    "fit_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum_sample_count",
+        "minimum_event_count",
+        "minimum_non_event_count",
+        "minimum_unique_probability_count",
+        "minimum_case_count",
+        "minimum_issue_count",
+        "sample_weighting"
+      ],
+      "properties": {
+        "minimum_sample_count": { "type": "integer", "minimum": 1000 },
+        "minimum_event_count": { "type": "integer", "minimum": 50 },
+        "minimum_non_event_count": { "type": "integer", "minimum": 50 },
+        "minimum_unique_probability_count": { "type": "integer", "minimum": 5 },
+        "minimum_case_count": { "type": "integer", "minimum": 6 },
+        "minimum_issue_count": { "type": "integer", "minimum": 50 },
+        "sample_weighting": { "const": "equal_valid_grid_cell" }
+      }
+    },
+    "split_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "training_role",
+        "validation_role",
+        "require_disjoint_namespaces",
+        "require_disjoint_case_ids",
+        "validation_untouched_at_fit"
+      ],
+      "properties": {
+        "training_role": { "const": "calibration_training" },
+        "validation_role": { "const": "calibration_validation" },
+        "require_disjoint_namespaces": { "const": true },
+        "require_disjoint_case_ids": { "const": true },
+        "validation_untouched_at_fit": { "const": true }
+      }
+    },
+    "activation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_fitting_enabled",
+        "shadow_application_enabled",
+        "calibrated_product_publication_enabled",
+        "required_gate"
+      ],
+      "properties": {
+        "artifact_fitting_enabled": { "const": false },
+        "shadow_application_enabled": { "const": false },
+        "calibrated_product_publication_enabled": { "const": false },
+        "required_gate": {
+          "const": "independent_fujian_calibration_acceptance_required"
+        }
+      }
+    }
+  }
+}
