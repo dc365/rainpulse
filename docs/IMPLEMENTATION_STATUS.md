@@ -49,7 +49,7 @@ NowcastInput gate.
 | RP-019 | Engineering foundation complete | Immutable raw archive, continuous ingest seam, persistent automatic planner, bounded Worker retries/atomic commit, control-plane security, build identity and Prometheus operational metrics are implemented; real ingest and the planner remain disabled pending Fujian data/config acceptance |
 | RP-020 | Coverage provenance complete | 53/53 frozen MRMS issues separate geometric advection-boundary loss from in-domain missing data with zero closure error; all 636 LK slices have zero in-domain loss, while the original RP-018 result remains unchanged |
 | RP-021 | Independent MRMS holdout complete | Observation-only selection froze 4 wet and 2 dry cases from 2024-06/2025-01 before forecast execution; 50/50 issues pass complete provenance, near-lead LK meets the frozen three-baseline gate, while far-lead translation remains a required baseline |
-| RP-022 | Offline STEPS ensemble foundation complete | ForecastOutput 1.2, frozen 12-member seeded STEPS, member-specific support, raw exceedance probabilities/P10-P50-P90 and Brier/CRPS/reliability verification pass real-library local acceptance; operational publication remains disabled |
+| RP-022 | Offline STEPS ensemble foundation complete | ForecastOutput 1.2, frozen 12-member seeded STEPS, member-specific support, raw exceedance probabilities/P10-P50-P90 and Brier/CRPS/reliability verification pass real-library and full-grid deployment-server acceptance; operational publication remains disabled |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
