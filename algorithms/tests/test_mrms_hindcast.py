@@ -16,6 +16,7 @@ from rainpulse_algo.datasets.mrms_precip import (
 from rainpulse_algo.grid import RegularLatLonGrid
 from rainpulse_algo.verification.mrms_hindcast import (
     MRMSArchiveFrameSource,
+    _runtime_fingerprint,
     conform_mrms_cases,
     main,
     run_mrms_hindcast,
@@ -42,6 +43,33 @@ class DryMRMSFrameSource:
 class FailingMRMSFrameSource:
     def read(self, valid_time: datetime, grid: RegularLatLonGrid) -> MRMSPrecipFrame:
         raise MRMSPrecipError(f"synthetic missing frame {valid_time.isoformat()}")
+
+
+def test_runtime_fingerprint_accepts_explicit_deployment_revision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    revision = "a" * 40
+    monkeypatch.setenv("RAINPULSE_BUILD_REVISION", revision)
+
+    fingerprint = _runtime_fingerprint(
+        load_mrms_verification_profile(RIGOR_PROFILE_PATH),
+        REPOSITORY_ROOT,
+    )
+
+    assert fingerprint["git_commit"] == revision
+    assert fingerprint["git_commit_source"] == "environment"
+
+
+def test_runtime_fingerprint_rejects_ambiguous_short_revision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RAINPULSE_BUILD_REVISION", "abc123")
+
+    with pytest.raises(ValueError, match="full hexadecimal revision"):
+        _runtime_fingerprint(
+            load_mrms_verification_profile(RIGOR_PROFILE_PATH),
+            REPOSITORY_ROOT,
+        )
 
 
 def test_hindcast_runs_shared_core_and_writes_non_operational_report(tmp_path: Path) -> None:

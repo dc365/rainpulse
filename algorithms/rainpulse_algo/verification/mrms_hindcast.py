@@ -270,17 +270,28 @@ def _runtime_fingerprint(profile: MRMSVerificationProfile, repository_root: Path
             packages[package] = importlib.metadata.version(package)
         except importlib.metadata.PackageNotFoundError:
             packages[package] = None
-    try:
-        commit = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=repository_root,
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        ).stdout.strip()
-    except (OSError, subprocess.SubprocessError):
-        commit = None
+    configured_revision = os.getenv("RAINPULSE_BUILD_REVISION", "").strip().lower()
+    if configured_revision:
+        if len(configured_revision) not in {40, 64} or any(
+            character not in "0123456789abcdef" for character in configured_revision
+        ):
+            raise ValueError("RAINPULSE_BUILD_REVISION must be a full hexadecimal revision")
+        commit = configured_revision
+        commit_source = "environment"
+    else:
+        try:
+            commit = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=repository_root,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            ).stdout.strip()
+            commit_source = "git"
+        except (OSError, subprocess.SubprocessError):
+            commit = None
+            commit_source = None
     thread_variables = {
         name: os.getenv(name)
         for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
@@ -291,6 +302,7 @@ def _runtime_fingerprint(profile: MRMSVerificationProfile, repository_root: Path
         "machine": platform.machine(),
         "processor": platform.processor() or None,
         "git_commit": commit,
+        "git_commit_source": commit_source,
         "verification_profile_sha256": profile.profile_sha256,
         "packages": packages,
         "thread_environment": thread_variables,
@@ -406,6 +418,7 @@ def run_mrms_hindcast(
     if not selected:
         raise ValueError("no MRMS verification cases selected")
 
+    runtime_fingerprint = _runtime_fingerprint(profile, repository_root)
     output_directory.mkdir(parents=True, exist_ok=True)
     rows: list[dict[str, Any]] = []
     truth_domain_rows: list[dict[str, Any]] = []
@@ -782,7 +795,7 @@ def run_mrms_hindcast(
         "adaptation_summary": adaptation_summary,
         "accumulation_summary": accumulation_summary,
         "performance_summary": performance_summary,
-        "runtime_fingerprint": _runtime_fingerprint(profile, repository_root),
+        "runtime_fingerprint": runtime_fingerprint,
         "report_files": {
             "common_domain": "metrics.csv",
             "fixed_truth_domain": "metrics_truth_domain.csv",
