@@ -219,6 +219,23 @@ def test_rejects_missing_input_instead_of_turning_it_into_no_rain() -> None:
         )
 
 
+def test_wraps_backend_failure_for_independent_lk_fallback_orchestration() -> None:
+    def failing_backend(*_args, **_kwargs):
+        raise RuntimeError("nonstationary AR(p) process")
+
+    with pytest.raises(
+        PystepsStepsInputError,
+        match=r"backend failed: RuntimeError: nonstationary AR\(p\) process",
+    ):
+        run_pysteps_steps_fields(
+            steps_fields(),
+            profile=steps_profile(),
+            lk_profile=lk_profile(),
+            grid=tiny_grid(),
+            backend=failing_backend,
+        )
+
+
 def test_no_rain_uses_explicit_zero_ensemble_without_calling_stochastic_backend() -> None:
     def unexpected_backend(*_args, **_kwargs):
         raise AssertionError("STEPS backend must not run for no-rain input")

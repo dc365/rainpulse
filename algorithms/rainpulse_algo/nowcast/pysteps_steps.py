@@ -144,15 +144,18 @@ def run_pysteps_steps_fields(
             "domain": profile.ensemble.domain,
             "return_output": True,
         }
-        transformed_members = np.asarray(
-            forecast(
+        try:
+            backend_output = forecast(
                 transformed,
                 deterministic.velocity_pixels_per_step,
                 lead_count,
                 **kwargs,
-            ),
-            dtype="float32",
-        )
+            )
+        except Exception as exc:
+            raise PystepsStepsInputError(
+                f"pySTEPS-STEPS backend failed: {type(exc).__name__}: {exc}"
+            ) from exc
+        transformed_members = np.asarray(backend_output, dtype="float32")
         expected = (member_count, lead_count, *grid.shape)
         if transformed_members.shape != expected:
             raise PystepsStepsInputError(

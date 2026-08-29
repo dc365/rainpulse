@@ -69,6 +69,8 @@ RP-022 没有猜测随机成员的缺测状态：
 - 支持真实 `pysteps.nowcasts.steps.forecast` 后端和可注入测试后端；
 - 无可追踪降水时显式生成零降水集合，并记录
   `no_trackable_precipitation`，不调用随机后端；
+- pySTEPS 内部异常转换为结构化 STEPS 失败，由后续编排保持 LK 独立发布，禁止
+  伪造随机集合；
 - 固定种子、单 Worker 和 NumPy FFT，保证当前工程环境可重复。
 
 ### 4.3 概率检验
