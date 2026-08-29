@@ -57,6 +57,11 @@ const detail = {
     lead_minutes: [10, 20],
     thresholds_mm_h: [1, 5, 10],
     windows_pixels: [1, 5, 11],
+    fss_scales: [
+      { window_pixels: 1, target_km: 1, actual_km_min: .97, actual_km_max: 1.04 },
+      { window_pixels: 5, target_km: 5, actual_km_min: 4.83, actual_km_max: 5.2 },
+      { window_pixels: 11, target_km: 10, actual_km_min: 10.63, actual_km_max: 11.43 },
+    ],
   },
   skill_summary: {
     status: 'lk_supported',
@@ -71,7 +76,7 @@ const detail = {
 const metric = (model: string, lead: number, fss: number) => ({
   case_id: 'midwest_convection_20210810', case_category: 'wet',
   issue_time: '2021-08-10T17:00:00Z', truth_kind: 'observed_mrms_10min',
-  model, lead_minutes: lead, threshold_mm_h: 5, window_pixels: 11, window_km: 11.1,
+  model, lead_minutes: lead, threshold_mm_h: 5, window_pixels: 11, window_km: 11.1, window_target_km: 10,
   hits: 10, misses: 2, false_alarms: 1, correct_negatives: 88,
   csi: .76, pod: .83, far: .09, fss,
   mae_mm_h: .8, rmse_mm_h: 1.2, mean_error_mm_h: .1,
@@ -137,6 +142,11 @@ describe('AlgorithmVerificationWorkspace', () => {
     expect(await screen.findByText(/回波运动矢量 1 个/)).toBeTruthy()
     expect(screen.getAllByText('+0.0200').length).toBeGreaterThan(0)
     expect(screen.getByText('工程证据 · 非福建业务验收')).toBeTruthy()
+    fireEvent.click(screen.getByText('高级设置'))
+    expect(screen.getByRole('button', { name: '10 km' }).getAttribute('title')).toBe('10 km，内部使用 11×11 网格窗口；当前报告实际覆盖 10.6 km–11.4 km')
+    expect(screen.getByText('目标物理尺度，内部按 11×11 网格窗口计算')).toBeTruthy()
+    expect(screen.queryByText('11 px')).toBeNull()
+    expect(screen.getByText('10 km · 实际 11.1 km · 11×11 网格')).toBeTruthy()
     const caseSelect = screen.getByRole('combobox', { name: '典型案例' }) as HTMLSelectElement
     expect(caseSelect.value).toBe('midwest_convection_20210810')
 

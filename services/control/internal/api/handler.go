@@ -1576,6 +1576,15 @@ func toAPIAlgorithmVerificationRunDetail(
 			WindowPixels:                comparison.WindowPixels,
 		})
 	}
+	fssScales := make([]apiv1.AlgorithmVerificationFSSScale, 0, len(detail.Filters.FSSScales))
+	for _, scale := range detail.Filters.FSSScales {
+		fssScales = append(fssScales, apiv1.AlgorithmVerificationFSSScale{
+			WindowPixels: scale.WindowPixels,
+			TargetKm:     scale.TargetKM,
+			ActualKmMin:  scale.ActualKMMin,
+			ActualKmMax:  scale.ActualKMMax,
+		})
+	}
 	return apiv1.AlgorithmVerificationRunDetail{
 		Run:   toAPIAlgorithmVerificationRun(detail.Run),
 		Cases: cases,
@@ -1583,6 +1592,7 @@ func toAPIAlgorithmVerificationRunDetail(
 			Models: detail.Filters.Models, LeadMinutes: detail.Filters.LeadMinutes,
 			ThresholdsMmH: detail.Filters.ThresholdsMMH,
 			WindowsPixels: detail.Filters.WindowsPixels,
+			FssScales:     fssScales,
 		},
 		SkillSummary: apiv1.AlgorithmVerificationSkillSummary{
 			Status:           detail.SkillSummary.Status,
@@ -1600,7 +1610,8 @@ func toAPIAlgorithmVerificationMetric(
 		IssueTime: metric.IssueTime.UTC(), TruthKind: metric.TruthKind,
 		Model: metric.Model, LeadMinutes: metric.LeadMinutes,
 		ThresholdMmH: metric.ThresholdMMH, WindowPixels: metric.WindowPixels,
-		WindowKm: metric.WindowKM, Hits: metric.Hits, Misses: metric.Misses,
+		WindowKm: metric.WindowKM, WindowTargetKm: metric.WindowTargetKM,
+		Hits: metric.Hits, Misses: metric.Misses,
 		FalseAlarms: metric.FalseAlarms, CorrectNegatives: metric.CorrectNegatives,
 		Csi: metric.CSI, Pod: metric.POD, Far: metric.FAR, Fss: metric.FSS,
 		MaeMmH: metric.MAEMMH, RmseMmH: metric.RMSEMMH,

@@ -41,6 +41,10 @@ func TestFileStoreListsAndFiltersAlgorithmVerificationRuns(t *testing.T) {
 	if got := fmt.Sprint(detail.Filters.LeadMinutes); got != "[10 20]" {
 		t.Fatalf("unexpected leads: %s", got)
 	}
+	if len(detail.Filters.FSSScales) != 1 || detail.Filters.FSSScales[0].TargetKM != 10 ||
+		detail.Filters.FSSScales[0].ActualKMMin != 11.1 || detail.Filters.FSSScales[0].ActualKMMax != 11.1 {
+		t.Fatalf("unexpected FSS scales: %#v", detail.Filters.FSSScales)
+	}
 
 	issueTime := time.Date(2021, 8, 10, 17, 0, 0, 0, time.UTC)
 	metrics, err := store.ListMetrics(
@@ -81,6 +85,23 @@ func TestFileStoreTreatsMissingRootAsEmpty(t *testing.T) {
 	runs, err := store.ListRuns(context.Background())
 	if err != nil || len(runs) != 0 {
 		t.Fatalf("expected empty missing root, got runs=%#v err=%v", runs, err)
+	}
+}
+
+func TestParseMetricReadsExplicitPhysicalFSSTarget(t *testing.T) {
+	header := append(append([]string{}, metricColumns...), "window_target_km")
+	columns := make(map[string]int, len(header))
+	for index, name := range header {
+		columns[name] = index
+	}
+	row := strings.Split(metricFixtureRow("lk", 10, "0.72")+",9.5", ",")
+
+	metric, err := parseMetric(row, columns)
+	if err != nil {
+		t.Fatalf("parse metric: %v", err)
+	}
+	if metric.WindowPixels != 11 || metric.WindowKM != 11.1 || metric.WindowTargetKM != 9.5 {
+		t.Fatalf("unexpected physical FSS scale: %#v", metric)
 	}
 }
 

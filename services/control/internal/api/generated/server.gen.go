@@ -447,12 +447,21 @@ type AlgorithmVerificationCase struct {
 	IssueTimes []time.Time `json:"issue_times"`
 }
 
+// AlgorithmVerificationFSSScale defines model for AlgorithmVerificationFSSScale.
+type AlgorithmVerificationFSSScale struct {
+	ActualKmMax  float64 `json:"actual_km_max"`
+	ActualKmMin  float64 `json:"actual_km_min"`
+	TargetKm     float64 `json:"target_km"`
+	WindowPixels int     `json:"window_pixels"`
+}
+
 // AlgorithmVerificationFilterOptions defines model for AlgorithmVerificationFilterOptions.
 type AlgorithmVerificationFilterOptions struct {
-	LeadMinutes   []int     `json:"lead_minutes"`
-	Models        []string  `json:"models"`
-	ThresholdsMmH []float64 `json:"thresholds_mm_h"`
-	WindowsPixels []int     `json:"windows_pixels"`
+	FssScales     []AlgorithmVerificationFSSScale `json:"fss_scales"`
+	LeadMinutes   []int                           `json:"lead_minutes"`
+	Models        []string                        `json:"models"`
+	ThresholdsMmH []float64                       `json:"thresholds_mm_h"`
+	WindowsPixels []int                           `json:"windows_pixels"`
 }
 
 // AlgorithmVerificationMapFrame defines model for AlgorithmVerificationMapFrame.
@@ -555,6 +564,7 @@ type AlgorithmVerificationMetric struct {
 	TruthKind        string    `json:"truth_kind"`
 	WindowKm         float64   `json:"window_km"`
 	WindowPixels     int       `json:"window_pixels"`
+	WindowTargetKm   float64   `json:"window_target_km"`
 }
 
 // AlgorithmVerificationMetricList defines model for AlgorithmVerificationMetricList.

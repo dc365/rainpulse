@@ -2251,7 +2251,7 @@ components:
     AlgorithmVerificationFilterOptions:
       type: object
       additionalProperties: false
-      required: [models, lead_minutes, thresholds_mm_h, windows_pixels]
+      required: [models, lead_minutes, thresholds_mm_h, windows_pixels, fss_scales]
       properties:
         models:
           type: array
@@ -2270,6 +2270,26 @@ components:
           type: array
           items:
             type: integer
+        fss_scales:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlgorithmVerificationFSSScale"
+    AlgorithmVerificationFSSScale:
+      type: object
+      additionalProperties: false
+      required: [window_pixels, target_km, actual_km_min, actual_km_max]
+      properties:
+        window_pixels:
+          type: integer
+        target_km:
+          type: number
+          format: double
+        actual_km_min:
+          type: number
+          format: double
+        actual_km_max:
+          type: number
+          format: double
     AlgorithmVerificationSkillComparison:
       type: object
       additionalProperties: false
@@ -2364,6 +2384,7 @@ components:
         - threshold_mm_h
         - window_pixels
         - window_km
+        - window_target_km
         - hits
         - misses
         - false_alarms
@@ -2398,6 +2419,9 @@ components:
         window_pixels:
           type: integer
         window_km:
+          type: number
+          format: double
+        window_target_km:
           type: number
           format: double
         hits:

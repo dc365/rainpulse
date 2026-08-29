@@ -140,6 +140,9 @@ func TestAlgorithmVerificationEndpointsExposeFilteredEvidence(t *testing.T) {
 			Filters: verificationstore.FilterOptions{
 				Models:      []string{"lk", "persistence", "translation"},
 				LeadMinutes: []int{10}, ThresholdsMMH: []float64{5}, WindowsPixels: []int{11},
+				FSSScales: []verificationstore.FSSScale{{
+					WindowPixels: 11, TargetKM: 10, ActualKMMin: 10.6, ActualKMMax: 11.4,
+				}},
 			},
 			SkillSummary: verificationstore.SkillSummary{
 				Status: "lk_supported", ComparisonMetric: "FSS",
@@ -156,7 +159,7 @@ func TestAlgorithmVerificationEndpointsExposeFilteredEvidence(t *testing.T) {
 		metrics: []verificationstore.Metric{{
 			CaseID: "midwest_convection_20210810", CaseCategory: "wet", IssueTime: issueTime,
 			TruthKind: "observed_mrms_10min", Model: "lk", LeadMinutes: 10,
-			ThresholdMMH: 5, WindowPixels: 11, WindowKM: 11.1, FSS: &fss,
+			ThresholdMMH: 5, WindowPixels: 11, WindowKM: 11.1, WindowTargetKM: 10, FSS: &fss,
 		}},
 		mapFrame: verificationstore.MapFrame{
 			ContractVersion: "1.0", RendererVersion: "verification-renderer-v1",
@@ -191,11 +194,11 @@ func TestAlgorithmVerificationEndpointsExposeFilteredEvidence(t *testing.T) {
 		}
 	}
 	assert("/api/v1/algorithm-verification/runs", `"metric_row_count":57240`)
-	assert("/api/v1/algorithm-verification/runs/rp016-mrms-v1/full-202108-v2", `"case_id":"midwest_convection_20210810"`)
+	assert("/api/v1/algorithm-verification/runs/rp016-mrms-v1/full-202108-v2", `"target_km":10`)
 	assert(
 		"/api/v1/algorithm-verification/runs/rp016-mrms-v1/full-202108-v2/metrics"+
 			"?case_id=midwest_convection_20210810&issue_time=2021-08-10T17:00:00Z&threshold_mm_h=5&window_pixels=11",
-		`"fss":0.72`,
+		`"window_target_km":10`,
 	)
 	assert(
 		"/api/v1/algorithm-verification/runs/rp016-mrms-v1/full-202108-v2/map-frame"+

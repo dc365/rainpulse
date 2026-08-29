@@ -83,6 +83,14 @@ type FilterOptions struct {
 	LeadMinutes   []int
 	ThresholdsMMH []float64
 	WindowsPixels []int
+	FSSScales     []FSSScale
+}
+
+type FSSScale struct {
+	WindowPixels int
+	TargetKM     float64
+	ActualKMMin  float64
+	ActualKMMax  float64
 }
 
 type RunDetail struct {
@@ -102,6 +110,7 @@ type Metric struct {
 	ThresholdMMH     float64
 	WindowPixels     int
 	WindowKM         float64
+	WindowTargetKM   float64
 	Hits             int64
 	Misses           int64
 	FalseAlarms      int64
@@ -790,6 +799,7 @@ func readMetricsCSV(
 	leads := make(map[int]bool)
 	thresholds := make(map[float64]bool)
 	windows := make(map[int]bool)
+	fssScales := make(map[int]FSSScale)
 	for rowNumber := 2; ; rowNumber++ {
 		if rowNumber%1024 == 0 {
 			if err := ctx.Err(); err != nil {
@@ -826,6 +836,26 @@ func readMetricsCSV(
 		leads[metric.LeadMinutes] = true
 		thresholds[metric.ThresholdMMH] = true
 		windows[metric.WindowPixels] = true
+		candidate := FSSScale{
+			WindowPixels: metric.WindowPixels,
+			TargetKM:     metric.WindowTargetKM,
+			ActualKMMin:  metric.WindowKM,
+			ActualKMMax:  metric.WindowKM,
+		}
+		if current, exists := fssScales[metric.WindowPixels]; exists {
+			if math.Abs(current.TargetKM-candidate.TargetKM) > 1e-6 {
+				return nil, nil, FilterOptions{}, fmt.Errorf(
+					"%w: FSS window %d has inconsistent target scales",
+					ErrInvalidReport,
+					metric.WindowPixels,
+				)
+			}
+			current.ActualKMMin = math.Min(current.ActualKMMin, candidate.ActualKMMin)
+			current.ActualKMMax = math.Max(current.ActualKMMax, candidate.ActualKMMax)
+			fssScales[metric.WindowPixels] = current
+		} else {
+			fssScales[metric.WindowPixels] = candidate
+		}
 	}
 	if len(metrics) == 0 {
 		return nil, nil, FilterOptions{}, fmt.Errorf("%w: metrics CSV is empty", ErrInvalidReport)
@@ -835,6 +865,7 @@ func readMetricsCSV(
 		LeadMinutes:   sortedIntKeys(leads),
 		ThresholdsMMH: sortedFloatKeys(thresholds),
 		WindowsPixels: sortedIntKeys(windows),
+		FSSScales:     sortedFSSScales(fssScales),
 	}
 	return metrics, cases, filters, nil
 }
@@ -902,6 +933,16 @@ func parseMetric(row []string, columns map[string]int) (Metric, error) {
 	if err != nil {
 		return Metric{}, err
 	}
+	windowTargetKM := legacyFSSTargetKM(window, windowKM)
+	if _, exists := columns["window_target_km"]; exists {
+		windowTargetKM, err = parseFloat(value, "window_target_km")
+		if err != nil {
+			return Metric{}, err
+		}
+		if math.Abs(windowTargetKM-windowKM) <= 1e-6 {
+			windowTargetKM = legacyFSSTargetKM(window, windowKM)
+		}
+	}
 	hits, err := parseInt64(value, "hits")
 	if err != nil {
 		return Metric{}, err
@@ -922,7 +963,8 @@ func parseMetric(row []string, columns map[string]int) (Metric, error) {
 		CaseID: caseID, CaseCategory: category, IssueTime: issueTime.UTC(),
 		TruthKind: truthKind, Model: model, LeadMinutes: lead,
 		ThresholdMMH: threshold, WindowPixels: window, WindowKM: windowKM,
-		Hits: hits, Misses: misses, FalseAlarms: falseAlarms,
+		WindowTargetKM: windowTargetKM,
+		Hits:           hits, Misses: misses, FalseAlarms: falseAlarms,
 		CorrectNegatives: correctNegatives,
 		CSI:              nullableFloat(value, "csi"), POD: nullableFloat(value, "pod"),
 		FAR: nullableFloat(value, "far"), FSS: nullableFloat(value, "fss"),
@@ -933,6 +975,38 @@ func parseMetric(row []string, columns map[string]int) (Metric, error) {
 		ForecastCoverage: nullableFloat(value, "forecast_coverage"),
 		CommonCoverage:   nullableFloat(value, "common_coverage"),
 	}, nil
+}
+
+func sortedFSSScales(values map[int]FSSScale) []FSSScale {
+	keys := make([]int, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Ints(keys)
+	result := make([]FSSScale, 0, len(keys))
+	for _, key := range keys {
+		result = append(result, values[key])
+	}
+	return result
+}
+
+func legacyFSSTargetKM(windowPixels int, actualKM float64) float64 {
+	// RP-016 reports predate window_target_km. Their frozen odd-grid windows
+	// correspond to the physical scales adopted by RP-018.
+	switch windowPixels {
+	case 1:
+		return 1
+	case 5:
+		return 5
+	case 11:
+		return 10
+	case 21:
+		return 20
+	case 41:
+		return 40
+	default:
+		return actualKM
+	}
 }
 
 func parseInt(value func(string) (string, error), name string) (int, error) {

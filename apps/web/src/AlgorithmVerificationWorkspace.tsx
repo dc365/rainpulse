@@ -10,6 +10,7 @@ type VerificationCase = components['schemas']['AlgorithmVerificationCase']
 type VerificationMetric = components['schemas']['AlgorithmVerificationMetric']
 type SkillComparison = components['schemas']['AlgorithmVerificationSkillComparison']
 type VerificationMapFrame = components['schemas']['AlgorithmVerificationMapFrame']
+type FSSScale = components['schemas']['AlgorithmVerificationFSSScale']
 
 const modelLabels: Record<string, string> = {
   lk: 'pySTEPS-LK',
@@ -234,6 +235,7 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
   }, [baseline, selectedCaseID, selectedIssueTime, selectedLeadMinutes, selectedRunKey, threshold, windowPixels])
 
   const activeCase = detail?.cases.find((item) => item.case_id === selectedCaseID) ?? null
+  const selectedFSSScale = detail?.filters.fss_scales.find((item) => item.window_pixels === windowPixels)
   const selectedRows = useMemo(
     () => buildLeadRows(metrics, detail?.filters.lead_minutes ?? [], baseline),
     [baseline, detail?.filters.lead_minutes, metrics],
@@ -301,7 +303,7 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
                 thresholds={detail.filters.thresholds_mm_h}
                 threshold={threshold}
                 onThresholdChange={setThreshold}
-                windows={detail.filters.windows_pixels}
+                fssScales={detail.filters.fss_scales}
                 windowPixels={windowPixels}
                 onWindowChange={setWindowPixels}
               />
@@ -336,7 +338,7 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
                   verificationCase={activeCase}
                   issueTime={selectedIssueTime}
                   threshold={threshold}
-                  windowPixels={windowPixels}
+                  fssScale={selectedFSSScale}
                   truthKind={detail.run.primary_truth_kind}
                   row={selectedLeadRow}
                 />
@@ -406,7 +408,7 @@ function VerificationSelectionBar({
   thresholds,
   threshold,
   onThresholdChange,
-  windows,
+  fssScales,
   windowPixels,
   onWindowChange,
 }: {
@@ -425,7 +427,7 @@ function VerificationSelectionBar({
   thresholds: number[]
   threshold: number
   onThresholdChange: (value: number) => void
-  windows: number[]
+  fssScales: FSSScale[]
   windowPixels: number
   onWindowChange: (value: number) => void
 }) {
@@ -465,13 +467,21 @@ function VerificationSelectionBar({
       </ControlGroup>
       <details className="verification-advanced-filter">
         <summary>高级设置</summary>
-        <ControlGroup label="FSS 邻域">
-          {windows.map((value) => (
-            <ChoiceButton key={value} active={windowPixels === value} onClick={() => onWindowChange(value)}>
-              {value} px
+        <ControlGroup label="FSS 邻域尺度">
+          {fssScales.map((scale) => (
+            <ChoiceButton
+              key={scale.window_pixels}
+              active={windowPixels === scale.window_pixels}
+              onClick={() => onWindowChange(scale.window_pixels)}
+              title={`${formatFSSScale(scale.target_km)}，内部使用 ${scale.window_pixels}×${scale.window_pixels} 网格窗口；当前报告实际覆盖 ${formatFSSRange(scale)}`}
+            >
+              {formatFSSScale(scale.target_km)}
             </ChoiceButton>
           ))}
         </ControlGroup>
+        <p className="verification-fss-scale-note">
+          目标物理尺度，内部按 {windowPixels}×{windowPixels} 网格窗口计算
+        </p>
       </details>
     </section>
   )
@@ -481,8 +491,8 @@ function ControlGroup({ label, children }: { label: string; children: ReactNode 
   return <div className="verification-control-group verification-control-group-rp017"><span>{label}</span><div>{children}</div></div>
 }
 
-function ChoiceButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
-  return <button type="button" className={active ? 'active' : ''} aria-pressed={active} onClick={onClick}>{children}</button>
+function ChoiceButton({ active, onClick, children, title }: { active: boolean; onClick: () => void; children: ReactNode; title?: string }) {
+  return <button type="button" className={active ? 'active' : ''} aria-pressed={active} onClick={onClick} title={title}>{children}</button>
 }
 
 function LeadTimeline({
@@ -589,14 +599,14 @@ function CurrentSliceCard({
   verificationCase,
   issueTime,
   threshold,
-  windowPixels,
+  fssScale,
   truthKind,
   row,
 }: {
   verificationCase: VerificationCase | null
   issueTime: string
   threshold: number
-  windowPixels: number
+  fssScale?: FSSScale
   truthKind: string
   row?: LeadRow
 }) {
@@ -608,7 +618,10 @@ function CurrentSliceCard({
         <div><dt>预报时效</dt><dd>{row ? `+${row.lead} 分钟` : '—'}</dd></div>
         <div><dt>真值</dt><dd>{truthLabels[truthKind] ?? truthKind}</dd></div>
         <div><dt>阈值</dt><dd>{threshold} mm/h</dd></div>
-        <div><dt>邻域</dt><dd>{windowPixels} px</dd></div>
+        <div>
+          <dt>FSS 邻域尺度</dt>
+          <dd>{fssScale ? `${formatFSSScale(fssScale.target_km)} · 实际 ${formatFSSActualKM(row, fssScale)} · ${fssScale.window_pixels}×${fssScale.window_pixels} 网格` : '—'}</dd>
+        </div>
         <div><dt>有效域</dt><dd>实况与全部模型共同有效域</dd></div>
       </dl>
       <p>当前结论只验证算法适配和确定性技巧，不验证福建极坐标质控、RQI、QPE 标定或生产就绪。</p>
@@ -761,6 +774,21 @@ function formatUTC(value: string) {
     timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', hour12: false,
   }).format(new Date(value))} UTC`
+}
+
+function formatFSSScale(value: number) {
+  return `${new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 1 }).format(value)} km`
+}
+
+function formatFSSRange(scale: FSSScale) {
+  const minimum = formatFSSScale(scale.actual_km_min)
+  const maximum = formatFSSScale(scale.actual_km_max)
+  return minimum === maximum ? minimum : `${minimum}–${maximum}`
+}
+
+function formatFSSActualKM(row: LeadRow | undefined, scale: FSSScale) {
+  const actual = row?.lk?.window_km ?? row?.baseline?.window_km
+  return actual == null ? formatFSSRange(scale) : formatFSSScale(actual)
 }
 
 function formatMetric(value?: number | null) {

@@ -1177,6 +1177,16 @@ export interface components {
             lead_minutes: number[];
             thresholds_mm_h: number[];
             windows_pixels: number[];
+            fss_scales: components["schemas"]["AlgorithmVerificationFSSScale"][];
+        };
+        AlgorithmVerificationFSSScale: {
+            window_pixels: number;
+            /** Format: double */
+            target_km: number;
+            /** Format: double */
+            actual_km_min: number;
+            /** Format: double */
+            actual_km_max: number;
         };
         AlgorithmVerificationSkillComparison: {
             baseline: string;
@@ -1220,6 +1230,8 @@ export interface components {
             window_pixels: number;
             /** Format: double */
             window_km: number;
+            /** Format: double */
+            window_target_km: number;
             /** Format: int64 */
             hits: number;
             /** Format: int64 */
