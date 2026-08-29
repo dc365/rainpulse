@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/configs/schemas/nowcastnet-profile.schema.json",
+  "title": "RainPulse RP-026 NowcastNet offline profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_version",
+    "model_id",
+    "model_version",
+    "forecast_output_contract_version",
+    "source",
+    "artifact",
+    "protocol",
+    "runtime",
+    "activation"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "profile_version": { "$ref": "#/$defs/identifier" },
+    "model_id": { "const": "nowcastnet" },
+    "model_version": { "$ref": "#/$defs/identifier" },
+    "forecast_output_contract_version": { "const": "1.2" },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "paper_doi",
+        "official_capsule_doi",
+        "official_source_reviewed",
+        "license_approved"
+      ],
+      "properties": {
+        "paper_doi": { "const": "10.1038/s41586-023-06184-4" },
+        "official_capsule_doi": { "const": "10.24433/CO.0832447.v1" },
+        "official_source_reviewed": { "type": "boolean" },
+        "license_approved": { "type": "boolean" }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capsule_archive_sha256",
+        "weights_uri",
+        "weights_sha256",
+        "weights_reviewed"
+      ],
+      "properties": {
+        "capsule_archive_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "weights_uri": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "pattern": "^(s3|file)://[^\\s]+$" }
+          ]
+        },
+        "weights_sha256": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+          ]
+        },
+        "weights_reviewed": { "type": "boolean" }
+      }
+    },
+    "protocol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "input_field",
+        "units",
+        "input_frames",
+        "total_frames",
+        "output_frames",
+        "timestep_minutes",
+        "input_height",
+        "input_width",
+        "input_channels",
+        "rain_rate_cap_mm_h",
+        "ensemble_members",
+        "missing_policy",
+        "output_negative_policy",
+        "preprocess_protocol_verified"
+      ],
+      "properties": {
+        "input_field": { "const": "RATE_QPE" },
+        "units": { "const": "mm h-1" },
+        "input_frames": { "const": 9 },
+        "total_frames": { "const": 29 },
+        "output_frames": { "const": 20 },
+        "timestep_minutes": { "const": 10 },
+        "input_height": { "const": 512 },
+        "input_width": { "const": 512 },
+        "input_channels": { "const": 2 },
+        "rain_rate_cap_mm_h": { "const": 128.0 },
+        "ensemble_members": { "const": 4 },
+        "missing_policy": { "const": "reject_any_missing" },
+        "output_negative_policy": { "const": "clip_to_zero_with_diagnostic" },
+        "preprocess_protocol_verified": { "type": "boolean" }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "python_version",
+        "torch_version",
+        "torch_cuda_version",
+        "target_compute_capability",
+        "compatibility_patch_sha256",
+        "environment_reviewed"
+      ],
+      "properties": {
+        "python_version": { "const": "3.13" },
+        "torch_version": { "const": "2.12.1+cu132" },
+        "torch_cuda_version": { "const": "13.2" },
+        "target_compute_capability": { "const": "12.0" },
+        "compatibility_patch_sha256": {
+          "const": "7a42637adacb6d37ffec1b559d6a31ba05c45338e01fb2d054448f3c0dfe7f32"
+        },
+        "environment_reviewed": { "type": "boolean" }
+      }
+    },
+    "activation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "offline_inference_enabled",
+        "realtime_shadow_enabled",
+        "product_publication_enabled",
+        "operational_eligible"
+      ],
+      "properties": {
+        "offline_inference_enabled": { "type": "boolean" },
+        "realtime_shadow_enabled": { "const": false },
+        "product_publication_enabled": { "const": false },
+        "operational_eligible": { "const": false }
+      }
+    }
+  },
+  "$defs": {
+    "identifier": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$" }
+  }
+}

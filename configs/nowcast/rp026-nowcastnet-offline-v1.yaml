@@ -1,0 +1,47 @@
+schema_version: "1.0"
+profile_version: rp026-nowcastnet-offline-v1
+model_id: nowcastnet
+model_version: official-codeocean-v1-cc0
+forecast_output_contract_version: "1.2"
+
+source:
+  paper_doi: 10.1038/s41586-023-06184-4
+  official_capsule_doi: 10.24433/CO.0832447.v1
+  official_source_reviewed: true
+  license_approved: true
+
+artifact:
+  capsule_archive_sha256: 3607858ca1fe0cd4a22b0c5ef51dc91f76ca156c182c348a08eecf41dbd66821
+  weights_uri: null
+  weights_sha256: 5faee618c4532dff0eec27cb79c29bd7109396a968f9b173a906f8592a2059a5
+  weights_reviewed: true
+
+protocol:
+  input_field: RATE_QPE
+  units: mm h-1
+  input_frames: 9
+  total_frames: 29
+  output_frames: 20
+  timestep_minutes: 10
+  input_height: 512
+  input_width: 512
+  input_channels: 2
+  rain_rate_cap_mm_h: 128.0
+  ensemble_members: 4
+  missing_policy: reject_any_missing
+  output_negative_policy: clip_to_zero_with_diagnostic
+  preprocess_protocol_verified: true
+
+runtime:
+  python_version: "3.13"
+  torch_version: 2.12.1+cu132
+  torch_cuda_version: "13.2"
+  target_compute_capability: "12.0"
+  compatibility_patch_sha256: 7a42637adacb6d37ffec1b559d6a31ba05c45338e01fb2d054448f3c0dfe7f32
+  environment_reviewed: true
+
+activation:
+  offline_inference_enabled: false
+  realtime_shadow_enabled: false
+  product_publication_enabled: false
+  operational_eligible: false
