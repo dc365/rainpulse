@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/configs/schemas/ensemble-application-product-profile.schema.json",
+  "title": "RainPulse RP-023 offline ensemble application products",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "profile_version", "builder_version",
+    "bundle_contract_version", "forecast_output_contract_version",
+    "source_product_profile_version", "rain_rate_exceedance",
+    "rain_rate_quantiles", "rendering", "outputs", "publication"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "profile_version": { "const": "rp023-ensemble-application-products-v1" },
+    "builder_version": { "const": "ensemble-application-product-builder-1.0.0" },
+    "bundle_contract_version": { "const": "1.0" },
+    "forecast_output_contract_version": { "const": "1.2" },
+    "source_product_profile_version": { "const": "rp022-ensemble-products-v1" },
+    "rain_rate_exceedance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_operator", "thresholds_mm_h", "calibration_status"],
+      "properties": {
+        "event_operator": { "const": "greater_than" },
+        "thresholds_mm_h": { "const": [1.0, 5.0, 10.0, 20.0, 50.0] },
+        "calibration_status": { "const": "raw_ensemble_relative_frequency_uncalibrated" }
+      }
+    },
+    "rain_rate_quantiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["quantiles"],
+      "properties": { "quantiles": { "const": [0.1, 0.5, 0.9] } }
+    },
+    "rendering": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "palette_version", "opacity", "probability_transparent_below",
+        "probability", "quantile_transparent_below_mm_h", "quantile"
+      ],
+      "properties": {
+        "palette_version": { "const": "ensemble-probability-rainfall-v1" },
+        "opacity": { "type": "integer", "minimum": 1, "maximum": 255 },
+        "probability_transparent_below": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "quantile_transparent_below_mm_h": { "type": "number", "minimum": 0, "maximum": 1 },
+        "probability": { "$ref": "#/$defs/palette" },
+        "quantile": { "$ref": "#/$defs/palette" }
+      }
+    },
+    "outputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rendered_png", "netcdf"],
+      "properties": {
+        "rendered_png": { "const": true },
+        "netcdf": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["format", "fill_value"],
+          "properties": {
+            "format": { "const": "NETCDF3_CLASSIC" },
+            "fill_value": { "const": -9999.0 }
+          }
+        }
+      }
+    },
+    "publication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["offline_evaluation_enabled", "operational_enabled", "operational_gate"],
+      "properties": {
+        "offline_evaluation_enabled": { "const": true },
+        "operational_enabled": { "const": false },
+        "operational_gate": { "const": "independent_fujian_probabilistic_acceptance_required" }
+      }
+    }
+  },
+  "$defs": {
+    "palette": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["minimum", "color"],
+        "properties": {
+          "minimum": { "type": "number" },
+          "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+        }
+      }
+    }
+  }
+}

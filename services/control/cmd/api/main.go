@@ -10,6 +10,7 @@ import (
 
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/api"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo"
+	ensembleproductstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/ensembleproducts"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/healthcheck"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/objectstore"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/orchestration"
@@ -61,6 +62,10 @@ func main() {
 		"RAINPULSE_ALGORITHM_VERIFICATION_ROOT",
 		"/var/lib/rainpulse/algorithm-verification",
 	))
+	ensembleProducts := ensembleproductstore.NewFileStore(environmentOrDefault(
+		"RAINPULSE_ENSEMBLE_PRODUCT_ROOT",
+		"/var/lib/rainpulse/ensemble-products",
+	))
 
 	server := &http.Server{
 		Addr: address,
@@ -74,6 +79,7 @@ func main() {
 			Products:         store,
 			ProductObjects:   diagnosticLayers,
 			Verification:     verificationReports,
+			EnsembleProducts: ensembleProducts,
 			Metrics:          store,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,

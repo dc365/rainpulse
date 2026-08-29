@@ -13,6 +13,7 @@ import (
 	"time"
 
 	apiv1 "github.com/fonwee/rainpulse-nowcast/services/control/internal/api/generated"
+	ensembleproductstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/ensembleproducts"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/objectstore"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/operationalmetrics"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/orchestration"
@@ -99,6 +100,11 @@ type AlgorithmVerificationStore interface {
 	) (verificationstore.MapAssetContent, error)
 }
 
+type EnsembleProductStore interface {
+	GetLatest(context.Context) (ensembleproductstore.Bundle, error)
+	ReadAsset(context.Context, string, string) (ensembleproductstore.AssetContent, error)
+}
+
 type Options struct {
 	Version          string
 	AdminToken       string
@@ -109,6 +115,7 @@ type Options struct {
 	Products         ProductStore
 	ProductObjects   ProductObjectReader
 	Verification     AlgorithmVerificationStore
+	EnsembleProducts EnsembleProductStore
 	Metrics          operationalmetrics.Provider
 	SSEPollInterval  time.Duration
 }
@@ -123,6 +130,7 @@ type server struct {
 	products         ProductStore
 	productObjects   ProductObjectReader
 	verification     AlgorithmVerificationStore
+	ensembleProducts EnsembleProductStore
 	ssePollInterval  time.Duration
 }
 
@@ -140,6 +148,7 @@ func NewHandler(options Options) http.Handler {
 		products:         options.Products,
 		productObjects:   options.ProductObjects,
 		verification:     options.Verification,
+		ensembleProducts: options.EnsembleProducts,
 		ssePollInterval:  pollInterval,
 	}, apiv1.ChiServerOptions{BaseURL: "/api/v1"})
 	protected := protectAdminRoutes(handler, options.AdminToken)
@@ -344,6 +353,52 @@ func (service *server) GetAlgorithmVerificationMapAsset(
 	response.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	response.Header().Set("ETag", fmt.Sprintf("%q", asset.SHA256))
 	response.Header().Set("X-Content-Type-Options", "nosniff")
+	response.WriteHeader(http.StatusOK)
+	_, _ = response.Write(asset.Data)
+}
+
+func (service *server) GetLatestEnsembleProductBundle(
+	response http.ResponseWriter,
+	request *http.Request,
+) {
+	if service.ensembleProducts == nil {
+		writeError(response, http.StatusNotFound, "not_found", "offline ensemble product was not found")
+		return
+	}
+	bundle, err := service.ensembleProducts.GetLatest(request.Context())
+	if err != nil {
+		writeEnsembleProductError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, toAPIEnsembleProductBundle(bundle))
+}
+
+func (service *server) GetEnsembleProductAsset(
+	response http.ResponseWriter,
+	request *http.Request,
+	bundleID uuid.UUID,
+	assetID string,
+) {
+	if service.ensembleProducts == nil {
+		writeError(response, http.StatusNotFound, "not_found", "offline ensemble asset was not found")
+		return
+	}
+	asset, err := service.ensembleProducts.ReadAsset(
+		request.Context(), bundleID.String(), assetID,
+	)
+	if err != nil {
+		writeEnsembleProductError(response, err)
+		return
+	}
+	response.Header().Set("Content-Type", asset.MediaType)
+	response.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	response.Header().Set("ETag", fmt.Sprintf("%q", asset.SHA256))
+	response.Header().Set("X-Content-Type-Options", "nosniff")
+	if asset.MediaType == "application/x-netcdf" {
+		response.Header().Set(
+			"Content-Disposition", fmt.Sprintf("attachment; filename=%q", asset.FileName),
+		)
+	}
 	response.WriteHeader(http.StatusOK)
 	_, _ = response.Write(asset.Data)
 }
@@ -1463,6 +1518,55 @@ func toAPIProductAsset(asset workflow.ProductAsset) apiv1.ProductAsset {
 	}
 }
 
+func toAPIEnsembleProductBundle(
+	bundle ensembleproductstore.Bundle,
+) apiv1.EnsembleProductBundle {
+	layers := make([]apiv1.EnsembleProductLayer, 0, len(bundle.Layers))
+	for _, layer := range bundle.Layers {
+		legend := make([]apiv1.EnsembleProductLegendEntry, 0, len(layer.Legend))
+		for _, entry := range layer.Legend {
+			legend = append(legend, apiv1.EnsembleProductLegendEntry{
+				Minimum: float32(entry.Minimum), Color: entry.Color,
+			})
+		}
+		assets := make([]apiv1.EnsembleProductAsset, 0, len(layer.Assets))
+		for _, asset := range layer.Assets {
+			assets = append(assets, apiv1.EnsembleProductAsset{
+				AssetId:   asset.AssetID,
+				AssetType: apiv1.EnsembleProductAssetAssetType(asset.AssetType),
+				ContentUrl: fmt.Sprintf(
+					"/api/v1/ensemble-products/%s/assets/%s", bundle.BundleID, asset.AssetID,
+				),
+				MediaType: asset.MediaType, Sha256: asset.SHA256, SizeBytes: asset.SizeBytes,
+				LeadTimeMinutes: asset.LeadMinutes, ValidTime: asset.ValidTime.UTC(), Unit: asset.Unit,
+				CoverageRatio:  float32(asset.CoverageRatio),
+				ValidCellCount: asset.ValidCellCount, MissingCellCount: asset.MissingCellCount,
+			})
+		}
+		layers = append(layers, apiv1.EnsembleProductLayer{
+			LayerId: layer.LayerID, ProductType: apiv1.ProductType(layer.ProductType),
+			VariableName: layer.VariableName, ThresholdMmH: float32Pointer(layer.ThresholdMMH),
+			Quantile: float32Pointer(layer.Quantile), Unit: layer.Unit,
+			Legend: legend, Assets: assets,
+		})
+	}
+	return apiv1.EnsembleProductBundle{
+		BundleId: bundle.BundleID, RunId: bundle.RunID, IssueTime: bundle.IssueTime.UTC(),
+		GridId: bundle.GridID, PixelEdgeBounds: bundle.PixelEdgeBounds,
+		Width: bundle.Width, Height: bundle.Height,
+		ModelId: bundle.ModelID, ModelVersion: bundle.ModelVersion,
+		ModelConfigVersion:   bundle.ModelConfigVersion,
+		ProductConfigVersion: bundle.ProductConfigVersion,
+		MemberCount:          bundle.MemberCount,
+		CalibrationStatus:    apiv1.EnsembleProductBundleCalibrationStatus(bundle.CalibrationStatus),
+		OperationalEligible:  apiv1.EnsembleProductBundleOperationalEligible(bundle.OperationalEligible),
+		OperationalGate:      bundle.OperationalGate,
+		SourceForecastUri:    bundle.SourceForecast.URI,
+		SourceForecastSha256: bundle.SourceForecast.SHA256,
+		Layers:               layers, CreatedAt: bundle.CreatedAt.UTC(),
+	}
+}
+
 func toAPIAlgorithmVerificationRun(
 	run verificationstore.RunSummary,
 ) apiv1.AlgorithmVerificationRunSummary {
@@ -1681,6 +1785,23 @@ func writeAlgorithmVerificationError(response http.ResponseWriter, err error) {
 		return
 	}
 	writeError(response, http.StatusInternalServerError, "internal_error", "algorithm-verification query failed")
+}
+
+func writeEnsembleProductError(response http.ResponseWriter, err error) {
+	if errors.Is(err, ensembleproductstore.ErrNotFound) {
+		writeError(response, http.StatusNotFound, "not_found", "offline ensemble product was not found")
+		return
+	}
+	if errors.Is(err, ensembleproductstore.ErrInvalidBundle) {
+		writeError(
+			response,
+			http.StatusBadGateway,
+			"ensemble_product_invalid",
+			"offline ensemble product bundle is invalid",
+		)
+		return
+	}
+	writeError(response, http.StatusInternalServerError, "internal_error", "offline ensemble product query failed")
 }
 
 func validProductSignature(mediaType string, data []byte) bool {

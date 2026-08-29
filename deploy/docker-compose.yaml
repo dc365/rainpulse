@@ -625,10 +625,12 @@ services:
       RAINPULSE_OBJECT_STORE_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
       RAINPULSE_MAX_INPUT_ARTIFACT_BYTES: "${RAINPULSE_MAX_INPUT_ARTIFACT_BYTES:-2147483648}"
       RAINPULSE_ALGORITHM_VERIFICATION_ROOT: /var/lib/rainpulse/algorithm-verification
+      RAINPULSE_ENSEMBLE_PRODUCT_ROOT: /var/lib/rainpulse/ensemble-products
       RAINPULSE_ADMIN_TOKEN: "${RAINPULSE_ADMIN_TOKEN:-}"
       TZ: UTC
     volumes:
       - "${RAINPULSE_ALGORITHM_VERIFICATION_HOST_ROOT:-../runtime/reports/mrms}:/var/lib/rainpulse/algorithm-verification:ro"
+      - "${RAINPULSE_ENSEMBLE_PRODUCT_HOST_ROOT:-../runtime/products/ensemble}:/var/lib/rainpulse/ensemble-products:ro"
     ports:
       - "${RAINPULSE_API_BIND_ADDRESS:-127.0.0.1}:${RAINPULSE_API_PORT:-8080}:8080"
     healthcheck:

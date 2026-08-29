@@ -17,6 +17,7 @@ interface NowcastMapProps {
   productLabel: string
   legend: readonly (readonly [number, string])[]
   legendUnit: string
+  footerNote?: string
   point: MapCoordinate
   emptyStateHint?: string
   bbox: readonly number[]
@@ -39,7 +40,7 @@ export function NowcastMap(props: NowcastMapProps) {
       productLabel={props.productLabel}
       legend={props.legend.map(([minimum, color]) => ({ label: String(minimum), color }))}
       legendUnit={props.legendUnit}
-      footerNote="透明含缺测与 <0.1"
+      footerNote={props.footerNote ?? '透明含缺测与 <0.1'}
       mapLabel={`可交互降水 GIS 地图，${props.imageDescription}，点击地图选择预报点`}
       resetViewLabel="复位福州网格范围"
       point={props.point}

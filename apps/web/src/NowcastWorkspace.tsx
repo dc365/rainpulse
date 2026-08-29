@@ -8,7 +8,7 @@ import {
 
 import type { components } from './api/generated/schema'
 import { NowcastMap } from './NowcastMap'
-import { NowcastTimeline } from './NowcastTimeline'
+import { NowcastTimeline, type TimelineAsset } from './NowcastTimeline'
 
 type ForecastRun = components['schemas']['ForecastRun']
 type Product = components['schemas']['Product']
@@ -18,8 +18,23 @@ type ProductType = components['schemas']['ProductType']
 type PointForecast = components['schemas']['PointForecast']
 type PointForecastValue = components['schemas']['PointForecastValue']
 type AreaStatistics = components['schemas']['AreaStatistics']
+type EnsembleProductBundle = components['schemas']['EnsembleProductBundle']
+type EnsembleProductLayer = components['schemas']['EnsembleProductLayer']
+type EnsembleProductAsset = components['schemas']['EnsembleProductAsset']
 
 type SupportedProductType = 'rain_rate' | 'accumulation_60' | 'accumulation_120'
+type DisplayMode = 'deterministic' | 'probability' | 'quantile'
+type DisplayAsset = TimelineAsset & {
+  asset_type: string
+  content_url: string
+  media_type: string
+  sha256: string
+  size_bytes: number
+  unit?: string | null
+  coverage_ratio?: number | null
+  valid_cell_count?: number | null
+  missing_cell_count?: number | null
+}
 type Coordinate = { longitude: number, latitude: number }
 type GridBounds = { west: number, south: number, east: number, north: number }
 
@@ -50,6 +65,9 @@ const rainfallAmountLegend = [
   [2.5, '#3ca85b'], [5, '#9acb3c'], [10, '#efd23a'],
   [25, '#ee8a2d'], [50, '#cf453b'], [100, '#862f82'],
 ] as const
+
+const probabilityThresholds = [1, 5, 10, 20, 50] as const
+const quantileValues = [0.1, 0.5, 0.9] as const
 
 const areaPresets = [
   { label: '福州城区', bbox: [119, 25.9, 119.6, 26.3] },
@@ -93,6 +111,10 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
   const [products, setProducts] = useState<Product[]>([])
   const [assets, setAssets] = useState<Record<string, ProductAsset[]>>({})
   const [productType, setProductType] = useState<SupportedProductType>('rain_rate')
+  const [displayMode, setDisplayMode] = useState<DisplayMode>('deterministic')
+  const [ensembleBundle, setEnsembleBundle] = useState<EnsembleProductBundle | null>(null)
+  const [probabilityThreshold, setProbabilityThreshold] = useState(5)
+  const [quantileValue, setQuantileValue] = useState(0.5)
   const [selectedLead, setSelectedLead] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -140,6 +162,19 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
           return [product.product_id, await response.json() as ProductAsset[]] as const
         }))
         const nextAssets = Object.fromEntries(assetPairs)
+        let latestEnsemble: EnsembleProductBundle | null = null
+        try {
+          const ensembleResponse = await fetch('/api/v1/ensemble-products/latest', {
+            signal: controller.signal,
+          })
+          if (ensembleResponse.ok) {
+            const candidate = await ensembleResponse.json() as unknown
+            if (isEnsembleBundle(candidate)) latestEnsemble = candidate
+          }
+        } catch (ensembleRequestError: unknown) {
+          if (ensembleRequestError instanceof DOMException
+            && ensembleRequestError.name === 'AbortError') throw ensembleRequestError
+        }
         const preferred = supported.find((item) => item.product_type === 'rain_rate')
           ?? supported[0]
           ?? null
@@ -152,6 +187,8 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
         setRun(latestRun)
         setProducts(supported)
         setAssets(nextAssets)
+        setEnsembleBundle(latestEnsemble)
+        if (!latestEnsemble) setDisplayMode('deterministic')
         if (preferred && isSupportedProduct(preferred.product_type)) {
           setProductType(preferred.product_type)
         }
@@ -178,25 +215,50 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
     () => products.find((item) => item.product_type === 'rain_rate') ?? null,
     [products],
   )
-  const renderedAssets = useMemo(
+  const selectedEnsembleLayer = useMemo(
+    () => ensembleBundle?.layers.find((layer) => displayMode === 'probability'
+      ? layer.product_type === 'probability_exceedance'
+        && layer.threshold_mm_h === probabilityThreshold
+      : displayMode === 'quantile'
+        && layer.product_type === 'quantile'
+        && layer.quantile === quantileValue) ?? null,
+    [displayMode, ensembleBundle, probabilityThreshold, quantileValue],
+  )
+  const deterministicRenderedAssets = useMemo(
     () => selectedProduct
       ? (assets[selectedProduct.product_id] ?? [])
         .filter((item) => item.asset_type === 'rendered_png')
+        .map(toDisplayAsset)
         .sort(sortAssets)
       : [],
     [assets, selectedProduct],
   )
+  const ensembleRenderedAssets = useMemo(
+    () => (selectedEnsembleLayer?.assets ?? [])
+      .filter((item) => item.asset_type === 'rendered_png')
+      .map(toDisplayAsset)
+      .sort(sortAssets),
+    [selectedEnsembleLayer],
+  )
+  const renderedAssets = displayMode === 'deterministic'
+    ? deterministicRenderedAssets
+    : ensembleRenderedAssets
   const selectedAsset = renderedAssets.find((item) => item.lead_time_minutes === selectedLead)
     ?? renderedAssets[0]
     ?? null
   const currentLead = selectedAsset?.lead_time_minutes ?? null
   const currentAssets = useMemo(
-    () => selectedProduct
-      ? (assets[selectedProduct.product_id] ?? []).filter(
-        (item) => item.lead_time_minutes === currentLead && item.asset_type !== 'point_query_index',
-      )
-      : [],
-    [assets, currentLead, selectedProduct],
+    () => displayMode === 'deterministic'
+      ? selectedProduct
+        ? (assets[selectedProduct.product_id] ?? [])
+          .filter((item) => item.lead_time_minutes === currentLead
+            && item.asset_type !== 'point_query_index')
+          .map(toDisplayAsset)
+        : []
+      : (selectedEnsembleLayer?.assets ?? [])
+        .filter((item) => item.lead_time_minutes === currentLead)
+        .map(toDisplayAsset),
+    [assets, currentLead, displayMode, selectedEnsembleLayer, selectedProduct],
   )
 
   useEffect(() => {
@@ -264,8 +326,33 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
     const firstFrame = (assets[nextProduct.product_id] ?? [])
       .filter((item) => item.asset_type === 'rendered_png')
       .sort(sortAssets)[0]
+    setDisplayMode('deterministic')
     setProductType(nextType)
     setSelectedLead(firstFrame?.lead_time_minutes ?? null)
+    setLayerError(false)
+  }
+
+  const switchEnsembleLayer = (
+    nextMode: Exclude<DisplayMode, 'deterministic'>,
+    nextThreshold = probabilityThreshold,
+    nextQuantile = quantileValue,
+  ) => {
+    if (!ensembleBundle) return
+    const layer = ensembleBundle.layers.find((item) => nextMode === 'probability'
+      ? item.product_type === 'probability_exceedance'
+        && item.threshold_mm_h === nextThreshold
+      : item.product_type === 'quantile' && item.quantile === nextQuantile)
+    if (!layer) return
+    const frames = layer.assets
+      .filter((item) => item.asset_type === 'rendered_png')
+      .sort(sortAssets)
+    setDisplayMode(nextMode)
+    setProbabilityThreshold(nextThreshold)
+    setQuantileValue(nextQuantile)
+    setSelectedLead((current) => frames.some((item) => item.lead_time_minutes === current)
+      ? current
+      : frames[0]?.lead_time_minutes ?? null)
+    setDrawerOpen(false)
     setLayerError(false)
   }
 
@@ -286,7 +373,7 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
     setPoint(normalized)
   }, [])
 
-  const selectTimelineAsset = useCallback((asset: ProductAsset) => {
+  const selectTimelineAsset = useCallback((asset: TimelineAsset) => {
     setSelectedLead(asset.lead_time_minutes ?? null)
     setLayerError(false)
   }, [])
@@ -327,13 +414,33 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
   ) ?? pointForecast?.values[0] ?? null
   const hasCurrentPointValue = currentPointValue?.valid === true
     && currentPointValue.rain_rate != null
-  const legend = productType === 'rain_rate' ? rainRateLegend : rainfallAmountLegend
+  const ensembleActive = displayMode !== 'deterministic'
+  const currentProductLabel = displayMode === 'probability'
+    ? `超过 ${probabilityThreshold} mm/h 概率`
+    : displayMode === 'quantile'
+      ? `P${Math.round(quantileValue * 100)} 雨强分位数`
+      : productLabels[productType]
+  const currentProductNote = displayMode === 'probability'
+    ? '有效时刻瞬时雨强超阈值的原始集合相对频率'
+    : displayMode === 'quantile'
+      ? '有效时刻瞬时雨强的集合成员分位数'
+      : productNotes[productType]
+  const legend = displayMode === 'probability'
+    ? (selectedEnsembleLayer?.legend ?? []).map(
+      (entry) => [entry.minimum * 100, entry.color] as const,
+    )
+    : displayMode === 'quantile'
+      ? (selectedEnsembleLayer?.legend ?? []).map(
+        (entry) => [entry.minimum, entry.color] as const,
+      )
+      : productType === 'rain_rate' ? rainRateLegend : rainfallAmountLegend
+  const issueTime = ensembleActive ? ensembleBundle?.issue_time : run?.issue_time
 
   return (
     <section className="forecast-page" aria-labelledby="forecast-title">
       <header className="page-heading forecast-heading">
         <div>
-          <p className="section-kicker">工程验证 / RP-016</p>
+          <p className="section-kicker">工程验证 / RP-023</p>
           <h1 id="forecast-title">0–2 小时降水预报</h1>
           <p>当前产品用于工程回放与检验；业务可用性由上游质量门控和实况评分共同决定。</p>
         </div>
@@ -347,17 +454,77 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
       {error ? <div className="error-banner" role="alert"><strong>产品读取异常</strong><span>{error}</span></div> : null}
 
       <section className="forecast-stage">
+        <div className="forecast-mode-bar" aria-label="预报模型与集合产品选择">
+          <div className="forecast-mode-switch" role="group" aria-label="预报模型">
+            <span>模型</span>
+            <button
+              type="button"
+              className={displayMode === 'deterministic' ? 'active' : ''}
+              aria-pressed={displayMode === 'deterministic'}
+              onClick={() => switchProduct(productType)}
+            >LK 确定性</button>
+            <button
+              type="button"
+              className={ensembleActive ? 'active' : ''}
+              aria-pressed={ensembleActive}
+              disabled={!ensembleBundle}
+              onClick={() => switchEnsembleLayer('probability')}
+            >STEPS 集合</button>
+          </div>
+          {ensembleBundle ? (
+            <div className="ensemble-layer-switch" aria-label="离线集合图层">
+              <div role="group" aria-label="超阈概率">
+                <span>超阈概率</span>
+                {probabilityThresholds.map((threshold) => (
+                  <button
+                    key={threshold}
+                    type="button"
+                    className={displayMode === 'probability'
+                      && probabilityThreshold === threshold ? 'active' : ''}
+                    aria-pressed={displayMode === 'probability'
+                      && probabilityThreshold === threshold}
+                    onClick={() => switchEnsembleLayer('probability', threshold)}
+                  >&gt;{threshold}</button>
+                ))}
+              </div>
+              <div role="group" aria-label="雨强分位数">
+                <span>分位数</span>
+                {quantileValues.map((quantile) => (
+                  <button
+                    key={quantile}
+                    type="button"
+                    className={displayMode === 'quantile'
+                      && quantileValue === quantile ? 'active' : ''}
+                    aria-pressed={displayMode === 'quantile' && quantileValue === quantile}
+                    onClick={() => switchEnsembleLayer('quantile', probabilityThreshold, quantile)}
+                  >P{Math.round(quantile * 100)}</button>
+                ))}
+              </div>
+            </div>
+          ) : <span className="ensemble-unavailable">等待离线集合产品</span>}
+          <div className={`ensemble-boundary${ensembleActive ? ' active' : ''}`}>
+            <strong>{ensembleBundle ? `${ensembleBundle.member_count} 成员` : '未装载'}</strong>
+            <span>离线 · 原始未校准 · 不进入业务发布</span>
+          </div>
+        </div>
         <div className="forecast-map-host">
           <NowcastMap
             imageUrl={selectedAsset?.content_url}
-            imageDescription={layerAlt(productType, currentLead)}
+            imageDescription={displayLayerAlt(displayMode, productType, currentLead, currentProductLabel)}
             validTimeLabel={formatUtc(selectedAsset?.valid_time)}
             leadLabel={formatLead(currentLead)}
-            productLabel={productLabels[productType]}
+            productLabel={currentProductLabel}
             legend={legend}
-            legendUnit={productType === 'rain_rate' ? 'mm/h' : 'mm'}
+            legendUnit={displayMode === 'probability'
+              ? '%'
+              : productType === 'rain_rate' || displayMode === 'quantile' ? 'mm/h' : 'mm'}
+            footerNote={displayMode === 'probability'
+              ? '透明含缺测与 <1%'
+              : '透明含缺测与 <0.1'}
             point={point}
-            emptyStateHint={run?.status === 'FAILED'
+            emptyStateHint={ensembleActive && !selectedAsset
+              ? '当前离线集合包缺少所选图层'
+              : run?.status === 'FAILED'
               ? `当前起报 ${formatUtc(run.issue_time, true)} 发布失败，等待下一次起报`
               : undefined}
             bbox={bbox}
@@ -365,7 +532,7 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
             layerError={layerError}
             onLayerError={setLayerError}
             onSelectPoint={selectPoint}
-            picker={(
+            picker={!ensembleActive ? (
               <div className="gis-picker">
                 {hasCurrentPointValue ? <strong>{formatRate(currentPointValue)}</strong> : null}
                 <span>{formatCoordinate(point.longitude)}°E  {formatCoordinate(point.latitude)}°N</span>
@@ -373,45 +540,51 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
                   ? <button type="button" onClick={() => openDrawer('point')}>展开单点曲线</button>
                   : null}
               </div>
-            )}
+            ) : undefined}
           />
 
           <div className="stage-float stage-products" role="group" aria-label="降水产品">
-            {(Object.keys(productLabels) as SupportedProductType[]).map((type) => {
-              const available = products.some((item) => item.product_type === type)
-              return (
-                <button
-                  key={type}
-                  type="button"
-                  className={productType === type ? 'active' : ''}
-                  aria-pressed={productType === type}
-                  disabled={!available}
-                  title={productNotes[type]}
-                  onClick={() => switchProduct(type)}
-                >
-                  <strong>{productLabels[type]}</strong>
-                </button>
-              )
-            })}
-            <small className="stage-products-note">{productNotes[productType]}</small>
+            {ensembleActive ? (
+              <button type="button" className="active" aria-pressed="true" disabled>
+                <strong>{currentProductLabel}</strong>
+              </button>
+            ) : (Object.keys(productLabels) as SupportedProductType[]).map((type) => {
+                const available = products.some((item) => item.product_type === type)
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    className={productType === type ? 'active' : ''}
+                    aria-pressed={productType === type}
+                    disabled={!available}
+                    title={productNotes[type]}
+                    onClick={() => switchProduct(type)}
+                  >
+                    <strong>{productLabels[type]}</strong>
+                  </button>
+                )
+              })}
+            <small className="stage-products-note">{currentProductNote}</small>
           </div>
 
           <div className="stage-float stage-status" aria-label="短临产品状态">
             <div className="stage-status-row">
-              <span className={`run-state${run?.status === 'PUBLISHED' ? ' published' : ''}${run?.status === 'FAILED' ? ' failed' : ''}`}>{run?.status ?? (loading ? '读取中' : '无产品')}</span>
+              <span className={`run-state${ensembleActive ? ' offline' : ''}${run?.status === 'PUBLISHED' && !ensembleActive ? ' published' : ''}${run?.status === 'FAILED' && !ensembleActive ? ' failed' : ''}`}>
+                {ensembleActive ? 'OFFLINE' : run?.status ?? (loading ? '读取中' : '无产品')}
+              </span>
               <strong>{formatLead(currentLead)}</strong>
             </div>
-            <div className="stage-status-row"><span>起报</span><strong>{formatUtc(run?.issue_time, true)}</strong></div>
+            <div className="stage-status-row"><span>起报</span><strong>{formatUtc(issueTime, true)}</strong></div>
             <div className="stage-status-row stage-status-valid-time"><span>有效时间</span><strong>{formatUtc(selectedAsset?.valid_time, true)}</strong></div>
             <div className="stage-status-row"><span>有效覆盖</span><strong>{percent(selectedAsset?.coverage_ratio)}</strong></div>
             <div className="stage-status-row"><span>缺测格点</span><strong>{selectedAsset?.missing_cell_count?.toLocaleString('zh-CN') ?? '暂无'}</strong></div>
-            <small>发布状态不等同于预报技巧通过</small>
+            <small>{ensembleActive ? '原始未校准概率，仅供离线验收' : '发布状态不等同于预报技巧通过'}</small>
           </div>
 
           <div className="stage-float stage-assets" aria-label="产品交付与溯源">
             <button type="button" onClick={() => openDrawer('provenance')}>
               <span>溯源</span>
-              <small>{selectedProduct?.model_id ?? '暂无'}</small>
+              <small>{ensembleActive ? ensembleBundle?.model_id : selectedProduct?.model_id ?? '暂无'}</small>
             </button>
             {currentAssets.map((asset) => (
               <a key={asset.asset_id} href={asset.content_url} download>
@@ -423,12 +596,12 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
         </div>
 
         <NowcastTimeline
-          key={productType}
+          key={`${displayMode}-${productType}-${selectedEnsembleLayer?.layer_id ?? 'none'}`}
           assets={renderedAssets}
           selectedAsset={selectedAsset}
-          issueTime={run?.issue_time}
-          fixedWindow={productType !== 'rain_rate'}
-          productLabel={productLabels[productType]}
+          issueTime={issueTime}
+          fixedWindow={!ensembleActive && productType !== 'rain_rate'}
+          productLabel={currentProductLabel}
           onSelect={selectTimelineAsset}
         />
 
@@ -442,13 +615,16 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
                   role="tab"
                   aria-selected={drawerTab === key}
                   className={drawerTab === key ? 'active' : ''}
+                  disabled={ensembleActive && key !== 'provenance'}
                   onClick={() => openDrawer(key)}
                 >
                   {label}
                 </button>
               ))}
             </div>
-            <p className="drawer-summary">{formatCoordinate(point.longitude)}°E {formatCoordinate(point.latitude)}°N · {formatRate(currentPointValue)} · {formatLead(currentLead)}</p>
+            <p className="drawer-summary">{ensembleActive
+              ? `${currentProductLabel} · ${formatLead(currentLead)} · 离线未校准`
+              : `${formatCoordinate(point.longitude)}°E ${formatCoordinate(point.latitude)}°N · ${formatRate(currentPointValue)} · ${formatLead(currentLead)}`}</p>
             <button type="button" className="drawer-toggle" aria-expanded={drawerOpen} onClick={() => setDrawerOpen((value) => !value)}>
               {drawerOpen ? '收起 ▴' : '展开 ▾'}
             </button>
@@ -500,14 +676,17 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
               <section className="provenance-panel">
               <header><p className="panel-label">Product provenance</p><h2>产品溯源</h2></header>
               <dl>
-                <div><dt>Run ID</dt><dd>{run?.run_id ?? '暂无'}</dd></div>
-                <div><dt>Product ID</dt><dd>{selectedProduct?.product_id ?? '暂无'}</dd></div>
-                <div><dt>网格</dt><dd>{selectedProduct?.grid_id ?? '暂无'}</dd></div>
-                <div><dt>产品配置</dt><dd>{selectedProduct?.config_version ?? '暂无'}</dd></div>
-                <div><dt>源预报 SHA</dt><dd>{selectedProduct ? shortSHA(selectedProduct.source_forecast_sha256) : '暂无'}</dd></div>
+                <div><dt>Run ID</dt><dd>{ensembleActive ? ensembleBundle?.run_id : run?.run_id ?? '暂无'}</dd></div>
+                <div><dt>Product ID</dt><dd>{ensembleActive ? selectedEnsembleLayer?.layer_id : selectedProduct?.product_id ?? '暂无'}</dd></div>
+                <div><dt>网格</dt><dd>{ensembleActive ? ensembleBundle?.grid_id : selectedProduct?.grid_id ?? '暂无'}</dd></div>
+                <div><dt>产品配置</dt><dd>{ensembleActive ? ensembleBundle?.product_config_version : selectedProduct?.config_version ?? '暂无'}</dd></div>
+                <div><dt>源预报 SHA</dt><dd>{ensembleActive && ensembleBundle
+                  ? shortSHA(ensembleBundle.source_forecast_sha256)
+                  : selectedProduct ? shortSHA(selectedProduct.source_forecast_sha256) : '暂无'}</dd></div>
                 <div><dt>当前资产 SHA</dt><dd>{selectedAsset ? shortSHA(selectedAsset.sha256) : '暂无'}</dd></div>
-                <div><dt>源预报</dt><dd title={selectedProduct?.source_forecast_uri}>{selectedProduct?.source_forecast_uri ?? '暂无'}</dd></div>
-                <div><dt>成员数</dt><dd>{selectedProduct?.member_count ?? '暂无'}</dd></div>
+                <div><dt>源预报</dt><dd title={ensembleActive ? ensembleBundle?.source_forecast_uri : selectedProduct?.source_forecast_uri}>{ensembleActive ? ensembleBundle?.source_forecast_uri : selectedProduct?.source_forecast_uri ?? '暂无'}</dd></div>
+                <div><dt>成员数</dt><dd>{ensembleActive ? ensembleBundle?.member_count : selectedProduct?.member_count ?? '暂无'}</dd></div>
+                {ensembleActive ? <div><dt>校准状态</dt><dd>原始未校准</dd></div> : null}
               </dl>
           </section>
             </div>
@@ -567,20 +746,56 @@ function PointMilestones({ values }: { values: PointForecastValue[] }) {
   )
 }
 
-function sortAssets(left: ProductAsset, right: ProductAsset) {
+function sortAssets(left: TimelineAsset, right: TimelineAsset) {
   return (left.lead_time_minutes ?? 0) - (right.lead_time_minutes ?? 0)
 }
 
-function layerAlt(productType: SupportedProductType, lead: number | null) {
+function displayLayerAlt(
+  mode: DisplayMode,
+  productType: SupportedProductType,
+  lead: number | null,
+  label: string,
+) {
+  if (mode !== 'deterministic') return `${formatLead(lead)} ${label}图层`
   if (productType === 'rain_rate') return `${formatLead(lead)} 分钟降水率图层`
   return productType === 'accumulation_60' ? '0–1 小时累计降水图层' : '0–2 小时累计降水图层'
 }
 
-function assetFormat(asset: ProductAsset) {
+function assetFormat(asset: DisplayAsset) {
   if (asset.asset_type === 'rendered_png') return 'PNG'
   if (asset.asset_type === 'cloud_optimized_geotiff') return 'COG'
   if (asset.asset_type === 'application_netcdf') return 'NetCDF'
   return asset.asset_type
+}
+
+function toDisplayAsset(asset: ProductAsset | EnsembleProductAsset): DisplayAsset {
+  return {
+    asset_id: asset.asset_id,
+    asset_type: asset.asset_type,
+    content_url: asset.content_url,
+    media_type: asset.media_type,
+    sha256: asset.sha256,
+    size_bytes: asset.size_bytes,
+    lead_time_minutes: asset.lead_time_minutes,
+    valid_time: asset.valid_time,
+    unit: asset.unit,
+    coverage_ratio: asset.coverage_ratio,
+    valid_cell_count: asset.valid_cell_count,
+    missing_cell_count: asset.missing_cell_count,
+  }
+}
+
+function isEnsembleBundle(value: unknown): value is EnsembleProductBundle {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<EnsembleProductBundle>
+  return typeof candidate.bundle_id === 'string'
+    && typeof candidate.issue_time === 'string'
+    && candidate.operational_eligible === false
+    && typeof candidate.member_count === 'number'
+    && candidate.member_count >= 2
+    && Array.isArray(candidate.layers)
+    && candidate.layers.every((layer: EnsembleProductLayer) =>
+      Array.isArray(layer.assets) && Array.isArray(layer.legend))
 }
 
 function formatBytes(value: number) {

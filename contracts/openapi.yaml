@@ -651,6 +651,55 @@ paths:
                 format: binary
         "404":
           $ref: "#/components/responses/NotFound"
+  /ensemble-products/latest:
+    get:
+      operationId: getLatestEnsembleProductBundle
+      tags: [products]
+      summary: Get the newest offline ensemble application-product bundle
+      responses:
+        "200":
+          description: Offline probability and quantile GIS product bundle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnsembleProductBundle"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /ensemble-products/{bundle_id}/assets/{asset_id}:
+    get:
+      operationId: getEnsembleProductAsset
+      tags: [products]
+      summary: Read one immutable offline ensemble PNG or NetCDF asset
+      parameters:
+        - name: bundle_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: asset_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-z0-9][a-z0-9-]{0,126}$'
+      responses:
+        "200":
+          description: Immutable offline ensemble product asset
+          headers:
+            ETag:
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
   /system/status:
     get:
       operationId: getSystemStatus
@@ -2037,6 +2086,189 @@ components:
         created_at:
           type: string
           format: date-time
+    EnsembleProductBundle:
+      type: object
+      additionalProperties: false
+      required:
+        - bundle_id
+        - run_id
+        - issue_time
+        - grid_id
+        - pixel_edge_bounds
+        - width
+        - height
+        - model_id
+        - model_version
+        - model_config_version
+        - product_config_version
+        - member_count
+        - calibration_status
+        - operational_eligible
+        - operational_gate
+        - source_forecast_uri
+        - source_forecast_sha256
+        - layers
+        - created_at
+      properties:
+        bundle_id:
+          type: string
+          format: uuid
+        run_id:
+          type: string
+          format: uuid
+        issue_time:
+          type: string
+          format: date-time
+        grid_id:
+          type: string
+        pixel_edge_bounds:
+          type: array
+          minItems: 4
+          maxItems: 4
+          items:
+            type: number
+            format: double
+        width:
+          type: integer
+          minimum: 1
+        height:
+          type: integer
+          minimum: 1
+        model_id:
+          type: string
+        model_version:
+          type: string
+        model_config_version:
+          type: string
+        product_config_version:
+          type: string
+        member_count:
+          type: integer
+          minimum: 2
+        calibration_status:
+          type: string
+          enum: [raw_ensemble_relative_frequency_uncalibrated]
+        operational_eligible:
+          type: boolean
+          enum: [false]
+        operational_gate:
+          type: string
+        source_forecast_uri:
+          type: string
+          format: uri
+        source_forecast_sha256:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+        layers:
+          type: array
+          items:
+            $ref: "#/components/schemas/EnsembleProductLayer"
+        created_at:
+          type: string
+          format: date-time
+    EnsembleProductLayer:
+      type: object
+      additionalProperties: false
+      required:
+        - layer_id
+        - product_type
+        - variable_name
+        - unit
+        - legend
+        - assets
+      properties:
+        layer_id:
+          type: string
+        product_type:
+          $ref: "#/components/schemas/ProductType"
+        variable_name:
+          type: string
+        threshold_mm_h:
+          type: number
+          format: float
+          nullable: true
+        quantile:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          nullable: true
+        unit:
+          type: string
+        legend:
+          type: array
+          items:
+            $ref: "#/components/schemas/EnsembleProductLegendEntry"
+        assets:
+          type: array
+          items:
+            $ref: "#/components/schemas/EnsembleProductAsset"
+    EnsembleProductLegendEntry:
+      type: object
+      additionalProperties: false
+      required: [minimum, color]
+      properties:
+        minimum:
+          type: number
+          format: float
+        color:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+    EnsembleProductAsset:
+      type: object
+      additionalProperties: false
+      required:
+        - asset_id
+        - asset_type
+        - content_url
+        - media_type
+        - sha256
+        - size_bytes
+        - lead_time_minutes
+        - valid_time
+        - unit
+        - coverage_ratio
+        - valid_cell_count
+        - missing_cell_count
+      properties:
+        asset_id:
+          type: string
+        asset_type:
+          type: string
+          enum: [rendered_png, application_netcdf]
+        content_url:
+          type: string
+          format: uri-reference
+        media_type:
+          type: string
+        sha256:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+        size_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        lead_time_minutes:
+          type: integer
+          minimum: 1
+        valid_time:
+          type: string
+          format: date-time
+        unit:
+          type: string
+        coverage_ratio:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        valid_cell_count:
+          type: integer
+          format: int64
+          minimum: 0
+        missing_cell_count:
+          type: integer
+          format: int64
+          minimum: 0
     PointForecastValue:
       type: object
       additionalProperties: false

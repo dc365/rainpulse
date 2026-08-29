@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/api"
+	ensembleproductstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/ensembleproducts"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/orchestration"
 	verificationstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/verification"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/workflow"
@@ -219,6 +220,70 @@ func TestAlgorithmVerificationEndpointsExposeFilteredEvidence(t *testing.T) {
 	}
 	if store.filter.CaseID != "midwest_convection_20210810" || !store.filter.IssueTime.Equal(issueTime) {
 		t.Fatalf("metric query was not delegated: %#v", store.filter)
+	}
+}
+
+func TestOfflineEnsembleProductEndpointsExposeGISAssetsWithoutPublishing(t *testing.T) {
+	bundleID := uuid.MustParse("9b000000-0000-4000-8000-000000000001")
+	jobID := uuid.MustParse("9b000000-0000-4000-8000-000000000002")
+	now := time.Date(2026, 8, 29, 2, 0, 0, 0, time.UTC)
+	store := &fakeEnsembleProductStore{
+		bundle: ensembleproductstore.Bundle{
+			BundleID: bundleID, RunID: bundleID, JobID: jobID,
+			IssueTime: now, GridID: "fuzhou_118_123_25_27_0p01deg_v1",
+			PixelEdgeBounds: []float64{117.995, 24.995, 123.005, 27.005},
+			Width:           501, Height: 201,
+			SourceForecast: ensembleproductstore.SourceForecast{
+				URI: "s3://rainpulse/forecast.zarr", SHA256: strings.Repeat("a", 64),
+			},
+			ModelID: "pysteps-steps", ModelVersion: "pysteps-steps-1.0.0",
+			ModelConfigVersion:   "rp022-pysteps-steps-v1",
+			ProductConfigVersion: "rp023-ensemble-application-products-v1",
+			MemberCount:          12,
+			CalibrationStatus:    "raw_ensemble_relative_frequency_uncalibrated",
+			OperationalGate:      "independent_fujian_probabilistic_acceptance_required",
+			CreatedAt:            now,
+			Layers: []ensembleproductstore.Layer{{
+				LayerID: "probability-gt-1", ProductType: "probability_exceedance",
+				VariableName: "prob_gt_1", ThresholdMMH: floatPointer(1), Unit: "1",
+				Legend: []ensembleproductstore.LegendEntry{{Minimum: 0.01, Color: "#d6eef7"}},
+				Assets: []ensembleproductstore.Asset{{
+					AssetID: "probability-gt-1-lead-005-png", AssetType: "rendered_png",
+					MediaType: "image/png", SHA256: strings.Repeat("b", 64), SizeBytes: 12,
+					LeadMinutes: 5, ValidTime: now.Add(5 * time.Minute), Unit: "1",
+					CoverageRatio: 0.98, ValidCellCount: 98687, MissingCellCount: 2014,
+				}},
+			}},
+		},
+		asset: ensembleproductstore.AssetContent{
+			Data: []byte("\x89PNG\r\n\x1a\nmap"), MediaType: "image/png",
+			SHA256: strings.Repeat("b", 64), FileName: "layer.png",
+		},
+	}
+	handler := api.NewHandler(api.Options{Version: "test", EnsembleProducts: store})
+
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/ensemble-products/latest", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK ||
+		!strings.Contains(response.Body.String(), `"operational_eligible":false`) ||
+		!strings.Contains(
+			response.Body.String(),
+			`/api/v1/ensemble-products/9b000000-0000-4000-8000-000000000001/assets/probability-gt-1-lead-005-png`,
+		) {
+		t.Fatalf("unexpected ensemble bundle response: status=%d body=%s", response.Code, response.Body.String())
+	}
+
+	request = httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/ensemble-products/"+bundleID.String()+"/assets/probability-gt-1-lead-005-png",
+		nil,
+	)
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || response.Header().Get("Content-Type") != "image/png" ||
+		!strings.Contains(response.Header().Get("Cache-Control"), "immutable") {
+		t.Fatalf("unexpected ensemble asset response: status=%d headers=%v", response.Code, response.Header())
 	}
 }
 
@@ -948,6 +1013,26 @@ func (store *fakeProductStore) GetProductAsset(
 
 type fakeProductObjectReader struct {
 	objects map[string][]byte
+}
+
+type fakeEnsembleProductStore struct {
+	bundle ensembleproductstore.Bundle
+	asset  ensembleproductstore.AssetContent
+	err    error
+}
+
+func (store *fakeEnsembleProductStore) GetLatest(
+	context.Context,
+) (ensembleproductstore.Bundle, error) {
+	return store.bundle, store.err
+}
+
+func (store *fakeEnsembleProductStore) ReadAsset(
+	context.Context,
+	string,
+	string,
+) (ensembleproductstore.AssetContent, error) {
+	return store.asset, store.err
 }
 
 func (reader *fakeProductObjectReader) ReadObject(

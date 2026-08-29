@@ -76,6 +76,58 @@ const accumulationAsset = (productID: string, lead: number) => [{
   created_at: '2026-08-25T15:07:56Z',
 }]
 
+const ensembleLayerAssets = (layerID: string) => [5, 10].flatMap((lead) => [
+  {
+    asset_id: `${layerID}-lead-${String(lead).padStart(3, '0')}-png`,
+    asset_type: 'rendered_png',
+    content_url: `/api/v1/ensemble-products/ensemble-run/assets/${layerID}-lead-${String(lead).padStart(3, '0')}-png`,
+    media_type: 'image/png', sha256: `${lead + 3}`.padStart(64, '0'), size_bytes: 1900,
+    lead_time_minutes: lead, valid_time: `2026-08-25T10:${String(lead).padStart(2, '0')}:00Z`,
+    unit: layerID.startsWith('probability') ? '1' : 'mm h-1', coverage_ratio: 0.91,
+    valid_cell_count: 91638, missing_cell_count: 9063,
+  },
+  {
+    asset_id: `${layerID}-lead-${String(lead).padStart(3, '0')}-nc`,
+    asset_type: 'application_netcdf',
+    content_url: `/api/v1/ensemble-products/ensemble-run/assets/${layerID}-lead-${String(lead).padStart(3, '0')}-nc`,
+    media_type: 'application/x-netcdf', sha256: `${lead + 4}`.padStart(64, '0'),
+    size_bytes: 408164, lead_time_minutes: lead,
+    valid_time: `2026-08-25T10:${String(lead).padStart(2, '0')}:00Z`,
+    unit: layerID.startsWith('probability') ? '1' : 'mm h-1', coverage_ratio: 0.91,
+    valid_cell_count: 91638, missing_cell_count: 9063,
+  },
+])
+
+const ensembleBundle = {
+  bundle_id: '9b000000-0000-4000-8000-000000000001',
+  run_id: '9b000000-0000-4000-8000-000000000001',
+  issue_time: run.issue_time, grid_id: run.grid_id,
+  pixel_edge_bounds: [117.995, 24.995, 123.005, 27.005], width: 501, height: 201,
+  model_id: 'pysteps-steps', model_version: 'pysteps-steps-1.0.0',
+  model_config_version: 'rp022-pysteps-steps-v1',
+  product_config_version: 'rp023-ensemble-application-products-v1', member_count: 12,
+  calibration_status: 'raw_ensemble_relative_frequency_uncalibrated',
+  operational_eligible: false,
+  operational_gate: 'independent_fujian_probabilistic_acceptance_required',
+  source_forecast_uri: 's3://rainpulse/ensemble-forecast.zarr',
+  source_forecast_sha256: productsSourceSHA,
+  layers: [
+    {
+      layer_id: 'probability-gt-5', product_type: 'probability_exceedance',
+      variable_name: 'prob_gt_5', threshold_mm_h: 5, quantile: null, unit: '1',
+      legend: [{ minimum: 0.01, color: '#d6eef7' }, { minimum: 0.5, color: '#2d8ea8' }],
+      assets: ensembleLayerAssets('probability-gt-5'),
+    },
+    {
+      layer_id: 'quantile-p90', product_type: 'quantile',
+      variable_name: 'p90', threshold_mm_h: null, quantile: 0.9, unit: 'mm h-1',
+      legend: [{ minimum: 0.1, color: '#9dd9ff' }, { minimum: 5, color: '#3ca85b' }],
+      assets: ensembleLayerAssets('quantile-p90'),
+    },
+  ],
+  created_at: '2026-08-29T02:00:00Z',
+}
+
 describe('RainPulse short-nowcast workspace', () => {
   afterEach(() => {
     cleanup()
@@ -111,7 +163,7 @@ describe('RainPulse short-nowcast workspace', () => {
     render(<NowcastWorkspace refreshToken={0} />)
 
     expect(screen.getByRole('heading', { name: '0–2 小时降水预报' })).toBeTruthy()
-    expect(screen.getByText('工程验证 / RP-016')).toBeTruthy()
+    expect(screen.getByText('工程验证 / RP-023')).toBeTruthy()
     const firstLayer = await screen.findByRole('img', { name: 'T+5 分钟降水率图层' })
     expect(firstLayer.getAttribute('data-source')).toBe('/api/lead-5.png')
     expect(screen.getByRole('application', { name: /可交互降水 GIS 地图/ })).toBeTruthy()
@@ -186,5 +238,53 @@ describe('RainPulse short-nowcast workspace', () => {
     expect(picker?.textContent).toContain('119.30°E')
     expect(picker?.textContent).not.toContain('缺测')
     expect(picker?.querySelector('button')).toBeNull()
+  })
+
+  it('switches offline STEPS probability and quantile layers on the shared GIS timeline', async () => {
+    const fetchStatus = vi.fn().mockImplementation((input: string) => {
+      let body: unknown = {}
+      if (input.endsWith('/runs/latest')) body = run
+      else if (input.includes('/products?run_id=')) body = { items: products }
+      else if (input.endsWith('/products/rain-product/assets')) body = rainAssets
+      else if (input.endsWith('/products/accum-60/assets')) body = accumulationAsset('accum-60', 60)
+      else if (input.endsWith('/products/accum-120/assets')) body = accumulationAsset('accum-120', 120)
+      else if (input.endsWith('/ensemble-products/latest')) body = ensembleBundle
+      else if (input.includes('/point-forecast?')) body = {
+        product_id: 'rain-product', longitude: 119.3, latitude: 26.08,
+        grid_longitude: 119.3, grid_latitude: 26.08,
+        values: [
+          { valid_time: '2026-08-25T10:05:00Z', lead_time_minutes: 5, rain_rate: 2, valid: true, confidence: 0.78 },
+        ],
+      }
+      else if (input.includes('/area-statistics?')) body = {
+        product_id: 'rain-product', bbox: [119, 25.9, 119.6, 26.3],
+        valid_time: '2026-08-25T10:05:00Z', lead_time_minutes: 5,
+        valid_pixel_count: 5151, missing_pixel_count: 0, valid_pixel_ratio: 1,
+        max_rain_rate: 7.2, mean_rain_rate: 1.83,
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => body })
+    })
+    vi.stubGlobal('fetch', fetchStatus)
+
+    render(<NowcastWorkspace refreshToken={0} />)
+
+    const ensembleButton = await screen.findByRole('button', { name: 'STEPS 集合' })
+    expect(ensembleButton.hasAttribute('disabled')).toBe(false)
+    fireEvent.click(ensembleButton)
+    const probabilityLayer = await screen.findByRole('img', {
+      name: 'T+5 超过 5 mm/h 概率图层',
+    })
+    expect(probabilityLayer.getAttribute('data-source')).toContain('probability-gt-5')
+    expect(screen.getByText('OFFLINE')).toBeTruthy()
+    expect(screen.getByText('离线 · 原始未校准 · 不进入业务发布')).toBeTruthy()
+    expect(screen.getByRole('tab', { name: '单点雨强' }).hasAttribute('disabled')).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: 'P90' }))
+    const quantileLayer = await screen.findByRole('img', { name: 'T+5 P90 雨强分位数图层' })
+    expect(quantileLayer.getAttribute('data-source')).toContain('quantile-p90')
+    expect(screen.getByText('NetCDF')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'LK 确定性' }))
+    expect(await screen.findByRole('img', { name: 'T+5 分钟降水率图层' })).toBeTruthy()
   })
 })

@@ -1,0 +1,48 @@
+schema_version: "1.0"
+profile_version: rp023-ensemble-application-products-v1
+builder_version: ensemble-application-product-builder-1.0.0
+bundle_contract_version: "1.0"
+forecast_output_contract_version: "1.2"
+source_product_profile_version: rp022-ensemble-products-v1
+
+rain_rate_exceedance:
+  event_operator: greater_than
+  thresholds_mm_h: [1.0, 5.0, 10.0, 20.0, 50.0]
+  calibration_status: raw_ensemble_relative_frequency_uncalibrated
+
+rain_rate_quantiles:
+  quantiles: [0.1, 0.5, 0.9]
+
+rendering:
+  palette_version: ensemble-probability-rainfall-v1
+  opacity: 210
+  probability_transparent_below: 0.01
+  probability:
+    - { minimum: 0.01, color: "#d6eef7" }
+    - { minimum: 0.10, color: "#a8d8e8" }
+    - { minimum: 0.25, color: "#66b8cf" }
+    - { minimum: 0.50, color: "#2d8ea8" }
+    - { minimum: 0.75, color: "#12697d" }
+    - { minimum: 0.90, color: "#084b5b" }
+  quantile_transparent_below_mm_h: 0.1
+  quantile:
+    - { minimum: 0.1, color: "#9dd9ff" }
+    - { minimum: 1.0, color: "#4ba3f2" }
+    - { minimum: 2.5, color: "#2a79c7" }
+    - { minimum: 5.0, color: "#3ca85b" }
+    - { minimum: 10.0, color: "#9acb3c" }
+    - { minimum: 25.0, color: "#efd23a" }
+    - { minimum: 50.0, color: "#ee8a2d" }
+    - { minimum: 100.0, color: "#cf453b" }
+    - { minimum: 200.0, color: "#862f82" }
+
+outputs:
+  rendered_png: true
+  netcdf:
+    format: NETCDF3_CLASSIC
+    fill_value: -9999.0
+
+publication:
+  offline_evaluation_enabled: true
+  operational_enabled: false
+  operational_gate: independent_fujian_probabilistic_acceptance_required

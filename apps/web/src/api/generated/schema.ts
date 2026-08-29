@@ -514,6 +514,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ensemble-products/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the newest offline ensemble application-product bundle */
+        get: operations["getLatestEnsembleProductBundle"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ensemble-products/{bundle_id}/assets/{asset_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one immutable offline ensemble PNG or NetCDF asset */
+        get: operations["getEnsembleProductAsset"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/system/status": {
         parameters: {
             query?: never;
@@ -1086,6 +1120,72 @@ export interface components {
             no_rain_cell_count?: number | null;
             /** Format: date-time */
             created_at: string;
+        };
+        EnsembleProductBundle: {
+            /** Format: uuid */
+            bundle_id: string;
+            /** Format: uuid */
+            run_id: string;
+            /** Format: date-time */
+            issue_time: string;
+            grid_id: string;
+            pixel_edge_bounds: number[];
+            width: number;
+            height: number;
+            model_id: string;
+            model_version: string;
+            model_config_version: string;
+            product_config_version: string;
+            member_count: number;
+            /** @enum {string} */
+            calibration_status: "raw_ensemble_relative_frequency_uncalibrated";
+            /** @enum {boolean} */
+            operational_eligible: false;
+            operational_gate: string;
+            /** Format: uri */
+            source_forecast_uri: string;
+            source_forecast_sha256: string;
+            layers: components["schemas"]["EnsembleProductLayer"][];
+            /** Format: date-time */
+            created_at: string;
+        };
+        EnsembleProductLayer: {
+            layer_id: string;
+            product_type: components["schemas"]["ProductType"];
+            variable_name: string;
+            /** Format: float */
+            threshold_mm_h?: number | null;
+            /** Format: float */
+            quantile?: number | null;
+            unit: string;
+            legend: components["schemas"]["EnsembleProductLegendEntry"][];
+            assets: components["schemas"]["EnsembleProductAsset"][];
+        };
+        EnsembleProductLegendEntry: {
+            /** Format: float */
+            minimum: number;
+            color: string;
+        };
+        EnsembleProductAsset: {
+            asset_id: string;
+            /** @enum {string} */
+            asset_type: "rendered_png" | "application_netcdf";
+            /** Format: uri-reference */
+            content_url: string;
+            media_type: string;
+            sha256: string;
+            /** Format: int64 */
+            size_bytes: number;
+            lead_time_minutes: number;
+            /** Format: date-time */
+            valid_time: string;
+            unit: string;
+            /** Format: float */
+            coverage_ratio: number;
+            /** Format: int64 */
+            valid_cell_count: number;
+            /** Format: int64 */
+            missing_cell_count: number;
         };
         PointForecastValue: {
             /** Format: date-time */
@@ -2114,6 +2214,53 @@ export interface operations {
                 };
                 content: {
                     "image/png": string;
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getLatestEnsembleProductBundle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Offline probability and quantile GIS product bundle */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnsembleProductBundle"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getEnsembleProductAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bundle_id: string;
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Immutable offline ensemble product asset */
+            200: {
+                headers: {
+                    ETag?: string;
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
                 };
             };
             404: components["responses"]["NotFound"];

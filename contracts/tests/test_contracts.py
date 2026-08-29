@@ -92,6 +92,8 @@ def test_openapi_exposes_the_planned_v1_operations() -> None:
         "/algorithm-verification/runs/{profile_version}/{run_id}/metrics",
         "/algorithm-verification/runs/{profile_version}/{run_id}/map-frame",
         "/algorithm-verification/runs/{profile_version}/{run_id}/map-assets/{case_id}/{issue_key}/{asset_id}",
+        "/ensemble-products/latest",
+        "/ensemble-products/{bundle_id}/assets/{asset_id}",
         "/system/status",
         "/events/stream",
         "/admin/runs/{run_id}/rerun",

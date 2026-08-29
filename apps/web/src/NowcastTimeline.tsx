@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import type { components } from './api/generated/schema'
-
-type ProductAsset = components['schemas']['ProductAsset']
+export interface TimelineAsset {
+  asset_id: string
+  lead_time_minutes?: number | null
+  valid_time?: string | null
+}
 
 interface NowcastTimelineProps {
-  assets: ProductAsset[]
-  selectedAsset: ProductAsset | null
+  assets: TimelineAsset[]
+  selectedAsset: TimelineAsset | null
   issueTime?: string | null
   fixedWindow: boolean
   productLabel: string
-  onSelect: (asset: ProductAsset) => void
+  onSelect: (asset: TimelineAsset) => void
 }
 
 function formatUtc(value?: string | null) {

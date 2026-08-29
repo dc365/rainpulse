@@ -50,6 +50,7 @@ NowcastInput gate.
 | RP-020 | Coverage provenance complete | 53/53 frozen MRMS issues separate geometric advection-boundary loss from in-domain missing data with zero closure error; all 636 LK slices have zero in-domain loss, while the original RP-018 result remains unchanged |
 | RP-021 | Independent MRMS holdout complete | Observation-only selection froze 4 wet and 2 dry cases from 2024-06/2025-01 before forecast execution; 50/50 issues pass complete provenance, near-lead LK meets the frozen three-baseline gate, while far-lead translation remains a required baseline |
 | RP-022 | Offline STEPS ensemble foundation complete | ForecastOutput 1.2, frozen 12-member seeded STEPS, member-specific support, raw exceedance probabilities/P10-P50-P90 and Brier/CRPS/reliability verification pass real-library and full-grid deployment-server acceptance; operational publication remains disabled |
+| RP-023 | Offline ensemble product and GIS loop complete | Eight probability/quantile layers produce 384 PNG/NetCDF assets behind a checksum-validated read-only API and shared OpenLayers timeline; 12/24-member full-grid resource evidence keeps the first hindcast at 12 members and operational publication disabled |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,

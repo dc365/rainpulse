@@ -152,6 +152,54 @@ func (e DiagnosticLayerScope) Valid() bool {
 	}
 }
 
+// Defines values for EnsembleProductAssetAssetType.
+const (
+	ApplicationNetcdf EnsembleProductAssetAssetType = "application_netcdf"
+	RenderedPng       EnsembleProductAssetAssetType = "rendered_png"
+)
+
+// Valid indicates whether the value is a known member of the EnsembleProductAssetAssetType enum.
+func (e EnsembleProductAssetAssetType) Valid() bool {
+	switch e {
+	case ApplicationNetcdf:
+		return true
+	case RenderedPng:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EnsembleProductBundleCalibrationStatus.
+const (
+	RawEnsembleRelativeFrequencyUncalibrated EnsembleProductBundleCalibrationStatus = "raw_ensemble_relative_frequency_uncalibrated"
+)
+
+// Valid indicates whether the value is a known member of the EnsembleProductBundleCalibrationStatus enum.
+func (e EnsembleProductBundleCalibrationStatus) Valid() bool {
+	switch e {
+	case RawEnsembleRelativeFrequencyUncalibrated:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EnsembleProductBundleOperationalEligible.
+const (
+	False EnsembleProductBundleOperationalEligible = false
+)
+
+// Valid indicates whether the value is a known member of the EnsembleProductBundleOperationalEligible enum.
+func (e EnsembleProductBundleOperationalEligible) Valid() bool {
+	switch e {
+	case False:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for JobStatus.
 const (
 	JobStatusFAILED    JobStatus = "FAILED"
@@ -808,6 +856,72 @@ type DiagnosticLegendEntry struct {
 	Value *float32 `json:"value,omitempty"`
 }
 
+// EnsembleProductAsset defines model for EnsembleProductAsset.
+type EnsembleProductAsset struct {
+	AssetId          string                        `json:"asset_id"`
+	AssetType        EnsembleProductAssetAssetType `json:"asset_type"`
+	ContentUrl       string                        `json:"content_url"`
+	CoverageRatio    float32                       `json:"coverage_ratio"`
+	LeadTimeMinutes  int                           `json:"lead_time_minutes"`
+	MediaType        string                        `json:"media_type"`
+	MissingCellCount int64                         `json:"missing_cell_count"`
+	Sha256           string                        `json:"sha256"`
+	SizeBytes        int64                         `json:"size_bytes"`
+	Unit             string                        `json:"unit"`
+	ValidCellCount   int64                         `json:"valid_cell_count"`
+	ValidTime        time.Time                     `json:"valid_time"`
+}
+
+// EnsembleProductAssetAssetType defines model for EnsembleProductAsset.AssetType.
+type EnsembleProductAssetAssetType string
+
+// EnsembleProductBundle defines model for EnsembleProductBundle.
+type EnsembleProductBundle struct {
+	BundleId             openapi_types.UUID                       `json:"bundle_id"`
+	CalibrationStatus    EnsembleProductBundleCalibrationStatus   `json:"calibration_status"`
+	CreatedAt            time.Time                                `json:"created_at"`
+	GridId               string                                   `json:"grid_id"`
+	Height               int                                      `json:"height"`
+	IssueTime            time.Time                                `json:"issue_time"`
+	Layers               []EnsembleProductLayer                   `json:"layers"`
+	MemberCount          int                                      `json:"member_count"`
+	ModelConfigVersion   string                                   `json:"model_config_version"`
+	ModelId              string                                   `json:"model_id"`
+	ModelVersion         string                                   `json:"model_version"`
+	OperationalEligible  EnsembleProductBundleOperationalEligible `json:"operational_eligible"`
+	OperationalGate      string                                   `json:"operational_gate"`
+	PixelEdgeBounds      []float64                                `json:"pixel_edge_bounds"`
+	ProductConfigVersion string                                   `json:"product_config_version"`
+	RunId                openapi_types.UUID                       `json:"run_id"`
+	SourceForecastSha256 string                                   `json:"source_forecast_sha256"`
+	SourceForecastUri    string                                   `json:"source_forecast_uri"`
+	Width                int                                      `json:"width"`
+}
+
+// EnsembleProductBundleCalibrationStatus defines model for EnsembleProductBundle.CalibrationStatus.
+type EnsembleProductBundleCalibrationStatus string
+
+// EnsembleProductBundleOperationalEligible defines model for EnsembleProductBundle.OperationalEligible.
+type EnsembleProductBundleOperationalEligible bool
+
+// EnsembleProductLayer defines model for EnsembleProductLayer.
+type EnsembleProductLayer struct {
+	Assets       []EnsembleProductAsset       `json:"assets"`
+	LayerId      string                       `json:"layer_id"`
+	Legend       []EnsembleProductLegendEntry `json:"legend"`
+	ProductType  ProductType                  `json:"product_type"`
+	Quantile     *float32                     `json:"quantile,omitempty"`
+	ThresholdMmH *float32                     `json:"threshold_mm_h,omitempty"`
+	Unit         string                       `json:"unit"`
+	VariableName string                       `json:"variable_name"`
+}
+
+// EnsembleProductLegendEntry defines model for EnsembleProductLegendEntry.
+type EnsembleProductLegendEntry struct {
+	Color   string  `json:"color"`
+	Minimum float32 `json:"minimum"`
+}
+
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
 	Code    string             `json:"code"`
@@ -1284,6 +1398,12 @@ type ServerInterface interface {
 	// GetDiagnosticLayer Read one immutable PNG layer listed by a diagnostic manifest
 	// (GET /diagnostics/{job_id}/layers/{layer_id})
 	GetDiagnosticLayer(w http.ResponseWriter, r *http.Request, jobId JobId, layerId LayerId)
+	// GetLatestEnsembleProductBundle Get the newest offline ensemble application-product bundle
+	// (GET /ensemble-products/latest)
+	GetLatestEnsembleProductBundle(w http.ResponseWriter, r *http.Request)
+	// GetEnsembleProductAsset Read one immutable offline ensemble PNG or NetCDF asset
+	// (GET /ensemble-products/{bundle_id}/assets/{asset_id})
+	GetEnsembleProductAsset(w http.ResponseWriter, r *http.Request, bundleId openapi_types.UUID, assetId string)
 	// StreamEvents Stream forecast, radar-scan, or analysis-cycle updates using SSE
 	// (GET /events/stream)
 	StreamEvents(w http.ResponseWriter, r *http.Request, params StreamEventsParams)
@@ -1437,6 +1557,18 @@ func (_ Unimplemented) GetAreaStatistics(w http.ResponseWriter, r *http.Request,
 // GetDiagnosticLayer Read one immutable PNG layer listed by a diagnostic manifest
 // (GET /diagnostics/{job_id}/layers/{layer_id})
 func (_ Unimplemented) GetDiagnosticLayer(w http.ResponseWriter, r *http.Request, jobId JobId, layerId LayerId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetLatestEnsembleProductBundle Get the newest offline ensemble application-product bundle
+// (GET /ensemble-products/latest)
+func (_ Unimplemented) GetLatestEnsembleProductBundle(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetEnsembleProductAsset Read one immutable offline ensemble PNG or NetCDF asset
+// (GET /ensemble-products/{bundle_id}/assets/{asset_id})
+func (_ Unimplemented) GetEnsembleProductAsset(w http.ResponseWriter, r *http.Request, bundleId openapi_types.UUID, assetId string) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2160,6 +2292,55 @@ func (siw *ServerInterfaceWrapper) GetDiagnosticLayer(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetDiagnosticLayer(w, r, jobId, layerId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetLatestEnsembleProductBundle operation middleware
+func (siw *ServerInterfaceWrapper) GetLatestEnsembleProductBundle(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetLatestEnsembleProductBundle(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetEnsembleProductAsset operation middleware
+func (siw *ServerInterfaceWrapper) GetEnsembleProductAsset(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "bundle_id" -------------
+	var bundleId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "bundle_id", chi.URLParam(r, "bundle_id"), &bundleId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "bundle_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "asset_id" -------------
+	var assetId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "asset_id", chi.URLParam(r, "asset_id"), &assetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "asset_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetEnsembleProductAsset(w, r, bundleId, assetId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3050,6 +3231,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/algorithm-verification/runs/{profile_version}/{run_id}/map-assets/{case_id}/{issue_key}/{asset_id}", wrapper.GetAlgorithmVerificationMapAsset)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/ensemble-products/latest", wrapper.GetLatestEnsembleProductBundle)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/ensemble-products/{bundle_id}/assets/{asset_id}", wrapper.GetEnsembleProductAsset)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/system/status", wrapper.GetSystemStatus)
