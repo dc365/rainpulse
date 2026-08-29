@@ -4,6 +4,10 @@
 publication and verification. Each dataset represents one `run_id`, model
 version, configuration version and target grid.
 
+Contract `1.1` remains the Phase-1 deterministic LK format. Contract `1.2` is
+the RP-022 additive ensemble format; it does not change or reinterpret any
+committed `1.1` artifact.
+
 ## Dimensions and coordinates
 
 The canonical dimension order for member-dependent forecast fields is
@@ -20,11 +24,16 @@ The canonical dimension order for member-dependent forecast fields is
 Phase 1 deterministic output has one member and exactly 24 lead times:
 `5, 10, …, 120` minutes.
 
+RP-022 ensemble output has at least two members and the same 24 lead times.
+Member identifiers are stable integer indices, and the frozen random seed is
+recorded in both Zarr attributes and `forecast/summary.json`.
+
 ## Variables
 
 | Variable | Dimensions | Dtype | Units | Required in Phase 1 |
 |---|---|---|---|---|
 | `rain_rate` | `[member, lead_time, lat, lon]` | `float32` | `mm h-1` | yes |
+| `member_valid_mask` | `[member, lead_time, lat, lon]` | `uint8` | `1` | required in 1.2 ensemble output |
 | `accum_60` | `[member, lat, lon]` | `float32` | `mm` | yes |
 | `accum_120` | `[member, lat, lon]` | `float32` | `mm` | yes |
 | `output_valid_mask` | `[lead_time, lat, lon]` | `uint8` | `1` | yes |
@@ -36,13 +45,22 @@ Phase 1 deterministic output has one member and exactly 24 lead times:
 | `translation_rain_rate` | `[lead_time, lat, lon]` | `float32` | `mm h-1` | yes; verification baseline |
 | `persistence_valid_mask` | `[lead_time, lat, lon]` | `uint8` | `1` | yes; persistence support |
 | `translation_valid_mask` | `[lead_time, lat, lon]` | `uint8` | `1` | yes; translation support |
-| `prob_gt_1/5/10/20/50` | `[lead_time, lat, lon]` | `float32` | `1` | no; ensemble phase |
-| `p10/p50/p90` | `[lead_time, lat, lon]` | `float32` | `mm h-1` | no; ensemble phase |
+| `prob_gt_1/5/10/20/50` | `[lead_time, lat, lon]` | `float32` | `1` | required in 1.2 ensemble output |
+| `p10/p50/p90` | `[lead_time, lat, lon]` | `float32` | `mm h-1` | required in 1.2 ensemble output |
 
-Probability variables are reserved but must not be published until the
-threshold accumulation period, event definition and calibration rules are
-frozen in `products.yaml`. A deterministic single-member field must never be
-presented as a calibrated probability.
+For `1.2`, `prob_gt_1/5/10/20/50` is the raw fraction of members whose
+instantaneous `rain_rate` is strictly greater than the named threshold at one
+valid time. The thresholds are in `mm h-1`; these variables are not
+accumulation probabilities. `p10/p50/p90` are member quantiles of instantaneous
+`rain_rate`. The identical semantics are frozen in
+`configs/products/rp022-ensemble-products-v1.yaml`.
+
+RP-022 values have
+`probability_calibration_status=raw_ensemble_relative_frequency_uncalibrated`.
+They may be used for offline evaluation but must not be published as an
+operational calibrated probability until the independent Fujian probability
+gate is passed. A deterministic single-member field must never be presented as
+a probability.
 
 `confidence` is the Phase-1 **technical forecast-quality index** produced from
 advected input quality, lead-time decay and low-quality penalties. It is not a
@@ -86,6 +104,19 @@ required output support is invalid.
 | `runtime_ms` | integer | Non-negative compute runtime |
 | `created_at` | string | RFC 3339 UTC publication timestamp |
 
+Contract `1.2` additionally requires:
+
+| Attribute | Type | Meaning |
+|---|---|---|
+| `ensemble_member_count` | integer | Number of generated stochastic members, at least two |
+| `random_seed` | integer | Frozen uint32 seed used for reproducible generation |
+| `input_missing_policy` | string | RP-022 is `reject_any_missing` |
+| `output_support_policy` | string | Intersection of deterministic support and finite support of every member |
+| `probability_event_operator` | string | `greater_than` |
+| `probability_thresholds_mm_h` | array[number] | Exactly `1, 5, 10, 20, 50` |
+| `probability_calibration_status` | string | Raw ensemble frequency, not locally calibrated |
+| `nominal_pixel_spacing_km` | number | WGS84 geometric-mean cell spacing passed to STEPS perturbations |
+
 The motion and confidence attributes are required for outputs produced by the
 RP-016-hardened pySTEPS adapter. The version-1.1 validator remains able to read
 older committed RP-014 artifacts that predate these optional diagnostics.
@@ -104,6 +135,17 @@ older committed RP-014 artifacts that predate these optional diagnostics.
   forbidden for the EPSG:4326 grid.
 - A deterministic model uses one member and cannot emit ensemble probability
   or quantile variables.
+- An ensemble model must contain at least two members. RP-022 rejects any
+  missing input frame. `member_valid_mask` records the finite domain of each
+  stochastic member after intersecting it with deterministic advection support;
+  `output_valid_mask` is exactly the intersection of all member masks. Member-
+  specific edge loss must never become valid no-rain. Member accumulations use
+  the corresponding member masks, while probability and quantile products are
+  available only on the common output mask.
+- Raw probabilities equal the member relative frequency for the frozen strict
+  exceedance event, and quantiles must be exactly derivable from `rain_rate`.
+- `operational_enabled=false` remains mandatory for the RP-022 product profile;
+  this foundation cannot replace the deterministic LK publication path.
 - The persistence and whole-field translation arrays are diagnostic baselines,
   not extra ensemble members. All three deterministic paths use the same 24
   lead times, source mask and accumulation convention.

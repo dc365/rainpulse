@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/configs/schemas/pysteps-steps-profile.schema.json",
+  "title": "RainPulse RP-022 pySTEPS-STEPS ensemble profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_version",
+    "model_id",
+    "model_version",
+    "pysteps_version",
+    "nowcast_input_contract_version",
+    "forecast_output_contract_version",
+    "grid_id",
+    "grid_config_version",
+    "sequence",
+    "ensemble",
+    "support",
+    "probability_products"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "profile_version": { "type": "string", "minLength": 1 },
+    "model_id": { "const": "pysteps-steps" },
+    "model_version": { "type": "string", "minLength": 1 },
+    "pysteps_version": { "const": "1.21.5" },
+    "nowcast_input_contract_version": { "const": "1.2" },
+    "forecast_output_contract_version": { "const": "1.2" },
+    "grid_id": { "type": "string", "minLength": 1 },
+    "grid_config_version": { "type": "string", "minLength": 1 },
+    "sequence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minimum_frames", "maximum_frames", "timestep_minutes"],
+      "properties": {
+        "minimum_frames": { "const": 3 },
+        "maximum_frames": { "const": 6 },
+        "timestep_minutes": { "const": 5 }
+      }
+    },
+    "ensemble": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "member_count",
+        "random_seed",
+        "num_workers",
+        "cascade_levels",
+        "autoregressive_order",
+        "transformation",
+        "precipitation_threshold_mm_h",
+        "decomposition_method",
+        "bandpass_filter_method",
+        "precipitation_noise_method",
+        "noise_stddev_adjustment",
+        "velocity_perturbation_method",
+        "probability_matching_method",
+        "mask_method",
+        "domain"
+      ],
+      "properties": {
+        "member_count": { "type": "integer", "minimum": 2, "maximum": 96 },
+        "random_seed": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "num_workers": { "const": 1 },
+        "cascade_levels": { "type": "integer", "minimum": 2, "maximum": 12 },
+        "autoregressive_order": { "const": 2 },
+        "transformation": { "const": "dB" },
+        "precipitation_threshold_mm_h": { "type": "number", "exclusiveMinimum": 0 },
+        "decomposition_method": { "const": "fft" },
+        "bandpass_filter_method": { "enum": ["gaussian", "uniform"] },
+        "precipitation_noise_method": {
+          "enum": ["parametric", "nonparametric", "ssft", "nested"]
+        },
+        "noise_stddev_adjustment": { "enum": ["auto", "fixed", "none"] },
+        "velocity_perturbation_method": { "const": "bps" },
+        "probability_matching_method": { "enum": ["cdf", "mean", "none"] },
+        "mask_method": { "enum": ["obs", "sprog", "incremental"] },
+        "domain": { "enum": ["spatial", "spectral"] }
+      }
+    },
+    "support": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input_missing_policy", "output_support_policy"],
+      "properties": {
+        "input_missing_policy": { "const": "reject_any_missing" },
+        "output_support_policy": {
+          "const": "deterministic_support_intersect_all_members_finite"
+        }
+      }
+    },
+    "probability_products": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_operator",
+        "calibration_status",
+        "rain_rate_thresholds_mm_h",
+        "quantiles"
+      ],
+      "properties": {
+        "event_operator": { "const": "greater_than" },
+        "calibration_status": {
+          "const": "raw_ensemble_relative_frequency_uncalibrated"
+        },
+        "rain_rate_thresholds_mm_h": {
+          "const": [1.0, 5.0, 10.0, 20.0, 50.0]
+        },
+        "quantiles": { "const": [0.1, 0.5, 0.9] }
+      }
+    }
+  }
+}

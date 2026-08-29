@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/configs/schemas/ensemble-product-profile.schema.json",
+  "title": "RainPulse RP-022 ensemble product semantics",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_version",
+    "forecast_output_contract_version",
+    "rain_rate_exceedance",
+    "rain_rate_quantiles",
+    "publication"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "profile_version": { "const": "rp022-ensemble-products-v1" },
+    "forecast_output_contract_version": { "const": "1.2" },
+    "rain_rate_exceedance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_variable",
+        "temporal_semantics",
+        "event_operator",
+        "thresholds_mm_h",
+        "probability_estimator",
+        "calibration_status"
+      ],
+      "properties": {
+        "source_variable": { "const": "rain_rate" },
+        "temporal_semantics": { "const": "instantaneous_at_valid_time" },
+        "event_operator": { "const": "greater_than" },
+        "thresholds_mm_h": { "const": [1.0, 5.0, 10.0, 20.0, 50.0] },
+        "probability_estimator": { "const": "ensemble_relative_frequency" },
+        "calibration_status": { "const": "uncalibrated" }
+      }
+    },
+    "rain_rate_quantiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_variable", "temporal_semantics", "quantiles"],
+      "properties": {
+        "source_variable": { "const": "rain_rate" },
+        "temporal_semantics": { "const": "instantaneous_at_valid_time" },
+        "quantiles": { "const": [0.1, 0.5, 0.9] }
+      }
+    },
+    "publication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["offline_evaluation_enabled", "operational_enabled", "operational_gate"],
+      "properties": {
+        "offline_evaluation_enabled": { "const": true },
+        "operational_enabled": { "const": false },
+        "operational_gate": {
+          "const": "independent_fujian_probabilistic_acceptance_required"
+        }
+      }
+    }
+  }
+}

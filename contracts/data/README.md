@@ -16,7 +16,8 @@ nowcast operation:
 7. [`nowcast-input.md`](nowcast-input.md) defines the fixed-step sequence passed
    to model workers.
 8. [`forecast-output.md`](forecast-output.md) defines model output consumed by
-   product generation and verification.
+   product generation and verification, including deterministic contract 1.1
+   and the offline-only RP-022 ensemble contract 1.2.
 9. [`application-product-bundle.md`](application-product-bundle.md) defines the
    atomic RP-015 distribution boundary and its three product identities.
 10. [`application-rainfall-netcdf.md`](application-rainfall-netcdf.md) defines

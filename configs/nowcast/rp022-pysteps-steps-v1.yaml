@@ -1,0 +1,42 @@
+schema_version: "1.0"
+profile_version: rp022-pysteps-steps-v1
+model_id: pysteps-steps
+model_version: pysteps-steps-0.1.0
+pysteps_version: 1.21.5
+nowcast_input_contract_version: "1.2"
+forecast_output_contract_version: "1.2"
+
+grid_id: fuzhou_118_123_25_27_0p01deg_v1
+grid_config_version: fuzhou-grid-0p01deg-v1
+
+sequence:
+  minimum_frames: 3
+  maximum_frames: 6
+  timestep_minutes: 5
+
+ensemble:
+  member_count: 12
+  random_seed: 20260829
+  num_workers: 1
+  cascade_levels: 6
+  autoregressive_order: 2
+  transformation: dB
+  precipitation_threshold_mm_h: 0.1
+  decomposition_method: fft
+  bandpass_filter_method: gaussian
+  precipitation_noise_method: nonparametric
+  noise_stddev_adjustment: auto
+  velocity_perturbation_method: bps
+  probability_matching_method: cdf
+  mask_method: incremental
+  domain: spatial
+
+support:
+  input_missing_policy: reject_any_missing
+  output_support_policy: deterministic_support_intersect_all_members_finite
+
+probability_products:
+  event_operator: greater_than
+  calibration_status: raw_ensemble_relative_frequency_uncalibrated
+  rain_rate_thresholds_mm_h: [1.0, 5.0, 10.0, 20.0, 50.0]
+  quantiles: [0.1, 0.5, 0.9]

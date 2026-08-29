@@ -1,0 +1,21 @@
+schema_version: "1.0"
+profile_version: rp022-ensemble-products-v1
+forecast_output_contract_version: "1.2"
+
+rain_rate_exceedance:
+  source_variable: rain_rate
+  temporal_semantics: instantaneous_at_valid_time
+  event_operator: greater_than
+  thresholds_mm_h: [1.0, 5.0, 10.0, 20.0, 50.0]
+  probability_estimator: ensemble_relative_frequency
+  calibration_status: uncalibrated
+
+rain_rate_quantiles:
+  source_variable: rain_rate
+  temporal_semantics: instantaneous_at_valid_time
+  quantiles: [0.1, 0.5, 0.9]
+
+publication:
+  offline_evaluation_enabled: true
+  operational_enabled: false
+  operational_gate: independent_fujian_probabilistic_acceptance_required

@@ -49,6 +49,7 @@ NowcastInput gate.
 | RP-019 | Engineering foundation complete | Immutable raw archive, continuous ingest seam, persistent automatic planner, bounded Worker retries/atomic commit, control-plane security, build identity and Prometheus operational metrics are implemented; real ingest and the planner remain disabled pending Fujian data/config acceptance |
 | RP-020 | Coverage provenance complete | 53/53 frozen MRMS issues separate geometric advection-boundary loss from in-domain missing data with zero closure error; all 636 LK slices have zero in-domain loss, while the original RP-018 result remains unchanged |
 | RP-021 | Independent MRMS holdout complete | Observation-only selection froze 4 wet and 2 dry cases from 2024-06/2025-01 before forecast execution; 50/50 issues pass complete provenance, near-lead LK meets the frozen three-baseline gate, while far-lead translation remains a required baseline |
+| RP-022 | Offline STEPS ensemble foundation complete | ForecastOutput 1.2, frozen 12-member seeded STEPS, member-specific support, raw exceedance probabilities/P10-P50-P90 and Brier/CRPS/reliability verification pass real-library local acceptance; operational publication remains disabled |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -444,6 +445,15 @@ error. Near-lead status is `lk_supported`; far-lead status is
 native ten-minute LK by -0.0385 mean FSS. Details are in
 `docs/RP021_MRMS独立留出验证与验收记录.md`.
 
+RP-022 adds an isolated pySTEPS-STEPS engineering model without changing the
+RP-021 LK parameters, holdout interpretation or operational default. It freezes
+12 seeded members, member-specific support, ForecastOutput 1.2, raw
+instantaneous exceedance frequencies, P10/P50/P90 and probabilistic scoring.
+The real pySTEPS 1.21.5 backend passes local integration tests. Probability
+publication is explicitly disabled until a new independent evaluation and
+Fujian operational gate pass. Details are in
+`docs/RP022_STEPS概率集合基础实施记录.md`.
+
 The 2024-06 and 2025-01 months are now spent holdout data. Do not tune against
 their results and reuse them as independent acceptance. If forecast, temporal
 adaptation or skill-gate parameters change, freeze different months before the
@@ -528,6 +538,7 @@ make test-qpe
 make test-diagnostics
 make test-nowcast-input
 make test-pysteps-lk
+make test-pysteps-steps
 make test-products
 make test-mrms
 make mrms-faults
