@@ -59,6 +59,7 @@ class MRMSEnsembleProfile:
     profile_sha256: str
     configuration_sha256: str
     source_cadence_minutes: int
+    compute_halo_cells: int
     steps_profile: Path
     steps_profile_sha256: str
     lk_profile: Path
@@ -304,6 +305,7 @@ def load_mrms_ensemble_profile(
             profile_sha256=hashlib.sha256(profile_bytes).hexdigest(),
             configuration_sha256=configuration_sha256,
             source_cadence_minutes=int(raw["source"]["cadence_minutes"]),
+            compute_halo_cells=int(raw["forecast"]["compute_halo_cells"]),
             steps_profile=steps_path,
             steps_profile_sha256=str(raw["forecast"]["steps_profile_sha256"]),
             lk_profile=lk_path,
@@ -338,6 +340,7 @@ def load_mrms_ensemble_profile(
     used = set(profile.development.months) | set(profile.holdout.months)
     if (
         profile.source_cadence_minutes != 10
+        or profile.compute_halo_cells != 100
         or profile.member_count != 12
         or profile.lead_minutes != tuple(range(10, 121, 10))
         or profile.thresholds_mm_h != (1.0, 5.0, 10.0, 20.0, 50.0)

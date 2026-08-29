@@ -77,6 +77,7 @@ def _profile() -> MRMSEnsembleProfile:
         profile_sha256="0" * 64,
         configuration_sha256="3" * 64,
         source_cadence_minutes=10,
+        compute_halo_cells=4,
         steps_profile=steps,
         steps_profile_sha256=_sha(steps),
         lk_profile=lk,

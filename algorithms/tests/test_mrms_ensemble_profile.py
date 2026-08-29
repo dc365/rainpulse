@@ -97,6 +97,7 @@ def _profile(tmp_path: Path) -> Path:
             "lk_profile": str(lk.relative_to(tmp_path)),
             "lk_profile_sha256": _sha(lk),
             "member_count": 12,
+            "compute_halo_cells": 100,
         },
         "splits": {
             "development": {
@@ -138,6 +139,7 @@ def test_profile_freezes_disjoint_observation_only_splits(tmp_path: Path) -> Non
     profile = load_mrms_ensemble_profile(_profile(tmp_path), repository_root=tmp_path)
 
     assert profile.member_count == 12
+    assert profile.compute_halo_cells == 100
     assert profile.development.months == ("2022-01",)
     assert profile.holdout.months == ("2023-06",)
     assert profile.gate.status == "development_pending"

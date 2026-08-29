@@ -18,6 +18,9 @@ forecast:
   lk_profile: configs/nowcast/rp016-pysteps-lk-v1.yaml
   lk_profile_sha256: 2e31c4a99a823eec665973798c222659f8da7f3239f16ac66fed3e4fd79b066b
   member_count: 12
+  # Forecast on a one-degree halo, then crop back to the frozen 5°x2° target.
+  # This preserves target-domain support under advection without changing truth.
+  compute_halo_cells: 100
 
 splits:
   development:

@@ -17,6 +17,7 @@ from rainpulse_algo.datasets.mrms_precip import (
     build_mrms_observed_sequence,
     build_mrms_validation_sequence,
 )
+from rainpulse_algo.grid import RegularLatLonGrid
 from rainpulse_algo.nowcast.pysteps_lk import PystepsLKFields
 from rainpulse_algo.nowcast.pysteps_profile import load_pysteps_lk_profile
 from rainpulse_algo.nowcast.pysteps_steps import run_pysteps_steps_fields
@@ -64,6 +65,40 @@ class CachedMRMSFrameSource:
         while len(self._frames) > self.maximum_frames:
             self._frames.popitem(last=False)
         return frame
+
+
+def _compute_grid(
+    target: RegularLatLonGrid,
+    halo_cells: int,
+) -> tuple[RegularLatLonGrid, tuple[slice, slice]]:
+    if halo_cells < 1:
+        raise ValueError("RP-024 compute halo must contain at least one cell")
+    latitude_count = target.latitude_count + 2 * halo_cells
+    longitude_count = target.longitude_count + 2 * halo_cells
+    compute = RegularLatLonGrid(
+        grid_id=f"{target.grid_id}_compute_halo_{halo_cells}",
+        config_version=f"{target.config_version}-compute-halo-{halo_cells}",
+        west=target.west - halo_cells * target.longitude_interval_deg,
+        east=target.east + halo_cells * target.longitude_interval_deg,
+        south=target.south - halo_cells * target.latitude_interval_deg,
+        north=target.north + halo_cells * target.latitude_interval_deg,
+        longitude_interval_deg=target.longitude_interval_deg,
+        latitude_interval_deg=target.latitude_interval_deg,
+        longitude_count=longitude_count,
+        latitude_count=latitude_count,
+        reference_latitude_deg=target.reference_latitude_deg,
+        ancillary_domain_id=target.ancillary_domain_id,
+    )
+    crop = (
+        slice(halo_cells, halo_cells + target.latitude_count),
+        slice(halo_cells, halo_cells + target.longitude_count),
+    )
+    if (
+        not np.array_equal(compute.latitude[crop[0]], target.latitude)
+        or not np.array_equal(compute.longitude[crop[1]], target.longitude)
+    ):
+        raise ValueError("RP-024 compute halo does not crop exactly to the target grid")
+    return compute, crop
 
 
 def _fields(sequence) -> PystepsLKFields:
@@ -407,21 +442,27 @@ def conform_ensemble_split(
     errors: list[dict[str, str]] = []
     stop = False
     for case in cases:
-        required: set[datetime] = set()
+        compute_grid, _ = _compute_grid(case.grid, profile.compute_halo_cells)
+        input_required: set[datetime] = set()
+        truth_required: set[datetime] = set()
         for issue_time in case.issue_times:
             if maximum_issues is not None and checked_issues >= maximum_issues:
                 stop = True
                 break
             checked_issues += 1
-            required.update(
+            input_required.update(
                 issue_time - timedelta(minutes=value) for value in (20, 10, 0)
             )
-            required.update(
+            truth_required.update(
                 issue_time + timedelta(minutes=value) for value in profile.lead_minutes
             )
-        for valid_time in sorted(required):
+        dependencies = (
+            *((valid_time, compute_grid) for valid_time in sorted(input_required)),
+            *((valid_time, case.grid) for valid_time in sorted(truth_required)),
+        )
+        for valid_time, dependency_grid in dependencies:
             try:
-                frame_source.read(valid_time, case.grid)
+                frame_source.read(valid_time, dependency_grid)
                 checked_frames += 1
             except Exception as exc:  # noqa: BLE001 - report every frozen input failure
                 errors.append(
@@ -487,15 +528,16 @@ def run_mrms_ensemble_hindcast(
     phase_fallbacks = 0
     stop = False
     for case in cases:
+        compute_grid, crop = _compute_grid(case.grid, profile.compute_halo_cells)
         steps_profile = replace(
             configured_steps,
-            grid_id=case.grid.grid_id,
-            grid_config_version=case.grid.config_version,
+            grid_id=compute_grid.grid_id,
+            grid_config_version=compute_grid.config_version,
         )
         lk_profile = replace(
             configured_lk,
-            grid_id=case.grid.grid_id,
-            grid_config_version=case.grid.config_version,
+            grid_id=compute_grid.grid_id,
+            grid_config_version=compute_grid.config_version,
         )
         for issue_time in case.issue_times:
             if maximum_issues is not None and completed + len(errors) >= maximum_issues:
@@ -511,18 +553,26 @@ def run_mrms_ensemble_hindcast(
                     issue_time - timedelta(minutes=value) for value in (20, 10, 0)
                 )
                 input_frames = {
-                    valid_time: frame_source.read(valid_time, case.grid)
+                    valid_time: frame_source.read(valid_time, compute_grid)
                     for valid_time in input_times
                 }
-                adapted = build_mrms_validation_sequence(input_frames, issue_time, case.grid)
-                observed = build_mrms_observed_sequence(input_frames, issue_time, case.grid)
+                adapted = build_mrms_validation_sequence(
+                    input_frames,
+                    issue_time,
+                    compute_grid,
+                )
+                observed = build_mrms_observed_sequence(
+                    input_frames,
+                    issue_time,
+                    compute_grid,
+                )
                 stage = "forecast"
                 forecast_started = time.perf_counter()
                 result = run_pysteps_steps_fields(
                     _fields(adapted),
                     profile=steps_profile,
                     lk_profile=lk_profile,
-                    grid=case.grid,
+                    grid=compute_grid,
                 )
                 phase = build_phase_correlation_forecast(
                     observed.rate_mm_h[-2],
@@ -541,20 +591,31 @@ def run_mrms_ensemble_hindcast(
                 truth_rate = np.stack([frame.rate_mm_h for frame in truth_frames])
                 truth_valid = np.stack([frame.valid_mask for frame in truth_frames]) == 1
                 indices = np.asarray([lead // 5 - 1 for lead in profile.lead_minutes])
-                members = result.rain_rate[:, indices]
-                member_valid = result.member_valid_mask[:, indices] == 1
-                steps_valid = result.output_valid_mask[indices] == 1
+                members = result.rain_rate[:, indices, crop[0], crop[1]]
+                member_valid = (
+                    result.member_valid_mask[:, indices, crop[0], crop[1]] == 1
+                )
+                steps_valid = result.output_valid_mask[indices, crop[0], crop[1]] == 1
                 deterministic = result.deterministic
                 forecasts = {
-                    "lk": deterministic.rain_rate[0, indices],
-                    "persistence": deterministic.persistence_rain_rate[indices],
-                    "phase_correlation": phase.rate_mm_h,
+                    "lk": deterministic.rain_rate[0, indices, crop[0], crop[1]],
+                    "persistence": deterministic.persistence_rain_rate[
+                        indices, crop[0], crop[1]
+                    ],
+                    "phase_correlation": phase.rate_mm_h[:, crop[0], crop[1]],
                 }
                 forecast_masks = {
                     "steps": steps_valid,
-                    "lk": deterministic.output_valid_mask[indices] == 1,
-                    "persistence": deterministic.persistence_valid_mask[indices] == 1,
-                    "phase_correlation": phase.valid_mask == 1,
+                    "lk": (
+                        deterministic.output_valid_mask[indices, crop[0], crop[1]] == 1
+                    ),
+                    "persistence": (
+                        deterministic.persistence_valid_mask[
+                            indices, crop[0], crop[1]
+                        ]
+                        == 1
+                    ),
+                    "phase_correlation": phase.valid_mask[:, crop[0], crop[1]] == 1,
                 }
                 common_valid = truth_valid.copy()
                 for value in forecast_masks.values():
@@ -667,6 +728,10 @@ def run_mrms_ensemble_hindcast(
             "operational_eligible": False,
             "calibration_status": "raw_ensemble_relative_frequency_uncalibrated",
             "member_count": profile.member_count,
+            "compute_halo_cells": profile.compute_halo_cells,
+            "compute_halo_degrees": (
+                profile.compute_halo_cells * cases[0].grid.longitude_interval_deg
+            ),
             "completed_issue_count": completed,
             "failed_issue_count": len(errors),
             "ensemble_fallback_issue_count": ensemble_fallbacks,
