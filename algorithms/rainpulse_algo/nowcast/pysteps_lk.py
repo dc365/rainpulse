@@ -61,6 +61,37 @@ MotionEstimator = Callable[[np.ndarray, PystepsLKProfile], np.ndarray]
 Extrapolator = Callable[[np.ndarray, np.ndarray, int, int], np.ndarray]
 
 
+def forecast_domain_valid_mask(
+    shape: tuple[int, int],
+    velocity_pixels_per_step: np.ndarray,
+    lead_count: int,
+    *,
+    extrapolator: Extrapolator | None = None,
+) -> np.ndarray:
+    """Return geometric support after advection, independent of source missing data.
+
+    This coverage-provenance mask separates cells whose backward trajectories
+    leave the finite grid from cells lost because the source was missing or the
+    algorithm produced no finite value.
+    """
+
+    if len(shape) != 2 or any(int(value) <= 0 for value in shape):
+        raise PystepsLKInputError("forecast domain shape must be two positive dimensions")
+    if lead_count < 1:
+        raise PystepsLKInputError("forecast domain lead count must be positive")
+    velocity = np.asarray(velocity_pixels_per_step, dtype="float32")
+    if velocity.shape != (2, *shape) or np.any(~np.isfinite(velocity)):
+        raise PystepsLKInputError("forecast domain velocity is invalid")
+    extrapolate = extrapolator or _semilagrangian
+    support = np.asarray(
+        extrapolate(np.ones(shape, dtype="float32"), velocity, lead_count, 0),
+        dtype="float32",
+    )
+    if support.shape != (lead_count, *shape):
+        raise PystepsLKInputError("forecast domain extrapolator returned an invalid shape")
+    return ((support >= 0.5) & np.isfinite(support)).astype("uint8")
+
+
 def run_pysteps_lk(
     input_objects: Mapping[str, bytes],
     *,

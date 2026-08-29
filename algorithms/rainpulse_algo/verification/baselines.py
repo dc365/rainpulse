@@ -27,6 +27,7 @@ class PhaseCorrelationEstimate:
 class PhaseCorrelationForecast:
     rate_mm_h: np.ndarray
     valid_mask: np.ndarray
+    domain_valid_mask: np.ndarray
     estimate: PhaseCorrelationEstimate
 
 
@@ -157,6 +158,7 @@ def build_phase_correlation_forecast(
     working_rate = np.where(current_valid, current_rate, 0.0).astype("float32")
     forecast = np.full((len(leads), *current_rate.shape), np.nan, dtype="float32")
     support = np.zeros((len(leads), *current_rate.shape), dtype="uint8")
+    domain_support = np.zeros((len(leads), *current_rate.shape), dtype="uint8")
     for index, lead in enumerate(leads):
         factor = float(lead / source_interval_minutes)
         shift = (
@@ -179,9 +181,18 @@ def build_phase_correlation_forecast(
             cval=0.0,
             prefilter=False,
         ) >= 0.5
+        shifted_domain_support = ndimage.shift(
+            np.ones(current_rate.shape, dtype="float32"),
+            shift=shift,
+            order=0,
+            mode="constant",
+            cval=0.0,
+            prefilter=False,
+        ) >= 0.5
         forecast[index][shifted_support] = np.maximum(
             shifted_rate[shifted_support],
             0.0,
         ).astype("float32")
         support[index] = shifted_support.astype("uint8")
-    return PhaseCorrelationForecast(forecast, support, estimate)
+        domain_support[index] = shifted_domain_support.astype("uint8")
+    return PhaseCorrelationForecast(forecast, support, domain_support, estimate)

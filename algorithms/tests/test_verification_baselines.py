@@ -46,8 +46,11 @@ def test_phase_correlation_forecast_advects_rate_and_support_without_wraparound(
 
     assert forecast.rate_mm_h.shape == (2, 32, 32)
     assert forecast.valid_mask.shape == (2, 32, 32)
+    assert forecast.domain_valid_mask.shape == (2, 32, 32)
     assert np.nanargmax(forecast.rate_mm_h[0]) % 32 > np.nanargmax(current) % 32
     assert np.all(forecast.valid_mask[:, :, :2] == 0)
+    assert np.all(forecast.domain_valid_mask[:, :, :2] == 0)
+    assert np.all(forecast.valid_mask <= forecast.domain_valid_mask)
 
 
 def test_phase_correlation_has_explicit_zero_motion_fallback_for_dry_scene() -> None:

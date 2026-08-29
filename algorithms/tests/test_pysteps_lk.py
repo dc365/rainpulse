@@ -20,6 +20,7 @@ from rainpulse_algo.nowcast.forecast_zarr import (
 )
 from rainpulse_algo.nowcast.pysteps_lk import (
     PystepsLKFields,
+    forecast_domain_valid_mask,
     run_pysteps_lk,
     run_pysteps_lk_fields,
 )
@@ -214,6 +215,27 @@ def test_uses_explicit_zero_motion_fallback_for_no_rain() -> None:
     assert np.all(result.persistence_rain_rate[:, :, :-5] == 0)
     assert np.all(result.translation_rain_rate[:, :, :-5] == 0)
     assert np.all(np.isnan(result.rain_rate[0, :, :, -5:]))
+
+
+def test_forecast_domain_mask_tracks_only_geometric_advection_support() -> None:
+    shape = (2, 5)
+
+    def fake_extrapolator(field, _velocity, lead_count, _order):
+        output = np.full((lead_count, *field.shape), np.nan, dtype="float32")
+        for lead_index in range(lead_count):
+            offset = lead_index + 1
+            output[lead_index, :, offset:] = field[:, :-offset]
+        return output
+
+    domain = forecast_domain_valid_mask(
+        shape,
+        np.zeros((2, *shape), dtype="float32"),
+        2,
+        extrapolator=fake_extrapolator,
+    )
+
+    np.testing.assert_array_equal(domain[0], np.asarray([[0, 1, 1, 1, 1]] * 2))
+    np.testing.assert_array_equal(domain[1], np.asarray([[0, 0, 1, 1, 1]] * 2))
 
 
 def test_array_entrypoint_runs_the_same_core_without_claiming_operational_input() -> None:

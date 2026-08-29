@@ -100,7 +100,7 @@ def test_hindcast_runs_shared_core_and_writes_non_operational_report(tmp_path: P
     assert "engineering validation" in (tmp_path / "report.md").read_text()
     persisted = json.loads((tmp_path / "summary.json").read_text())
     assert persisted["profile_version"] == "rp018-mrms-v1"
-    assert persisted["schema_version"] == "1.2"
+    assert persisted["schema_version"] == "1.3"
     assert len(persisted["profile_sha256"]) == 64
     assert persisted["map_bundle_count"] == 1
     assert persisted["map_layer_count"] == 60
@@ -112,6 +112,19 @@ def test_hindcast_runs_shared_core_and_writes_non_operational_report(tmp_path: P
     assert persisted["performance_summary"]["failed_issue_count"] == 0
     assert persisted["performance_summary"]["total_runtime_ms"]["p95"] >= 0
     assert persisted["performance_summary"]["peak_rss_bytes"]["max"] > 0
+    provenance = persisted["coverage_provenance_summary"]
+    assert provenance["all_models_have_provenance"] is True
+    assert provenance["models"]["lk"]["maximum_closure_error"] == pytest.approx(0.0)
+    assert (
+        provenance["models"]["lk"][
+            "minimum_boundary_adjusted_forecast_to_truth_coverage"
+        ]
+        == pytest.approx(1.0)
+    )
+    with (tmp_path / "metrics_truth_domain.csv").open(newline="") as handle:
+        truth_rows = list(csv.DictReader(handle))
+    assert truth_rows[0]["coverage_provenance_available"] == "True"
+    assert float(truth_rows[0]["coverage_decomposition_closure_error"]) == pytest.approx(0.0)
     with (tmp_path / "runtime_metrics.csv").open(newline="") as handle:
         runtime_rows = list(csv.DictReader(handle))
     assert len(runtime_rows) == 1

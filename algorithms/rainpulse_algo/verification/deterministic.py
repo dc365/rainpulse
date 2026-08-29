@@ -16,6 +16,7 @@ class VerificationInputError(ValueError):
 class DeterministicForecast:
     rate_mm_h: np.ndarray
     valid_mask: np.ndarray
+    domain_valid_mask: np.ndarray | None = None
 
 
 ValidityDomain = Literal["common", "truth"]
@@ -130,7 +131,7 @@ def score_deterministic_forecasts(
         raise VerificationInputError("validity_domain must be common or truth")
     window_specs = _window_specs(windows_pixels, windows_km, pixel_spacing_km)
 
-    normalized: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+    normalized: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray | None]] = {}
     common_valid = truth_valid.copy()
     for model, forecast in forecasts.items():
         rate = np.asarray(forecast.rate_mm_h, dtype="float32")
@@ -139,7 +140,17 @@ def score_deterministic_forecasts(
             raise VerificationInputError(f"forecast {model} shape differs from truth")
         if np.any(~np.isfinite(rate[valid])) or np.any(rate[valid] < 0.0):
             raise VerificationInputError(f"forecast {model} has invalid values in valid cells")
-        normalized[model] = rate, valid
+        domain_valid: np.ndarray | None = None
+        if forecast.domain_valid_mask is not None:
+            raw_domain = np.asarray(forecast.domain_valid_mask)
+            if raw_domain.shape != truth.shape or np.any(~np.isin(raw_domain, (0, 1))):
+                raise VerificationInputError(f"forecast {model} domain mask is invalid")
+            domain_valid = raw_domain == 1
+            if np.any(valid & ~domain_valid):
+                raise VerificationInputError(
+                    f"forecast {model} is valid outside its advection domain"
+                )
+        normalized[model] = rate, valid, domain_valid
         common_valid &= valid
     if np.any(~np.isfinite(truth[truth_valid])) or np.any(truth[truth_valid] < 0.0):
         raise VerificationInputError("truth has invalid values inside its validity mask")
@@ -150,7 +161,7 @@ def score_deterministic_forecasts(
         truth_domain = truth_valid[lead_index]
         all_model_common = common_valid[lead_index]
         truth_count = int(np.count_nonzero(truth_domain))
-        for model, (forecast_rate, forecast_valid) in normalized.items():
+        for model, (forecast_rate, forecast_valid, forecast_domain_valid) in normalized.items():
             model_valid = forecast_valid[lead_index]
             evaluation = all_model_common if validity_domain == "common" else truth_domain
             observed_values = truth[lead_index][evaluation]
@@ -168,10 +179,43 @@ def score_deterministic_forecasts(
                 mae = rmse = mean_error = float("nan")
 
             forecast_inside_truth = truth_domain & model_valid
+            forecast_inside_truth_count = int(np.count_nonzero(forecast_inside_truth))
             forecast_to_truth_coverage = _ratio(
-                int(np.count_nonzero(forecast_inside_truth)),
+                forecast_inside_truth_count,
                 truth_count,
             )
+            if forecast_domain_valid is None:
+                advection_domain_to_truth_coverage = float("nan")
+                advection_boundary_loss_ratio = float("nan")
+                interior_missing_loss_ratio = float("nan")
+                boundary_adjusted_coverage = float("nan")
+                coverage_closure_error = float("nan")
+                coverage_provenance_available = False
+            else:
+                domain_inside_truth = truth_domain & forecast_domain_valid[lead_index]
+                domain_inside_truth_count = int(np.count_nonzero(domain_inside_truth))
+                boundary_loss_count = truth_count - domain_inside_truth_count
+                interior_missing_count = int(
+                    np.count_nonzero(domain_inside_truth & ~model_valid)
+                )
+                advection_domain_to_truth_coverage = _ratio(
+                    domain_inside_truth_count,
+                    truth_count,
+                )
+                advection_boundary_loss_ratio = _ratio(boundary_loss_count, truth_count)
+                interior_missing_loss_ratio = _ratio(interior_missing_count, truth_count)
+                boundary_adjusted_coverage = _ratio(
+                    forecast_inside_truth_count,
+                    domain_inside_truth_count,
+                )
+                closure = _ratio(
+                    forecast_inside_truth_count
+                    + boundary_loss_count
+                    + interior_missing_count,
+                    truth_count,
+                )
+                coverage_closure_error = abs(closure - 1.0)
+                coverage_provenance_available = True
             for threshold in thresholds_mm_h:
                 observed_event = (truth[lead_index] >= threshold) & truth_domain
                 forecast_event = (forecast_rate[lead_index] >= threshold) & model_valid
@@ -217,6 +261,16 @@ def score_deterministic_forecasts(
                                 np.count_nonzero(all_model_common) / cell_count
                             ),
                             "forecast_to_truth_coverage": forecast_to_truth_coverage,
+                            "coverage_provenance_available": coverage_provenance_available,
+                            "advection_domain_to_truth_coverage": (
+                                advection_domain_to_truth_coverage
+                            ),
+                            "advection_boundary_loss_ratio": advection_boundary_loss_ratio,
+                            "interior_missing_loss_ratio": interior_missing_loss_ratio,
+                            "boundary_adjusted_forecast_to_truth_coverage": (
+                                boundary_adjusted_coverage
+                            ),
+                            "coverage_decomposition_closure_error": coverage_closure_error,
                             "evaluation_coverage": float(
                                 np.count_nonzero(evaluation) / cell_count
                             ),
@@ -285,6 +339,16 @@ def score_accumulation_forecasts(
             accumulated_forecasts[model] = DeterministicForecast(
                 values[np.newaxis, ...],
                 valid[np.newaxis, ...],
+                (
+                    _accumulate_rates(
+                        np.zeros_like(forecast.rate_mm_h, dtype="float32"),
+                        forecast.domain_valid_mask,
+                        lead_minutes,
+                        int(accumulation_minutes),
+                    )[1][np.newaxis, ...]
+                    if forecast.domain_valid_mask is not None
+                    else None
+                ),
             )
         scored = score_deterministic_forecasts(
             truth_accum[np.newaxis, ...],
@@ -346,6 +410,73 @@ def summarize_coverage(
         "all_models_pass": bool(summaries) and all(
             item["passes"] for item in summaries.values()
         ),
+    }
+
+
+def summarize_coverage_provenance(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    models: Sequence[str],
+    maximum_lead_minutes: int = 120,
+) -> dict[str, Any]:
+    """Summarize geometric-boundary and in-domain forecast coverage losses."""
+
+    summaries: dict[str, Any] = {}
+    for model in models:
+        unique: dict[tuple[str, str, int], tuple[float, float, float, float, float]] = {}
+        for row in rows:
+            if row.get("model") != model or int(row["lead_minutes"]) > maximum_lead_minutes:
+                continue
+            values = tuple(
+                float(row[name])
+                for name in (
+                    "forecast_to_truth_coverage",
+                    "advection_boundary_loss_ratio",
+                    "interior_missing_loss_ratio",
+                    "boundary_adjusted_forecast_to_truth_coverage",
+                    "coverage_decomposition_closure_error",
+                )
+            )
+            if not all(np.isfinite(value) for value in values):
+                continue
+            key = (
+                str(row.get("case_id", "")),
+                str(row.get("issue_time_utc", "")),
+                int(row["lead_minutes"]),
+            )
+            unique[key] = values
+        slices = list(unique.values())
+        summaries[model] = {
+            "evaluated_slice_count": len(slices),
+            "mean_forecast_to_truth_coverage": (
+                float(np.mean([item[0] for item in slices])) if slices else None
+            ),
+            "minimum_forecast_to_truth_coverage": (
+                min(item[0] for item in slices) if slices else None
+            ),
+            "mean_advection_boundary_loss_ratio": (
+                float(np.mean([item[1] for item in slices])) if slices else None
+            ),
+            "maximum_advection_boundary_loss_ratio": (
+                max(item[1] for item in slices) if slices else None
+            ),
+            "mean_interior_missing_loss_ratio": (
+                float(np.mean([item[2] for item in slices])) if slices else None
+            ),
+            "maximum_interior_missing_loss_ratio": (
+                max(item[2] for item in slices) if slices else None
+            ),
+            "minimum_boundary_adjusted_forecast_to_truth_coverage": (
+                min(item[3] for item in slices) if slices else None
+            ),
+            "interior_missing_slice_count": sum(item[2] > 0.0 for item in slices),
+            "maximum_closure_error": max(item[4] for item in slices) if slices else None,
+        }
+    return {
+        "method": "advected_all_ones_domain_support_v1",
+        "models": summaries,
+        "all_models_have_provenance": bool(summaries)
+        and all(item["evaluated_slice_count"] > 0 for item in summaries.values()),
     }
 
 

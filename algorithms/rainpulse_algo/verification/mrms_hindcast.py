@@ -28,7 +28,11 @@ from rainpulse_algo.datasets.mrms_precip import (
     read_mrms_precip_frame,
 )
 from rainpulse_algo.grid import RegularLatLonGrid
-from rainpulse_algo.nowcast.pysteps_lk import PystepsLKFields, run_pysteps_lk_fields
+from rainpulse_algo.nowcast.pysteps_lk import (
+    PystepsLKFields,
+    forecast_domain_valid_mask,
+    run_pysteps_lk_fields,
+)
 from rainpulse_algo.nowcast.pysteps_profile import load_pysteps_lk_profile
 
 from .baselines import build_phase_correlation_forecast
@@ -37,6 +41,7 @@ from .deterministic import (
     score_accumulation_forecasts,
     score_deterministic_forecasts,
     summarize_coverage,
+    summarize_coverage_provenance,
     summarize_fss_skill,
     summarize_model_fss_difference,
 )
@@ -136,6 +141,7 @@ def _write_csv(path: Path, rows: Sequence[Mapping[str, object]]) -> None:
 def _write_report(path: Path, summary: Mapping[str, Any]) -> None:
     skill = summary["skill_summary"]
     coverage = summary["coverage_summary"]
+    coverage_provenance = summary["coverage_provenance_summary"]["models"]["lk"]
     adaptation = summary["adaptation_summary"]
     performance = summary["performance_summary"]
     total_runtime = performance["total_runtime_ms"]
@@ -157,6 +163,15 @@ def _write_report(path: Path, summary: Mapping[str, Any]) -> None:
         (
             f"- Coverage gate: `{coverage['all_models_pass']}` at "
             f"{coverage['minimum_required_ratio']:.0%}"
+        ),
+        (
+            "- LK mean coverage loss (boundary/interior): "
+            f"{coverage_provenance['mean_advection_boundary_loss_ratio']}/"
+            f"{coverage_provenance['mean_interior_missing_loss_ratio']}"
+        ),
+        (
+            "- LK minimum coverage after excluding advection boundary: "
+            f"{coverage_provenance['minimum_boundary_adjusted_forecast_to_truth_coverage']}"
         ),
         f"- Adapted-minus-native LK mean FSS: {adaptation['mean_fss_difference']}",
         (
@@ -517,6 +532,24 @@ def run_mrms_hindcast(
                     lead_minutes=profile.lead_minutes,
                     source_interval_minutes=profile.source_cadence_minutes,
                 )
+                result_domain = forecast_domain_valid_mask(
+                    case.grid.shape,
+                    result.velocity_pixels_per_step,
+                    case_profile.extrapolation.lead_count,
+                )
+                translation_velocity = np.empty_like(result.velocity_pixels_per_step)
+                translation_velocity[0] = result.global_translation_pixels_per_step[0]
+                translation_velocity[1] = result.global_translation_pixels_per_step[1]
+                translation_domain = forecast_domain_valid_mask(
+                    case.grid.shape,
+                    translation_velocity,
+                    case_profile.extrapolation.lead_count,
+                )
+                native_domain = forecast_domain_valid_mask(
+                    case.grid.shape,
+                    native_result.velocity_pixels_per_step,
+                    native_profile.extrapolation.lead_count,
+                )
                 stage_runtime_ms["nowcast_runtime_ms"] = _elapsed_ms(stage_started)
 
                 stage = "truth_read"
@@ -541,14 +574,17 @@ def run_mrms_hindcast(
                     "lk": DeterministicForecast(
                         result.rain_rate[0, lead_indices],
                         result.output_valid_mask[lead_indices],
+                        result_domain[lead_indices],
                     ),
                     "persistence": DeterministicForecast(
                         result.persistence_rain_rate[lead_indices],
                         result.persistence_valid_mask[lead_indices],
+                        np.ones_like(result.persistence_valid_mask[lead_indices]),
                     ),
                     "translation": DeterministicForecast(
                         result.translation_rain_rate[lead_indices],
                         result.translation_valid_mask[lead_indices],
+                        translation_domain[lead_indices],
                     ),
                 }
                 rigorous_forecasts = {
@@ -556,10 +592,12 @@ def run_mrms_hindcast(
                     "phase_correlation": DeterministicForecast(
                         phase.rate_mm_h,
                         phase.valid_mask,
+                        phase.domain_valid_mask,
                     ),
                     "lk_native_10min": DeterministicForecast(
                         native_result.rain_rate[0],
                         native_result.output_valid_mask,
+                        native_domain,
                     ),
                 }
 
@@ -757,6 +795,10 @@ def run_mrms_hindcast(
         models=("lk", "persistence", "translation", "phase_correlation", "lk_native_10min"),
         minimum_ratio=profile.coverage_minimum_ratio,
     )
+    coverage_provenance_summary = summarize_coverage_provenance(
+        gate_rows,
+        models=("lk", "persistence", "translation", "phase_correlation", "lk_native_10min"),
+    )
     adaptation_summary = summarize_model_fss_difference(
         adaptation_rows,
         candidate="lk_adapted_5min",
@@ -770,7 +812,7 @@ def run_mrms_hindcast(
     }
     performance_summary = _summarize_performance(runtime_rows)
     summary: dict[str, object] = {
-        "schema_version": "1.2",
+        "schema_version": "1.3",
         "profile_version": profile.profile_version,
         "profile_sha256": profile.profile_sha256,
         "primary_truth_kind": profile.primary_truth_kind,
@@ -792,6 +834,7 @@ def run_mrms_hindcast(
         "near_skill_summary": skill_summary,
         "far_skill_summary": far_skill_summary,
         "coverage_summary": coverage_summary,
+        "coverage_provenance_summary": coverage_provenance_summary,
         "adaptation_summary": adaptation_summary,
         "accumulation_summary": accumulation_summary,
         "performance_summary": performance_summary,

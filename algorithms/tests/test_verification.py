@@ -5,9 +5,11 @@ import pytest
 
 from rainpulse_algo.verification.deterministic import (
     DeterministicForecast,
+    VerificationInputError,
     score_accumulation_forecasts,
     score_deterministic_forecasts,
     summarize_coverage,
+    summarize_coverage_provenance,
     summarize_fss_skill,
 )
 
@@ -96,6 +98,53 @@ def test_fixed_truth_domain_penalizes_missing_forecast_coverage() -> None:
     assert fixed["misses"] == 1
     assert fixed["forecast_to_truth_coverage"] == pytest.approx(0.5)
     assert fixed["validity_domain"] == "truth"
+
+
+def test_coverage_provenance_separates_boundary_and_interior_loss() -> None:
+    truth = np.ones((1, 1, 4), dtype="float32")
+    truth_valid = np.ones(truth.shape, dtype="uint8")
+    forecast = np.asarray([[[np.nan, np.nan, 1.0, 1.0]]], dtype="float32")
+    forecast_valid = np.asarray([[[0, 0, 1, 1]]], dtype="uint8")
+    domain_valid = np.asarray([[[0, 1, 1, 1]]], dtype="uint8")
+
+    row = score_deterministic_forecasts(
+        truth,
+        truth_valid,
+        {"lk": DeterministicForecast(forecast, forecast_valid, domain_valid)},
+        lead_minutes=(10,),
+        thresholds_mm_h=(0.5,),
+        windows_pixels=(1,),
+        pixel_spacing_km=1.0,
+        validity_domain="truth",
+    )[0]
+
+    assert row["forecast_to_truth_coverage"] == pytest.approx(0.5)
+    assert row["advection_domain_to_truth_coverage"] == pytest.approx(0.75)
+    assert row["advection_boundary_loss_ratio"] == pytest.approx(0.25)
+    assert row["interior_missing_loss_ratio"] == pytest.approx(0.25)
+    assert row["boundary_adjusted_forecast_to_truth_coverage"] == pytest.approx(2 / 3)
+    assert row["coverage_decomposition_closure_error"] == pytest.approx(0.0)
+
+    summary = summarize_coverage_provenance([row], models=("lk",))
+    assert summary["all_models_have_provenance"] is True
+    assert summary["models"]["lk"]["interior_missing_slice_count"] == 1
+
+
+def test_coverage_provenance_rejects_valid_forecast_outside_advection_domain() -> None:
+    truth = np.ones((1, 1, 2), dtype="float32")
+    valid = np.ones(truth.shape, dtype="uint8")
+    domain = np.asarray([[[0, 1]]], dtype="uint8")
+
+    with pytest.raises(VerificationInputError, match="outside its advection domain"):
+        score_deterministic_forecasts(
+            truth,
+            valid,
+            {"lk": DeterministicForecast(truth, valid, domain)},
+            lead_minutes=(10,),
+            thresholds_mm_h=(0.5,),
+            windows_pixels=(1,),
+            pixel_spacing_km=1.0,
+        )
 
 
 def test_physical_fss_window_is_converted_to_an_odd_pixel_count() -> None:
