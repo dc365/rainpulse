@@ -4,10 +4,13 @@ import argparse
 import csv
 import importlib.metadata
 import json
+import math
 import os
 import platform
 import subprocess
 import sys
+import threading
+import time
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -134,6 +137,10 @@ def _write_report(path: Path, summary: Mapping[str, Any]) -> None:
     skill = summary["skill_summary"]
     coverage = summary["coverage_summary"]
     adaptation = summary["adaptation_summary"]
+    performance = summary["performance_summary"]
+    total_runtime = performance["total_runtime_ms"]
+    core_runtime = performance["core_runtime_ms"]
+    peak_rss = performance["peak_rss_bytes"]
     lines = [
         f"# {summary['profile_version']} MRMS offline hindcast",
         "",
@@ -152,6 +159,18 @@ def _write_report(path: Path, summary: Mapping[str, Any]) -> None:
             f"{coverage['minimum_required_ratio']:.0%}"
         ),
         f"- Adapted-minus-native LK mean FSS: {adaptation['mean_fss_difference']}",
+        (
+            "- Total issue runtime P50/P95/max (ms): "
+            f"{total_runtime['p50']}/{total_runtime['p95']}/{total_runtime['max']}"
+        ),
+        (
+            "- Core forecast/scoring runtime P50/P95/max (ms): "
+            f"{core_runtime['p50']}/{core_runtime['p95']}/{core_runtime['max']}"
+        ),
+        (
+            "- Whole-process peak RSS P50/P95/max (bytes): "
+            f"{peak_rss['p50']}/{peak_rss['p95']}/{peak_rss['max']}"
+        ),
         "- Primary truth: observed 10-minute MRMS PrecipRate frames",
         "- Primary report: common-domain legacy metrics for API compatibility",
         "- Rigorous report: fixed truth domain, physical FSS scales and coverage penalty",
@@ -187,9 +206,7 @@ def conform_mrms_cases(
             if maximum_issues is not None and checked_issues >= maximum_issues:
                 break
             checked_issues += 1
-            required.update(
-                issue_time - timedelta(minutes=minutes) for minutes in (20, 10, 0)
-            )
+            required.update(issue_time - timedelta(minutes=minutes) for minutes in (20, 10, 0))
             required.update(
                 issue_time + timedelta(minutes=minutes) for minutes in profile.lead_minutes
             )
@@ -280,6 +297,93 @@ def _runtime_fingerprint(profile: MRMSVerificationProfile, repository_root: Path
     }
 
 
+def _resident_memory_bytes() -> int:
+    """Return process resident memory without counting only Python allocations."""
+
+    try:
+        resident_pages = int(Path("/proc/self/statm").read_text(encoding="ascii").split()[1])
+        return resident_pages * int(os.sysconf("SC_PAGE_SIZE"))
+    except (IndexError, OSError, ValueError):
+        pass
+
+    try:
+        import resource
+
+        maximum_rss = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+        return maximum_rss if sys.platform == "darwin" else maximum_rss * 1024
+    except (ImportError, OSError, ValueError):
+        return 0
+
+
+class _IssueResourceSampler:
+    """Sample whole-process RSS while one frozen issue is evaluated."""
+
+    def __init__(self, *, interval_seconds: float = 0.05):
+        self.interval_seconds = interval_seconds
+        self.peak_rss_bytes = 0
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        self.sample()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def sample(self) -> None:
+        self.peak_rss_bytes = max(self.peak_rss_bytes, _resident_memory_bytes())
+
+    def stop(self) -> int:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=max(1.0, self.interval_seconds * 4))
+        self.sample()
+        return self.peak_rss_bytes
+
+    def _run(self) -> None:
+        while not self._stop.wait(self.interval_seconds):
+            self.sample()
+
+
+def _elapsed_ms(started: float) -> int:
+    return max(0, round((time.perf_counter() - started) * 1000))
+
+
+def _nearest_rank(values: Sequence[int], percentile: float) -> int | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    rank = max(1, math.ceil(percentile * len(ordered)))
+    return ordered[min(rank, len(ordered)) - 1]
+
+
+def _performance_distribution(
+    rows: Sequence[Mapping[str, Any]], field: str
+) -> dict[str, int | None]:
+    values = [
+        int(row[field])
+        for row in rows
+        if row.get("status") == "completed" and row.get(field) is not None
+    ]
+    return {
+        "p50": _nearest_rank(values, 0.50),
+        "p95": _nearest_rank(values, 0.95),
+        "max": max(values) if values else None,
+    }
+
+
+def _summarize_performance(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    return {
+        "schema_version": "1.0",
+        "completed_issue_count": sum(row.get("status") == "completed" for row in rows),
+        "failed_issue_count": sum(row.get("status") == "failed" for row in rows),
+        "rss_scope": "whole_process_resident_set_sampled_per_issue",
+        "rss_sample_interval_ms": 50,
+        "total_runtime_ms": _performance_distribution(rows, "total_runtime_ms"),
+        "core_runtime_ms": _performance_distribution(rows, "core_runtime_ms"),
+        "peak_rss_bytes": _performance_distribution(rows, "peak_rss_bytes"),
+    }
+
+
 def run_mrms_hindcast(
     profile: MRMSVerificationProfile,
     *,
@@ -308,6 +412,7 @@ def run_mrms_hindcast(
     gate_rows: list[dict[str, Any]] = []
     adaptation_rows: list[dict[str, Any]] = []
     accumulation_rows: list[dict[str, Any]] = []
+    runtime_rows: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
     completed = 0
     fallback_count = 0
@@ -346,7 +451,20 @@ def run_mrms_hindcast(
             if maximum_issues is not None and completed + len(errors) >= maximum_issues:
                 stop = True
                 break
+            issue_time_utc = issue_time.isoformat().replace("+00:00", "Z")
+            issue_started = time.perf_counter()
+            resource_sampler = _IssueResourceSampler()
+            resource_sampler.start()
+            stage = "input_read"
+            stage_runtime_ms = {
+                "input_read_ms": 0,
+                "nowcast_runtime_ms": 0,
+                "truth_read_ms": 0,
+                "scoring_runtime_ms": 0,
+                "map_runtime_ms": 0,
+            }
             try:
+                stage_started = time.perf_counter()
                 input_times = tuple(
                     issue_time - timedelta(minutes=minutes) for minutes in (20, 10, 0)
                 )
@@ -364,6 +482,10 @@ def run_mrms_hindcast(
                     issue_time,
                     case.grid,
                 )
+                stage_runtime_ms["input_read_ms"] = _elapsed_ms(stage_started)
+
+                stage = "nowcast"
+                stage_started = time.perf_counter()
                 result = run_pysteps_lk_fields(
                     _fields(adapted_sequence),
                     profile=case_profile,
@@ -382,7 +504,10 @@ def run_mrms_hindcast(
                     lead_minutes=profile.lead_minutes,
                     source_interval_minutes=profile.source_cadence_minutes,
                 )
+                stage_runtime_ms["nowcast_runtime_ms"] = _elapsed_ms(stage_started)
 
+                stage = "truth_read"
+                stage_started = time.perf_counter()
                 truth_frames = tuple(
                     frame_source.read(issue_time + timedelta(minutes=lead), case.grid)
                     for lead in profile.lead_minutes
@@ -395,6 +520,10 @@ def run_mrms_hindcast(
                         for lead in profile.lead_minutes
                     ]
                 )
+                stage_runtime_ms["truth_read_ms"] = _elapsed_ms(stage_started)
+
+                stage = "scoring"
+                stage_started = time.perf_counter()
                 primary_forecasts = {
                     "lk": DeterministicForecast(
                         result.rain_rate[0, lead_indices],
@@ -492,7 +621,10 @@ def run_mrms_hindcast(
                         issue_time=issue_time,
                         truth_kind=profile.primary_truth_kind,
                     )
+                stage_runtime_ms["scoring_runtime_ms"] = _elapsed_ms(stage_started)
 
+                stage = "map_render"
+                stage_started = time.perf_counter()
                 map_manifest, map_objects = build_verification_map_bundle(
                     profile=configured_map,
                     verification_profile_version=profile.profile_version,
@@ -505,7 +637,8 @@ def run_mrms_hindcast(
                     truth_valid=truth_valid,
                     forecasts={
                         model: (forecast.rate_mm_h, forecast.valid_mask)
-                        for model, forecast in primary_forecasts.items()
+                        for model, forecast in rigorous_forecasts.items()
+                        if model != "lk_native_10min"
                     },
                     velocity_pixels_per_step=result.velocity_pixels_per_step,
                     motion_valid_mask=result.motion_valid_mask,
@@ -519,6 +652,7 @@ def run_mrms_hindcast(
                     map_manifest,
                     map_objects,
                 )
+                stage_runtime_ms["map_runtime_ms"] = _elapsed_ms(stage_started)
                 bundle_manifest_path = (
                     Path(case.case_id) / str(map_manifest["issue_key"]) / "manifest.json"
                 )
@@ -541,11 +675,47 @@ def run_mrms_hindcast(
                 fallback_count += int(result.motion_fallback_used)
                 native_fallback_count += int(native_result.motion_fallback_used)
                 phase_fallback_count += int(phase.estimate.fallback_used)
+                peak_rss_bytes = resource_sampler.stop()
+                runtime_rows.append(
+                    {
+                        "case_id": case.case_id,
+                        "case_category": case.category,
+                        "issue_time_utc": issue_time_utc,
+                        "status": "completed",
+                        **stage_runtime_ms,
+                        "core_runtime_ms": (
+                            stage_runtime_ms["nowcast_runtime_ms"]
+                            + stage_runtime_ms["scoring_runtime_ms"]
+                        ),
+                        "total_runtime_ms": _elapsed_ms(issue_started),
+                        "peak_rss_bytes": peak_rss_bytes,
+                        "failed_stage": "",
+                        "error": "",
+                    }
+                )
             except Exception as exc:  # noqa: BLE001 - isolate failures by frozen issue
+                peak_rss_bytes = resource_sampler.stop()
+                runtime_rows.append(
+                    {
+                        "case_id": case.case_id,
+                        "case_category": case.category,
+                        "issue_time_utc": issue_time_utc,
+                        "status": "failed",
+                        **stage_runtime_ms,
+                        "core_runtime_ms": (
+                            stage_runtime_ms["nowcast_runtime_ms"]
+                            + stage_runtime_ms["scoring_runtime_ms"]
+                        ),
+                        "total_runtime_ms": _elapsed_ms(issue_started),
+                        "peak_rss_bytes": peak_rss_bytes,
+                        "failed_stage": stage,
+                        "error": str(exc),
+                    }
+                )
                 errors.append(
                     {
                         "case_id": case.case_id,
-                        "issue_time_utc": issue_time.isoformat().replace("+00:00", "Z"),
+                        "issue_time_utc": issue_time_utc,
                         "error": str(exc),
                     }
                 )
@@ -585,8 +755,9 @@ def run_mrms_hindcast(
         "thresholds_mm": list(profile.accumulation_thresholds_mm),
         "validity_domain": "truth",
     }
+    performance_summary = _summarize_performance(runtime_rows)
     summary: dict[str, object] = {
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "profile_version": profile.profile_version,
         "profile_sha256": profile.profile_sha256,
         "primary_truth_kind": profile.primary_truth_kind,
@@ -610,12 +781,14 @@ def run_mrms_hindcast(
         "coverage_summary": coverage_summary,
         "adaptation_summary": adaptation_summary,
         "accumulation_summary": accumulation_summary,
+        "performance_summary": performance_summary,
         "runtime_fingerprint": _runtime_fingerprint(profile, repository_root),
         "report_files": {
             "common_domain": "metrics.csv",
             "fixed_truth_domain": "metrics_truth_domain.csv",
             "native_cadence_comparison": "adaptation_metrics.csv",
             "accumulation": "accumulation_metrics.csv",
+            "performance": "runtime_metrics.csv",
         },
     }
     write_verification_map_index(
@@ -629,6 +802,7 @@ def run_mrms_hindcast(
     _write_csv(output_directory / "metrics_truth_domain.csv", truth_domain_rows)
     _write_csv(output_directory / "adaptation_metrics.csv", adaptation_rows)
     _write_csv(output_directory / "accumulation_metrics.csv", accumulation_rows)
+    _write_csv(output_directory / "runtime_metrics.csv", runtime_rows)
     (output_directory / "summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -38,6 +39,11 @@ class DryMRMSFrameSource:
         )
 
 
+class FailingMRMSFrameSource:
+    def read(self, valid_time: datetime, grid: RegularLatLonGrid) -> MRMSPrecipFrame:
+        raise MRMSPrecipError(f"synthetic missing frame {valid_time.isoformat()}")
+
+
 def test_hindcast_runs_shared_core_and_writes_non_operational_report(tmp_path: Path) -> None:
     profile = load_mrms_verification_profile(RIGOR_PROFILE_PATH)
 
@@ -62,21 +68,59 @@ def test_hindcast_runs_shared_core_and_writes_non_operational_report(tmp_path: P
     assert (tmp_path / "metrics_truth_domain.csv").is_file()
     assert (tmp_path / "adaptation_metrics.csv").is_file()
     assert (tmp_path / "accumulation_metrics.csv").is_file()
+    assert (tmp_path / "runtime_metrics.csv").is_file()
     assert "engineering validation" in (tmp_path / "report.md").read_text()
     persisted = json.loads((tmp_path / "summary.json").read_text())
     assert persisted["profile_version"] == "rp018-mrms-v1"
-    assert persisted["schema_version"] == "1.1"
+    assert persisted["schema_version"] == "1.2"
     assert len(persisted["profile_sha256"]) == 64
     assert persisted["map_bundle_count"] == 1
-    assert persisted["map_layer_count"] == 48
+    assert persisted["map_layer_count"] == 60
     assert persisted["map_renderer_version"] == "algorithm-verification-map-renderer-1.0.0"
     assert persisted["runtime_fingerprint"]["packages"]["pysteps"]
     assert persisted["report_files"]["fixed_truth_domain"] == "metrics_truth_domain.csv"
+    assert persisted["report_files"]["performance"] == "runtime_metrics.csv"
+    assert persisted["performance_summary"]["completed_issue_count"] == 1
+    assert persisted["performance_summary"]["failed_issue_count"] == 0
+    assert persisted["performance_summary"]["total_runtime_ms"]["p95"] >= 0
+    assert persisted["performance_summary"]["peak_rss_bytes"]["max"] > 0
+    with (tmp_path / "runtime_metrics.csv").open(newline="") as handle:
+        runtime_rows = list(csv.DictReader(handle))
+    assert len(runtime_rows) == 1
+    assert runtime_rows[0]["status"] == "completed"
+    assert runtime_rows[0]["case_id"] == "socal_dry_20210805"
+    assert int(runtime_rows[0]["core_runtime_ms"]) >= 0
+    assert int(runtime_rows[0]["peak_rss_bytes"]) > 0
     map_index = json.loads((tmp_path / "maps" / "index.json").read_text())
     assert map_index["bundle_count"] == 1
-    assert map_index["layer_count"] == 48
+    assert map_index["layer_count"] == 60
     issue_manifest = tmp_path / "maps" / map_index["issues"][0]["manifest_path"]
     assert issue_manifest.is_file()
+    issue_payload = json.loads(issue_manifest.read_text())
+    assert any(layer.get("model") == "phase_correlation" for layer in issue_payload["layers"])
+
+
+def test_hindcast_records_runtime_evidence_for_failed_issue(tmp_path: Path) -> None:
+    summary = run_mrms_hindcast(
+        load_mrms_verification_profile(RIGOR_PROFILE_PATH),
+        repository_root=REPOSITORY_ROOT,
+        frame_source=FailingMRMSFrameSource(),
+        output_directory=tmp_path,
+        case_ids={"socal_dry_20210805"},
+        maximum_issues=1,
+    )
+
+    assert summary["completed_issue_count"] == 0
+    assert summary["failed_issue_count"] == 1
+    assert summary["performance_summary"]["completed_issue_count"] == 0
+    assert summary["performance_summary"]["failed_issue_count"] == 1
+    assert summary["performance_summary"]["total_runtime_ms"]["p95"] is None
+    with (tmp_path / "runtime_metrics.csv").open(newline="") as handle:
+        runtime_rows = list(csv.DictReader(handle))
+    assert len(runtime_rows) == 1
+    assert runtime_rows[0]["status"] == "failed"
+    assert runtime_rows[0]["failed_stage"] == "input_read"
+    assert "synthetic missing frame" in runtime_rows[0]["error"]
 
 
 def test_archive_source_rejects_a_missing_required_source_slot(tmp_path: Path) -> None:

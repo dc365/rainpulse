@@ -115,6 +115,25 @@ forecast_to_truth_coverage >= 0.95
 
 用于解释后续不同机器或依赖版本产生的微小数值差异。
 
+### 9. 逐起报性能证据
+
+每个冻结起报独立记录：
+
+- 输入读取与序列构建耗时；
+- 适配 5 分钟 LK、原生 10 分钟 LK 和独立相位相关预报耗时；
+- 实况读取、评分与地图生成耗时；
+- 预报加评分的核心耗时、起报总耗时；
+- 50 ms 采样的整进程峰值常驻内存。
+
+结果保存到 `runtime_metrics.csv`。`summary.json` 的 `performance_summary`
+给出已完成/失败起报数，以及总耗时、核心耗时和峰值 RSS 的 P50、P95、最大值。
+RSS 是同一回算进程的常驻内存，不等同于单个函数的独占内存；该口径用于 105
+服务器容量与连续运行基线，不作为跨操作系统的字节级性能承诺。
+
+RP-018 地图包在 RP-016 的实况、LK、持续性和 LK 整场平移基础上增加独立
+相位相关平移图层，使 Web 的第三种比较基线同时具备数值和空间证据。旧 RP-016
+地图包不变，Reader 继续兼容。
+
 ## 输出文件
 
 ```text
@@ -122,9 +141,10 @@ metrics.csv                  共同有效域，兼容现有 API
 metrics_truth_domain.csv     固定实况域 + 物理 FSS + 独立基线
 adaptation_metrics.csv       5 分钟适配 vs 原生 10 分钟
 accumulation_metrics.csv     0–1h / 0–2h 累积降水
-summary.json                 门槛、覆盖、远时效、敏感性、环境指纹
+runtime_metrics.csv          逐起报阶段耗时、核心耗时和峰值 RSS
+summary.json                 门槛、覆盖、远时效、敏感性、环境与性能汇总
 report.md                    人可读边界与结论
-maps/                        保持 RP-016 地图契约
+maps/                        兼容 RP-016 契约并增加独立平移基线图层
 ```
 
 ## 新配置
@@ -175,4 +195,6 @@ make test
 5. 70–120 分钟是否出现灾难性退化；
 6. 0–1h 和 0–2h 累积降水偏差；
 7. `runtime_fingerprint` 是否完整；
-8. 福建本地链路仍保持 `operational_eligible=false`，不得因 MRMS 通过而自动转为业务产品。
+8. `runtime_metrics.csv` 行数是否等于已完成加失败起报数，P50/P95/最大值是否可解释；
+9. 独立相位相关基线是否同时具备指标和空间图层；
+10. 福建本地链路仍保持 `operational_eligible=false`，不得因 MRMS 通过而自动转为业务产品。

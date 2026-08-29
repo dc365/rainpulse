@@ -81,8 +81,10 @@ def load_verification_map_profile(path: Path) -> VerificationMapProfile:
     if not 1 <= profile.maximum_motion_vectors <= 200 or profile.sample_step_pixels < 1:
         raise VerificationMapError("verification motion-vector limits are invalid")
     minima = tuple(stop.minimum for stop in profile.rain_rate_stops)
-    if not minima or minima[0] != profile.rain_threshold_mm_h or any(
-        right <= left for left, right in zip(minima, minima[1:], strict=False)
+    if (
+        not minima
+        or minima[0] != profile.rain_threshold_mm_h
+        or any(right <= left for left, right in zip(minima, minima[1:], strict=False))
     ):
         raise VerificationMapError("verification rain palette stops are invalid")
     for color in (profile.valid_no_rain_color, *(stop.color for stop in profile.rain_rate_stops)):
@@ -118,8 +120,16 @@ def build_verification_map_bundle(
     truth_support = np.asarray(truth_valid) == 1
     if not leads or truth_values.shape != expected_shape or truth_support.shape != expected_shape:
         raise VerificationMapError("verification truth arrays differ from lead/grid dimensions")
-    if tuple(sorted(forecasts)) != ("lk", "persistence", "translation"):
-        raise VerificationMapError("verification maps require LK and both frozen baselines")
+    required_models = {"lk", "persistence", "translation"}
+    optional_models = {"phase_correlation"}
+    forecast_models = set(forecasts)
+    if not required_models.issubset(forecast_models) or forecast_models - (
+        required_models | optional_models
+    ):
+        raise VerificationMapError(
+            "verification maps require LK and both frozen baselines; only the independent "
+            "phase-correlation baseline may be added"
+        )
 
     normalized_forecasts: dict[str, tuple[np.ndarray, np.ndarray]] = {}
     for model, (values, valid) in forecasts.items():
@@ -138,12 +148,21 @@ def build_verification_map_bundle(
 
     objects: dict[str, bytes] = {}
     layers: list[dict[str, Any]] = []
-    sources: tuple[tuple[str, str, str | None, np.ndarray, np.ndarray], ...] = (
+    sources: list[tuple[str, str, str | None, np.ndarray, np.ndarray]] = [
         ("truth", "truth", None, truth_values, truth_support),
         ("lk", "forecast", "lk", *normalized_forecasts["lk"]),
         ("persistence", "forecast", "persistence", *normalized_forecasts["persistence"]),
         ("translation", "forecast", "translation", *normalized_forecasts["translation"]),
-    )
+    ]
+    if "phase_correlation" in normalized_forecasts:
+        sources.append(
+            (
+                "phase-correlation",
+                "forecast",
+                "phase_correlation",
+                *normalized_forecasts["phase_correlation"],
+            )
+        )
     for lead_index, lead in enumerate(leads):
         valid_time = issue + timedelta(minutes=lead)
         for name, role, model, values, support in sources:
@@ -193,8 +212,7 @@ def build_verification_map_bundle(
             "rain_threshold_mm_h": profile.rain_threshold_mm_h,
             "valid_no_rain_color": profile.valid_no_rain_color,
             "stops": [
-                {"minimum": stop.minimum, "color": stop.color}
-                for stop in profile.rain_rate_stops
+                {"minimum": stop.minimum, "color": stop.color} for stop in profile.rain_rate_stops
             ],
         },
         "motion": {
