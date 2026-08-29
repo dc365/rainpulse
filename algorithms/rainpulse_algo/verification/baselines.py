@@ -38,6 +38,7 @@ def estimate_phase_correlation_translation(
     current_valid: np.ndarray,
     *,
     minimum_support_pixels: int = 256,
+    minimum_signal_pixels: int = 64,
     minimum_standard_deviation: float = 1e-4,
 ) -> PhaseCorrelationEstimate:
     """Estimate one integer-pixel translation using masked FFT phase correlation.
@@ -82,6 +83,17 @@ def estimate_phase_correlation_translation(
             0.0,
             True,
             "insufficient_spatial_variance",
+        )
+    first_signal_count = int(np.count_nonzero(np.abs(first_values) > 1e-8))
+    second_signal_count = int(np.count_nonzero(np.abs(second_values) > 1e-8))
+    if min(first_signal_count, second_signal_count) < minimum_signal_pixels:
+        return PhaseCorrelationEstimate(
+            0.0,
+            0.0,
+            support_fraction,
+            0.0,
+            True,
+            "insufficient_signal_area",
         )
 
     first_work = np.zeros(first.shape, dtype="float64")

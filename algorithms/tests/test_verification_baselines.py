@@ -31,7 +31,7 @@ def test_phase_correlation_recovers_known_integer_translation() -> None:
 
 def test_phase_correlation_forecast_advects_rate_and_support_without_wraparound() -> None:
     previous = np.zeros((32, 32), dtype="float32")
-    previous[8:14, 8:14] = 2.0
+    previous[8:16, 8:16] = 2.0
     current = np.roll(previous, shift=(0, 2), axis=(0, 1))
     valid = np.ones(previous.shape, dtype="uint8")
 
@@ -69,3 +69,18 @@ def test_phase_correlation_has_explicit_zero_motion_fallback_for_dry_scene() -> 
     assert forecast.estimate.fallback_used
     assert forecast.estimate.fallback_reason == "insufficient_spatial_variance"
     assert np.allclose(forecast.rate_mm_h[0], 0.0)
+
+
+def test_phase_correlation_rejects_sparse_noise_as_motion_signal() -> None:
+    previous = np.zeros((64, 64), dtype="float32")
+    current = np.zeros((64, 64), dtype="float32")
+    previous[20, 20] = 0.1
+    current[40, 40] = 0.1
+    valid = np.ones(previous.shape, dtype="uint8")
+
+    estimate = estimate_phase_correlation_translation(previous, current, valid, valid)
+
+    assert estimate.fallback_used
+    assert estimate.fallback_reason == "insufficient_signal_area"
+    assert estimate.dx_pixels_per_source_step == 0.0
+    assert estimate.dy_pixels_per_source_step == 0.0
