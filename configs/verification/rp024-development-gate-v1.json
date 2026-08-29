@@ -1,0 +1,61 @@
+{
+  "approved_to_run_holdout": true,
+  "configuration_sha256": "2c170f6f911036c1d6a05159c40474bc4afa0abaec9e88e4e356cfc14ca6045a",
+  "criteria": {
+    "completed_issue_count_must_equal_expected": true,
+    "far_minimum_common_verification_coverage": 0.05,
+    "far_minimum_steps_member_mean_coverage": 0.4,
+    "far_skill_policy": "descriptive_only_retain_all_deterministic_baselines",
+    "maximum_failed_issue_count": 0,
+    "near_minimum_common_verification_coverage": 0.7,
+    "near_minimum_steps_member_mean_coverage": 0.85,
+    "near_wet_brier_skill_thresholds_mm_h": [
+      1.0,
+      5.0,
+      10.0
+    ],
+    "near_wet_minimum_crps_skill_against_persistence": 0.0,
+    "near_wet_minimum_finite_brier_skill_threshold_count": 2,
+    "near_wet_minimum_mean_brier_skill_against_persistence": 0.0,
+    "reliability_policy": "diagnostic_only_raw_ensemble_uncalibrated"
+  },
+  "development_evaluation": {
+    "checks": {
+      "completed_issue_count": true,
+      "failed_issue_count": true,
+      "far_common_verification_coverage": true,
+      "far_steps_member_mean_coverage": true,
+      "near_common_verification_coverage": true,
+      "near_steps_member_mean_coverage": true,
+      "near_wet_crps_skill_against_persistence": true,
+      "near_wet_finite_brier_skill_threshold_count": true,
+      "near_wet_mean_brier_skill_against_persistence": true
+    },
+    "expected_issue_count": 50,
+    "observed": {
+      "completed_issue_count": 50,
+      "failed_issue_count": 0,
+      "far_minimum_common_verification_coverage": 0.7669536548792961,
+      "far_minimum_steps_member_mean_coverage": 0.9465041724180163,
+      "near_minimum_common_verification_coverage": 0.9913009801292937,
+      "near_minimum_steps_member_mean_coverage": 0.9989076573221717,
+      "near_wet_brier_skill_against_persistence": {
+        "1.0": 0.4328839486454443,
+        "10.0": 0.4118573927251593,
+        "5.0": 0.3927747417620683
+      },
+      "near_wet_crps_skill_against_persistence": 0.4092679141956479,
+      "near_wet_mean_brier_skill_against_persistence": 0.412505361044224
+    },
+    "passed": true
+  },
+  "development_profile_sha256": "3495fa5b7acb0a2c8e738ceb50b8955ed3b4bb6d29088bea8fb3182f0b4bdc86",
+  "development_selection_evidence_sha256": "0a6c2979396c7b58ef99265d96b501880c200b41d03d5087237d3847cd558c67",
+  "development_summary_path": "configs/verification/rp024-development-summary-v1.json",
+  "development_summary_sha256": "b45966e225fd5430a6a3d82e5fca65446ea87bb0fb39ad5678083e1dec6bdb87",
+  "frozen_before_holdout_forecast": true,
+  "gate_policy_version": "rp024-independent-probability-gate-v1",
+  "generated_at_utc": "2026-08-29T14:34:31.723563Z",
+  "profile_version": "rp024-mrms-ensemble-v1",
+  "schema_version": "1.0"
+}

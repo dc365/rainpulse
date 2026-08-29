@@ -55,6 +55,6 @@ leakage:
   selection_must_not_read_forecast_or_skill_fields: true
 
 holdout_gate:
-  status: development_pending
-  artifact_path: null
-  artifact_sha256: null
+  status: frozen_before_holdout
+  artifact_path: configs/verification/rp024-development-gate-v1.json
+  artifact_sha256: 60c25fcf9b0e53b7b75fc9d59abebf3b0b1e4ae77ba2e43bae1158e424c3f564

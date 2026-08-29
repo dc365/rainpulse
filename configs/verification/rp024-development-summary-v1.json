@@ -1,0 +1,623 @@
+{
+  "calibration_status": "raw_ensemble_relative_frequency_uncalibrated",
+  "category_lead_band_summary": {
+    "dry": {
+      "far": {
+        "lead_minutes": [
+          70,
+          120
+        ],
+        "minimum_common_verification_coverage": 1.0,
+        "minimum_steps_member_mean_coverage": 1.0,
+        "scores": {
+          "lk": {
+            "brier_score_by_threshold": {
+              "1.0": 0.0,
+              "10.0": 0.0,
+              "20.0": 0.0,
+              "5.0": 0.0,
+              "50.0": 0.0
+            },
+            "crps_mm_h": 3.428348344022015e-07,
+            "ensemble_mean_rmse_mm_h": 4.525144634369228e-05,
+            "mean_ensemble_spread_mm_h": 0.0
+          },
+          "persistence": {
+            "brier_score_by_threshold": {
+              "1.0": 0.0,
+              "10.0": 0.0,
+              "20.0": 0.0,
+              "5.0": 0.0,
+              "50.0": 0.0
+            },
+            "crps_mm_h": 3.428348344022015e-07,
+            "ensemble_mean_rmse_mm_h": 4.525144634369228e-05,
+            "mean_ensemble_spread_mm_h": 0.0
+          },
+          "phase_correlation": {
+            "brier_score_by_threshold": {
+              "1.0": 0.0,
+              "10.0": 0.0,
+              "20.0": 0.0,
+              "5.0": 0.0,
+              "50.0": 0.0
+            },
+            "crps_mm_h": 3.428348344022015e-07,
+            "ensemble_mean_rmse_mm_h": 4.525144634369228e-05,
+            "mean_ensemble_spread_mm_h": 0.0
+          },
+          "steps": {
+            "brier_score_by_threshold": {
+              "1.0": 0.0,
+              "10.0": 0.0,
+              "20.0": 0.0,
+              "5.0": 0.0,
+              "50.0": 0.0
+            },
+            "crps_mm_h": 3.428348344022015e-07,
+            "ensemble_mean_rmse_mm_h": 4.525144634369228e-05,
+            "mean_ensemble_spread_mm_h": 0.0
+          }
+        },
+        "steps_skill_against_deterministic_baselines": {
+          "lk": {
+            "brier_skill_by_threshold": {
+              "1.0": null,
+              "10.0": null,
+              "20.0": null,
+              "5.0": null,
+              "50.0": null
+            },
+            "crps_skill": 0.0
+          },
+          "persistence": {
+            "brier_skill_by_threshold": {
+              "1.0": null,
+              "10.0": null,
+              "20.0": null,
+              "5.0": null,
+              "50.0": null
+            },
+            "crps_skill": 0.0
+          },
+          "phase_correlation": {
+            "brier_skill_by_threshold": {
+              "1.0": null,
+              "10.0": null,
+              "20.0": null,
+              "5.0": null,
+              "50.0": null
+            },
+            "crps_skill": 0.0
+          }
+        }
+      },
+      "near": {
+        "lead_minutes": [
+          10,
+          60
+        ],
+        "minimum_common_verification_coverage": 1.0,
+        "minimum_steps_member_mean_coverage": 1.0,
+        "scores": {
+          "lk": {
+            "brier_score_by_threshold": {
+              "1.0": 0.0,
+              "10.0": 0.0,
+              "20.0": 0.0,
+              "5.0": 0.0,
+              "50.0": 0.0
+            },
+            "crps_mm_h": 5.438070341061901e-07,
+            "ensemble_mean_rmse_mm_h": 9.428164117880875e-05,
+            "mean_ensemble_spread_mm_h": 0.0
+          },
+          "persistence": {
+            "brier_score_by_threshold": {
+              "1.0": 0.0,
+              "10.0": 0.0,
+              "20.0": 0.0,
+              "5.0": 0.0,
+              "50.0": 0.0
+            },
+            "crps_mm_h": 5.438070341061901e-07,
+            "ensemble_mean_rmse_mm_h": 9.428164117880875e-05,
+            "mean_ensemble_spread_mm_h": 0.0
+          },
+          "phase_correlation": {
+            "brier_score_by_threshold": {
+              "1.0": 0.0,
+              "10.0": 0.0,
+              "20.0": 0.0,
+              "5.0": 0.0,
+              "50.0": 0.0
+            },
+            "crps_mm_h": 5.438070341061901e-07,
+            "ensemble_mean_rmse_mm_h": 9.428164117880875e-05,
+            "mean_ensemble_spread_mm_h": 0.0
+          },
+          "steps": {
+            "brier_score_by_threshold": {
+              "1.0": 0.0,
+              "10.0": 0.0,
+              "20.0": 0.0,
+              "5.0": 0.0,
+              "50.0": 0.0
+            },
+            "crps_mm_h": 5.438070341061901e-07,
+            "ensemble_mean_rmse_mm_h": 9.428164117880875e-05,
+            "mean_ensemble_spread_mm_h": 0.0
+          }
+        },
+        "steps_skill_against_deterministic_baselines": {
+          "lk": {
+            "brier_skill_by_threshold": {
+              "1.0": null,
+              "10.0": null,
+              "20.0": null,
+              "5.0": null,
+              "50.0": null
+            },
+            "crps_skill": 0.0
+          },
+          "persistence": {
+            "brier_skill_by_threshold": {
+              "1.0": null,
+              "10.0": null,
+              "20.0": null,
+              "5.0": null,
+              "50.0": null
+            },
+            "crps_skill": 0.0
+          },
+          "phase_correlation": {
+            "brier_skill_by_threshold": {
+              "1.0": null,
+              "10.0": null,
+              "20.0": null,
+              "5.0": null,
+              "50.0": null
+            },
+            "crps_skill": 0.0
+          }
+        }
+      }
+    },
+    "wet": {
+      "far": {
+        "lead_minutes": [
+          70,
+          120
+        ],
+        "minimum_common_verification_coverage": 0.7669536548792961,
+        "minimum_steps_member_mean_coverage": 0.9465041724180163,
+        "scores": {
+          "lk": {
+            "brier_score_by_threshold": {
+              "1.0": 0.23032032615191733,
+              "10.0": 0.047466464665115116,
+              "20.0": 0.010116624728008186,
+              "5.0": 0.21857363340706762,
+              "50.0": 0.001509185397512215
+            },
+            "crps_mm_h": 2.2635918380066036,
+            "ensemble_mean_rmse_mm_h": 4.456566319676759,
+            "mean_ensemble_spread_mm_h": 0.0
+          },
+          "persistence": {
+            "brier_score_by_threshold": {
+              "1.0": 0.27038273038311217,
+              "10.0": 0.04739006040767853,
+              "20.0": 0.011419239160436105,
+              "5.0": 0.2061680545983971,
+              "50.0": 0.0018594702603414678
+            },
+            "crps_mm_h": 2.3489270279874788,
+            "ensemble_mean_rmse_mm_h": 4.752195387101293,
+            "mean_ensemble_spread_mm_h": 0.0
+          },
+          "phase_correlation": {
+            "brier_score_by_threshold": {
+              "1.0": 0.2800740870247808,
+              "10.0": 0.03850930888536041,
+              "20.0": 0.008219876011000507,
+              "5.0": 0.1982029699703795,
+              "50.0": 0.00138489229675982
+            },
+            "crps_mm_h": 2.2158336895305015,
+            "ensemble_mean_rmse_mm_h": 4.39614713000218,
+            "mean_ensemble_spread_mm_h": 0.0
+          },
+          "steps": {
+            "brier_score_by_threshold": {
+              "1.0": 0.1465347787053603,
+              "10.0": 0.026323446263478396,
+              "20.0": 0.005960933706341055,
+              "5.0": 0.12044326688889218,
+              "50.0": 0.0009351452563248102
+            },
+            "crps_mm_h": 1.341067687153119,
+            "ensemble_mean_rmse_mm_h": 3.5530369083626576,
+            "mean_ensemble_spread_mm_h": 2.771127555926213
+          }
+        },
+        "steps_skill_against_deterministic_baselines": {
+          "lk": {
+            "brier_skill_by_threshold": {
+              "1.0": 0.3637783466461957,
+              "10.0": 0.44543065405870674,
+              "20.0": 0.41077841013139227,
+              "5.0": 0.4489579323386147,
+              "50.0": 0.38036422969216976
+            },
+            "crps_skill": 0.40754880600112553
+          },
+          "persistence": {
+            "brier_skill_by_threshold": {
+              "1.0": 0.45804682681570885,
+              "10.0": 0.44453655393076363,
+              "20.0": 0.4779920428504797,
+              "5.0": 0.4158005364919004,
+              "50.0": 0.4970905013812468
+            },
+            "crps_skill": 0.42907222268964085
+          },
+          "phase_correlation": {
+            "brier_skill_by_threshold": {
+              "1.0": 0.47679994153691563,
+              "10.0": 0.3164394006176142,
+              "20.0": 0.27481464460490057,
+              "5.0": 0.39232360187694537,
+              "50.0": 0.32475235907316835
+            },
+            "crps_skill": 0.39477962922512067
+          }
+        }
+      },
+      "near": {
+        "lead_minutes": [
+          10,
+          60
+        ],
+        "minimum_common_verification_coverage": 0.9913009801292937,
+        "minimum_steps_member_mean_coverage": 0.9989076573221717,
+        "scores": {
+          "lk": {
+            "brier_score_by_threshold": {
+              "1.0": 0.15778891006843968,
+              "10.0": 0.04082804380948703,
+              "20.0": 0.009882513261739709,
+              "5.0": 0.16486183791298975,
+              "50.0": 0.0017307156511976254
+            },
+            "crps_mm_h": 1.7590913102380519,
+            "ensemble_mean_rmse_mm_h": 3.8631211112959933,
+            "mean_ensemble_spread_mm_h": 0.0
+          },
+          "persistence": {
+            "brier_score_by_threshold": {
+              "1.0": 0.1864722898833776,
+              "10.0": 0.04332338415506006,
+              "20.0": 0.01116197574864808,
+              "5.0": 0.1681389979283273,
+              "50.0": 0.001958434135428362
+            },
+            "crps_mm_h": 1.8979229994290754,
+            "ensemble_mean_rmse_mm_h": 4.211555868877177,
+            "mean_ensemble_spread_mm_h": 0.0
+          },
+          "phase_correlation": {
+            "brier_score_by_threshold": {
+              "1.0": 0.1789202474973035,
+              "10.0": 0.03794066722021614,
+              "20.0": 0.009057982008722543,
+              "5.0": 0.162382129363225,
+              "50.0": 0.0016150403622162944
+            },
+            "crps_mm_h": 1.7710291865282977,
+            "ensemble_mean_rmse_mm_h": 3.903106755974754,
+            "mean_ensemble_spread_mm_h": 0.0
+          },
+          "steps": {
+            "brier_score_by_threshold": {
+              "1.0": 0.10575142872570316,
+              "10.0": 0.025480328112926547,
+              "20.0": 0.006184942866808006,
+              "5.0": 0.1020982464368956,
+              "50.0": 0.001029377699741401
+            },
+            "crps_mm_h": 1.1211640121487898,
+            "ensemble_mean_rmse_mm_h": 3.2553548438755313,
+            "mean_ensemble_spread_mm_h": 2.2784229061570374
+          }
+        },
+        "steps_skill_against_deterministic_baselines": {
+          "lk": {
+            "brier_skill_by_threshold": {
+              "1.0": 0.3297917535533117,
+              "10.0": 0.3759111205076693,
+              "20.0": 0.37415283916156217,
+              "5.0": 0.38070418400417994,
+              "50.0": 0.4052300278043425
+            },
+            "crps_skill": 0.3626459265510973
+          },
+          "persistence": {
+            "brier_skill_by_threshold": {
+              "1.0": 0.4328839486454443,
+              "10.0": 0.4118573927251593,
+              "20.0": 0.44589174837106094,
+              "5.0": 0.3927747417620683,
+              "50.0": 0.47438737861038727
+            },
+            "crps_skill": 0.4092679141956479
+          },
+          "phase_correlation": {
+            "brier_skill_by_threshold": {
+              "1.0": 0.4089465546525307,
+              "10.0": 0.328416446526019,
+              "20.0": 0.3171831362822197,
+              "5.0": 0.3712470279995109,
+              "50.0": 0.3626303566006225
+            },
+            "crps_skill": 0.3669421031131743
+          }
+        }
+      }
+    }
+  },
+  "completed_issue_count": 50,
+  "compute_halo_cells": 100,
+  "compute_halo_degrees": 1.0,
+  "configuration_sha256": "2c170f6f911036c1d6a05159c40474bc4afa0abaec9e88e4e356cfc14ca6045a",
+  "coverage_row_count": 2400,
+  "ensemble_fallback_issue_count": 14,
+  "errors": [],
+  "failed_issue_count": 0,
+  "holdout_gate_status": "development_pending",
+  "lead_band_summary": {
+    "far": {
+      "lead_minutes": [
+        70,
+        120
+      ],
+      "minimum_common_verification_coverage": 0.7669536548792961,
+      "minimum_steps_member_mean_coverage": 0.9465041724180163,
+      "scores": {
+        "lk": {
+          "brier_score_by_threshold": {
+            "1.0": 0.1644348024788273,
+            "10.0": 0.03388818899304717,
+            "20.0": 0.0072226590535704556,
+            "5.0": 0.15604837331058796,
+            "50.0": 0.0010774672252772234
+          },
+          "crps_mm_h": 1.6160679588376639,
+          "ensemble_mean_rmse_mm_h": 3.1817321387506254,
+          "mean_ensemble_spread_mm_h": 0.0
+        },
+        "persistence": {
+          "brier_score_by_threshold": {
+            "1.0": 0.1930369394966357,
+            "10.0": 0.0338336409677381,
+            "20.0": 0.008152647085808103,
+            "5.0": 0.1471915392867695,
+            "50.0": 0.0013275494615825833
+          },
+          "crps_mm_h": 1.6769921305920188,
+          "ensemble_mean_rmse_mm_h": 3.392793438120657,
+          "mean_ensemble_spread_mm_h": 0.0
+        },
+        "phase_correlation": {
+          "brier_score_by_threshold": {
+            "1.0": 0.19995598282099053,
+            "10.0": 0.027493320741408103,
+            "20.0": 0.005868495025392563,
+            "5.0": 0.14150494992048265,
+            "50.0": 0.0009887294581284387
+          },
+          "crps_mm_h": 1.581971525220066,
+          "ensemble_mean_rmse_mm_h": 3.1385964863917573,
+          "mean_ensemble_spread_mm_h": 0.0
+        },
+        "steps": {
+          "brier_score_by_threshold": {
+            "1.0": 0.10461698190198575,
+            "10.0": 0.0187933508050091,
+            "20.0": 0.004255746650623678,
+            "5.0": 0.08598921828426212,
+            "50.0": 0.0006676372341160928
+          },
+          "crps_mm_h": 0.9574414317656078,
+          "ensemble_mean_rmse_mm_h": 2.5366667085061025,
+          "mean_ensemble_spread_mm_h": 1.978417710305804
+        }
+      },
+      "steps_skill_against_deterministic_baselines": {
+        "lk": {
+          "brier_skill_by_threshold": {
+            "1.0": 0.3637783466461957,
+            "10.0": 0.44543065405870685,
+            "20.0": 0.41077841013139227,
+            "5.0": 0.4489579323386147,
+            "50.0": 0.38036422969216976
+          },
+          "crps_skill": 0.40754878126892924
+        },
+        "persistence": {
+          "brier_skill_by_threshold": {
+            "1.0": 0.45804682681570885,
+            "10.0": 0.44453655393076363,
+            "20.0": 0.4779920428504797,
+            "5.0": 0.4158005364919003,
+            "50.0": 0.49709050138124666
+          },
+          "crps_skill": 0.42907219759724946
+        },
+        "phase_correlation": {
+          "brier_skill_by_threshold": {
+            "1.0": 0.47679994153691563,
+            "10.0": 0.3164394006176142,
+            "20.0": 0.2748146446049007,
+            "5.0": 0.39232360187694537,
+            "50.0": 0.32475235907316824
+          },
+          "crps_skill": 0.3947796047514702
+        }
+      }
+    },
+    "near": {
+      "lead_minutes": [
+        10,
+        60
+      ],
+      "minimum_common_verification_coverage": 0.9913009801292937,
+      "minimum_steps_member_mean_coverage": 0.9989076573221717,
+      "scores": {
+        "lk": {
+          "brier_score_by_threshold": {
+            "1.0": 0.11360673411052127,
+            "10.0": 0.029395860046851605,
+            "20.0": 0.007115329309158626,
+            "5.0": 0.11869918473122824,
+            "50.0": 0.0012461012166269704
+          },
+          "crps_mm_h": 1.266531613015388,
+          "ensemble_mean_rmse_mm_h": 2.78144223383915,
+          "mean_ensemble_spread_mm_h": 0.0
+        },
+        "persistence": {
+          "brier_score_by_threshold": {
+            "1.0": 0.13425853468771864,
+            "10.0": 0.031192484835195797,
+            "20.0": 0.008036531911366466,
+            "5.0": 0.1210587133339583,
+            "50.0": 0.00141005667635371
+          },
+          "crps_mm_h": 1.3664893020139246,
+          "ensemble_mean_rmse_mm_h": 3.0323124302440805,
+          "mean_ensemble_spread_mm_h": 0.0
+        },
+        "phase_correlation": {
+          "brier_score_by_threshold": {
+            "1.0": 0.12882112548719896,
+            "10.0": 0.02731697234611292,
+            "20.0": 0.006521673501619892,
+            "5.0": 0.11691381470894645,
+            "50.0": 0.0011628159477651743
+          },
+          "crps_mm_h": 1.2751267870169196,
+          "ensemble_mean_rmse_mm_h": 2.810231573351587,
+          "mean_ensemble_spread_mm_h": 0.0
+        },
+        "steps": {
+          "brier_score_by_threshold": {
+            "1.0": 0.07614017005274763,
+            "10.0": 0.01834562935835299,
+            "20.0": 0.00445310864656745,
+            "5.0": 0.07350990846616458,
+            "50.0": 0.0007411435859661982
+          },
+          "crps_mm_h": 0.8072291379274017,
+          "ensemble_mean_rmse_mm_h": 2.3438554559456204,
+          "mean_ensemble_spread_mm_h": 1.6404459931869237
+        }
+      },
+      "steps_skill_against_deterministic_baselines": {
+        "lk": {
+          "brier_skill_by_threshold": {
+            "1.0": 0.3297917535533117,
+            "10.0": 0.3759111205076694,
+            "20.0": 0.37415283916156217,
+            "5.0": 0.38070418400417994,
+            "50.0": 0.4052300278043425
+          },
+          "crps_skill": 0.36264588295152644
+        },
+        "persistence": {
+          "brier_skill_by_threshold": {
+            "1.0": 0.43288394864544444,
+            "10.0": 0.4118573927251592,
+            "20.0": 0.4458917483710608,
+            "5.0": 0.3927747417620683,
+            "50.0": 0.4743873786103874
+          },
+          "crps_skill": 0.40926786859018094
+        },
+        "phase_correlation": {
+          "brier_skill_by_threshold": {
+            "1.0": 0.4089465546525307,
+            "10.0": 0.328416446526019,
+            "20.0": 0.3171831362822196,
+            "5.0": 0.3712470279995109,
+            "50.0": 0.3626303566006226
+          },
+          "crps_skill": 0.3669420592944609
+        }
+      }
+    }
+  },
+  "member_count": 12,
+  "metric_row_count": 12000,
+  "motion_fallback_issue_count": 14,
+  "operational_eligible": false,
+  "performance_summary": {
+    "forecast_runtime_ms": {
+      "max": 40006,
+      "p50": 38355,
+      "p95": 39281
+    },
+    "peak_rss_bytes": {
+      "max": 5032812544,
+      "p50": 4477775872,
+      "p95": 4866539520
+    },
+    "rss_sample_interval_ms": 50,
+    "rss_scope": "whole_process_resident_set_sampled_per_issue",
+    "schema_version": "1.0",
+    "scoring_runtime_ms": {
+      "max": 768,
+      "p50": 740,
+      "p95": 763
+    },
+    "total_runtime_ms": {
+      "max": 43784,
+      "p50": 40411,
+      "p95": 42326
+    }
+  },
+  "phase_correlation_fallback_issue_count": 14,
+  "profile_sha256": "3495fa5b7acb0a2c8e738ceb50b8955ed3b4bb6d29088bea8fb3182f0b4bdc86",
+  "profile_version": "rp024-mrms-ensemble-v1",
+  "reliability_row_count": 120000,
+  "report_files": {
+    "coverage": "coverage.csv",
+    "probabilistic_metrics": "probabilistic_metrics.csv",
+    "reliability": "reliability.json",
+    "runtime": "runtime_metrics.csv"
+  },
+  "runtime_fingerprint": {
+    "git_commit": "6275f02615414f37e4df7d1761c7240c1f7d71dc",
+    "git_commit_source": "environment",
+    "machine": "x86_64",
+    "packages": {
+      "numpy": "2.5.2",
+      "opencv-python-headless": "5.0.0.93",
+      "pysteps": "1.21.5",
+      "rasterio": "1.5.1",
+      "scipy": "1.18.1"
+    },
+    "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.35",
+    "processor": "x86_64",
+    "python": "3.12.13",
+    "thread_environment": {
+      "MKL_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1"
+    },
+    "verification_profile_sha256": "3495fa5b7acb0a2c8e738ceb50b8955ed3b4bb6d29088bea8fb3182f0b4bdc86"
+  },
+  "schema_version": "1.0",
+  "selection_evidence_sha256": "0a6c2979396c7b58ef99265d96b501880c200b41d03d5087237d3847cd558c67",
+  "split": "development"
+}
