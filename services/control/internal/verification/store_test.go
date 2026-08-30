@@ -133,6 +133,10 @@ func TestFileStoreLoadsProbabilisticEnsembleSummaryWithoutDeterministicMetrics(t
 		len(detail.SkillSummary.Comparisons) != 0 {
 		t.Fatalf("probabilistic run leaked deterministic selectors: %#v", detail)
 	}
+	if detail.Filters.LeadMinutes == nil || detail.Filters.ThresholdsMMH == nil ||
+		detail.Filters.WindowsPixels == nil || detail.Filters.FSSScales == nil {
+		t.Fatalf("probabilistic empty filter dimensions must encode as arrays: %#v", detail.Filters)
+	}
 }
 
 func TestFileStoreRejectsProbabilisticReportThatEnablesPublication(t *testing.T) {

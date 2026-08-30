@@ -94,7 +94,7 @@ const probabilisticDetail = {
   cases: [],
   filters: {
     models: ['nowcastnet', 'steps', 'lk', 'persistence', 'phase_correlation'],
-    lead_minutes: [], thresholds_mm_h: [], windows_pixels: [], fss_scales: [],
+    lead_minutes: null, thresholds_mm_h: null, windows_pixels: null, fss_scales: null,
   },
   skill_summary: {
     status: 'steps_retained_nowcastnet_offline', comparison_metric: 'CRPS', comparisons: [],

@@ -117,16 +117,26 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
         return response.json() as Promise<RunDetail>
       })
       .then((payload) => {
-        setDetail(payload)
-        const nextCase = pickCase(payload.cases, selectedCaseID)
+        const normalizedPayload = normalizeRunDetail(payload)
+        setDetail(normalizedPayload)
+        if (isProbabilisticRun(normalizedPayload.run)) {
+          setSelectedCaseID('')
+          setSelectedIssueTime('')
+          setMetrics([])
+          setMapFrame(null)
+          setPlaying(false)
+          setError(null)
+          return
+        }
+        const nextCase = pickCase(normalizedPayload.cases, selectedCaseID)
         setSelectedCaseID(nextCase?.case_id ?? '')
         setSelectedIssueTime(nextIssue(nextCase, selectedIssueTime))
-        setThreshold((current) => pickNumber(payload.filters.thresholds_mm_h, current, 5))
-        setWindowPixels((current) => pickFSSWindow(payload.filters.fss_scales, current, 10))
-        setSelectedLeadMinutes((current) => pickNumber(payload.filters.lead_minutes, current, 60))
-        setBaseline((current) => payload.filters.models.includes(current)
+        setThreshold((current) => pickNumber(normalizedPayload.filters.thresholds_mm_h, current, 5))
+        setWindowPixels((current) => pickFSSWindow(normalizedPayload.filters.fss_scales, current, 10))
+        setSelectedLeadMinutes((current) => pickNumber(normalizedPayload.filters.lead_minutes, current, 60))
+        setBaseline((current) => normalizedPayload.filters.models.includes(current)
           ? current
-          : payload.filters.models.find((model) => model !== 'lk') ?? 'persistence')
+          : normalizedPayload.filters.models.find((model) => model !== 'lk') ?? 'persistence')
         setError(null)
       })
       .catch((requestError: unknown) => {
@@ -391,6 +401,22 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
       ) : null}
     </section>
   )
+}
+
+function normalizeRunDetail(payload: RunDetail): RunDetail {
+  const filters = payload.filters ?? {} as RunDetail['filters']
+  return {
+    ...payload,
+    cases: payload.cases ?? [],
+    filters: {
+      ...filters,
+      models: filters.models ?? [],
+      lead_minutes: filters.lead_minutes ?? [],
+      thresholds_mm_h: filters.thresholds_mm_h ?? [],
+      windows_pixels: filters.windows_pixels ?? [],
+      fss_scales: filters.fss_scales ?? [],
+    },
+  }
 }
 
 function VerificationConclusion({ run, detail }: { run: RunSummary; detail: RunDetail | null }) {

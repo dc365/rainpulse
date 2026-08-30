@@ -699,9 +699,15 @@ func (store *FileStore) loadRun(
 		loaded := cachedRun{
 			SummaryStamp: summaryStamp,
 			Detail: RunDetail{
-				Run:     summary,
-				Cases:   []Case{},
-				Filters: FilterOptions{Models: append([]string(nil), report.Models...)},
+				Run:   summary,
+				Cases: []Case{},
+				Filters: FilterOptions{
+					Models:        append([]string(nil), report.Models...),
+					LeadMinutes:   []int{},
+					ThresholdsMMH: []float64{},
+					WindowsPixels: []int{},
+					FSSScales:     []FSSScale{},
+				},
 				SkillSummary: SkillSummary{
 					CandidateModel:   "nowcastnet",
 					Status:           "steps_retained_nowcastnet_offline",
