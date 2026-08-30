@@ -66,7 +66,11 @@ LEFT JOIN LATERAL (
     ORDER BY attempt_no DESC
     LIMIT 1
 ) AS attempt ON TRUE
-WHERE j.status = 'FAILED'
+WHERE (
+       j.status = 'FAILED'
+       AND COALESCE(attempt.completed_at, j.completed_at, j.updated_at)
+           >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
+   )
    OR (
        j.status IN ('PENDING', 'RUNNING')
        AND COALESCE(attempt.started_at, j.started_at, j.scheduled_at, j.created_at)
