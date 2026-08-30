@@ -32,6 +32,65 @@ const verificationSummary = {
   promotion_eligible: false,
 }
 
+const analysisCycles = ['09:50', '09:55', '10:00'].map((time, index) => ({
+  analysis_id: `1922303f-eef9-583b-acb6-11644f3f1c${index}`,
+  run_id: `d8540b49-067f-5a9d-a50d-2ebcf1d0c1${index}`,
+  analysis_time: `2026-08-28T${time}:00Z`,
+  grid_id: run.grid_id,
+  config_version: 'rp034-fujian-four-radar-engineering-v1',
+  status: 'ANALYSIS_READY',
+  radar_count: 4,
+  valid_coverage_ratio: 0.41,
+  mean_quality_index: 0.39,
+  analysis_uri: `s3://rainpulse/analysis/${time}/analysis.zarr`,
+  mosaic_uri: `s3://rainpulse/analysis/${time}/mosaic.zarr`,
+  radars: [
+    { radar_id: 'z9591', state: 'PARTICIPATING' },
+    { radar_id: 'z9593', state: 'PARTICIPATING' },
+  ],
+  created_at: '2026-08-30T15:40:00Z',
+  updated_at: '2026-08-30T15:50:00Z',
+}))
+
+const analysisDiagnostic = (analysisID: string, analysisTime: string) => ({
+  contract_version: '1.0',
+  job_id: '7b8eb073-06c6-563b-a492-a33da8a1fa74',
+  analysis_id: analysisID,
+  analysis_time: analysisTime,
+  grid_id: run.grid_id,
+  diagnostic_config_version: 'rp012-operational-diagnostics-v1',
+  renderer_version: 'radar-diagnostic-renderer-1.0.0',
+  palette_version: 'rainpulse-meteorological-v1',
+  flag_definition_version: 'qc-flags-v1',
+  operational_eligible: false,
+  operational_reasons: ['input_not_operational:z9591'],
+  layers: [{
+    layer_id: 'grid-rate-qpe', title: '瞬时雨强', scope: 'grid', field: 'RATE_QPE',
+    rendering: 'scalar', unit: 'mm/h',
+    image_url: '/api/v1/diagnostics/job/layers/grid-rate-qpe',
+    width: 1002, height: 402, palette_version: 'rainpulse-meteorological-v1',
+    legend: [], bounds: [117.995, 24.995, 123.005, 27.005],
+  }],
+  created_at: '2026-08-30T15:50:00Z',
+})
+
+const analysisQPE = (analysisID: string, analysisTime: string) => ({
+  analysis_id: analysisID, analysis_time: analysisTime, grid_id: run.grid_id,
+  grid_config_version: 'fuzhou-grid-0p01deg-v1',
+  qpe_config_version: 'rp011-basic-qpe-v1', qpe_algorithm_version: 'basic-zr-qpe-1.0.0',
+  mosaic_config_version: 'rp034-fujian-four-radar-engineering-v1',
+  mosaic_algorithm_version: 'qi-mosaic-1.1.0', flag_definition_version: 'qc-flags-v1',
+  input_mosaic_uri: 's3://rainpulse/analysis/mosaic.zarr', input_field: 'DBZH_QC',
+  coefficient_a: 200, exponent_b: 1.6, no_rain_below_dbz: 10, maximum_rate_mm_h: 300,
+  gauge_adjustment_enabled: false, operational_eligible: false,
+  operational_reasons: ['input_not_operational:z9591'], grid_cell_count: 100701,
+  valid_cell_count: 41287, missing_cell_count: 59414, low_quality_cell_count: 20000,
+  no_rain_cell_count: 7000, rain_cell_count: 34287, capped_cell_count: 0,
+  valid_coverage_ratio: 0.41, mean_quality_index: 0.39, mean_rate_mm_h: 1.8,
+  maximum_observed_rate_mm_h: 80, uncapped_max_rate_mm_h: 80, p95_rate_mm_h: 6.4,
+  measured_at: '2026-08-30T15:49:00Z',
+})
+
 const products = [
   {
     product_id: 'rain-product', run_id: run.run_id, product_type: 'rain_rate',
@@ -347,7 +406,7 @@ describe('RainPulse short-nowcast workspace', () => {
 
     await screen.findByRole('img', { name: 'T+5 分钟降水率图层' })
     fireEvent.click(screen.getByRole('button', { name: '历史时次' }))
-    const picker = await screen.findByRole('combobox', { name: '历史起报时次' })
+    const picker = await screen.findByRole('combobox', { name: '历史数据时次' })
     expect(picker.querySelectorAll('option')).toHaveLength(2)
     fireEvent.change(picker, { target: { value: olderRun.run_id } })
 
@@ -357,7 +416,54 @@ describe('RainPulse short-nowcast workspace', () => {
       ))).toBe(true)
     })
     expect(screen.getByRole('button', { name: '历史时次' }).getAttribute('aria-pressed')).toBe('true')
-    expect(screen.getByRole<HTMLSelectElement>('combobox', { name: '历史起报时次' }).value)
+    expect(screen.getByRole<HTMLSelectElement>('combobox', { name: '历史数据时次' }).value)
       .toBe(olderRun.run_id)
+  })
+
+  it('reuses the historical picker for multiple radar QPE analysis times', async () => {
+    const latestAnalysis = analysisCycles.at(-1)!
+    const fetchStatus = vi.fn().mockImplementation((input: string) => {
+      let body: unknown = {}
+      if (input.includes('/runs?status=')) body = { items: [run] }
+      else if (input.includes('/analysis-cycles?')) body = { items: analysisCycles }
+      else if (input.endsWith(`/${latestAnalysis.analysis_id}/diagnostics`)) {
+        body = analysisDiagnostic(latestAnalysis.analysis_id, latestAnalysis.analysis_time)
+      }
+      else if (input.endsWith(`/${latestAnalysis.analysis_id}/qpe-summary`)) {
+        body = analysisQPE(latestAnalysis.analysis_id, latestAnalysis.analysis_time)
+      }
+      else if (input.includes('/products?run_id=')) body = { items: products }
+      else if (input.endsWith('/products/rain-product/assets')) body = rainAssets
+      else if (input.endsWith('/products/accum-60/assets')) body = accumulationAsset('accum-60', 60)
+      else if (input.endsWith('/products/accum-120/assets')) body = accumulationAsset('accum-120', 120)
+      else if (input.includes('/point-forecast?')) body = {
+        product_id: 'rain-product', longitude: 119.3, latitude: 26.08,
+        grid_longitude: 119.3, grid_latitude: 26.08, values: [],
+      }
+      else if (input.includes('/area-statistics?')) body = {
+        product_id: 'rain-product', bbox: [119, 25.9, 119.6, 26.3],
+        valid_time: '2026-08-25T10:05:00Z', lead_time_minutes: 5,
+        valid_pixel_count: 0, missing_pixel_count: 5151, valid_pixel_ratio: 0,
+        max_rain_rate: 0, mean_rain_rate: 0,
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => body })
+    })
+    vi.stubGlobal('fetch', fetchStatus)
+
+    render(<NowcastWorkspace refreshToken={0} />)
+
+    await screen.findByRole('img', { name: 'T+5 分钟降水率图层' })
+    fireEvent.click(screen.getByRole('button', { name: '历史时次' }))
+    const picker = await screen.findByRole<HTMLSelectElement>('combobox', {
+      name: '历史数据时次',
+    })
+    expect(picker.querySelectorAll('option')).toHaveLength(4)
+    expect(picker.value).toBe(`analysis:${latestAnalysis.analysis_id}`)
+    expect((await screen.findByText('雷达 QPE')).textContent).toBe('雷达 QPE')
+    const layer = await screen.findByRole('img', { name: /雷达 QPE 瞬时雨强图层/ })
+    expect(layer.getAttribute('data-source')).toBe('/api/v1/diagnostics/job/layers/grid-rate-qpe')
+    expect(screen.getByText('41.0%')).toBeTruthy()
+    expect(screen.getByRole('tab', { name: '单点雨强' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.queryByLabelText('五分钟预报时间轴')).toBeNull()
   })
 })

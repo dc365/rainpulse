@@ -12,6 +12,10 @@ import { NowcastTimeline, type TimelineAsset } from './NowcastTimeline'
 
 type ForecastRun = components['schemas']['ForecastRun']
 type ForecastRunPage = components['schemas']['ForecastRunPage']
+type AnalysisCycle = components['schemas']['AnalysisCycle']
+type AnalysisCyclePage = components['schemas']['AnalysisCyclePage']
+type AnalysisQPEMetrics = components['schemas']['AnalysisQPEMetrics']
+type DiagnosticBundle = components['schemas']['DiagnosticBundle']
 type Product = components['schemas']['Product']
 type ProductAsset = components['schemas']['ProductAsset']
 type ProductPage = components['schemas']['ProductPage']
@@ -31,17 +35,29 @@ type DisplayAsset = TimelineAsset & {
   asset_type: string
   content_url: string
   media_type: string
-  sha256: string
-  size_bytes: number
+  sha256?: string
+  size_bytes?: number
   unit?: string | null
   coverage_ratio?: number | null
   valid_cell_count?: number | null
   missing_cell_count?: number | null
 }
+type HistoryItem = {
+  id: string
+  kind: 'forecast'
+  time: string
+  run: ForecastRun
+} | {
+  id: string
+  kind: 'analysis'
+  time: string
+  analysis: AnalysisCycle
+}
 type Coordinate = { longitude: number, latitude: number }
 type GridBounds = { west: number, south: number, east: number, north: number }
 
 const FUZHOU_GRID: GridBounds = { west: 118, south: 25, east: 123, north: 27 }
+const FUZHOU_GRID_ID = 'fuzhou_118_123_25_27_0p01deg_v1'
 const DEFAULT_POINT: Coordinate = { longitude: 119.3, latitude: 26.08 }
 const DEFAULT_AREA = [119, 25.9, 119.6, 26.3] as const
 
@@ -132,9 +148,12 @@ function formatCoordinate(value: number) {
 
 export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
   const [run, setRun] = useState<ForecastRun | null>(null)
+  const [analysis, setAnalysis] = useState<AnalysisCycle | null>(null)
+  const [analysisQPE, setAnalysisQPE] = useState<AnalysisQPEMetrics | null>(null)
+  const [analysisAsset, setAnalysisAsset] = useState<DisplayAsset | null>(null)
   const [dataMode, setDataMode] = useState<DataMode>('realtime')
-  const [availableRuns, setAvailableRuns] = useState<ForecastRun[]>([])
-  const [selectedRunID, setSelectedRunID] = useState<string | null>(null)
+  const [availableHistory, setAvailableHistory] = useState<HistoryItem[]>([])
+  const [selectedHistoryID, setSelectedHistoryID] = useState<string | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [assets, setAssets] = useState<Record<string, ProductAsset[]>>({})
   const [productType, setProductType] = useState<SupportedProductType>('rain_rate')
@@ -172,26 +191,113 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
     const load = async () => {
       setLoading(true)
       try {
-        const runPages = await Promise.all(
-          ['PUBLISHED', 'VERIFYING', 'VERIFIED'].map(async (status) => {
+        const [runPages, analysisPage] = await Promise.all([
+          Promise.all(['PUBLISHED', 'VERIFYING', 'VERIFIED'].map(async (status) => {
             const response = await fetch(`/api/v1/runs?status=${status}&limit=50`, {
               signal: controller.signal,
             })
             if (!response.ok) throw new Error(`预报运行目录接口响应 ${response.status}`)
             return await response.json() as ForecastRunPage
+          })),
+          fetch('/api/v1/analysis-cycles?status=ANALYSIS_READY&limit=200', {
+            signal: controller.signal,
+          }).then(async (response) => {
+            if (!response.ok) return { items: [] } as AnalysisCyclePage
+            return await response.json() as AnalysisCyclePage
           }),
-        )
-        const catalog = Array.from(
+        ])
+        const forecastCatalog = Array.from(
           new Map(runPages.flatMap((page) => page.items)
             .map((item) => [item.run_id, item])).values(),
         ).sort((left, right) => Date.parse(right.issue_time) - Date.parse(left.issue_time))
-        if (catalog.length === 0) throw new Error('暂无已发布或已检验的可展示预报')
-        const selectedRun = dataMode === 'historical'
-          ? catalog.find((item) => item.run_id === selectedRunID) ?? catalog[0]
-          : catalog[0]
-        if (dataMode === 'historical' && selectedRunID !== selectedRun.run_id) {
-          setSelectedRunID(selectedRun.run_id)
+        const analysisCatalog = (Array.isArray(analysisPage.items) ? analysisPage.items : [])
+          .filter((item) => item.grid_id === FUZHOU_GRID_ID
+            && item.radar_count >= 2
+            && item.analysis_uri != null)
+          .sort((left, right) => Date.parse(right.analysis_time) - Date.parse(left.analysis_time))
+        const historyCatalog: HistoryItem[] = [
+          ...forecastCatalog.map((item): HistoryItem => ({
+            id: item.run_id, kind: 'forecast', time: item.issue_time, run: item,
+          })),
+          ...analysisCatalog.map((item): HistoryItem => ({
+            id: `analysis:${item.analysis_id}`,
+            kind: 'analysis',
+            time: item.analysis_time,
+            analysis: item,
+          })),
+        ].sort((left, right) => Date.parse(right.time) - Date.parse(left.time))
+        const selected = dataMode === 'historical'
+          ? historyCatalog.find((item) => item.id === selectedHistoryID) ?? historyCatalog[0]
+          : forecastCatalog[0]
+            ? ({
+                id: forecastCatalog[0].run_id,
+                kind: 'forecast',
+                time: forecastCatalog[0].issue_time,
+                run: forecastCatalog[0],
+              } satisfies HistoryItem)
+            : null
+        if (!selected) {
+          throw new Error(dataMode === 'historical'
+            ? '暂无可展示的雷达分析或预报产品'
+            : '暂无已发布或已检验的可展示预报')
         }
+        setAvailableHistory(historyCatalog)
+        if (dataMode === 'historical' && selectedHistoryID !== selected.id) {
+          setSelectedHistoryID(selected.id)
+        }
+
+        if (selected.kind === 'analysis') {
+          const [diagnosticResponse, qpeResponse] = await Promise.all([
+            fetch(`/api/v1/analysis-cycles/${selected.analysis.analysis_id}/diagnostics`, {
+              signal: controller.signal,
+            }),
+            fetch(`/api/v1/analysis-cycles/${selected.analysis.analysis_id}/qpe-summary`, {
+              signal: controller.signal,
+            }),
+          ])
+          if (!diagnosticResponse.ok) {
+            throw new Error(`雷达分析图层接口响应 ${diagnosticResponse.status}`)
+          }
+          if (!qpeResponse.ok) throw new Error(`雷达 QPE 接口响应 ${qpeResponse.status}`)
+          const diagnostic = await diagnosticResponse.json() as DiagnosticBundle
+          const qpe = await qpeResponse.json() as AnalysisQPEMetrics
+          const rateLayer = diagnostic.layers.find((item) =>
+            item.scope === 'grid' && item.field === 'RATE_QPE')
+          if (!rateLayer) throw new Error('当前雷达分析缺少瞬时雨强图层')
+          setRun(null)
+          setAnalysis(selected.analysis)
+          setAnalysisQPE(qpe)
+          setAnalysisAsset({
+            asset_id: `${selected.analysis.analysis_id}:grid-rate-qpe`,
+            asset_type: 'rendered_png',
+            content_url: rateLayer.image_url,
+            media_type: 'image/png',
+            lead_time_minutes: 0,
+            valid_time: selected.analysis.analysis_time,
+            unit: rateLayer.unit,
+            coverage_ratio: qpe.valid_coverage_ratio,
+            valid_cell_count: qpe.valid_cell_count,
+            missing_cell_count: qpe.missing_cell_count,
+          })
+          setProducts([])
+          setAssets({})
+          setEnsembleBundle(null)
+          setVerification(null)
+          setDisplayMode('deterministic')
+          setProductType('rain_rate')
+          setSelectedLead(0)
+          setPointForecast(null)
+          setAreaStatistics(null)
+          setPointError(null)
+          setAreaError(null)
+          setDrawerTab('provenance')
+          setDrawerOpen(false)
+          setUpdatedAt(new Date())
+          setError(null)
+          return
+        }
+
+        const selectedRun = selected.run
         const productResponse = await fetch(
           `/api/v1/products?run_id=${encodeURIComponent(selectedRun.run_id)}`,
           { signal: controller.signal },
@@ -246,7 +352,9 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
           : null
 
         setRun(selectedRun)
-        setAvailableRuns(catalog)
+        setAnalysis(null)
+        setAnalysisQPE(null)
+        setAnalysisAsset(null)
         setProducts(supported)
         setAssets(nextAssets)
         setEnsembleBundle(latestEnsemble)
@@ -268,7 +376,7 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
     }
     void load()
     return () => controller.abort()
-  }, [dataMode, refreshToken, selectedRunID])
+  }, [dataMode, refreshToken, selectedHistoryID])
 
   const selectedProduct = useMemo(
     () => products.find((item) => item.product_type === productType) ?? null,
@@ -288,13 +396,15 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
     [displayMode, ensembleBundle, probabilityThreshold, quantileValue],
   )
   const deterministicRenderedAssets = useMemo(
-    () => selectedProduct
+    () => analysisAsset
+      ? [analysisAsset]
+      : selectedProduct
       ? (assets[selectedProduct.product_id] ?? [])
         .filter((item) => item.asset_type === 'rendered_png')
         .map(toDisplayAsset)
         .sort(sortAssets)
       : [],
-    [assets, selectedProduct],
+    [analysisAsset, assets, selectedProduct],
   )
   const ensembleRenderedAssets = useMemo(
     () => (selectedEnsembleLayer?.assets ?? [])
@@ -311,7 +421,9 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
     ?? null
   const currentLead = selectedAsset?.lead_time_minutes ?? null
   const currentAssets = useMemo(
-    () => displayMode === 'deterministic'
+    () => analysisAsset
+      ? [analysisAsset]
+      : displayMode === 'deterministic'
       ? selectedProduct
         ? (assets[selectedProduct.product_id] ?? [])
           .filter((item) => item.lead_time_minutes === currentLead
@@ -321,7 +433,7 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
       : (selectedEnsembleLayer?.assets ?? [])
         .filter((item) => item.lead_time_minutes === currentLead)
         .map(toDisplayAsset),
-    [assets, currentLead, displayMode, selectedEnsembleLayer, selectedProduct],
+    [analysisAsset, assets, currentLead, displayMode, selectedEnsembleLayer, selectedProduct],
   )
 
   useEffect(() => {
@@ -384,6 +496,7 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
   }, [bbox, currentLead, rainProduct])
 
   const switchProduct = (nextType: SupportedProductType) => {
+    if (analysis) return
     const nextProduct = products.find((item) => item.product_type === nextType)
     if (!nextProduct) return
     const firstFrame = (assets[nextProduct.product_id] ?? [])
@@ -477,13 +590,18 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
   ) ?? pointForecast?.values[0] ?? null
   const hasCurrentPointValue = currentPointValue?.valid === true
     && currentPointValue.rain_rate != null
-  const ensembleActive = displayMode !== 'deterministic'
-  const currentProductLabel = displayMode === 'probability'
+  const analysisActive = analysis != null
+  const ensembleActive = !analysisActive && displayMode !== 'deterministic'
+  const currentProductLabel = analysisActive
+    ? '雷达瞬时雨强'
+    : displayMode === 'probability'
     ? `超过 ${probabilityThreshold} mm/h 概率`
     : displayMode === 'quantile'
       ? `P${Math.round(quantileValue * 100)} 雨强分位数`
       : productLabels[productType]
-  const currentProductNote = displayMode === 'probability'
+  const currentProductNote = analysisActive
+    ? '质控、拼图后的雷达 QPE 分析，非未来预报'
+    : displayMode === 'probability'
     ? '有效时刻瞬时雨强超阈值的原始集合相对频率'
     : displayMode === 'quantile'
       ? '有效时刻瞬时雨强的集合成员分位数'
@@ -497,14 +615,16 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
         (entry) => [entry.minimum, entry.color] as const,
       )
       : productType === 'rain_rate' ? rainRateLegend : rainfallAmountLegend
-  const issueTime = ensembleActive ? ensembleBundle?.issue_time : run?.issue_time
+  const issueTime = analysisActive
+    ? analysis.analysis_time
+    : ensembleActive ? ensembleBundle?.issue_time : run?.issue_time
   const realtimeFresh = dataMode === 'realtime'
     && run != null
     && updatedAt != null
     && updatedAt.getTime() - Date.parse(run.issue_time) <= 15 * 60 * 1000
 
   const switchDataMode = (nextMode: DataMode) => {
-    if (nextMode === 'historical' && !selectedRunID) setSelectedRunID(run?.run_id ?? null)
+    if (nextMode === 'historical') setSelectedHistoryID(null)
     setDataMode(nextMode)
     setLayerError(false)
   }
@@ -546,15 +666,15 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
             </div>
             {dataMode === 'historical' ? (
               <label className="forecast-run-picker">
-                <span>起报</span>
+                <span>时次</span>
                 <select
-                  aria-label="历史起报时次"
-                  value={selectedRunID ?? run?.run_id ?? ''}
-                  onChange={(event) => setSelectedRunID(event.target.value)}
+                  aria-label="历史数据时次"
+                  value={selectedHistoryID ?? run?.run_id ?? ''}
+                  onChange={(event) => setSelectedHistoryID(event.target.value)}
                 >
-                  {availableRuns.map((item) => (
-                    <option key={item.run_id} value={item.run_id}>
-                      {formatRunOption(item.issue_time)}
+                  {availableHistory.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.kind === 'analysis' ? '分析' : '预报'} · {formatRunOption(item.time)}
                     </option>
                   ))}
                 </select>
@@ -567,23 +687,30 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
               </div>
             )}
           </div>
-          <div className="forecast-mode-switch" role="group" aria-label="预报模型">
-            <span>模型</span>
-            <button
-              type="button"
-              className={displayMode === 'deterministic' ? 'active' : ''}
-              aria-pressed={displayMode === 'deterministic'}
-              onClick={() => switchProduct(productType)}
-            >LK 确定性</button>
-            <button
-              type="button"
-              className={ensembleActive ? 'active' : ''}
-              aria-pressed={ensembleActive}
-              disabled={!ensembleBundle}
-              onClick={() => switchEnsembleLayer('probability')}
-            >STEPS 集合</button>
-          </div>
-          {ensembleBundle ? (
+          {analysisActive ? (
+            <div className="forecast-mode-switch analysis-source" aria-label="当前数据类型">
+              <span>数据</span>
+              <strong>雷达 QPE</strong>
+            </div>
+          ) : (
+            <div className="forecast-mode-switch" role="group" aria-label="预报模型">
+              <span>模型</span>
+              <button
+                type="button"
+                className={displayMode === 'deterministic' ? 'active' : ''}
+                aria-pressed={displayMode === 'deterministic'}
+                onClick={() => switchProduct(productType)}
+              >LK 确定性</button>
+              <button
+                type="button"
+                className={ensembleActive ? 'active' : ''}
+                aria-pressed={ensembleActive}
+                disabled={!ensembleBundle}
+                onClick={() => switchEnsembleLayer('probability')}
+              >STEPS 集合</button>
+            </div>
+          )}
+          {!analysisActive && ensembleBundle ? (
             <div className="ensemble-layer-switch" aria-label="离线集合图层">
               <div role="group" aria-label="超阈概率">
                 <span>超阈概率</span>
@@ -613,18 +740,20 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
                 ))}
               </div>
             </div>
-          ) : <span className="ensemble-unavailable">等待离线集合产品</span>}
-          <div className={`ensemble-boundary${ensembleActive ? ' active' : ''}`}>
+          ) : !analysisActive ? <span className="ensemble-unavailable">等待离线集合产品</span> : null}
+          {!analysisActive ? <div className={`ensemble-boundary${ensembleActive ? ' active' : ''}`}>
             <strong>{ensembleBundle ? `${ensembleBundle.member_count} 成员` : '未装载'}</strong>
             <span>离线 · 原始未校准 · 不进入业务发布</span>
-          </div>
+          </div> : null}
         </div>
         <div className="forecast-map-host">
           <NowcastMap
             imageUrl={selectedAsset?.content_url}
-            imageDescription={displayLayerAlt(displayMode, productType, currentLead, currentProductLabel)}
+            imageDescription={analysisActive
+              ? `${formatRunOption(analysis.analysis_time)} 雷达 QPE 瞬时雨强图层`
+              : displayLayerAlt(displayMode, productType, currentLead, currentProductLabel)}
             validTimeLabel={formatUtc(selectedAsset?.valid_time)}
-            leadLabel={formatLead(currentLead)}
+            leadLabel={analysisActive ? '雷达分析' : formatLead(currentLead)}
             productLabel={currentProductLabel}
             legend={legend}
             legendUnit={displayMode === 'probability'
@@ -644,7 +773,7 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
             layerError={layerError}
             onLayerError={setLayerError}
             onSelectPoint={selectPoint}
-            picker={!ensembleActive ? (
+            picker={!ensembleActive && !analysisActive ? (
               <div className="gis-picker">
                 {hasCurrentPointValue ? <strong>{formatRate(currentPointValue)}</strong> : null}
                 <span>{formatCoordinate(point.longitude)}°E  {formatCoordinate(point.latitude)}°N</span>
@@ -656,7 +785,11 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
           />
 
           <div className="stage-float stage-products" role="group" aria-label="降水产品">
-            {ensembleActive ? (
+            {analysisActive ? (
+              <button type="button" className="active" aria-pressed="true" disabled>
+                <strong>瞬时雨强</strong>
+              </button>
+            ) : ensembleActive ? (
               <button type="button" className="active" aria-pressed="true" disabled>
                 <strong>{currentProductLabel}</strong>
               </button>
@@ -681,16 +814,16 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
 
           <div className="stage-float stage-status" aria-label="短临产品状态">
             <div className="stage-status-row">
-              <span className={`run-state${ensembleActive ? ' offline' : ''}${['PUBLISHED', 'VERIFYING', 'VERIFIED'].includes(run?.status ?? '') && !ensembleActive ? ' published' : ''}${run?.status === 'FAILED' && !ensembleActive ? ' failed' : ''}`}>
-                {ensembleActive ? 'OFFLINE' : run?.status ?? (loading ? '读取中' : '无产品')}
+              <span className={`run-state${ensembleActive ? ' offline' : ''}${analysisActive ? ' analysis' : ''}${['PUBLISHED', 'VERIFYING', 'VERIFIED'].includes(run?.status ?? '') && !ensembleActive ? ' published' : ''}${run?.status === 'FAILED' && !ensembleActive ? ' failed' : ''}`}>
+                {analysisActive ? analysis.status : ensembleActive ? 'OFFLINE' : run?.status ?? (loading ? '读取中' : '无产品')}
               </span>
-              <strong>{formatLead(currentLead)}</strong>
+              <strong>{analysisActive ? `${analysis.radar_count} 站融合` : formatLead(currentLead)}</strong>
             </div>
-            <div className="stage-status-row"><span>起报</span><strong>{formatUtc(issueTime, true)}</strong></div>
-            <div className="stage-status-row stage-status-valid-time"><span>有效时间</span><strong>{formatUtc(selectedAsset?.valid_time, true)}</strong></div>
+            <div className="stage-status-row"><span>{analysisActive ? '分析时次' : '起报'}</span><strong>{formatUtc(issueTime, true)}</strong></div>
+            {!analysisActive ? <div className="stage-status-row stage-status-valid-time"><span>有效时间</span><strong>{formatUtc(selectedAsset?.valid_time, true)}</strong></div> : null}
             <div className="stage-status-row"><span>有效覆盖</span><strong>{percent(selectedAsset?.coverage_ratio)}</strong></div>
             <div className="stage-status-row"><span>缺测格点</span><strong>{selectedAsset?.missing_cell_count?.toLocaleString('zh-CN') ?? '暂无'}</strong></div>
-            {!ensembleActive ? (
+            {!ensembleActive && !analysisActive ? (
               <>
                 <div className="stage-status-row verification-status-row">
                   <span>实况检验</span>
@@ -704,7 +837,9 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
                 ) : null}
               </>
             ) : null}
-            <small>{ensembleActive
+            <small>{analysisActive
+              ? '基础质控、拼图与 QPE 已完成；当前结果未通过业务预报输入门控'
+              : ensembleActive
               ? '原始未校准概率，仅供离线验收'
               : verification?.status === 'succeeded'
                 ? '5 mm/h · 10 km；完成仅表示已评分，不代表业务技巧通过'
@@ -714,18 +849,18 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
           <div className="stage-float stage-assets" aria-label="产品交付与溯源">
             <button type="button" onClick={() => openDrawer('provenance')}>
               <span>溯源</span>
-              <small>{ensembleActive ? ensembleBundle?.model_id : selectedProduct?.model_id ?? '暂无'}</small>
+              <small>{analysisActive ? 'basic-zr-qpe' : ensembleActive ? ensembleBundle?.model_id : selectedProduct?.model_id ?? '暂无'}</small>
             </button>
             {currentAssets.map((asset) => (
               <a key={asset.asset_id} href={asset.content_url} download>
                 <span>{assetFormat(asset)}</span>
-                <small>{formatBytes(asset.size_bytes)}</small>
+                <small>{asset.size_bytes == null ? '诊断图层' : formatBytes(asset.size_bytes)}</small>
               </a>
             ))}
           </div>
         </div>
 
-        <NowcastTimeline
+        {!analysisActive ? <NowcastTimeline
           key={`${displayMode}-${productType}-${selectedEnsembleLayer?.layer_id ?? 'none'}`}
           assets={renderedAssets}
           selectedAsset={selectedAsset}
@@ -733,7 +868,7 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
           fixedWindow={!ensembleActive && productType !== 'rain_rate'}
           productLabel={currentProductLabel}
           onSelect={selectTimelineAsset}
-        />
+        /> : null}
 
         <section className={`forecast-drawer${drawerOpen ? ' open' : ''}`} aria-label="预报细节抽屉">
           <header className="drawer-bar">
@@ -745,14 +880,16 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
                   role="tab"
                   aria-selected={drawerTab === key}
                   className={drawerTab === key ? 'active' : ''}
-                  disabled={ensembleActive && key !== 'provenance'}
+                  disabled={(ensembleActive || analysisActive) && key !== 'provenance'}
                   onClick={() => openDrawer(key)}
                 >
                   {label}
                 </button>
               ))}
             </div>
-            <p className="drawer-summary">{ensembleActive
+            <p className="drawer-summary">{analysisActive
+              ? `${formatRunOption(analysis.analysis_time)} · 雷达 QPE · 工程分析`
+              : ensembleActive
               ? `${currentProductLabel} · ${formatLead(currentLead)} · 离线未校准`
               : `${formatCoordinate(point.longitude)}°E ${formatCoordinate(point.latitude)}°N · ${formatRate(currentPointValue)} · ${formatLead(currentLead)}`}</p>
             <button type="button" className="drawer-toggle" aria-expanded={drawerOpen} onClick={() => setDrawerOpen((value) => !value)}>
@@ -806,16 +943,16 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
               <section className="provenance-panel">
               <header><p className="panel-label">Product provenance</p><h2>产品溯源</h2></header>
               <dl>
-                <div><dt>Run ID</dt><dd>{ensembleActive ? ensembleBundle?.run_id : run?.run_id ?? '暂无'}</dd></div>
-                <div><dt>Product ID</dt><dd>{ensembleActive ? selectedEnsembleLayer?.layer_id : selectedProduct?.product_id ?? '暂无'}</dd></div>
-                <div><dt>网格</dt><dd>{ensembleActive ? ensembleBundle?.grid_id : selectedProduct?.grid_id ?? '暂无'}</dd></div>
-                <div><dt>产品配置</dt><dd>{ensembleActive ? ensembleBundle?.product_config_version : selectedProduct?.config_version ?? '暂无'}</dd></div>
-                <div><dt>源预报 SHA</dt><dd>{ensembleActive && ensembleBundle
+                <div><dt>Run ID</dt><dd>{analysisActive ? analysis.run_id : ensembleActive ? ensembleBundle?.run_id : run?.run_id ?? '暂无'}</dd></div>
+                <div><dt>{analysisActive ? 'Analysis ID' : 'Product ID'}</dt><dd>{analysisActive ? analysis.analysis_id : ensembleActive ? selectedEnsembleLayer?.layer_id : selectedProduct?.product_id ?? '暂无'}</dd></div>
+                <div><dt>网格</dt><dd>{analysisActive ? analysis.grid_id : ensembleActive ? ensembleBundle?.grid_id : selectedProduct?.grid_id ?? '暂无'}</dd></div>
+                <div><dt>{analysisActive ? '分析配置' : '产品配置'}</dt><dd>{analysisActive ? analysis.config_version : ensembleActive ? ensembleBundle?.product_config_version : selectedProduct?.config_version ?? '暂无'}</dd></div>
+                {!analysisActive ? <div><dt>源预报 SHA</dt><dd>{ensembleActive && ensembleBundle
                   ? shortSHA(ensembleBundle.source_forecast_sha256)
-                  : selectedProduct ? shortSHA(selectedProduct.source_forecast_sha256) : '暂无'}</dd></div>
-                <div><dt>当前资产 SHA</dt><dd>{selectedAsset ? shortSHA(selectedAsset.sha256) : '暂无'}</dd></div>
-                <div><dt>源预报</dt><dd title={ensembleActive ? ensembleBundle?.source_forecast_uri : selectedProduct?.source_forecast_uri}>{ensembleActive ? ensembleBundle?.source_forecast_uri : selectedProduct?.source_forecast_uri ?? '暂无'}</dd></div>
-                <div><dt>成员数</dt><dd>{ensembleActive ? ensembleBundle?.member_count : selectedProduct?.member_count ?? '暂无'}</dd></div>
+                  : selectedProduct ? shortSHA(selectedProduct.source_forecast_sha256) : '暂无'}</dd></div> : null}
+                <div><dt>当前资产 SHA</dt><dd>{selectedAsset?.sha256 ? shortSHA(selectedAsset.sha256) : '清单未提供'}</dd></div>
+                <div><dt>{analysisActive ? '分析产品' : '源预报'}</dt><dd title={analysisActive ? analysis.analysis_uri ?? undefined : ensembleActive ? ensembleBundle?.source_forecast_uri : selectedProduct?.source_forecast_uri}>{analysisActive ? analysis.analysis_uri : ensembleActive ? ensembleBundle?.source_forecast_uri : selectedProduct?.source_forecast_uri ?? '暂无'}</dd></div>
+                <div><dt>{analysisActive ? '平均 QI' : '成员数'}</dt><dd>{analysisActive ? analysisQPE?.mean_quality_index.toFixed(3) ?? '暂无' : ensembleActive ? ensembleBundle?.member_count : selectedProduct?.member_count ?? '暂无'}</dd></div>
                 {ensembleActive ? <div><dt>校准状态</dt><dd>原始未校准</dd></div> : null}
               </dl>
           </section>

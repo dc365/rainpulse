@@ -86,6 +86,15 @@ promotion_eligible: false
 	if err != nil || settings == nil || settings.gridID != grid {
 		t.Fatalf("valid pipeline settings = %#v, err=%v", settings, err)
 	}
+	if !settings.forecastEnabled || settings.requireAllRadars {
+		t.Fatalf("unexpected operational planner defaults: %#v", settings)
+	}
+	t.Setenv("RAINPULSE_PIPELINE_FORECAST_ENABLED", "false")
+	t.Setenv("RAINPULSE_PIPELINE_REQUIRE_ALL_RADARS", "true")
+	settings, err = pipelineSettingsFromEnvironment()
+	if err != nil || settings == nil || settings.forecastEnabled || !settings.requireAllRadars {
+		t.Fatalf("historical analysis-only planner settings = %#v, err=%v", settings, err)
+	}
 }
 
 func TestClosestScanByRadarSelectsOneCandidatePerRadar(t *testing.T) {

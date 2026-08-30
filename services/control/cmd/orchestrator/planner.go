@@ -34,6 +34,8 @@ type pipelineSettings struct {
 	gridID             string
 	minimumFrames      int
 	maximumFrames      int
+	forecastEnabled    bool
+	requireAllRadars   bool
 }
 
 type pipelinePlanner struct {
@@ -73,6 +75,18 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 	if err != nil || mosaicDelay < 0 {
 		return nil, fmt.Errorf("RAINPULSE_PIPELINE_MOSAIC_DELAY must be a non-negative duration")
 	}
+	forecastEnabled, err := strconv.ParseBool(
+		environmentOrDefault("RAINPULSE_PIPELINE_FORECAST_ENABLED", "true"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("parse RAINPULSE_PIPELINE_FORECAST_ENABLED: %w", err)
+	}
+	requireAllRadars, err := strconv.ParseBool(
+		environmentOrDefault("RAINPULSE_PIPELINE_REQUIRE_ALL_RADARS", "false"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("parse RAINPULSE_PIPELINE_REQUIRE_ALL_RADARS: %w", err)
+	}
 	radarIDs := make(map[string]struct{})
 	for _, raw := range strings.Split(os.Getenv("RAINPULSE_PIPELINE_RADAR_IDS"), ",") {
 		if value := strings.TrimSpace(raw); value != "" {
@@ -96,6 +110,8 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 		pystepsConfig:      environmentOrDefault("RAINPULSE_PIPELINE_PYSTEPS_CONFIG", "/opt/rainpulse/configs/nowcast/rp016-pysteps-lk-v1.yaml"),
 		productConfig:      environmentOrDefault("RAINPULSE_PIPELINE_PRODUCT_CONFIG", "/opt/rainpulse/configs/products/rp015-application-products-v1.yaml"),
 		verificationConfig: environmentOrDefault("RAINPULSE_PIPELINE_VERIFICATION_CONFIG", "/opt/rainpulse/configs/verification/rp031-operational-deterministic-v1.yaml"),
+		forecastEnabled:    forecastEnabled,
+		requireAllRadars:   requireAllRadars,
 	}
 	for _, path := range []string{
 		settings.qcConfig,
@@ -232,6 +248,9 @@ func (planner *pipelinePlanner) PlanOnce(ctx context.Context) error {
 	if err := planner.planAnalyses(ctx); err != nil {
 		return err
 	}
+	if !planner.settings.forecastEnabled {
+		return nil
+	}
 	return planner.planForecasts(ctx)
 }
 
@@ -302,6 +321,9 @@ func (planner *pipelinePlanner) planMosaics(ctx context.Context) error {
 			continue
 		}
 		selected := closestScanByRadar(byTime[analysisTime], analysisTime)
+		if planner.settings.requireAllRadars && len(selected) < len(planner.settings.radarIDs) {
+			continue
+		}
 		scanIDs := make([]string, 0, len(selected))
 		for _, scan := range selected {
 			scanIDs = append(scanIDs, scan.ID.String())

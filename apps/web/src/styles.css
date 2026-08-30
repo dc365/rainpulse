@@ -1231,6 +1231,7 @@ h1 {
 
 .run-state { padding: 4px 7px; border-radius: 3px; color: #626d69; background: #e9eeec; font-size: 11px; font-weight: 750; letter-spacing: .06em; }
 .run-state.published { color: #0b665a; background: var(--teal-soft); }
+.run-state.analysis { color: #0b665a; background: var(--teal-soft); }
 .run-state.failed { color: var(--critical); background: var(--risk-soft); }
 .run-state.offline { color: #874a2f; background: #f8e9df; }
 
@@ -2162,6 +2163,17 @@ h1 {
   font-size: 11px;
   letter-spacing: .05em;
   white-space: nowrap;
+}
+.forecast-mode-switch.analysis-source > strong {
+  min-height: 45px;
+  display: grid;
+  place-items: center;
+  padding: 0 12px;
+  border-left: 1px solid #e3e9e6;
+  color: #075e52;
+  background: #e3efeb;
+  box-shadow: inset 0 -2px var(--teal);
+  font-size: 11px;
 }
 .forecast-mode-bar button {
   min-width: 44px;

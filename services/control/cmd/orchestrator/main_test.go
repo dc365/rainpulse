@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -65,5 +66,47 @@ func TestRadarIngestSettingsValidateConfiguredWatcher(t *testing.T) {
 	}
 	if settings == nil || settings.interval != 20*time.Second || settings.minAge != 45*time.Second || settings.lookback != 12*time.Hour {
 		t.Fatalf("unexpected settings: %#v", settings)
+	}
+}
+
+func TestDiscoverRadarBatchInputsSelectsOnlyRegularCAPFMTVolumes(t *testing.T) {
+	root := t.TempDir()
+	configs := filepath.Join(root, "configs")
+	inputs := filepath.Join(root, "inputs")
+	for _, radarID := range []string{"z9591", "z9593"} {
+		if err := os.MkdirAll(filepath.Join(inputs, strings.ToUpper(radarID)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(configs, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(
+			filepath.Join(configs, radarID+".yaml"),
+			[]byte("radar_id: "+radarID+"\n"),
+			0o600,
+		); err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range []string{
+			"Z_RADR_I_" + strings.ToUpper(radarID) + "_20260828095000_O_DOR_SAD_CAP_FMT.bin.bz2",
+			"Z_RADR_I_" + strings.ToUpper(radarID) + "_20260828095000_O_DOR_SAD_CAP_FMT_DPCTEST.bin.bz2",
+		} {
+			if err := os.WriteFile(filepath.Join(inputs, strings.ToUpper(radarID), name), []byte("test"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	discovered, err := discoverRadarBatchInputs(configs, inputs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(discovered) != 2 || discovered[0].radarID != "z9591" || discovered[1].radarID != "z9593" {
+		t.Fatalf("unexpected radar batch inputs: %#v", discovered)
+	}
+	for _, input := range discovered {
+		if strings.Contains(input.inputPath, "DPCTEST") {
+			t.Fatalf("DPCTEST input was not excluded: %s", input.inputPath)
+		}
 	}
 }

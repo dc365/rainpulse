@@ -13,7 +13,9 @@ import (
 	"os/signal"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -83,6 +85,15 @@ func main() {
 		}
 		if err := radarIngest(ctx, service, os.Args[2], os.Args[3], true); err != nil {
 			slog.Error("archive and ingest radar volume", "error", err)
+			os.Exit(1)
+		}
+	case "radar-batch-ingest":
+		if len(os.Args) != 4 {
+			slog.Error("radar-batch-ingest requires a radar config directory and input root")
+			os.Exit(2)
+		}
+		if err := radarBatchIngest(ctx, service, os.Args[2], os.Args[3]); err != nil {
+			slog.Error("archive and ingest historical radar volumes", "error", err)
 			os.Exit(1)
 		}
 	case "radar-qc":
@@ -304,6 +315,12 @@ type radarIngestSettings struct {
 	lookback   time.Duration
 }
 
+type radarBatchInput struct {
+	radarID    string
+	configPath string
+	inputPath  string
+}
+
 func radarDecode(
 	ctx context.Context,
 	service *orchestration.Service,
@@ -426,6 +443,110 @@ func radarIngest(
 		return err
 	}
 	return writeRadarDecodeResult(scan, job)
+}
+
+func radarBatchIngest(
+	ctx context.Context,
+	service *orchestration.Service,
+	configDirectory string,
+	inputRoot string,
+) error {
+	inputs, err := discoverRadarBatchInputs(configDirectory, inputRoot)
+	if err != nil {
+		return err
+	}
+	counts := make(map[string]int)
+	for index, input := range inputs {
+		if err := radarIngest(ctx, service, input.configPath, input.inputPath, false); err != nil {
+			return fmt.Errorf(
+				"ingest historical radar volume %d/%d %s: %w",
+				index+1, len(inputs), input.inputPath, err,
+			)
+		}
+		counts[input.radarID]++
+	}
+	return json.NewEncoder(os.Stdout).Encode(map[string]any{
+		"registered_volume_count": len(inputs),
+		"radar_counts":            counts,
+	})
+}
+
+func discoverRadarBatchInputs(configDirectory string, inputRoot string) ([]radarBatchInput, error) {
+	configDirectory, err := filepath.Abs(configDirectory)
+	if err != nil {
+		return nil, fmt.Errorf("resolve radar config directory: %w", err)
+	}
+	inputRoot, err = filepath.Abs(inputRoot)
+	if err != nil {
+		return nil, fmt.Errorf("resolve radar input root: %w", err)
+	}
+	configEntries, err := os.ReadDir(configDirectory)
+	if err != nil {
+		return nil, fmt.Errorf("read radar config directory: %w", err)
+	}
+	configs := make(map[string]string)
+	for _, entry := range configEntries {
+		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".yaml") {
+			continue
+		}
+		path := filepath.Join(configDirectory, entry.Name())
+		content, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return nil, fmt.Errorf("read radar batch config %s: %w", path, readErr)
+		}
+		var config radarConfiguration
+		if decodeErr := yaml.Unmarshal(content, &config); decodeErr != nil {
+			return nil, fmt.Errorf("decode radar batch config %s: %w", path, decodeErr)
+		}
+		if config.RadarID == "" {
+			return nil, fmt.Errorf("radar batch config %s lacks radar_id", path)
+		}
+		radarID := strings.ToLower(config.RadarID)
+		if _, duplicate := configs[radarID]; duplicate {
+			return nil, fmt.Errorf("duplicate radar batch config for %s", radarID)
+		}
+		configs[radarID] = path
+	}
+	if len(configs) == 0 {
+		return nil, fmt.Errorf("radar config directory contains no YAML radar configurations")
+	}
+	radarIDs := make([]string, 0, len(configs))
+	for radarID := range configs {
+		radarIDs = append(radarIDs, radarID)
+	}
+	sort.Strings(radarIDs)
+	inputs := make([]radarBatchInput, 0)
+	for _, radarID := range radarIDs {
+		radarRoot := filepath.Join(inputRoot, strings.ToUpper(radarID))
+		if info, statErr := os.Stat(radarRoot); statErr != nil || !info.IsDir() {
+			return nil, fmt.Errorf("historical radar input directory is unavailable: %s", radarRoot)
+		}
+		walkErr := filepath.WalkDir(radarRoot, func(path string, entry os.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), "_CAP_FMT.bin.bz2") {
+				return nil
+			}
+			inputs = append(inputs, radarBatchInput{
+				radarID: radarID, configPath: configs[radarID], inputPath: path,
+			})
+			return nil
+		})
+		if walkErr != nil {
+			return nil, fmt.Errorf("scan historical radar input directory %s: %w", radarRoot, walkErr)
+		}
+	}
+	sort.Slice(inputs, func(i, j int) bool {
+		if inputs[i].inputPath == inputs[j].inputPath {
+			return inputs[i].radarID < inputs[j].radarID
+		}
+		return inputs[i].inputPath < inputs[j].inputPath
+	})
+	if len(inputs) == 0 {
+		return nil, fmt.Errorf("historical input root contains no regular CAP_FMT volumes")
+	}
+	return inputs, nil
 }
 
 func createRadarDecode(
