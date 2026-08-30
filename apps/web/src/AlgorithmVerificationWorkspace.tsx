@@ -11,8 +11,12 @@ type VerificationMetric = components['schemas']['AlgorithmVerificationMetric']
 type SkillComparison = components['schemas']['AlgorithmVerificationSkillComparison']
 type VerificationMapFrame = components['schemas']['AlgorithmVerificationMapFrame']
 type FSSScale = components['schemas']['AlgorithmVerificationFSSScale']
+type ProbabilisticSummary = components['schemas']['AlgorithmVerificationProbabilisticSummary']
+type ProbabilisticLeadBand = components['schemas']['AlgorithmVerificationProbabilisticLeadBand']
 
 const modelLabels: Record<string, string> = {
+  nowcastnet: 'NowcastNet',
+  steps: 'pySTEPS-STEPS',
   lk: 'pySTEPS-LK',
   persistence: '持续性',
   translation: '基于 LK 的整场平移',
@@ -24,6 +28,7 @@ const statusLabels: Record<string, string> = {
   translation_baseline_retained: '尚未稳定超过平移基线',
   skill_not_demonstrated: '尚未证明稳定增益',
   insufficient_evidence: '证据不足',
+  steps_retained_nowcastnet_offline: 'STEPS 保持主基线，NowcastNet 保留为离线候选',
 }
 
 const truthLabels: Record<string, string> = {
@@ -138,7 +143,7 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
   }, [selectedRun])
 
   useEffect(() => {
-    if (!selectedRun || !activeDetail || !selectedCaseID || !selectedIssueTime) {
+    if (!selectedRun || isProbabilisticRun(selectedRun) || !activeDetail || !selectedCaseID || !selectedIssueTime) {
       setMetrics([])
       return
     }
@@ -175,7 +180,7 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
   }, [activeDetail, selectedCaseID, selectedIssueTime, selectedRun, threshold, windowPixels])
 
   useEffect(() => {
-    if (!selectedRun || !activeDetail || !selectedRun.maps_available || !selectedCaseID || !selectedIssueTime) {
+    if (!selectedRun || isProbabilisticRun(selectedRun) || !activeDetail || !selectedRun.maps_available || !selectedCaseID || !selectedIssueTime) {
       setMapFrame(null)
       return
     }
@@ -224,10 +229,16 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
   }, [leadMinutes, playing])
 
   useEffect(() => {
-    if (!activeDetail || !selectedRunKey || !selectedCaseID || !selectedIssueTime) return
+    if (!activeDetail || !selectedRunKey) return
     const query = new URLSearchParams(window.location.search)
     query.set('view', 'verification')
     query.set('run', selectedRunKey)
+    if (isProbabilisticRun(activeDetail.run)) {
+      for (const key of ['case', 'issue', 'lead', 'baseline', 'threshold', 'window']) query.delete(key)
+      window.history.replaceState(null, '', `${window.location.pathname}?${query}${window.location.hash}`)
+      return
+    }
+    if (!selectedCaseID || !selectedIssueTime) return
     query.set('case', selectedCaseID)
     query.set('issue', selectedIssueTime)
     query.set('lead', String(selectedLeadMinutes))
@@ -258,9 +269,9 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
     <section className="verification-page verification-page-rp017" aria-labelledby="verification-title">
       <header className="page-heading verification-heading verification-heading-rp017">
         <div>
-          <p className="section-kicker">算法验证 · RP-017</p>
+          <p className="section-kicker">算法验证 · 确定性与概率集合</p>
           <h1 id="verification-title">算法离线验证</h1>
-          <p>先看结论，再看空间差异，最后展开评分明细。当前数据为美国 MRMS，仅用于工程验证。</p>
+          <p>先看结论，再比较同一批样本上的模型技巧，最后展开评分与运行证据。当前数据为美国 MRMS，仅用于工程验证。</p>
         </div>
         <span className="verification-boundary">工程证据 · 非福建业务验收</span>
       </header>
@@ -273,11 +284,22 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
 
       {selectedRun ? (
         <>
-          <VerificationConclusion run={selectedRun} detail={activeDetail} />
+          {isProbabilisticRun(selectedRun)
+            ? <ProbabilisticConclusion run={selectedRun} summary={activeDetail?.probabilistic_summary ?? null} />
+            : <VerificationConclusion run={selectedRun} detail={activeDetail} />}
 
           {loadingDetail || !activeDetail ? (
             <p className="verification-empty">正在建立验证索引…</p>
           ) : (
+            isProbabilisticRun(activeDetail.run) && activeDetail.probabilistic_summary ? (
+              <ProbabilisticVerificationWorkbench
+                runs={runs}
+                selectedRunKey={selectedRunKey}
+                onRunChange={setSelectedRunKey}
+                run={activeDetail.run}
+                summary={activeDetail.probabilistic_summary}
+              />
+            ) : (
             <section className="verification-workbench" aria-live="polite">
               <VerificationSelectionBar
                 runs={runs}
@@ -363,6 +385,7 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
                 <VerificationProvenance run={activeDetail.run} activeCase={activeCase} />
               </details>
             </section>
+            )
           )}
         </>
       ) : null}
@@ -394,6 +417,195 @@ function VerificationConclusion({ run, detail }: { run: RunSummary; detail: RunD
 
 function ConclusionMetric({ label, value, note }: { label: string; value: string; note: string }) {
   return <div><span>{label}</span><strong>{value}</strong><small>{note}</small></div>
+}
+
+function ProbabilisticConclusion({ run, summary }: { run: RunSummary; summary: ProbabilisticSummary | null }) {
+  const near = summary?.lead_bands.find((band) => band.band === 'near')
+  const persistenceSkill = near?.candidate_skills.find((item) => item.baseline === 'persistence')?.crps_skill
+  const stepsSkill = near?.candidate_skills.find((item) => item.baseline === 'steps')?.crps_skill
+  return (
+    <section className="verification-conclusion caution probabilistic-conclusion" aria-label="概率集合验证结论">
+      <div className="verification-conclusion-copy">
+        <span>当前结论</span>
+        <strong>{statusLabels[run.skill_status] ?? run.skill_status}</strong>
+        <p>独立留出集确认 NowcastNet 超过确定性基线，但未超过 STEPS。它继续用于离线研究，不进入实时影子链路或产品发布。</p>
+      </div>
+      <div className="verification-conclusion-metrics">
+        <ConclusionMetric label="完成起报" value={`${run.completed_issue_count}/${run.completed_issue_count + run.failed_issue_count}`} note={`${run.failed_issue_count} 个失败`} />
+        <ConclusionMetric label="近时效对持续性" value={formatSkillPercent(persistenceSkill)} note="NowcastNet CRPS 技巧" />
+        <ConclusionMetric label="近时效对 STEPS" value={formatSkillPercent(stepsSkill)} note="负值表示候选更差" />
+        <ConclusionMetric label="最低共同覆盖" value={formatPercent(near?.minimum_common_verification_coverage)} note="+10 至 +60 分钟" />
+      </div>
+      <p className="verification-conclusion-boundary">原始集合概率尚未校准，STEPS 仍是主概率基线；MRMS 独立验证不等于福建业务验收。</p>
+    </section>
+  )
+}
+
+function ProbabilisticVerificationWorkbench({
+  runs,
+  selectedRunKey,
+  onRunChange,
+  run,
+  summary,
+}: {
+  runs: RunSummary[]
+  selectedRunKey: string
+  onRunChange: (value: string) => void
+  run: RunSummary
+  summary: ProbabilisticSummary
+}) {
+  return (
+    <section className="verification-workbench probabilistic-workbench" aria-live="polite">
+      <section className="verification-filterbar probabilistic-run-filter" aria-label="概率集合验证运行">
+        <label>
+          <span>验证运行</span>
+          <select aria-label="验证运行" value={selectedRunKey} onChange={(event) => onRunChange(event.target.value)}>
+            {runs.map((item) => (
+              <option key={runKey(item)} value={runKey(item)}>
+                {item.run_id} · {item.profile_version}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="probabilistic-run-facts" aria-label="概率集合边界">
+          <span>{summary.split === 'holdout' ? '独立留出集' : '开发集'}</span>
+          <span>NowcastNet {summary.candidate_member_count} 成员</span>
+          <span>STEPS {summary.reference_member_count} 成员</span>
+          <span className="caution">未校准概率</span>
+          <span className="caution">发布关闭</span>
+        </div>
+      </section>
+
+      <section className="probabilistic-evidence" aria-labelledby="probabilistic-comparison-title">
+        <header className="probabilistic-section-heading">
+          <div>
+            <span>同批样本 · 同一有效域</span>
+            <h2 id="probabilistic-comparison-title">模型概率技巧对比</h2>
+          </div>
+          <small>CRPS、RMSE 越低越好；离散度只对集合模型有解释意义</small>
+        </header>
+        <div className="probabilistic-band-grid">
+          {summary.lead_bands.map((band) => (
+            <ProbabilisticModelTable
+              key={band.band}
+              band={band}
+              candidateModel={summary.candidate_model}
+              referenceModel={summary.reference_model}
+              candidateMemberCount={summary.candidate_member_count}
+              referenceMemberCount={summary.reference_member_count}
+            />
+          ))}
+        </div>
+      </section>
+
+      <BrierSkillMatrix bands={summary.lead_bands} />
+      <ProbabilisticPerformanceStrip summary={summary} />
+
+      <details className="verification-details-panel">
+        <summary><span>展开运行与证据边界</span><small>设备、概率状态与上线限制</small></summary>
+        <section className="verification-provenance-rp017 probabilistic-provenance">
+          <dl>
+            <div><dt>运行</dt><dd>{run.run_id}</dd></div>
+            <div><dt>验证配置</dt><dd>{run.profile_version}</dd></div>
+            <div><dt>数据切分</dt><dd>{summary.split === 'holdout' ? '2025-03 / 2025-07 独立留出' : '开发集'}</dd></div>
+            <div><dt>概率状态</dt><dd>{calibrationLabel(summary.calibration_status)}</dd></div>
+            <div><dt>GPU</dt><dd>{summary.device_name}</dd></div>
+            <div><dt>产品发布</dt><dd>{summary.product_publication_enabled ? '已启用' : '关闭'}</dd></div>
+          </dl>
+          <p>本页读取冻结汇总，不修改原始回算产物。当前没有逐时效概率地图，也不声明福建真实雷达就绪。</p>
+        </section>
+      </details>
+    </section>
+  )
+}
+
+function ProbabilisticModelTable({
+  band,
+  candidateModel,
+  referenceModel,
+  candidateMemberCount,
+  referenceMemberCount,
+}: {
+  band: ProbabilisticLeadBand
+  candidateModel: string
+  referenceModel: string
+  candidateMemberCount: number
+  referenceMemberCount: number
+}) {
+  const skillByBaseline = new Map(band.candidate_skills.map((item) => [item.baseline, item.crps_skill]))
+  return (
+    <section className="probabilistic-band-panel">
+      <header>
+        <div><span>{band.band === 'near' ? '近时效' : '远时效'}</span><strong>+{band.minimum_lead_minutes} 至 +{band.maximum_lead_minutes} 分钟</strong></div>
+        <small>共同覆盖不低于 {formatPercent(band.minimum_common_verification_coverage)}</small>
+      </header>
+      <div className="probabilistic-table-scroll">
+        <table>
+          <thead><tr><th>模型</th><th>角色</th><th>CRPS</th><th>均值 RMSE</th><th>集合离散度</th><th>候选相对技巧</th></tr></thead>
+          <tbody>
+            {band.scores.map((score) => {
+              const skill = score.model === candidateModel ? null : skillByBaseline.get(score.model)
+              return (
+                <tr className={score.model === candidateModel ? 'candidate' : score.model === referenceModel ? 'reference' : ''} key={score.model}>
+                  <th>{modelLabels[score.model] ?? score.model}</th>
+                  <td>{modelRole(score.model, candidateModel, referenceModel, candidateMemberCount, referenceMemberCount)}</td>
+                  <td><strong>{score.crps_mm_h.toFixed(3)}</strong><small>mm/h</small></td>
+                  <td>{score.ensemble_mean_rmse_mm_h.toFixed(3)}</td>
+                  <td>{score.mean_ensemble_spread_mm_h > 0 ? score.mean_ensemble_spread_mm_h.toFixed(3) : '不适用'}</td>
+                  <td className={skill == null ? '' : skill >= 0 ? 'positive' : 'negative'}>{skill == null ? '候选' : formatSkillPercent(skill)}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <footer>
+        <span>候选成员覆盖 {formatPercent(band.minimum_candidate_member_mean_coverage)}</span>
+        <span>STEPS 成员覆盖 {formatPercent(band.minimum_reference_member_mean_coverage)}</span>
+      </footer>
+    </section>
+  )
+}
+
+function BrierSkillMatrix({ bands }: { bands: ProbabilisticLeadBand[] }) {
+  const thresholds = ['1.0', '5.0', '10.0', '20.0', '50.0']
+  return (
+    <section className="skill-gate-panel-rp017 probabilistic-brier-panel" aria-labelledby="brier-skill-title">
+      <header>
+        <div><span>阈值概率</span><h2 id="brier-skill-title">NowcastNet 相对基线的 Brier 技巧</h2></div>
+        <small>正值表示优于基线，负值表示更差</small>
+      </header>
+      <div className="skill-gate-table-wrap">
+        <table>
+          <thead><tr><th>时效 / 基线</th>{thresholds.map((value) => <th key={value}>{Number(value)} mm/h</th>)}</tr></thead>
+          <tbody>
+            {bands.flatMap((band) => band.candidate_skills.map((skill) => (
+              <tr key={`${band.band}-${skill.baseline}`}>
+                <th>{band.band === 'near' ? '近' : '远'} · {modelLabels[skill.baseline] ?? skill.baseline}</th>
+                {thresholds.map((threshold) => {
+                  const value = skill.brier_skill_by_threshold[threshold]
+                  return <td className={value >= 0 ? 'passed' : 'failed'} key={threshold}><strong>{formatSkillPercent(value)}</strong></td>
+                })}
+              </tr>
+            )))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
+function ProbabilisticPerformanceStrip({ summary }: { summary: ProbabilisticSummary }) {
+  const performance = summary.performance
+  return (
+    <section className="verification-current-metrics probabilistic-performance" aria-label="概率集合运行性能">
+      <CurrentMetric label="NowcastNet 推理" value={`${(performance.candidate_runtime_ms.p50 / 1000).toFixed(3)} s`} note={`P95 ${(performance.candidate_runtime_ms.p95 / 1000).toFixed(3)} s`} />
+      <CurrentMetric label="STEPS 推理" value={`${(performance.reference_runtime_ms.p50 / 1000).toFixed(1)} s`} note={`P95 ${(performance.reference_runtime_ms.p95 / 1000).toFixed(1)} s`} />
+      <CurrentMetric label="完整流程" value={`${(performance.total_runtime_ms.p50 / 1000).toFixed(1)} s`} note={`P95 ${(performance.total_runtime_ms.p95 / 1000).toFixed(1)} s`} />
+      <CurrentMetric label="GPU 峰值分配" value={formatGiB(performance.gpu_peak_allocated_bytes.p50)} note={`P95 ${formatGiB(performance.gpu_peak_allocated_bytes.p95)}`} />
+      <CurrentMetric label="进程峰值 RSS" value={formatGiB(performance.peak_rss_bytes.p50)} note={`P95 ${formatGiB(performance.peak_rss_bytes.p95)}`} />
+    </section>
+  )
 }
 
 function VerificationSelectionBar({
@@ -763,6 +975,21 @@ function runKey(run: RunSummary) {
   return `${run.profile_version}/${run.run_id}`
 }
 
+function isProbabilisticRun(run: RunSummary | null | undefined) {
+  return run?.verification_kind === 'probabilistic_ensemble'
+}
+
+function modelRole(model: string, candidate: string, reference: string, candidateMembers: number, referenceMembers: number) {
+  if (model === candidate) return `离线候选 · ${candidateMembers} 成员`
+  if (model === reference) return `主概率基线 · ${referenceMembers} 成员`
+  return '确定性基线'
+}
+
+function calibrationLabel(status: string) {
+  if (status === 'raw_ensemble_relative_frequency_uncalibrated') return '原始集合相对频率 · 未校准'
+  return status
+}
+
 function usesFixedTruthDomain(schemaVersion: string) {
   const [major, minor] = schemaVersion.split('.', 2).map(Number)
   return Number.isInteger(major) && Number.isInteger(minor)
@@ -847,4 +1074,13 @@ function formatRate(value?: number | null) {
 
 function formatPercent(value?: number | null) {
   return value == null || !Number.isFinite(value) ? '—' : `${(value * 100).toFixed(1)}%`
+}
+
+function formatSkillPercent(value?: number | null) {
+  if (value == null || !Number.isFinite(value)) return '—'
+  return `${value >= 0 ? '+' : ''}${(value * 100).toFixed(1)}%`
+}
+
+function formatGiB(value?: number | null) {
+  return value == null || !Number.isFinite(value) ? '—' : `${(value / 1024 ** 3).toFixed(2)} GiB`
 }

@@ -130,7 +130,8 @@ func TestAlgorithmVerificationEndpointsExposeFilteredEvidence(t *testing.T) {
 		detail: verificationstore.RunDetail{
 			Run: verificationstore.RunSummary{
 				ProfileVersion: "rp016-mrms-v1", RunID: "full-202108-v2",
-				SchemaVersion: "1.0", PrimaryTruthKind: "observed_mrms_10min",
+				SchemaVersion: "1.0", VerificationKind: "deterministic_spatial",
+				PrimaryTruthKind: "observed_mrms_10min",
 				CompletedIssueCount: 53, MetricRowCount: 57240,
 				SkillStatus: "lk_supported", ModifiedAt: now,
 			},
@@ -194,7 +195,7 @@ func TestAlgorithmVerificationEndpointsExposeFilteredEvidence(t *testing.T) {
 			t.Fatalf("GET %s: status=%d body=%s", target, response.Code, response.Body.String())
 		}
 	}
-	assert("/api/v1/algorithm-verification/runs", `"metric_row_count":57240`)
+	assert("/api/v1/algorithm-verification/runs", `"verification_kind":"deterministic_spatial"`)
 	assert("/api/v1/algorithm-verification/runs/rp016-mrms-v1/full-202108-v2", `"target_km":10`)
 	assert(
 		"/api/v1/algorithm-verification/runs/rp016-mrms-v1/full-202108-v2/metrics"+

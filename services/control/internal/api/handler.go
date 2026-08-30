@@ -1574,6 +1574,7 @@ func toAPIAlgorithmVerificationRun(
 		ProfileVersion:           run.ProfileVersion,
 		RunId:                    run.RunID,
 		SchemaVersion:            run.SchemaVersion,
+		VerificationKind:         apiv1.AlgorithmVerificationRunSummaryVerificationKind(run.VerificationKind),
 		PrimaryTruthKind:         run.PrimaryTruthKind,
 		OperationalEligible:      run.OperationalEligible,
 		CompletedIssueCount:      run.CompletedIssueCount,
@@ -1689,7 +1690,7 @@ func toAPIAlgorithmVerificationRunDetail(
 			ActualKmMax:  scale.ActualKMMax,
 		})
 	}
-	return apiv1.AlgorithmVerificationRunDetail{
+	result := apiv1.AlgorithmVerificationRunDetail{
 		Run:   toAPIAlgorithmVerificationRun(detail.Run),
 		Cases: cases,
 		Filters: apiv1.AlgorithmVerificationFilterOptions{
@@ -1702,6 +1703,73 @@ func toAPIAlgorithmVerificationRunDetail(
 			Status:           detail.SkillSummary.Status,
 			ComparisonMetric: detail.SkillSummary.ComparisonMetric,
 			Comparisons:      comparisons,
+		},
+	}
+	if detail.ProbabilisticSummary != nil {
+		result.ProbabilisticSummary = toAPIAlgorithmVerificationProbabilisticSummary(
+			*detail.ProbabilisticSummary,
+		)
+	}
+	return result
+}
+
+func toAPIAlgorithmVerificationProbabilisticSummary(
+	summary verificationstore.ProbabilisticSummary,
+) *apiv1.AlgorithmVerificationProbabilisticSummary {
+	bands := make([]apiv1.AlgorithmVerificationProbabilisticLeadBand, 0, len(summary.LeadBands))
+	for _, band := range summary.LeadBands {
+		scores := make([]apiv1.AlgorithmVerificationProbabilisticModelScore, 0, len(band.Scores))
+		for _, score := range band.Scores {
+			scores = append(scores, apiv1.AlgorithmVerificationProbabilisticModelScore{
+				Model:                 score.Model,
+				BrierScoreByThreshold: score.BrierScoreByThreshold,
+				CrpsMmH:               score.CRPSMMH,
+				EnsembleMeanRmseMmH:   score.EnsembleMeanRMSEMMH,
+				MeanEnsembleSpreadMmH: score.MeanEnsembleSpreadMMH,
+			})
+		}
+		skills := make([]apiv1.AlgorithmVerificationProbabilisticSkill, 0, len(band.CandidateSkills))
+		for _, skill := range band.CandidateSkills {
+			skills = append(skills, apiv1.AlgorithmVerificationProbabilisticSkill{
+				Baseline:              skill.Baseline,
+				BrierSkillByThreshold: skill.BrierSkillByThreshold,
+				CrpsSkill:             skill.CRPSSkill,
+			})
+		}
+		bands = append(bands, apiv1.AlgorithmVerificationProbabilisticLeadBand{
+			Band:                               apiv1.AlgorithmVerificationProbabilisticLeadBandBand(band.Band),
+			MinimumLeadMinutes:                 band.MinimumLeadMinutes,
+			MaximumLeadMinutes:                 band.MaximumLeadMinutes,
+			MinimumCommonVerificationCoverage:  band.MinimumCommonVerificationCoverage,
+			MinimumCandidateMemberMeanCoverage: band.MinimumCandidateMemberMeanCoverage,
+			MinimumReferenceMemberMeanCoverage: band.MinimumReferenceMemberMeanCoverage,
+			Scores:                             scores,
+			CandidateSkills:                    skills,
+		})
+	}
+	quantiles := func(value verificationstore.RuntimeQuantiles) apiv1.AlgorithmVerificationRuntimeQuantiles {
+		return apiv1.AlgorithmVerificationRuntimeQuantiles{
+			Max: value.Maximum,
+			P50: value.P50,
+			P95: value.P95,
+		}
+	}
+	return &apiv1.AlgorithmVerificationProbabilisticSummary{
+		Split:                     apiv1.AlgorithmVerificationProbabilisticSummarySplit(summary.Split),
+		CalibrationStatus:         summary.CalibrationStatus,
+		ProductPublicationEnabled: summary.ProductPublicationEnabled,
+		CandidateModel:            summary.CandidateModel,
+		ReferenceModel:            summary.ReferenceModel,
+		CandidateMemberCount:      summary.CandidateMemberCount,
+		ReferenceMemberCount:      summary.ReferenceMemberCount,
+		DeviceName:                summary.DeviceName,
+		LeadBands:                 bands,
+		Performance: apiv1.AlgorithmVerificationProbabilisticPerformance{
+			CandidateRuntimeMs:    quantiles(summary.Performance.CandidateRuntimeMS),
+			ReferenceRuntimeMs:    quantiles(summary.Performance.ReferenceRuntimeMS),
+			TotalRuntimeMs:        quantiles(summary.Performance.TotalRuntimeMS),
+			GpuPeakAllocatedBytes: quantiles(summary.Performance.GPUPeakAllocatedBytes),
+			PeakRssBytes:          quantiles(summary.Performance.PeakRSSBytes),
 		},
 	}
 }

@@ -1250,6 +1250,8 @@ export interface components {
             profile_version: string;
             run_id: string;
             schema_version: string;
+            /** @enum {string} */
+            verification_kind: "deterministic_spatial" | "probabilistic_ensemble";
             primary_truth_kind: string;
             operational_eligible: boolean;
             completed_issue_count: number;
@@ -1311,11 +1313,74 @@ export interface components {
             comparison_metric: string;
             comparisons: components["schemas"]["AlgorithmVerificationSkillComparison"][];
         };
+        AlgorithmVerificationProbabilisticModelScore: {
+            model: string;
+            /** Format: double */
+            crps_mm_h: number;
+            /** Format: double */
+            ensemble_mean_rmse_mm_h: number;
+            /** Format: double */
+            mean_ensemble_spread_mm_h: number;
+            brier_score_by_threshold: {
+                [key: string]: number;
+            };
+        };
+        AlgorithmVerificationProbabilisticSkill: {
+            baseline: string;
+            /** Format: double */
+            crps_skill: number;
+            brier_skill_by_threshold: {
+                [key: string]: number;
+            };
+        };
+        AlgorithmVerificationProbabilisticLeadBand: {
+            /** @enum {string} */
+            band: "near" | "far";
+            minimum_lead_minutes: number;
+            maximum_lead_minutes: number;
+            /** Format: double */
+            minimum_common_verification_coverage: number;
+            /** Format: double */
+            minimum_candidate_member_mean_coverage: number;
+            /** Format: double */
+            minimum_reference_member_mean_coverage: number;
+            scores: components["schemas"]["AlgorithmVerificationProbabilisticModelScore"][];
+            candidate_skills: components["schemas"]["AlgorithmVerificationProbabilisticSkill"][];
+        };
+        AlgorithmVerificationRuntimeQuantiles: {
+            /** Format: double */
+            p50: number;
+            /** Format: double */
+            p95: number;
+            /** Format: double */
+            max: number;
+        };
+        AlgorithmVerificationProbabilisticPerformance: {
+            candidate_runtime_ms: components["schemas"]["AlgorithmVerificationRuntimeQuantiles"];
+            reference_runtime_ms: components["schemas"]["AlgorithmVerificationRuntimeQuantiles"];
+            total_runtime_ms: components["schemas"]["AlgorithmVerificationRuntimeQuantiles"];
+            gpu_peak_allocated_bytes: components["schemas"]["AlgorithmVerificationRuntimeQuantiles"];
+            peak_rss_bytes: components["schemas"]["AlgorithmVerificationRuntimeQuantiles"];
+        };
+        AlgorithmVerificationProbabilisticSummary: {
+            /** @enum {string} */
+            split: "development" | "holdout";
+            calibration_status: string;
+            product_publication_enabled: boolean;
+            candidate_model: string;
+            reference_model: string;
+            candidate_member_count: number;
+            reference_member_count: number;
+            device_name: string;
+            lead_bands: components["schemas"]["AlgorithmVerificationProbabilisticLeadBand"][];
+            performance: components["schemas"]["AlgorithmVerificationProbabilisticPerformance"];
+        };
         AlgorithmVerificationRunDetail: {
             run: components["schemas"]["AlgorithmVerificationRunSummary"];
             cases: components["schemas"]["AlgorithmVerificationCase"][];
             filters: components["schemas"]["AlgorithmVerificationFilterOptions"];
             skill_summary: components["schemas"]["AlgorithmVerificationSkillSummary"];
+            probabilistic_summary?: components["schemas"]["AlgorithmVerificationProbabilisticSummary"];
         };
         AlgorithmVerificationMetric: {
             case_id: string;

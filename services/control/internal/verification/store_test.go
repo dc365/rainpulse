@@ -101,6 +101,51 @@ func TestFileStoreListsNewestRunFirstAcrossProfilesWithDifferentCaseCounts(t *te
 	}
 }
 
+func TestFileStoreLoadsProbabilisticEnsembleSummaryWithoutDeterministicMetrics(t *testing.T) {
+	root := t.TempDir()
+	writeProbabilisticReportFixture(t, root, "rp026-mrms-nowcastnet-v1", "holdout-v1", false)
+	store := NewFileStore(root)
+
+	runs, err := store.ListRuns(context.Background())
+	if err != nil {
+		t.Fatalf("list probabilistic runs: %v", err)
+	}
+	if len(runs) != 1 || runs[0].VerificationKind != "probabilistic_ensemble" ||
+		runs[0].SkillStatus != "steps_retained_nowcastnet_offline" ||
+		runs[0].MapsAvailable || runs[0].OperationalEligible {
+		t.Fatalf("unexpected probabilistic run summary: %#v", runs)
+	}
+
+	detail, err := store.GetRun(
+		context.Background(), "rp026-mrms-nowcastnet-v1", "holdout-v1",
+	)
+	if err != nil {
+		t.Fatalf("get probabilistic run: %v", err)
+	}
+	if detail.ProbabilisticSummary == nil || detail.ProbabilisticSummary.Split != "holdout" ||
+		detail.ProbabilisticSummary.CandidateMemberCount != 4 ||
+		detail.ProbabilisticSummary.ReferenceMemberCount != 12 ||
+		len(detail.ProbabilisticSummary.LeadBands) != 2 ||
+		detail.ProbabilisticSummary.LeadBands[0].CandidateSkills[1].CRPSSkill != 0.2 {
+		t.Fatalf("unexpected probabilistic detail: %#v", detail.ProbabilisticSummary)
+	}
+	if len(detail.Cases) != 0 || len(detail.Filters.Models) != 5 ||
+		len(detail.SkillSummary.Comparisons) != 0 {
+		t.Fatalf("probabilistic run leaked deterministic selectors: %#v", detail)
+	}
+}
+
+func TestFileStoreRejectsProbabilisticReportThatEnablesPublication(t *testing.T) {
+	root := t.TempDir()
+	writeProbabilisticReportFixture(t, root, "rp026-mrms-nowcastnet-v1", "unsafe", true)
+	_, err := NewFileStore(root).GetRun(
+		context.Background(), "rp026-mrms-nowcastnet-v1", "unsafe",
+	)
+	if !errors.Is(err, ErrInvalidReport) {
+		t.Fatalf("expected unsafe probabilistic report to be rejected, got %v", err)
+	}
+}
+
 func TestFileStoreUsesFixedTruthDomainForRigorousReports(t *testing.T) {
 	root := t.TempDir()
 	writeRigorousReportFixture(t, root, "rp018-mrms-v1", "full-v1")
@@ -325,6 +370,79 @@ func writeReportFixture(
 		0o644,
 	); err != nil {
 		t.Fatalf("write metrics fixture: %v", err)
+	}
+}
+
+func writeProbabilisticReportFixture(
+	t *testing.T,
+	root string,
+	profileVersion string,
+	runID string,
+	productPublicationEnabled bool,
+) {
+	t.Helper()
+	directory := filepath.Join(root, profileVersion, runID)
+	if err := os.MkdirAll(directory, 0o755); err != nil {
+		t.Fatalf("create probabilistic report fixture: %v", err)
+	}
+	models := []string{"nowcastnet", "steps", "lk", "persistence", "phase_correlation"}
+	scores := make(map[string]any, len(models))
+	for index, model := range models {
+		scores[model] = map[string]any{
+			"brier_score_by_threshold":  map[string]float64{"1.0": 0.1 + float64(index)/100},
+			"crps_mm_h":                 1.5 + float64(index)/10,
+			"ensemble_mean_rmse_mm_h":   3.5 + float64(index)/10,
+			"mean_ensemble_spread_mm_h": float64(index) / 10,
+		}
+	}
+	skills := map[string]any{}
+	for index, model := range models[1:] {
+		skills[model] = map[string]any{
+			"brier_skill_by_threshold": map[string]float64{"1.0": 0.1},
+			"crps_skill":               float64(index+1) / 10,
+		}
+	}
+	band := func(minimum int, maximum int) map[string]any {
+		return map[string]any{
+			"lead_minutes":                            []int{minimum, maximum},
+			"minimum_common_verification_coverage":    0.72,
+			"minimum_nowcastnet_member_mean_coverage": 1.0,
+			"minimum_steps_member_mean_coverage":      0.9,
+			"scores":                                  scores,
+			"nowcastnet_skill":                        skills,
+		}
+	}
+	quantiles := map[string]float64{"p50": 100, "p95": 150, "max": 200}
+	summary := map[string]any{
+		"schema_version":              "1.0",
+		"profile_version":             profileVersion,
+		"split":                       "holdout",
+		"calibration_status":          "raw_ensemble_relative_frequency_uncalibrated",
+		"operational_eligible":        false,
+		"product_publication_enabled": productPublicationEnabled,
+		"completed_issue_count":       50,
+		"failed_issue_count":          0,
+		"motion_fallback_issue_count": 2,
+		"metric_row_count":            3000,
+		"nowcastnet_member_count":     4,
+		"steps_member_count":          12,
+		"models":                      models,
+		"lead_band_summary":           map[string]any{"near": band(10, 60), "far": band(70, 120)},
+		"performance_summary": map[string]any{
+			"nowcastnet_runtime_ms":    quantiles,
+			"steps_runtime_ms":         quantiles,
+			"total_runtime_ms":         quantiles,
+			"gpu_peak_allocated_bytes": quantiles,
+			"peak_rss_bytes":           quantiles,
+		},
+		"runtime": map[string]string{"device_name": "NVIDIA RTX 6000D"},
+	}
+	encoded, err := json.Marshal(summary)
+	if err != nil {
+		t.Fatalf("encode probabilistic report fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "summary.json"), encoded, 0o644); err != nil {
+		t.Fatalf("write probabilistic report fixture: %v", err)
 	}
 }
 

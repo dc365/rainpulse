@@ -793,6 +793,177 @@
   color: var(--verification-negative);
 }
 
+.probabilistic-run-filter {
+  grid-template-columns: minmax(260px, .8fr) minmax(0, 2.2fr);
+}
+
+.probabilistic-run-facts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.probabilistic-run-facts span {
+  padding: 6px 9px;
+  border: 1px solid #cfddd8;
+  border-radius: 999px;
+  background: #f7faf8;
+  color: #405e57;
+  font-size: 11px;
+  font-weight: 680;
+  white-space: nowrap;
+}
+
+.probabilistic-run-facts span.caution {
+  border-color: #e7b997;
+  background: #fff8f1;
+  color: #965126;
+}
+
+.probabilistic-evidence {
+  min-width: 0;
+  padding: 2px 0 0;
+}
+
+.probabilistic-section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 2px 12px;
+  border-bottom: 1px solid var(--verification-line);
+}
+
+.probabilistic-section-heading span,
+.probabilistic-section-heading small,
+.probabilistic-band-panel header span,
+.probabilistic-band-panel header small {
+  color: var(--verification-muted);
+  font-size: 11px;
+}
+
+.probabilistic-section-heading h2 {
+  margin: 4px 0 0;
+  color: var(--verification-ink);
+  font-size: 18px;
+}
+
+.probabilistic-band-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.probabilistic-band-panel {
+  min-width: 0;
+  padding: 16px 2px;
+  border-bottom: 1px solid var(--verification-line);
+}
+
+.probabilistic-band-panel > header,
+.probabilistic-band-panel > footer {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.probabilistic-band-panel header strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--verification-ink);
+  font-size: 15px;
+}
+
+.probabilistic-table-scroll {
+  overflow-x: auto;
+  margin-top: 10px;
+}
+
+.probabilistic-band-panel table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  color: #40544f;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.probabilistic-band-panel th,
+.probabilistic-band-panel td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e6ece9;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.probabilistic-band-panel th:first-child,
+.probabilistic-band-panel td:nth-child(2) {
+  text-align: left;
+}
+
+.probabilistic-band-panel thead th {
+  color: var(--verification-muted);
+  font-size: 10px;
+  letter-spacing: .035em;
+}
+
+.probabilistic-band-panel tbody th {
+  color: var(--verification-ink);
+  font-size: 12px;
+}
+
+.probabilistic-band-panel tbody tr.candidate {
+  background: #fff9f2;
+  box-shadow: inset 3px 0 #b86b32;
+}
+
+.probabilistic-band-panel tbody tr.reference {
+  background: #f2f8f5;
+  box-shadow: inset 3px 0 var(--verification-accent);
+}
+
+.probabilistic-band-panel td strong,
+.probabilistic-band-panel td small {
+  display: block;
+}
+
+.probabilistic-band-panel td small {
+  margin-top: 2px;
+  color: var(--verification-muted);
+  font-size: 10px;
+}
+
+.probabilistic-band-panel td.positive {
+  color: var(--verification-positive);
+  font-weight: 760;
+}
+
+.probabilistic-band-panel td.negative {
+  color: var(--verification-negative);
+  font-weight: 760;
+}
+
+.probabilistic-band-panel > footer {
+  justify-content: flex-start;
+  margin-top: 9px;
+  color: var(--verification-muted);
+  font-size: 10px;
+}
+
+.probabilistic-brier-panel {
+  background: #fff;
+}
+
+.probabilistic-performance strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.probabilistic-provenance dl {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 28px;
+}
+
 @media (max-width: 1180px) {
   .verification-conclusion {
     grid-template-columns: minmax(0, 1fr);
@@ -859,6 +1030,19 @@
   }
 
   .verification-filterbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .probabilistic-run-facts {
+    justify-content: flex-start;
+  }
+
+  .probabilistic-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .probabilistic-provenance dl {
     grid-template-columns: minmax(0, 1fr);
   }
 

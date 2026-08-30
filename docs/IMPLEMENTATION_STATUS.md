@@ -54,6 +54,7 @@ NowcastInput gate.
 | RP-024 | Independent MRMS probability validation complete | Frozen 2022 development and 2023 holdout splits verify 12-member STEPS on 50/50 independent issues; near-lead CRPS/Brier skill passes the precommitted gate, while raw probabilities remain uncalibrated and operational publication disabled |
 | RP-025 | Probability calibration and shadow foundation complete | Versioned isotonic calibration artifacts, fit-readiness checks, split-leakage rejection, threshold coherence and shadow-only scoring pass synthetic acceptance; fitting, shadow application and publication remain disabled pending Fujian QC/QPE data |
 | RP-026 | Independent MRMS NowcastNet engineering validation complete; STEPS retained | Frozen 2024 development and 2025 holdout splits complete 50/50 issues with zero failures; NowcastNet beats persistence/LK/phase translation on independent near leads but trails STEPS by 36.6% CRPS, so it remains an offline candidate and realtime, publication and Fujian eligibility stay disabled |
+| RP-027 | Offline probabilistic model-comparison workbench complete | The read-only control plane and Web now distinguish deterministic spatial verification from probabilistic ensemble evidence, expose the frozen RP-026 model ranking, skill, coverage and resource summary, and fail closed if an offline report enables operational or product publication |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -508,6 +509,15 @@ against persistence/LK/phase correlation, but -0.3661 against STEPS. The raw
 four-member ensemble is strongly underdispersive. Consequently STEPS remains
 the primary probability baseline, NowcastNet remains offline-only, and no
 realtime or product-publication switch is enabled.
+
+RP-027 closes the presentation loop for that frozen evidence without changing
+the result. The algorithm-verification API now discriminates deterministic
+spatial runs from probabilistic ensemble runs. The Web presents conclusion,
+same-slice model scores, CRPS/Brier skill, coverage and GPU/runtime evidence,
+while deliberately omitting deterministic FSS selectors and maps for RP-026.
+The report adapter rejects any probabilistic summary that enables operational
+eligibility or product publication. Details are in
+`docs/RP027_离线模型对比工作台实施记录.md`.
 
 The 2021-08, 2022-01, 2022-12, 2023-06, 2023-12, 2024-06, 2024-07, 2024-11,
 2025-01, 2025-03 and 2025-07 months are now spent verification data for their

@@ -7,6 +7,7 @@ const run = {
   profile_version: 'rp016-mrms-v1',
   run_id: 'full-202108-v2',
   schema_version: '1.0',
+  verification_kind: 'deterministic_spatial',
   primary_truth_kind: 'observed_mrms_10min',
   operational_eligible: false,
   completed_issue_count: 53,
@@ -41,6 +42,79 @@ const rigorousRun = {
   skill_status: 'insufficient_evidence',
   map_bundle_count: 1,
   map_layer_count: 60,
+}
+
+const probabilisticRun = {
+  ...run,
+  profile_version: 'rp026-mrms-nowcastnet-v1',
+  run_id: 'holdout-v1',
+  verification_kind: 'probabilistic_ensemble',
+  primary_truth_kind: 'observed_mrms_preciprate_10min',
+  completed_issue_count: 50,
+  motion_fallback_issue_count: 0,
+  metric_row_count: 3000,
+  skill_status: 'steps_retained_nowcastnet_offline',
+  maps_available: false,
+  map_bundle_count: 0,
+  map_layer_count: 0,
+  map_renderer_version: null,
+  modified_at: '2026-08-30T08:00:00Z',
+}
+
+const brierValues = (value: number) => ({
+  '1.0': value, '5.0': value, '10.0': value, '20.0': value, '50.0': value,
+})
+
+const probabilisticBand = (band: 'near' | 'far', minimumLead: number, maximumLead: number) => ({
+  band,
+  minimum_lead_minutes: minimumLead,
+  maximum_lead_minutes: maximumLead,
+  minimum_common_verification_coverage: band === 'near' ? .728 : .424,
+  minimum_candidate_member_mean_coverage: 1,
+  minimum_reference_member_mean_coverage: band === 'near' ? .901 : .784,
+  scores: [
+    ['nowcastnet', 1.504, 3.854, .424],
+    ['steps', 1.101, 3.505, 1.939],
+    ['lk', 1.750, 4.215, 0],
+    ['persistence', 1.884, 4.520, 0],
+    ['phase_correlation', 1.862, 4.493, 0],
+  ].map(([model, crps, rmse, spread]) => ({
+    model, crps_mm_h: crps, ensemble_mean_rmse_mm_h: rmse,
+    mean_ensemble_spread_mm_h: spread, brier_score_by_threshold: brierValues(.1),
+  })),
+  candidate_skills: [
+    ['steps', -.366], ['lk', .141], ['persistence', .202], ['phase_correlation', .193],
+  ].map(([baseline, skill]) => ({
+    baseline, crps_skill: skill, brier_skill_by_threshold: brierValues(Number(skill)),
+  })),
+})
+
+const probabilisticDetail = {
+  run: probabilisticRun,
+  cases: [],
+  filters: {
+    models: ['nowcastnet', 'steps', 'lk', 'persistence', 'phase_correlation'],
+    lead_minutes: [], thresholds_mm_h: [], windows_pixels: [], fss_scales: [],
+  },
+  skill_summary: {
+    status: 'steps_retained_nowcastnet_offline', comparison_metric: 'CRPS', comparisons: [],
+  },
+  probabilistic_summary: {
+    split: 'holdout',
+    calibration_status: 'raw_ensemble_relative_frequency_uncalibrated',
+    product_publication_enabled: false,
+    candidate_model: 'nowcastnet', reference_model: 'steps',
+    candidate_member_count: 4, reference_member_count: 12,
+    device_name: 'NVIDIA RTX 6000D',
+    lead_bands: [probabilisticBand('near', 10, 60), probabilisticBand('far', 70, 120)],
+    performance: {
+      candidate_runtime_ms: { p50: 149, p95: 158, max: 407 },
+      reference_runtime_ms: { p50: 27602, p95: 29506, max: 29806 },
+      total_runtime_ms: { p50: 30090, p95: 34774, max: 35937 },
+      gpu_peak_allocated_bytes: { p50: 1058564096, p95: 1061185536, max: 1061443584 },
+      peak_rss_bytes: { p50: 5832470528, p95: 6134890496, max: 6153449472 },
+    },
+  },
 }
 
 const comparison = (baseline: string, threshold: number, difference: number) => ({
@@ -196,6 +270,33 @@ describe('AlgorithmVerificationWorkspace', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ items: [] }) }))
     render(<AlgorithmVerificationWorkspace refreshToken={0} />)
     expect(await screen.findByText(/尚未挂载算法验证报告/)).toBeTruthy()
+  })
+
+  it('shows the frozen probabilistic comparison without querying deterministic evidence', async () => {
+    const fetchStatus = vi.fn().mockImplementation((input: string) => {
+      const body = input.endsWith('/rp026-mrms-nowcastnet-v1/holdout-v1')
+        ? probabilisticDetail
+        : { items: [probabilisticRun, run] }
+      return Promise.resolve({ ok: true, status: 200, json: async () => body })
+    })
+    vi.stubGlobal('fetch', fetchStatus)
+
+    render(<AlgorithmVerificationWorkspace refreshToken={0} />)
+
+    expect(await screen.findByText('STEPS 保持主基线，NowcastNet 保留为离线候选')).toBeTruthy()
+    expect(screen.getAllByText('+20.2%').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('-36.6%').length).toBeGreaterThan(0)
+    expect(screen.getByRole('heading', { name: '模型概率技巧对比' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'NowcastNet 相对基线的 Brier 技巧' })).toBeTruthy()
+    expect(screen.getAllByText('主概率基线 · 12 成员').length).toBe(2)
+    expect(screen.getByText('完整流程')).toBeTruthy()
+    expect(screen.getByText('30.1 s')).toBeTruthy()
+    expect(fetchStatus.mock.calls.some(([url]) => String(url).includes('/metrics?'))).toBe(false)
+    expect(fetchStatus.mock.calls.some(([url]) => String(url).includes('/map-frame?'))).toBe(false)
+    await waitFor(() => {
+      expect(window.location.search).toContain('run=rp026-mrms-nowcastnet-v1%2Fholdout-v1')
+      expect(window.location.search).not.toContain('case=')
+    })
   })
 
   it('does not query a newly selected run with stale selectors and labels its fixed truth domain', async () => {

@@ -37,6 +37,7 @@ type RunSummary struct {
 	ProfileVersion           string
 	RunID                    string
 	SchemaVersion            string
+	VerificationKind         string
 	PrimaryTruthKind         string
 	OperationalEligible      bool
 	CompletedIssueCount      int
@@ -95,10 +96,63 @@ type FSSScale struct {
 }
 
 type RunDetail struct {
-	Run          RunSummary
-	Cases        []Case
-	Filters      FilterOptions
-	SkillSummary SkillSummary
+	Run                  RunSummary
+	Cases                []Case
+	Filters              FilterOptions
+	SkillSummary         SkillSummary
+	ProbabilisticSummary *ProbabilisticSummary
+}
+
+type ProbabilisticModelScore struct {
+	Model                 string
+	BrierScoreByThreshold map[string]float64
+	CRPSMMH               float64
+	EnsembleMeanRMSEMMH   float64
+	MeanEnsembleSpreadMMH float64
+}
+
+type ProbabilisticSkill struct {
+	Baseline              string
+	BrierSkillByThreshold map[string]float64
+	CRPSSkill             float64
+}
+
+type ProbabilisticLeadBand struct {
+	Band                               string
+	MinimumLeadMinutes                 int
+	MaximumLeadMinutes                 int
+	MinimumCommonVerificationCoverage  float64
+	MinimumCandidateMemberMeanCoverage float64
+	MinimumReferenceMemberMeanCoverage float64
+	Scores                             []ProbabilisticModelScore
+	CandidateSkills                    []ProbabilisticSkill
+}
+
+type RuntimeQuantiles struct {
+	Maximum float64
+	P50     float64
+	P95     float64
+}
+
+type ProbabilisticPerformance struct {
+	CandidateRuntimeMS    RuntimeQuantiles
+	ReferenceRuntimeMS    RuntimeQuantiles
+	TotalRuntimeMS        RuntimeQuantiles
+	GPUPeakAllocatedBytes RuntimeQuantiles
+	PeakRSSBytes          RuntimeQuantiles
+}
+
+type ProbabilisticSummary struct {
+	Split                     string
+	CalibrationStatus         string
+	ProductPublicationEnabled bool
+	CandidateModel            string
+	ReferenceModel            string
+	CandidateMemberCount      int
+	ReferenceMemberCount      int
+	DeviceName                string
+	LeadBands                 []ProbabilisticLeadBand
+	Performance               ProbabilisticPerformance
 }
 
 type Metric struct {
@@ -219,21 +273,69 @@ type MapAssetContent struct {
 }
 
 type reportSummary struct {
-	SchemaVersion             string       `json:"schema_version"`
-	ProfileVersion            string       `json:"profile_version"`
-	PrimaryTruthKind          string       `json:"primary_truth_kind"`
-	OperationalEligible       bool         `json:"operational_eligible"`
-	CompletedIssueCount       int          `json:"completed_issue_count"`
-	FailedIssueCount          int          `json:"failed_issue_count"`
-	MotionFallbackIssueCount  int          `json:"motion_fallback_issue_count"`
-	MetricRowCount            int          `json:"metric_row_count"`
-	TruthDomainMetricRowCount int          `json:"truth_domain_metric_row_count"`
-	MapBundleCount            int          `json:"map_bundle_count"`
-	MapLayerCount             int          `json:"map_layer_count"`
-	MapRendererVersion        string       `json:"map_renderer_version"`
-	Errors                    []any        `json:"errors"`
-	SkillSummary              SkillSummary `json:"skill_summary"`
-	ReportFiles               reportFiles  `json:"report_files"`
+	SchemaVersion             string                                 `json:"schema_version"`
+	ProfileVersion            string                                 `json:"profile_version"`
+	PrimaryTruthKind          string                                 `json:"primary_truth_kind"`
+	OperationalEligible       bool                                   `json:"operational_eligible"`
+	CompletedIssueCount       int                                    `json:"completed_issue_count"`
+	FailedIssueCount          int                                    `json:"failed_issue_count"`
+	MotionFallbackIssueCount  int                                    `json:"motion_fallback_issue_count"`
+	MetricRowCount            int                                    `json:"metric_row_count"`
+	TruthDomainMetricRowCount int                                    `json:"truth_domain_metric_row_count"`
+	MapBundleCount            int                                    `json:"map_bundle_count"`
+	MapLayerCount             int                                    `json:"map_layer_count"`
+	MapRendererVersion        string                                 `json:"map_renderer_version"`
+	Errors                    []any                                  `json:"errors"`
+	SkillSummary              SkillSummary                           `json:"skill_summary"`
+	ReportFiles               reportFiles                            `json:"report_files"`
+	Split                     string                                 `json:"split"`
+	CalibrationStatus         string                                 `json:"calibration_status"`
+	ProductPublicationEnabled bool                                   `json:"product_publication_enabled"`
+	Models                    []string                               `json:"models"`
+	NowcastNetMemberCount     int                                    `json:"nowcastnet_member_count"`
+	StepsMemberCount          int                                    `json:"steps_member_count"`
+	LeadBandSummary           map[string]probabilisticLeadBandReport `json:"lead_band_summary"`
+	PerformanceSummary        probabilisticPerformanceReport         `json:"performance_summary"`
+	Runtime                   probabilisticRuntimeReport             `json:"runtime"`
+}
+
+type probabilisticModelScoreReport struct {
+	BrierScoreByThreshold map[string]float64 `json:"brier_score_by_threshold"`
+	CRPSMMH               float64            `json:"crps_mm_h"`
+	EnsembleMeanRMSEMMH   float64            `json:"ensemble_mean_rmse_mm_h"`
+	MeanEnsembleSpreadMMH float64            `json:"mean_ensemble_spread_mm_h"`
+}
+
+type probabilisticSkillReport struct {
+	BrierSkillByThreshold map[string]float64 `json:"brier_skill_by_threshold"`
+	CRPSSkill             float64            `json:"crps_skill"`
+}
+
+type probabilisticLeadBandReport struct {
+	LeadMinutes                         []int                                    `json:"lead_minutes"`
+	MinimumCommonVerificationCoverage   float64                                  `json:"minimum_common_verification_coverage"`
+	MinimumNowcastNetMemberMeanCoverage float64                                  `json:"minimum_nowcastnet_member_mean_coverage"`
+	MinimumStepsMemberMeanCoverage      float64                                  `json:"minimum_steps_member_mean_coverage"`
+	Scores                              map[string]probabilisticModelScoreReport `json:"scores"`
+	NowcastNetSkill                     map[string]probabilisticSkillReport      `json:"nowcastnet_skill"`
+}
+
+type runtimeQuantilesReport struct {
+	Maximum float64 `json:"max"`
+	P50     float64 `json:"p50"`
+	P95     float64 `json:"p95"`
+}
+
+type probabilisticPerformanceReport struct {
+	NowcastNetRuntimeMS   runtimeQuantilesReport `json:"nowcastnet_runtime_ms"`
+	StepsRuntimeMS        runtimeQuantilesReport `json:"steps_runtime_ms"`
+	TotalRuntimeMS        runtimeQuantilesReport `json:"total_runtime_ms"`
+	GPUPeakAllocatedBytes runtimeQuantilesReport `json:"gpu_peak_allocated_bytes"`
+	PeakRSSBytes          runtimeQuantilesReport `json:"peak_rss_bytes"`
+}
+
+type probabilisticRuntimeReport struct {
+	DeviceName string `json:"device_name"`
 }
 
 type reportFiles struct {
@@ -586,6 +688,35 @@ func (store *FileStore) loadRun(
 	if err != nil {
 		return cachedRun{}, err
 	}
+	cacheKey := profileVersion + "/" + runID
+	if summary.VerificationKind == "probabilistic_ensemble" {
+		store.mu.RLock()
+		cached, ok := store.cache[cacheKey]
+		store.mu.RUnlock()
+		if ok && cached.SummaryStamp == summaryStamp {
+			return cached, nil
+		}
+		loaded := cachedRun{
+			SummaryStamp: summaryStamp,
+			Detail: RunDetail{
+				Run:     summary,
+				Cases:   []Case{},
+				Filters: FilterOptions{Models: append([]string(nil), report.Models...)},
+				SkillSummary: SkillSummary{
+					CandidateModel:   "nowcastnet",
+					Status:           "steps_retained_nowcastnet_offline",
+					ComparisonMetric: "CRPS",
+					Comparisons:      []SkillComparison{},
+				},
+				ProbabilisticSummary: report.probabilisticSummary(),
+			},
+			Metrics: []Metric{},
+		}
+		store.mu.Lock()
+		store.cache[cacheKey] = loaded
+		store.mu.Unlock()
+		return loaded, nil
+	}
 	metricsFilename, expectedMetricCount, usesTruthDomain, err := report.displayMetricSource()
 	if err != nil {
 		return cachedRun{}, err
@@ -595,7 +726,6 @@ func (store *FileStore) loadRun(
 	if err != nil {
 		return cachedRun{}, reportFileError(err)
 	}
-	cacheKey := profileVersion + "/" + runID
 	store.mu.RLock()
 	cached, ok := store.cache[cacheKey]
 	store.mu.RUnlock()
@@ -739,12 +869,34 @@ func (store *FileStore) readSummary(
 		return RunSummary{}, reportSummary{}, fmt.Errorf("%w: decode summary: %v", ErrInvalidReport, err)
 	}
 	if report.ProfileVersion != profileVersion || report.SchemaVersion == "" ||
-		report.PrimaryTruthKind == "" || report.SkillSummary.Status == "" ||
 		report.CompletedIssueCount < 0 || report.FailedIssueCount < 0 ||
 		report.MotionFallbackIssueCount < 0 || report.MetricRowCount < 0 ||
 		report.TruthDomainMetricRowCount < 0 ||
 		report.MapBundleCount < 0 || report.MapLayerCount < 0 {
 		return RunSummary{}, reportSummary{}, fmt.Errorf("%w: summary identity or counts differ", ErrInvalidReport)
+	}
+	if report.CalibrationStatus != "" || len(report.LeadBandSummary) > 0 {
+		if err := report.validateProbabilistic(); err != nil {
+			return RunSummary{}, reportSummary{}, err
+		}
+		return RunSummary{
+			ProfileVersion:           report.ProfileVersion,
+			RunID:                    runID,
+			SchemaVersion:            report.SchemaVersion,
+			VerificationKind:         "probabilistic_ensemble",
+			PrimaryTruthKind:         "observed_mrms_preciprate_10min",
+			OperationalEligible:      report.OperationalEligible,
+			CompletedIssueCount:      report.CompletedIssueCount,
+			FailedIssueCount:         report.FailedIssueCount,
+			MotionFallbackIssueCount: report.MotionFallbackIssueCount,
+			MetricRowCount:           report.MetricRowCount,
+			SkillStatus:              "steps_retained_nowcastnet_offline",
+			MapsAvailable:            false,
+			ModifiedAt:               info.ModTime().UTC(),
+		}, report, nil
+	}
+	if report.PrimaryTruthKind == "" || report.SkillSummary.Status == "" {
+		return RunSummary{}, reportSummary{}, fmt.Errorf("%w: deterministic summary identity is incomplete", ErrInvalidReport)
 	}
 	if _, _, _, err := report.displayMetricSource(); err != nil {
 		return RunSummary{}, reportSummary{}, err
@@ -773,6 +925,7 @@ func (store *FileStore) readSummary(
 		ProfileVersion:           report.ProfileVersion,
 		RunID:                    runID,
 		SchemaVersion:            report.SchemaVersion,
+		VerificationKind:         "deterministic_spatial",
 		PrimaryTruthKind:         report.PrimaryTruthKind,
 		OperationalEligible:      report.OperationalEligible,
 		CompletedIssueCount:      report.CompletedIssueCount,
@@ -786,6 +939,127 @@ func (store *FileStore) readSummary(
 		MapRendererVersion:       report.MapRendererVersion,
 		ModifiedAt:               info.ModTime().UTC(),
 	}, report, nil
+}
+
+func (report reportSummary) validateProbabilistic() error {
+	if (report.Split != "development" && report.Split != "holdout") ||
+		report.CalibrationStatus == "" || report.OperationalEligible ||
+		report.ProductPublicationEnabled || report.CompletedIssueCount < 1 ||
+		report.MetricRowCount < 1 || report.NowcastNetMemberCount < 1 ||
+		report.StepsMemberCount < 1 || len(report.Models) < 2 ||
+		report.Runtime.DeviceName == "" {
+		return fmt.Errorf("%w: probabilistic summary identity or boundary is invalid", ErrInvalidReport)
+	}
+	modelSet := make(map[string]bool, len(report.Models))
+	for _, model := range report.Models {
+		if model == "" || modelSet[model] {
+			return fmt.Errorf("%w: probabilistic model list is invalid", ErrInvalidReport)
+		}
+		modelSet[model] = true
+	}
+	if !modelSet["nowcastnet"] || !modelSet["steps"] {
+		return fmt.Errorf("%w: probabilistic candidate or reference is missing", ErrInvalidReport)
+	}
+	for _, name := range []string{"near", "far"} {
+		band, ok := report.LeadBandSummary[name]
+		if !ok || len(band.LeadMinutes) != 2 || band.LeadMinutes[0] < 1 ||
+			band.LeadMinutes[1] < band.LeadMinutes[0] ||
+			!validCoverage(band.MinimumCommonVerificationCoverage) ||
+			!validCoverage(band.MinimumNowcastNetMemberMeanCoverage) ||
+			!validCoverage(band.MinimumStepsMemberMeanCoverage) {
+			return fmt.Errorf("%w: probabilistic %s lead band is invalid", ErrInvalidReport, name)
+		}
+		for _, model := range report.Models {
+			if _, ok := band.Scores[model]; !ok {
+				return fmt.Errorf("%w: probabilistic %s score is missing", ErrInvalidReport, model)
+			}
+		}
+		for _, baseline := range report.Models {
+			if baseline == "nowcastnet" {
+				continue
+			}
+			if _, ok := band.NowcastNetSkill[baseline]; !ok {
+				return fmt.Errorf("%w: probabilistic %s skill is missing", ErrInvalidReport, baseline)
+			}
+		}
+	}
+	if !validRuntimeQuantiles(report.PerformanceSummary.NowcastNetRuntimeMS) ||
+		!validRuntimeQuantiles(report.PerformanceSummary.StepsRuntimeMS) ||
+		!validRuntimeQuantiles(report.PerformanceSummary.TotalRuntimeMS) ||
+		!validRuntimeQuantiles(report.PerformanceSummary.GPUPeakAllocatedBytes) ||
+		!validRuntimeQuantiles(report.PerformanceSummary.PeakRSSBytes) {
+		return fmt.Errorf("%w: probabilistic performance summary is invalid", ErrInvalidReport)
+	}
+	return nil
+}
+
+func validCoverage(value float64) bool {
+	return value >= 0 && value <= 1
+}
+
+func validRuntimeQuantiles(value runtimeQuantilesReport) bool {
+	return value.P50 >= 0 && value.P95 >= value.P50 && value.Maximum >= value.P95
+}
+
+func (report reportSummary) probabilisticSummary() *ProbabilisticSummary {
+	bands := make([]ProbabilisticLeadBand, 0, 2)
+	for _, name := range []string{"near", "far"} {
+		reportBand := report.LeadBandSummary[name]
+		scores := make([]ProbabilisticModelScore, 0, len(report.Models))
+		for _, model := range report.Models {
+			score := reportBand.Scores[model]
+			scores = append(scores, ProbabilisticModelScore{
+				Model:                 model,
+				BrierScoreByThreshold: score.BrierScoreByThreshold,
+				CRPSMMH:               score.CRPSMMH,
+				EnsembleMeanRMSEMMH:   score.EnsembleMeanRMSEMMH,
+				MeanEnsembleSpreadMMH: score.MeanEnsembleSpreadMMH,
+			})
+		}
+		skills := make([]ProbabilisticSkill, 0, len(report.Models)-1)
+		for _, baseline := range report.Models {
+			if baseline == "nowcastnet" {
+				continue
+			}
+			skill := reportBand.NowcastNetSkill[baseline]
+			skills = append(skills, ProbabilisticSkill{
+				Baseline:              baseline,
+				BrierSkillByThreshold: skill.BrierSkillByThreshold,
+				CRPSSkill:             skill.CRPSSkill,
+			})
+		}
+		bands = append(bands, ProbabilisticLeadBand{
+			Band:                               name,
+			MinimumLeadMinutes:                 reportBand.LeadMinutes[0],
+			MaximumLeadMinutes:                 reportBand.LeadMinutes[1],
+			MinimumCommonVerificationCoverage:  reportBand.MinimumCommonVerificationCoverage,
+			MinimumCandidateMemberMeanCoverage: reportBand.MinimumNowcastNetMemberMeanCoverage,
+			MinimumReferenceMemberMeanCoverage: reportBand.MinimumStepsMemberMeanCoverage,
+			Scores:                             scores,
+			CandidateSkills:                    skills,
+		})
+	}
+	quantiles := func(value runtimeQuantilesReport) RuntimeQuantiles {
+		return RuntimeQuantiles{Maximum: value.Maximum, P50: value.P50, P95: value.P95}
+	}
+	return &ProbabilisticSummary{
+		Split:                     report.Split,
+		CalibrationStatus:         report.CalibrationStatus,
+		ProductPublicationEnabled: report.ProductPublicationEnabled,
+		CandidateModel:            "nowcastnet",
+		ReferenceModel:            "steps",
+		CandidateMemberCount:      report.NowcastNetMemberCount,
+		ReferenceMemberCount:      report.StepsMemberCount,
+		DeviceName:                report.Runtime.DeviceName,
+		LeadBands:                 bands,
+		Performance: ProbabilisticPerformance{
+			CandidateRuntimeMS:    quantiles(report.PerformanceSummary.NowcastNetRuntimeMS),
+			ReferenceRuntimeMS:    quantiles(report.PerformanceSummary.StepsRuntimeMS),
+			TotalRuntimeMS:        quantiles(report.PerformanceSummary.TotalRuntimeMS),
+			GPUPeakAllocatedBytes: quantiles(report.PerformanceSummary.GPUPeakAllocatedBytes),
+			PeakRSSBytes:          quantiles(report.PerformanceSummary.PeakRSSBytes),
+		},
+	}
 }
 
 func readMapIndex(path string) (mapIndex, error) {

@@ -47,6 +47,60 @@ func (e AlgorithmVerificationMapLayerRole) Valid() bool {
 	}
 }
 
+// Defines values for AlgorithmVerificationProbabilisticLeadBandBand.
+const (
+	Far  AlgorithmVerificationProbabilisticLeadBandBand = "far"
+	Near AlgorithmVerificationProbabilisticLeadBandBand = "near"
+)
+
+// Valid indicates whether the value is a known member of the AlgorithmVerificationProbabilisticLeadBandBand enum.
+func (e AlgorithmVerificationProbabilisticLeadBandBand) Valid() bool {
+	switch e {
+	case Far:
+		return true
+	case Near:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AlgorithmVerificationProbabilisticSummarySplit.
+const (
+	Development AlgorithmVerificationProbabilisticSummarySplit = "development"
+	Holdout     AlgorithmVerificationProbabilisticSummarySplit = "holdout"
+)
+
+// Valid indicates whether the value is a known member of the AlgorithmVerificationProbabilisticSummarySplit enum.
+func (e AlgorithmVerificationProbabilisticSummarySplit) Valid() bool {
+	switch e {
+	case Development:
+		return true
+	case Holdout:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AlgorithmVerificationRunSummaryVerificationKind.
+const (
+	DeterministicSpatial  AlgorithmVerificationRunSummaryVerificationKind = "deterministic_spatial"
+	ProbabilisticEnsemble AlgorithmVerificationRunSummaryVerificationKind = "probabilistic_ensemble"
+)
+
+// Valid indicates whether the value is a known member of the AlgorithmVerificationRunSummaryVerificationKind enum.
+func (e AlgorithmVerificationRunSummaryVerificationKind) Valid() bool {
+	switch e {
+	case DeterministicSpatial:
+		return true
+	case ProbabilisticEnsemble:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AnalysisCycleStatus.
 const (
 	AnalysisCycleStatusALIGNING         AnalysisCycleStatus = "ALIGNING"
@@ -626,12 +680,70 @@ type AlgorithmVerificationMetricList struct {
 	Items []AlgorithmVerificationMetric `json:"items"`
 }
 
+// AlgorithmVerificationProbabilisticLeadBand defines model for AlgorithmVerificationProbabilisticLeadBand.
+type AlgorithmVerificationProbabilisticLeadBand struct {
+	Band                               AlgorithmVerificationProbabilisticLeadBandBand `json:"band"`
+	CandidateSkills                    []AlgorithmVerificationProbabilisticSkill      `json:"candidate_skills"`
+	MaximumLeadMinutes                 int                                            `json:"maximum_lead_minutes"`
+	MinimumCandidateMemberMeanCoverage float64                                        `json:"minimum_candidate_member_mean_coverage"`
+	MinimumCommonVerificationCoverage  float64                                        `json:"minimum_common_verification_coverage"`
+	MinimumLeadMinutes                 int                                            `json:"minimum_lead_minutes"`
+	MinimumReferenceMemberMeanCoverage float64                                        `json:"minimum_reference_member_mean_coverage"`
+	Scores                             []AlgorithmVerificationProbabilisticModelScore `json:"scores"`
+}
+
+// AlgorithmVerificationProbabilisticLeadBandBand defines model for AlgorithmVerificationProbabilisticLeadBand.Band.
+type AlgorithmVerificationProbabilisticLeadBandBand string
+
+// AlgorithmVerificationProbabilisticModelScore defines model for AlgorithmVerificationProbabilisticModelScore.
+type AlgorithmVerificationProbabilisticModelScore struct {
+	BrierScoreByThreshold map[string]float64 `json:"brier_score_by_threshold"`
+	CrpsMmH               float64            `json:"crps_mm_h"`
+	EnsembleMeanRmseMmH   float64            `json:"ensemble_mean_rmse_mm_h"`
+	MeanEnsembleSpreadMmH float64            `json:"mean_ensemble_spread_mm_h"`
+	Model                 string             `json:"model"`
+}
+
+// AlgorithmVerificationProbabilisticPerformance defines model for AlgorithmVerificationProbabilisticPerformance.
+type AlgorithmVerificationProbabilisticPerformance struct {
+	CandidateRuntimeMs    AlgorithmVerificationRuntimeQuantiles `json:"candidate_runtime_ms"`
+	GpuPeakAllocatedBytes AlgorithmVerificationRuntimeQuantiles `json:"gpu_peak_allocated_bytes"`
+	PeakRssBytes          AlgorithmVerificationRuntimeQuantiles `json:"peak_rss_bytes"`
+	ReferenceRuntimeMs    AlgorithmVerificationRuntimeQuantiles `json:"reference_runtime_ms"`
+	TotalRuntimeMs        AlgorithmVerificationRuntimeQuantiles `json:"total_runtime_ms"`
+}
+
+// AlgorithmVerificationProbabilisticSkill defines model for AlgorithmVerificationProbabilisticSkill.
+type AlgorithmVerificationProbabilisticSkill struct {
+	Baseline              string             `json:"baseline"`
+	BrierSkillByThreshold map[string]float64 `json:"brier_skill_by_threshold"`
+	CrpsSkill             float64            `json:"crps_skill"`
+}
+
+// AlgorithmVerificationProbabilisticSummary defines model for AlgorithmVerificationProbabilisticSummary.
+type AlgorithmVerificationProbabilisticSummary struct {
+	CalibrationStatus         string                                         `json:"calibration_status"`
+	CandidateMemberCount      int                                            `json:"candidate_member_count"`
+	CandidateModel            string                                         `json:"candidate_model"`
+	DeviceName                string                                         `json:"device_name"`
+	LeadBands                 []AlgorithmVerificationProbabilisticLeadBand   `json:"lead_bands"`
+	Performance               AlgorithmVerificationProbabilisticPerformance  `json:"performance"`
+	ProductPublicationEnabled bool                                           `json:"product_publication_enabled"`
+	ReferenceMemberCount      int                                            `json:"reference_member_count"`
+	ReferenceModel            string                                         `json:"reference_model"`
+	Split                     AlgorithmVerificationProbabilisticSummarySplit `json:"split"`
+}
+
+// AlgorithmVerificationProbabilisticSummarySplit defines model for AlgorithmVerificationProbabilisticSummary.Split.
+type AlgorithmVerificationProbabilisticSummarySplit string
+
 // AlgorithmVerificationRunDetail defines model for AlgorithmVerificationRunDetail.
 type AlgorithmVerificationRunDetail struct {
-	Cases        []AlgorithmVerificationCase        `json:"cases"`
-	Filters      AlgorithmVerificationFilterOptions `json:"filters"`
-	Run          AlgorithmVerificationRunSummary    `json:"run"`
-	SkillSummary AlgorithmVerificationSkillSummary  `json:"skill_summary"`
+	Cases                []AlgorithmVerificationCase                `json:"cases"`
+	Filters              AlgorithmVerificationFilterOptions         `json:"filters"`
+	ProbabilisticSummary *AlgorithmVerificationProbabilisticSummary `json:"probabilistic_summary,omitempty"`
+	Run                  AlgorithmVerificationRunSummary            `json:"run"`
+	SkillSummary         AlgorithmVerificationSkillSummary          `json:"skill_summary"`
 }
 
 // AlgorithmVerificationRunList defines model for AlgorithmVerificationRunList.
@@ -641,21 +753,32 @@ type AlgorithmVerificationRunList struct {
 
 // AlgorithmVerificationRunSummary defines model for AlgorithmVerificationRunSummary.
 type AlgorithmVerificationRunSummary struct {
-	CompletedIssueCount      int       `json:"completed_issue_count"`
-	FailedIssueCount         int       `json:"failed_issue_count"`
-	MapBundleCount           int       `json:"map_bundle_count"`
-	MapLayerCount            int       `json:"map_layer_count"`
-	MapRendererVersion       *string   `json:"map_renderer_version"`
-	MapsAvailable            bool      `json:"maps_available"`
-	MetricRowCount           int       `json:"metric_row_count"`
-	ModifiedAt               time.Time `json:"modified_at"`
-	MotionFallbackIssueCount int       `json:"motion_fallback_issue_count"`
-	OperationalEligible      bool      `json:"operational_eligible"`
-	PrimaryTruthKind         string    `json:"primary_truth_kind"`
-	ProfileVersion           string    `json:"profile_version"`
-	RunId                    string    `json:"run_id"`
-	SchemaVersion            string    `json:"schema_version"`
-	SkillStatus              string    `json:"skill_status"`
+	CompletedIssueCount      int                                             `json:"completed_issue_count"`
+	FailedIssueCount         int                                             `json:"failed_issue_count"`
+	MapBundleCount           int                                             `json:"map_bundle_count"`
+	MapLayerCount            int                                             `json:"map_layer_count"`
+	MapRendererVersion       *string                                         `json:"map_renderer_version"`
+	MapsAvailable            bool                                            `json:"maps_available"`
+	MetricRowCount           int                                             `json:"metric_row_count"`
+	ModifiedAt               time.Time                                       `json:"modified_at"`
+	MotionFallbackIssueCount int                                             `json:"motion_fallback_issue_count"`
+	OperationalEligible      bool                                            `json:"operational_eligible"`
+	PrimaryTruthKind         string                                          `json:"primary_truth_kind"`
+	ProfileVersion           string                                          `json:"profile_version"`
+	RunId                    string                                          `json:"run_id"`
+	SchemaVersion            string                                          `json:"schema_version"`
+	SkillStatus              string                                          `json:"skill_status"`
+	VerificationKind         AlgorithmVerificationRunSummaryVerificationKind `json:"verification_kind"`
+}
+
+// AlgorithmVerificationRunSummaryVerificationKind defines model for AlgorithmVerificationRunSummary.VerificationKind.
+type AlgorithmVerificationRunSummaryVerificationKind string
+
+// AlgorithmVerificationRuntimeQuantiles defines model for AlgorithmVerificationRuntimeQuantiles.
+type AlgorithmVerificationRuntimeQuantiles struct {
+	Max float64 `json:"max"`
+	P50 float64 `json:"p50"`
+	P95 float64 `json:"p95"`
 }
 
 // AlgorithmVerificationSkillComparison defines model for AlgorithmVerificationSkillComparison.

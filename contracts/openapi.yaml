@@ -2406,6 +2406,7 @@ components:
         - profile_version
         - run_id
         - schema_version
+        - verification_kind
         - primary_truth_kind
         - operational_eligible
         - completed_issue_count
@@ -2425,6 +2426,9 @@ components:
           type: string
         schema_version:
           type: string
+        verification_kind:
+          type: string
+          enum: [deterministic_spatial, probabilistic_ensemble]
         primary_truth_kind:
           type: string
         operational_eligible:
@@ -2588,6 +2592,158 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AlgorithmVerificationSkillComparison"
+    AlgorithmVerificationProbabilisticModelScore:
+      type: object
+      additionalProperties: false
+      required:
+        - model
+        - crps_mm_h
+        - ensemble_mean_rmse_mm_h
+        - mean_ensemble_spread_mm_h
+        - brier_score_by_threshold
+      properties:
+        model:
+          type: string
+        crps_mm_h:
+          type: number
+          format: double
+        ensemble_mean_rmse_mm_h:
+          type: number
+          format: double
+        mean_ensemble_spread_mm_h:
+          type: number
+          format: double
+        brier_score_by_threshold:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+    AlgorithmVerificationProbabilisticSkill:
+      type: object
+      additionalProperties: false
+      required: [baseline, crps_skill, brier_skill_by_threshold]
+      properties:
+        baseline:
+          type: string
+        crps_skill:
+          type: number
+          format: double
+        brier_skill_by_threshold:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+    AlgorithmVerificationProbabilisticLeadBand:
+      type: object
+      additionalProperties: false
+      required:
+        - band
+        - minimum_lead_minutes
+        - maximum_lead_minutes
+        - minimum_common_verification_coverage
+        - minimum_candidate_member_mean_coverage
+        - minimum_reference_member_mean_coverage
+        - scores
+        - candidate_skills
+      properties:
+        band:
+          type: string
+          enum: [near, far]
+        minimum_lead_minutes:
+          type: integer
+        maximum_lead_minutes:
+          type: integer
+        minimum_common_verification_coverage:
+          type: number
+          format: double
+        minimum_candidate_member_mean_coverage:
+          type: number
+          format: double
+        minimum_reference_member_mean_coverage:
+          type: number
+          format: double
+        scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlgorithmVerificationProbabilisticModelScore"
+        candidate_skills:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlgorithmVerificationProbabilisticSkill"
+    AlgorithmVerificationRuntimeQuantiles:
+      type: object
+      additionalProperties: false
+      required: [p50, p95, max]
+      properties:
+        p50:
+          type: number
+          format: double
+        p95:
+          type: number
+          format: double
+        max:
+          type: number
+          format: double
+    AlgorithmVerificationProbabilisticPerformance:
+      type: object
+      additionalProperties: false
+      required:
+        - candidate_runtime_ms
+        - reference_runtime_ms
+        - total_runtime_ms
+        - gpu_peak_allocated_bytes
+        - peak_rss_bytes
+      properties:
+        candidate_runtime_ms:
+          $ref: "#/components/schemas/AlgorithmVerificationRuntimeQuantiles"
+        reference_runtime_ms:
+          $ref: "#/components/schemas/AlgorithmVerificationRuntimeQuantiles"
+        total_runtime_ms:
+          $ref: "#/components/schemas/AlgorithmVerificationRuntimeQuantiles"
+        gpu_peak_allocated_bytes:
+          $ref: "#/components/schemas/AlgorithmVerificationRuntimeQuantiles"
+        peak_rss_bytes:
+          $ref: "#/components/schemas/AlgorithmVerificationRuntimeQuantiles"
+    AlgorithmVerificationProbabilisticSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - split
+        - calibration_status
+        - product_publication_enabled
+        - candidate_model
+        - reference_model
+        - candidate_member_count
+        - reference_member_count
+        - device_name
+        - lead_bands
+        - performance
+      properties:
+        split:
+          type: string
+          enum: [development, holdout]
+        calibration_status:
+          type: string
+        product_publication_enabled:
+          type: boolean
+        candidate_model:
+          type: string
+        reference_model:
+          type: string
+        candidate_member_count:
+          type: integer
+          minimum: 1
+        reference_member_count:
+          type: integer
+          minimum: 1
+        device_name:
+          type: string
+        lead_bands:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlgorithmVerificationProbabilisticLeadBand"
+        performance:
+          $ref: "#/components/schemas/AlgorithmVerificationProbabilisticPerformance"
     AlgorithmVerificationRunDetail:
       type: object
       additionalProperties: false
@@ -2603,6 +2759,8 @@ components:
           $ref: "#/components/schemas/AlgorithmVerificationFilterOptions"
         skill_summary:
           $ref: "#/components/schemas/AlgorithmVerificationSkillSummary"
+        probabilistic_summary:
+          $ref: "#/components/schemas/AlgorithmVerificationProbabilisticSummary"
     AlgorithmVerificationMetric:
       type: object
       additionalProperties: false
