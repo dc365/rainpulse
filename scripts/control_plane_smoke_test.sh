@@ -17,6 +17,25 @@ fi
 
 compose=(docker compose --progress quiet --env-file "$env_file" -f "$compose_file")
 
+admin_token=${RAINPULSE_ADMIN_TOKEN:-}
+if [[ -z "$admin_token" ]]; then
+  admin_token=$("${compose[@]}" config --format json | python3 -c '
+import json
+import sys
+
+config = json.load(sys.stdin)
+print(config.get("services", {}).get("api", {}).get("environment", {}).get("RAINPULSE_ADMIN_TOKEN", ""))
+')
+fi
+if [[ -z "$admin_token" ]]; then
+  printf 'RAINPULSE_ADMIN_TOKEN is required for the control-plane smoke test\n' >&2
+  exit 1
+fi
+if [[ "$admin_token" == *$'\r'* || "$admin_token" == *$'\n'* ]]; then
+  printf 'RAINPULSE_ADMIN_TOKEN contains an invalid line break\n' >&2
+  exit 1
+fi
+
 wait_for_state() {
   local url=$1
   local field=$2
@@ -94,8 +113,9 @@ wait_for_state "$api_url/api/v1/runs/$run_id/jobs" status SUCCEEDED
 # must be ACKed without applying the state transition a second time.
 "${compose[@]}" run --rm --no-deps orchestrator complete "$job_id" >/dev/null
 
-rerun=$(curl --fail --silent --show-error --request POST \
-  "$api_url/api/v1/admin/runs/$run_id/rerun")
+rerun=$(printf 'Authorization: Bearer %s\n' "$admin_token" | \
+  curl --fail --silent --show-error --header @- --request POST \
+    "$api_url/api/v1/admin/runs/$run_id/rerun")
 rerun_id=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["run_id"])' <<<"$rerun")
 if [[ "$rerun_id" == "$run_id" ]]; then
   printf 'rerun reused the source run UUID\n' >&2
