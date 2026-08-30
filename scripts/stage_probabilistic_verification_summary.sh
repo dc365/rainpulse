@@ -10,36 +10,45 @@ source_summary=$1
 target_report_root=$2
 run_id=$3
 
-command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
+command -v python3 >/dev/null || { echo "python3 is required" >&2; exit 1; }
 [[ -f "$source_summary" ]] || { echo "source summary is not a regular file" >&2; exit 1; }
 [[ "$run_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] || {
   echo "run id is invalid" >&2
   exit 1
 }
 
-profile_version=$(jq -er '.profile_version' "$source_summary")
+profile_version=$(python3 - "$source_summary" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as handle:
+    report = json.load(handle)
+
+required_strings = ("schema_version", "profile_version", "calibration_status")
+valid = all(isinstance(report.get(key), str) and report[key] for key in required_strings)
+valid = valid and report.get("split") in {"development", "holdout"}
+valid = valid and report.get("operational_eligible") is False
+valid = valid and report.get("product_publication_enabled") is False
+valid = valid and isinstance(report.get("completed_issue_count"), int) and report["completed_issue_count"] > 0
+valid = valid and isinstance(report.get("failed_issue_count"), int) and report["failed_issue_count"] >= 0
+valid = valid and isinstance(report.get("nowcastnet_member_count"), int) and report["nowcastnet_member_count"] > 0
+valid = valid and isinstance(report.get("steps_member_count"), int) and report["steps_member_count"] > 0
+valid = valid and isinstance(report.get("models"), list) and "nowcastnet" in report["models"] and "steps" in report["models"]
+lead_bands = report.get("lead_band_summary", {})
+valid = valid and all(
+    isinstance(lead_bands.get(name, {}).get("lead_minutes"), list)
+    and len(lead_bands[name]["lead_minutes"]) == 2
+    for name in ("near", "far")
+)
+runtime = report.get("runtime", {})
+valid = valid and isinstance(runtime.get("device_name"), str) and bool(runtime["device_name"])
+if not valid:
+    raise SystemExit("probabilistic summary failed the offline publication boundary")
+print(report["profile_version"])
+PY
+)
 [[ "$profile_version" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] || {
   echo "profile version is invalid" >&2
-  exit 1
-}
-
-jq -e '
-  (.schema_version | type == "string" and length > 0) and
-  (.split == "development" or .split == "holdout") and
-  (.calibration_status | type == "string" and length > 0) and
-  (.operational_eligible == false) and
-  (.product_publication_enabled == false) and
-  (.completed_issue_count > 0) and
-  (.failed_issue_count >= 0) and
-  (.nowcastnet_member_count > 0) and
-  (.steps_member_count > 0) and
-  (.models | index("nowcastnet") != null) and
-  (.models | index("steps") != null) and
-  (.lead_band_summary.near.lead_minutes | length == 2) and
-  (.lead_band_summary.far.lead_minutes | length == 2) and
-  (.runtime.device_name | type == "string" and length > 0)
-' "$source_summary" >/dev/null || {
-  echo "probabilistic summary failed the offline publication boundary" >&2
   exit 1
 }
 
