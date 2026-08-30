@@ -1,0 +1,60 @@
+{
+  "schema_version": "1.0",
+  "status": "passed",
+  "measured_at": "2026-08-30T15:55:00+00:00",
+  "scope": "full_mrms_training_library_capacity_preflight",
+  "code_revision": "4f567f1",
+  "filesystem_snapshot": {
+    "local_training_runtime": {
+      "filesystem_type": "ext4",
+      "size_bytes": 2014574526464,
+      "used_bytes": 1510041358336,
+      "available_bytes": 402122895360,
+      "used_percent": 79,
+      "meets_500gb_gate": false,
+      "capacity_deficit_bytes": 97877104640
+    },
+    "external_training_artifact_volume": {
+      "filesystem_type": "nfs_v3",
+      "mount_mode": "read_write",
+      "size_bytes": 10995116277760,
+      "used_bytes": 9961829957632,
+      "available_bytes": 1033286320128,
+      "used_percent": 91,
+      "meets_500gb_gate": true,
+      "headroom_above_gate_bytes": 533286320128
+    }
+  },
+  "pilot_observation": {
+    "sample_count": 10000,
+    "logical_bytes": 57016320000,
+    "stored_bytes_from_validation_report": 5778298957,
+    "filesystem_bytes": 5788633656,
+    "compression_ratio": 9.867318699,
+    "full_library_linear_logical_estimate_bytes": 570163200000,
+    "full_library_linear_stored_estimate_bytes": 57782989570
+  },
+  "frozen_capacity_policy": {
+    "target_sample_count": 100000,
+    "output_root_env": "RAINPULSE_MRMS_FULL_ROOT",
+    "raw_root_env": "RAINPULSE_MRMS_RAW_ROOT",
+    "minimum_free_bytes_before_start": 500000000000,
+    "maximum_logical_output_bytes": 600000000000,
+    "maximum_physical_output_bytes": 400000000000,
+    "output_filesystem": "external_training_artifact_volume",
+    "local_runtime_filesystem_allowed": false,
+    "raw_root_immutable": true,
+    "output_must_be_distinct_from_raw_root": true,
+    "output_must_not_be_nested_under_raw_root": true,
+    "holdout_windows_allowed": false,
+    "stop_when_physical_cap_reached": true,
+    "stop_when_free_space_gate_fails_before_start_or_resume": true
+  },
+  "decision": {
+    "capacity_policy_frozen": true,
+    "full_sample_materialization_allowed": true,
+    "full_sample_materialization_started": false,
+    "next_gate": "freeze_full_sample_profile_plan_and_run_a_bounded_real_shard_smoke"
+  },
+  "operational_eligible": false
+}
