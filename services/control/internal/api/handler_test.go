@@ -211,6 +211,44 @@ func TestRerunReportsUnsupportedRealWorkflowAsConflict(t *testing.T) {
 	}
 }
 
+func TestForecastVerificationSummaryExposesTruthReadinessAndHeadline(t *testing.T) {
+	runID := uuid.MustParse("f3641335-13a3-4f68-96c0-56a5e0e684d7")
+	issueTime := time.Date(2026, 8, 30, 3, 0, 0, 0, time.UTC)
+	lk := 0.71
+	persistence := 0.63
+	difference := 0.08
+	profile := "rp031-operational-deterministic-v1"
+	verifiedAt := issueTime.Add(125 * time.Minute)
+	store := &fakeForecastVerificationStore{status: workflow.ForecastVerificationStatus{
+		RunID: runID, IssueTime: issueTime, RunStatus: workflow.RunVerified,
+		Status: "succeeded", TruthFrameCount: 24, ProfileVersion: &profile,
+		VerifiedAt: &verifiedAt,
+		Summary: &workflow.ForecastVerificationResultSummary{
+			TruthOperationalEligible: true, PromotionEligible: false,
+			Headline: workflow.ForecastVerificationHeadline{
+				Band: "5-60_minutes", ThresholdMMH: 5, FSSWindowTargetKM: 10,
+				MeanFSS:               map[string]*float64{"lk": &lk, "persistence": &persistence},
+				LKMinusPersistenceFSS: &difference,
+			},
+		},
+	}}
+	handler := api.NewHandler(api.Options{ForecastVerification: store})
+	request := httptest.NewRequest(
+		http.MethodGet, "/api/v1/verification/summary?run_id="+runID.String(), nil,
+	)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK ||
+		!strings.Contains(response.Body.String(), `"status":"succeeded"`) ||
+		!strings.Contains(response.Body.String(), `"truth_frame_count":24`) ||
+		!strings.Contains(response.Body.String(), `"name":"mean_fss_lk"`) ||
+		strings.Contains(response.Body.String(), `"promotion_eligible":true`) {
+		t.Fatalf("forecast verification summary: status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
 func TestAlgorithmVerificationEndpointsExposeFilteredEvidence(t *testing.T) {
 	now := time.Date(2026, 8, 26, 8, 0, 0, 0, time.UTC)
 	issueTime := time.Date(2021, 8, 10, 17, 0, 0, 0, time.UTC)
@@ -816,6 +854,18 @@ type fakeAlgorithmVerificationStore struct {
 	mapFilter verificationstore.MapFrameFilter
 	mapAsset  verificationstore.MapAssetContent
 	err       error
+}
+
+type fakeForecastVerificationStore struct {
+	status workflow.ForecastVerificationStatus
+	err    error
+}
+
+func (store *fakeForecastVerificationStore) GetForecastVerificationStatus(
+	context.Context,
+	uuid.UUID,
+) (workflow.ForecastVerificationStatus, error) {
+	return store.status, store.err
 }
 
 func (store *fakeAlgorithmVerificationStore) ListRuns(context.Context) ([]verificationstore.RunSummary, error) {

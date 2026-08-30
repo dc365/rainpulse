@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/contracts/events/forecast-verification-requested.schema.json",
+  "title": "RainPulse forecast.verification.requested.v1 event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "event_type", "occurred_at", "run_id", "job_id", "trace_id", "payload"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "event_id": { "type": "string", "format": "uuid" },
+    "event_type": { "const": "forecast.verification.requested.v1" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "run_id": { "type": "string", "format": "uuid" },
+    "job_id": { "type": "string", "format": "uuid" },
+    "trace_id": { "type": "string", "format": "uuid" },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "forecast_uri",
+        "forecast_sha256",
+        "truth_frames",
+        "output_prefix",
+        "issue_time",
+        "grid_id",
+        "model_id",
+        "model_version",
+        "forecast_contract_version",
+        "verification_config_version",
+        "result_contract_version"
+      ],
+      "properties": {
+        "forecast_uri": { "type": "string", "format": "uri" },
+        "forecast_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "truth_frames": {
+          "type": "array",
+          "minItems": 24,
+          "maxItems": 24,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["analysis_id", "valid_time", "input_uri", "input_sha256"],
+            "properties": {
+              "analysis_id": { "type": "string", "format": "uuid" },
+              "valid_time": { "type": "string", "format": "date-time" },
+              "input_uri": { "type": "string", "format": "uri" },
+              "input_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+            }
+          }
+        },
+        "output_prefix": { "type": "string", "format": "uri" },
+        "issue_time": { "type": "string", "format": "date-time" },
+        "grid_id": { "type": "string", "minLength": 1 },
+        "model_id": { "type": "string", "minLength": 1 },
+        "model_version": { "type": "string", "minLength": 1 },
+        "forecast_contract_version": { "enum": ["1.1"] },
+        "verification_config_version": { "type": "string", "minLength": 1 },
+        "result_contract_version": { "const": "1.0" }
+      }
+    }
+  }
+}

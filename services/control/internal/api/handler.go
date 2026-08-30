@@ -102,42 +102,51 @@ type AlgorithmVerificationStore interface {
 	) (verificationstore.MapAssetContent, error)
 }
 
+type ForecastVerificationStore interface {
+	GetForecastVerificationStatus(
+		context.Context,
+		uuid.UUID,
+	) (workflow.ForecastVerificationStatus, error)
+}
+
 type EnsembleProductStore interface {
 	GetLatest(context.Context) (ensembleproductstore.Bundle, error)
 	ReadAsset(context.Context, string, string) (ensembleproductstore.AssetContent, error)
 }
 
 type Options struct {
-	Version           string
-	AdminToken        string
-	Runs              RunStore
-	Observations      ObservationStore
-	Commands          RunCommands
-	DiagnosticLayers  DiagnosticLayerReader
-	Products          ProductStore
-	ProductObjects    ProductObjectReader
-	Verification      AlgorithmVerificationStore
-	EnsembleProducts  EnsembleProductStore
-	Metrics           operationalmetrics.Provider
-	Alerts            alerting.Reader
-	OperationalIssues operationalissues.Reader
-	SSEPollInterval   time.Duration
+	Version              string
+	AdminToken           string
+	Runs                 RunStore
+	Observations         ObservationStore
+	Commands             RunCommands
+	DiagnosticLayers     DiagnosticLayerReader
+	Products             ProductStore
+	ProductObjects       ProductObjectReader
+	Verification         AlgorithmVerificationStore
+	ForecastVerification ForecastVerificationStore
+	EnsembleProducts     EnsembleProductStore
+	Metrics              operationalmetrics.Provider
+	Alerts               alerting.Reader
+	OperationalIssues    operationalissues.Reader
+	SSEPollInterval      time.Duration
 }
 
 type server struct {
 	apiv1.Unimplemented
-	version           string
-	runs              RunStore
-	observations      ObservationStore
-	commands          RunCommands
-	diagnosticLayers  DiagnosticLayerReader
-	products          ProductStore
-	productObjects    ProductObjectReader
-	verification      AlgorithmVerificationStore
-	ensembleProducts  EnsembleProductStore
-	alerts            alerting.Reader
-	operationalIssues operationalissues.Reader
-	ssePollInterval   time.Duration
+	version              string
+	runs                 RunStore
+	observations         ObservationStore
+	commands             RunCommands
+	diagnosticLayers     DiagnosticLayerReader
+	products             ProductStore
+	productObjects       ProductObjectReader
+	verification         AlgorithmVerificationStore
+	forecastVerification ForecastVerificationStore
+	ensembleProducts     EnsembleProductStore
+	alerts               alerting.Reader
+	operationalIssues    operationalissues.Reader
+	ssePollInterval      time.Duration
 }
 
 func NewHandler(options Options) http.Handler {
@@ -146,18 +155,19 @@ func NewHandler(options Options) http.Handler {
 		pollInterval = time.Second
 	}
 	handler := apiv1.HandlerWithOptions(&server{
-		version:           options.Version,
-		runs:              options.Runs,
-		observations:      options.Observations,
-		commands:          options.Commands,
-		diagnosticLayers:  options.DiagnosticLayers,
-		products:          options.Products,
-		productObjects:    options.ProductObjects,
-		verification:      options.Verification,
-		ensembleProducts:  options.EnsembleProducts,
-		alerts:            options.Alerts,
-		operationalIssues: options.OperationalIssues,
-		ssePollInterval:   pollInterval,
+		version:              options.Version,
+		runs:                 options.Runs,
+		observations:         options.Observations,
+		commands:             options.Commands,
+		diagnosticLayers:     options.DiagnosticLayers,
+		products:             options.Products,
+		productObjects:       options.ProductObjects,
+		verification:         options.Verification,
+		forecastVerification: options.ForecastVerification,
+		ensembleProducts:     options.EnsembleProducts,
+		alerts:               options.Alerts,
+		operationalIssues:    options.OperationalIssues,
+		ssePollInterval:      pollInterval,
 	}, apiv1.ChiServerOptions{BaseURL: "/api/v1"})
 	protected := protectAdminRoutes(handler, options.AdminToken)
 	if options.Metrics != nil {
@@ -237,6 +247,60 @@ func (service *server) GetSystemStatus(response http.ResponseWriter, request *ht
 		Service: "rainpulse-control",
 		Status:  status,
 		Version: service.version,
+	})
+}
+
+func (service *server) GetVerificationSummary(
+	response http.ResponseWriter,
+	request *http.Request,
+	params apiv1.GetVerificationSummaryParams,
+) {
+	if service.forecastVerification == nil {
+		writeError(response, http.StatusServiceUnavailable, "service_unavailable", "forecast verification persistence is unavailable")
+		return
+	}
+	status, err := service.forecastVerification.GetForecastVerificationStatus(
+		request.Context(), params.RunId,
+	)
+	if err != nil {
+		writeStoreError(response, err)
+		return
+	}
+	metrics := make([]apiv1.VerificationMetric, 0, 5)
+	promotionEligible := false
+	var truthOperationalEligible *bool
+	if status.Summary != nil {
+		promotionEligible = status.Summary.PromotionEligible
+		truthOperationalEligible = &status.Summary.TruthOperationalEligible
+		for _, item := range []struct {
+			name  string
+			value *float64
+		}{
+			{"mean_fss_lk", status.Summary.Headline.MeanFSS["lk"]},
+			{"mean_fss_persistence", status.Summary.Headline.MeanFSS["persistence"]},
+			{"mean_fss_translation", status.Summary.Headline.MeanFSS["translation"]},
+			{"lk_minus_persistence_fss", status.Summary.Headline.LKMinusPersistenceFSS},
+			{"lk_minus_translation_fss", status.Summary.Headline.LKMinusTranslationFSS},
+		} {
+			if item.value == nil {
+				continue
+			}
+			threshold := float32(status.Summary.Headline.ThresholdMMH)
+			metrics = append(metrics, apiv1.VerificationMetric{
+				Name: item.name, Threshold: &threshold, Value: *item.value,
+			})
+		}
+	}
+	writeJSON(response, http.StatusOK, apiv1.VerificationSummary{
+		RunId: params.RunId, IssueTime: status.IssueTime.UTC(),
+		RunStatus:          apiv1.RunStatus(status.RunStatus),
+		Status:             apiv1.VerificationSummaryStatus(status.Status),
+		TruthFrameCount:    status.TruthFrameCount,
+		MissingLeadMinutes: status.MissingLeadMinutes,
+		ProfileVersion:     status.ProfileVersion, Metrics: metrics,
+		VerifiedAt:               status.VerifiedAt,
+		TruthOperationalEligible: truthOperationalEligible,
+		PromotionEligible:        promotionEligible,
 	})
 }
 

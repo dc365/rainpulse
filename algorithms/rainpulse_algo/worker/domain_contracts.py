@@ -325,3 +325,54 @@ class ProductBuildPayload(ObjectTaskPayload):
 class ProductBuildRequested(DomainRequest):
     event_type: Literal["product.build.requested.v1"]
     payload: ProductBuildPayload
+
+
+class ForecastVerificationTruthFrame(ContractModel):
+    analysis_id: UUID
+    valid_time: datetime
+    input_uri: str
+    input_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+    @field_validator("input_uri")
+    @classmethod
+    def validate_input_uri(cls, value: str) -> str:
+        if urlparse(value).scheme != "s3":
+            raise ValueError("verification truth URI must use s3")
+        return value
+
+
+class ForecastVerificationPayload(ContractModel):
+    forecast_uri: str
+    forecast_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    truth_frames: list[ForecastVerificationTruthFrame] = Field(
+        min_length=24, max_length=24
+    )
+    output_prefix: str
+    issue_time: datetime
+    grid_id: str = Field(min_length=1)
+    model_id: Literal["pysteps-lk"]
+    model_version: str = Field(min_length=1)
+    forecast_contract_version: Literal["1.1"]
+    verification_config_version: str = Field(min_length=1)
+    result_contract_version: Literal["1.0"]
+
+    @field_validator("forecast_uri", "output_prefix")
+    @classmethod
+    def validate_s3_uri(cls, value: str) -> str:
+        if urlparse(value).scheme != "s3":
+            raise ValueError("verification object URI must use s3")
+        return value
+
+    @model_validator(mode="after")
+    def validate_truth_identity(self) -> ForecastVerificationPayload:
+        ids = [frame.analysis_id for frame in self.truth_frames]
+        times = [frame.valid_time for frame in self.truth_frames]
+        uris = [frame.input_uri for frame in self.truth_frames]
+        if len(set(ids)) != 24 or len(set(times)) != 24 or len(set(uris)) != 24:
+            raise ValueError("verification truth frames must have unique identities")
+        return self
+
+
+class ForecastVerificationRequested(DomainRequest):
+    event_type: Literal["forecast.verification.requested.v1"]
+    payload: ForecastVerificationPayload

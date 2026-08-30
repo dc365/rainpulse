@@ -18,35 +18,37 @@ import (
 )
 
 type pipelineSettings struct {
-	interval         time.Duration
-	lookback         time.Duration
-	mosaicDelay      time.Duration
-	radarIDs         map[string]struct{}
-	qcConfig         string
-	gridConfig       string
-	mosaicConfig     string
-	qpeConfig        string
-	diagnosticConfig string
-	nowcastConfig    string
-	pystepsConfig    string
-	productConfig    string
-	gridID           string
-	minimumFrames    int
-	maximumFrames    int
+	interval           time.Duration
+	lookback           time.Duration
+	mosaicDelay        time.Duration
+	radarIDs           map[string]struct{}
+	qcConfig           string
+	gridConfig         string
+	mosaicConfig       string
+	qpeConfig          string
+	diagnosticConfig   string
+	nowcastConfig      string
+	pystepsConfig      string
+	productConfig      string
+	verificationConfig string
+	gridID             string
+	minimumFrames      int
+	maximumFrames      int
 }
 
 type pipelinePlanner struct {
-	settings          pipelineSettings
-	store             *postgresstore.Store
-	service           *orchestration.Service
-	plannedQC         map[uuid.UUID]struct{}
-	plannedGrid       map[uuid.UUID]struct{}
-	plannedMosaic     map[time.Time]struct{}
-	plannedQPE        map[uuid.UUID]struct{}
-	plannedDiagnostic map[uuid.UUID]struct{}
-	plannedNowcast    map[time.Time]struct{}
-	plannedPysteps    map[uuid.UUID]struct{}
-	plannedProduct    map[uuid.UUID]struct{}
+	settings            pipelineSettings
+	store               *postgresstore.Store
+	service             *orchestration.Service
+	plannedQC           map[uuid.UUID]struct{}
+	plannedGrid         map[uuid.UUID]struct{}
+	plannedMosaic       map[time.Time]struct{}
+	plannedQPE          map[uuid.UUID]struct{}
+	plannedDiagnostic   map[uuid.UUID]struct{}
+	plannedNowcast      map[time.Time]struct{}
+	plannedPysteps      map[uuid.UUID]struct{}
+	plannedProduct      map[uuid.UUID]struct{}
+	plannedVerification map[uuid.UUID]struct{}
 }
 
 func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
@@ -81,18 +83,19 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 		return nil, fmt.Errorf("enabled real pipeline requires a non-empty radar allowlist")
 	}
 	settings := &pipelineSettings{
-		interval:         interval,
-		lookback:         lookback,
-		mosaicDelay:      mosaicDelay,
-		radarIDs:         radarIDs,
-		qcConfig:         environmentOrDefault("RAINPULSE_PIPELINE_QC_CONFIG", "/opt/rainpulse/configs/qc/rp008-basic-v1.yaml"),
-		gridConfig:       environmentOrDefault("RAINPULSE_PIPELINE_GRID_CONFIG", "/opt/rainpulse/configs/gridding/rp016-hybrid-v1.yaml"),
-		mosaicConfig:     environmentOrDefault("RAINPULSE_PIPELINE_MOSAIC_CONFIG", "/opt/rainpulse/configs/mosaic/rp016-qi-mosaic-v1.yaml"),
-		qpeConfig:        environmentOrDefault("RAINPULSE_PIPELINE_QPE_CONFIG", "/opt/rainpulse/configs/qpe/rp011-basic-zr-v1.yaml"),
-		diagnosticConfig: environmentOrDefault("RAINPULSE_PIPELINE_DIAGNOSTIC_CONFIG", "/opt/rainpulse/configs/diagnostics/rp012-operational-diagnostics-v1.yaml"),
-		nowcastConfig:    environmentOrDefault("RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG", "/opt/rainpulse/configs/nowcast/rp013-fixed-5min-v1.1.yaml"),
-		pystepsConfig:    environmentOrDefault("RAINPULSE_PIPELINE_PYSTEPS_CONFIG", "/opt/rainpulse/configs/nowcast/rp016-pysteps-lk-v1.yaml"),
-		productConfig:    environmentOrDefault("RAINPULSE_PIPELINE_PRODUCT_CONFIG", "/opt/rainpulse/configs/products/rp015-application-products-v1.yaml"),
+		interval:           interval,
+		lookback:           lookback,
+		mosaicDelay:        mosaicDelay,
+		radarIDs:           radarIDs,
+		qcConfig:           environmentOrDefault("RAINPULSE_PIPELINE_QC_CONFIG", "/opt/rainpulse/configs/qc/rp008-basic-v1.yaml"),
+		gridConfig:         environmentOrDefault("RAINPULSE_PIPELINE_GRID_CONFIG", "/opt/rainpulse/configs/gridding/rp016-hybrid-v1.yaml"),
+		mosaicConfig:       environmentOrDefault("RAINPULSE_PIPELINE_MOSAIC_CONFIG", "/opt/rainpulse/configs/mosaic/rp016-qi-mosaic-v1.yaml"),
+		qpeConfig:          environmentOrDefault("RAINPULSE_PIPELINE_QPE_CONFIG", "/opt/rainpulse/configs/qpe/rp011-basic-zr-v1.yaml"),
+		diagnosticConfig:   environmentOrDefault("RAINPULSE_PIPELINE_DIAGNOSTIC_CONFIG", "/opt/rainpulse/configs/diagnostics/rp012-operational-diagnostics-v1.yaml"),
+		nowcastConfig:      environmentOrDefault("RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG", "/opt/rainpulse/configs/nowcast/rp013-fixed-5min-v1.1.yaml"),
+		pystepsConfig:      environmentOrDefault("RAINPULSE_PIPELINE_PYSTEPS_CONFIG", "/opt/rainpulse/configs/nowcast/rp016-pysteps-lk-v1.yaml"),
+		productConfig:      environmentOrDefault("RAINPULSE_PIPELINE_PRODUCT_CONFIG", "/opt/rainpulse/configs/products/rp015-application-products-v1.yaml"),
+		verificationConfig: environmentOrDefault("RAINPULSE_PIPELINE_VERIFICATION_CONFIG", "/opt/rainpulse/configs/verification/rp031-operational-deterministic-v1.yaml"),
 	}
 	for _, path := range []string{
 		settings.qcConfig,
@@ -103,6 +106,7 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 		settings.nowcastConfig,
 		settings.pystepsConfig,
 		settings.productConfig,
+		settings.verificationConfig,
 	} {
 		if info, statErr := os.Stat(path); statErr != nil || !info.Mode().IsRegular() {
 			return nil, fmt.Errorf("pipeline config must be a readable regular file: %s", path)
@@ -116,6 +120,7 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 	var nowcast nowcastInputConfiguration
 	var pysteps pystepsLKConfiguration
 	var product productConfiguration
+	var verification forecastVerificationConfiguration
 	for _, item := range []struct {
 		label  string
 		path   string
@@ -129,6 +134,7 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 		{"NowcastInput", settings.nowcastConfig, &nowcast},
 		{"pySTEPS-LK", settings.pystepsConfig, &pysteps},
 		{"product", settings.productConfig, &product},
+		{"verification", settings.verificationConfig, &verification},
 	} {
 		configBytes, readErr := os.ReadFile(item.path)
 		if readErr != nil {
@@ -163,6 +169,9 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 		pysteps.Extrapolation.LeadStepMinutes != 5 {
 		return nil, fmt.Errorf("pipeline pySTEPS-LK config must publish 24 five-minute leads")
 	}
+	if err := validateForecastVerificationConfiguration(verification); err != nil {
+		return nil, err
+	}
 	expectedRadars := make(map[string]struct{}, len(mosaic.Alignment.ExpectedRadarIDs))
 	for _, radarID := range mosaic.Alignment.ExpectedRadarIDs {
 		expectedRadars[radarID] = struct{}{}
@@ -191,6 +200,7 @@ func newPipelinePlanner(
 		plannedMosaic: make(map[time.Time]struct{}), plannedQPE: make(map[uuid.UUID]struct{}),
 		plannedDiagnostic: make(map[uuid.UUID]struct{}), plannedNowcast: make(map[time.Time]struct{}),
 		plannedPysteps: make(map[uuid.UUID]struct{}), plannedProduct: make(map[uuid.UUID]struct{}),
+		plannedVerification: make(map[uuid.UUID]struct{}),
 	}
 }
 
@@ -449,12 +459,49 @@ func (planner *pipelinePlanner) planForecasts(ctx context.Context) error {
 		}
 		planner.plannedProduct[run.ID] = struct{}{}
 	}
+
+	published := workflow.RunPublished
+	runs, _, err = planner.store.ListRuns(ctx, 200, nil, &published)
+	if err != nil {
+		return err
+	}
+	for _, run := range runs {
+		if run.GridID != planner.settings.gridID || planner.outsideVerificationLookback(run.IssueTime) {
+			continue
+		}
+		if _, exists := planner.plannedVerification[run.ID]; exists {
+			continue
+		}
+		input, inputErr := planner.store.GetForecastVerificationInput(ctx, run.ID)
+		if inputErr != nil {
+			slog.Error("inspect forecast verification truth", "run_id", run.ID, "error", inputErr)
+			continue
+		}
+		if len(input.Truth) != 24 {
+			continue
+		}
+		if err := forecastVerification(
+			ctx, planner.store, planner.service, run.ID.String(), planner.settings.verificationConfig,
+		); err != nil {
+			slog.Error("plan forecast verification", "run_id", run.ID, "error", err)
+			continue
+		}
+		planner.plannedVerification[run.ID] = struct{}{}
+	}
 	return nil
 }
 
 func (planner *pipelinePlanner) outsideLookback(value time.Time) bool {
 	return planner.settings.lookback > 0 &&
 		time.Since(value.UTC()) > planner.settings.lookback
+}
+
+func (planner *pipelinePlanner) outsideVerificationLookback(value time.Time) bool {
+	lookback := 6 * time.Hour
+	if planner.settings.lookback > lookback {
+		lookback = planner.settings.lookback
+	}
+	return time.Since(value.UTC()) > lookback
 }
 
 func closestScanByRadar(scans []workflow.RadarScan, analysisTime time.Time) []workflow.RadarScan {

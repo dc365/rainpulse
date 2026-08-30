@@ -30,6 +30,7 @@ EVENT_NAMES = (
     "forecast-nowcastnet-offline-requested",
     "forecast-baseline-ready",
     "product-build-requested",
+    "forecast-verification-requested",
     "forecast-nowcastnet-offline-requested",
 )
 JOB_EVENT_NAMES = (
@@ -38,6 +39,7 @@ JOB_EVENT_NAMES = (
     "job-failed",
     "product-published",
     "product-build-requested",
+    "forecast-verification-requested",
 )
 
 
@@ -88,6 +90,8 @@ def test_openapi_exposes_the_planned_v1_operations() -> None:
         "/products/{product_id}/assets/{asset_id}/content",
         "/point-forecast",
         "/area-statistics",
+        "/alerts",
+        "/operations/issues",
         "/verification/summary",
         "/algorithm-verification/runs",
         "/algorithm-verification/runs/{profile_version}/{run_id}",

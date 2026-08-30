@@ -406,6 +406,12 @@ WHERE job_id = $1`, event.JobID, event.Payload.StartedAt, event.Payload.Finished
 			}
 			break
 		}
+		if jobType == orchestration.ForecastVerificationJobType && modelID != nil &&
+			*modelID == orchestration.PystepsLKModelID {
+			if err := applyForecastVerificationCompletion(ctx, tx, event); err != nil {
+				return false, err
+			}
+		}
 		nextStatus := completionRunStatus(jobType)
 		var currentStatus workflow.RunStatus
 		if err := tx.QueryRow(ctx, `SELECT status FROM forecast_runs WHERE run_id = $1 FOR UPDATE`, runID).Scan(&currentStatus); err != nil {
@@ -573,6 +579,15 @@ SET status = 'failed', runtime_ms = $2, completed_at = $3
 WHERE job_id = $1`, event.JobID, event.Payload.RuntimeMS,
 				event.Payload.FinishedAt); err != nil {
 				return false, fmt.Errorf("fail pySTEPS-LK model run: %w", err)
+			}
+		}
+		if jobType == orchestration.ForecastVerificationJobType && modelID != nil &&
+			*modelID == orchestration.PystepsLKModelID {
+			if _, err = tx.Exec(ctx, `
+UPDATE forecast_verification_runs
+SET status = 'FAILED', updated_at = CURRENT_TIMESTAMP
+WHERE job_id = $1`, event.JobID); err != nil {
+				return false, fmt.Errorf("fail forecast-verification run: %w", err)
 			}
 		}
 	case workflow.WorkflowRadarScan:
@@ -1294,10 +1309,11 @@ WHERE a.run_id = $1 AND q.job_id = $2 FOR UPDATE OF a, q`,
 	}
 	if _, err = tx.Exec(ctx, `
 UPDATE qpe_runs
-SET status = 'SUCCEEDED', analysis_uri = $2, diagnostics = $3,
-    measured_at = $4, updated_at = CURRENT_TIMESTAMP
-WHERE job_id = $1`, event.JobID, analysisAsset.URI, diagnostics,
-		metrics.MeasuredAt); err != nil {
+SET status = 'SUCCEEDED', analysis_uri = $2, analysis_sha256 = $3,
+    analysis_size_bytes = $4, diagnostics = $5,
+    measured_at = $6, updated_at = CURRENT_TIMESTAMP
+WHERE job_id = $1`, event.JobID, analysisAsset.URI, analysisAsset.SHA256,
+		analysisAsset.SizeBytes, diagnostics, metrics.MeasuredAt); err != nil {
 		return fmt.Errorf("persist QPE run completion: %w", err)
 	}
 	var degradedReason *string

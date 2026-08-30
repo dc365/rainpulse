@@ -15,6 +15,23 @@ const run = {
   updated_at: '2026-08-25T15:12:40Z',
 }
 
+const verificationSummary = {
+  run_id: run.run_id,
+  issue_time: run.issue_time,
+  run_status: 'VERIFIED',
+  status: 'succeeded',
+  truth_frame_count: 24,
+  missing_lead_minutes: [],
+  profile_version: 'rp031-operational-deterministic-v1',
+  metrics: [
+    { name: 'mean_fss_lk', threshold: 5, value: 0.713 },
+    { name: 'mean_fss_persistence', threshold: 5, value: 0.631 },
+  ],
+  verified_at: '2026-08-25T12:06:00Z',
+  truth_operational_eligible: true,
+  promotion_eligible: false,
+}
+
 const products = [
   {
     product_id: 'rain-product', run_id: run.run_id, product_type: 'rain_rate',
@@ -142,6 +159,7 @@ describe('RainPulse short-nowcast workspace', () => {
       else if (input.endsWith('/products/rain-product/assets')) body = rainAssets
       else if (input.endsWith('/products/accum-60/assets')) body = accumulationAsset('accum-60', 60)
       else if (input.endsWith('/products/accum-120/assets')) body = accumulationAsset('accum-120', 120)
+      else if (input.includes('/verification/summary?')) body = verificationSummary
       else if (input.includes('/point-forecast?')) body = {
         product_id: 'rain-product', longitude: 119.3, latitude: 26.08,
         grid_longitude: 119.3, grid_latitude: 26.08,
@@ -163,6 +181,8 @@ describe('RainPulse short-nowcast workspace', () => {
     render(<NowcastWorkspace refreshToken={0} />)
 
     expect(screen.getByRole('heading', { name: '0–2 小时降水预报' })).toBeTruthy()
+    expect(screen.getByText('实况检验')).toBeTruthy()
+    expect(await screen.findByText('0.713')).toBeTruthy()
     expect(screen.getByText('工程验证 / RP-023')).toBeTruthy()
     const firstLayer = await screen.findByRole('img', { name: 'T+5 分钟降水率图层' })
     expect(firstLayer.getAttribute('data-source')).toBe('/api/lead-5.png')

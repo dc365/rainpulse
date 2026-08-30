@@ -1,0 +1,14 @@
+schema_version: "1.0"
+profile_version: rp031-operational-deterministic-v1
+lifecycle: automatic_verification
+forecast_contract_version: "1.1"
+truth_contract_version: "1.2"
+result_contract_version: "1.0"
+lead_minutes: [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120]
+models: [lk, persistence, translation]
+thresholds_mm_h: [0.1, 1, 5, 10, 20, 50]
+fss_windows_km: [1, 5, 10, 20, 40]
+accumulation_windows_minutes: [60, 120]
+accumulation_thresholds_mm: [1, 5, 10, 25, 50]
+validity_domain: common
+promotion_eligible: false

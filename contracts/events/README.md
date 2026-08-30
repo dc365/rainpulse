@@ -35,6 +35,11 @@ only after validated output is atomically published. Examples in
 - `product.build.requested.v1` consumes exactly one committed ForecastOutput
   and atomically publishes the rain-rate, 0 to 1 hour and 0 to 2 hour product
   suite before the run enters `PUBLISHED`.
+- `forecast.verification.requested.v1` consumes one committed deterministic
+  ForecastOutput plus the exact 24 five-minute RadarAnalysis truth frames. It
+  preserves missing support, scores LK together with its persistence and
+  translation baselines, and publishes an immutable verification result before
+  the forecast run enters `VERIFIED`.
 
 `job.requested`, `job.completed`, and `job.failed` remain the common worker
 command/result envelope. RP-004 will map the three domain workflow state
@@ -54,6 +59,8 @@ machines to those idempotent job records.
   simulation remains isolated on `rainpulse.jobs.requested.model_pysteps_lk`.
 - The RP-015 application-product task uses
   `rainpulse.jobs.requested.product_build`.
+- The RP-031 automatic-verification task uses
+  `rainpulse.jobs.requested.forecast_verification`.
 - The RP-026 offline-only task uses
   `rainpulse.jobs.requested.nowcastnet_offline`; no production workflow emits
   this subject.

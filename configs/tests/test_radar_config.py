@@ -254,6 +254,22 @@ def test_fujian_taiwan_ancillary_sources_are_valid_and_cover_104_dem_tiles() -> 
     assert source["static_clutter"]["status"] == "awaiting_clear_air_samples"
 
 
+def test_rp031_automatic_verification_profile_is_frozen_and_non_promoting() -> None:
+    schema = json.loads(
+        (CONFIG_ROOT / "schemas" / "operational-verification-profile.schema.json").read_text()
+    )
+    profile = yaml.safe_load(
+        (CONFIG_ROOT / "verification" / "rp031-operational-deterministic-v1.yaml").read_text()
+    )
+
+    Draft202012Validator.check_schema(schema)
+    Draft202012Validator(schema).validate(profile)
+    assert profile["lead_minutes"] == list(range(5, 125, 5))
+    assert profile["fss_windows_km"] == [1, 5, 10, 20, 40]
+    assert profile["validity_domain"] == "common"
+    assert profile["promotion_eligible"] is False
+
+
 def test_rp009_hybrid_profile_is_valid_and_explicitly_engineering_only() -> None:
     schema = json.loads(
         (CONFIG_ROOT / "schemas" / "radar-grid-profile.schema.json").read_text()

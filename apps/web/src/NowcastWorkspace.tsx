@@ -21,6 +21,7 @@ type AreaStatistics = components['schemas']['AreaStatistics']
 type EnsembleProductBundle = components['schemas']['EnsembleProductBundle']
 type EnsembleProductLayer = components['schemas']['EnsembleProductLayer']
 type EnsembleProductAsset = components['schemas']['EnsembleProductAsset']
+type VerificationSummary = components['schemas']['VerificationSummary']
 
 type SupportedProductType = 'rain_rate' | 'accumulation_60' | 'accumulation_120'
 type DisplayMode = 'deterministic' | 'probability' | 'quantile'
@@ -113,6 +114,7 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
   const [productType, setProductType] = useState<SupportedProductType>('rain_rate')
   const [displayMode, setDisplayMode] = useState<DisplayMode>('deterministic')
   const [ensembleBundle, setEnsembleBundle] = useState<EnsembleProductBundle | null>(null)
+  const [verification, setVerification] = useState<VerificationSummary | null>(null)
   const [probabilityThreshold, setProbabilityThreshold] = useState(5)
   const [quantileValue, setQuantileValue] = useState(0.5)
   const [selectedLead, setSelectedLead] = useState<number | null>(null)
@@ -175,6 +177,20 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
           if (ensembleRequestError instanceof DOMException
             && ensembleRequestError.name === 'AbortError') throw ensembleRequestError
         }
+        let latestVerification: VerificationSummary | null = null
+        try {
+          const verificationResponse = await fetch(
+            `/api/v1/verification/summary?run_id=${encodeURIComponent(latestRun.run_id)}`,
+            { signal: controller.signal },
+          )
+          if (verificationResponse.ok) {
+            const candidate = await verificationResponse.json() as unknown
+            if (isVerificationSummary(candidate)) latestVerification = candidate
+          }
+        } catch (verificationRequestError: unknown) {
+          if (verificationRequestError instanceof DOMException
+            && verificationRequestError.name === 'AbortError') throw verificationRequestError
+        }
         const preferred = supported.find((item) => item.product_type === 'rain_rate')
           ?? supported[0]
           ?? null
@@ -188,6 +204,7 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
         setProducts(supported)
         setAssets(nextAssets)
         setEnsembleBundle(latestEnsemble)
+        setVerification(latestVerification)
         if (!latestEnsemble) setDisplayMode('deterministic')
         if (preferred && isSupportedProduct(preferred.product_type)) {
           setProductType(preferred.product_type)
@@ -569,7 +586,7 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
 
           <div className="stage-float stage-status" aria-label="短临产品状态">
             <div className="stage-status-row">
-              <span className={`run-state${ensembleActive ? ' offline' : ''}${run?.status === 'PUBLISHED' && !ensembleActive ? ' published' : ''}${run?.status === 'FAILED' && !ensembleActive ? ' failed' : ''}`}>
+              <span className={`run-state${ensembleActive ? ' offline' : ''}${['PUBLISHED', 'VERIFYING', 'VERIFIED'].includes(run?.status ?? '') && !ensembleActive ? ' published' : ''}${run?.status === 'FAILED' && !ensembleActive ? ' failed' : ''}`}>
                 {ensembleActive ? 'OFFLINE' : run?.status ?? (loading ? '读取中' : '无产品')}
               </span>
               <strong>{formatLead(currentLead)}</strong>
@@ -578,7 +595,25 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
             <div className="stage-status-row stage-status-valid-time"><span>有效时间</span><strong>{formatUtc(selectedAsset?.valid_time, true)}</strong></div>
             <div className="stage-status-row"><span>有效覆盖</span><strong>{percent(selectedAsset?.coverage_ratio)}</strong></div>
             <div className="stage-status-row"><span>缺测格点</span><strong>{selectedAsset?.missing_cell_count?.toLocaleString('zh-CN') ?? '暂无'}</strong></div>
-            <small>{ensembleActive ? '原始未校准概率，仅供离线验收' : '发布状态不等同于预报技巧通过'}</small>
+            {!ensembleActive ? (
+              <>
+                <div className="stage-status-row verification-status-row">
+                  <span>实况检验</span>
+                  <strong>{verificationStatusLabel(verification)}</strong>
+                </div>
+                {verification?.status === 'succeeded' ? (
+                  <div className="stage-status-row verification-score-row">
+                    <span>FSS 5–60 分钟</span>
+                    <strong>{verificationMetric(verification, 'mean_fss_lk')}</strong>
+                  </div>
+                ) : null}
+              </>
+            ) : null}
+            <small>{ensembleActive
+              ? '原始未校准概率，仅供离线验收'
+              : verification?.status === 'succeeded'
+                ? '5 mm/h · 10 km；完成仅表示已评分，不代表业务技巧通过'
+                : '发布后收齐未来 24 帧实况再自动评分'}</small>
           </div>
 
           <div className="stage-float stage-assets" aria-label="产品交付与溯源">
@@ -796,6 +831,31 @@ function isEnsembleBundle(value: unknown): value is EnsembleProductBundle {
     && Array.isArray(candidate.layers)
     && candidate.layers.every((layer: EnsembleProductLayer) =>
       Array.isArray(layer.assets) && Array.isArray(layer.legend))
+}
+
+function isVerificationSummary(value: unknown): value is VerificationSummary {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<VerificationSummary>
+  return typeof candidate.run_id === 'string'
+    && typeof candidate.issue_time === 'string'
+    && typeof candidate.status === 'string'
+    && typeof candidate.truth_frame_count === 'number'
+    && Array.isArray(candidate.missing_lead_minutes)
+    && Array.isArray(candidate.metrics)
+}
+
+function verificationStatusLabel(value: VerificationSummary | null) {
+  if (!value) return '状态未提供'
+  if (value.status === 'waiting_truth') return `等待实况 ${value.truth_frame_count}/24`
+  if (value.status === 'running') return '评分运行中'
+  if (value.status === 'succeeded') return '已完成'
+  if (value.status === 'failed') return '评分失败'
+  return '等待产品发布'
+}
+
+function verificationMetric(value: VerificationSummary, name: string) {
+  const metric = value.metrics.find((item) => item.name === name)
+  return metric ? metric.value.toFixed(3) : '不可计算'
 }
 
 function formatBytes(value: number) {

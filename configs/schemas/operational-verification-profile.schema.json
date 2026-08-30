@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/schemas/operational-verification-profile.schema.json",
+  "title": "RainPulse automatic forecast verification profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_version",
+    "lifecycle",
+    "forecast_contract_version",
+    "truth_contract_version",
+    "result_contract_version",
+    "lead_minutes",
+    "models",
+    "thresholds_mm_h",
+    "fss_windows_km",
+    "accumulation_windows_minutes",
+    "accumulation_thresholds_mm",
+    "validity_domain",
+    "promotion_eligible"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "profile_version": { "const": "rp031-operational-deterministic-v1" },
+    "lifecycle": { "const": "automatic_verification" },
+    "forecast_contract_version": { "const": "1.1" },
+    "truth_contract_version": { "const": "1.2" },
+    "result_contract_version": { "const": "1.0" },
+    "lead_minutes": {
+      "const": [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120]
+    },
+    "models": { "const": ["lk", "persistence", "translation"] },
+    "thresholds_mm_h": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "number", "exclusiveMinimum": 0 }
+    },
+    "fss_windows_km": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "number", "exclusiveMinimum": 0 }
+    },
+    "accumulation_windows_minutes": { "const": [60, 120] },
+    "accumulation_thresholds_mm": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "number", "exclusiveMinimum": 0 }
+    },
+    "validity_domain": { "const": "common" },
+    "promotion_eligible": { "const": false }
+  }
+}

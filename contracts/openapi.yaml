@@ -2595,11 +2595,40 @@ components:
     VerificationSummary:
       type: object
       additionalProperties: false
-      required: [run_id, metrics, verified_at]
+      required:
+        - run_id
+        - issue_time
+        - run_status
+        - status
+        - truth_frame_count
+        - missing_lead_minutes
+        - metrics
+        - promotion_eligible
       properties:
         run_id:
           type: string
           format: uuid
+        issue_time:
+          type: string
+          format: date-time
+        run_status:
+          $ref: "#/components/schemas/RunStatus"
+        status:
+          type: string
+          enum: [pending_forecast, waiting_truth, running, succeeded, failed]
+        truth_frame_count:
+          type: integer
+          minimum: 0
+          maximum: 24
+        missing_lead_minutes:
+          type: array
+          items:
+            type: integer
+            minimum: 5
+            maximum: 120
+            multipleOf: 5
+        profile_version:
+          type: string
         metrics:
           type: array
           items:
@@ -2607,6 +2636,10 @@ components:
         verified_at:
           type: string
           format: date-time
+        truth_operational_eligible:
+          type: boolean
+        promotion_eligible:
+          type: boolean
     AlgorithmVerificationRunSummary:
       type: object
       additionalProperties: false

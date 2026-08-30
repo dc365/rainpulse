@@ -12,6 +12,7 @@ from .domain_contracts import (
     AnalysisMosaicRequestedV1,
     AnalysisMosaicRequestedV2,
     AnalysisQPERequestedV1,
+    ForecastVerificationRequested,
     NowcastInputRequested,
     NowcastNetOfflineRequested,
     ProductBuildRequested,
@@ -73,6 +74,14 @@ def _execute_product_build(request: ProductBuildRequested) -> WorkerResult:
     from rainpulse_algo.products.worker import execute_product_build
 
     return execute_product_build(request)
+
+
+def _execute_forecast_verification(
+    request: ForecastVerificationRequested,
+) -> WorkerResult:
+    from rainpulse_algo.verification.worker import execute_forecast_verification
+
+    return execute_forecast_verification(request)
 
 
 def _synthetic_executor(stage: str) -> Callable[[Any], WorkerResult]:
@@ -248,6 +257,17 @@ HANDLERS = {
         asset_type="application_product_bundle",
         artifact_name="application-products",
         media_type="application/vnd.rainpulse.application-product-bundle+json",
+        ack_wait_seconds=900,
+    ),
+    "forecast-verification": TaskHandler(
+        profile="forecast-verification",
+        subject="rainpulse.jobs.requested.forecast_verification",
+        consumer="rainpulse-forecast-verification-rp031-v1",
+        request_model=ForecastVerificationRequested,
+        executor=_execute_forecast_verification,
+        asset_type="forecast_verification_result",
+        artifact_name="verification-result",
+        media_type="application/vnd.rainpulse.forecast-verification-result+json",
         ack_wait_seconds=900,
     ),
 }

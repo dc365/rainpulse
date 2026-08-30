@@ -547,6 +547,16 @@ internal Prometheus endpoint. Storage and failure thresholds remain engineering
 defaults, and no external notification or recovery mutation is enabled.
 Details are in `docs/RP030_运行问题关联与存储容量监控实施记录.md`.
 
+RP-031 closes the deterministic online verification seam after application
+product publication. A PUBLISHED run waits fail-closed for exactly 24 committed
+five-minute RadarAnalysis 1.2 frames, then scores LK, persistence and whole-field
+translation with physical-kilometre FSS windows and 60/120-minute accumulations.
+The immutable object bundle is content-addressed; PostgreSQL stores only its
+identity and bounded summary. The short-nowcast Web view exposes waiting,
+running, succeeded and failed verification state, while completion remains
+non-promoting. Details are in
+`docs/RP031_自动实况检验闭环实施记录.md`.
+
 The 2021-08, 2022-01, 2022-12, 2023-06, 2023-12, 2024-06, 2024-07, 2024-11,
 2025-01, 2025-03 and 2025-07 months are now spent verification data for their
 respective claims. Do not tune against their results and reuse them as

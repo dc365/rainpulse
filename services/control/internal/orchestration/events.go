@@ -15,58 +15,61 @@ import (
 )
 
 const (
-	SchemaVersion                         = "1.0"
-	JobRequestedEventType                 = "job.requested"
-	JobCompletedEventType                 = "job.completed"
-	JobFailedEventType                    = "job.failed"
-	JobRequestedSubject                   = "rainpulse.jobs.requested.model_pysteps_lk"
-	RadarDecodeRequestedEventType         = "radar.decode.requested.v1"
-	RadarDecodeRequestedSubject           = "rainpulse.jobs.requested.radar_decode"
-	RadarDecodeJobType                    = "radar.decode"
-	RadarDecoderVersion                   = "cma-rstm-2.1.0"
-	RadarQCRequestedEventType             = "radar.qc.requested.v1"
-	RadarQCRequestedSubject               = "rainpulse.jobs.requested.radar_qc"
-	RadarQCJobType                        = "radar.qc"
-	RadarGridRequestedEventType           = "radar.grid.requested.v1"
-	RadarGridRequestedSubject             = "rainpulse.jobs.requested.radar_grid"
-	RadarGridJobType                      = "radar.grid"
-	AnalysisMosaicRequestedEventType      = "analysis.mosaic.requested.v2"
-	AnalysisMosaicRequestedSubject        = "rainpulse.jobs.requested.analysis_mosaic"
-	AnalysisMosaicJobType                 = "analysis.mosaic"
-	AnalysisQPERequestedEventType         = "analysis.qpe.requested.v1"
-	AnalysisQPERequestedSubject           = "rainpulse.jobs.requested.analysis_qpe"
-	AnalysisQPEJobType                    = "analysis.qpe"
-	AnalysisDiagnosticsRequestedEventType = "analysis.diagnostics.requested.v1"
-	AnalysisDiagnosticsRequestedSubject   = "rainpulse.jobs.requested.analysis_diagnostics"
-	AnalysisDiagnosticsJobType            = "analysis.diagnostics"
-	NowcastInputRequestedEventType        = "nowcast.input.requested.v1"
-	NowcastInputRequestedSubject          = "rainpulse.jobs.requested.nowcast_input"
-	NowcastInputJobType                   = "nowcast.input"
-	NowcastInputReadyEventType            = "nowcast.input.ready.v1"
-	NowcastInputReadySubject              = "rainpulse.jobs.lifecycle.nowcast_input_ready"
-	PystepsLKRequestedEventType           = "forecast.pysteps_lk.requested.v1"
-	PystepsLKRequestedSubject             = "rainpulse.jobs.requested.pysteps_lk"
-	PystepsLKJobType                      = "model.pysteps_lk"
-	PystepsLKModelID                      = "pysteps-lk"
-	PystepsLKModelVersion                 = "pysteps-lk-1.1.0"
-	PystepsLKConfidenceKind               = "technical_forecast_quality_index_not_calibrated_probability"
-	ForecastBaselineReadyEventType        = "forecast.baseline.ready.v1"
-	ForecastBaselineReadySubject          = "rainpulse.jobs.lifecycle.forecast_baseline_ready"
-	ProductBuildRequestedEventType        = "product.build.requested.v1"
-	ProductBuildRequestedSubject          = "rainpulse.jobs.requested.product_build"
-	ProductBuildJobType                   = "product.build"
-	ProductPublishedEventType             = "product.published"
-	ProductPublishedSubject               = "rainpulse.products.published"
-	JobCompletedSubject                   = "rainpulse.jobs.completed"
-	JobFailedSubject                      = "rainpulse.jobs.failed"
-	JobResultsSubject                     = "rainpulse.jobs.*"
-	JobStreamName                         = "RAINPULSE_JOBS"
-	ResultConsumerName                    = "rainpulse-orchestrator-results-v2"
-	SimulationJobType                     = "model.pysteps_lk"
-	SimulationModelID                     = "pysteps-lk-sim"
-	SimulationModelVersion                = "pysteps-lk-sim-v1"
-	SimulationConfig                      = "rp003-sim-v1"
-	SimulationGrid                        = "rp003-sim-grid"
+	SchemaVersion                          = "1.0"
+	JobRequestedEventType                  = "job.requested"
+	JobCompletedEventType                  = "job.completed"
+	JobFailedEventType                     = "job.failed"
+	JobRequestedSubject                    = "rainpulse.jobs.requested.model_pysteps_lk"
+	RadarDecodeRequestedEventType          = "radar.decode.requested.v1"
+	RadarDecodeRequestedSubject            = "rainpulse.jobs.requested.radar_decode"
+	RadarDecodeJobType                     = "radar.decode"
+	RadarDecoderVersion                    = "cma-rstm-2.1.0"
+	RadarQCRequestedEventType              = "radar.qc.requested.v1"
+	RadarQCRequestedSubject                = "rainpulse.jobs.requested.radar_qc"
+	RadarQCJobType                         = "radar.qc"
+	RadarGridRequestedEventType            = "radar.grid.requested.v1"
+	RadarGridRequestedSubject              = "rainpulse.jobs.requested.radar_grid"
+	RadarGridJobType                       = "radar.grid"
+	AnalysisMosaicRequestedEventType       = "analysis.mosaic.requested.v2"
+	AnalysisMosaicRequestedSubject         = "rainpulse.jobs.requested.analysis_mosaic"
+	AnalysisMosaicJobType                  = "analysis.mosaic"
+	AnalysisQPERequestedEventType          = "analysis.qpe.requested.v1"
+	AnalysisQPERequestedSubject            = "rainpulse.jobs.requested.analysis_qpe"
+	AnalysisQPEJobType                     = "analysis.qpe"
+	AnalysisDiagnosticsRequestedEventType  = "analysis.diagnostics.requested.v1"
+	AnalysisDiagnosticsRequestedSubject    = "rainpulse.jobs.requested.analysis_diagnostics"
+	AnalysisDiagnosticsJobType             = "analysis.diagnostics"
+	NowcastInputRequestedEventType         = "nowcast.input.requested.v1"
+	NowcastInputRequestedSubject           = "rainpulse.jobs.requested.nowcast_input"
+	NowcastInputJobType                    = "nowcast.input"
+	NowcastInputReadyEventType             = "nowcast.input.ready.v1"
+	NowcastInputReadySubject               = "rainpulse.jobs.lifecycle.nowcast_input_ready"
+	PystepsLKRequestedEventType            = "forecast.pysteps_lk.requested.v1"
+	PystepsLKRequestedSubject              = "rainpulse.jobs.requested.pysteps_lk"
+	PystepsLKJobType                       = "model.pysteps_lk"
+	PystepsLKModelID                       = "pysteps-lk"
+	PystepsLKModelVersion                  = "pysteps-lk-1.1.0"
+	PystepsLKConfidenceKind                = "technical_forecast_quality_index_not_calibrated_probability"
+	ForecastBaselineReadyEventType         = "forecast.baseline.ready.v1"
+	ForecastBaselineReadySubject           = "rainpulse.jobs.lifecycle.forecast_baseline_ready"
+	ProductBuildRequestedEventType         = "product.build.requested.v1"
+	ProductBuildRequestedSubject           = "rainpulse.jobs.requested.product_build"
+	ProductBuildJobType                    = "product.build"
+	ProductPublishedEventType              = "product.published"
+	ProductPublishedSubject                = "rainpulse.products.published"
+	ForecastVerificationRequestedEventType = "forecast.verification.requested.v1"
+	ForecastVerificationRequestedSubject   = "rainpulse.jobs.requested.forecast_verification"
+	ForecastVerificationJobType            = "verification.run"
+	JobCompletedSubject                    = "rainpulse.jobs.completed"
+	JobFailedSubject                       = "rainpulse.jobs.failed"
+	JobResultsSubject                      = "rainpulse.jobs.*"
+	JobStreamName                          = "RAINPULSE_JOBS"
+	ResultConsumerName                     = "rainpulse-orchestrator-results-v2"
+	SimulationJobType                      = "model.pysteps_lk"
+	SimulationModelID                      = "pysteps-lk-sim"
+	SimulationModelVersion                 = "pysteps-lk-sim-v1"
+	SimulationConfig                       = "rp003-sim-v1"
+	SimulationGrid                         = "rp003-sim-grid"
 )
 
 type JobRequested struct {
@@ -394,6 +397,38 @@ type ProductPublishedAsset struct {
 	SizeBytes  int64     `json:"size_bytes"`
 	MediaType  string    `json:"media_type,omitempty"`
 	LeadMinute *int      `json:"lead_time_minutes,omitempty"`
+}
+
+type ForecastVerificationRequested struct {
+	SchemaVersion string                               `json:"schema_version"`
+	EventID       uuid.UUID                            `json:"event_id"`
+	EventType     string                               `json:"event_type"`
+	OccurredAt    time.Time                            `json:"occurred_at"`
+	RunID         uuid.UUID                            `json:"run_id"`
+	JobID         uuid.UUID                            `json:"job_id"`
+	TraceID       uuid.UUID                            `json:"trace_id"`
+	Payload       ForecastVerificationRequestedPayload `json:"payload"`
+}
+
+type ForecastVerificationRequestedTruth struct {
+	AnalysisID  uuid.UUID `json:"analysis_id"`
+	ValidTime   time.Time `json:"valid_time"`
+	InputURI    string    `json:"input_uri"`
+	InputSHA256 string    `json:"input_sha256"`
+}
+
+type ForecastVerificationRequestedPayload struct {
+	ForecastURI               string                               `json:"forecast_uri"`
+	ForecastSHA256            string                               `json:"forecast_sha256"`
+	TruthFrames               []ForecastVerificationRequestedTruth `json:"truth_frames"`
+	OutputPrefix              string                               `json:"output_prefix"`
+	IssueTime                 time.Time                            `json:"issue_time"`
+	GridID                    string                               `json:"grid_id"`
+	ModelID                   string                               `json:"model_id"`
+	ModelVersion              string                               `json:"model_version"`
+	ForecastContractVersion   string                               `json:"forecast_contract_version"`
+	VerificationConfigVersion string                               `json:"verification_config_version"`
+	ResultContractVersion     string                               `json:"result_contract_version"`
 }
 
 type JobCompleted struct {

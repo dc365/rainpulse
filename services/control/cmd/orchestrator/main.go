@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"syscall"
 	"time"
@@ -156,6 +157,15 @@ func main() {
 			slog.Error("create application product workflow", "error", err)
 			os.Exit(1)
 		}
+	case "forecast-verify":
+		if len(os.Args) != 4 {
+			slog.Error("forecast-verify requires a forecast run UUID and verification profile YAML")
+			os.Exit(2)
+		}
+		if err := forecastVerification(ctx, store, service, os.Args[2], os.Args[3]); err != nil {
+			slog.Error("create forecast verification workflow", "error", err)
+			os.Exit(1)
+		}
 	case "complete":
 		if len(os.Args) != 3 {
 			slog.Error("complete requires a job UUID")
@@ -267,6 +277,23 @@ type productConfiguration struct {
 	ForecastOutputContractVersion string `yaml:"forecast_output_contract_version"`
 	GridID                        string `yaml:"grid_id"`
 	GridConfigVersion             string `yaml:"grid_config_version"`
+}
+
+type forecastVerificationConfiguration struct {
+	SchemaVersion           string    `yaml:"schema_version"`
+	ProfileVersion          string    `yaml:"profile_version"`
+	Lifecycle               string    `yaml:"lifecycle"`
+	ForecastContractVersion string    `yaml:"forecast_contract_version"`
+	TruthContractVersion    string    `yaml:"truth_contract_version"`
+	ResultContractVersion   string    `yaml:"result_contract_version"`
+	LeadMinutes             []int     `yaml:"lead_minutes"`
+	Models                  []string  `yaml:"models"`
+	ThresholdsMMH           []float64 `yaml:"thresholds_mm_h"`
+	FSSWindowsKM            []float64 `yaml:"fss_windows_km"`
+	AccumulationWindows     []int     `yaml:"accumulation_windows_minutes"`
+	AccumulationThresholds  []float64 `yaml:"accumulation_thresholds_mm"`
+	ValidityDomain          string    `yaml:"validity_domain"`
+	PromotionEligible       bool      `yaml:"promotion_eligible"`
 }
 
 type radarIngestSettings struct {
@@ -968,6 +995,76 @@ func productBuild(
 		"run_id": run.ID.String(), "job_id": job.ID.String(),
 		"issue_time": run.IssueTime, "forecast_uri": input.ForecastURI,
 	})
+}
+
+func forecastVerification(
+	ctx context.Context,
+	store *postgresstore.Store,
+	service *orchestration.Service,
+	rawRunID string,
+	configPath string,
+) error {
+	runID, err := uuid.Parse(rawRunID)
+	if err != nil {
+		return fmt.Errorf("parse forecast-verification run UUID: %w", err)
+	}
+	configBytes, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("read forecast-verification profile: %w", err)
+	}
+	var config forecastVerificationConfiguration
+	if err := yaml.Unmarshal(configBytes, &config); err != nil {
+		return fmt.Errorf("decode forecast-verification profile: %w", err)
+	}
+	if err := validateForecastVerificationConfiguration(config); err != nil {
+		return err
+	}
+	var configValue map[string]any
+	if err := yaml.Unmarshal(configBytes, &configValue); err != nil {
+		return fmt.Errorf("normalize forecast-verification profile: %w", err)
+	}
+	configJSON, err := json.Marshal(configValue)
+	if err != nil {
+		return fmt.Errorf("encode forecast-verification profile: %w", err)
+	}
+	input, err := store.GetForecastVerificationInput(ctx, runID)
+	if err != nil {
+		return err
+	}
+	configHash := sha256.Sum256(configBytes)
+	input.VerificationConfigVersion = config.ProfileVersion
+	input.ForecastContractVersion = config.ForecastContractVersion
+	input.ResultContractVersion = config.ResultContractVersion
+	input.VerificationConfig = configJSON
+	input.VerificationConfigSHA256 = fmt.Sprintf("%x", configHash)
+	run, job, err := service.CreateForecastVerification(ctx, input)
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(os.Stdout).Encode(map[string]any{
+		"run_id": run.ID.String(), "job_id": job.ID.String(),
+		"issue_time": run.IssueTime, "truth_frame_count": len(input.Truth),
+	})
+}
+
+func validateForecastVerificationConfiguration(config forecastVerificationConfiguration) error {
+	expectedLeads := make([]int, 24)
+	for index := range expectedLeads {
+		expectedLeads[index] = (index + 1) * 5
+	}
+	if config.SchemaVersion != "1.0" || config.ProfileVersion == "" ||
+		config.Lifecycle != "automatic_verification" ||
+		config.ForecastContractVersion != "1.1" || config.TruthContractVersion != "1.2" ||
+		config.ResultContractVersion != "1.0" ||
+		!slices.Equal(config.LeadMinutes, expectedLeads) ||
+		!slices.Equal(config.Models, []string{"lk", "persistence", "translation"}) ||
+		len(config.ThresholdsMMH) == 0 || len(config.FSSWindowsKM) == 0 ||
+		!slices.Equal(config.AccumulationWindows, []int{60, 120}) ||
+		len(config.AccumulationThresholds) == 0 || config.ValidityDomain != "common" ||
+		config.PromotionEligible {
+		return fmt.Errorf("forecast-verification profile differs from RP-031")
+	}
+	return nil
 }
 
 func dependencies(ctx context.Context) (*pgxpool.Pool, *postgresstore.Store, *messaging.JetStream, *orchestration.Service, error) {

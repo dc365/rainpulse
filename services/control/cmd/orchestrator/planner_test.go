@@ -38,6 +38,21 @@ func TestPipelineSettingsRejectMixedGridConfigurations(t *testing.T) {
 	nowcastPath := write("nowcast", "grid_id: "+grid+"\ngrid_config_version: "+version+"\nsequence:\n  minimum_frames: 3\n  maximum_frames: 6\n  timestep_minutes: 5\n")
 	pystepsPath := write("pysteps", "grid_id: "+grid+"\ngrid_config_version: "+version+"\nextrapolation:\n  lead_count: 24\n  lead_step_minutes: 5\n")
 	productPath := write("product", "grid_id: other-grid\ngrid_config_version: "+version+"\n")
+	verificationPath := write("verification", `schema_version: "1.0"
+profile_version: rp031-test
+lifecycle: automatic_verification
+forecast_contract_version: "1.1"
+truth_contract_version: "1.2"
+result_contract_version: "1.0"
+lead_minutes: [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120]
+models: [lk, persistence, translation]
+thresholds_mm_h: [0.1, 1, 5]
+fss_windows_km: [1, 5, 10]
+accumulation_windows_minutes: [60, 120]
+accumulation_thresholds_mm: [1, 5]
+validity_domain: common
+promotion_eligible: false
+`)
 	diagnosticPath := write("diagnostic", "profile_version: diagnostic-v1\nrenderer_version: renderer-v1\n")
 
 	t.Setenv("RAINPULSE_PIPELINE_ENABLED", "true")
@@ -51,6 +66,7 @@ func TestPipelineSettingsRejectMixedGridConfigurations(t *testing.T) {
 		"RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG": nowcastPath,
 		"RAINPULSE_PIPELINE_PYSTEPS_CONFIG":       pystepsPath,
 		"RAINPULSE_PIPELINE_PRODUCT_CONFIG":       productPath,
+		"RAINPULSE_PIPELINE_VERIFICATION_CONFIG":  verificationPath,
 	} {
 		t.Setenv(name, path)
 	}

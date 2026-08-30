@@ -502,19 +502,19 @@ func (e RadarLifecycle) Valid() bool {
 
 // Defines values for RadarQCMetricsModuleStatuses.
 const (
-	Applied RadarQCMetricsModuleStatuses = "applied"
-	Failed  RadarQCMetricsModuleStatuses = "failed"
-	Skipped RadarQCMetricsModuleStatuses = "skipped"
+	RadarQCMetricsModuleStatusesApplied RadarQCMetricsModuleStatuses = "applied"
+	RadarQCMetricsModuleStatusesFailed  RadarQCMetricsModuleStatuses = "failed"
+	RadarQCMetricsModuleStatusesSkipped RadarQCMetricsModuleStatuses = "skipped"
 )
 
 // Valid indicates whether the value is a known member of the RadarQCMetricsModuleStatuses enum.
 func (e RadarQCMetricsModuleStatuses) Valid() bool {
 	switch e {
-	case Applied:
+	case RadarQCMetricsModuleStatusesApplied:
 		return true
-	case Failed:
+	case RadarQCMetricsModuleStatusesFailed:
 		return true
-	case Skipped:
+	case RadarQCMetricsModuleStatusesSkipped:
 		return true
 	default:
 		return false
@@ -638,6 +638,33 @@ func (e SystemStatusStatus) Valid() bool {
 	case SystemStatusStatusReady:
 		return true
 	case SystemStatusStatusUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VerificationSummaryStatus.
+const (
+	VerificationSummaryStatusFailed          VerificationSummaryStatus = "failed"
+	VerificationSummaryStatusPendingForecast VerificationSummaryStatus = "pending_forecast"
+	VerificationSummaryStatusRunning         VerificationSummaryStatus = "running"
+	VerificationSummaryStatusSucceeded       VerificationSummaryStatus = "succeeded"
+	VerificationSummaryStatusWaitingTruth    VerificationSummaryStatus = "waiting_truth"
+)
+
+// Valid indicates whether the value is a known member of the VerificationSummaryStatus enum.
+func (e VerificationSummaryStatus) Valid() bool {
+	switch e {
+	case VerificationSummaryStatusFailed:
+		return true
+	case VerificationSummaryStatusPendingForecast:
+		return true
+	case VerificationSummaryStatusRunning:
+		return true
+	case VerificationSummaryStatusSucceeded:
+		return true
+	case VerificationSummaryStatusWaitingTruth:
 		return true
 	default:
 		return false
@@ -1537,10 +1564,21 @@ type VerificationMetric struct {
 
 // VerificationSummary defines model for VerificationSummary.
 type VerificationSummary struct {
-	Metrics    []VerificationMetric `json:"metrics"`
-	RunId      openapi_types.UUID   `json:"run_id"`
-	VerifiedAt time.Time            `json:"verified_at"`
+	IssueTime                time.Time                 `json:"issue_time"`
+	Metrics                  []VerificationMetric      `json:"metrics"`
+	MissingLeadMinutes       []int                     `json:"missing_lead_minutes"`
+	ProfileVersion           *string                   `json:"profile_version,omitempty"`
+	PromotionEligible        bool                      `json:"promotion_eligible"`
+	RunId                    openapi_types.UUID        `json:"run_id"`
+	RunStatus                RunStatus                 `json:"run_status"`
+	Status                   VerificationSummaryStatus `json:"status"`
+	TruthFrameCount          int                       `json:"truth_frame_count"`
+	TruthOperationalEligible *bool                     `json:"truth_operational_eligible,omitempty"`
+	VerifiedAt               *time.Time                `json:"verified_at,omitempty"`
 }
+
+// VerificationSummaryStatus defines model for VerificationSummary.Status.
+type VerificationSummaryStatus string
 
 // AnalysisId defines model for AnalysisId.
 type AnalysisId = openapi_types.UUID

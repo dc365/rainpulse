@@ -675,22 +675,87 @@ func TestCreateProductBuildSchedulesThreeProductsFromCommittedBaseline(t *testin
 	}
 }
 
+func TestCreateForecastVerificationRequiresCompleteFutureTruth(t *testing.T) {
+	repository := &fakeRepository{}
+	issueTime := time.Date(2026, 8, 30, 8, 0, 0, 0, time.UTC)
+	service := NewService(repository, Options{Now: func() time.Time {
+		return issueTime.Add(125 * time.Minute)
+	}})
+	truth := make([]ForecastVerificationTruth, 24)
+	for index := range truth {
+		truth[index] = ForecastVerificationTruth{
+			AnalysisID: uuid.NewSHA1(uuid.NameSpaceURL, []byte(fmt.Sprintf("truth-%d", index))),
+			ValidTime:  issueTime.Add(time.Duration(index+1) * 5 * time.Minute),
+			URI:        fmt.Sprintf("s3://rainpulse/analysis/%02d/analysis.zarr", index+1),
+			SHA256:     strings.Repeat(fmt.Sprintf("%x", (index%15)+1), 64),
+		}
+	}
+	input := ForecastVerificationInput{
+		RunID:                     uuid.MustParse("97100000-0000-4000-8000-000000000001"),
+		IssueTime:                 issueTime,
+		GridID:                    "fuzhou_118_123_25_27_0p01deg_v1",
+		CurrentStatus:             workflow.RunPublished,
+		ForecastURI:               "s3://rainpulse/products/run/pysteps-lk/pysteps-lk-1.1.0/forecast.zarr",
+		ForecastSHA256:            strings.Repeat("a", 64),
+		ModelID:                   PystepsLKModelID,
+		ModelVersion:              PystepsLKModelVersion,
+		ForecastContractVersion:   "1.1",
+		Truth:                     truth,
+		VerificationConfigVersion: "rp031-operational-deterministic-v1",
+		ResultContractVersion:     "1.0",
+		VerificationConfig:        json.RawMessage(`{"profile_version":"rp031-operational-deterministic-v1"}`),
+		VerificationConfigSHA256:  strings.Repeat("b", 64),
+	}
+
+	run, job, err := service.CreateForecastVerification(context.Background(), input)
+	if err != nil {
+		t.Fatalf("CreateForecastVerification() error = %v", err)
+	}
+	if run.Status != workflow.RunVerifying || job.JobType != ForecastVerificationJobType {
+		t.Fatalf("unexpected verification workflow state: run=%s job=%s", run.Status, job.JobType)
+	}
+	var requested ForecastVerificationRequested
+	if err := json.Unmarshal(repository.forecastVerification.Outbox.Payload, &requested); err != nil {
+		t.Fatalf("decode verification request: %v", err)
+	}
+	if requested.EventType != ForecastVerificationRequestedEventType ||
+		repository.forecastVerification.Outbox.Subject != ForecastVerificationRequestedSubject ||
+		len(requested.Payload.TruthFrames) != 24 ||
+		requested.Payload.TruthFrames[23].ValidTime != issueTime.Add(120*time.Minute) {
+		t.Fatalf("unexpected verification request: %#v", requested)
+	}
+	secondRun, secondJob, err := service.CreateForecastVerification(context.Background(), input)
+	if err != nil || secondRun.ID != run.ID || secondJob.ID != job.ID {
+		t.Fatalf("verification workflow identifiers are not deterministic: %v", err)
+	}
+	input.Truth = input.Truth[:23]
+	if _, _, err := service.CreateForecastVerification(context.Background(), input); err == nil {
+		t.Fatal("verification accepted incomplete truth")
+	}
+	input.Truth = truth
+	input.CurrentStatus = workflow.RunBaselineReady
+	if _, _, err := service.CreateForecastVerification(context.Background(), input); err == nil {
+		t.Fatal("verification accepted a run before publication")
+	}
+}
+
 type fakeRepository struct {
-	created             workflow.CreateBundle
-	radarDecode         workflow.RadarDecodeBundle
-	radarQC             workflow.RadarQCBundle
-	radarGrid           workflow.RadarGridBundle
-	analysisMosaic      workflow.AnalysisMosaicBundle
-	analysisQPE         workflow.AnalysisQPEBundle
-	analysisDiagnostics workflow.AnalysisDiagnosticsBundle
-	nowcastInput        workflow.NowcastInputBundle
-	pystepsLK           workflow.PystepsLKBundle
-	productBuild        workflow.ProductBuildBundle
-	domain              workflow.DomainSimulation
-	claimed             workflow.OutboxEvent
-	published           uuid.UUID
-	failed              uuid.UUID
-	appliedFailure      JobFailed
+	created              workflow.CreateBundle
+	radarDecode          workflow.RadarDecodeBundle
+	radarQC              workflow.RadarQCBundle
+	radarGrid            workflow.RadarGridBundle
+	analysisMosaic       workflow.AnalysisMosaicBundle
+	analysisQPE          workflow.AnalysisQPEBundle
+	analysisDiagnostics  workflow.AnalysisDiagnosticsBundle
+	nowcastInput         workflow.NowcastInputBundle
+	pystepsLK            workflow.PystepsLKBundle
+	productBuild         workflow.ProductBuildBundle
+	forecastVerification workflow.ForecastVerificationBundle
+	domain               workflow.DomainSimulation
+	claimed              workflow.OutboxEvent
+	published            uuid.UUID
+	failed               uuid.UUID
+	appliedFailure       JobFailed
 }
 
 func (repository *fakeRepository) CreateNowcastInputBundle(
@@ -714,6 +779,14 @@ func (repository *fakeRepository) CreateProductBuildBundle(
 	bundle workflow.ProductBuildBundle,
 ) error {
 	repository.productBuild = bundle
+	return nil
+}
+
+func (repository *fakeRepository) CreateForecastVerificationBundle(
+	_ context.Context,
+	bundle workflow.ForecastVerificationBundle,
+) error {
+	repository.forecastVerification = bundle
 	return nil
 }
 

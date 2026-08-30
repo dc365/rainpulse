@@ -1356,9 +1356,19 @@ export interface components {
         VerificationSummary: {
             /** Format: uuid */
             run_id: string;
+            /** Format: date-time */
+            issue_time: string;
+            run_status: components["schemas"]["RunStatus"];
+            /** @enum {string} */
+            status: "pending_forecast" | "waiting_truth" | "running" | "succeeded" | "failed";
+            truth_frame_count: number;
+            missing_lead_minutes: number[];
+            profile_version?: string;
             metrics: components["schemas"]["VerificationMetric"][];
             /** Format: date-time */
-            verified_at: string;
+            verified_at?: string;
+            truth_operational_eligible?: boolean;
+            promotion_eligible: boolean;
         };
         AlgorithmVerificationRunSummary: {
             profile_version: string;

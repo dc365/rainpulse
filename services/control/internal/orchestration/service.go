@@ -26,6 +26,7 @@ type Repository interface {
 	CreateNowcastInputBundle(context.Context, workflow.NowcastInputBundle) error
 	CreatePystepsLKBundle(context.Context, workflow.PystepsLKBundle) error
 	CreateProductBuildBundle(context.Context, workflow.ProductBuildBundle) error
+	CreateForecastVerificationBundle(context.Context, workflow.ForecastVerificationBundle) error
 	CreateDomainSimulation(context.Context, workflow.DomainSimulation) error
 	GetRun(context.Context, uuid.UUID) (workflow.Run, error)
 	GetJob(context.Context, uuid.UUID) (workflow.Job, error)
@@ -197,6 +198,25 @@ type ProductBuildInput struct {
 	ProductBundleContract string
 	ProductConfig         json.RawMessage
 	ProductConfigSHA256   string
+}
+
+type ForecastVerificationTruth = workflow.ForecastVerificationTruth
+
+type ForecastVerificationInput struct {
+	RunID                     uuid.UUID
+	IssueTime                 time.Time
+	GridID                    string
+	CurrentStatus             workflow.RunStatus
+	ForecastURI               string
+	ForecastSHA256            string
+	ModelID                   string
+	ModelVersion              string
+	ForecastContractVersion   string
+	Truth                     []ForecastVerificationTruth
+	VerificationConfigVersion string
+	ResultContractVersion     string
+	VerificationConfig        json.RawMessage
+	VerificationConfigSHA256  string
 }
 
 type Publisher interface {
@@ -1132,6 +1152,123 @@ func validateProductBuildInput(input ProductBuildInput) error {
 	if len(input.InputAssetIDs) == 0 || len(input.ProductConfig) == 0 ||
 		!json.Valid(input.ProductConfig) || !sha256Pattern.MatchString(input.ProductConfigSHA256) {
 		return fmt.Errorf("product build provenance and configuration are required")
+	}
+	return nil
+}
+
+func (service *Service) CreateForecastVerification(
+	ctx context.Context,
+	input ForecastVerificationInput,
+) (workflow.Run, workflow.Job, error) {
+	if err := validateForecastVerificationInput(input); err != nil {
+		return workflow.Run{}, workflow.Job{}, err
+	}
+	now := service.now().UTC()
+	jobID := stableID(
+		"forecast-verification-job", input.RunID.String(),
+		input.VerificationConfigVersion, input.ForecastSHA256,
+	)
+	traceID := stableID("forecast-verification-trace", jobID.String())
+	eventID := stableID("forecast-verification-request", jobID.String())
+	truthFrames := make([]ForecastVerificationRequestedTruth, len(input.Truth))
+	for index, frame := range input.Truth {
+		truthFrames[index] = ForecastVerificationRequestedTruth{
+			AnalysisID: frame.AnalysisID, ValidTime: frame.ValidTime.UTC(),
+			InputURI: frame.URI, InputSHA256: frame.SHA256,
+		}
+	}
+	outputPrefix := fmt.Sprintf(
+		"s3://rainpulse/verification/%s/%s/",
+		input.RunID, url.PathEscape(input.VerificationConfigVersion),
+	)
+	request := ForecastVerificationRequested{
+		SchemaVersion: SchemaVersion, EventID: eventID,
+		EventType: ForecastVerificationRequestedEventType, OccurredAt: now,
+		RunID: input.RunID, JobID: jobID, TraceID: traceID,
+		Payload: ForecastVerificationRequestedPayload{
+			ForecastURI: input.ForecastURI, ForecastSHA256: input.ForecastSHA256,
+			TruthFrames: truthFrames, OutputPrefix: outputPrefix,
+			IssueTime: input.IssueTime.UTC(), GridID: input.GridID,
+			ModelID: input.ModelID, ModelVersion: input.ModelVersion,
+			ForecastContractVersion:   input.ForecastContractVersion,
+			VerificationConfigVersion: input.VerificationConfigVersion,
+			ResultContractVersion:     input.ResultContractVersion,
+		},
+	}
+	payload, err := json.Marshal(request)
+	if err != nil {
+		return workflow.Run{}, workflow.Job{}, fmt.Errorf("encode verification request: %w", err)
+	}
+	run := workflow.Run{
+		ID: input.RunID, IssueTime: input.IssueTime.UTC(), GridID: input.GridID,
+		Status: workflow.RunVerifying, UpdatedAt: now,
+	}
+	job := workflow.Job{
+		ID: jobID, RunID: input.RunID, TraceID: traceID,
+		JobType: ForecastVerificationJobType, ModelID: input.ModelID,
+		ModelVersion: input.ModelVersion, ConfigVersion: input.VerificationConfigVersion,
+		Status: workflow.JobPending, Attempt: 1, RequestPayload: payload, CreatedAt: now,
+	}
+	bundle := workflow.ForecastVerificationBundle{
+		Run: run, ForecastURI: input.ForecastURI, ForecastSHA256: input.ForecastSHA256,
+		Truth:                    append([]workflow.ForecastVerificationTruth(nil), input.Truth...),
+		ForecastContractVersion:  input.ForecastContractVersion,
+		ResultContractVersion:    input.ResultContractVersion,
+		VerificationConfig:       input.VerificationConfig,
+		VerificationConfigSHA256: input.VerificationConfigSHA256,
+		Job:                      job,
+		Outbox: workflow.OutboxEvent{
+			ID: eventID, AggregateID: jobID.String(),
+			EventType: ForecastVerificationRequestedEventType,
+			Subject:   ForecastVerificationRequestedSubject, Payload: payload,
+		},
+	}
+	if err := service.repository.CreateForecastVerificationBundle(ctx, bundle); err != nil {
+		return workflow.Run{}, workflow.Job{}, err
+	}
+	return run, job, nil
+}
+
+func validateForecastVerificationInput(input ForecastVerificationInput) error {
+	forecastURI, forecastErr := url.ParseRequestURI(input.ForecastURI)
+	if input.RunID == uuid.Nil || input.IssueTime.IsZero() || input.GridID == "" ||
+		forecastErr != nil || forecastURI.Scheme != "s3" ||
+		!sha256Pattern.MatchString(input.ForecastSHA256) {
+		return fmt.Errorf("verification requires a committed ForecastOutput identity")
+	}
+	if input.CurrentStatus != workflow.RunPublished {
+		return fmt.Errorf("verification requires forecast run state PUBLISHED")
+	}
+	if !input.IssueTime.UTC().Equal(input.IssueTime.UTC().Truncate(5*time.Minute)) ||
+		input.ModelID != PystepsLKModelID || input.ModelVersion != PystepsLKModelVersion ||
+		input.ForecastContractVersion != "1.1" || input.ResultContractVersion != "1.0" {
+		return fmt.Errorf("verification model, time, or contract identity differs from RP-031")
+	}
+	if len(input.Truth) != 24 {
+		return fmt.Errorf("verification requires 24 five-minute truth frames")
+	}
+	seenIDs := make(map[uuid.UUID]struct{}, len(input.Truth))
+	seenURIs := make(map[string]struct{}, len(input.Truth))
+	for index, frame := range input.Truth {
+		expectedTime := input.IssueTime.UTC().Add(time.Duration(index+1) * 5 * time.Minute)
+		parsed, uriErr := url.ParseRequestURI(frame.URI)
+		if frame.AnalysisID == uuid.Nil || !frame.ValidTime.UTC().Equal(expectedTime) ||
+			uriErr != nil || parsed.Scheme != "s3" || !sha256Pattern.MatchString(frame.SHA256) {
+			return fmt.Errorf("verification truth frame %d has invalid identity", index)
+		}
+		if _, exists := seenIDs[frame.AnalysisID]; exists {
+			return fmt.Errorf("verification truth analysis IDs must be unique")
+		}
+		if _, exists := seenURIs[frame.URI]; exists {
+			return fmt.Errorf("verification truth URIs must be unique")
+		}
+		seenIDs[frame.AnalysisID] = struct{}{}
+		seenURIs[frame.URI] = struct{}{}
+	}
+	if input.VerificationConfigVersion == "" || len(input.VerificationConfig) == 0 ||
+		!json.Valid(input.VerificationConfig) ||
+		!sha256Pattern.MatchString(input.VerificationConfigSHA256) {
+		return fmt.Errorf("verification configuration and SHA-256 are required")
 	}
 	return nil
 }

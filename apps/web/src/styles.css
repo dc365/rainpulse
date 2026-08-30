@@ -2194,6 +2194,9 @@ h1 {
 .stage-status .stage-status-row > span { color: #6b7b76; font-size: 11px; }
 .stage-status .stage-status-row > strong { font-size: 12px; font-variant-numeric: tabular-nums; }
 .stage-status > small { color: #6b7b76; font-size: 11px; line-height: 1.45; }
+.stage-status .verification-status-row { margin-top: 2px; padding-top: 6px; border-top: 1px solid rgb(35 70 62 / 14%); }
+.stage-status .verification-status-row > strong { color: #0b665a; }
+.stage-status .verification-score-row > strong { color: #0b665a; }
 
 /* 左下：溯源与资产下载图标行（位于坐标读数上方） */
 .stage-assets { bottom: 76px; left: 12px; display: flex; align-items: center; gap: 5px; padding: 5px; }
@@ -2312,7 +2315,7 @@ h1 {
     padding: 7px 10px;
     border-width: 1px 0 0;
   }
-  .stage-status .stage-status-row:not(:first-child):not(.stage-status-valid-time),
+  .stage-status .stage-status-row:not(:first-child):not(.stage-status-valid-time):not(.verification-status-row),
   .stage-status > small { display: none; }
   .stage-assets { bottom: 146px; }
   .drawer-summary { display: none; }
