@@ -255,7 +255,7 @@ func (planner *pipelinePlanner) PlanOnce(ctx context.Context) error {
 }
 
 func (planner *pipelinePlanner) planRadarStage(ctx context.Context, status workflow.RadarScanStatus) error {
-	scans, err := planner.store.ListRadarScans(ctx, 200, nil, &status)
+	scans, err := planner.listRadarScans(ctx, status)
 	if err != nil {
 		return err
 	}
@@ -290,7 +290,7 @@ func (planner *pipelinePlanner) planRadarStage(ctx context.Context, status workf
 
 func (planner *pipelinePlanner) planMosaics(ctx context.Context) error {
 	status := workflow.RadarScanGridReady
-	scans, err := planner.store.ListRadarScans(ctx, 200, nil, &status)
+	scans, err := planner.listRadarScans(ctx, status)
 	if err != nil {
 		return err
 	}
@@ -343,6 +343,24 @@ func (planner *pipelinePlanner) planMosaics(ctx context.Context) error {
 		planner.plannedMosaic[analysisTime] = struct{}{}
 	}
 	return nil
+}
+
+func (planner *pipelinePlanner) listRadarScans(
+	ctx context.Context,
+	status workflow.RadarScanStatus,
+) ([]workflow.RadarScan, error) {
+	const pageSize = 200
+	scans := make([]workflow.RadarScan, 0, pageSize)
+	for offset := 0; ; offset += pageSize {
+		page, err := planner.store.ListRadarScansPage(ctx, pageSize, offset, nil, &status)
+		if err != nil {
+			return nil, err
+		}
+		scans = append(scans, page...)
+		if len(page) < pageSize {
+			return scans, nil
+		}
+	}
 }
 
 func (planner *pipelinePlanner) planAnalyses(ctx context.Context) error {

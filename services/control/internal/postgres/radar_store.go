@@ -919,8 +919,21 @@ func (store *Store) ListRadarScans(
 	radarID *string,
 	status *workflow.RadarScanStatus,
 ) ([]workflow.RadarScan, error) {
+	return store.ListRadarScansPage(ctx, limit, 0, radarID, status)
+}
+
+func (store *Store) ListRadarScansPage(
+	ctx context.Context,
+	limit int,
+	offset int,
+	radarID *string,
+	status *workflow.RadarScanStatus,
+) ([]workflow.RadarScan, error) {
 	if err := validatePageLimit(limit); err != nil {
 		return nil, err
+	}
+	if offset < 0 {
+		return nil, fmt.Errorf("radar scan page offset must be non-negative")
 	}
 	radarValue := ""
 	if radarID != nil {
@@ -934,7 +947,7 @@ func (store *Store) ListRadarScans(
 WHERE ($1 = '' OR s.radar_id = $1)
   AND ($2 = '' OR r.status = $2)
 ORDER BY s.volume_start_time DESC, r.created_at DESC
-LIMIT $3`, radarValue, statusValue, limit)
+LIMIT $3 OFFSET $4`, radarValue, statusValue, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("list radar scans: %w", err)
 	}
