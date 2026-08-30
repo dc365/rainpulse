@@ -61,7 +61,7 @@ def _update_state_digest(torch: Any, digest: Any, value: Any) -> None:
         digest.update(b"\0")
         digest.update(json.dumps(tuple(tensor.shape)).encode())
         digest.update(b"\0")
-        digest.update(tensor.view(torch.uint8).numpy().tobytes())
+        digest.update(tensor.reshape(-1).view(torch.uint8).numpy().tobytes())
         return
     if isinstance(value, np.ndarray):
         array = np.ascontiguousarray(value)

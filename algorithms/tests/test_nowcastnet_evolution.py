@@ -40,14 +40,17 @@ def test_evolution_network_and_loss_support_backward() -> None:
 def test_checkpoint_state_fingerprint_detects_tensor_changes() -> None:
     first = {
         "model": {"weight": torch.arange(8, dtype=torch.float32).reshape(2, 4)},
+        "batch_count": torch.tensor(3, dtype=torch.int64),
         "step": 3,
     }
     same = {
         "model": {"weight": first["model"]["weight"].clone()},
+        "batch_count": first["batch_count"].clone(),
         "step": 3,
     }
     changed = {
         "model": {"weight": first["model"]["weight"].clone()},
+        "batch_count": first["batch_count"].clone(),
         "step": 3,
     }
     changed["model"]["weight"][0, 0] = 99.0
