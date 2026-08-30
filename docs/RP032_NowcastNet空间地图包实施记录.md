@@ -69,6 +69,17 @@ uv run --project algorithms python -m \
   --capsule-root <NOWCASTNET_CAPSULE_ROOT>
 ```
 
+完整回算通过后，使用只读地图运行发布脚本把三级运行目录原子发布到控制面要求的两级
+目录；脚本会先核对离线门禁、索引、每个 manifest 以及全部 PNG 的大小和 SHA-256，且
+拒绝覆盖同名目标：
+
+```bash
+scripts/stage_probabilistic_verification_map_run.sh \
+  <FULL_HINDCAST_RUN> \
+  <CONTROL_PLANE_REPORT_ROOT> \
+  holdout-map-v1
+```
+
 ## 5. 验收边界
 
 - RP-026 原始 `holdout-v1` 保持不变；
