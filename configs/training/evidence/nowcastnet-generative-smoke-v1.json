@@ -1,0 +1,109 @@
+{
+  "schema_version": "1.0",
+  "status": "passed",
+  "created_at": "2026-08-30T15:37:03.614902+00:00",
+  "scope": "stage_b_generative_mechanical_conformance",
+  "code_revision": "ae1cb8e7c480ec07e9e95c69f2376a76a447bdaa",
+  "profile": {
+    "version": "nowcastnet-mrms-generative-v1",
+    "sha256": "06ffe74e3425338e14b5a6f3fca835da659d47aecb43136ff89f204654ff9f28",
+    "evolution_profile_sha256": "1f8fe80408fe45f6c74b4f94c69ad757034779570a7a35257f76e810381fb8b7",
+    "sample_index_sha256": "0d1569b1d2c36302f969711be8b935b458e0b424e5e2ce44acb2dc577a34bdff"
+  },
+  "provenance": {
+    "paper_doi": "10.1038/s41586-023-06184-4",
+    "generator_source": "official_mit_inference_capsule",
+    "discriminator_source": "paper_methods_and_extended_data_figure_1c",
+    "official_training_source_published": false,
+    "rainpulse_reconstruction": true
+  },
+  "architecture_conformance": {
+    "generator": {
+      "official_trainable_parameter_count": 26037288,
+      "rainpulse_trainable_parameter_count": 26037288,
+      "official_trainable_tensor_count": 195,
+      "rainpulse_trainable_tensor_count": 195,
+      "trainable_parameter_shape_multiset_equal": true
+    },
+    "temporal_discriminator": {
+      "context_frames": 4,
+      "target_frames": 20,
+      "entry_flattened_channels": 188,
+      "residual_channels": [128, 256, 512, 512],
+      "output": "patch_logits",
+      "implementation_boundary": "rainpulse_reconstruction_from_publication"
+    }
+  },
+  "training_protocol": {
+    "ensemble_members": 4,
+    "adversarial_weight_beta": 6.0,
+    "pool_weight_gamma": 20.0,
+    "pool_kernel_size": 5,
+    "pool_stride": 2,
+    "optimizer": "Adam",
+    "generator_learning_rate": 0.00003,
+    "discriminator_learning_rate": 0.00003,
+    "precision": "bf16"
+  },
+  "evolution_checkpoint": {
+    "global_step": 1000,
+    "sha256": "709416ccb0acb9626eb4b818e0aa681e3c424bc87c0630bcbd813dd9e73c0700",
+    "minimum_stage_b_smoke_step": 1000,
+    "completed_pretraining_step": 300000,
+    "pretraining_complete": false
+  },
+  "gpu": {
+    "name": "NVIDIA RTX 6000D",
+    "total_memory_bytes": 89173131264,
+    "available_memory_before_smoke_mib": 38084,
+    "shared_service_policy": "only_authorized_qwen3p8_paused_and_restored"
+  },
+  "runs": [
+    {
+      "batch_size": 1,
+      "duration_seconds": 0.7908327439799905,
+      "peak_allocated_memory_bytes": 3386289664,
+      "peak_reserved_memory_bytes": 4253024256,
+      "report_sha256": "862beefc3d7a4d80071ff5730cb7569e5645d2f4d9bb23e92938f390ae6658e7",
+      "checkpoint_sha256": "be202c60e0c6693bd43499dbaeb027004b623a8491949434979799ea5a4ab351",
+      "checkpoint_size_bytes": 469698821,
+      "finite_losses_and_gradients": true,
+      "checkpoint_load_back_verified": true
+    },
+    {
+      "batch_size": 8,
+      "duration_seconds": 0.9768880372866988,
+      "peak_allocated_memory_bytes": 19406717952,
+      "peak_reserved_memory_bytes": 20539506688,
+      "report_sha256": "34432f9d0489f6bfa92c4b451659486f8d829d3d008154472ca6cac2fa3f2d13",
+      "checkpoint_sha256": "28a7795c2efde054dca04da9f2757e7e7af0e9a6fb542df93df5f3e9a9d49e56",
+      "checkpoint_size_bytes": 469699333,
+      "finite_losses_and_gradients": true,
+      "checkpoint_load_back_verified": true
+    },
+    {
+      "batch_size": 16,
+      "duration_seconds": 1.5013419669121504,
+      "peak_allocated_memory_bytes": 37913757696,
+      "peak_reserved_memory_bytes": 39214645248,
+      "report_sha256": "b498d9df785aee6f7944ffaac811ef32e8bef125bc28972a496ac4bee8403ad1",
+      "checkpoint_sha256": "1c150dd0b2fb3534a4607d3e05f4210453905de49f3d2d3034a21828a1a51740",
+      "checkpoint_size_bytes": 469699973,
+      "finite_losses_and_gradients": true,
+      "checkpoint_load_back_verified": true,
+      "shared_gpu_long_run_approved": false,
+      "reason": "batch_16_fits_but_has_insufficient_margin_with_other_authorized_services_running"
+    }
+  ],
+  "result": {
+    "single_step_forward_backward_optimizer_pair": true,
+    "generator_and_discriminator_checkpoint_states_present": true,
+    "qwen3p8_restored_healthy": true,
+    "stage_b_smoke_passed": true,
+    "batch_8_safe_capacity_baseline_only": true,
+    "batch_8_claimed_equivalent_to_global_batch_16": false,
+    "full_generative_training_eligible": false,
+    "next_gate": "minimal_inference_export_and_training_process_numeric_comparison"
+  },
+  "operational_eligible": false
+}
