@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 )
 
 type Snapshot struct {
@@ -24,6 +25,27 @@ type Snapshot struct {
 	AnalysisPublishDelaySeconds *float64
 	AnalysisOperationalEligible bool
 	QPEStationBias              *float64
+	ActiveJobs                  []JobMetric
+	RecentFailedJobs            []JobMetric
+	OutboxIssues                []OutboxMetric
+}
+
+type JobMetric struct {
+	JobID      string
+	RunID      string
+	JobType    string
+	Status     string
+	ErrorCode  string
+	AgeSeconds float64
+	OccurredAt time.Time
+}
+
+type OutboxMetric struct {
+	EventID        string
+	AggregateID    string
+	EventType      string
+	Subject        string
+	PendingSeconds float64
 }
 
 type RadarSnapshot struct {
@@ -139,7 +161,50 @@ func Render(snapshot Snapshot, version string) []byte {
 		"Latest QPE station bias when gauge adjustment is enabled.",
 		snapshot.QPEStationBias,
 	)
+	writeJobAgeMetrics(&output, snapshot.ActiveJobs)
+	writeJobFailureMetrics(&output, snapshot.RecentFailedJobs)
+	writeOutboxAgeMetrics(&output, snapshot.OutboxIssues)
 	return []byte(output.String())
+}
+
+func writeJobAgeMetrics(output *strings.Builder, values []JobMetric) {
+	const name = "rainpulse_job_active_seconds"
+	fmt.Fprintf(output, "# HELP %s Age of each pending or running job.\n# TYPE %s gauge\n", name, name)
+	for _, value := range values {
+		fmt.Fprintf(
+			output,
+			"%s{job_id=\"%s\",job_type=\"%s\",run_id=\"%s\",status=\"%s\"} %.3f\n",
+			name, escapeLabel(value.JobID), escapeLabel(value.JobType), escapeLabel(value.RunID),
+			escapeLabel(value.Status), value.AgeSeconds,
+		)
+	}
+}
+
+func writeJobFailureMetrics(output *strings.Builder, values []JobMetric) {
+	const name = "rainpulse_job_failure_timestamp_seconds"
+	fmt.Fprintf(output, "# HELP %s Completion timestamp of each recent failed job.\n# TYPE %s gauge\n", name, name)
+	for _, value := range values {
+		fmt.Fprintf(
+			output,
+			"%s{error_code=\"%s\",job_id=\"%s\",job_type=\"%s\",run_id=\"%s\"} %.3f\n",
+			name, escapeLabel(value.ErrorCode), escapeLabel(value.JobID),
+			escapeLabel(value.JobType), escapeLabel(value.RunID),
+			float64(value.OccurredAt.UTC().UnixMilli())/1000,
+		)
+	}
+}
+
+func writeOutboxAgeMetrics(output *strings.Builder, values []OutboxMetric) {
+	const name = "rainpulse_outbox_event_pending_seconds"
+	fmt.Fprintf(output, "# HELP %s Age of each unpublished outbox event.\n# TYPE %s gauge\n", name, name)
+	for _, value := range values {
+		fmt.Fprintf(
+			output,
+			"%s{aggregate_id=\"%s\",event_id=\"%s\",event_type=\"%s\",subject=\"%s\"} %.3f\n",
+			name, escapeLabel(value.AggregateID), escapeLabel(value.EventID),
+			escapeLabel(value.EventType), escapeLabel(value.Subject), value.PendingSeconds,
+		)
+	}
 }
 
 func writeCounter(output *strings.Builder, name, help string, value int64) {

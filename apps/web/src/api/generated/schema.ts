@@ -582,6 +582,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/operations/issues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get current failed jobs, stuck jobs, and unpublished outbox evidence */
+        get: operations["getOperationalIssueSnapshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/events/stream": {
         parameters: {
             query?: never;
@@ -706,6 +723,44 @@ export interface components {
             sources: components["schemas"]["AlertSources"];
             counts: components["schemas"]["AlertCounts"];
             items: components["schemas"]["AlertRecord"][];
+            /** Format: date-time */
+            observed_at: string;
+        };
+        /** @enum {string} */
+        OperationalIssueKind: "job" | "outbox";
+        OperationalIssueCounts: {
+            total: number;
+            failed_jobs: number;
+            stuck_jobs: number;
+            outbox_events: number;
+        };
+        OperationalIssue: {
+            issue_id: string;
+            kind: components["schemas"]["OperationalIssueKind"];
+            status: string;
+            summary: string;
+            /** Format: uuid */
+            run_id?: string | null;
+            /** Format: uuid */
+            job_id?: string | null;
+            /** Format: uuid */
+            event_id?: string | null;
+            aggregate_id?: string | null;
+            job_type?: string | null;
+            event_type?: string | null;
+            error_code?: string | null;
+            error_message?: string | null;
+            attempt_count: number;
+            /** Format: double */
+            age_seconds: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        OperationalIssueSnapshot: {
+            counts: components["schemas"]["OperationalIssueCounts"];
+            items: components["schemas"]["OperationalIssue"][];
             /** Format: date-time */
             observed_at: string;
         };
@@ -2427,6 +2482,33 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AlertSnapshot"];
                 };
+            };
+        };
+    };
+    getOperationalIssueSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current read-only operational issue snapshot */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationalIssueSnapshot"];
+                };
+            };
+            /** @description Operational evidence store is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

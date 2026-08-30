@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRenderProducesStablePrometheusFamilies(t *testing.T) {
@@ -94,6 +95,33 @@ func TestHandlerFailsClosedWhenMetricsAreUnavailable(t *testing.T) {
 	Handler(failingProvider{}, "rp028-test").ServeHTTP(response, request)
 	if response.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected metrics failure to return 503, got %d", response.Code)
+	}
+}
+
+func TestRenderProducesCorrelatableJobAndOutboxMetrics(t *testing.T) {
+	value := string(Render(Snapshot{
+		ActiveJobs: []JobMetric{{
+			JobID: "job-1", RunID: "run-1", JobType: "radar.qc", Status: "RUNNING",
+			AgeSeconds: 721.25,
+		}},
+		RecentFailedJobs: []JobMetric{{
+			JobID: "job-2", RunID: "run-2", JobType: "analysis.qpe", ErrorCode: "BAD_INPUT",
+			OccurredAt: time.Unix(1_787_900_000, 500_000_000),
+		}},
+		OutboxIssues: []OutboxMetric{{
+			EventID: "event-1", AggregateID: "job-2", EventType: "job.requested.v1",
+			Subject: "rainpulse.jobs.analysis.qpe.requested.v1", PendingSeconds: 83.75,
+		}},
+	}, "rp030-test"))
+
+	for _, expected := range []string{
+		`rainpulse_job_active_seconds{job_id="job-1",job_type="radar.qc",run_id="run-1",status="RUNNING"} 721.250`,
+		`rainpulse_job_failure_timestamp_seconds{error_code="BAD_INPUT",job_id="job-2",job_type="analysis.qpe",run_id="run-2"} 1787900000.500`,
+		`rainpulse_outbox_event_pending_seconds{aggregate_id="job-2",event_id="event-1",event_type="job.requested.v1",subject="rainpulse.jobs.analysis.qpe.requested.v1"} 83.750`,
+	} {
+		if !strings.Contains(value, expected) {
+			t.Fatalf("metrics do not contain %q:\n%s", expected, value)
+		}
 	}
 }
 

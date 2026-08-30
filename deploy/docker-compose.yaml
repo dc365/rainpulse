@@ -69,6 +69,7 @@ services:
       MINIO_ROOT_USER: "${RAINPULSE_MINIO_ROOT_USER:?set RAINPULSE_MINIO_ROOT_USER in deploy/.env}"
       MINIO_ROOT_PASSWORD: "${RAINPULSE_MINIO_ROOT_PASSWORD:?set RAINPULSE_MINIO_ROOT_PASSWORD in deploy/.env}"
       MINIO_BROWSER_REDIRECT_URL: "${RAINPULSE_MINIO_BROWSER_REDIRECT_URL:-http://127.0.0.1:9001}"
+      MINIO_PROMETHEUS_AUTH_TYPE: public
       TZ: UTC
     ports:
       - "${RAINPULSE_INFRA_BIND_ADDRESS:-127.0.0.1}:${RAINPULSE_MINIO_PORT:-9000}:9000"
@@ -669,6 +670,10 @@ services:
         condition: service_healthy
       alertmanager:
         condition: service_healthy
+      minio:
+        condition: service_healthy
+      node-exporter:
+        condition: service_started
       orchestrator:
         condition: service_healthy
     command:
@@ -682,6 +687,15 @@ services:
       - prometheus-data:/prometheus
     ports:
       - "${RAINPULSE_INFRA_BIND_ADDRESS:-127.0.0.1}:${RAINPULSE_PROMETHEUS_PORT:-9090}:9090"
+    restart: unless-stopped
+
+  node-exporter:
+    image: quay.io/prometheus/node-exporter:v1.9.1
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/containers/storage/.+)($$|/)
+    volumes:
+      - /:/host:ro,rslave
     restart: unless-stopped
 
   alertmanager:

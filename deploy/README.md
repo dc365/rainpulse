@@ -61,6 +61,22 @@ so `/api/v1/alerts` can expose pending rules, firing alerts, silence/inhibition
 state and partial-source degradation without granting Web clients direct
 access to either observability service.
 
+RP-030 adds read-only operational issue evidence and capacity monitoring.
+`/api/v1/operations/issues` lists failed or ten-minute-stuck jobs and Outbox
+events unpublished for more than one minute, preserving `job_id`, `run_id`,
+`event_id`, attempts and bounded error evidence for alert correlation. MinIO
+exposes its Prometheus endpoint without a bearer token only inside the Compose
+network; its host ports remain loopback-bound. node-exporter has no published
+port and mounts the host root read-only to report filesystem capacity.
+
+If the target cannot pull node-exporter, stage it through the workstation
+proxy before `make deploy-up`:
+
+```bash
+HTTPS_PROXY=http://127.0.0.1:7897 make export-node-exporter-image
+docker load --input .build/node-exporter-v1.9.1-linux-amd64.tar
+```
+
 RP-004 adds `simulation-worker`, a long-lived Python pull consumer with a
 dedicated MinIO application user. It publishes small completion/failure events,
 uses `_SUCCESS.json` as the atomic object-prefix commit marker, and exposes an

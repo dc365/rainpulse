@@ -58,16 +58,58 @@ groups:
         annotations:
           summary: A publication-eligible analysis exceeds the engineering publication-delay threshold
       - alert: RainPulseJobStuck
-        expr: max(rainpulse_oldest_pending_job_seconds) > 600
+        expr: max by (job_id, run_id, job_type, status) (rainpulse_job_active_seconds) > 600
         for: 5m
         labels:
           severity: critical
         annotations:
           summary: A RainPulse job has been pending or running for over ten minutes
+      - alert: RainPulseJobFailed
+        expr: time() - rainpulse_job_failure_timestamp_seconds < 1800
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: A RainPulse job failed within the last thirty minutes
       - alert: RainPulseOutboxFailure
-        expr: max(rainpulse_outbox_events{status="failed"}) > 0
+        expr: max by (event_id, aggregate_id, event_type, subject) (rainpulse_outbox_event_pending_seconds) > 60
         for: 2m
         labels:
           severity: warning
         annotations:
           summary: RainPulse has outbox events awaiting a publish retry
+      - alert: RainPulseStorageMetricsDown
+        expr: up{job=~"minio|node-exporter"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: RainPulse storage capacity metrics are unavailable
+      - alert: RainPulseHostDiskSpaceLow
+        expr: min by (instance, mountpoint) (node_filesystem_avail_bytes{job="node-exporter",mountpoint="/"} / node_filesystem_size_bytes{job="node-exporter",mountpoint="/"}) < 0.15 and min by (instance, mountpoint) (node_filesystem_avail_bytes{job="node-exporter",mountpoint="/"} / node_filesystem_size_bytes{job="node-exporter",mountpoint="/"}) >= 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: RainPulse host root filesystem has less than fifteen percent free space
+      - alert: RainPulseHostDiskSpaceCritical
+        expr: min by (instance, mountpoint) (node_filesystem_avail_bytes{job="node-exporter",mountpoint="/"} / node_filesystem_size_bytes{job="node-exporter",mountpoint="/"}) < 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: RainPulse host root filesystem has less than five percent free space
+      - alert: RainPulseObjectStoreSpaceLow
+        expr: min by (instance) (minio_cluster_capacity_usable_free_bytes{job="minio"} / minio_cluster_capacity_usable_total_bytes{job="minio"}) < 0.15 and min by (instance) (minio_cluster_capacity_usable_free_bytes{job="minio"} / minio_cluster_capacity_usable_total_bytes{job="minio"}) >= 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: RainPulse object storage has less than fifteen percent usable capacity free
+      - alert: RainPulseObjectStoreSpaceCritical
+        expr: min by (instance) (minio_cluster_capacity_usable_free_bytes{job="minio"} / minio_cluster_capacity_usable_total_bytes{job="minio"}) < 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: RainPulse object storage has less than five percent usable capacity free

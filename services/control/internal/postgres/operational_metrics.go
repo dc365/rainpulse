@@ -116,6 +116,15 @@ ORDER BY r.radar_id`)
 	if err := rows.Err(); err != nil {
 		return operationalmetrics.Snapshot{}, fmt.Errorf("iterate radar operational metrics: %w", err)
 	}
+	if snapshot.ActiveJobs, err = store.activeJobMetrics(ctx); err != nil {
+		return operationalmetrics.Snapshot{}, err
+	}
+	if snapshot.RecentFailedJobs, err = store.recentFailedJobMetrics(ctx); err != nil {
+		return operationalmetrics.Snapshot{}, err
+	}
+	if snapshot.OutboxIssues, err = store.outboxIssueMetrics(ctx); err != nil {
+		return operationalmetrics.Snapshot{}, err
+	}
 	var radarDelay sql.NullFloat64
 	if err := store.pool.QueryRow(ctx, `
 SELECT EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - MAX(volume_end_time)))::double precision
@@ -168,6 +177,101 @@ LIMIT 1`).Scan(
 		return operationalmetrics.Snapshot{}, fmt.Errorf("measure latest analysis metrics: %w", err)
 	}
 	return snapshot, nil
+}
+
+func (store *Store) activeJobMetrics(ctx context.Context) ([]operationalmetrics.JobMetric, error) {
+	rows, err := store.pool.Query(ctx, `
+SELECT job_id::text, run_id::text, job_type, status,
+       GREATEST(0, EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - COALESCE(started_at, scheduled_at, created_at))))::double precision
+FROM jobs
+WHERE status IN ('PENDING', 'RUNNING')
+ORDER BY COALESCE(started_at, scheduled_at, created_at), job_id
+LIMIT 200`)
+	if err != nil {
+		return nil, fmt.Errorf("measure active jobs: %w", err)
+	}
+	defer rows.Close()
+	values := make([]operationalmetrics.JobMetric, 0)
+	for rows.Next() {
+		var value operationalmetrics.JobMetric
+		if err := rows.Scan(
+			&value.JobID, &value.RunID, &value.JobType, &value.Status, &value.AgeSeconds,
+		); err != nil {
+			return nil, fmt.Errorf("scan active job metric: %w", err)
+		}
+		values = append(values, value)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate active job metrics: %w", err)
+	}
+	return values, nil
+}
+
+func (store *Store) recentFailedJobMetrics(ctx context.Context) ([]operationalmetrics.JobMetric, error) {
+	rows, err := store.pool.Query(ctx, `
+SELECT j.job_id::text, j.run_id::text, j.job_type,
+       COALESCE(attempt.error_code, 'UNKNOWN'),
+       COALESCE(attempt.completed_at, j.completed_at, j.updated_at, j.created_at)
+FROM jobs AS j
+LEFT JOIN LATERAL (
+    SELECT error_code, completed_at
+    FROM job_attempts
+    WHERE job_id = j.job_id
+    ORDER BY attempt_no DESC
+    LIMIT 1
+) AS attempt ON TRUE
+WHERE j.status = 'FAILED'
+  AND COALESCE(attempt.completed_at, j.completed_at, j.updated_at, j.created_at)
+      >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
+ORDER BY COALESCE(attempt.completed_at, j.completed_at, j.updated_at, j.created_at) DESC
+LIMIT 200`)
+	if err != nil {
+		return nil, fmt.Errorf("measure recent failed jobs: %w", err)
+	}
+	defer rows.Close()
+	values := make([]operationalmetrics.JobMetric, 0)
+	for rows.Next() {
+		var value operationalmetrics.JobMetric
+		if err := rows.Scan(
+			&value.JobID, &value.RunID, &value.JobType, &value.ErrorCode, &value.OccurredAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan failed job metric: %w", err)
+		}
+		values = append(values, value)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate failed job metrics: %w", err)
+	}
+	return values, nil
+}
+
+func (store *Store) outboxIssueMetrics(ctx context.Context) ([]operationalmetrics.OutboxMetric, error) {
+	rows, err := store.pool.Query(ctx, `
+SELECT event_id::text, aggregate_id, event_type, subject,
+       GREATEST(0, EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - created_at)))::double precision
+FROM outbox_events
+WHERE status <> 'published'
+ORDER BY created_at, event_id
+LIMIT 200`)
+	if err != nil {
+		return nil, fmt.Errorf("measure unpublished outbox events: %w", err)
+	}
+	defer rows.Close()
+	values := make([]operationalmetrics.OutboxMetric, 0)
+	for rows.Next() {
+		var value operationalmetrics.OutboxMetric
+		if err := rows.Scan(
+			&value.EventID, &value.AggregateID, &value.EventType, &value.Subject,
+			&value.PendingSeconds,
+		); err != nil {
+			return nil, fmt.Errorf("scan outbox issue metric: %w", err)
+		}
+		values = append(values, value)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate outbox issue metrics: %w", err)
+	}
+	return values, nil
 }
 
 func nullableFloat(value sql.NullFloat64) *float64 {

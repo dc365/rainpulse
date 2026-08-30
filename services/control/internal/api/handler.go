@@ -16,6 +16,7 @@ import (
 	apiv1 "github.com/fonwee/rainpulse-nowcast/services/control/internal/api/generated"
 	ensembleproductstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/ensembleproducts"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/objectstore"
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/operationalissues"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/operationalmetrics"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/orchestration"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/productquery"
@@ -107,34 +108,36 @@ type EnsembleProductStore interface {
 }
 
 type Options struct {
-	Version          string
-	AdminToken       string
-	Runs             RunStore
-	Observations     ObservationStore
-	Commands         RunCommands
-	DiagnosticLayers DiagnosticLayerReader
-	Products         ProductStore
-	ProductObjects   ProductObjectReader
-	Verification     AlgorithmVerificationStore
-	EnsembleProducts EnsembleProductStore
-	Metrics          operationalmetrics.Provider
-	Alerts           alerting.Reader
-	SSEPollInterval  time.Duration
+	Version           string
+	AdminToken        string
+	Runs              RunStore
+	Observations      ObservationStore
+	Commands          RunCommands
+	DiagnosticLayers  DiagnosticLayerReader
+	Products          ProductStore
+	ProductObjects    ProductObjectReader
+	Verification      AlgorithmVerificationStore
+	EnsembleProducts  EnsembleProductStore
+	Metrics           operationalmetrics.Provider
+	Alerts            alerting.Reader
+	OperationalIssues operationalissues.Reader
+	SSEPollInterval   time.Duration
 }
 
 type server struct {
 	apiv1.Unimplemented
-	version          string
-	runs             RunStore
-	observations     ObservationStore
-	commands         RunCommands
-	diagnosticLayers DiagnosticLayerReader
-	products         ProductStore
-	productObjects   ProductObjectReader
-	verification     AlgorithmVerificationStore
-	ensembleProducts EnsembleProductStore
-	alerts           alerting.Reader
-	ssePollInterval  time.Duration
+	version           string
+	runs              RunStore
+	observations      ObservationStore
+	commands          RunCommands
+	diagnosticLayers  DiagnosticLayerReader
+	products          ProductStore
+	productObjects    ProductObjectReader
+	verification      AlgorithmVerificationStore
+	ensembleProducts  EnsembleProductStore
+	alerts            alerting.Reader
+	operationalIssues operationalissues.Reader
+	ssePollInterval   time.Duration
 }
 
 func NewHandler(options Options) http.Handler {
@@ -143,17 +146,18 @@ func NewHandler(options Options) http.Handler {
 		pollInterval = time.Second
 	}
 	handler := apiv1.HandlerWithOptions(&server{
-		version:          options.Version,
-		runs:             options.Runs,
-		observations:     options.Observations,
-		commands:         options.Commands,
-		diagnosticLayers: options.DiagnosticLayers,
-		products:         options.Products,
-		productObjects:   options.ProductObjects,
-		verification:     options.Verification,
-		ensembleProducts: options.EnsembleProducts,
-		alerts:           options.Alerts,
-		ssePollInterval:  pollInterval,
+		version:           options.Version,
+		runs:              options.Runs,
+		observations:      options.Observations,
+		commands:          options.Commands,
+		diagnosticLayers:  options.DiagnosticLayers,
+		products:          options.Products,
+		productObjects:    options.ProductObjects,
+		verification:      options.Verification,
+		ensembleProducts:  options.EnsembleProducts,
+		alerts:            options.Alerts,
+		operationalIssues: options.OperationalIssues,
+		ssePollInterval:   pollInterval,
 	}, apiv1.ChiServerOptions{BaseURL: "/api/v1"})
 	protected := protectAdminRoutes(handler, options.AdminToken)
 	if options.Metrics != nil {
@@ -279,6 +283,69 @@ func (service *server) GetAlertSnapshot(response http.ResponseWriter, request *h
 		Items:      items,
 		ObservedAt: snapshot.ObservedAt,
 	})
+}
+
+func (service *server) GetOperationalIssueSnapshot(
+	response http.ResponseWriter,
+	request *http.Request,
+) {
+	if service.operationalIssues == nil {
+		writeServiceUnavailable(response)
+		return
+	}
+	snapshot, err := service.operationalIssues.OperationalIssues(request.Context(), 50)
+	if err != nil {
+		writeError(
+			response,
+			http.StatusServiceUnavailable,
+			"operational_evidence_unavailable",
+			"operational evidence is unavailable",
+		)
+		return
+	}
+	items := make([]apiv1.OperationalIssue, 0, len(snapshot.Items))
+	for _, item := range snapshot.Items {
+		items = append(items, apiv1.OperationalIssue{
+			AgeSeconds:   item.AgeSeconds,
+			AggregateId:  item.AggregateID,
+			AttemptCount: item.AttemptCount,
+			CreatedAt:    item.CreatedAt.UTC(),
+			ErrorCode:    item.ErrorCode,
+			ErrorMessage: item.ErrorMessage,
+			EventId:      parseOptionalUUID(item.EventID),
+			EventType:    item.EventType,
+			IssueId:      item.ID,
+			JobId:        parseOptionalUUID(item.JobID),
+			JobType:      item.JobType,
+			Kind:         apiv1.OperationalIssueKind(item.Kind),
+			RunId:        parseOptionalUUID(item.RunID),
+			Status:       item.Status,
+			Summary:      item.Summary,
+			UpdatedAt:    item.UpdatedAt.UTC(),
+		})
+	}
+	response.Header().Set("Cache-Control", "no-store")
+	writeJSON(response, http.StatusOK, apiv1.OperationalIssueSnapshot{
+		Counts: apiv1.OperationalIssueCounts{
+			Total:        snapshot.Counts.Total,
+			FailedJobs:   snapshot.Counts.FailedJobs,
+			StuckJobs:    snapshot.Counts.StuckJobs,
+			OutboxEvents: snapshot.Counts.OutboxEvents,
+		},
+		Items:      items,
+		ObservedAt: snapshot.ObservedAt.UTC(),
+	})
+}
+
+func parseOptionalUUID(value *string) *uuid.UUID {
+	if value == nil {
+		return nil
+	}
+	parsed, err := uuid.Parse(*value)
+	if err != nil {
+		return nil
+	}
+	return &parsed
 }
 
 func (service *server) ListAlgorithmVerificationRuns(

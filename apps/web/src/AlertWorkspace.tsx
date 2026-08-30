@@ -5,6 +5,8 @@ import type { components } from './api/generated/schema'
 type AlertSnapshot = components['schemas']['AlertSnapshot']
 type AlertRecord = components['schemas']['AlertRecord']
 type AlertState = components['schemas']['AlertState']
+type OperationalIssue = components['schemas']['OperationalIssue']
+type OperationalIssueSnapshot = components['schemas']['OperationalIssueSnapshot']
 type Filter = 'all' | 'firing' | 'pending' | 'suppressed'
 
 const stateLabels: Record<AlertState, string> = {
@@ -47,6 +49,25 @@ function matchesFilter(alert: AlertRecord, filter: Filter) {
   return alert.state === filter
 }
 
+function formatAge(seconds: number) {
+  if (seconds < 60) return `${Math.floor(seconds)} 秒`
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} 分钟`
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)} 小时`
+  return `${Math.floor(seconds / 86400)} 天`
+}
+
+function matchingAlert(issue: OperationalIssue, alerts: AlertRecord[]) {
+  return alerts.find((alert) => {
+    if (issue.event_id && alert.labels.event_id === issue.event_id) return true
+    if (issue.job_id && alert.labels.job_id === issue.job_id) return true
+    if (issue.aggregate_id && alert.labels.aggregate_id === issue.aggregate_id) return true
+    return Boolean(
+      issue.run_id && issue.job_type &&
+      alert.labels.run_id === issue.run_id && alert.labels.job_type === issue.job_type,
+    )
+  })
+}
+
 function SourceStatus({
   name,
   availability,
@@ -64,16 +85,31 @@ function SourceStatus({
 
 export function AlertWorkspace({ refreshToken }: { refreshToken: number }) {
   const [snapshot, setSnapshot] = useState<AlertSnapshot | null>(null)
+  const [issues, setIssues] = useState<OperationalIssueSnapshot | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [issueError, setIssueError] = useState<string | null>(null)
 
   const load = useCallback(async (signal?: AbortSignal) => {
     try {
-      const response = await fetch('/api/v1/alerts', { signal })
-      if (!response.ok) throw new Error(`告警接口响应异常（${response.status}）`)
-      setSnapshot(await response.json() as AlertSnapshot)
+      const [alertResult, issueResult] = await Promise.allSettled([
+        fetch('/api/v1/alerts', { signal }),
+        fetch('/api/v1/operations/issues', { signal }),
+      ])
+      if (alertResult.status === 'rejected') throw alertResult.reason
+      if (!alertResult.value.ok) throw new Error(`告警接口响应异常（${alertResult.value.status}）`)
+      setSnapshot(await alertResult.value.json() as AlertSnapshot)
       setError(null)
+      if (issueResult.status === 'fulfilled' && issueResult.value.ok) {
+        setIssues(await issueResult.value.json() as OperationalIssueSnapshot)
+        setIssueError(null)
+      } else if (!(signal?.aborted)) {
+        const detail = issueResult.status === 'fulfilled'
+          ? `运行证据接口响应异常（${issueResult.value.status}）`
+          : '运行证据读取失败'
+        setIssueError(detail)
+      }
     } catch (requestError: unknown) {
       if (!(requestError instanceof DOMException && requestError.name === 'AbortError')) {
         setError(requestError instanceof Error ? requestError.message : '告警状态读取失败')
@@ -110,9 +146,9 @@ export function AlertWorkspace({ refreshToken }: { refreshToken: number }) {
     <section className="alert-workspace" aria-labelledby="alert-workspace-title">
       <header className="alert-workspace-heading">
         <div>
-          <p>Alert operations / RP-029</p>
+          <p>Alert operations / RP-029 + RP-030</p>
           <h1 id="alert-workspace-title">告警中心</h1>
-          <span>只读聚合 Prometheus 规则状态与 Alertmanager 分发状态。</span>
+          <span>聚合规则、分发状态，以及可定位到任务和 Outbox 的只读运行证据。</span>
         </div>
         <div className="alert-source-cluster" aria-label="告警数据源状态">
           <SourceStatus name="Prometheus" availability={snapshot?.sources.prometheus ?? 'unavailable'} />
@@ -208,6 +244,64 @@ export function AlertWorkspace({ refreshToken }: { refreshToken: number }) {
               </article>
             )
           }) : null}
+        </div>
+      </div>
+
+      <div className="operational-ledger" aria-label="关联运行问题">
+        <header>
+          <div>
+            <p>Correlated operational evidence</p>
+            <h2>关联运行问题</h2>
+          </div>
+          <dl aria-label="运行问题计数">
+            <div><dt>失败任务</dt><dd>{issues?.counts.failed_jobs ?? 0}</dd></div>
+            <div><dt>阻塞任务</dt><dd>{issues?.counts.stuck_jobs ?? 0}</dd></div>
+            <div><dt>Outbox</dt><dd>{issues?.counts.outbox_events ?? 0}</dd></div>
+          </dl>
+        </header>
+
+        {issueError ? (
+          <div className="operational-evidence-error" role="status">
+            <strong>运行证据不完整</strong>
+            <span>{issueError}</span>
+          </div>
+        ) : null}
+
+        {!issueError && issues?.items.length === 0 ? (
+          <p className="alert-empty healthy">当前没有失败、阻塞或滞留的运行记录</p>
+        ) : null}
+
+        <div className="operational-record-list">
+          {issues?.items.map((issue) => {
+            const alert = matchingAlert(issue, snapshot?.items ?? [])
+            return (
+              <article className={`operational-record ${issue.kind}`} key={issue.issue_id}>
+                <div className="operational-record-state">
+                  <span>{issue.kind === 'job' ? '任务' : 'Outbox'}</span>
+                  <strong>{issue.status}</strong>
+                </div>
+                <div className="operational-record-evidence">
+                  <strong>{issue.summary}</strong>
+                  <code>{issue.job_type ?? issue.event_type ?? issue.issue_id}</code>
+                  {issue.error_message ? <small>{issue.error_message}</small> : null}
+                </div>
+                <div className="operational-record-identity">
+                  {issue.job_id ? <span><small>job</small>{issue.job_id.slice(0, 8)}</span> : null}
+                  {issue.event_id ? <span><small>event</small>{issue.event_id.slice(0, 8)}</span> : null}
+                  {issue.run_id ? <span><small>run</small>{issue.run_id.slice(0, 8)}</span> : null}
+                  <span><small>attempt</small>{issue.attempt_count}</span>
+                </div>
+                <div className="operational-record-correlation">
+                  {alert ? (
+                    <span className={`linked ${alert.state}`}>已关联 {stateLabels[alert.state]}</span>
+                  ) : (
+                    <span>尚未进入活动告警</span>
+                  )}
+                  <small>{formatAge(issue.age_seconds)}</small>
+                </div>
+              </article>
+            )
+          })}
         </div>
       </div>
 

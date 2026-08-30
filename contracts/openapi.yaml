@@ -725,6 +725,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AlertSnapshot"
+  /operations/issues:
+    get:
+      operationId: getOperationalIssueSnapshot
+      tags: [operations]
+      summary: Get current failed jobs, stuck jobs, and unpublished outbox evidence
+      responses:
+        "200":
+          description: Current read-only operational issue snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationalIssueSnapshot"
+        "503":
+          description: Operational evidence store is unavailable
   /events/stream:
     get:
       operationId: streamEvents
@@ -1049,6 +1063,101 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AlertRecord"
+        observed_at:
+          type: string
+          format: date-time
+    OperationalIssueKind:
+      type: string
+      enum: [job, outbox]
+    OperationalIssueCounts:
+      type: object
+      additionalProperties: false
+      required: [total, failed_jobs, stuck_jobs, outbox_events]
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        failed_jobs:
+          type: integer
+          minimum: 0
+        stuck_jobs:
+          type: integer
+          minimum: 0
+        outbox_events:
+          type: integer
+          minimum: 0
+    OperationalIssue:
+      type: object
+      additionalProperties: false
+      required:
+        - issue_id
+        - kind
+        - status
+        - summary
+        - attempt_count
+        - age_seconds
+        - created_at
+        - updated_at
+      properties:
+        issue_id:
+          type: string
+        kind:
+          $ref: "#/components/schemas/OperationalIssueKind"
+        status:
+          type: string
+        summary:
+          type: string
+        run_id:
+          type: string
+          format: uuid
+          nullable: true
+        job_id:
+          type: string
+          format: uuid
+          nullable: true
+        event_id:
+          type: string
+          format: uuid
+          nullable: true
+        aggregate_id:
+          type: string
+          nullable: true
+        job_type:
+          type: string
+          nullable: true
+        event_type:
+          type: string
+          nullable: true
+        error_code:
+          type: string
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+        attempt_count:
+          type: integer
+          minimum: 0
+        age_seconds:
+          type: number
+          format: double
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    OperationalIssueSnapshot:
+      type: object
+      additionalProperties: false
+      required: [counts, items, observed_at]
+      properties:
+        counts:
+          $ref: "#/components/schemas/OperationalIssueCounts"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationalIssue"
         observed_at:
           type: string
           format: date-time

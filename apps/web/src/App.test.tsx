@@ -301,6 +301,11 @@ describe('RainPulse radar operations overview', () => {
           items: [],
           observed_at: '2026-08-30T07:00:00Z',
         }
+        if (input.includes('/operations/issues')) return {
+          counts: { total: 0, failed_jobs: 0, stuck_jobs: 0, outbox_events: 0 },
+          items: [],
+          observed_at: '2026-08-30T07:00:00Z',
+        }
         return { service: 'rainpulse-control', status: 'ready', version: 'rp029-test' }
       },
     }))

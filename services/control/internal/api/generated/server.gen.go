@@ -365,6 +365,24 @@ func (e JobStatus) Valid() bool {
 	}
 }
 
+// Defines values for OperationalIssueKind.
+const (
+	Job    OperationalIssueKind = "job"
+	Outbox OperationalIssueKind = "outbox"
+)
+
+// Valid indicates whether the value is a known member of the OperationalIssueKind enum.
+func (e OperationalIssueKind) Valid() bool {
+	switch e {
+	case Job:
+		return true
+	case Outbox:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ProductType.
 const (
 	Accumulation120       ProductType = "accumulation_120"
@@ -1230,6 +1248,44 @@ type ModelState struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// OperationalIssue defines model for OperationalIssue.
+type OperationalIssue struct {
+	AgeSeconds   float64              `json:"age_seconds"`
+	AggregateId  *string              `json:"aggregate_id,omitempty"`
+	AttemptCount int                  `json:"attempt_count"`
+	CreatedAt    time.Time            `json:"created_at"`
+	ErrorCode    *string              `json:"error_code,omitempty"`
+	ErrorMessage *string              `json:"error_message,omitempty"`
+	EventId      *openapi_types.UUID  `json:"event_id,omitempty"`
+	EventType    *string              `json:"event_type,omitempty"`
+	IssueId      string               `json:"issue_id"`
+	JobId        *openapi_types.UUID  `json:"job_id,omitempty"`
+	JobType      *string              `json:"job_type,omitempty"`
+	Kind         OperationalIssueKind `json:"kind"`
+	RunId        *openapi_types.UUID  `json:"run_id,omitempty"`
+	Status       string               `json:"status"`
+	Summary      string               `json:"summary"`
+	UpdatedAt    time.Time            `json:"updated_at"`
+}
+
+// OperationalIssueCounts defines model for OperationalIssueCounts.
+type OperationalIssueCounts struct {
+	FailedJobs   int `json:"failed_jobs"`
+	OutboxEvents int `json:"outbox_events"`
+	StuckJobs    int `json:"stuck_jobs"`
+	Total        int `json:"total"`
+}
+
+// OperationalIssueKind defines model for OperationalIssueKind.
+type OperationalIssueKind string
+
+// OperationalIssueSnapshot defines model for OperationalIssueSnapshot.
+type OperationalIssueSnapshot struct {
+	Counts     OperationalIssueCounts `json:"counts"`
+	Items      []OperationalIssue     `json:"items"`
+	ObservedAt time.Time              `json:"observed_at"`
+}
+
 // PointForecast defines model for PointForecast.
 type PointForecast struct {
 	GridLatitude  float64              `json:"grid_latitude"`
@@ -1666,6 +1722,9 @@ type ServerInterface interface {
 	// StreamEvents Stream forecast, radar-scan, or analysis-cycle updates using SSE
 	// (GET /events/stream)
 	StreamEvents(w http.ResponseWriter, r *http.Request, params StreamEventsParams)
+	// GetOperationalIssueSnapshot Get current failed jobs, stuck jobs, and unpublished outbox evidence
+	// (GET /operations/issues)
+	GetOperationalIssueSnapshot(w http.ResponseWriter, r *http.Request)
 	// GetPointForecast Query forecast values at a geographic point
 	// (GET /point-forecast)
 	GetPointForecast(w http.ResponseWriter, r *http.Request, params GetPointForecastParams)
@@ -1840,6 +1899,12 @@ func (_ Unimplemented) GetEnsembleProductAsset(w http.ResponseWriter, r *http.Re
 // StreamEvents Stream forecast, radar-scan, or analysis-cycle updates using SSE
 // (GET /events/stream)
 func (_ Unimplemented) StreamEvents(w http.ResponseWriter, r *http.Request, params StreamEventsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetOperationalIssueSnapshot Get current failed jobs, stuck jobs, and unpublished outbox evidence
+// (GET /operations/issues)
+func (_ Unimplemented) GetOperationalIssueSnapshot(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2688,6 +2753,20 @@ func (siw *ServerInterfaceWrapper) StreamEvents(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// GetOperationalIssueSnapshot operation middleware
+func (siw *ServerInterfaceWrapper) GetOperationalIssueSnapshot(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOperationalIssueSnapshot(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetPointForecast operation middleware
 func (siw *ServerInterfaceWrapper) GetPointForecast(w http.ResponseWriter, r *http.Request) {
 
@@ -3522,6 +3601,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/alerts", wrapper.GetAlertSnapshot)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/operations/issues", wrapper.GetOperationalIssueSnapshot)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/events/stream", wrapper.StreamEvents)

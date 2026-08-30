@@ -539,6 +539,14 @@ Web reports degraded source coverage instead of claiming an empty healthy
 state. No external receiver, acknowledgement or silence mutation is enabled.
 Details are in `docs/RP029_Alertmanager与只读告警中心实施记录.md`.
 
+RP-030 adds per-record job and Outbox metrics whose labels retain the bounded
+identifiers required to locate a failure, plus a read-only operational issue
+API and Web ledger. Host root-filesystem capacity is scraped through a
+read-only node-exporter mount, and MinIO usable capacity is scraped from its
+internal Prometheus endpoint. Storage and failure thresholds remain engineering
+defaults, and no external notification or recovery mutation is enabled.
+Details are in `docs/RP030_运行问题关联与存储容量监控实施记录.md`.
+
 The 2021-08, 2022-01, 2022-12, 2023-06, 2023-12, 2024-06, 2024-07, 2024-11,
 2025-01, 2025-03 and 2025-07 months are now spent verification data for their
 respective claims. Do not tune against their results and reuse them as
@@ -602,6 +610,7 @@ make test-ancillary
 make test-probability-calibration
 make test-nowcastnet
 make test-alerting
+make test-operations
 make test
 make lint
 make build

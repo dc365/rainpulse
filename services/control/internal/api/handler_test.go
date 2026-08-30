@@ -17,6 +17,7 @@ import (
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/alerting"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/api"
 	ensembleproductstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/ensembleproducts"
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/operationalissues"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/orchestration"
 	verificationstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/verification"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/workflow"
@@ -95,6 +96,57 @@ func TestAlertSnapshotExposesReadOnlyAggregatedState(t *testing.T) {
 		!strings.Contains(response.Body.String(), `"alert_id":"fixture-alert"`) ||
 		!strings.Contains(response.Body.String(), `"firing":1`) {
 		t.Fatalf("unexpected alert response: %s", response.Body.String())
+	}
+}
+
+func TestOperationalIssueSnapshotExposesCorrelatableEvidence(t *testing.T) {
+	jobID := uuid.NewString()
+	runID := uuid.NewString()
+	eventID := uuid.NewString()
+	jobType := "analysis.qpe"
+	eventType := "job.requested.v1"
+	errorCode := "BAD_INPUT"
+	message := "input grid does not match the configured domain"
+	observedAt := time.Date(2026, 8, 30, 7, 0, 0, 0, time.UTC)
+	reader := &fakeOperationalIssueReader{snapshot: operationalissues.Snapshot{
+		Counts: operationalissues.Counts{Total: 2, FailedJobs: 1, OutboxEvents: 1},
+		Items: []operationalissues.Issue{
+			{
+				ID: "job:" + jobID, Kind: operationalissues.KindJob, Status: "FAILED",
+				Summary: "analysis.qpe 执行失败", RunID: &runID, JobID: &jobID, JobType: &jobType,
+				ErrorCode: &errorCode, ErrorMessage: &message, AttemptCount: 2, AgeSeconds: 93,
+				CreatedAt: observedAt.Add(-2 * time.Minute), UpdatedAt: observedAt.Add(-93 * time.Second),
+			},
+			{
+				ID: "outbox:" + eventID, Kind: operationalissues.KindOutbox, Status: "failed",
+				Summary: "job.requested.v1 尚未发布", RunID: &runID, JobID: &jobID,
+				EventID: &eventID, AggregateID: &jobID, JobType: &jobType, EventType: &eventType,
+				AttemptCount: 4, AgeSeconds: 88,
+				CreatedAt: observedAt.Add(-88 * time.Second), UpdatedAt: observedAt,
+			},
+		},
+		ObservedAt: observedAt,
+	}}
+	handler := api.NewHandler(api.Options{OperationalIssues: reader})
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/operations/issues", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", response.Code, response.Body.String())
+	}
+	if response.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("expected no-store issue response, got %q", response.Header().Get("Cache-Control"))
+	}
+	for _, expected := range []string{
+		`"failed_jobs":1`, `"outbox_events":1`, `"issue_id":"job:` + jobID,
+		`"job_id":"` + jobID, `"run_id":"` + runID, `"event_id":"` + eventID,
+		`"error_code":"BAD_INPUT"`,
+	} {
+		if !strings.Contains(response.Body.String(), expected) {
+			t.Fatalf("operational issue response does not contain %q: %s", expected, response.Body.String())
+		}
 	}
 }
 
@@ -1056,6 +1108,18 @@ type fakeProductObjectReader struct {
 
 type fakeAlertReader struct {
 	snapshot alerting.Snapshot
+}
+
+type fakeOperationalIssueReader struct {
+	snapshot operationalissues.Snapshot
+	err      error
+}
+
+func (reader *fakeOperationalIssueReader) OperationalIssues(
+	context.Context,
+	int,
+) (operationalissues.Snapshot, error) {
+	return reader.snapshot, reader.err
 }
 
 func (reader *fakeAlertReader) Snapshot(context.Context) alerting.Snapshot {

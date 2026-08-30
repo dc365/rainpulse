@@ -774,13 +774,16 @@ h1 {
 .alert-workspace-heading span,
 .alert-ledger header p,
 .alert-ledger header h2,
+.operational-ledger header p,
+.operational-ledger header h2,
 .alert-empty,
 .alert-workspace-boundary {
   margin: 0;
 }
 
 .alert-workspace-heading p,
-.alert-ledger header p {
+.alert-ledger header p,
+.operational-ledger header p {
   color: #588077;
   font-size: 11px;
   font-weight: 750;
@@ -906,6 +909,95 @@ h1 {
   font-size: 15px;
   font-weight: 680;
 }
+
+.operational-ledger {
+  margin-top: 14px;
+  border: 1px solid var(--line-strong);
+  background: var(--paper);
+}
+
+.operational-ledger > header {
+  min-height: 61px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.operational-ledger header h2 {
+  margin-top: 3px;
+  font-size: 15px;
+  font-weight: 680;
+}
+
+.operational-ledger dl {
+  display: flex;
+  margin: 0;
+  border: 1px solid var(--line-strong);
+  background: var(--canvas);
+  font-variant-numeric: tabular-nums;
+}
+
+.operational-ledger dl > div {
+  min-width: 92px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 6px 9px;
+  border-right: 1px solid var(--line);
+}
+
+.operational-ledger dl > div:last-child { border-right: 0; }
+.operational-ledger dt { color: var(--muted); font-size: 10px; }
+.operational-ledger dd { margin: 0; font-size: 12px; font-weight: 720; }
+
+.operational-evidence-error {
+  display: flex;
+  gap: 10px;
+  padding: 11px 14px;
+  color: #713929;
+  background: var(--risk-soft);
+  font-size: 11px;
+}
+
+.operational-record {
+  min-height: 78px;
+  display: grid;
+  grid-template-columns: 116px minmax(260px, 1fr) minmax(230px, .72fr) 150px;
+  align-items: center;
+  gap: 18px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.operational-record:last-child { border-bottom: 0; }
+.operational-record-state { display: flex; align-items: center; gap: 8px; }
+.operational-record-state span { color: #855035; font-size: 10px; font-weight: 750; }
+.operational-record-state span::before { content: ""; width: 7px; height: 7px; display: inline-block; margin-right: 6px; border-radius: 50%; background: var(--risk); }
+.operational-record.outbox .operational-record-state span { color: #5a5550; }
+.operational-record.outbox .operational-record-state span::before { background: #6f7975; }
+.operational-record-state strong { overflow-wrap: anywhere; font-size: 10px; }
+
+.operational-record-evidence { min-width: 0; display: grid; gap: 4px; }
+.operational-record-evidence > strong { overflow-wrap: anywhere; font-size: 12px; line-height: 1.35; }
+.operational-record-evidence code { overflow: hidden; color: #61706c; font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 10px; text-overflow: clip; white-space: nowrap; }
+.operational-record-evidence small { max-width: 72ch; overflow-wrap: anywhere; color: var(--muted); font-size: 10px; line-height: 1.45; }
+
+.operational-record-identity { min-width: 0; display: flex; flex-wrap: wrap; gap: 5px; }
+.operational-record-identity span { display: inline-flex; gap: 5px; padding: 4px 6px; color: #344943; background: #eef2f0; font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 10px; }
+.operational-record-identity small { color: #71807b; font-size: 9px; }
+
+.operational-record-correlation { display: grid; justify-items: end; gap: 5px; }
+.operational-record-correlation > span { color: var(--muted); font-size: 10px; text-align: right; }
+.operational-record-correlation > span.linked { padding: 4px 6px; color: #0b665a; background: var(--teal-soft); font-weight: 680; }
+.operational-record-correlation > span.linked.pending { color: #86452c; background: #f8e9df; }
+.operational-record-correlation small { color: #425651; font-size: 11px; font-weight: 680; }
 
 .alert-filter {
   display: flex;
@@ -1039,12 +1131,14 @@ h1 {
   .alert-filter button:hover { color: var(--ink); background: #fff; }
   .alert-filter button.active:hover { color: #0b665a; background: var(--teal-soft); }
   .alert-record:hover { background: #f8faf8; }
+  .operational-record:hover { background: #f8faf8; }
 }
 
 @media (max-width: 820px) {
   .alert-ledger-columns,
   .alert-record { grid-template-columns: 116px minmax(230px, 1fr) 150px 110px; gap: 12px; }
   .alert-record-labels { display: grid; }
+  .operational-record { grid-template-columns: 100px minmax(220px, 1fr) 190px 130px; gap: 12px; }
 }
 
 @media (max-width: 700px) {
@@ -1057,12 +1151,18 @@ h1 {
   .alert-summary-rail > div:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
   .alert-completeness-notice { align-items: flex-start; flex-direction: column; gap: 4px; }
   .alert-ledger > header { align-items: flex-start; flex-direction: column; }
+  .operational-ledger > header { align-items: flex-start; flex-direction: column; }
+  .operational-ledger dl { width: 100%; }
+  .operational-ledger dl > div { min-width: 0; flex: 1; }
   .alert-filter { width: 100%; overflow-x: auto; }
   .alert-filter button { min-width: 78px; flex: 1 0 auto; }
   .alert-ledger-columns { display: none; }
   .alert-record { grid-template-columns: 96px minmax(0, 1fr); gap: 12px; padding: 13px; }
   .alert-record-labels { grid-column: 1 / -1; display: flex; }
   .alert-record-time { grid-column: 1 / -1; display: flex; justify-content: space-between; padding-top: 8px; border-top: 1px solid var(--line); }
+  .operational-record { grid-template-columns: 92px minmax(0, 1fr); gap: 12px; padding: 13px; }
+  .operational-record-identity { grid-column: 1 / -1; }
+  .operational-record-correlation { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; padding-top: 8px; border-top: 1px solid var(--line); }
   .alert-workspace-boundary { align-items: flex-start; flex-direction: column; gap: 4px; }
 }
 
@@ -1071,6 +1171,9 @@ h1 {
   .alert-source-cluster { grid-template-columns: 1fr; }
   .alert-source-cluster > small { grid-column: 1; }
   .alert-summary-rail small { max-width: 84px; }
+  .operational-ledger dl { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .operational-ledger dl > div { padding: 6px; }
+  .operational-ledger dt { overflow-wrap: anywhere; }
 }
 
 @media (max-width: 380px) {
