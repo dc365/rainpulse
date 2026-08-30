@@ -1,6 +1,6 @@
 # RP-032 NowcastNet 空间地图包实施记录
 
-状态：代码与接口完成；MRMS 服务器回算与地图包发布待执行
+状态：完成；MRMS 完整回算、地图包发布和控制面接入均已验收
 
 ## 1. 目标
 
@@ -87,3 +87,23 @@ scripts/stage_probabilistic_verification_map_run.sh \
 - Web 必须明确标注“集合均值，不是阈值概率图”；
 - MRMS 结果不能替代福建真实极坐标质控、QI 拼图、QPE 和业务实况检验；
 - 福建数据到位前，NowcastNet 继续是离线候选，STEPS 继续是主概率基线。
+
+## 6. 105 完整回算证据
+
+2026-08-30 在 105 的 RTX 6000D 上执行冻结留出集，新运行 `holdout-map-v1` 完成：
+
+- 50/50 个起报完成、0 失败；
+- 50 个不可变地图包、3,600 个 PNG 图层；
+- 15,000 行概率评分、150,000 条可靠性分箱记录；
+- 地图渲染耗时 P50/P95/最大为 `0.841/1.069/1.316 s`；
+- 完整单起报耗时 P50/P95/最大为 `31.411/42.218/47.282 s`；
+- 控制面发布目录大小约 56 MiB；
+- `operational_eligible=false`、`product_publication_enabled=false`。
+
+新运行与原始 `holdout-v1` 的配置哈希、样本选择证据、评分行数、覆盖率行数、可靠性
+行数、近远时效汇总和分类汇总逐项一致，说明增加地图渲染没有改变冻结验证结论。
+发布脚本随后核验全部图层大小和 SHA-256，并原子发布到：
+
+`/data/Weather/RADA/RADA_MRMS/reports/rp026-mrms-nowcastnet-v1/holdout-map-v1`
+
+GPU 窗口结束后，8004 上的 Qwen3.8 已按原参数恢复，`/health` 返回 `ok`。
