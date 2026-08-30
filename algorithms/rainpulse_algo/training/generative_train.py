@@ -706,10 +706,23 @@ def compare_generative_runs(
     resumed_path, resumed_latest = _latest_checkpoint(resumed_dir)
     if reference_latest["global_step"] != resumed_latest["global_step"]:
         raise GenerativeTrainError("final generative checkpoint steps differ")
-    for state in (
-        torch.load(reference_path, map_location="cpu", weights_only=False),
-        torch.load(resumed_path, map_location="cpu", weights_only=False),
+    reference = torch.load(reference_path, map_location="cpu", weights_only=False)
+    resumed = torch.load(resumed_path, map_location="cpu", weights_only=False)
+    for key in (
+        "global_step",
+        "profile_sha256",
+        "code_revision",
+        "sample_index_sha256",
+        "evolution_checkpoint_step",
+        "evolution_checkpoint_sha256",
+        "batch_size",
+        "ensemble_members",
+        "precision",
+        "stage_b_smoke",
     ):
+        if reference[key] != resumed[key]:
+            raise GenerativeTrainError(f"final generative identity differs: {key}")
+    for state in (reference, resumed):
         for name in (
             "evolution_state",
             "generator_state",
