@@ -196,6 +196,7 @@ services:
     volumes:
       - ../configs:/opt/rainpulse/configs:ro
       - /data/Weather/RADA/FMT_L2_Z959X_SBD:/data/Weather/RADA/FMT_L2_Z959X_SBD:ro
+      - /data/Weather/RADA/RADA_L2_FMT/OBS_TEMP:/data/Weather/RADA/RADA_L2_FMT/OBS_TEMP:ro
     healthcheck:
       test: ["CMD", "/rainpulse-healthcheck", "http://127.0.0.1:8090/healthz"]
       interval: 5s
@@ -261,7 +262,7 @@ services:
       RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
       RAINPULSE_WORKER_ID: cma-rstm-z9598
       RAINPULSE_WORKER_PROFILE: radar-decode-fmt
-      RAINPULSE_RADAR_CONFIG_DIR: /opt/rainpulse/configs/radars
+      RAINPULSE_RADAR_CONFIG_DIR: "${RAINPULSE_RADAR_CONFIG_DIR:-/opt/rainpulse/configs/radars}"
       RAINPULSE_RADAR_HEALTH_CONFIG: /opt/rainpulse/configs/health/rp007-integrity-v1.yaml
       TZ: UTC
     volumes:
@@ -342,7 +343,7 @@ services:
       RAINPULSE_GRID_CONFIG: /opt/rainpulse/configs/grids/fuzhou-0p01deg-v1.yaml
       RAINPULSE_ANCILLARY_CONFIG: /opt/rainpulse/configs/ancillary/fujian-taiwan-v1.yaml
       RAINPULSE_ANCILLARY_ROOT: /opt/rainpulse/ancillary
-      RAINPULSE_RADAR_CONFIG_DIR: /opt/rainpulse/configs/radars
+      RAINPULSE_RADAR_CONFIG_DIR: "${RAINPULSE_RADAR_CONFIG_DIR:-/opt/rainpulse/configs/radars}"
       RAINPULSE_QC_FLAG_DEFINITIONS: /opt/rainpulse/configs/qc/flag-definitions.yaml
       TZ: UTC
     volumes:
@@ -381,7 +382,7 @@ services:
       RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
       RAINPULSE_WORKER_ID: rp016-qi-mosaic
       RAINPULSE_WORKER_PROFILE: analysis-mosaic-qi
-      RAINPULSE_RADAR_MOSAIC_CONFIG: /opt/rainpulse/configs/mosaic/rp016-qi-mosaic-v1.yaml
+      RAINPULSE_RADAR_MOSAIC_CONFIG: "${RAINPULSE_RADAR_MOSAIC_CONFIG:-/opt/rainpulse/configs/mosaic/rp016-qi-mosaic-v1.yaml}"
       RAINPULSE_GRID_CONFIG: /opt/rainpulse/configs/grids/fuzhou-0p01deg-v1.yaml
       RAINPULSE_QC_FLAG_DEFINITIONS: /opt/rainpulse/configs/qc/flag-definitions.yaml
       TZ: UTC

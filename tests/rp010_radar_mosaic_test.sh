@@ -27,7 +27,7 @@ done
 
 grep -q 'RAINPULSE_WORKER_PROFILE: analysis-mosaic-qi' \
   "$repo_root/deploy/docker-compose.yaml"
-grep -q 'RAINPULSE_RADAR_MOSAIC_CONFIG: /opt/rainpulse/configs/mosaic/rp016-qi-mosaic-v1.yaml' \
+grep -q 'RAINPULSE_RADAR_MOSAIC_CONFIG:.*RAINPULSE_RADAR_MOSAIC_CONFIG.*rp016-qi-mosaic-v1.yaml' \
   "$repo_root/deploy/docker-compose.yaml"
 grep -q 'AnalysisMosaicJobType' \
   "$repo_root/services/control/internal/orchestration/events.go"

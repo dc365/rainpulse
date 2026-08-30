@@ -27,3 +27,11 @@ decoding but not eligible for operational ingest.
 The NAS directory currently replays historical payloads beneath newer
 filenames. The RSTM task/radial UTC timestamps and compressed-byte SHA-256 are
 authoritative; filename time is discovery metadata only.
+
+`fujian-20260828/` freezes the four RSTM 2.0 headers found in the 2026-08-28
+Fujian test inventory for Z9591, Z9593, Z9598 and Z9599. These configurations
+remain `draft`. They support an explicitly historical engineering replay, but
+must not activate continuous ingest or make the resulting analysis
+operationally eligible. The paired `DPCTEST` files are excluded from the first
+replay until the data provider confirms whether they are derived duplicates or
+a distinct authoritative stream.

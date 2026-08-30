@@ -1,0 +1,56 @@
+schema_version: "1.0"
+config_version: z9598-fmt-20260828-v1
+radar_id: z9598
+lifecycle: draft
+display_name: Sanming Z9598
+
+site:
+  longitude_deg: 117.08055877685547
+  latitude_deg: 27.00861167907715
+  altitude_m: 1692.0
+  antenna_altitude_m: 1740.0
+  altitude_datum: null
+
+hardware:
+  manufacturer: null
+  model: null
+  radar_band: S
+  frequency_mhz: 2730.0
+  beam_width_deg: 0.9599999785423279
+  beam_width_vertical_deg: 0.8600000143051147
+  dual_pol_available: true
+  nyquist_velocity_mps: null
+  calibration_offsets: {dbzh_db: null, zdr_db: null}
+
+scan:
+  strategy_name: VCP21D
+  expected_update_seconds: 338
+  expected_elevations_deg: [0.5, 1.5, 2.4, 3.4, 4.3, 6.0, 9.9, 14.6, 19.5]
+  expected_cut_elevations_deg: [0.5, 0.5, 1.5, 1.5, 2.4, 3.4, 4.3, 6.0, 9.9, 14.6, 19.5]
+  azimuth_resolution_deg: 1.0
+  range_gate_m: 250.0
+  max_range_m: 460000.0
+
+fields:
+  - {canonical_name: DBZH, source_name: REF, source_unit: dBZ, canonical_unit: dBZ, missing_value: raw_codes_0_to_4, scale_factor: 0.5, add_offset: -33.0}
+  - {canonical_name: ZDR, source_name: ZDR, source_unit: dB, canonical_unit: dB, missing_value: raw_codes_0_to_4, scale_factor: 0.0625, add_offset: -8.125}
+  - {canonical_name: RHOHV, source_name: RHO, source_unit: "1", canonical_unit: "1", missing_value: raw_codes_0_to_4, scale_factor: 0.005, add_offset: -0.025}
+  - {canonical_name: PHIDP, source_name: PHI, source_unit: degree, canonical_unit: degree, missing_value: raw_codes_0_to_4, scale_factor: 0.01, add_offset: -0.5}
+  - {canonical_name: VR, source_name: VEL, source_unit: m s-1, canonical_unit: m s-1, missing_value: raw_codes_0_to_4, scale_factor: 0.5, add_offset: -64.5}
+  - {canonical_name: SW, source_name: SW, source_unit: m s-1, canonical_unit: m s-1, missing_value: raw_codes_0_to_4, scale_factor: 0.5, add_offset: -64.5}
+  - {canonical_name: SNR, source_name: SNRH, source_unit: dB, canonical_unit: dB, missing_value: raw_codes_0_to_4, scale_factor: 0.5, add_offset: -10.0}
+
+source:
+  format: cma-rstm-level2
+  format_version: "2.0"
+  delivery: shared_directory
+  uri_pattern: file:///data/Weather/RADA/RADA_L2_FMT/OBS_TEMP/{yyyy}/{yyyymmdd}/Z9598/Z_RADR_I_Z9598_{filename_time}_O_DOR_SAD_CAP_FMT.bin.bz2
+  timestamp_timezone: UTC
+
+ancillary: {dem_asset_version: copernicus-dem-glo30-2022-v1, clutter_map_version: null, coastline_asset_version: gshhg-2.3.7-fujian-taiwan-v1}
+qc: {profile: null, pipeline_version: null, flag_definition_version: null}
+known_issues:
+  - Only regular FMT files are selected; paired DPCTEST semantics await confirmation.
+  - Altitude datum, manufacturer/model, calibration offsets and static clutter asset await verification.
+inventory_owner: rainpulse
+updated_at: "2026-08-30T00:00:00Z"

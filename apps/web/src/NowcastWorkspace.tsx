@@ -11,6 +11,7 @@ import { NowcastMap } from './NowcastMap'
 import { NowcastTimeline, type TimelineAsset } from './NowcastTimeline'
 
 type ForecastRun = components['schemas']['ForecastRun']
+type ForecastRunPage = components['schemas']['ForecastRunPage']
 type Product = components['schemas']['Product']
 type ProductAsset = components['schemas']['ProductAsset']
 type ProductPage = components['schemas']['ProductPage']
@@ -25,6 +26,7 @@ type VerificationSummary = components['schemas']['VerificationSummary']
 
 type SupportedProductType = 'rain_rate' | 'accumulation_60' | 'accumulation_120'
 type DisplayMode = 'deterministic' | 'probability' | 'quantile'
+type DataMode = 'realtime' | 'historical'
 type DisplayAsset = TimelineAsset & {
   asset_type: string
   content_url: string
@@ -95,6 +97,27 @@ function formatUtc(value?: string | null, includeDate = false) {
   return `${new Intl.DateTimeFormat('zh-CN', options).format(new Date(value))} UTC`
 }
 
+function formatRunOption(value: string) {
+  const timestamp = new Date(value)
+  const local = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Taipei',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(timestamp)
+  const utc = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'UTC',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(timestamp)
+  return `${local} CST · ${utc} UTC`
+}
+
 function formatLead(value?: number | null) {
   return value == null ? '暂无' : `T+${value}`
 }
@@ -109,6 +132,9 @@ function formatCoordinate(value: number) {
 
 export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
   const [run, setRun] = useState<ForecastRun | null>(null)
+  const [dataMode, setDataMode] = useState<DataMode>('realtime')
+  const [availableRuns, setAvailableRuns] = useState<ForecastRun[]>([])
+  const [selectedRunID, setSelectedRunID] = useState<string | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [assets, setAssets] = useState<Record<string, ProductAsset[]>>({})
   const [productType, setProductType] = useState<SupportedProductType>('rain_rate')
@@ -146,11 +172,28 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
     const load = async () => {
       setLoading(true)
       try {
-        const runResponse = await fetch('/api/v1/runs/latest', { signal: controller.signal })
-        if (!runResponse.ok) throw new Error(`最新预报运行接口响应 ${runResponse.status}`)
-        const latestRun = await runResponse.json() as ForecastRun
+        const runPages = await Promise.all(
+          ['PUBLISHED', 'VERIFYING', 'VERIFIED'].map(async (status) => {
+            const response = await fetch(`/api/v1/runs?status=${status}&limit=50`, {
+              signal: controller.signal,
+            })
+            if (!response.ok) throw new Error(`预报运行目录接口响应 ${response.status}`)
+            return await response.json() as ForecastRunPage
+          }),
+        )
+        const catalog = Array.from(
+          new Map(runPages.flatMap((page) => page.items)
+            .map((item) => [item.run_id, item])).values(),
+        ).sort((left, right) => Date.parse(right.issue_time) - Date.parse(left.issue_time))
+        if (catalog.length === 0) throw new Error('暂无已发布或已检验的可展示预报')
+        const selectedRun = dataMode === 'historical'
+          ? catalog.find((item) => item.run_id === selectedRunID) ?? catalog[0]
+          : catalog[0]
+        if (dataMode === 'historical' && selectedRunID !== selectedRun.run_id) {
+          setSelectedRunID(selectedRun.run_id)
+        }
         const productResponse = await fetch(
-          `/api/v1/products?run_id=${encodeURIComponent(latestRun.run_id)}`,
+          `/api/v1/products?run_id=${encodeURIComponent(selectedRun.run_id)}`,
           { signal: controller.signal },
         )
         if (!productResponse.ok) throw new Error(`产品目录接口响应 ${productResponse.status}`)
@@ -171,7 +214,9 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
           })
           if (ensembleResponse.ok) {
             const candidate = await ensembleResponse.json() as unknown
-            if (isEnsembleBundle(candidate)) latestEnsemble = candidate
+            if (isEnsembleBundle(candidate)
+              && candidate.issue_time === selectedRun.issue_time
+              && candidate.grid_id === selectedRun.grid_id) latestEnsemble = candidate
           }
         } catch (ensembleRequestError: unknown) {
           if (ensembleRequestError instanceof DOMException
@@ -180,7 +225,7 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
         let latestVerification: VerificationSummary | null = null
         try {
           const verificationResponse = await fetch(
-            `/api/v1/verification/summary?run_id=${encodeURIComponent(latestRun.run_id)}`,
+            `/api/v1/verification/summary?run_id=${encodeURIComponent(selectedRun.run_id)}`,
             { signal: controller.signal },
           )
           if (verificationResponse.ok) {
@@ -200,7 +245,8 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
             .sort(sortAssets)[0]
           : null
 
-        setRun(latestRun)
+        setRun(selectedRun)
+        setAvailableRuns(catalog)
         setProducts(supported)
         setAssets(nextAssets)
         setEnsembleBundle(latestEnsemble)
@@ -222,7 +268,7 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
     }
     void load()
     return () => controller.abort()
-  }, [refreshToken])
+  }, [dataMode, refreshToken, selectedRunID])
 
   const selectedProduct = useMemo(
     () => products.find((item) => item.product_type === productType) ?? null,
@@ -452,6 +498,16 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
       )
       : productType === 'rain_rate' ? rainRateLegend : rainfallAmountLegend
   const issueTime = ensembleActive ? ensembleBundle?.issue_time : run?.issue_time
+  const realtimeFresh = dataMode === 'realtime'
+    && run != null
+    && updatedAt != null
+    && updatedAt.getTime() - Date.parse(run.issue_time) <= 15 * 60 * 1000
+
+  const switchDataMode = (nextMode: DataMode) => {
+    if (nextMode === 'historical' && !selectedRunID) setSelectedRunID(run?.run_id ?? null)
+    setDataMode(nextMode)
+    setLayerError(false)
+  }
 
   return (
     <section className="forecast-page" aria-labelledby="forecast-title">
@@ -464,14 +520,53 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
         <div className="update-time">
           <span>产品目录更新</span>
           <strong>{updatedAt ? updatedAt.toLocaleTimeString('zh-CN', { hour12: false }) : '暂无'}</strong>
-          <small>所有时间均为 UTC</small>
+          <small>起报时次显示 CST 与 UTC</small>
         </div>
       </header>
 
       {error ? <div className="error-banner" role="alert"><strong>产品读取异常</strong><span>{error}</span></div> : null}
 
       <section className="forecast-stage">
-        <div className="forecast-mode-bar" aria-label="预报模型与集合产品选择">
+        <div className="forecast-mode-bar" aria-label="数据时次、预报模型与集合产品选择">
+          <div className="forecast-source-control">
+            <div className="forecast-source-switch" role="group" aria-label="数据时次模式">
+              <span>时次</span>
+              <button
+                type="button"
+                className={dataMode === 'realtime' ? 'active' : ''}
+                aria-pressed={dataMode === 'realtime'}
+                onClick={() => switchDataMode('realtime')}
+              >实时</button>
+              <button
+                type="button"
+                className={dataMode === 'historical' ? 'active' : ''}
+                aria-pressed={dataMode === 'historical'}
+                onClick={() => switchDataMode('historical')}
+              >历史时次</button>
+            </div>
+            {dataMode === 'historical' ? (
+              <label className="forecast-run-picker">
+                <span>起报</span>
+                <select
+                  aria-label="历史起报时次"
+                  value={selectedRunID ?? run?.run_id ?? ''}
+                  onChange={(event) => setSelectedRunID(event.target.value)}
+                >
+                  {availableRuns.map((item) => (
+                    <option key={item.run_id} value={item.run_id}>
+                      {formatRunOption(item.issue_time)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <div className={`forecast-live-state${realtimeFresh ? ' fresh' : ''}`}>
+                <span aria-hidden="true" />
+                <strong>{realtimeFresh ? '跟随最新产品' : '当前无实时更新'}</strong>
+                <small>{run ? formatRunOption(run.issue_time) : '等待产品目录'}</small>
+              </div>
+            )}
+          </div>
           <div className="forecast-mode-switch" role="group" aria-label="预报模型">
             <span>模型</span>
             <button

@@ -59,6 +59,7 @@ NowcastInput gate.
 | RP-029 | Local alert-management and read-only operations loop complete | Prometheus pending/firing evidence and Alertmanager silence/inhibition state are fail-soft aggregated through the Go API and exposed in a responsive Web alert ledger; no external receiver or write action is enabled |
 | RP-032 | Probabilistic spatial-evidence implementation and server replay complete | The frozen RP-026 holdout completed 50/50 issues with 3,600 immutable EPSG:4326 MRMS/NowcastNet-mean/STEPS-mean and deterministic comparison layers; Go validates the map index and the Web exposes synchronized ensemble-mean GIS/timeline evidence without changing the offline-only gate |
 | RP-033 | Raw exceedance-probability GIS implementation and server replay complete | A separate probability-map contract, renderer, API and synchronized three-map Web mode expose MRMS 0/100 exceedance and raw NowcastNet/STEPS member frequencies for 1/5/10/20/50 mm/h; all 50 frozen holdout issues and 9,000 probability assets passed staging validation, while calibration, operational eligibility and publication remain disabled |
+| RP-034 | Fujian four-radar historical engineering replay complete through QPE | Z9591/Z9593/Z9598/Z9599 completed real decode, polar QC and single-radar grids for 2026-08-28 10:00 UTC; all four aligned within 150 s, two contributed after quality decay, and the ineligible analysis completed QPE and diagnostics. The Web now separates real-time following from pinned historical issue selection |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -583,6 +584,18 @@ frozen holdout issues without failure and atomically published 9,000 validated
 probability assets alongside the unchanged 3,600 RP-032 rain-rate assets. Desktop
 and mobile browser checks passed with no console errors or warnings.
 
+RP-034 begins controlled Fujian multi-radar integration without enabling the
+continuous ingest or planner. Four draft RSTM 2.0 configurations were frozen
+from the 2026-08-28 headers and all four stations completed decode, polar QC and
+single-radar gridding. Their volume ends all fall within the 150-second analysis
+window. After time-quality decay, Z9591 and Z9598 provided actual mosaic cells;
+Z9593 and Z9599 remained aligned inputs but fell below the minimum fusion QI.
+The 10:00 UTC analysis completed basic Z-R QPE and a 23-layer diagnostic bundle,
+but stays operationally ineligible because the inputs remain drafts. The Web now
+lists only displayable forecast states, explicitly reports stale real-time data,
+and pins a selected run in historical mode. Details and exact evidence are in
+`docs/RP034_福建四站雷达历史回放与时次选择实施记录.md`.
+
 The 2021-08, 2022-01, 2022-12, 2023-06, 2023-12, 2024-06, 2024-07, 2024-11,
 2025-01, 2025-03 and 2025-07 months are now spent verification data for their
 respective claims. Do not tune against their results and reuse them as
@@ -596,10 +609,11 @@ Full raw-radar-to-React operational acceptance still needs at least three
 consecutive operational QC→grid→mosaic→QPE cycles with trackable precipitation.
 Gauge adjustment remains disabled until representative gauge observations and
 quality rules are supplied. Real multi-radar mosaic acceptance still requires
-at least two ready radar configurations and representative synchronized
-volumes. Static clutter, derived coastline/sea-AP probability assets, verified
-vertical datum and a representative mountain-blockage case remain operational
-gates.
+at least two ready radar configurations. RP-034 proves synchronized four-radar
+engineering ingestion, alignment and a two-contributor mosaic, but not ready-
+configuration acceptance. Static clutter, derived coastline/sea-AP probability
+assets, verified vertical datum and a representative mountain-blockage case
+remain operational gates.
 
 Before that real-data acceptance, enable RP-019 in stages: archive-only ingest,
 then decode/QC/grid, then mosaic/QPE, and only then NowcastInput/LK/product
@@ -628,8 +642,9 @@ or radar-maintainer confirmation:
 6. Representative clear-air, radial-interference, sea/AP, mountain-blockage,
    ordinary-rain, convection and typhoon cases.
 7. Later QPE truth: gauge locations, observation interval and quality rules.
-8. A second ready radar configuration plus representative volumes synchronized
-   to Z9598 for real overlap/blending acceptance.
+8. Promote at least two of the RP-034 four-station drafts to `ready`, then repeat
+   synchronized overlap/blending acceptance on at least three consecutive wet
+   analysis times.
 
 Until the ready-state metadata, operational ancillary assets, representative
 case labels and QC thresholds are verified, the deployed decode/QC chain remains

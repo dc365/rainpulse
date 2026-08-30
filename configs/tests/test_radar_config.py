@@ -155,6 +155,35 @@ def test_z9598_real_sample_configuration_is_valid_but_not_ready() -> None:
         validate(config)
 
 
+def test_fujian_four_radar_history_configs_are_valid_drafts() -> None:
+    config_dir = CONFIG_ROOT / "radars" / "fujian-20260828"
+    paths = sorted(config_dir.glob("z959*.yaml"))
+
+    assert {path.stem for path in paths} == {"z9591", "z9593", "z9598", "z9599"}
+    for path in paths:
+        config = yaml.safe_load(path.read_text())
+        validate(config)
+        assert config["radar_id"] == path.stem
+        assert config["lifecycle"] == "draft"
+        assert config["source"]["timestamp_timezone"] == "UTC"
+        assert "/RADA_L2_FMT/OBS_TEMP/" in config["source"]["uri_pattern"]
+        assert "DPCTEST" not in config["source"]["uri_pattern"]
+        assert {item["canonical_name"] for item in config["fields"]} == {
+            "DBZH",
+            "ZDR",
+            "RHOHV",
+            "PHIDP",
+            "VR",
+            "SW",
+            "SNR",
+        }
+
+        promoted = copy.deepcopy(config)
+        promoted["lifecycle"] = "ready"
+        with pytest.raises(ValidationError):
+            validate(promoted)
+
+
 def test_qc_flag_definition_is_a_unique_uint32_bitset() -> None:
     definition = yaml.safe_load((CONFIG_ROOT / "qc" / "flag-definitions.yaml").read_text())
     flags = definition["flags"]
@@ -350,6 +379,39 @@ def test_rp016_mosaic_profile_versions_hard_qc_gate_immutably() -> None:
     Draft202012Validator(schema).validate(profile)
     assert profile["profile_version"] == "rp016-qi-mosaic-v1"
     assert profile["algorithm_version"] == "qi-mosaic-1.1.0"
+    assert {
+        "MISSING",
+        "HARDWARE_ANOMALY",
+        "RADIAL_INTERFERENCE",
+        "GROUND_CLUTTER",
+        "SEA_CLUTTER",
+        "ANOMALOUS_PROPAGATION",
+        "BIOLOGICAL_ECHO",
+    } <= set(profile["fusion"]["reject_flags"])
+
+
+def test_rp034_fujian_four_radar_profile_is_engineering_only_and_complete() -> None:
+    schema = json.loads(
+        (CONFIG_ROOT / "schemas" / "radar-mosaic-profile.schema.json").read_text()
+    )
+    profile = yaml.safe_load(
+        (
+            CONFIG_ROOT
+            / "mosaic"
+            / "rp034-fujian-four-radar-engineering-v1.yaml"
+        ).read_text()
+    )
+
+    Draft202012Validator(schema).validate(profile)
+    assert profile["profile_version"] == "rp034-fujian-four-radar-engineering-v1"
+    assert profile["alignment"]["expected_radar_ids"] == [
+        "z9591",
+        "z9593",
+        "z9598",
+        "z9599",
+    ]
+    assert profile["alignment"]["maximum_absolute_offset_seconds"] == 150
+    assert profile["alignment"]["minimum_operational_contributors"] == 2
     assert {
         "MISSING",
         "HARDWARE_ANOMALY",

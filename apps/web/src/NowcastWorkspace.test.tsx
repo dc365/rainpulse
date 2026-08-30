@@ -154,7 +154,7 @@ describe('RainPulse short-nowcast workspace', () => {
   it('renders published products, scrubs frames and exposes point and area evidence', async () => {
     const fetchStatus = vi.fn().mockImplementation((input: string) => {
       let body: unknown = {}
-      if (input.endsWith('/runs/latest')) body = run
+      if (input.includes('/runs?status=')) body = { items: [run] }
       else if (input.includes('/products?run_id=')) body = { items: products }
       else if (input.endsWith('/products/rain-product/assets')) body = rainAssets
       else if (input.endsWith('/products/accum-60/assets')) body = accumulationAsset('accum-60', 60)
@@ -184,6 +184,8 @@ describe('RainPulse short-nowcast workspace', () => {
     expect(screen.getByText('实况检验')).toBeTruthy()
     expect(await screen.findByText('0.713')).toBeTruthy()
     expect(screen.getByText('工程验证 / RP-023')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '实时' }).getAttribute('aria-pressed')).toBe('true')
+    expect(await screen.findByText('当前无实时更新')).toBeTruthy()
     const firstLayer = await screen.findByRole('img', { name: 'T+5 分钟降水率图层' })
     expect(firstLayer.getAttribute('data-source')).toBe('/api/lead-5.png')
     expect(screen.getByRole('application', { name: /可交互降水 GIS 地图/ })).toBeTruthy()
@@ -228,7 +230,7 @@ describe('RainPulse short-nowcast workspace', () => {
   it('keeps the map picker compact when the selected cell is missing', async () => {
     const fetchStatus = vi.fn().mockImplementation((input: string) => {
       let body: unknown = {}
-      if (input.endsWith('/runs/latest')) body = run
+      if (input.includes('/runs?status=')) body = { items: [run] }
       else if (input.includes('/products?run_id=')) body = { items: products }
       else if (input.endsWith('/products/rain-product/assets')) body = rainAssets
       else if (input.endsWith('/products/accum-60/assets')) body = accumulationAsset('accum-60', 60)
@@ -263,7 +265,7 @@ describe('RainPulse short-nowcast workspace', () => {
   it('switches offline STEPS probability and quantile layers on the shared GIS timeline', async () => {
     const fetchStatus = vi.fn().mockImplementation((input: string) => {
       let body: unknown = {}
-      if (input.endsWith('/runs/latest')) body = run
+      if (input.includes('/runs?status=')) body = { items: [run] }
       else if (input.includes('/products?run_id=')) body = { items: products }
       else if (input.endsWith('/products/rain-product/assets')) body = rainAssets
       else if (input.endsWith('/products/accum-60/assets')) body = accumulationAsset('accum-60', 60)
@@ -309,5 +311,53 @@ describe('RainPulse short-nowcast workspace', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'LK 确定性' }))
     expect(await screen.findByRole('img', { name: 'T+5 分钟降水率图层' })).toBeTruthy()
+  })
+
+  it('pins a selected published run in historical mode', async () => {
+    const olderRun = {
+      ...run,
+      run_id: '1ce8e90c-3160-5e5d-874d-1eda09bf1084',
+      issue_time: '2026-08-24T10:00:00Z',
+      created_at: '2026-08-24T14:10:02Z',
+      updated_at: '2026-08-24T15:12:40Z',
+    }
+    const fetchStatus = vi.fn().mockImplementation((input: string) => {
+      let body: unknown = {}
+      if (input.includes('/runs?status=')) body = { items: [run, olderRun] }
+      else if (input.includes('/products?run_id=')) body = { items: products }
+      else if (input.endsWith('/products/rain-product/assets')) body = rainAssets
+      else if (input.endsWith('/products/accum-60/assets')) body = accumulationAsset('accum-60', 60)
+      else if (input.endsWith('/products/accum-120/assets')) body = accumulationAsset('accum-120', 120)
+      else if (input.includes('/point-forecast?')) body = {
+        product_id: 'rain-product', longitude: 119.3, latitude: 26.08,
+        grid_longitude: 119.3, grid_latitude: 26.08,
+        values: [],
+      }
+      else if (input.includes('/area-statistics?')) body = {
+        product_id: 'rain-product', bbox: [119, 25.9, 119.6, 26.3],
+        valid_time: '2026-08-25T10:05:00Z', lead_time_minutes: 5,
+        valid_pixel_count: 0, missing_pixel_count: 5151, valid_pixel_ratio: 0,
+        max_rain_rate: 0, mean_rain_rate: 0,
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => body })
+    })
+    vi.stubGlobal('fetch', fetchStatus)
+
+    render(<NowcastWorkspace refreshToken={0} />)
+
+    await screen.findByRole('img', { name: 'T+5 分钟降水率图层' })
+    fireEvent.click(screen.getByRole('button', { name: '历史时次' }))
+    const picker = await screen.findByRole('combobox', { name: '历史起报时次' })
+    expect(picker.querySelectorAll('option')).toHaveLength(2)
+    fireEvent.change(picker, { target: { value: olderRun.run_id } })
+
+    await waitFor(() => {
+      expect(fetchStatus.mock.calls.some(([url]) => String(url).includes(
+        `/products?run_id=${olderRun.run_id}`,
+      ))).toBe(true)
+    })
+    expect(screen.getByRole('button', { name: '历史时次' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole<HTMLSelectElement>('combobox', { name: '历史起报时次' }).value)
+      .toBe(olderRun.run_id)
   })
 })

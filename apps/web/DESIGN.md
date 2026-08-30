@@ -52,6 +52,12 @@ latitude/longitude graticule, without glass effects.
 - Preserve the product pixel-edge extent separately from the point-centre grid.
 - Keep the local GSHHG coastline available when the XYZ basemap is unavailable.
 - Keep UTC explicit on every forecast time.
+- Keep the data-source mode separate from the lead-time timeline: real-time
+  follows the newest displayable run, while historical mode pins one issue time.
+- Show historical issue times in CST and UTC, but retain UTC as the API and
+  product contract time zone.
+- Never label a stale latest product as live; expose the absence of a current
+  real-time update while keeping the most recent displayable run available.
 - Preserve product, model, configuration and source SHA provenance.
 - Avoid decorative gradients, generic card grids and ornamental animation.
 

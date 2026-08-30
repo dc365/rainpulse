@@ -2079,12 +2079,74 @@ h1 {
 .forecast-mode-bar {
   min-height: 46px;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: stretch;
   border-bottom: 1px solid var(--line);
   color: #52645f;
   background: #f8faf8;
 }
+.forecast-source-control {
+  display: flex;
+  align-items: stretch;
+  border-right: 1px solid var(--line);
+  background: #f4f8f6;
+}
+.forecast-source-switch,
+.forecast-run-picker,
+.forecast-live-state {
+  display: flex;
+  align-items: center;
+}
+.forecast-source-switch { border-right: 1px solid var(--line); }
+.forecast-source-switch > span,
+.forecast-run-picker > span {
+  padding: 0 8px;
+  color: #73807c;
+  font-size: 11px;
+  letter-spacing: .05em;
+  white-space: nowrap;
+}
+.forecast-run-picker select {
+  width: 206px;
+  min-height: 34px;
+  margin: 5px 7px 5px 0;
+  padding: 0 28px 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  color: #35514a;
+  background: #fff;
+  font: inherit;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.forecast-run-picker select:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--teal), transparent 45%);
+  outline-offset: 1px;
+}
+.forecast-live-state {
+  position: relative;
+  min-width: 214px;
+  display: grid;
+  grid-template-columns: 8px 1fr;
+  align-content: center;
+  column-gap: 7px;
+  padding: 4px 10px;
+}
+.forecast-live-state > span {
+  width: 7px;
+  height: 7px;
+  grid-row: 1 / span 2;
+  align-self: center;
+  border-radius: 50%;
+  background: #b36c43;
+  box-shadow: 0 0 0 3px #f3e5dc;
+}
+.forecast-live-state strong,
+.forecast-live-state small { white-space: nowrap; }
+.forecast-live-state strong { color: #7e4c31; font-size: 11px; }
+.forecast-live-state small { color: #71807b; font-size: 10px; font-variant-numeric: tabular-nums; }
+.forecast-live-state.fresh > span { background: var(--teal); box-shadow: 0 0 0 3px #dcece7; }
+.forecast-live-state.fresh strong { color: #075e52; }
 .forecast-mode-switch,
 .ensemble-layer-switch,
 .ensemble-layer-switch > div {
@@ -2287,6 +2349,15 @@ h1 {
 
 @media (max-width: 700px) {
   .forecast-mode-bar { display: block; overflow: hidden; }
+  .forecast-source-control {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .forecast-source-switch button { min-width: 52px; }
+  .forecast-run-picker select { width: min(220px, calc(100vw - 236px)); }
+  .forecast-live-state { min-width: 0; }
   .forecast-mode-switch { border-right: 0; border-bottom: 1px solid var(--line); }
   .forecast-mode-switch button { flex: 1; }
   .ensemble-layer-switch { min-height: 42px; border-bottom: 1px solid var(--line); }
@@ -2319,4 +2390,12 @@ h1 {
   .stage-status > small { display: none; }
   .stage-assets { bottom: 146px; }
   .drawer-summary { display: none; }
+}
+
+@media (max-width: 430px) {
+  .forecast-source-control { display: block; }
+  .forecast-source-switch { border-right: 0; border-bottom: 1px solid var(--line); }
+  .forecast-source-switch button { flex: 1; }
+  .forecast-run-picker select { width: calc(100% - 52px); min-height: 40px; margin-block: 5px; }
+  .forecast-live-state { min-height: 44px; }
 }
