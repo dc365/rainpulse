@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "validated_at": "2026-08-30T14:49:00Z",
+  "comparison_target": "reviewed_official_inference_capsule_evolution_network",
+  "input_frames": 9,
+  "target_frames": 20,
+  "base_channels": 32,
+  "rainpulse_parameter_count": 8862548,
+  "official_parameter_count": 8862548,
+  "rainpulse_parameter_tensor_count": 161,
+  "official_parameter_tensor_count": 161,
+  "parameter_count_equal": true,
+  "parameter_shape_multiset_equal": true,
+  "conformance_dataset_validation": {
+    "sample_count": 16,
+    "all_shard_content_hashes_verified": true,
+    "all_samples_readable": true,
+    "all_samples_valid": true,
+    "minimum_rain_rate_mm_h": 0.0,
+    "maximum_rain_rate_mm_h": 128.0,
+    "sample_index_sha256": "0b54b818f18aff020530cd5f65f6c042f928fb77d8c6e1781f9dbffed82562bf"
+  },
+  "operational_eligible": false
+}

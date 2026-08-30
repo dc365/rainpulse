@@ -2,7 +2,7 @@
 
 更新日期：2026-08-30
 
-当前状态：10,000 样本预处理试制已通过验收，进入训练器实现，GPU 自训练尚未开始
+当前状态：10,000 样本试制、0.02° 对照集和演化网络 GPU 单步均已通过，尚未启动长时间训练
 
 唯一执行方案：[TRAINING_PLAN_v1.0.md](TRAINING_PLAN_v1.0.md)
 
@@ -46,7 +46,7 @@ MRMS 基础模型 → 冻结父权重 → 福建微调子模型 → 离线验收
 1. 先用 MRMS 训练 `RainPulse-NowcastNet-MRMS-v1`，使用随机初始化，形成 RainPulse 自有训练权重。
 2. 福建连续真实资料到位后，必须先经过 v1.1 的极坐标质控、拼图和 QPE，再微调得到 `RainPulse-NowcastNet-Fujian-v1`。
 3. 福建模型是 MRMS 模型的子制品，不能覆盖父权重。
-4. 正式产品网格保持 EPSG:4326、`0.01° × 0.01°`。官方 `0.02°` 协议只用于重建训练器基线，不代表 RainPulse 最终产品分辨率。
+4. 正式产品网格保持 EPSG:4326、`0.01° × 0.01°`。`0.02°` 协议只用于训练器基线对照，不代表 RainPulse 最终产品分辨率；其样本必须从 0.01°、512 × 512 原生窗口降尺度为 256 × 256，不能直接缩小现有 0.01°、256 × 256 试制块。
 5. 训练采用 9 帧输入、20 帧目标、10 分钟间隔和 256 × 256 训练裁剪，雨强上限为 128 mm/h。
 6. MRMS 训练集覆盖 2019 至 2023 年；开发集和独立留出集使用尚未被 RP 验证消耗的 2024、2025 月份。
 7. 允许每天 20:00 至次日 08:00 分段训练，但必须支持完整、可验证的断点续训。
@@ -65,4 +65,38 @@ MRMS 基础模型 → 冻结父权重 → 福建微调子模型 → 离线验收
 
 ## 5. 下一动作
 
-MRMS 全量 manifest 审计、冻结切分、训练/开发窗口索引、原生 0.01° 坐标校验和 10,000 样本试制均已通过验收。下一步冻结训练运行配置，实现试制集加载和 0.02° 演化网络最小训练闭环。GPU 完整训练尚未开始，也不需要在 CPU 侧训练器开发期间停用共享模型服务。
+MRMS 全量 manifest 审计、冻结切分、10,000 样本试制、独立 0.02° 对照样本、训练加载器和演化网络最小闭环均已通过验收。BF16 批量 16 和 8 的单步资源测量表明演化网络可直接使用冻结全局批量 16。下一步实现连续训练和严格恢复，完成 1,000 步中断恢复对照；在此之前不启动 300,000 步正式训练。生成器和判别器训练循环仍待实现。
+
+## 6. 重现入口
+
+以下路径均由部署环境注入，不写入仓库。0.02° 对照集只需制作一次，完成标记和样本索引哈希不一致时加载器会拒绝训练。
+
+```bash
+cd "$RAINPULSE_REPOSITORY_ROOT"
+PYTHONPATH=algorithms "$RAINPULSE_TRAIN_PYTHON" \
+  -m rainpulse_algo.training.conformance \
+  --run-profile configs/training/nowcastnet-mrms-run-v1.yaml \
+  --pilot-profile configs/training/nowcastnet-mrms-pilot-v1.yaml \
+  --repository-root . \
+  --pilot-plan "$RAINPULSE_MRMS_PILOT_PLAN" \
+  --audit-root "$RAINPULSE_MRMS_AUDIT_ROOT" \
+  --dataset-root "$RAINPULSE_MRMS_ARCHIVE_ROOT" \
+  --output-root "$RAINPULSE_MRMS_CONFORMANCE_ROOT" \
+  --workers 4
+```
+
+单步 GPU 更新和检查点回读使用同一个入口，通过 `--track` 明确区分两种空间协议：
+
+```bash
+cd "$RAINPULSE_REPOSITORY_ROOT"
+PYTHONPATH=algorithms "$RAINPULSE_TRAIN_PYTHON" \
+  -m rainpulse_algo.training.evolution_smoke \
+  --profile configs/training/nowcastnet-mrms-run-v1.yaml \
+  --repository-root . \
+  --data-root "$RAINPULSE_MRMS_PILOT_ROOT" \
+  --output-dir "$RAINPULSE_TRAIN_RUN_ROOT/evolution-smoke" \
+  --track foundation_0p01 \
+  --device cuda \
+  --batch-size 16 \
+  --precision bf16
+```

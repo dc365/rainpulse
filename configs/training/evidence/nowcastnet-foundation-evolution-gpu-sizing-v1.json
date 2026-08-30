@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0",
+  "validated_at": "2026-08-30T14:51:06.060902+00:00",
+  "status": "passed",
+  "profile_sha256": "1f8fe80408fe45f6c74b4f94c69ad757034779570a7a35257f76e810381fb8b7",
+  "sample_index_sha256": "0d1569b1d2c36302f969711be8b935b458e0b424e5e2ce44acb2dc577a34bdff",
+  "data_track": "foundation_0p01",
+  "resolution_deg": 0.01,
+  "precision": "bf16",
+  "gpu_name": "NVIDIA RTX 6000D",
+  "gpu_total_memory_bytes": 89173131264,
+  "torch_version": "2.12.1+cu132",
+  "cuda_version": "13.2",
+  "measurements": [
+    {
+      "batch_size": 16,
+      "optimizer_updates": 1,
+      "duration_seconds": 0.6503261085599661,
+      "peak_allocated_memory_bytes": 7309481472,
+      "peak_reserved_memory_bytes": 8373927936,
+      "loss_total": 55.989707946777344,
+      "gradient_norm_before_clip": 5.143037796020508,
+      "checkpoint_sha256": "7debce94f235a48ab4b4289314c756c5be73862fa6d8987571348805f1555d24",
+      "full_report_sha256": "fff4b21eb14042174239973ee2133dd47b3b442517a78a3f8486012cb4d564a9"
+    },
+    {
+      "batch_size": 8,
+      "optimizer_updates": 1,
+      "duration_seconds": 0.6205586474388838,
+      "peak_allocated_memory_bytes": 3722696192,
+      "peak_reserved_memory_bytes": 4250927104,
+      "loss_total": 11.177950859069824,
+      "gradient_norm_before_clip": 1.589747667312622,
+      "checkpoint_sha256": "0e34a7d4298450f2037aba1e952bc9edea7f9e0bd619f04706798c2cb4081536",
+      "full_report_sha256": "ea913674da86d0cb9b9a924fc312600dafdfa714d52219d9082d3fd05def27bf"
+    }
+  ],
+  "qwen38_restored_after_measurement": true,
+  "operational_eligible": false
+}

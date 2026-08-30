@@ -1,0 +1,77 @@
+schema_version: "1.0"
+profile_version: nowcastnet-mrms-run-v1
+lifecycle: offline_training
+operational_eligible: false
+
+frozen_inputs:
+  training_profile:
+    path: configs/training/nowcastnet-mrms-training-v1.yaml
+    sha256: c54d200a88e9f60d9dd1bfb44c4e2421700b4e1bb9ac3e60e36097b2b5c618bc
+  pilot_profile:
+    path: configs/training/nowcastnet-mrms-pilot-v1.yaml
+    sha256: 2404e6effe1c425f86357611b845b962aa15a52060bf471b54751b0fb394a1cf
+  pilot_evidence:
+    path: configs/training/evidence/nowcastnet-mrms-pilot-v1.json
+    sha256: 7819b4f9a3a1543e785af4a631ecb7bc3bc4cdea655449e41336ac61f0a4a5f4
+    sample_index_sha256: 0d1569b1d2c36302f969711be8b935b458e0b424e5e2ce44acb2dc577a34bdff
+
+sequence:
+  input_frames: 9
+  target_frames: 20
+  total_frames: 29
+  cadence_minutes: 10
+  rain_rate_cap_mm_h: 128.0
+
+data_tracks:
+  foundation_0p01:
+    purpose: rainpulse_foundation_training
+    data_root_env: RAINPULSE_MRMS_PILOT_ROOT
+    crs: EPSG:4326
+    source_resolution_deg: 0.01
+    resolution_deg: 0.01
+    native_crop_size: 256
+    model_crop_size: 256
+    downsample_method: none
+    expected_sample_count: 10000
+  paper_conformance_0p02:
+    purpose: trainer_protocol_conformance_only
+    data_root_env: RAINPULSE_MRMS_CONFORMANCE_ROOT
+    crs: EPSG:4326
+    source_resolution_deg: 0.01
+    resolution_deg: 0.02
+    native_crop_size: 512
+    model_crop_size: 256
+    downsample_method: block_mean_2x2
+    downsample_rule_provenance: rainpulse_conservative_area_mean
+    official_kernel_published: false
+    expected_sample_count: 16
+
+evolution:
+  base_channels: 32
+  spectral_normalization: true
+  interpolation_for_prediction: nearest
+  interpolation_for_motion_gradient: bilinear
+  padding_mode: border
+  stop_gradient_between_steps: true
+  weighted_l1:
+    formula: min(24,1+target_mm_h)
+    weight_cap: 24.0
+  motion_regularization:
+    operator: sobel
+    lambda: 0.01
+
+optimization:
+  optimizer: Adam
+  global_batch_size: 16
+  initial_learning_rate: 0.001
+  decay_step: 200000
+  decayed_learning_rate: 0.0001
+  total_steps: 300000
+  default_precision: bf16
+  gradient_clip_norm: 1.0
+
+reproducibility:
+  run_seed: 2026083002
+  deterministic_sample_order: true
+  checkpoint_after_complete_optimizer_step: true
+  exact_resume_required: true

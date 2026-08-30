@@ -1,0 +1,28 @@
+{
+  "all_samples_valid": true,
+  "asset_inventory_sha256": "249446df96f7e4aadcd59976f51620171842a3154ae8d84b4a28b0ffabb7bea3",
+  "branch_counts": {
+    "importance": 16
+  },
+  "dataset_version": "nowcastnet-mrms-paper-conformance-0p02-v1",
+  "downsample_method": "block_mean_2x2",
+  "downsample_rule_provenance": "rainpulse_conservative_area_mean",
+  "duration_seconds": 96.528691,
+  "finished_at": "2026-08-30T14:47:35.658160+00:00",
+  "holdout_windows_processed": 0,
+  "logical_bytes": 91226112,
+  "model_crop_size": 256,
+  "official_kernel_published": false,
+  "operational_eligible": false,
+  "pilot_plan_sha256": "2717aa66f81b2f392974f47cf0fe19ff95a599ede978f1411015da6c2ae94f22",
+  "pilot_profile_sha256": "2404e6effe1c425f86357611b845b962aa15a52060bf471b54751b0fb394a1cf",
+  "resolution_deg": 0.02,
+  "run_profile_sha256": "1f8fe80408fe45f6c74b4f94c69ad757034779570a7a35257f76e810381fb8b7",
+  "sample_count": 16,
+  "sample_index_sha256": "0b54b818f18aff020530cd5f65f6c042f928fb77d8c6e1781f9dbffed82562bf",
+  "schema_version": "1.0",
+  "source_native_crop_size": 512,
+  "source_resolution_deg": 0.01,
+  "started_at": "2026-08-30T14:45:59.129469+00:00",
+  "status": "complete"
+}

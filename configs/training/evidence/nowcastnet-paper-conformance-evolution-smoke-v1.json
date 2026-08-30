@@ -1,0 +1,33 @@
+{
+  "batch_size": 1,
+  "checkpoint": {
+    "load_back_verified": true,
+    "path": "evolution-smoke-step-000001.pt",
+    "sha256": "e4ea06ddab16593d589b0961d811156523afa04e9260a064b6c028430d2120a2"
+  },
+  "created_at": "2026-08-30T14:48:44.016316+00:00",
+  "cuda_version": "13.2",
+  "data_track": "paper_conformance_0p02",
+  "device": "cuda",
+  "duration_seconds": 0.606719246134162,
+  "loss": {
+    "accumulation": 16.133865356445312,
+    "gradient_norm_before_clip": 3.797736406326294,
+    "motion_regularization": 6.338222026824951,
+    "total": 16.197248458862305
+  },
+  "operational_eligible": false,
+  "peak_memory_bytes": 578672128,
+  "precision": "bf16",
+  "profile_sha256": "1f8fe80408fe45f6c74b4f94c69ad757034779570a7a35257f76e810381fb8b7",
+  "profile_version": "nowcastnet-mrms-run-v1",
+  "python_version": "3.13.13",
+  "resolution_deg": 0.02,
+  "sample_ids": [
+    "fbaad8923d53fa2412a113f02447c10f0006a08b4395f8066eca32362a6525aa"
+  ],
+  "sample_index_sha256": "0b54b818f18aff020530cd5f65f6c042f928fb77d8c6e1781f9dbffed82562bf",
+  "schema_version": "1.0",
+  "status": "passed",
+  "torch_version": "2.12.1+cu132"
+}
