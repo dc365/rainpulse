@@ -1,0 +1,251 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.internal/schemas/nowcastnet-generative.schema.json",
+  "title": "RainPulse NowcastNet generative training profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_version",
+    "lifecycle",
+    "operational_eligible",
+    "provenance",
+    "frozen_evolution",
+    "architecture",
+    "loss",
+    "optimization",
+    "reproducibility"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "profile_version": {"const": "nowcastnet-mrms-generative-v1"},
+    "lifecycle": {"const": "offline_training"},
+    "operational_eligible": {"const": false},
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "paper_doi",
+        "upstream_license",
+        "generator_source",
+        "discriminator_source",
+        "official_training_source_published",
+        "reconstruction_note"
+      ],
+      "properties": {
+        "paper_doi": {"const": "10.1038/s41586-023-06184-4"},
+        "upstream_license": {"$ref": "#/$defs/pathHash"},
+        "generator_source": {"const": "official_mit_inference_capsule"},
+        "discriminator_source": {
+          "const": "paper_methods_and_extended_data_figure_1c"
+        },
+        "official_training_source_published": {"const": false},
+        "reconstruction_note": {
+          "const": "rainpulse_explicit_reconstruction_of_unpublished_training_code"
+        }
+      }
+    },
+    "frozen_evolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_profile",
+        "checkpoint_schema",
+        "require_completed_pretraining",
+        "completed_pretraining_step",
+        "stage_b_smoke_minimum_step",
+        "detach_from_generative_gradient"
+      ],
+      "properties": {
+        "run_profile": {"$ref": "#/$defs/pathHash"},
+        "checkpoint_schema": {
+          "const": "rainpulse.nowcastnet-evolution-checkpoint/1.0"
+        },
+        "require_completed_pretraining": {"const": true},
+        "completed_pretraining_step": {"const": 300000},
+        "stage_b_smoke_minimum_step": {"const": 1000},
+        "detach_from_generative_gradient": {"const": true}
+      }
+    },
+    "architecture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "input_frames",
+        "target_frames",
+        "discriminator_context_frames",
+        "base_channels",
+        "rain_rate_cap_mm_h",
+        "spectral_normalization",
+        "generator",
+        "noise_projector",
+        "temporal_discriminator"
+      ],
+      "properties": {
+        "input_frames": {"const": 9},
+        "target_frames": {"const": 20},
+        "discriminator_context_frames": {"const": 4},
+        "base_channels": {"const": 32},
+        "rain_rate_cap_mm_h": {"const": 128.0},
+        "spectral_normalization": {"const": true},
+        "generator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["evolution_normalization", "decoder_conditioning", "upsampling"],
+          "properties": {
+            "evolution_normalization": {"const": "divide_by_128"},
+            "decoder_conditioning": {"const": "spade"},
+            "upsampling": {"const": "nearest"}
+          }
+        },
+        "noise_projector": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "distribution",
+            "latent_channels",
+            "latent_grid_divisor",
+            "projected_grid_divisor",
+            "channel_to_space_factor"
+          ],
+          "properties": {
+            "distribution": {"const": "standard_normal"},
+            "latent_channels": {"const": 32},
+            "latent_grid_divisor": {"const": 32},
+            "projected_grid_divisor": {"const": 8},
+            "channel_to_space_factor": {"const": 4}
+          }
+        },
+        "temporal_discriminator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "spatial_branch",
+            "short_branch",
+            "long_branch",
+            "flattened_channels",
+            "residual_channels",
+            "downsampling",
+            "output"
+          ],
+          "properties": {
+            "spatial_branch": {"const": "conv2d_channels_64_kernel_9_stride_2"},
+            "short_branch": {
+              "const": "conv3d_channels_4_kernel_4x9x9_stride_1x2x2"
+            },
+            "long_branch": {
+              "const": "conv3d_channels_8_kernel_20x9x9_stride_1x2x2"
+            },
+            "flattened_channels": {"const": 188},
+            "residual_channels": {
+              "type": "array",
+              "prefixItems": [
+                {"const": 128},
+                {"const": 256},
+                {"const": 512},
+                {"const": 512}
+              ],
+              "minItems": 4,
+              "maxItems": 4
+            },
+            "downsampling": {
+              "const": "bilinear_before_first_three_residual_blocks"
+            },
+            "output": {"const": "patch_logits"}
+          }
+        }
+      }
+    },
+    "loss": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ensemble_members", "adversarial", "pool_regularization"],
+      "properties": {
+        "ensemble_members": {"const": 4},
+        "adversarial": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "beta"],
+          "properties": {
+            "type": {"const": "binary_cross_entropy_with_logits"},
+            "beta": {"const": 6.0}
+          }
+        },
+        "pool_regularization": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "aggregation",
+            "operator",
+            "kernel_size",
+            "stride",
+            "weighted_l1_formula",
+            "weight_cap",
+            "gamma"
+          ],
+          "properties": {
+            "aggregation": {"const": "ensemble_mean_after_member_pooling"},
+            "operator": {"const": "max_pool_2d"},
+            "kernel_size": {"const": 5},
+            "stride": {"const": 2},
+            "weighted_l1_formula": {"const": "min(24,1+pooled_target_mm_h)"},
+            "weight_cap": {"const": 24.0},
+            "gamma": {"const": 20.0}
+          }
+        }
+      }
+    },
+    "optimization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "optimizer",
+        "global_batch_size",
+        "generator_learning_rate",
+        "discriminator_learning_rate",
+        "total_steps",
+        "default_precision",
+        "gradient_clip_norm",
+        "update_order"
+      ],
+      "properties": {
+        "optimizer": {"const": "Adam"},
+        "global_batch_size": {"const": 16},
+        "generator_learning_rate": {"const": 0.00003},
+        "discriminator_learning_rate": {"const": 0.00003},
+        "total_steps": {"const": 500000},
+        "default_precision": {"const": "bf16"},
+        "gradient_clip_norm": {"const": 1.0},
+        "update_order": {"const": "discriminator_then_generator"}
+      }
+    },
+    "reproducibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_seed",
+        "deterministic_sample_order",
+        "checkpoint_after_complete_optimizer_pair",
+        "exact_state_resume_required"
+      ],
+      "properties": {
+        "run_seed": {"const": 2026083003},
+        "deterministic_sample_order": {"const": true},
+        "checkpoint_after_complete_optimizer_pair": {"const": true},
+        "exact_state_resume_required": {"const": true}
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "pathHash": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  }
+}

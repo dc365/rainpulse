@@ -7,6 +7,7 @@ torch = pytest.importorskip("torch")
 from rainpulse_algo.training.evolution import (  # noqa: E402
     EvolutionNetwork,
     evolution_loss,
+    rollout_evolution,
 )
 from rainpulse_algo.training.evolution_train import _state_fingerprint  # noqa: E402
 
@@ -35,6 +36,20 @@ def test_evolution_network_and_loss_support_backward() -> None:
     assert torch.isfinite(result.accumulation)
     assert torch.isfinite(result.motion_regularization)
     assert any(parameter.grad is not None for parameter in model.parameters())
+
+
+def test_evolution_rollout_does_not_require_future_observations() -> None:
+    inputs = torch.zeros((1, 9, 16, 16))
+    inputs[:, -1] = 2.0
+    intensity = torch.ones((1, 3, 16, 16))
+    motion = torch.zeros((1, 6, 16, 16))
+
+    prediction = rollout_evolution(inputs, intensity, motion)
+
+    assert prediction.shape == (1, 3, 16, 16)
+    torch.testing.assert_close(prediction[:, 0], torch.full((1, 16, 16), 3.0))
+    torch.testing.assert_close(prediction[:, 1], torch.full((1, 16, 16), 4.0))
+    torch.testing.assert_close(prediction[:, 2], torch.full((1, 16, 16), 5.0))
 
 
 def test_checkpoint_state_fingerprint_detects_tensor_changes() -> None:

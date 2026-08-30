@@ -24,6 +24,10 @@ from rainpulse_algo.training.evolution_train import (
     compare_resume_metrics,
     deterministic_batch_indices,
 )
+from rainpulse_algo.training.generative_profile import (
+    GenerativeTrainingProfileError,
+    load_generative_training_profile,
+)
 from rainpulse_algo.training.profile import (
     NowcastNetTrainingRunError,
     load_nowcastnet_training_run_profile,
@@ -35,6 +39,12 @@ PROFILE_PATH = (
 )
 SCHEMA_PATH = (
     REPOSITORY_ROOT / "configs" / "schemas" / "nowcastnet-training-run.schema.json"
+)
+GENERATIVE_PROFILE_PATH = (
+    REPOSITORY_ROOT / "configs" / "training" / "nowcastnet-mrms-generative-v1.yaml"
+)
+GENERATIVE_SCHEMA_PATH = (
+    REPOSITORY_ROOT / "configs" / "schemas" / "nowcastnet-generative.schema.json"
 )
 
 
@@ -117,6 +127,42 @@ def test_repository_run_profile_matches_schema_and_frozen_evidence() -> None:
     assert profile.evolution.base_channels == 32
     assert profile.evolution.motion_regularization_lambda == 0.01
     assert profile.evolution.weight_cap == 24.0
+
+
+def test_generative_profile_matches_schema_and_published_contract() -> None:
+    raw = yaml.safe_load(GENERATIVE_PROFILE_PATH.read_text(encoding="utf-8"))
+    Draft202012Validator(json.loads(GENERATIVE_SCHEMA_PATH.read_text())).validate(raw)
+
+    profile = load_generative_training_profile(
+        GENERATIVE_PROFILE_PATH,
+        repository_root=REPOSITORY_ROOT,
+    )
+
+    assert profile.profile_version == "nowcastnet-mrms-generative-v1"
+    assert profile.input_frames == 9
+    assert profile.target_frames == 20
+    assert profile.context_frames == 4
+    assert profile.base_channels == 32
+    assert profile.completed_pretraining_step == 300000
+    assert profile.stage_b_smoke_minimum_step == 1000
+    assert profile.ensemble_members == 4
+    assert profile.adversarial_weight == 6.0
+    assert profile.pool_weight == 20.0
+    assert profile.generator_learning_rate == 3e-5
+    assert profile.discriminator_learning_rate == 3e-5
+    assert profile.total_steps == 500000
+
+
+def test_generative_profile_rejects_an_official_training_source_claim(
+    tmp_path: Path,
+) -> None:
+    raw = yaml.safe_load(GENERATIVE_PROFILE_PATH.read_text(encoding="utf-8"))
+    raw["provenance"]["official_training_source_published"] = True
+    path = tmp_path / "generative.yaml"
+    path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+
+    with pytest.raises(GenerativeTrainingProfileError, match="differs from frozen v1"):
+        load_generative_training_profile(path, repository_root=REPOSITORY_ROOT)
 
 
 def test_run_profile_rejects_claim_that_official_downsample_kernel_is_known(

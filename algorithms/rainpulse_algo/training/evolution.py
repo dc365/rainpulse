@@ -206,6 +206,36 @@ def _motion_regularization(motion: Tensor, targets: Tensor, weight_cap: float) -
     return torch.mean(gradient_energy * weights)
 
 
+def rollout_evolution(
+    inputs: Tensor,
+    intensity: Tensor,
+    motion: Tensor,
+    *,
+    mode: str = "nearest",
+) -> Tensor:
+    """Roll out detached evolution steps without requiring future observations."""
+
+    if inputs.ndim != 4 or intensity.ndim != 4 or motion.ndim != 4:
+        raise ValueError("evolution rollout inputs must be BCHW sequences")
+    batch, target_frames, height, width = intensity.shape
+    if (
+        inputs.shape[0] != batch
+        or inputs.shape[-2:] != (height, width)
+        or motion.shape != (batch, target_frames * 2, height, width)
+        or mode not in {"nearest", "bilinear"}
+    ):
+        raise ValueError("evolution rollout shapes or interpolation mode differ")
+    motion_fields = motion.reshape(batch, target_frames, 2, height, width)
+    current = inputs[:, -1:].detach()
+    grid = make_grid(current)
+    predictions = []
+    for step in range(target_frames):
+        current = warp(current.detach(), motion_fields[:, step], grid, mode=mode)
+        current = current + intensity[:, step : step + 1]
+        predictions.append(current)
+    return torch.cat(predictions, dim=1)
+
+
 @dataclass(frozen=True)
 class EvolutionLoss:
     total: Tensor

@@ -1,0 +1,80 @@
+schema_version: "1.0"
+profile_version: nowcastnet-mrms-generative-v1
+lifecycle: offline_training
+operational_eligible: false
+
+provenance:
+  paper_doi: 10.1038/s41586-023-06184-4
+  upstream_license:
+    path: algorithms/rainpulse_algo/training/LICENSE.nowcastnet.txt
+    sha256: cc1815af57d92f21f89477195b88b8f3cad31202a409d7c2a32603b9dec6ddb2
+  generator_source: official_mit_inference_capsule
+  discriminator_source: paper_methods_and_extended_data_figure_1c
+  official_training_source_published: false
+  reconstruction_note: rainpulse_explicit_reconstruction_of_unpublished_training_code
+
+frozen_evolution:
+  run_profile:
+    path: configs/training/nowcastnet-mrms-run-v1.yaml
+    sha256: 1f8fe80408fe45f6c74b4f94c69ad757034779570a7a35257f76e810381fb8b7
+  checkpoint_schema: rainpulse.nowcastnet-evolution-checkpoint/1.0
+  require_completed_pretraining: true
+  completed_pretraining_step: 300000
+  stage_b_smoke_minimum_step: 1000
+  detach_from_generative_gradient: true
+
+architecture:
+  input_frames: 9
+  target_frames: 20
+  discriminator_context_frames: 4
+  base_channels: 32
+  rain_rate_cap_mm_h: 128.0
+  spectral_normalization: true
+  generator:
+    evolution_normalization: divide_by_128
+    decoder_conditioning: spade
+    upsampling: nearest
+  noise_projector:
+    distribution: standard_normal
+    latent_channels: 32
+    latent_grid_divisor: 32
+    projected_grid_divisor: 8
+    channel_to_space_factor: 4
+  temporal_discriminator:
+    spatial_branch: conv2d_channels_64_kernel_9_stride_2
+    short_branch: conv3d_channels_4_kernel_4x9x9_stride_1x2x2
+    long_branch: conv3d_channels_8_kernel_20x9x9_stride_1x2x2
+    flattened_channels: 188
+    residual_channels: [128, 256, 512, 512]
+    downsampling: bilinear_before_first_three_residual_blocks
+    output: patch_logits
+
+loss:
+  ensemble_members: 4
+  adversarial:
+    type: binary_cross_entropy_with_logits
+    beta: 6.0
+  pool_regularization:
+    aggregation: ensemble_mean_after_member_pooling
+    operator: max_pool_2d
+    kernel_size: 5
+    stride: 2
+    weighted_l1_formula: min(24,1+pooled_target_mm_h)
+    weight_cap: 24.0
+    gamma: 20.0
+
+optimization:
+  optimizer: Adam
+  global_batch_size: 16
+  generator_learning_rate: 0.00003
+  discriminator_learning_rate: 0.00003
+  total_steps: 500000
+  default_precision: bf16
+  gradient_clip_norm: 1.0
+  update_order: discriminator_then_generator
+
+reproducibility:
+  run_seed: 2026083003
+  deterministic_sample_order: true
+  checkpoint_after_complete_optimizer_pair: true
+  exact_state_resume_required: true
