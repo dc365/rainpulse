@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/orchestration"
@@ -115,6 +116,13 @@ func (stream *JetStream) ConsumeResults(ctx context.Context, handler func(contex
 		}
 		for _, message := range messages {
 			_, handleErr := handler(ctx, message.Data)
+			if handleErr != nil {
+				slog.Warn(
+					"RainPulse result event rejected",
+					"subject", message.Subject,
+					"error", handleErr,
+				)
+			}
 			switch {
 			case handleErr == nil:
 				if err := message.Ack(); err != nil {

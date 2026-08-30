@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -1248,7 +1249,10 @@ func applyAnalysisQPECompletion(
 		metrics.ValidCoverageRatio < 0 || metrics.ValidCoverageRatio > 1 ||
 		metrics.MeanQualityIndex < 0 || metrics.MeanQualityIndex > 1 ||
 		metrics.MeanRateMMH < 0 || metrics.MaximumObservedRateMMH < 0 ||
-		metrics.UncappedMaximumRateMMH+1e-6 < metrics.MaximumObservedRateMMH ||
+		!qpePeakWithinStoragePrecision(
+			metrics.UncappedMaximumRateMMH,
+			metrics.MaximumObservedRateMMH,
+		) ||
 		metrics.P95RateMMH < 0 || metrics.MaximumObservedRateMMH > metrics.MaximumRateMMH {
 		return fmt.Errorf("%w: invalid analysis QPE metrics", orchestration.ErrInvalidEvent)
 	}
@@ -1332,6 +1336,11 @@ WHERE analysis_id = $1`, analysisID, analysisAsset.URI,
 		return fmt.Errorf("complete analysis QPE: %w", err)
 	}
 	return nil
+}
+
+func qpePeakWithinStoragePrecision(uncapped, observed float64) bool {
+	upperFloat32RoundTrip := math.Nextafter32(float32(uncapped), float32(math.Inf(1)))
+	return observed <= float64(upperFloat32RoundTrip)
 }
 
 func applyAnalysisDiagnosticsCompletion(
