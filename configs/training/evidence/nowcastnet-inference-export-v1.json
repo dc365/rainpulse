@@ -1,0 +1,75 @@
+{
+  "schema_version": "1.0",
+  "status": "passed",
+  "created_at": "2026-08-30T15:43:52.219750+00:00",
+  "scope": "stage_b_minimal_inference_export_numeric_comparison",
+  "code_revision": "6b510f65dc1e2c2b9c9818209d6e08c31126c024",
+  "profile_sha256": "06ffe74e3425338e14b5a6f3fca835da659d47aecb43136ff89f204654ff9f28",
+  "sample_index_sha256": "0d1569b1d2c36302f969711be8b935b458e0b424e5e2ce44acb2dc577a34bdff",
+  "source_checkpoints": {
+    "evolution_global_step": 1000,
+    "evolution_sha256": "709416ccb0acb9626eb4b818e0aa681e3c424bc87c0630bcbd813dd9e73c0700",
+    "generative_global_step": 1,
+    "generative_sha256": "be202c60e0c6693bd43499dbaeb027004b623a8491949434979799ea5a4ab351",
+    "source_weights_are_skill_eligible": false
+  },
+  "fixed_vector": {
+    "sample_id": "14f4badff9a503e8eb90b2d00138d3060823db07d4a47f719dc41074956bf322",
+    "noise_seed": 2026084003,
+    "ensemble_members": 4,
+    "precision": "bf16",
+    "shape": [1, 4, 20, 256, 256],
+    "raw_output_sha256_float32": "914d3d25031060833566d212fbc36ddfd0f165d7ba1913b08d9cf4167048f267",
+    "clipped_output_sha256_float32": "115e7b0d0146b7fded5be01db6313cdb58f63b217cf3220d1d97612c320265c2"
+  },
+  "comparison": {
+    "training_checkpoint_path": "explicit_evolution_rollout_plus_generator",
+    "reloaded_export_path": "fresh_inference_composition_from_hash_verified_states",
+    "absolute_tolerance": 0.0,
+    "relative_tolerance": 0.0,
+    "raw_allclose": true,
+    "clipped_allclose": true,
+    "raw_max_absolute_difference": 0.0,
+    "clipped_max_absolute_difference": 0.0
+  },
+  "artifacts": {
+    "manifest": {
+      "sha256": "a8e7b4238a87f7b05c0b59f3b8ec6b4646ad608b06b8f86c2c42213bdc7587e5",
+      "size_bytes": 1428
+    },
+    "comparison_report": {
+      "sha256": "a96565f76715c3a4587ab9026fd94fde1dcb7320f0d36a650af4234ecbd72277",
+      "size_bytes": 1847
+    },
+    "evolution_state": {
+      "sha256": "8e35577c27f9184ea7a2e69bad79a5738c703cbfa57b8e145ce56fff3c6d46c9",
+      "size_bytes": 35886447
+    },
+    "generator_state": {
+      "sha256": "bfe3fee43d16a3b78b802a5eea3832d124003a0bcdc8aec59e66abdf08b0eb65",
+      "size_bytes": 104506797
+    }
+  },
+  "export_boundary": {
+    "contains_evolution_state": true,
+    "contains_generator_state": true,
+    "contains_discriminator": false,
+    "contains_optimizer_state": false,
+    "raw_output_semantics": "unbounded_generator_mm_h",
+    "product_clip_range_mm_h": [0.0, 128.0]
+  },
+  "environment": {
+    "torch_version": "2.12.1+cu132",
+    "cuda_version": "13.2",
+    "gpu": "NVIDIA RTX 6000D",
+    "qwen3p8_restored_healthy": true,
+    "training_processes_remaining": false
+  },
+  "result": {
+    "minimal_inference_export_passed": true,
+    "numeric_comparison_passed": true,
+    "stage_b_inference_export_gate_passed": true,
+    "next_gate": "generative_continuous_training_and_interrupted_resume_comparison"
+  },
+  "operational_eligible": false
+}
