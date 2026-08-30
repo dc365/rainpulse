@@ -1,0 +1,72 @@
+schema_version: "1.0"
+profile_version: nowcastnet-mrms-training-v1
+lifecycle: offline_training
+operational_eligible: false
+
+source:
+  product: PrecipRate_00.00
+  unit: mm/h
+  cadence_minutes: 10
+  inventory_start: "2019-01-01T00:00:00Z"
+  inventory_end: "2025-12-31T23:50:00Z"
+  manifest_hash_required: true
+  raw_immutable: true
+
+sequence:
+  input_frames: 9
+  target_frames: 20
+  total_frames: 29
+  rain_rate_cap_mm_h: 128.0
+
+spatial:
+  crs: EPSG:4326
+  resolution_deg: 0.01
+  training_crop_size: 256
+  inference_window_size: 512
+  training_dtype: float16
+
+splits:
+  training:
+    start_month: "2019-01"
+    end_month: "2023-12"
+  development_months:
+    - "2024-02"
+    - "2024-05"
+    - "2024-08"
+    - "2024-10"
+  independent_holdout_months:
+    - "2025-02"
+    - "2025-05"
+    - "2025-08"
+    - "2025-10"
+  spent_verification_months:
+    - "2021-08"
+    - "2022-01"
+    - "2022-12"
+    - "2023-06"
+    - "2023-12"
+    - "2024-06"
+    - "2024-07"
+    - "2024-11"
+    - "2025-01"
+    - "2025-03"
+    - "2025-07"
+
+sampling:
+  importance_fraction: 0.8
+  uniform_fraction: 0.2
+  importance_formula: sum(1-exp(-rain_rate))+epsilon
+
+pilot:
+  sample_count: 10000
+  minimum_free_bytes: 120000000000
+  maximum_output_bytes: 80000000000
+
+full_sample:
+  target_sample_count: 100000
+  minimum_free_bytes: 500000000000
+
+holdout_gate:
+  status: closed
+  forecast_results_read: false
+  open_after_development_gate: true

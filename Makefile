@@ -19,7 +19,7 @@ BUILD_REVISION ?= $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo unkn
 BUILD_VERSION ?= $(BUILD_REVISION)
 RAINPULSE_GO_LDFLAGS := -X github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo.Version=$(BUILD_VERSION) -X github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo.Revision=$(BUILD_REVISION)
 
-.PHONY: bootstrap contracts-generate contracts-check test test-structure test-radar-config test-contracts test-infrastructure test-alerting test-operations test-control-plane test-worker-sdk test-radar-decoder test-radar-health test-radar-qc test-radar-grid test-radar-mosaic test-qpe test-diagnostics test-nowcast-input test-pysteps-lk test-pysteps-steps test-probability-calibration test-nowcastnet test-products test-ensemble-products test-ancillary test-grid test-mrms test-mrms-ensemble test-go test-python test-web lint build build-linux build-infrastructure-linux export-postgres-image export-python-image export-node-exporter-image build-worker-linux deploy-up dev-up dev-down smoke infrastructure-smoke control-plane-smoke worker-smoke radar-decode-smoke radar-health-smoke radar-qc-smoke radar-grid-smoke ancillary-plan ancillary-download ancillary-verify mrms-download mrms-verify mrms-holdout-select mrms-conformance mrms-hindcast mrms-faults mrms-ensemble-conformance mrms-ensemble-hindcast mrms-ensemble-freeze-gate mrms-nowcastnet-conformance mrms-nowcastnet-hindcast mrms-nowcastnet-freeze-gate
+.PHONY: bootstrap contracts-generate contracts-check test test-structure test-radar-config test-contracts test-infrastructure test-alerting test-operations test-control-plane test-worker-sdk test-radar-decoder test-radar-health test-radar-qc test-radar-grid test-radar-mosaic test-qpe test-diagnostics test-nowcast-input test-pysteps-lk test-pysteps-steps test-probability-calibration test-nowcastnet test-nowcastnet-training test-nowcastnet-pilot test-products test-ensemble-products test-ancillary test-grid test-mrms test-mrms-ensemble test-go test-python test-web lint build build-linux build-infrastructure-linux export-postgres-image export-python-image export-node-exporter-image build-worker-linux deploy-up dev-up dev-down smoke infrastructure-smoke control-plane-smoke worker-smoke radar-decode-smoke radar-health-smoke radar-qc-smoke radar-grid-smoke ancillary-plan ancillary-download ancillary-verify mrms-download mrms-verify mrms-training-audit mrms-pilot-plan mrms-pilot-run mrms-pilot-validate mrms-holdout-select mrms-conformance mrms-hindcast mrms-faults mrms-ensemble-conformance mrms-ensemble-hindcast mrms-ensemble-freeze-gate mrms-nowcastnet-conformance mrms-nowcastnet-hindcast mrms-nowcastnet-freeze-gate
 
 bootstrap:
 	@command -v rg >/dev/null || { echo "ripgrep is required" >&2; exit 1; }
@@ -105,6 +105,12 @@ test-probability-calibration:
 
 test-nowcastnet:
 	uv run --project algorithms pytest algorithms/tests/test_nowcastnet_adapter.py algorithms/tests/test_nowcastnet_worker.py algorithms/tests/test_mrms_nowcastnet_hindcast.py
+
+test-nowcastnet-training:
+	uv run --project algorithms pytest algorithms/tests/test_mrms_training.py
+
+test-nowcastnet-pilot:
+	uv run --project algorithms pytest algorithms/tests/test_mrms_pilot.py algorithms/tests/test_mrms_precip.py
 
 test-products:
 	bash tests/rp015_products_test.sh
@@ -266,12 +272,37 @@ MRMS_NOWCASTNET_SPLIT ?= development
 MRMS_NOWCASTNET_CAPSULE_ROOT ?= /opt/rainpulse/nowcastnet/official-v1
 MRMS_NOWCASTNET_DEVICE ?= cuda:0
 MRMS_NOWCASTNET_GATE_OUTPUT ?= configs/verification/rp026-development-gate-v1.json
+NOWCASTNET_TRAINING_PROFILE ?= configs/training/nowcastnet-mrms-training-v1.yaml
+NOWCASTNET_TRAINING_AUDIT_OUTPUT ?= runtime/training/nowcastnet-mrms-v1/audit
+NOWCASTNET_TRAINING_AUDIT_START ?=
+NOWCASTNET_TRAINING_AUDIT_END ?=
+NOWCASTNET_TRAINING_FULL_HASH ?= 0
+NOWCASTNET_PILOT_PROFILE ?= configs/training/nowcastnet-mrms-pilot-v1.yaml
+NOWCASTNET_PILOT_AUDIT_ROOT ?= runtime/training/nowcastnet-mrms-v1/audit
+NOWCASTNET_PILOT_PLAN ?= runtime/training/nowcastnet-mrms-v1/pilot-plan-v1.json
+NOWCASTNET_PILOT_OUTPUT ?= runtime/training/nowcastnet-mrms-v1/pilot-v1
+NOWCASTNET_PILOT_WORKERS ?= 1
+NOWCASTNET_PILOT_MAX_WINDOWS ?=
+NOWCASTNET_PILOT_VALIDATION_SAMPLES ?= 64
+NOWCASTNET_PILOT_SKIP_CONTENT_HASH ?= 0
 
 mrms-download:
 	uv run --project algorithms python -m rainpulse_algo.datasets.mrms_archive download --start $(MRMS_START) --end $(MRMS_END) --root $(MRMS_ROOT) --cadence-minutes $(MRMS_CADENCE_MINUTES) --workers $(MRMS_WORKERS) $(if $(MRMS_PROXY),--proxy $(MRMS_PROXY),)
 
 mrms-verify:
 	uv run --project algorithms python -m rainpulse_algo.datasets.mrms_archive verify --start $(MRMS_START) --end $(MRMS_END) --root $(MRMS_ROOT) --cadence-minutes $(MRMS_CADENCE_MINUTES) --full-hash
+
+mrms-training-audit:
+	uv run --project algorithms python -m rainpulse_algo.datasets.mrms_training audit --profile $(NOWCASTNET_TRAINING_PROFILE) --dataset-root $(MRMS_ROOT) --output-root $(NOWCASTNET_TRAINING_AUDIT_OUTPUT) $(if $(NOWCASTNET_TRAINING_AUDIT_START),--start $(NOWCASTNET_TRAINING_AUDIT_START),) $(if $(NOWCASTNET_TRAINING_AUDIT_END),--end $(NOWCASTNET_TRAINING_AUDIT_END),) $(if $(filter 1,$(NOWCASTNET_TRAINING_FULL_HASH)),--full-hash,)
+
+mrms-pilot-plan:
+	uv run --project algorithms python -m rainpulse_algo.datasets.mrms_pilot plan --repository-root $(CURDIR) --pilot-profile $(NOWCASTNET_PILOT_PROFILE) --audit-root $(NOWCASTNET_PILOT_AUDIT_ROOT) --output $(NOWCASTNET_PILOT_PLAN)
+
+mrms-pilot-run:
+	uv run --project algorithms python -m rainpulse_algo.datasets.mrms_pilot run --repository-root $(CURDIR) --pilot-profile $(NOWCASTNET_PILOT_PROFILE) --audit-root $(NOWCASTNET_PILOT_AUDIT_ROOT) --plan $(NOWCASTNET_PILOT_PLAN) --dataset-root $(MRMS_ROOT) --output-root $(NOWCASTNET_PILOT_OUTPUT) --workers $(NOWCASTNET_PILOT_WORKERS) $(if $(NOWCASTNET_PILOT_MAX_WINDOWS),--max-windows $(NOWCASTNET_PILOT_MAX_WINDOWS),)
+
+mrms-pilot-validate:
+	uv run --project algorithms python -m rainpulse_algo.datasets.mrms_pilot validate --repository-root $(CURDIR) --pilot-profile $(NOWCASTNET_PILOT_PROFILE) --plan $(NOWCASTNET_PILOT_PLAN) --output-root $(NOWCASTNET_PILOT_OUTPUT) --random-samples $(NOWCASTNET_PILOT_VALIDATION_SAMPLES) $(if $(filter 1,$(NOWCASTNET_PILOT_SKIP_CONTENT_HASH)),--skip-content-hash,)
 
 mrms-holdout-select:
 	uv run --project algorithms python -m rainpulse_algo.verification.mrms_holdout --root $(MRMS_ROOT) --catalog $(MRMS_HOLDOUT_CATALOG) $(foreach month,$(MRMS_HOLDOUT_MONTHS),--month $(month)) --output $(MRMS_HOLDOUT_OUTPUT)

@@ -1,0 +1,54 @@
+schema_version: "1.0"
+pilot_version: nowcastnet-mrms-pilot-v1
+lifecycle: offline_training_pilot
+operational_eligible: false
+
+training_profile:
+  path: configs/training/nowcastnet-mrms-training-v1.yaml
+  sha256: c54d200a88e9f60d9dd1bfb44c4e2421700b4e1bb9ac3e60e36097b2b5c618bc
+
+audit_evidence:
+  path: configs/training/evidence/nowcastnet-mrms-audit-manifest-v1.json
+  sha256: 1d5141220cf94b7e1dc55ede4352d4409e641d19805b00a137baf1b2c29f3c44
+  asset_inventory_sha256: 249446df96f7e4aadcd59976f51620171842a3154ae8d84b4a28b0ffabb7bea3
+  window_index_sha256: 856cfc723b4cf58aaaa6c9933ea2e4e7f29a848e36c2f550755b7bbd52f93410
+
+temporal_sampling:
+  split: training
+  random_seed: 2026083001
+  years: [2019, 2020, 2021, 2022, 2023]
+  windows_per_year: 80
+  minimum_separation_minutes: 360
+
+spatial_sampling:
+  crop_size: 256
+  candidate_stride_cells: 32
+  crops_per_window: 25
+  importance_crops_per_window: 20
+  uniform_crops_per_window: 5
+  importance_epsilon: 1.0
+  minimum_origin_separation_cells: 128
+  rain_rate_cap_mm_h: 128.0
+  reject_any_missing: true
+
+native_grid:
+  longitude_count: 7000
+  latitude_count: 3500
+  west_edge_deg: -130.0
+  east_edge_deg: -60.0
+  south_edge_deg: 20.0
+  north_edge_deg: 55.0
+  resolution_deg: 0.01
+  latitude_order: ascending_after_decode
+
+output:
+  sample_count: 10000
+  shard_count: 400
+  samples_per_shard: 25
+  format: zarr-v2-window-shards
+  rain_rate_dtype: float16
+  valid_mask_dtype: uint8
+  compressor: blosc-zstd-bitshuffle
+  compression_level: 3
+  minimum_free_bytes: 120000000000
+  maximum_logical_output_bytes: 80000000000

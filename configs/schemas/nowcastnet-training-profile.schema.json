@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.internal/schemas/nowcastnet-training-profile.schema.json",
+  "title": "RainPulse NowcastNet offline training profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_version",
+    "lifecycle",
+    "operational_eligible",
+    "source",
+    "sequence",
+    "spatial",
+    "splits",
+    "sampling",
+    "pilot",
+    "full_sample",
+    "holdout_gate"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "profile_version": {"const": "nowcastnet-mrms-training-v1"},
+    "lifecycle": {"const": "offline_training"},
+    "operational_eligible": {"const": false},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "product",
+        "unit",
+        "cadence_minutes",
+        "inventory_start",
+        "inventory_end",
+        "manifest_hash_required",
+        "raw_immutable"
+      ],
+      "properties": {
+        "product": {"const": "PrecipRate_00.00"},
+        "unit": {"const": "mm/h"},
+        "cadence_minutes": {"const": 10},
+        "inventory_start": {"const": "2019-01-01T00:00:00Z"},
+        "inventory_end": {"const": "2025-12-31T23:50:00Z"},
+        "manifest_hash_required": {"const": true},
+        "raw_immutable": {"const": true}
+      }
+    },
+    "sequence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input_frames", "target_frames", "total_frames", "rain_rate_cap_mm_h"],
+      "properties": {
+        "input_frames": {"const": 9},
+        "target_frames": {"const": 20},
+        "total_frames": {"const": 29},
+        "rain_rate_cap_mm_h": {"const": 128.0}
+      }
+    },
+    "spatial": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "crs",
+        "resolution_deg",
+        "training_crop_size",
+        "inference_window_size",
+        "training_dtype"
+      ],
+      "properties": {
+        "crs": {"const": "EPSG:4326"},
+        "resolution_deg": {"const": 0.01},
+        "training_crop_size": {"const": 256},
+        "inference_window_size": {"const": 512},
+        "training_dtype": {"const": "float16"}
+      }
+    },
+    "splits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "training",
+        "development_months",
+        "independent_holdout_months",
+        "spent_verification_months"
+      ],
+      "properties": {
+        "training": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["start_month", "end_month"],
+          "properties": {
+            "start_month": {"const": "2019-01"},
+            "end_month": {"const": "2023-12"}
+          }
+        },
+        "development_months": {
+          "const": ["2024-02", "2024-05", "2024-08", "2024-10"]
+        },
+        "independent_holdout_months": {
+          "const": ["2025-02", "2025-05", "2025-08", "2025-10"]
+        },
+        "spent_verification_months": {
+          "type": "array",
+          "minItems": 11,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^20[0-9]{2}-(0[1-9]|1[0-2])$"}
+        }
+      }
+    },
+    "sampling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["importance_fraction", "uniform_fraction", "importance_formula"],
+      "properties": {
+        "importance_fraction": {"const": 0.8},
+        "uniform_fraction": {"const": 0.2},
+        "importance_formula": {"const": "sum(1-exp(-rain_rate))+epsilon"}
+      }
+    },
+    "pilot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sample_count", "minimum_free_bytes", "maximum_output_bytes"],
+      "properties": {
+        "sample_count": {"const": 10000},
+        "minimum_free_bytes": {"const": 120000000000},
+        "maximum_output_bytes": {"const": 80000000000}
+      }
+    },
+    "full_sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_sample_count", "minimum_free_bytes"],
+      "properties": {
+        "target_sample_count": {"const": 100000},
+        "minimum_free_bytes": {"const": 500000000000}
+      }
+    },
+    "holdout_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "forecast_results_read", "open_after_development_gate"],
+      "properties": {
+        "status": {"const": "closed"},
+        "forecast_results_read": {"const": false},
+        "open_after_development_gate": {"const": true}
+      }
+    }
+  }
+}

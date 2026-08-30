@@ -9,10 +9,12 @@ from affine import Affine
 
 import rainpulse_algo.datasets.mrms_precip as mrms_precip_module
 from rainpulse_algo.datasets.mrms_precip import (
+    MRMSNativePrecipFrame,
     MRMSPrecipFrame,
     MRMSSourceState,
     build_mrms_observed_sequence,
     build_mrms_validation_sequence,
+    read_mrms_native_precip_frame,
     read_mrms_precip_frame,
     read_mrms_precip_frames,
 )
@@ -52,10 +54,11 @@ class FakeMRMSDataset:
             "GRIB_VALID_TIME": "1627783200",
         }
 
-    def read(self, band: int, *, window) -> np.ndarray:
+    def read(self, band: int, *, window=None) -> np.ndarray:
         assert band == 1
-        assert window.width == 3
-        assert window.height == 2
+        if window is not None:
+            assert window.width == 3
+            assert window.height == 2
         return np.asarray(
             [
                 [1.0, 0.0, -1.0],
@@ -96,6 +99,30 @@ def test_reader_crops_to_ascending_grid_and_preserves_mrms_source_states(
         ),
     )
     assert frame.valid_time.isoformat() == "2021-08-01T02:00:00+00:00"
+
+
+def test_native_reader_freezes_ascending_latitude_and_pixel_centers(monkeypatch) -> None:
+    monkeypatch.setattr(
+        mrms_precip_module.rasterio,
+        "open",
+        lambda _: nullcontext(FakeMRMSDataset()),
+    )
+
+    frame = read_mrms_native_precip_frame(
+        Path("MRMS_PrecipRate_00.00_20210801-020000.grib2.gz")
+    )
+
+    assert isinstance(frame, MRMSNativePrecipFrame)
+    np.testing.assert_allclose(frame.longitudes, [-99.995, -99.985, -99.975])
+    np.testing.assert_allclose(frame.latitudes, [30.005, 30.015])
+    np.testing.assert_allclose(
+        frame.rate_mm_h,
+        np.asarray([[np.nan, 2.0, 0.0], [1.0, 0.0, np.nan]], dtype="float32"),
+        equal_nan=True,
+    )
+    np.testing.assert_array_equal(frame.valid_mask, [[0, 1, 1], [1, 1, 0]])
+    assert frame.longitude_interval_deg == 0.01
+    assert frame.latitude_interval_deg == 0.01
 
 
 def test_multi_region_reader_opens_one_asset_and_rejects_duplicate_grid_ids(

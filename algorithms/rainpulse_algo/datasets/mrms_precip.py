@@ -41,6 +41,19 @@ class MRMSPrecipFrame:
 
 
 @dataclass(frozen=True)
+class MRMSNativePrecipFrame:
+    valid_time: datetime
+    rate_mm_h: np.ndarray
+    valid_mask: np.ndarray
+    source_state: np.ndarray
+    longitudes: np.ndarray
+    latitudes: np.ndarray
+    longitude_interval_deg: float
+    latitude_interval_deg: float
+    source_path: str
+
+
+@dataclass(frozen=True)
 class MRMSValidationSequence:
     issue_time: datetime
     frame_times: tuple[datetime, ...]
@@ -137,6 +150,76 @@ def _decode_frame_values(
         source_state=state,
         source_path=str(path),
     )
+
+
+def _native_coordinates(dataset) -> tuple[np.ndarray, np.ndarray, float, float]:
+    transform = dataset.transform
+    longitude_interval = float(transform.a)
+    latitude_interval = float(-transform.e)
+    if (
+        longitude_interval <= 0
+        or latitude_interval <= 0
+        or not np.isclose(longitude_interval, 0.01, atol=1e-6)
+        or not np.isclose(latitude_interval, 0.01, atol=1e-6)
+        or not np.isclose(transform.b, 0.0, atol=1e-12)
+        or not np.isclose(transform.d, 0.0, atol=1e-12)
+    ):
+        raise MRMSPrecipError("MRMS native raster geometry is not the frozen 0.01 degree grid")
+    longitudes = transform.c + longitude_interval * (
+        np.arange(dataset.width, dtype="float64") + 0.5
+    )
+    descending_latitudes = transform.f - latitude_interval * (
+        np.arange(dataset.height, dtype="float64") + 0.5
+    )
+    return (
+        longitudes,
+        descending_latitudes[::-1].copy(),
+        longitude_interval,
+        latitude_interval,
+    )
+
+
+def read_mrms_native_precip_frame(path: Path) -> MRMSNativePrecipFrame:
+    """Read one complete native MRMS field with ascending latitude coordinates."""
+
+    valid_time = _valid_time_from_path(path)
+    source = f"/vsigzip/{path.resolve()}"
+    try:
+        with rasterio.open(source) as dataset:
+            if dataset.driver != "GRIB" or dataset.count != 1:
+                raise MRMSPrecipError("MRMS asset must contain one GRIB raster band")
+            _validate_product(dataset.tags(1), valid_time)
+            longitudes, latitudes, longitude_interval, latitude_interval = (
+                _native_coordinates(dataset)
+            )
+            values = np.flipud(np.asarray(dataset.read(1), dtype="float32"))
+            no_coverage = np.isclose(values, -3.0, atol=1e-6)
+            missing = np.isclose(values, -1.0, atol=1e-6)
+            valid = np.isfinite(values) & (values >= 0.0)
+            if np.any(~(no_coverage | missing | valid)):
+                raise MRMSPrecipError(
+                    "MRMS frame contains an undocumented precipitation-rate state"
+                )
+            rate = np.where(valid, values, np.nan).astype("float32")
+            state = np.full(values.shape, MRMSSourceState.NO_RAIN, dtype="int8")
+            state[values > 0.0] = MRMSSourceState.RAIN
+            state[missing] = MRMSSourceState.MISSING
+            state[no_coverage] = MRMSSourceState.NO_COVERAGE
+            return MRMSNativePrecipFrame(
+                valid_time=valid_time,
+                rate_mm_h=rate,
+                valid_mask=valid.astype("uint8"),
+                source_state=state,
+                longitudes=longitudes,
+                latitudes=latitudes,
+                longitude_interval_deg=longitude_interval,
+                latitude_interval_deg=latitude_interval,
+                source_path=str(path),
+            )
+    except MRMSPrecipError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - normalize raster driver failures at the seam
+        raise MRMSPrecipError(f"cannot read MRMS asset {path}: {exc}") from exc
 
 
 def read_mrms_precip_frames(

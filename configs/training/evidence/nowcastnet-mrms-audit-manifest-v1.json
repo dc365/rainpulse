@@ -1,0 +1,89 @@
+{
+  "schema_version": "1.0",
+  "evidence_id": "nowcastnet-mrms-audit-manifest-v1",
+  "evidence_date": "2026-08-30",
+  "profile_version": "nowcastnet-mrms-training-v1",
+  "profile_sha256": "c54d200a88e9f60d9dd1bfb44c4e2421700b4e1bb9ac3e60e36097b2b5c618bc",
+  "audit_scope": {
+    "start": "2019-01-01",
+    "end": "2025-12-31",
+    "started_at": "2026-08-30T12:36:19.882040Z",
+    "finished_at": "2026-08-30T12:41:13.449185Z",
+    "duration_seconds": 293.567145,
+    "cadence_minutes": 10,
+    "manifest_count": 2557,
+    "raw_data_mutated": false,
+    "full_content_hash_verified": false
+  },
+  "integrity": {
+    "transport_integrity": true,
+    "source_completeness": false,
+    "error_count": 0,
+    "asset_count": 367851,
+    "expected_slot_count": 368208,
+    "missing_slot_count": 357,
+    "incomplete_day_count": 162,
+    "total_bytes": 218275572861
+  },
+  "splits": {
+    "training": {
+      "asset_count": 262595,
+      "missing_slot_count": 349,
+      "candidate_window_count": 262916,
+      "eligible_window_count": 257141,
+      "indexed_window_count": 257141
+    },
+    "development": {
+      "asset_count": 17566,
+      "missing_slot_count": 2,
+      "candidate_window_count": 17456,
+      "eligible_window_count": 17426,
+      "indexed_window_count": 17426
+    },
+    "independent_holdout": {
+      "asset_count": 17424,
+      "missing_slot_count": 0,
+      "candidate_window_count": 17312,
+      "eligible_window_count": 17312,
+      "indexed_window_count": 0,
+      "window_index_status": "closed_by_holdout_gate"
+    },
+    "spent_verification": {
+      "asset_count": 26496,
+      "missing_slot_count": 0,
+      "indexed_window_count": 0
+    },
+    "reserve": {
+      "asset_count": 43770,
+      "missing_slot_count": 6,
+      "indexed_window_count": 0
+    }
+  },
+  "artifacts": {
+    "asset_inventory": {
+      "row_count": 367851,
+      "size_bytes": 128830366,
+      "sha256": "249446df96f7e4aadcd59976f51620171842a3154ae8d84b4a28b0ffabb7bea3"
+    },
+    "window_index": {
+      "row_count": 274567,
+      "size_bytes": 78909468,
+      "sha256": "856cfc723b4cf58aaaa6c9933ea2e4e7f29a848e36c2f550755b7bbd52f93410"
+    }
+  },
+  "cross_validation": {
+    "sampled_window_count": 1071,
+    "asset_boundaries_valid": true,
+    "input_issue_offset_valid": true,
+    "split_membership_valid": true,
+    "artifact_hashes_verified": true,
+    "holdout_window_row_count": 0
+  },
+  "performance": {
+    "asset_metadata_reads_per_file": 1,
+    "gpu_used": false,
+    "raw_grib_content_decoded": false
+  },
+  "conclusion": "accepted_for_pilot_preprocessing",
+  "operational_eligible": false
+}

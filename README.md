@@ -14,6 +14,7 @@ The implementation baseline is [`docs/RainPulse_技术架构与实施方案_含�
 - `configs`: versioned runtime configuration.
 - `deploy`: local and test deployment definitions.
 - `scripts`: reproducible bootstrap, verification, and smoke commands.
+- `docs/nowcastnet-training`: the separate source of truth for MRMS foundation-model training and later Fujian localization; this offline track does not use RP numbering.
 
 ## Developer entry points
 

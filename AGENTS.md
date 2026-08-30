@@ -17,6 +17,14 @@
 - Do not put STEPS ensembles, NowcastNet production inference, numerical-model fusion, online training, or Kubernetes on the Phase 1 critical path.
 - Compare pySTEPS-LK with persistence and whole-field translation baselines before declaring skill.
 
+## NowcastNet training track
+
+- Treat `docs/nowcastnet-training/README.md` as the only entry point and source of truth for self-trained NowcastNet work.
+- Keep model-training plans, runbooks, and progress records under `docs/nowcastnet-training/`; do not assign new RP numbers to them.
+- The training track is offline research. It does not replace the v1.1 Phase 1 critical path, alter accepted RP evidence, or enable realtime publication by itself.
+- Preserve the immutable model lineage: the MRMS foundation model is a parent artifact, and later Fujian fine-tuning creates a new child artifact without overwriting the parent.
+- Open an independent holdout only after the data split, code revision, configuration, checkpoint, and promotion gates have been frozen and hashed.
+
 ## Architecture boundaries
 
 - React calls Go only; it never calls Python workers directly.

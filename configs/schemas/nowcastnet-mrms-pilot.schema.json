@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.internal/schemas/nowcastnet-mrms-pilot.schema.json",
+  "title": "RainPulse NowcastNet MRMS preprocessing pilot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "pilot_version",
+    "lifecycle",
+    "operational_eligible",
+    "training_profile",
+    "audit_evidence",
+    "temporal_sampling",
+    "spatial_sampling",
+    "native_grid",
+    "output"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "pilot_version": {"const": "nowcastnet-mrms-pilot-v1"},
+    "lifecycle": {"const": "offline_training_pilot"},
+    "operational_eligible": {"const": false},
+    "training_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"const": "configs/training/nowcastnet-mrms-training-v1.yaml"},
+        "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+      }
+    },
+    "audit_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "asset_inventory_sha256",
+        "window_index_sha256"
+      ],
+      "properties": {
+        "path": {
+          "const": "configs/training/evidence/nowcastnet-mrms-audit-manifest-v1.json"
+        },
+        "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "asset_inventory_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "window_index_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+      }
+    },
+    "temporal_sampling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "split",
+        "random_seed",
+        "years",
+        "windows_per_year",
+        "minimum_separation_minutes"
+      ],
+      "properties": {
+        "split": {"const": "training"},
+        "random_seed": {"const": 2026083001},
+        "years": {"const": [2019, 2020, 2021, 2022, 2023]},
+        "windows_per_year": {"const": 80},
+        "minimum_separation_minutes": {"const": 360}
+      }
+    },
+    "spatial_sampling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "crop_size",
+        "candidate_stride_cells",
+        "crops_per_window",
+        "importance_crops_per_window",
+        "uniform_crops_per_window",
+        "importance_epsilon",
+        "minimum_origin_separation_cells",
+        "rain_rate_cap_mm_h",
+        "reject_any_missing"
+      ],
+      "properties": {
+        "crop_size": {"const": 256},
+        "candidate_stride_cells": {"const": 32},
+        "crops_per_window": {"const": 25},
+        "importance_crops_per_window": {"const": 20},
+        "uniform_crops_per_window": {"const": 5},
+        "importance_epsilon": {"const": 1.0},
+        "minimum_origin_separation_cells": {"const": 128},
+        "rain_rate_cap_mm_h": {"const": 128.0},
+        "reject_any_missing": {"const": true}
+      }
+    },
+    "native_grid": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "longitude_count",
+        "latitude_count",
+        "west_edge_deg",
+        "east_edge_deg",
+        "south_edge_deg",
+        "north_edge_deg",
+        "resolution_deg",
+        "latitude_order"
+      ],
+      "properties": {
+        "longitude_count": {"const": 7000},
+        "latitude_count": {"const": 3500},
+        "west_edge_deg": {"const": -130.0},
+        "east_edge_deg": {"const": -60.0},
+        "south_edge_deg": {"const": 20.0},
+        "north_edge_deg": {"const": 55.0},
+        "resolution_deg": {"const": 0.01},
+        "latitude_order": {"const": "ascending_after_decode"}
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sample_count",
+        "shard_count",
+        "samples_per_shard",
+        "format",
+        "rain_rate_dtype",
+        "valid_mask_dtype",
+        "compressor",
+        "compression_level",
+        "minimum_free_bytes",
+        "maximum_logical_output_bytes"
+      ],
+      "properties": {
+        "sample_count": {"const": 10000},
+        "shard_count": {"const": 400},
+        "samples_per_shard": {"const": 25},
+        "format": {"const": "zarr-v2-window-shards"},
+        "rain_rate_dtype": {"const": "float16"},
+        "valid_mask_dtype": {"const": "uint8"},
+        "compressor": {"const": "blosc-zstd-bitshuffle"},
+        "compression_level": {"const": 3},
+        "minimum_free_bytes": {"const": 120000000000},
+        "maximum_logical_output_bytes": {"const": 80000000000}
+      }
+    }
+  }
+}

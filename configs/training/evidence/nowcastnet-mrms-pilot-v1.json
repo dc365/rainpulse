@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0",
+  "evidence_type": "nowcastnet_mrms_pilot",
+  "validated_at": "2026-08-30T14:23:48.169377+00:00",
+  "pilot_version": "nowcastnet-mrms-pilot-v1",
+  "pilot_profile_sha256": "2404e6effe1c425f86357611b845b962aa15a52060bf471b54751b0fb394a1cf",
+  "training_profile_sha256": "c54d200a88e9f60d9dd1bfb44c4e2421700b4e1bb9ac3e60e36097b2b5c618bc",
+  "plan_id": "1b28ccf6c7021017c5a27d26e483752c95724b485d05cec4c6a5c6a187f1fa68",
+  "source_integrity": {
+    "asset_inventory_sha256": "249446df96f7e4aadcd59976f51620171842a3154ae8d84b4a28b0ffabb7bea3",
+    "window_index_sha256": "856cfc723b4cf58aaaa6c9933ea2e4e7f29a848e36c2f550755b7bbd52f93410",
+    "holdout_windows_processed": 0
+  },
+  "result": {
+    "status": "passed",
+    "shard_count": 400,
+    "sample_count": 10000,
+    "branch_counts": {
+      "importance": 8000,
+      "uniform": 2000
+    },
+    "logical_bytes": 57016320000,
+    "stored_bytes": 5778298957,
+    "compression_ratio": 9.867319158163108,
+    "all_samples_valid": true,
+    "content_hash_verified": true,
+    "sampled_rain_min_mm_h": 0.0,
+    "sampled_rain_max_mm_h": 128.0,
+    "random_read_sample_count": 64,
+    "random_read_logical_mib_s": 465.73408495279995
+  },
+  "artifacts": {
+    "pilot_plan_sha256": "2717aa66f81b2f392974f47cf0fe19ff95a599ede978f1411015da6c2ae94f22",
+    "pilot_report_sha256": "e27413755e890c72ab9df8c44ea98239b9b0321447f0167073002739909709f0",
+    "validation_report_sha256": "633ef7c1cec5e67a920e5d1c2af2b9a64b08c70febffd50c6c03a5b0f3cd3177",
+    "sample_index_sha256": "0d1569b1d2c36302f969711be8b935b458e0b424e5e2ce44acb2dc577a34bdff"
+  },
+  "operational_eligible": false
+}
