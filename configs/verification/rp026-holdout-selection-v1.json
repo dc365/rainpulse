@@ -1,0 +1,309 @@
+{
+  "candidate_catalog": {
+    "catalog_sha256": "17d2bd95d76815fb3b9fcaaae9b043415935336eac3365b27cdd94674e310526",
+    "catalog_version": "mrms-holdout-regions-v1",
+    "region_count": 10
+  },
+  "case_namespace": "holdout",
+  "claim": "Cases were frozen from MRMS observations before any forecast run for this split.",
+  "generated_at_utc": "2026-08-30T05:04:50.580571Z",
+  "model_forecast_or_skill_fields_read": false,
+  "schema_version": "1.0",
+  "screened_observation_row_count": 14880,
+  "screened_observation_statistics_sha256": "3c21af84f9b714f91cdbb54efe722394e61cf561c58c851a9db6f881f2cbce06",
+  "selected_case_count": 6,
+  "selected_cases": [
+    {
+      "anchor_time_utc": "2025-03-04T20:00:00Z",
+      "case_id": "holdout_20250304_midwest_wet_1",
+      "category": "wet",
+      "grid": {
+        "bounds": {
+          "east": -89.995,
+          "north": 41.005,
+          "south": 39.005,
+          "west": -94.995
+        },
+        "config_version": "mrms-holdout-midwest-0p01deg-v1",
+        "coordinate_sha256": "682d65165a7bce8a4c0177f960310ccfe998b4eabb044d07365720ccbd2ba221",
+        "grid_id": "mrms_holdout_midwest_0p01deg_v1"
+      },
+      "issues": {
+        "end": "2025-03-04T22:00:00Z",
+        "start": "2025-03-04T18:00:00Z",
+        "step_minutes": 30
+      },
+      "label": "Midwest observation-screened wet event",
+      "observation_screen": {
+        "anchor_time_utc": "2025-03-04T20:00:00Z",
+        "category": "wet",
+        "maximum_rain_fraction_ge_0p1": 0.879743001559,
+        "maximum_rate_mm_h": 50.299999,
+        "mean_rain_fraction_ge_0p1": 0.818283830349,
+        "mean_rain_fraction_ge_1": 0.694312866804,
+        "mean_rain_fraction_ge_10": 0.003684173941,
+        "minimum_valid_fraction": 1.0,
+        "month": "2025-03",
+        "region_id": "midwest",
+        "region_label": "Midwest",
+        "wet_active_hour_count": 5,
+        "wet_score": 0.701681214685
+      }
+    },
+    {
+      "anchor_time_utc": "2025-03-17T07:00:00Z",
+      "case_id": "holdout_20250317_northeast_wet_2",
+      "category": "wet",
+      "grid": {
+        "bounds": {
+          "east": -71.995,
+          "north": 42.005,
+          "south": 40.005,
+          "west": -76.995
+        },
+        "config_version": "mrms-holdout-northeast-0p01deg-v1",
+        "coordinate_sha256": "7c2bd9871e09bf783e3458bab6fb6fc7a019e4f3cfbecb00b661691b8790ccb5",
+        "grid_id": "mrms_holdout_northeast_0p01deg_v1"
+      },
+      "issues": {
+        "end": "2025-03-17T09:00:00Z",
+        "start": "2025-03-17T05:00:00Z",
+        "step_minutes": 30
+      },
+      "label": "Northeast observation-screened wet event",
+      "observation_screen": {
+        "anchor_time_utc": "2025-03-17T07:00:00Z",
+        "category": "wet",
+        "maximum_rain_fraction_ge_0p1": 0.854768075789,
+        "maximum_rate_mm_h": 150.0,
+        "mean_rain_fraction_ge_0p1": 0.754671751025,
+        "mean_rain_fraction_ge_1": 0.601286978282,
+        "mean_rain_fraction_ge_10": 0.044970755008,
+        "minimum_valid_fraction": 1.0,
+        "month": "2025-03",
+        "region_id": "northeast",
+        "region_label": "Northeast",
+        "wet_active_hour_count": 5,
+        "wet_score": 0.691228488297
+      }
+    },
+    {
+      "anchor_time_utc": "2025-03-01T03:00:00Z",
+      "case_id": "holdout_20250301_central_plains_dry_1",
+      "category": "dry",
+      "grid": {
+        "bounds": {
+          "east": -96.995,
+          "north": 39.005,
+          "south": 37.005,
+          "west": -101.995
+        },
+        "config_version": "mrms-holdout-central-plains-0p01deg-v1",
+        "coordinate_sha256": "9d604a857f235fd694e680636a01df64eb4340dbed3b011195d1f0bd3372bfb0",
+        "grid_id": "mrms_holdout_central_plains_0p01deg_v1"
+      },
+      "issues": {
+        "end": "2025-03-01T06:00:00Z",
+        "start": "2025-03-01T00:00:00Z",
+        "step_minutes": 60
+      },
+      "label": "Central Plains observation-screened dry control",
+      "observation_screen": {
+        "anchor_time_utc": "2025-03-01T03:00:00Z",
+        "category": "dry",
+        "maximum_rain_fraction_ge_0p1": 0.0,
+        "maximum_rate_mm_h": 0.0,
+        "mean_rain_fraction_ge_0p1": 0.0,
+        "mean_rain_fraction_ge_1": 0.0,
+        "mean_rain_fraction_ge_10": 0.0,
+        "minimum_valid_fraction": 1.0,
+        "month": "2025-03",
+        "region_id": "central_plains",
+        "region_label": "Central Plains",
+        "wet_active_hour_count": 0,
+        "wet_score": 0.0
+      }
+    },
+    {
+      "anchor_time_utc": "2025-07-25T09:00:00Z",
+      "case_id": "holdout_20250725_central_plains_wet_1",
+      "category": "wet",
+      "grid": {
+        "bounds": {
+          "east": -96.995,
+          "north": 39.005,
+          "south": 37.005,
+          "west": -101.995
+        },
+        "config_version": "mrms-holdout-central-plains-0p01deg-v1",
+        "coordinate_sha256": "9d604a857f235fd694e680636a01df64eb4340dbed3b011195d1f0bd3372bfb0",
+        "grid_id": "mrms_holdout_central_plains_0p01deg_v1"
+      },
+      "issues": {
+        "end": "2025-07-25T11:00:00Z",
+        "start": "2025-07-25T07:00:00Z",
+        "step_minutes": 30
+      },
+      "label": "Central Plains observation-screened wet event",
+      "observation_screen": {
+        "anchor_time_utc": "2025-07-25T09:00:00Z",
+        "category": "wet",
+        "maximum_rain_fraction_ge_0p1": 0.570163156275,
+        "maximum_rate_mm_h": 150.0,
+        "mean_rain_fraction_ge_0p1": 0.476229630292,
+        "mean_rain_fraction_ge_1": 0.39690171895,
+        "mean_rain_fraction_ge_10": 0.0710340513,
+        "minimum_valid_fraction": 1.0,
+        "month": "2025-07",
+        "region_id": "central_plains",
+        "region_label": "Central Plains",
+        "wet_active_hour_count": 5,
+        "wet_score": 0.538969821551
+      }
+    },
+    {
+      "anchor_time_utc": "2025-07-14T22:00:00Z",
+      "case_id": "holdout_20250714_northeast_wet_2",
+      "category": "wet",
+      "grid": {
+        "bounds": {
+          "east": -71.995,
+          "north": 42.005,
+          "south": 40.005,
+          "west": -76.995
+        },
+        "config_version": "mrms-holdout-northeast-0p01deg-v1",
+        "coordinate_sha256": "7c2bd9871e09bf783e3458bab6fb6fc7a019e4f3cfbecb00b661691b8790ccb5",
+        "grid_id": "mrms_holdout_northeast_0p01deg_v1"
+      },
+      "issues": {
+        "end": "2025-07-15T00:00:00Z",
+        "start": "2025-07-14T20:00:00Z",
+        "step_minutes": 30
+      },
+      "label": "Northeast observation-screened wet event",
+      "observation_screen": {
+        "anchor_time_utc": "2025-07-14T22:00:00Z",
+        "category": "wet",
+        "maximum_rain_fraction_ge_0p1": 0.513083286164,
+        "maximum_rate_mm_h": 150.0,
+        "mean_rain_fraction_ge_0p1": 0.467173116454,
+        "mean_rain_fraction_ge_1": 0.386484741959,
+        "mean_rain_fraction_ge_10": 0.070468019185,
+        "minimum_valid_fraction": 1.0,
+        "month": "2025-07",
+        "region_id": "northeast",
+        "region_label": "Northeast",
+        "wet_active_hour_count": 5,
+        "wet_score": 0.52742078033
+      }
+    },
+    {
+      "anchor_time_utc": "2025-07-01T03:00:00Z",
+      "case_id": "holdout_20250701_northern_plains_dry_1",
+      "category": "dry",
+      "grid": {
+        "bounds": {
+          "east": -98.995,
+          "north": 47.005,
+          "south": 45.005,
+          "west": -103.995
+        },
+        "config_version": "mrms-holdout-northern-plains-0p01deg-v1",
+        "coordinate_sha256": "0c57195fab3ac3164c9333a322b545759548b5851892ef218615e52d4e18e1f1",
+        "grid_id": "mrms_holdout_northern_plains_0p01deg_v1"
+      },
+      "issues": {
+        "end": "2025-07-01T06:00:00Z",
+        "start": "2025-07-01T00:00:00Z",
+        "step_minutes": 60
+      },
+      "label": "Northern Plains observation-screened dry control",
+      "observation_screen": {
+        "anchor_time_utc": "2025-07-01T03:00:00Z",
+        "category": "dry",
+        "maximum_rain_fraction_ge_0p1": 0.0,
+        "maximum_rate_mm_h": 0.0,
+        "mean_rain_fraction_ge_0p1": 0.0,
+        "mean_rain_fraction_ge_1": 0.0,
+        "mean_rain_fraction_ge_10": 0.0,
+        "minimum_valid_fraction": 1.0,
+        "month": "2025-07",
+        "region_id": "northern_plains",
+        "region_label": "Northern Plains",
+        "wet_active_hour_count": 0,
+        "wet_score": 0.0
+      }
+    }
+  ],
+  "selected_issue_count": 50,
+  "selection_protocol_version": "mrms-observation-split-v2",
+  "selection_role": "independent_holdout",
+  "selection_rules": {
+    "dry_cases_per_month": 1,
+    "dry_issue_step_minutes": 60,
+    "dry_issue_window_hours": [
+      -3,
+      3
+    ],
+    "dry_rank": "minimum max(area_fraction_rate_ge_0.1), then minimum mean",
+    "dry_screen_offsets_hours": [
+      -3,
+      -2,
+      -1,
+      0,
+      1,
+      2,
+      3
+    ],
+    "minimum_case_anchor_separation_hours": 48,
+    "minimum_valid_fraction": 0.99,
+    "wet_active_fraction_minimum": 0.005,
+    "wet_active_hour_minimum": 4,
+    "wet_cases_per_month": 2,
+    "wet_issue_step_minutes": 30,
+    "wet_issue_window_hours": [
+      -2,
+      2
+    ],
+    "wet_regions_must_be_distinct_within_month": true,
+    "wet_score": "mean(area_fraction_rate_ge_1)+2*mean(area_fraction_rate_ge_10)",
+    "wet_screen_offsets_hours": [
+      -2,
+      -1,
+      0,
+      1,
+      2
+    ]
+  },
+  "source": {
+    "manifest_summaries": [
+      {
+        "complete": true,
+        "daily_manifest_count": 31,
+        "daily_manifests_sha256": "095728a0b0da5efd0338d7c5ae06523660b78ae4e079c62aea3ea8d5964f3b60",
+        "described_asset_count": 4464,
+        "month": "2025-03",
+        "screened_asset_size_checks_passed": true,
+        "screened_hourly_asset_count": 744
+      },
+      {
+        "complete": true,
+        "daily_manifest_count": 31,
+        "daily_manifests_sha256": "4ab757a32b457188b2868000b69d5ef5b0761ba42bea29c4640f1099ad8beb51",
+        "described_asset_count": 4464,
+        "month": "2025-07",
+        "screened_asset_size_checks_passed": true,
+        "screened_hourly_asset_count": 744
+      }
+    ],
+    "months": [
+      "2025-03",
+      "2025-07"
+    ],
+    "product": "PrecipRate_00.00",
+    "screen_cadence_minutes": 60,
+    "selected_assets_require_full_hash_conformance_before_hindcast": true,
+    "units": "mm/h"
+  }
+}

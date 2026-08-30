@@ -1,0 +1,309 @@
+{
+  "candidate_catalog": {
+    "catalog_sha256": "17d2bd95d76815fb3b9fcaaae9b043415935336eac3365b27cdd94674e310526",
+    "catalog_version": "mrms-holdout-regions-v1",
+    "region_count": 10
+  },
+  "case_namespace": "development",
+  "claim": "Cases were frozen from MRMS observations before any forecast run for this split.",
+  "generated_at_utc": "2026-08-30T04:54:50.454140Z",
+  "model_forecast_or_skill_fields_read": false,
+  "schema_version": "1.0",
+  "screened_observation_row_count": 14640,
+  "screened_observation_statistics_sha256": "41237e67723023430a7e0724d3bf474d07e37df149acaf8fb039a677b7056cb7",
+  "selected_case_count": 6,
+  "selected_cases": [
+    {
+      "anchor_time_utc": "2024-07-03T05:00:00Z",
+      "case_id": "development_20240703_midwest_wet_1",
+      "category": "wet",
+      "grid": {
+        "bounds": {
+          "east": -89.995,
+          "north": 41.005,
+          "south": 39.005,
+          "west": -94.995
+        },
+        "config_version": "mrms-holdout-midwest-0p01deg-v1",
+        "coordinate_sha256": "682d65165a7bce8a4c0177f960310ccfe998b4eabb044d07365720ccbd2ba221",
+        "grid_id": "mrms_holdout_midwest_0p01deg_v1"
+      },
+      "issues": {
+        "end": "2024-07-03T07:00:00Z",
+        "start": "2024-07-03T03:00:00Z",
+        "step_minutes": 30
+      },
+      "label": "Midwest observation-screened wet event",
+      "observation_screen": {
+        "anchor_time_utc": "2024-07-03T05:00:00Z",
+        "category": "wet",
+        "maximum_rain_fraction_ge_0p1": 0.602863923894,
+        "maximum_rate_mm_h": 175.0,
+        "mean_rain_fraction_ge_0p1": 0.554214953178,
+        "mean_rain_fraction_ge_1": 0.481022035531,
+        "mean_rain_fraction_ge_10": 0.092195708086,
+        "minimum_valid_fraction": 1.0,
+        "month": "2024-07",
+        "region_id": "midwest",
+        "region_label": "Midwest",
+        "wet_active_hour_count": 5,
+        "wet_score": 0.665413451704
+      }
+    },
+    {
+      "anchor_time_utc": "2024-07-24T15:00:00Z",
+      "case_id": "development_20240724_lower_mississippi_wet_2",
+      "category": "wet",
+      "grid": {
+        "bounds": {
+          "east": -88.995,
+          "north": 33.005,
+          "south": 31.005,
+          "west": -93.995
+        },
+        "config_version": "mrms-holdout-lower-mississippi-0p01deg-v1",
+        "coordinate_sha256": "6da73609eb77d715eaf8306e8e566809f59ef3d8c6e9b6cd80f957f7fe7e34ad",
+        "grid_id": "mrms_holdout_lower_mississippi_0p01deg_v1"
+      },
+      "issues": {
+        "end": "2024-07-24T17:00:00Z",
+        "start": "2024-07-24T13:00:00Z",
+        "step_minutes": 30
+      },
+      "label": "Lower Mississippi Valley observation-screened wet event",
+      "observation_screen": {
+        "anchor_time_utc": "2024-07-24T15:00:00Z",
+        "category": "wet",
+        "maximum_rain_fraction_ge_0p1": 0.637858611136,
+        "maximum_rate_mm_h": 168.199997,
+        "mean_rain_fraction_ge_0p1": 0.614379201795,
+        "mean_rain_fraction_ge_1": 0.454567481952,
+        "mean_rain_fraction_ge_10": 0.076317017706,
+        "minimum_valid_fraction": 1.0,
+        "month": "2024-07",
+        "region_id": "lower_mississippi",
+        "region_label": "Lower Mississippi Valley",
+        "wet_active_hour_count": 5,
+        "wet_score": 0.607201517363
+      }
+    },
+    {
+      "anchor_time_utc": "2024-07-01T03:00:00Z",
+      "case_id": "development_20240701_midwest_dry_1",
+      "category": "dry",
+      "grid": {
+        "bounds": {
+          "east": -89.995,
+          "north": 41.005,
+          "south": 39.005,
+          "west": -94.995
+        },
+        "config_version": "mrms-holdout-midwest-0p01deg-v1",
+        "coordinate_sha256": "682d65165a7bce8a4c0177f960310ccfe998b4eabb044d07365720ccbd2ba221",
+        "grid_id": "mrms_holdout_midwest_0p01deg_v1"
+      },
+      "issues": {
+        "end": "2024-07-01T06:00:00Z",
+        "start": "2024-07-01T00:00:00Z",
+        "step_minutes": 60
+      },
+      "label": "Midwest observation-screened dry control",
+      "observation_screen": {
+        "anchor_time_utc": "2024-07-01T03:00:00Z",
+        "category": "dry",
+        "maximum_rain_fraction_ge_0p1": 0.0,
+        "maximum_rate_mm_h": 0.0,
+        "mean_rain_fraction_ge_0p1": 0.0,
+        "mean_rain_fraction_ge_1": 0.0,
+        "mean_rain_fraction_ge_10": 0.0,
+        "minimum_valid_fraction": 1.0,
+        "month": "2024-07",
+        "region_id": "midwest",
+        "region_label": "Midwest",
+        "wet_active_hour_count": 0,
+        "wet_score": 0.0
+      }
+    },
+    {
+      "anchor_time_utc": "2024-11-08T12:00:00Z",
+      "case_id": "development_20241108_central_plains_wet_1",
+      "category": "wet",
+      "grid": {
+        "bounds": {
+          "east": -96.995,
+          "north": 39.005,
+          "south": 37.005,
+          "west": -101.995
+        },
+        "config_version": "mrms-holdout-central-plains-0p01deg-v1",
+        "coordinate_sha256": "9d604a857f235fd694e680636a01df64eb4340dbed3b011195d1f0bd3372bfb0",
+        "grid_id": "mrms_holdout_central_plains_0p01deg_v1"
+      },
+      "issues": {
+        "end": "2024-11-08T14:00:00Z",
+        "start": "2024-11-08T10:00:00Z",
+        "step_minutes": 30
+      },
+      "label": "Central Plains observation-screened wet event",
+      "observation_screen": {
+        "anchor_time_utc": "2024-11-08T12:00:00Z",
+        "category": "wet",
+        "maximum_rain_fraction_ge_0p1": 0.955035203225,
+        "maximum_rate_mm_h": 132.600006,
+        "mean_rain_fraction_ge_0p1": 0.913238200216,
+        "mean_rain_fraction_ge_1": 0.789513510293,
+        "mean_rain_fraction_ge_10": 0.012150822733,
+        "minimum_valid_fraction": 1.0,
+        "month": "2024-11",
+        "region_id": "central_plains",
+        "region_label": "Central Plains",
+        "wet_active_hour_count": 5,
+        "wet_score": 0.813815155759
+      }
+    },
+    {
+      "anchor_time_utc": "2024-11-19T17:00:00Z",
+      "case_id": "development_20241119_southeast_wet_2",
+      "category": "wet",
+      "grid": {
+        "bounds": {
+          "east": -81.995,
+          "north": 34.005,
+          "south": 32.005,
+          "west": -86.995
+        },
+        "config_version": "mrms-holdout-southeast-0p01deg-v1",
+        "coordinate_sha256": "66867f10b5078469b7a869174684afff171f26567cf698e60192e3515825c2a7",
+        "grid_id": "mrms_holdout_southeast_0p01deg_v1"
+      },
+      "issues": {
+        "end": "2024-11-19T19:00:00Z",
+        "start": "2024-11-19T15:00:00Z",
+        "step_minutes": 30
+      },
+      "label": "Southeast observation-screened wet event",
+      "observation_screen": {
+        "anchor_time_utc": "2024-11-19T17:00:00Z",
+        "category": "wet",
+        "maximum_rain_fraction_ge_0p1": 0.771263443263,
+        "maximum_rate_mm_h": 105.599998,
+        "mean_rain_fraction_ge_0p1": 0.749374882077,
+        "mean_rain_fraction_ge_1": 0.638873496787,
+        "mean_rain_fraction_ge_10": 0.057919980934,
+        "minimum_valid_fraction": 1.0,
+        "month": "2024-11",
+        "region_id": "southeast",
+        "region_label": "Southeast",
+        "wet_active_hour_count": 5,
+        "wet_score": 0.754713458655
+      }
+    },
+    {
+      "anchor_time_utc": "2024-11-01T03:00:00Z",
+      "case_id": "development_20241101_central_plains_dry_1",
+      "category": "dry",
+      "grid": {
+        "bounds": {
+          "east": -96.995,
+          "north": 39.005,
+          "south": 37.005,
+          "west": -101.995
+        },
+        "config_version": "mrms-holdout-central-plains-0p01deg-v1",
+        "coordinate_sha256": "9d604a857f235fd694e680636a01df64eb4340dbed3b011195d1f0bd3372bfb0",
+        "grid_id": "mrms_holdout_central_plains_0p01deg_v1"
+      },
+      "issues": {
+        "end": "2024-11-01T06:00:00Z",
+        "start": "2024-11-01T00:00:00Z",
+        "step_minutes": 60
+      },
+      "label": "Central Plains observation-screened dry control",
+      "observation_screen": {
+        "anchor_time_utc": "2024-11-01T03:00:00Z",
+        "category": "dry",
+        "maximum_rain_fraction_ge_0p1": 0.0,
+        "maximum_rate_mm_h": 0.0,
+        "mean_rain_fraction_ge_0p1": 0.0,
+        "mean_rain_fraction_ge_1": 0.0,
+        "mean_rain_fraction_ge_10": 0.0,
+        "minimum_valid_fraction": 1.0,
+        "month": "2024-11",
+        "region_id": "central_plains",
+        "region_label": "Central Plains",
+        "wet_active_hour_count": 0,
+        "wet_score": 0.0
+      }
+    }
+  ],
+  "selected_issue_count": 50,
+  "selection_protocol_version": "mrms-observation-split-v2",
+  "selection_role": "development",
+  "selection_rules": {
+    "dry_cases_per_month": 1,
+    "dry_issue_step_minutes": 60,
+    "dry_issue_window_hours": [
+      -3,
+      3
+    ],
+    "dry_rank": "minimum max(area_fraction_rate_ge_0.1), then minimum mean",
+    "dry_screen_offsets_hours": [
+      -3,
+      -2,
+      -1,
+      0,
+      1,
+      2,
+      3
+    ],
+    "minimum_case_anchor_separation_hours": 48,
+    "minimum_valid_fraction": 0.99,
+    "wet_active_fraction_minimum": 0.005,
+    "wet_active_hour_minimum": 4,
+    "wet_cases_per_month": 2,
+    "wet_issue_step_minutes": 30,
+    "wet_issue_window_hours": [
+      -2,
+      2
+    ],
+    "wet_regions_must_be_distinct_within_month": true,
+    "wet_score": "mean(area_fraction_rate_ge_1)+2*mean(area_fraction_rate_ge_10)",
+    "wet_screen_offsets_hours": [
+      -2,
+      -1,
+      0,
+      1,
+      2
+    ]
+  },
+  "source": {
+    "manifest_summaries": [
+      {
+        "complete": true,
+        "daily_manifest_count": 31,
+        "daily_manifests_sha256": "03139cd472cd745c6026239ddf2a3af92c1d03304c2470cbc4a73799b41e1d54",
+        "described_asset_count": 4464,
+        "month": "2024-07",
+        "screened_asset_size_checks_passed": true,
+        "screened_hourly_asset_count": 744
+      },
+      {
+        "complete": true,
+        "daily_manifest_count": 30,
+        "daily_manifests_sha256": "0a13605213b96e7a34e1b392d5ea8ca0f3d9c92f33826605de2543a80c039c1f",
+        "described_asset_count": 4320,
+        "month": "2024-11",
+        "screened_asset_size_checks_passed": true,
+        "screened_hourly_asset_count": 720
+      }
+    ],
+    "months": [
+      "2024-07",
+      "2024-11"
+    ],
+    "product": "PrecipRate_00.00",
+    "screen_cadence_minutes": 60,
+    "selected_assets_require_full_hash_conformance_before_hindcast": true,
+    "units": "mm/h"
+  }
+}

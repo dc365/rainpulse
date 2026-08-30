@@ -1,0 +1,73 @@
+schema_version: "1.0"
+profile_version: rp026-mrms-nowcastnet-v1
+description: >-
+  Frozen MRMS development and independent-holdout boundary for official
+  NowcastNet against STEPS, LK, persistence and phase correlation. This is
+  engineering-only evidence and cannot enable operational publication.
+lifecycle: engineering_validation
+operational_eligible: false
+
+source:
+  product: PrecipRate_00.00
+  cadence_minutes: 10
+  nowcastnet_input: nine_raw_ten_minute_frames_issue_minus_80_to_issue
+  baseline_adaptation: causal_linear_midpoints_to_5_minutes
+  truth: raw_ten_minute_frames_issue_plus_10_to_120
+
+forecast:
+  nowcastnet_profile: configs/nowcast/rp026-nowcastnet-offline-v1.yaml
+  nowcastnet_profile_sha256: b6c42503366053110ac555906b3383a34448e7dbd17dc5d78ea7b05140ba2e8b
+  steps_profile: configs/nowcast/rp024-pysteps-steps-v1.yaml
+  steps_profile_sha256: a74e3381222e14b3c5597dee602d0a7d8f629db5db5a99adda0e75f65d0647f7
+  lk_profile: configs/nowcast/rp016-pysteps-lk-v1.yaml
+  lk_profile_sha256: 2e31c4a99a823eec665973798c222659f8da7f3239f16ac66fed3e4fd79b066b
+  nowcastnet_member_count: 4
+  steps_member_count: 12
+  model_grid:
+    height: 512
+    width: 512
+    adaptation: expand_then_exact_crop_to_frozen_target
+    target_crop:
+      south_offset: 155
+      west_offset: 5
+      height: 201
+      width: 501
+
+splits:
+  development:
+    role: development
+    months: ["2024-07", "2024-11"]
+    selection_evidence_path: configs/verification/rp026-development-selection-v1.json
+    selection_evidence_sha256: 3561526fe6ab0c521a94e6ff0f43aed4f9c4d100f33614b79aaffc8af410a8c0
+    expected_case_count: 6
+    expected_issue_count: 50
+  holdout:
+    role: independent_holdout
+    months: ["2025-03", "2025-07"]
+    selection_evidence_path: configs/verification/rp026-holdout-selection-v1.json
+    selection_evidence_sha256: 2aaf56f4e550224fcca853b6e1abc49ad0a037ec442d158f4e1e73ae70ad08fa
+    expected_case_count: 6
+    expected_issue_count: 50
+
+verification:
+  lead_minutes: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
+  thresholds_mm_h: [1, 5, 10, 20, 50]
+  reliability_bin_edges: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+  near_minutes: [10, 60]
+  far_minutes: [70, 120]
+  models: [nowcastnet, steps, lk, persistence, phase_correlation]
+  common_support_policy: truth_and_all_forecast_models_valid
+  category_reporting: [wet, dry]
+  probability_status: raw_ensemble_relative_frequency_uncalibrated
+
+leakage:
+  forbidden_months:
+    ["2021-08", "2022-01", "2022-12", "2023-06", "2023-12", "2024-06", "2025-01"]
+  development_holdout_months_must_be_disjoint: true
+  selection_must_not_read_forecast_or_skill_fields: true
+  holdout_forecast_requires_frozen_development_gate: true
+
+development_gate:
+  status: development_pending
+  artifact_path: null
+  artifact_sha256: null

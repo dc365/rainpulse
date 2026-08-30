@@ -261,3 +261,22 @@ class OfficialNowcastNetBackend:
             result["device_name"] = "cpu-smoke-only"
             result["device_capability"] = None
         return result
+
+    def reset_peak_memory_stats(self) -> None:
+        if self.device.startswith("cuda:"):
+            index = int(self.device.split(":", maxsplit=1)[1])
+            self._torch.cuda.reset_peak_memory_stats(index)
+
+    def peak_memory_stats(self) -> dict[str, int | None]:
+        if not self.device.startswith("cuda:"):
+            return {
+                "gpu_peak_allocated_bytes": None,
+                "gpu_peak_reserved_bytes": None,
+            }
+        index = int(self.device.split(":", maxsplit=1)[1])
+        return {
+            "gpu_peak_allocated_bytes": int(
+                self._torch.cuda.max_memory_allocated(index)
+            ),
+            "gpu_peak_reserved_bytes": int(self._torch.cuda.max_memory_reserved(index)),
+        }

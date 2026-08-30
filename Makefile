@@ -18,7 +18,7 @@ BUILD_REVISION ?= $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo unkn
 BUILD_VERSION ?= $(BUILD_REVISION)
 RAINPULSE_GO_LDFLAGS := -X github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo.Version=$(BUILD_VERSION) -X github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo.Revision=$(BUILD_REVISION)
 
-.PHONY: bootstrap contracts-generate contracts-check test test-structure test-radar-config test-contracts test-infrastructure test-control-plane test-worker-sdk test-radar-decoder test-radar-health test-radar-qc test-radar-grid test-radar-mosaic test-qpe test-diagnostics test-nowcast-input test-pysteps-lk test-pysteps-steps test-probability-calibration test-nowcastnet test-products test-ensemble-products test-ancillary test-grid test-mrms test-mrms-ensemble test-go test-python test-web lint build build-linux build-infrastructure-linux export-postgres-image export-python-image build-worker-linux deploy-up dev-up dev-down smoke infrastructure-smoke control-plane-smoke worker-smoke radar-decode-smoke radar-health-smoke radar-qc-smoke radar-grid-smoke ancillary-plan ancillary-download ancillary-verify mrms-download mrms-verify mrms-holdout-select mrms-conformance mrms-hindcast mrms-faults mrms-ensemble-conformance mrms-ensemble-hindcast mrms-ensemble-freeze-gate
+.PHONY: bootstrap contracts-generate contracts-check test test-structure test-radar-config test-contracts test-infrastructure test-control-plane test-worker-sdk test-radar-decoder test-radar-health test-radar-qc test-radar-grid test-radar-mosaic test-qpe test-diagnostics test-nowcast-input test-pysteps-lk test-pysteps-steps test-probability-calibration test-nowcastnet test-products test-ensemble-products test-ancillary test-grid test-mrms test-mrms-ensemble test-go test-python test-web lint build build-linux build-infrastructure-linux export-postgres-image export-python-image build-worker-linux deploy-up dev-up dev-down smoke infrastructure-smoke control-plane-smoke worker-smoke radar-decode-smoke radar-health-smoke radar-qc-smoke radar-grid-smoke ancillary-plan ancillary-download ancillary-verify mrms-download mrms-verify mrms-holdout-select mrms-conformance mrms-hindcast mrms-faults mrms-ensemble-conformance mrms-ensemble-hindcast mrms-ensemble-freeze-gate mrms-nowcastnet-conformance mrms-nowcastnet-hindcast mrms-nowcastnet-freeze-gate
 
 bootstrap:
 	@command -v rg >/dev/null || { echo "ripgrep is required" >&2; exit 1; }
@@ -97,7 +97,7 @@ test-probability-calibration:
 	uv run --project algorithms pytest algorithms/tests/test_probability_calibration.py
 
 test-nowcastnet:
-	uv run --project algorithms pytest algorithms/tests/test_nowcastnet_adapter.py algorithms/tests/test_nowcastnet_worker.py
+	uv run --project algorithms pytest algorithms/tests/test_nowcastnet_adapter.py algorithms/tests/test_nowcastnet_worker.py algorithms/tests/test_mrms_nowcastnet_hindcast.py
 
 test-products:
 	bash tests/rp015_products_test.sh
@@ -249,6 +249,11 @@ MRMS_ENSEMBLE_PROFILE ?= configs/verification/rp024-mrms-ensemble-v1.yaml
 MRMS_ENSEMBLE_SPLIT ?= development
 MRMS_DEVELOPMENT_SUMMARY ?=
 MRMS_ENSEMBLE_GATE_OUTPUT ?= configs/verification/rp024-development-gate-v1.json
+MRMS_NOWCASTNET_PROFILE ?= configs/verification/rp026-mrms-nowcastnet-v1.yaml
+MRMS_NOWCASTNET_SPLIT ?= development
+MRMS_NOWCASTNET_CAPSULE_ROOT ?= /opt/rainpulse/nowcastnet/official-v1
+MRMS_NOWCASTNET_DEVICE ?= cuda:0
+MRMS_NOWCASTNET_GATE_OUTPUT ?= configs/verification/rp026-development-gate-v1.json
 
 mrms-download:
 	uv run --project algorithms python -m rainpulse_algo.datasets.mrms_archive download --start $(MRMS_START) --end $(MRMS_END) --root $(MRMS_ROOT) --cadence-minutes $(MRMS_CADENCE_MINUTES) --workers $(MRMS_WORKERS) $(if $(MRMS_PROXY),--proxy $(MRMS_PROXY),)
@@ -274,6 +279,16 @@ mrms-ensemble-hindcast:
 mrms-ensemble-freeze-gate:
 	@test -n "$(MRMS_DEVELOPMENT_SUMMARY)" || { echo "set MRMS_DEVELOPMENT_SUMMARY to a completed development summary.json" >&2; exit 1; }
 	uv run --project algorithms python -m rainpulse_algo.verification.mrms_ensemble_gate --repository-root $(CURDIR) --profile $(MRMS_ENSEMBLE_PROFILE) --development-summary $(MRMS_DEVELOPMENT_SUMMARY) --output $(MRMS_ENSEMBLE_GATE_OUTPUT)
+
+mrms-nowcastnet-conformance:
+	uv run --project algorithms python -m rainpulse_algo.verification.mrms_nowcastnet_hindcast conformance --repository-root $(CURDIR) --profile $(MRMS_NOWCASTNET_PROFILE) --split $(MRMS_NOWCASTNET_SPLIT) --root $(MRMS_ROOT) $(if $(MRMS_CASE),--case $(MRMS_CASE),) $(if $(MRMS_MAX_ISSUES),--max-issues $(MRMS_MAX_ISSUES),) $(if $(filter 1,$(MRMS_SKIP_HASH)),--skip-hash,)
+
+mrms-nowcastnet-hindcast:
+	uv run --project algorithms python -m rainpulse_algo.verification.mrms_nowcastnet_hindcast hindcast --repository-root $(CURDIR) --profile $(MRMS_NOWCASTNET_PROFILE) --split $(MRMS_NOWCASTNET_SPLIT) --root $(MRMS_ROOT) --output-root $(MRMS_REPORT_ROOT) --capsule-root $(MRMS_NOWCASTNET_CAPSULE_ROOT) --device $(MRMS_NOWCASTNET_DEVICE) $(if $(MRMS_CASE),--case $(MRMS_CASE),) $(if $(MRMS_MAX_ISSUES),--max-issues $(MRMS_MAX_ISSUES),) $(if $(MRMS_RUN_ID),--run-id $(MRMS_RUN_ID),) $(if $(filter 1,$(MRMS_SKIP_HASH)),--skip-hash,)
+
+mrms-nowcastnet-freeze-gate:
+	@test -n "$(MRMS_DEVELOPMENT_SUMMARY)" || { echo "set MRMS_DEVELOPMENT_SUMMARY to a completed development summary.json" >&2; exit 1; }
+	uv run --project algorithms python -m rainpulse_algo.verification.mrms_nowcastnet_gate --repository-root $(CURDIR) --profile $(MRMS_NOWCASTNET_PROFILE) --development-summary $(MRMS_DEVELOPMENT_SUMMARY) --output $(MRMS_NOWCASTNET_GATE_OUTPUT)
 
 mrms-faults:
 	uv run --project algorithms pytest algorithms/tests/test_mrms_archive.py::test_verify_checks_size_and_optional_hash algorithms/tests/test_mrms_precip.py::test_reader_crops_to_ascending_grid_and_preserves_mrms_source_states algorithms/tests/test_mrms_hindcast.py::test_archive_source_rejects_a_missing_required_source_slot algorithms/tests/test_mrms_hindcast.py::test_archive_source_checks_manifest_hash_before_grib_decode algorithms/tests/test_pysteps_lk.py::test_uses_explicit_zero_motion_fallback_for_no_rain algorithms/tests/test_pysteps_lk.py::test_empty_motion_domain_has_specific_zero_motion_fallback
