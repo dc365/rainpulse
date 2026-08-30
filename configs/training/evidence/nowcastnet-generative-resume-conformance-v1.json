@@ -1,0 +1,96 @@
+{
+  "schema_version": "1.0",
+  "status": "passed",
+  "created_at": "2026-08-30T15:51:03.242955+00:00",
+  "scope": "stage_b_generative_interrupted_resume_conformance",
+  "training_code_revision": "cb23541a8d13a1c8f5d39ea899d1f8a071a8112b",
+  "comparison_code_revision": "59318c5",
+  "profile_sha256": "06ffe74e3425338e14b5a6f3fca835da659d47aecb43136ff89f204654ff9f28",
+  "sample_index_sha256": "0d1569b1d2c36302f969711be8b935b458e0b424e5e2ce44acb2dc577a34bdff",
+  "training_protocol": {
+    "batch_size": 1,
+    "ensemble_members": 4,
+    "precision": "bf16",
+    "optimizer_pair_order": "discriminator_then_generator",
+    "checkpoint_boundary": "after_complete_optimizer_pair",
+    "learning_rate_schedule": "constant_no_scheduler",
+    "generator_learning_rate": 0.00003,
+    "discriminator_learning_rate": 0.00003,
+    "stage_b_smoke": true
+  },
+  "evolution_checkpoint": {
+    "global_step": 1000,
+    "sha256": "709416ccb0acb9626eb4b818e0aa681e3c424bc87c0630bcbd813dd9e73c0700",
+    "evolution_state_sha256": "c7ae0f56d26c809eb780cc96d858e9d1515cc7f75312b48df2306c45fff45d5f",
+    "pretraining_complete": false
+  },
+  "reference_run": {
+    "mode": "continuous_steps_1_to_6",
+    "final_checkpoint_sha256": "16e77309fabe6476e5318d671e8db99c3f14687e292bf67a575a64aea1675e10",
+    "final_checkpoint_size_bytes": 505585700,
+    "metrics_sha256": "71c86e714de7e75c775f212a0e970de135804f66e9f37f551355c692aa3b2482",
+    "report_sha256": "4bd2f55b582543566161b8b595cf5fc071cbef1f5ab9e05e0761f94236ae10e5",
+    "generator_state_sha256": "210b09736ec6e7e274dec3ed5fc6ac747d412573a8ad2a3553ffdc84e9a5b044",
+    "discriminator_state_sha256": "d91708a25fba2d9ab023769b6f1fb57cb56c42b339b662ef60944c8fd295f47a",
+    "generator_optimizer_state_sha256": "f571c557155f7d141bd64aa438c0ca052b37bad0a00946e49a9eb76ad3838437",
+    "discriminator_optimizer_state_sha256": "cd53dfd516afcf4c1ab73de5a9a7de3cd6049f0f5e0f4863c15f8ba6a4431f75",
+    "random_state_sha256": "f2b853fa3cfc5a990e2aa0a09053eccb5fcd76df37cede11ae5314cb714459d6"
+  },
+  "resumed_run": {
+    "mode": "steps_1_to_3_then_new_process_steps_4_to_6",
+    "resume_checkpoint_sha256": "ca6fac079618edde26e7784d8d6814be51dc4302964d17bdf81a26b76a272e7c",
+    "resume_checkpoint_size_bytes": 505585700,
+    "final_checkpoint_sha256": "4bea526011fa9c4c61b5e67992ccd72bcbb7ee55426c6fe0bed2d9f73718c15d",
+    "final_checkpoint_size_bytes": 505585700,
+    "metrics_sha256": "4dadea528bd6d40a89d05dafbb20d92089542d304d4bd345b39c0f66263f487c",
+    "report_sha256": "673a46775ae0dfbede529cb649d24d59390ae5485046c29617adc0b873373eec",
+    "generator_state_sha256": "41a4afc490c1542227d97337806de573a11e9abab12df2a1c0e7eea1a2c85e62",
+    "discriminator_state_sha256": "b3dc6dfe14a93404bb716d11124728ce48fa2834b8f1010fb752a537bab60135",
+    "generator_optimizer_state_sha256": "a9d16185ec46b8a7d65a47c385d04b451785c664c05751ccaef72a68ddb30c63",
+    "discriminator_optimizer_state_sha256": "0debbfa9e63558ea2a51a3ba1d4bdc7b35ad010c6415a3fa3c632bb1f533308d",
+    "random_state_sha256": "f2b853fa3cfc5a990e2aa0a09053eccb5fcd76df37cede11ae5314cb714459d6",
+    "checkpoint_state_exact_on_restore": true,
+    "random_state_exact_on_restore": true
+  },
+  "trajectory_comparison": {
+    "resume_after_step": 3,
+    "compared_steps": [4, 5, 6],
+    "absolute_tolerance": 0.05,
+    "relative_tolerance": 0.01,
+    "batch_indices_identical": true,
+    "max_absolute_difference": {
+      "generator_loss_total": 0.013614654541015625,
+      "generator_loss_adversarial": 0.0006750226020812988,
+      "generator_loss_pool_regularization": 0.0004782676696777344,
+      "discriminator_loss_total": 0.0004634857177734375
+    },
+    "all_fields_within_tolerance": true,
+    "independent_cuda_runs_bitwise_equal": false,
+    "bitwise_trajectory_required": false
+  },
+  "checkpoint_contract": {
+    "contains_evolution_state": true,
+    "contains_generator_state": true,
+    "contains_discriminator_state": true,
+    "contains_generator_adam_state": true,
+    "contains_discriminator_adam_state": true,
+    "contains_python_numpy_torch_cuda_random_states": true,
+    "contains_amp_scaler_state": true,
+    "scheduler_states": "explicit_none_for_constant_learning_rate",
+    "serialization_fingerprints_verified": true
+  },
+  "environment": {
+    "torch_version": "2.12.1+cu132",
+    "cuda_version": "13.2",
+    "gpu": "NVIDIA RTX 6000D",
+    "qwen3p8_restored_healthy": true
+  },
+  "result": {
+    "continuous_training_loop_passed": true,
+    "interrupted_resume_passed": true,
+    "stage_b_generative_resume_gate_passed": true,
+    "full_generative_training_eligible": false,
+    "next_gate": "freeze_full_dataset_capacity_and_materialize_full_training_library"
+  },
+  "operational_eligible": false
+}
