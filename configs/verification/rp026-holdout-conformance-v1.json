@@ -1,0 +1,13 @@
+{
+  "checked_frame_count": 462,
+  "checked_issue_count": 50,
+  "complete": true,
+  "errors": [],
+  "failed_frame_count": 0,
+  "operational_eligible": false,
+  "profile_sha256": "9fc4e94fa67e0ca2b327f6b0b9b798b9f4be0c17cce62d21c706c9d2e9d1d40a",
+  "profile_version": "rp026-mrms-nowcastnet-v1",
+  "schema_version": "1.0",
+  "selection_evidence_sha256": "2aaf56f4e550224fcca853b6e1abc49ad0a037ec442d158f4e1e73ae70ad08fa",
+  "split": "holdout"
+}

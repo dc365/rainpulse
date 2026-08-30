@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -41,6 +43,10 @@ class DryMRMSFrameSource:
 
 def _profile():
     return load_mrms_nowcastnet_profile(PROFILE_PATH, repository_root=REPOSITORY_ROOT)
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _gate_summary() -> dict[str, object]:
@@ -151,3 +157,22 @@ def test_development_gate_requires_frozen_coverage_and_wet_skill() -> None:
     assert failing["passed"] is False
     assert failing["checks"]["near_common_verification_coverage"] is False
     assert FROZEN_GATE_CRITERIA["near_minimum_common_verification_coverage"] == 0.70
+
+
+def test_independent_acceptance_is_hash_bound_and_keeps_steps_baseline() -> None:
+    path = REPOSITORY_ROOT / "configs/verification/rp026-independent-acceptance-v1.json"
+    acceptance = json.loads(path.read_text())
+
+    assert acceptance["acceptance_status"] == "passed_with_steps_baseline_retained"
+    assert acceptance["operational_eligible"] is False
+    assert acceptance["product_publication_enabled"] is False
+    for section in ("development", "holdout"):
+        for name in ("selection", "summary", "reliability"):
+            referenced = REPOSITORY_ROOT / acceptance[section][f"{name}_path"]
+            assert _sha256(referenced) == acceptance[section][f"{name}_sha256"]
+    conformance = REPOSITORY_ROOT / acceptance["holdout"]["conformance_path"]
+    assert _sha256(conformance) == acceptance["holdout"]["conformance_sha256"]
+    gate = REPOSITORY_ROOT / acceptance["development"]["gate_path"]
+    assert _sha256(gate) == acceptance["development"]["gate_sha256"]
+    assert acceptance["holdout"]["near_crps_skill"]["against_persistence"] > 0
+    assert acceptance["holdout"]["near_crps_skill"]["against_steps"] < 0

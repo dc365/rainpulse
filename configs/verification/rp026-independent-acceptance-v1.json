@@ -1,0 +1,76 @@
+{
+  "schema_version": "1.0",
+  "generated_at_utc": "2026-08-30T06:03:06Z",
+  "acceptance_status": "passed_with_steps_baseline_retained",
+  "accepted_scope": "independent_mrms_nowcastnet_engineering_validation",
+  "profile_version": "rp026-mrms-nowcastnet-v1",
+  "profile_path": "configs/verification/rp026-mrms-nowcastnet-v1.yaml",
+  "profile_sha256": "9fc4e94fa67e0ca2b327f6b0b9b798b9f4be0c17cce62d21c706c9d2e9d1d40a",
+  "configuration_sha256": "08eb33a1f4b8585204a4d2ff7f0c0527e43dddcf3cbff54776f8b7f462b920b9",
+  "development": {
+    "runtime_git_commit": "762c892",
+    "selection_path": "configs/verification/rp026-development-selection-v1.json",
+    "selection_sha256": "3561526fe6ab0c521a94e6ff0f43aed4f9c4d100f33614b79aaffc8af410a8c0",
+    "summary_path": "configs/verification/rp026-development-summary-v1.json",
+    "summary_sha256": "a34a523818aa3499f6b190f5a1bb3e3eef7bf805745711b292448ef91445ff1a",
+    "reliability_path": "configs/verification/rp026-development-reliability-v1.json",
+    "reliability_sha256": "d4baeb2eb1b0df1cf9de77ef91e23cd4dd9c598aa69a793a73cda0b4857b92db",
+    "gate_path": "configs/verification/rp026-development-gate-v1.json",
+    "gate_sha256": "f989e7ed896548fabf4cf890ff7280673b8718e9490ac9456b43794abdc381b7"
+  },
+  "holdout": {
+    "runtime_git_commit": "293d616",
+    "selection_path": "configs/verification/rp026-holdout-selection-v1.json",
+    "selection_sha256": "2aaf56f4e550224fcca853b6e1abc49ad0a037ec442d158f4e1e73ae70ad08fa",
+    "conformance_path": "configs/verification/rp026-holdout-conformance-v1.json",
+    "conformance_sha256": "726b3cfeb2879069f613d9560997c64c43d7ec888498e73682d7037bfcec27eb",
+    "summary_path": "configs/verification/rp026-holdout-summary-v1.json",
+    "summary_sha256": "f0446623ef8eb269ac84563c07d25ab3d8beaae38fa98a6d1d0b480025721752",
+    "reliability_path": "configs/verification/rp026-holdout-reliability-v1.json",
+    "reliability_sha256": "22cc771210f822bdc5867a05b1129a45f82f22079229c77e5d469c90285bcfa5",
+    "completed_issue_count": 50,
+    "failed_issue_count": 0,
+    "frozen_gate_checks_passed": true,
+    "near_minimum_common_verification_coverage": 0.7281754898163871,
+    "far_minimum_common_verification_coverage": 0.423828958997428,
+    "wet_near_crps_skill_against_persistence": 0.20232010762579322,
+    "wet_near_brier_skill_against_persistence": {
+      "1.0": 0.2364979118119066,
+      "5.0": 0.10706160283578325,
+      "10.0": 0.13939314581419482
+    },
+    "near_crps_skill": {
+      "against_persistence": 0.2017059630296224,
+      "against_lk": 0.14093876461375132,
+      "against_phase_correlation": 0.19252769471855657,
+      "against_steps": -0.3661343028130726
+    },
+    "far_crps_skill": {
+      "against_persistence": 0.31197929500389576,
+      "against_lk": 0.2881071481951196,
+      "against_phase_correlation": 0.30587481249597614,
+      "against_steps": -0.3133412186571829
+    }
+  },
+  "model_policy": {
+    "nowcastnet": "offline_candidate_only",
+    "steps": "retained_primary_probability_baseline",
+    "lk": "retained_deterministic_baseline",
+    "persistence": "retained_deterministic_baseline",
+    "phase_correlation": "retained_deterministic_baseline"
+  },
+  "lead_policy": {
+    "10_to_60_minutes": "independent_deterministic_skill_gate_passed_but_steps_not_beaten",
+    "70_to_120_minutes": "descriptive_only_retain_all_baselines"
+  },
+  "calibration_status": "raw_four_member_ensemble_underdispersive",
+  "operational_eligible": false,
+  "product_publication_enabled": false,
+  "operational_blockers": [
+    "representative_fujian_qc_qpe_sequences_not_yet_available",
+    "nowcastnet_does_not_beat_steps_on_independent_mrms_holdout",
+    "raw_nowcastnet_ensemble_is_underdispersive",
+    "fujian_probability_calibration_not_completed",
+    "parallel_operational_acceptance_not_completed"
+  ]
+}

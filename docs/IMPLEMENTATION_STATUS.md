@@ -53,7 +53,7 @@ NowcastInput gate.
 | RP-023 | Offline ensemble product and GIS loop complete | Eight probability/quantile layers produce 384 PNG/NetCDF assets behind a checksum-validated read-only API and shared OpenLayers timeline; 12/24-member full-grid resource evidence keeps the first hindcast at 12 members and operational publication disabled |
 | RP-024 | Independent MRMS probability validation complete | Frozen 2022 development and 2023 holdout splits verify 12-member STEPS on 50/50 independent issues; near-lead CRPS/Brier skill passes the precommitted gate, while raw probabilities remain uncalibrated and operational publication disabled |
 | RP-025 | Probability calibration and shadow foundation complete | Versioned isotonic calibration artifacts, fit-readiness checks, split-leakage rejection, threshold coherence and shadow-only scoring pass synthetic acceptance; fitting, shadow application and publication remain disabled pending Fujian QC/QPE data |
-| RP-026 | Offline NowcastNet worker and GPU object-chain integration complete; hindcast pending | Reviewed MIT/CC0 capsule and checkpoint hashes, fixed runtime URI, official 9+20-frame protocol, cached long-lived worker, dedicated offline Zarr contracts, four-member seeded inference and explicit negative-output clipping pass CPU/GPU and systemd health acceptance; realtime, product publication and Fujian eligibility remain disabled |
+| RP-026 | Independent MRMS NowcastNet engineering validation complete; STEPS retained | Frozen 2024 development and 2025 holdout splits complete 50/50 issues with zero failures; NowcastNet beats persistence/LK/phase translation on independent near leads but trails STEPS by 36.6% CRPS, so it remains an offline candidate and realtime, publication and Fujian eligibility stay disabled |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -499,13 +499,24 @@ disabled outside approved GPU windows, and Qwen3.8 was restored healthy after
 both tests. MRMS hindcast, realtime shadow and publication remain disabled. Details are
 in `docs/RP026_NowcastNet离线适配基础实施记录.md`.
 
-The 2021-08, 2024-06, 2025-01, 2022-01, 2022-12, 2023-06 and 2023-12 months are
-now spent verification data for their respective claims. Do not tune against
-their results and reuse them as independent acceptance. If forecast, temporal
-adaptation, ensemble or skill-gate parameters change, freeze different months
-before the next claim. Until Fujian data arrives, retain all three deterministic
-baselines, label 70–120 minute evidence conservatively, and improve only
-fail-closed operational seams that do not reinterpret these results.
+RP-026 now also completes the frozen MRMS hindcast without changing the
+operational path. Observation-only selection used 2024-07/2024-11 for
+development and held 2025-03/2025-07 untouched until the committed development
+gate passed. Both splits completed 50/50 issues with zero failures. On the
+independent 10–60 minute band, NowcastNet CRPS skill is 0.2017/0.1409/0.1925
+against persistence/LK/phase correlation, but -0.3661 against STEPS. The raw
+four-member ensemble is strongly underdispersive. Consequently STEPS remains
+the primary probability baseline, NowcastNet remains offline-only, and no
+realtime or product-publication switch is enabled.
+
+The 2021-08, 2022-01, 2022-12, 2023-06, 2023-12, 2024-06, 2024-07, 2024-11,
+2025-01, 2025-03 and 2025-07 months are now spent verification data for their
+respective claims. Do not tune against their results and reuse them as
+independent acceptance. If forecast, temporal adaptation, ensemble or
+skill-gate parameters change, freeze different months before the next claim.
+Until Fujian data arrives, retain all three deterministic baselines and STEPS,
+label 70–120 minute evidence conservatively, and improve only fail-closed
+operational seams that do not reinterpret these results.
 
 Full raw-radar-to-React operational acceptance still needs at least three
 consecutive operational QC→grid→mosaic→QPE cycles with trackable precipitation.
@@ -592,5 +603,7 @@ make test-products
 make test-mrms
 make mrms-faults
 make mrms-holdout-select
+make mrms-nowcastnet-conformance
+make mrms-nowcastnet-hindcast
 make smoke
 ```
