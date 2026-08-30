@@ -1,0 +1,71 @@
+{
+  "schema_version": "1.0",
+  "evidence_id": "rp026-nowcastnet-worker-gpu-smoke-v1",
+  "observed_at": "2026-08-30T04:15:33Z",
+  "scope": "offline_worker_object_contract_and_gpu_integration",
+  "source_revision": "d995af21d8a632c0f5861fc0b68fcdb53d66bd78",
+  "operational_eligible": false,
+  "activation": {
+    "offline_single_case_enabled": true,
+    "realtime_shadow_enabled": false,
+    "product_publication_enabled": false,
+    "fujian_operational_eligible": false
+  },
+  "worker": {
+    "profile": "nowcastnet-offline",
+    "subject": "rainpulse.jobs.requested.nowcastnet_offline",
+    "consumer": "rainpulse-nowcastnet-offline-rp026-v1",
+    "input_contract": "rainpulse.nowcastnet-offline-input/1.0",
+    "output_contract": "rainpulse.nowcastnet-offline-output/1.0",
+    "artifact_name": "nowcastnet-output.zarr",
+    "maximum_deliveries": 1,
+    "cached_runtime_reused": true,
+    "systemd_health": {
+      "status": "ready",
+      "profile": "nowcastnet-offline"
+    },
+    "installed_service_enabled_after_test": false,
+    "installed_service_active_after_test": false
+  },
+  "artifacts": {
+    "weights_uri": "file:///opt/rainpulse/nowcastnet/official-v1/data/checkpoints/mrms_model.ckpt",
+    "weights_sha256": "5faee618c4532dff0eec27cb79c29bd7109396a968f9b173a906f8592a2059a5",
+    "capsule_archive_sha256": "3607858ca1fe0cd4a22b0c5ef51dc91f76ca156c182c348a08eecf41dbd66821",
+    "output_artifact_sha256": "8034ab2f0bc6d6bda07991bcefbfb7cdc32cb9def7b7ca5334b29a06307dcdbd",
+    "output_object_count": 2900,
+    "output_size_bytes": 52469911
+  },
+  "runtime": {
+    "gpu_name": "NVIDIA RTX 6000D",
+    "device": "cuda:0",
+    "compute_capability": "12.0",
+    "torch_version": "2.12.1+cu132",
+    "torch_cuda_version": "13.2",
+    "model_load_seconds": 0.8739099390804768,
+    "inference_seconds": 0.4203945593908429
+  },
+  "output": {
+    "member_count": 4,
+    "lead_count": 20,
+    "lead_step_minutes": 10,
+    "common_valid_coverage_ratio": 1.0,
+    "maximum_forecast_rate_mm_h": 240.0892333984375,
+    "clipped_input_pixel_count": 0,
+    "clipped_negative_output_pixel_count": 8597696
+  },
+  "resource_coordination": {
+    "temporarily_stopped_service": "Qwen3.8-27B port 8004",
+    "gpu_free_before_inference_mib": 38084,
+    "restored_after_test": true,
+    "restored_process_user": "yons",
+    "restored_health": "ok",
+    "gpu_free_after_restore_mib": 561
+  },
+  "gate": {
+    "worker_contract_passed": true,
+    "atomic_output_validation_passed": true,
+    "long_lived_process_health_passed": true,
+    "mrms_hindcast_complete": false,
+    "publication_allowed": false
+  }
+}

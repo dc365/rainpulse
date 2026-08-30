@@ -9,11 +9,12 @@
 - NowcastNet 仅允许作为可失败的离线增强模型；
 - 福建真实数据到位前，不声明福建技巧、业务资格或本地适用性；
 - 官方源码、预处理协议和权重已完成审查：代码为 MIT，胶囊数据和权重为 CC0 1.0；
-- 真实官方后端及 105 CPU/GPU 数值冒烟均已完成；离线 Worker、历史回算和发布门禁
-  继续关闭。
+- 真实官方后端、105 CPU/GPU 数值冒烟和离线 Worker 对象链路均已完成；历史回算、
+  实时影子和发布门禁继续关闭。
 
 当前已经完成配置契约、官方双通道数组适配、真实权重加载、四成员随机推理、可重复性
-修复和 CPU/GPU 数值冒烟。尚未完成离线 Worker 编排、MRMS 历史回算和技巧对比。
+修复、CPU/GPU 数值冒烟、长驻 Worker 和独立离线 Zarr 输入/输出契约。尚未完成新月份
+MRMS 历史回算和技巧对比。
 
 ## 2. 官方协议基线
 
@@ -65,9 +66,10 @@
 6. 运行环境及兼容补丁版本完成审查；
 7. 显式开启离线推理。
 
-源码、许可证、权重哈希、预处理协议和兼容运行环境已经标记完成；固定部署 URI 和
-GPU 验收尚未完成，因此 `offline_inference_enabled=false`。实时影子、产品发布和
-业务资格在 RP-026 中仍固定为 `false`。
+源码、许可证、权重哈希、预处理协议、兼容运行环境和 GPU 验收已经完成。权重固定为
+`file:///opt/rainpulse/nowcastnet/official-v1/data/checkpoints/mrms_model.ckpt`，只打开
+`offline_inference_enabled=true`。实时影子、产品发布和业务资格在 RP-026 中仍固定为
+`false`。
 
 ### 3.2 输入适配
 
@@ -165,10 +167,37 @@ VLLM 和语音服务占用。经授权临时停止 Qwen3.8 后，可用显存增
 其显存占用约 37,518 MiB。结构化证据保存在
 `configs/verification/rp026-nowcastnet-gpu-smoke-v1.json`。
 
-## 6. 下一步
+## 6. 离线 Worker 与对象链路
 
-1. 实现长驻 `nowcastnet-worker` 的离线任务、对象 URI、原子结果写入和失败回退；
-2. 冻结权重运行 URI后，只打开“离线单案例”门禁，不打开实时或产品发布；
-3. 从未用于 RP-021/RP-024 独立结论的新 MRMS 月份冻结 NowcastNet 开发集；
-4. 另选未触碰的留出月份，与 persistence、translation、LK、STEPS 做共同有效域对比；
-5. 只有福建连续 QC/QPE 数据到位后，才讨论实时并行灰度和本地适用性。
+新增 `forecast.nowcastnet_offline.requested.v1`，只在
+`rainpulse.jobs.requested.nowcastnet_offline` 上消费。生产实时编排不会产生该事件。
+Worker 首次接受任务时加载官方模型，后续任务复用同一进程内实例；任务最多投递一次，
+失败不会阻塞或改写 LK/STEPS 结果。
+
+输入和输出分别使用独立的
+`rainpulse.nowcastnet-offline-input/1.0` 与
+`rainpulse.nowcastnet-offline-output/1.0`，不冒充五分钟业务 `ForecastOutput`。输入保留
+9 个源资产、十分钟时次、经纬坐标和全有效掩膜；输出保留 4 成员、20 个十分钟时效、
+固定种子、权重身份和截断诊断，并强制
+`operational_eligible=false`、`product_publication_enabled=false`。
+
+105 集成验证结果：
+
+- 固定 `/opt` 权重 URI 与胶囊实际文件解析到同一对象且哈希一致；
+- 同一进程两次取得相同缓存运行实例，模型加载约 0.874 秒；
+- 四成员 GPU 推理约 0.420 秒；
+- 原始 8,597,696 个负值按契约截零，输出无非有限值；
+- 离线 Zarr 为 2,900 个对象、52,469,911 bytes，共同有效覆盖率 1.0；
+- systemd 常驻进程连接 NATS 后 `/healthz` 返回 `ready/nowcastnet-offline`；
+- 单元安装后保持 `disabled/inactive`，避免与共享 GPU 上的 Qwen3.8 常态争抢显存；
+- 测试后 Qwen3.8 已以 `yons` 用户按原参数恢复，8004 `/health` 返回 `ok`。
+
+结构化证据保存在
+`configs/verification/rp026-nowcastnet-worker-gpu-smoke-v1.json`。
+
+## 7. 下一步
+
+1. 从未用于 RP-021/RP-024 独立结论的新 MRMS 月份冻结 NowcastNet 开发集；
+2. 运行分批回算，记录 GPU 利用率、延迟、显存、失败案例和对象容量；
+3. 另选未触碰的留出月份，与 persistence、translation、LK、STEPS 做共同有效域对比；
+4. 只有福建连续 QC/QPE 数据到位后，才讨论实时并行灰度和本地适用性。
