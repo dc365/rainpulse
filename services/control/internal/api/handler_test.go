@@ -254,6 +254,8 @@ func TestAlgorithmVerificationEndpointsExposeFilteredEvidence(t *testing.T) {
 	issueTime := time.Date(2021, 8, 10, 17, 0, 0, 0, time.UTC)
 	meanDifference := 0.027
 	fss := 0.72
+	nowcastnetModel := "nowcastnet"
+	stepsModel := "steps"
 	store := &fakeAlgorithmVerificationStore{
 		detail: verificationstore.RunDetail{
 			Run: verificationstore.RunSummary{
@@ -311,6 +313,28 @@ func TestAlgorithmVerificationEndpointsExposeFilteredEvidence(t *testing.T) {
 		mapAsset: verificationstore.MapAssetContent{
 			Data: []byte("\x89PNG\r\n\x1a\nmap"), SHA256: strings.Repeat("a", 64),
 		},
+		probabilityMapFrame: verificationstore.ProbabilityMapFrame{
+			ContractVersion: "1.0", RendererVersion: "probability-renderer-v1",
+			PaletteVersion: "raw-exceedance-probability-v1", ProfileVersion: "rp016-mrms-v1",
+			RunID: "full-202108-v2", CaseID: "midwest_convection_20210810",
+			IssueTime: issueTime, ValidTime: issueTime.Add(10 * time.Minute), LeadMinutes: 10,
+			ThresholdMMH: 5, TruthKind: "observed_mrms_10min",
+			CalibrationStatus: "raw_ensemble_relative_frequency_uncalibrated",
+			Projection:        "EPSG:4326", PixelEdgeBounds: []float64{-95.005, 38.995, -89.995, 41.005},
+			FitBounds: []float64{-95, 39, -90, 41}, Width: 501, Height: 201,
+			ValidNoEventColor: "#dce6e2",
+			Legend: []verificationstore.ProbabilityMapLegendEntry{{
+				MinimumProbabilityPercent: 25, Color: "#3eb6c5",
+			}},
+			Layers: []verificationstore.ProbabilityMapLayer{
+				{AssetID: "lead-010-threshold-005-truth", Role: "truth", LeadMinutes: 10, ThresholdMMH: 5, ValidTime: issueTime.Add(10 * time.Minute), SHA256: strings.Repeat("b", 64), SizeBytes: 100, Width: 501, Height: 201, ValidCellCount: 100701},
+				{AssetID: "lead-010-threshold-005-nowcastnet", Role: "forecast", Model: &nowcastnetModel, LeadMinutes: 10, ThresholdMMH: 5, ValidTime: issueTime.Add(10 * time.Minute), SHA256: strings.Repeat("b", 64), SizeBytes: 100, Width: 501, Height: 201, ValidCellCount: 100701},
+				{AssetID: "lead-010-threshold-005-steps", Role: "forecast", Model: &stepsModel, LeadMinutes: 10, ThresholdMMH: 5, ValidTime: issueTime.Add(10 * time.Minute), SHA256: strings.Repeat("b", 64), SizeBytes: 100, Width: 501, Height: 201, ValidCellCount: 100701},
+			},
+		},
+		probabilityMapAsset: verificationstore.MapAssetContent{
+			Data: []byte("\x89PNG\r\n\x1a\nprobability"), SHA256: strings.Repeat("b", 64),
+		},
 	}
 	handler := api.NewHandler(api.Options{Version: "test", Verification: store})
 
@@ -331,6 +355,11 @@ func TestAlgorithmVerificationEndpointsExposeFilteredEvidence(t *testing.T) {
 		`"window_target_km":10`,
 	)
 	assert(
+		"/api/v1/algorithm-verification/runs/rp016-mrms-v1/full-202108-v2/probability-map-frame"+
+			"?case_id=midwest_convection_20210810&issue_time=2021-08-10T17:00:00Z&lead_minutes=10&threshold_mm_h=5",
+		`"image_url":"/api/v1/algorithm-verification/runs/rp016-mrms-v1/full-202108-v2/probability-map-assets/midwest_convection_20210810/20210810T170000Z/lead-010-threshold-005-nowcastnet"`,
+	)
+	assert(
 		"/api/v1/algorithm-verification/runs/rp016-mrms-v1/full-202108-v2/map-frame"+
 			"?case_id=midwest_convection_20210810&issue_time=2021-08-10T17:00:00Z&lead_minutes=10",
 		`"image_url":"/api/v1/algorithm-verification/runs/rp016-mrms-v1/full-202108-v2/map-assets/midwest_convection_20210810/20210810T170000Z/lead-010-truth"`,
@@ -346,6 +375,19 @@ func TestAlgorithmVerificationEndpointsExposeFilteredEvidence(t *testing.T) {
 	if mapResponse.Code != http.StatusOK || mapResponse.Header().Get("Content-Type") != "image/png" ||
 		!strings.Contains(mapResponse.Header().Get("Cache-Control"), "immutable") {
 		t.Fatalf("unexpected map asset response: status=%d headers=%v", mapResponse.Code, mapResponse.Header())
+	}
+	probabilityAssetRequest := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/algorithm-verification/runs/rp016-mrms-v1/full-202108-v2/probability-map-assets/"+
+			"midwest_convection_20210810/20210810T170000Z/lead-010-threshold-005-nowcastnet",
+		nil,
+	)
+	probabilityAssetResponse := httptest.NewRecorder()
+	handler.ServeHTTP(probabilityAssetResponse, probabilityAssetRequest)
+	if probabilityAssetResponse.Code != http.StatusOK ||
+		probabilityAssetResponse.Header().Get("Content-Type") != "image/png" ||
+		!strings.Contains(probabilityAssetResponse.Header().Get("Cache-Control"), "immutable") {
+		t.Fatalf("unexpected probability map asset response: status=%d headers=%v", probabilityAssetResponse.Code, probabilityAssetResponse.Header())
 	}
 	if store.filter.CaseID != "midwest_convection_20210810" || !store.filter.IssueTime.Equal(issueTime) {
 		t.Fatalf("metric query was not delegated: %#v", store.filter)
@@ -847,13 +889,16 @@ type fakeRunStore struct {
 }
 
 type fakeAlgorithmVerificationStore struct {
-	detail    verificationstore.RunDetail
-	metrics   []verificationstore.Metric
-	filter    verificationstore.MetricFilter
-	mapFrame  verificationstore.MapFrame
-	mapFilter verificationstore.MapFrameFilter
-	mapAsset  verificationstore.MapAssetContent
-	err       error
+	detail               verificationstore.RunDetail
+	metrics              []verificationstore.Metric
+	filter               verificationstore.MetricFilter
+	mapFrame             verificationstore.MapFrame
+	mapFilter            verificationstore.MapFrameFilter
+	mapAsset             verificationstore.MapAssetContent
+	probabilityMapFrame  verificationstore.ProbabilityMapFrame
+	probabilityMapFilter verificationstore.ProbabilityMapFrameFilter
+	probabilityMapAsset  verificationstore.MapAssetContent
+	err                  error
 }
 
 type fakeForecastVerificationStore struct {
@@ -909,6 +954,27 @@ func (store *fakeAlgorithmVerificationStore) ReadMapAsset(
 	string,
 ) (verificationstore.MapAssetContent, error) {
 	return store.mapAsset, store.err
+}
+
+func (store *fakeAlgorithmVerificationStore) GetProbabilityMapFrame(
+	_ context.Context,
+	_ string,
+	_ string,
+	filter verificationstore.ProbabilityMapFrameFilter,
+) (verificationstore.ProbabilityMapFrame, error) {
+	store.probabilityMapFilter = filter
+	return store.probabilityMapFrame, store.err
+}
+
+func (store *fakeAlgorithmVerificationStore) ReadProbabilityMapAsset(
+	context.Context,
+	string,
+	string,
+	string,
+	string,
+	string,
+) (verificationstore.MapAssetContent, error) {
+	return store.probabilityMapAsset, store.err
 }
 
 func (store *fakeRunStore) Ping(context.Context) error { return store.err }

@@ -652,6 +652,92 @@ paths:
                 format: binary
         "404":
           $ref: "#/components/responses/NotFound"
+  /algorithm-verification/runs/{profile_version}/{run_id}/probability-map-frame:
+    get:
+      operationId: getAlgorithmVerificationProbabilityMapFrame
+      tags: [verification]
+      summary: Get synchronized truth and raw ensemble exceedance probability maps
+      parameters:
+        - $ref: "#/components/parameters/VerificationProfileVersion"
+        - $ref: "#/components/parameters/VerificationRunId"
+        - name: case_id
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+        - name: issue_time
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: lead_minutes
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1440
+        - name: threshold_mm_h
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: 0
+      responses:
+        "200":
+          description: One synchronized raw exceedance-probability map frame
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlgorithmVerificationProbabilityMapFrame"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /algorithm-verification/runs/{profile_version}/{run_id}/probability-map-assets/{case_id}/{issue_key}/{asset_id}:
+    get:
+      operationId: getAlgorithmVerificationProbabilityMapAsset
+      tags: [verification]
+      summary: Read one immutable probability PNG listed by a probability map manifest
+      parameters:
+        - $ref: "#/components/parameters/VerificationProfileVersion"
+        - $ref: "#/components/parameters/VerificationRunId"
+        - name: case_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+        - name: issue_key
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9]{8}T[0-9]{6}Z$'
+        - name: asset_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-z0-9][a-z0-9-]{0,127}$'
+      responses:
+        "200":
+          description: Immutable raw exceedance-probability PNG
+          headers:
+            ETag:
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
   /ensemble-products/latest:
     get:
       operationId: getLatestEnsembleProductBundle
@@ -2659,6 +2745,10 @@ components:
         - map_bundle_count
         - map_layer_count
         - map_renderer_version
+        - probability_maps_available
+        - probability_map_bundle_count
+        - probability_map_layer_count
+        - probability_map_renderer_version
         - modified_at
       properties:
         profile_version:
@@ -2697,6 +2787,17 @@ components:
           type: integer
           minimum: 0
         map_renderer_version:
+          type: string
+          nullable: true
+        probability_maps_available:
+          type: boolean
+        probability_map_bundle_count:
+          type: integer
+          minimum: 0
+        probability_map_layer_count:
+          type: integer
+          minimum: 0
+        probability_map_renderer_version:
           type: string
           nullable: true
         modified_at:
@@ -3358,6 +3459,187 @@ components:
         minimum_mm_h:
           type: number
           format: double
+        color:
+          type: string
+          pattern: '^#[0-9A-Fa-f]{6}$'
+    AlgorithmVerificationProbabilityMapLayer:
+      type: object
+      additionalProperties: false
+      required:
+        - asset_id
+        - role
+        - model
+        - lead_minutes
+        - threshold_mm_h
+        - valid_time
+        - image_url
+        - width
+        - height
+        - sha256
+        - size_bytes
+        - valid_cell_count
+        - no_event_cell_count
+        - event_cell_count
+        - missing_cell_count
+      properties:
+        asset_id:
+          type: string
+        role:
+          type: string
+          enum: [truth, forecast]
+        model:
+          type: string
+          nullable: true
+        lead_minutes:
+          type: integer
+        threshold_mm_h:
+          type: number
+          format: double
+          minimum: 0
+        valid_time:
+          type: string
+          format: date-time
+        image_url:
+          type: string
+        width:
+          type: integer
+          minimum: 1
+        height:
+          type: integer
+          minimum: 1
+        sha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        size_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+        valid_cell_count:
+          type: integer
+          format: int64
+          minimum: 0
+        no_event_cell_count:
+          type: integer
+          format: int64
+          minimum: 0
+        event_cell_count:
+          type: integer
+          format: int64
+          minimum: 0
+        missing_cell_count:
+          type: integer
+          format: int64
+          minimum: 0
+    AlgorithmVerificationProbabilityMapFrame:
+      type: object
+      additionalProperties: false
+      required:
+        - contract_version
+        - renderer_version
+        - palette_version
+        - profile_version
+        - run_id
+        - case_id
+        - issue_time
+        - valid_time
+        - lead_minutes
+        - threshold_mm_h
+        - truth_kind
+        - calibration_status
+        - operational_eligible
+        - product_publication_enabled
+        - projection
+        - pixel_edge_bounds
+        - fit_bounds
+        - width
+        - height
+        - valid_no_event_color
+        - legend
+        - layers
+      properties:
+        contract_version:
+          type: string
+        renderer_version:
+          type: string
+        palette_version:
+          type: string
+        profile_version:
+          type: string
+        run_id:
+          type: string
+        case_id:
+          type: string
+        issue_time:
+          type: string
+          format: date-time
+        valid_time:
+          type: string
+          format: date-time
+        lead_minutes:
+          type: integer
+        threshold_mm_h:
+          type: number
+          format: double
+          minimum: 0
+        truth_kind:
+          type: string
+        calibration_status:
+          type: string
+          enum: [raw_ensemble_relative_frequency_uncalibrated]
+        operational_eligible:
+          type: boolean
+          enum: [false]
+        product_publication_enabled:
+          type: boolean
+          enum: [false]
+        projection:
+          type: string
+          enum: [EPSG:4326]
+        pixel_edge_bounds:
+          type: array
+          minItems: 4
+          maxItems: 4
+          items:
+            type: number
+            format: double
+        fit_bounds:
+          type: array
+          minItems: 4
+          maxItems: 4
+          items:
+            type: number
+            format: double
+        width:
+          type: integer
+          minimum: 1
+        height:
+          type: integer
+          minimum: 1
+        valid_no_event_color:
+          type: string
+          pattern: '^#[0-9A-Fa-f]{6}$'
+        legend:
+          type: array
+          minItems: 1
+          maxItems: 32
+          items:
+            $ref: "#/components/schemas/AlgorithmVerificationProbabilityMapLegendEntry"
+        layers:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items:
+            $ref: "#/components/schemas/AlgorithmVerificationProbabilityMapLayer"
+    AlgorithmVerificationProbabilityMapLegendEntry:
+      type: object
+      additionalProperties: false
+      required: [minimum_probability_percent, color]
+      properties:
+        minimum_probability_percent:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
         color:
           type: string
           pattern: '^#[0-9A-Fa-f]{6}$'

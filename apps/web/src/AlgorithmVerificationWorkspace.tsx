@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 
 import type { components } from './api/generated/schema'
 import { EnsembleVerificationMapMatrix } from './EnsembleVerificationMapMatrix'
+import { ProbabilityVerificationMapMatrix } from './ProbabilityVerificationMapMatrix'
 import { VerificationMapMatrix } from './VerificationMapMatrix'
 
 type RunSummary = components['schemas']['AlgorithmVerificationRunSummary']
@@ -11,9 +12,11 @@ type VerificationCase = components['schemas']['AlgorithmVerificationCase']
 type VerificationMetric = components['schemas']['AlgorithmVerificationMetric']
 type SkillComparison = components['schemas']['AlgorithmVerificationSkillComparison']
 type VerificationMapFrame = components['schemas']['AlgorithmVerificationMapFrame']
+type ProbabilityVerificationMapFrame = components['schemas']['AlgorithmVerificationProbabilityMapFrame']
 type FSSScale = components['schemas']['AlgorithmVerificationFSSScale']
 type ProbabilisticSummary = components['schemas']['AlgorithmVerificationProbabilisticSummary']
 type ProbabilisticLeadBand = components['schemas']['AlgorithmVerificationProbabilisticLeadBand']
+type SpatialMode = 'rate' | 'probability'
 
 const modelLabels: Record<string, string> = {
   nowcastnet: 'NowcastNet',
@@ -58,8 +61,11 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
   const [windowPixels, setWindowPixels] = useState(initialQuery.windowPixels ?? 11)
   const [baseline, setBaseline] = useState(initialQuery.baseline || 'translation')
   const [selectedLeadMinutes, setSelectedLeadMinutes] = useState(initialQuery.leadMinutes ?? 60)
+  const [spatialMode, setSpatialMode] = useState<SpatialMode>(initialQuery.spatialMode)
+  const [probabilityThreshold, setProbabilityThreshold] = useState(initialQuery.probabilityThreshold ?? 5)
   const [metrics, setMetrics] = useState<VerificationMetric[]>([])
   const [mapFrame, setMapFrame] = useState<VerificationMapFrame | null>(null)
+  const [probabilityMapFrame, setProbabilityMapFrame] = useState<ProbabilityVerificationMapFrame | null>(null)
   const [mapError, setMapError] = useState<string | null>(null)
   const [loadingMap, setLoadingMap] = useState(false)
   const [playing, setPlaying] = useState(false)
@@ -121,7 +127,7 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
         const normalizedPayload = normalizeRunDetail(payload)
         setDetail(normalizedPayload)
         if (isProbabilisticRun(normalizedPayload.run)) {
-          if (normalizedPayload.run.maps_available && normalizedPayload.cases.length > 0) {
+          if ((normalizedPayload.run.maps_available || normalizedPayload.run.probability_maps_available) && normalizedPayload.cases.length > 0) {
             const nextCase = pickCase(normalizedPayload.cases, selectedCaseID)
             setSelectedCaseID(nextCase?.case_id ?? '')
             setSelectedIssueTime(nextIssue(nextCase, selectedIssueTime))
@@ -132,8 +138,17 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
             setSelectedCaseID('')
             setSelectedIssueTime('')
           }
+          setSpatialMode((current) => {
+            if (current === 'probability' && normalizedPayload.run.probability_maps_available) return current
+            if (current === 'rate' && normalizedPayload.run.maps_available) return current
+            return normalizedPayload.run.probability_maps_available ? 'probability' : 'rate'
+          })
+          setProbabilityThreshold((current) => pickNumber(
+            normalizedPayload.filters.thresholds_mm_h, current, 5,
+          ))
           setMetrics([])
           setMapFrame(null)
+          setProbabilityMapFrame(null)
           setPlaying(false)
           setError(null)
           return
@@ -200,7 +215,9 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
   }, [activeDetail, selectedCaseID, selectedIssueTime, selectedRun, threshold, windowPixels])
 
   useEffect(() => {
-    if (!selectedRun || !activeDetail || !selectedRun.maps_available || !selectedCaseID || !selectedIssueTime) {
+    if (!selectedRun || !activeDetail ||
+      (isProbabilisticRun(selectedRun) && spatialMode !== 'rate') ||
+      !selectedRun.maps_available || !selectedCaseID || !selectedIssueTime) {
       setMapFrame(null)
       return
     }
@@ -234,7 +251,46 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
         if (!controller.signal.aborted) setLoadingMap(false)
       })
     return () => controller.abort()
-  }, [activeDetail, selectedCaseID, selectedIssueTime, selectedLeadMinutes, selectedRun])
+  }, [activeDetail, selectedCaseID, selectedIssueTime, selectedLeadMinutes, selectedRun, spatialMode])
+
+  useEffect(() => {
+    if (!selectedRun || !activeDetail || spatialMode !== 'probability' ||
+      !selectedRun.probability_maps_available || !selectedCaseID || !selectedIssueTime) {
+      setProbabilityMapFrame(null)
+      return
+    }
+    const controller = new AbortController()
+    const query = new URLSearchParams({
+      case_id: selectedCaseID,
+      issue_time: selectedIssueTime,
+      lead_minutes: String(selectedLeadMinutes),
+      threshold_mm_h: String(probabilityThreshold),
+    })
+    setLoadingMap(true)
+    setProbabilityMapFrame(null)
+    setMapError(null)
+    void fetch(
+      `/api/v1/algorithm-verification/runs/${encodeURIComponent(selectedRun.profile_version)}/${encodeURIComponent(selectedRun.run_id)}/probability-map-frame?${query}`,
+      { signal: controller.signal },
+    )
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`概率验证地图响应异常（${response.status}）`)
+        return response.json() as Promise<ProbabilityVerificationMapFrame>
+      })
+      .then((payload) => {
+        setProbabilityMapFrame(payload)
+        setMapError(null)
+      })
+      .catch((requestError: unknown) => {
+        if (!isAbortError(requestError)) {
+          setMapError(requestError instanceof Error ? requestError.message : '概率验证地图读取失败')
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoadingMap(false)
+      })
+    return () => controller.abort()
+  }, [activeDetail, probabilityThreshold, selectedCaseID, selectedIssueTime, selectedLeadMinutes, selectedRun, spatialMode])
 
   const leadMinutes = useMemo(() => activeDetail?.filters.lead_minutes ?? [], [activeDetail])
   useEffect(() => {
@@ -255,12 +311,15 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
     query.set('run', selectedRunKey)
     if (isProbabilisticRun(activeDetail.run)) {
       for (const key of ['baseline', 'threshold', 'window']) query.delete(key)
-      if (activeDetail.run.maps_available && selectedCaseID && selectedIssueTime) {
+      if ((activeDetail.run.maps_available || activeDetail.run.probability_maps_available) && selectedCaseID && selectedIssueTime) {
         query.set('case', selectedCaseID)
         query.set('issue', selectedIssueTime)
         query.set('lead', String(selectedLeadMinutes))
+        query.set('map', spatialMode)
+        if (spatialMode === 'probability') query.set('probability_threshold', String(probabilityThreshold))
+        else query.delete('probability_threshold')
       } else {
-        for (const key of ['case', 'issue', 'lead']) query.delete(key)
+        for (const key of ['case', 'issue', 'lead', 'map', 'probability_threshold']) query.delete(key)
       }
       window.history.replaceState(null, '', `${window.location.pathname}?${query}${window.location.hash}`)
       return
@@ -273,7 +332,7 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
     query.set('threshold', String(threshold))
     query.set('window', String(windowPixels))
     window.history.replaceState(null, '', `${window.location.pathname}?${query}${window.location.hash}`)
-  }, [activeDetail, baseline, selectedCaseID, selectedIssueTime, selectedLeadMinutes, selectedRunKey, threshold, windowPixels])
+  }, [activeDetail, baseline, probabilityThreshold, selectedCaseID, selectedIssueTime, selectedLeadMinutes, selectedRunKey, spatialMode, threshold, windowPixels])
 
   const activeCase = activeDetail?.cases.find((item) => item.case_id === selectedCaseID) ?? null
   const selectedFSSScale = activeDetail?.filters.fss_scales.find((item) => item.window_pixels === windowPixels)
@@ -290,6 +349,16 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
     && mapFrame.issue_time === selectedIssueTime
     && mapFrame.lead_minutes === selectedLeadMinutes
     ? mapFrame
+    : null
+  const activeProbabilityMapFrame = probabilityMapFrame
+    && selectedRun?.probability_maps_available
+    && probabilityMapFrame.profile_version === selectedRun.profile_version
+    && probabilityMapFrame.run_id === selectedRun.run_id
+    && probabilityMapFrame.case_id === selectedCaseID
+    && probabilityMapFrame.issue_time === selectedIssueTime
+    && probabilityMapFrame.lead_minutes === selectedLeadMinutes
+    && probabilityMapFrame.threshold_mm_h === probabilityThreshold
+    ? probabilityMapFrame
     : null
 
   return (
@@ -340,8 +409,20 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
                   setSelectedIssueTime(value)
                 }}
                 mapFrame={activeMapFrame}
+                probabilityMapFrame={activeProbabilityMapFrame}
                 loadingMap={loadingMap}
                 mapError={mapError}
+                spatialMode={spatialMode}
+                onSpatialModeChange={(value) => {
+                  setPlaying(false)
+                  setSpatialMode(value)
+                }}
+                thresholds={activeDetail.filters.thresholds_mm_h}
+                probabilityThreshold={probabilityThreshold}
+                onProbabilityThresholdChange={(value) => {
+                  setPlaying(false)
+                  setProbabilityThreshold(value)
+                }}
                 leadMinutes={activeDetail.filters.lead_minutes}
                 selectedLeadMinutes={selectedLeadMinutes}
                 playing={playing}
@@ -522,8 +603,14 @@ function ProbabilisticVerificationWorkbench({
   selectedIssueTime,
   onIssueChange,
   mapFrame,
+  probabilityMapFrame,
   loadingMap,
   mapError,
+  spatialMode,
+  onSpatialModeChange,
+  thresholds,
+  probabilityThreshold,
+  onProbabilityThresholdChange,
   leadMinutes,
   selectedLeadMinutes,
   playing,
@@ -542,8 +629,14 @@ function ProbabilisticVerificationWorkbench({
   selectedIssueTime: string
   onIssueChange: (value: string) => void
   mapFrame: VerificationMapFrame | null
+  probabilityMapFrame: ProbabilityVerificationMapFrame | null
   loadingMap: boolean
   mapError: string | null
+  spatialMode: SpatialMode
+  onSpatialModeChange: (value: SpatialMode) => void
+  thresholds: number[]
+  probabilityThreshold: number
+  onProbabilityThresholdChange: (value: number) => void
   leadMinutes: number[]
   selectedLeadMinutes: number
   playing: boolean
@@ -563,13 +656,13 @@ function ProbabilisticVerificationWorkbench({
             ))}
           </select>
         </label>
-        {run.maps_available ? <label>
+        {run.maps_available || run.probability_maps_available ? <label>
           <span>典型案例</span>
           <select aria-label="概率典型案例" value={selectedCaseID} onChange={(event) => onCaseChange(event.target.value)}>
             {cases.map((item) => <option key={item.case_id} value={item.case_id}>{formatCaseName(item.case_id)} · {item.issue_times.length} 起报</option>)}
           </select>
         </label> : null}
-        {run.maps_available ? <label>
+        {run.maps_available || run.probability_maps_available ? <label>
           <span>起报时间</span>
           <select aria-label="概率起报时间" value={selectedIssueTime} onChange={(event) => onIssueChange(event.target.value)}>
             {activeCase?.issue_times.map((value) => <option key={value} value={value}>{formatUTC(value)}</option>)}
@@ -584,13 +677,29 @@ function ProbabilisticVerificationWorkbench({
         </div>
       </section>
 
-      {run.maps_available ? <>
-        <EnsembleVerificationMapMatrix
+      {run.maps_available || run.probability_maps_available ? <>
+        <section className="probability-spatial-controls" aria-label="空间产品选择">
+          <div className="probability-spatial-mode" role="group" aria-label="空间产品">
+            <span>空间产品</span>
+            <button type="button" className={spatialMode === 'probability' ? 'active' : ''} aria-pressed={spatialMode === 'probability'} disabled={!run.probability_maps_available} onClick={() => onSpatialModeChange('probability')}>超阈概率</button>
+            <button type="button" className={spatialMode === 'rate' ? 'active' : ''} aria-pressed={spatialMode === 'rate'} disabled={!run.maps_available} onClick={() => onSpatialModeChange('rate')}>集合均值雨强</button>
+          </div>
+          {spatialMode === 'probability' ? <div className="probability-threshold-selector" role="group" aria-label="超阈雨强">
+            <span>雨强阈值</span>
+            {thresholds.map((value) => <button type="button" className={value === probabilityThreshold ? 'active' : ''} aria-pressed={value === probabilityThreshold} key={value} onClick={() => onProbabilityThresholdChange(value)}>≥ {value} mm/h</button>)}
+          </div> : <small>同一雨强色标，用于检查集合平均雨区位置与形态。</small>}
+        </section>
+        {spatialMode === 'probability' ? <ProbabilityVerificationMapMatrix
+          frame={probabilityMapFrame}
+          loading={loadingMap}
+          error={mapError}
+          mapsAvailable={run.probability_maps_available}
+        /> : <EnsembleVerificationMapMatrix
           frame={mapFrame}
           loading={loadingMap}
           error={mapError}
           mapsAvailable={run.maps_available}
-        />
+        />}
         <SpatialLeadTimeline
           leads={leadMinutes}
           selectedLead={selectedLeadMinutes}
@@ -636,7 +745,7 @@ function ProbabilisticVerificationWorkbench({
             <div><dt>GPU</dt><dd>{summary.device_name}</dd></div>
             <div><dt>产品发布</dt><dd>{summary.product_publication_enabled ? '已启用' : '关闭'}</dd></div>
           </dl>
-          <p>本页读取冻结汇总和不可变集合均值地图，不修改评分数组。集合均值不是阈值概率图，也不声明福建真实雷达就绪。</p>
+          <p>本页读取冻结汇总、不可变集合均值和原始超阈概率地图，不修改评分数组。概率未经校准，且不声明福建真实雷达就绪。</p>
         </section>
       </details>
     </section>
@@ -1160,6 +1269,8 @@ function readVerificationQuery() {
     threshold: parseNumber('threshold'),
     windowPixels: parseNumber('window'),
     baseline: query.get('baseline') ?? '',
+    spatialMode: query.get('map') === 'rate' ? 'rate' as SpatialMode : 'probability' as SpatialMode,
+    probabilityThreshold: parseNumber('probability_threshold'),
   }
 }
 

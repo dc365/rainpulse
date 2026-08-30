@@ -71,6 +71,66 @@ for issue in issues:
 if layer_count != index["layer_count"]:
     raise SystemExit("map index layer count differs")
 
+probability_bundle_count = summary.get("probability_map_bundle_count", 0)
+probability_layer_count = summary.get("probability_map_layer_count", 0)
+probability_renderer = summary.get("probability_map_renderer_version", "")
+if probability_bundle_count == 0:
+    if probability_layer_count != 0 or probability_renderer:
+        raise SystemExit("probability map summary counts differ")
+else:
+    probability_index = json.loads(
+        (root / "probability-maps" / "index.json").read_text(encoding="utf-8")
+    )
+    valid = summary.get("completed_issue_count") == probability_bundle_count
+    valid = valid and probability_index.get("bundle_count") == probability_bundle_count
+    valid = valid and probability_index.get("layer_count") == probability_layer_count
+    valid = valid and probability_index.get("renderer_version") == probability_renderer
+    valid = valid and probability_index.get("verification_profile_version") == summary.get(
+        "profile_version"
+    )
+    probability_issues = probability_index.get("issues")
+    valid = valid and isinstance(probability_issues, list)
+    valid = valid and len(probability_issues) == probability_bundle_count
+    if not valid:
+        raise SystemExit("probability map run failed the offline publication boundary")
+    thresholds = {float(value) for value in summary.get("thresholds_mm_h", [])}
+    lead_minutes = {int(value) for value in summary.get("lead_minutes", [])}
+    probability_assets = 0
+    for issue in probability_issues:
+        manifest_path = PurePosixPath(str(issue.get("manifest_path", "")))
+        if manifest_path.is_absolute() or ".." in manifest_path.parts:
+            raise SystemExit("probability map manifest path is unsafe")
+        manifest_file = root / "probability-maps" / manifest_path
+        manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+        if manifest.get("operational_eligible") is not False:
+            raise SystemExit("probability map manifest is operationally eligible")
+        if manifest.get("product_publication_enabled") is not False:
+            raise SystemExit("probability map manifest enables publication")
+        if manifest.get("calibration_status") != "raw_ensemble_relative_frequency_uncalibrated":
+            raise SystemExit("probability map calibration boundary differs")
+        if manifest.get("verification_profile_version") != summary["profile_version"]:
+            raise SystemExit("probability map profile identity differs")
+        layers = manifest.get("layers")
+        if not isinstance(layers, list) or len(layers) != issue.get("layer_count"):
+            raise SystemExit("probability map manifest layer count differs")
+        for layer in layers:
+            if float(layer.get("threshold_mm_h", -1)) not in thresholds:
+                raise SystemExit("probability map threshold differs")
+            if int(layer.get("lead_minutes", -1)) not in lead_minutes:
+                raise SystemExit("probability map lead differs")
+            object_path = PurePosixPath(str(layer.get("object_path", "")))
+            if object_path.is_absolute() or ".." in object_path.parts:
+                raise SystemExit("probability map asset path is unsafe")
+            asset = manifest_file.parent / object_path
+            data = asset.read_bytes()
+            if len(data) != layer.get("size_bytes"):
+                raise SystemExit("probability map asset size differs")
+            if hashlib.sha256(data).hexdigest() != layer.get("sha256"):
+                raise SystemExit("probability map asset digest differs")
+            probability_assets += 1
+    if probability_assets != probability_layer_count:
+        raise SystemExit("probability map index layer count differs")
+
 profile = summary.get("profile_version")
 if not isinstance(profile, str) or not profile:
     raise SystemExit("profile version is invalid")

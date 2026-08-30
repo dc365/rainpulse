@@ -514,6 +514,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/algorithm-verification/runs/{profile_version}/{run_id}/probability-map-frame": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get synchronized truth and raw ensemble exceedance probability maps */
+        get: operations["getAlgorithmVerificationProbabilityMapFrame"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/algorithm-verification/runs/{profile_version}/{run_id}/probability-map-assets/{case_id}/{issue_key}/{asset_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one immutable probability PNG listed by a probability map manifest */
+        get: operations["getAlgorithmVerificationProbabilityMapAsset"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ensemble-products/latest": {
         parameters: {
             query?: never;
@@ -1387,6 +1421,10 @@ export interface components {
             map_bundle_count: number;
             map_layer_count: number;
             map_renderer_version: string | null;
+            probability_maps_available: boolean;
+            probability_map_bundle_count: number;
+            probability_map_layer_count: number;
+            probability_map_renderer_version: string | null;
             /** Format: date-time */
             modified_at: string;
         };
@@ -1640,6 +1678,67 @@ export interface components {
         AlgorithmVerificationMapLegendEntry: {
             /** Format: double */
             minimum_mm_h: number;
+            color: string;
+        };
+        AlgorithmVerificationProbabilityMapLayer: {
+            asset_id: string;
+            /** @enum {string} */
+            role: "truth" | "forecast";
+            model: string | null;
+            lead_minutes: number;
+            /** Format: double */
+            threshold_mm_h: number;
+            /** Format: date-time */
+            valid_time: string;
+            image_url: string;
+            width: number;
+            height: number;
+            sha256: string;
+            /** Format: int64 */
+            size_bytes: number;
+            /** Format: int64 */
+            valid_cell_count: number;
+            /** Format: int64 */
+            no_event_cell_count: number;
+            /** Format: int64 */
+            event_cell_count: number;
+            /** Format: int64 */
+            missing_cell_count: number;
+        };
+        AlgorithmVerificationProbabilityMapFrame: {
+            contract_version: string;
+            renderer_version: string;
+            palette_version: string;
+            profile_version: string;
+            run_id: string;
+            case_id: string;
+            /** Format: date-time */
+            issue_time: string;
+            /** Format: date-time */
+            valid_time: string;
+            lead_minutes: number;
+            /** Format: double */
+            threshold_mm_h: number;
+            truth_kind: string;
+            /** @enum {string} */
+            calibration_status: "raw_ensemble_relative_frequency_uncalibrated";
+            /** @enum {boolean} */
+            operational_eligible: false;
+            /** @enum {boolean} */
+            product_publication_enabled: false;
+            /** @enum {string} */
+            projection: "EPSG:4326";
+            pixel_edge_bounds: number[];
+            fit_bounds: number[];
+            width: number;
+            height: number;
+            valid_no_event_color: string;
+            legend: components["schemas"]["AlgorithmVerificationProbabilityMapLegendEntry"][];
+            layers: components["schemas"]["AlgorithmVerificationProbabilityMapLayer"][];
+        };
+        AlgorithmVerificationProbabilityMapLegendEntry: {
+            /** Format: double */
+            minimum_probability_percent: number;
             color: string;
         };
         ModelState: {
@@ -2395,6 +2494,64 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Immutable algorithm-verification PNG */
+            200: {
+                headers: {
+                    ETag?: string;
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getAlgorithmVerificationProbabilityMapFrame: {
+        parameters: {
+            query: {
+                case_id: string;
+                issue_time: string;
+                lead_minutes: number;
+                threshold_mm_h: number;
+            };
+            header?: never;
+            path: {
+                profile_version: components["parameters"]["VerificationProfileVersion"];
+                run_id: components["parameters"]["VerificationRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One synchronized raw exceedance-probability map frame */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlgorithmVerificationProbabilityMapFrame"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getAlgorithmVerificationProbabilityMapAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile_version: components["parameters"]["VerificationProfileVersion"];
+                run_id: components["parameters"]["VerificationRunId"];
+                case_id: string;
+                issue_key: string;
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Immutable raw exceedance-probability PNG */
             200: {
                 headers: {
                     ETag?: string;

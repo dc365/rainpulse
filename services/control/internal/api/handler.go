@@ -100,6 +100,20 @@ type AlgorithmVerificationStore interface {
 		string,
 		string,
 	) (verificationstore.MapAssetContent, error)
+	GetProbabilityMapFrame(
+		context.Context,
+		string,
+		string,
+		verificationstore.ProbabilityMapFrameFilter,
+	) (verificationstore.ProbabilityMapFrame, error)
+	ReadProbabilityMapAsset(
+		context.Context,
+		string,
+		string,
+		string,
+		string,
+		string,
+	) (verificationstore.MapAssetContent, error)
 }
 
 type ForecastVerificationStore interface {
@@ -523,6 +537,59 @@ func (service *server) GetAlgorithmVerificationMapAsset(
 		return
 	}
 	asset, err := service.verification.ReadMapAsset(
+		request.Context(), profileVersion, runID, caseID, issueKey, assetID,
+	)
+	if err != nil {
+		writeAlgorithmVerificationError(response, err)
+		return
+	}
+	response.Header().Set("Content-Type", "image/png")
+	response.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	response.Header().Set("ETag", fmt.Sprintf("%q", asset.SHA256))
+	response.Header().Set("X-Content-Type-Options", "nosniff")
+	response.WriteHeader(http.StatusOK)
+	_, _ = response.Write(asset.Data)
+}
+
+func (service *server) GetAlgorithmVerificationProbabilityMapFrame(
+	response http.ResponseWriter,
+	request *http.Request,
+	profileVersion apiv1.VerificationProfileVersion,
+	runID apiv1.VerificationRunId,
+	params apiv1.GetAlgorithmVerificationProbabilityMapFrameParams,
+) {
+	if service.verification == nil {
+		writeError(response, http.StatusNotFound, "not_found", "algorithm-verification probability map was not found")
+		return
+	}
+	frame, err := service.verification.GetProbabilityMapFrame(
+		request.Context(), profileVersion, runID,
+		verificationstore.ProbabilityMapFrameFilter{
+			CaseID: params.CaseId, IssueTime: params.IssueTime,
+			LeadMinutes: params.LeadMinutes, ThresholdMMH: params.ThresholdMmH,
+		},
+	)
+	if err != nil {
+		writeAlgorithmVerificationError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, toAPIAlgorithmVerificationProbabilityMapFrame(frame))
+}
+
+func (service *server) GetAlgorithmVerificationProbabilityMapAsset(
+	response http.ResponseWriter,
+	request *http.Request,
+	profileVersion apiv1.VerificationProfileVersion,
+	runID apiv1.VerificationRunId,
+	caseID string,
+	issueKey string,
+	assetID string,
+) {
+	if service.verification == nil {
+		writeError(response, http.StatusNotFound, "not_found", "algorithm-verification probability map was not found")
+		return
+	}
+	asset, err := service.verification.ReadProbabilityMapAsset(
 		request.Context(), profileVersion, runID, caseID, issueKey, assetID,
 	)
 	if err != nil {
@@ -1751,22 +1818,69 @@ func toAPIAlgorithmVerificationRun(
 	run verificationstore.RunSummary,
 ) apiv1.AlgorithmVerificationRunSummary {
 	return apiv1.AlgorithmVerificationRunSummary{
-		ProfileVersion:           run.ProfileVersion,
-		RunId:                    run.RunID,
-		SchemaVersion:            run.SchemaVersion,
-		VerificationKind:         apiv1.AlgorithmVerificationRunSummaryVerificationKind(run.VerificationKind),
-		PrimaryTruthKind:         run.PrimaryTruthKind,
-		OperationalEligible:      run.OperationalEligible,
-		CompletedIssueCount:      run.CompletedIssueCount,
-		FailedIssueCount:         run.FailedIssueCount,
-		MotionFallbackIssueCount: run.MotionFallbackIssueCount,
-		MetricRowCount:           run.MetricRowCount,
-		SkillStatus:              run.SkillStatus,
-		MapsAvailable:            run.MapsAvailable,
-		MapBundleCount:           run.MapBundleCount,
-		MapLayerCount:            run.MapLayerCount,
-		MapRendererVersion:       stringPointerOrNil(run.MapRendererVersion),
-		ModifiedAt:               run.ModifiedAt.UTC(),
+		ProfileVersion:                run.ProfileVersion,
+		RunId:                         run.RunID,
+		SchemaVersion:                 run.SchemaVersion,
+		VerificationKind:              apiv1.AlgorithmVerificationRunSummaryVerificationKind(run.VerificationKind),
+		PrimaryTruthKind:              run.PrimaryTruthKind,
+		OperationalEligible:           run.OperationalEligible,
+		CompletedIssueCount:           run.CompletedIssueCount,
+		FailedIssueCount:              run.FailedIssueCount,
+		MotionFallbackIssueCount:      run.MotionFallbackIssueCount,
+		MetricRowCount:                run.MetricRowCount,
+		SkillStatus:                   run.SkillStatus,
+		MapsAvailable:                 run.MapsAvailable,
+		MapBundleCount:                run.MapBundleCount,
+		MapLayerCount:                 run.MapLayerCount,
+		MapRendererVersion:            stringPointerOrNil(run.MapRendererVersion),
+		ProbabilityMapsAvailable:      run.ProbabilityMapsAvailable,
+		ProbabilityMapBundleCount:     run.ProbabilityMapBundleCount,
+		ProbabilityMapLayerCount:      run.ProbabilityMapLayerCount,
+		ProbabilityMapRendererVersion: stringPointerOrNil(run.ProbabilityMapRendererVersion),
+		ModifiedAt:                    run.ModifiedAt.UTC(),
+	}
+}
+
+func toAPIAlgorithmVerificationProbabilityMapFrame(
+	frame verificationstore.ProbabilityMapFrame,
+) apiv1.AlgorithmVerificationProbabilityMapFrame {
+	layers := make([]apiv1.AlgorithmVerificationProbabilityMapLayer, 0, len(frame.Layers))
+	issueKey := frame.IssueTime.UTC().Format("20060102T150405Z")
+	for _, layer := range frame.Layers {
+		layers = append(layers, apiv1.AlgorithmVerificationProbabilityMapLayer{
+			AssetId: layer.AssetID,
+			Role:    apiv1.AlgorithmVerificationProbabilityMapLayerRole(layer.Role),
+			Model:   layer.Model, LeadMinutes: layer.LeadMinutes,
+			ThresholdMmH: layer.ThresholdMMH, ValidTime: layer.ValidTime.UTC(),
+			ImageUrl: fmt.Sprintf(
+				"/api/v1/algorithm-verification/runs/%s/%s/probability-map-assets/%s/%s/%s",
+				frame.ProfileVersion, frame.RunID, frame.CaseID, issueKey, layer.AssetID,
+			),
+			Width: layer.Width, Height: layer.Height, Sha256: layer.SHA256,
+			SizeBytes: layer.SizeBytes, ValidCellCount: layer.ValidCellCount,
+			NoEventCellCount: layer.NoEventCellCount, EventCellCount: layer.EventCellCount,
+			MissingCellCount: layer.MissingCellCount,
+		})
+	}
+	legend := make([]apiv1.AlgorithmVerificationProbabilityMapLegendEntry, 0, len(frame.Legend))
+	for _, item := range frame.Legend {
+		legend = append(legend, apiv1.AlgorithmVerificationProbabilityMapLegendEntry{
+			MinimumProbabilityPercent: item.MinimumProbabilityPercent, Color: item.Color,
+		})
+	}
+	return apiv1.AlgorithmVerificationProbabilityMapFrame{
+		ContractVersion: frame.ContractVersion, RendererVersion: frame.RendererVersion,
+		PaletteVersion: frame.PaletteVersion, ProfileVersion: frame.ProfileVersion,
+		RunId: frame.RunID, CaseId: frame.CaseID, IssueTime: frame.IssueTime.UTC(),
+		ValidTime: frame.ValidTime.UTC(), LeadMinutes: frame.LeadMinutes,
+		ThresholdMmH: frame.ThresholdMMH, TruthKind: frame.TruthKind,
+		CalibrationStatus:         apiv1.AlgorithmVerificationProbabilityMapFrameCalibrationStatus(frame.CalibrationStatus),
+		OperationalEligible:       apiv1.AlgorithmVerificationProbabilityMapFrameOperationalEligible(frame.OperationalEligible),
+		ProductPublicationEnabled: apiv1.AlgorithmVerificationProbabilityMapFrameProductPublicationEnabled(frame.ProductPublicationEnabled),
+		Projection:                apiv1.AlgorithmVerificationProbabilityMapFrameProjection(frame.Projection),
+		PixelEdgeBounds:           frame.PixelEdgeBounds, FitBounds: frame.FitBounds,
+		Width: frame.Width, Height: frame.Height,
+		ValidNoEventColor: frame.ValidNoEventColor, Legend: legend, Layers: layers,
 	}
 }
 

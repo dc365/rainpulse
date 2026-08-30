@@ -145,14 +145,19 @@ func TestFileStoreLoadsProbabilisticSpatialEvidenceWithoutEnablingPublication(t 
 	writeMapFixtureForModels(
 		t, root, "rp026-mrms-nowcastnet-v1", "holdout-map-v1", []string{"nowcastnet", "steps"},
 	)
+	png := writeProbabilityMapFixture(
+		t, root, "rp026-mrms-nowcastnet-v1", "holdout-map-v1",
+	)
 	store := NewFileStore(root)
 
 	runs, err := store.ListRuns(context.Background())
 	if err != nil {
 		t.Fatalf("list probabilistic map run: %v", err)
 	}
-	if len(runs) != 1 || !runs[0].MapsAvailable || runs[0].MapBundleCount != 1 ||
-		runs[0].MapLayerCount != 3 || runs[0].OperationalEligible {
+	if len(runs) != 1 || !runs[0].MapsAvailable || !runs[0].ProbabilityMapsAvailable ||
+		runs[0].MapBundleCount != 1 || runs[0].MapLayerCount != 3 ||
+		runs[0].ProbabilityMapBundleCount != 1 || runs[0].ProbabilityMapLayerCount != 15 ||
+		runs[0].OperationalEligible {
 		t.Fatalf("unexpected probabilistic map summary: %#v", runs)
 	}
 
@@ -182,6 +187,28 @@ func TestFileStoreLoadsProbabilisticSpatialEvidenceWithoutEnablingPublication(t 
 		*frame.Layers[1].Model != "nowcastnet" || frame.Layers[2].Model == nil ||
 		*frame.Layers[2].Model != "steps" {
 		t.Fatalf("unexpected probabilistic map frame: %#v", frame)
+	}
+	probabilityFrame, err := store.GetProbabilityMapFrame(
+		context.Background(), "rp026-mrms-nowcastnet-v1", "holdout-map-v1",
+		ProbabilityMapFrameFilter{
+			CaseID: "midwest_case", IssueTime: time.Date(2021, 8, 10, 17, 0, 0, 0, time.UTC),
+			LeadMinutes: 10, ThresholdMMH: 5,
+		},
+	)
+	if err != nil {
+		t.Fatalf("get probability map frame: %v", err)
+	}
+	if len(probabilityFrame.Layers) != 3 || probabilityFrame.ThresholdMMH != 5 ||
+		probabilityFrame.CalibrationStatus != "raw_ensemble_relative_frequency_uncalibrated" ||
+		probabilityFrame.OperationalEligible || probabilityFrame.ProductPublicationEnabled {
+		t.Fatalf("unexpected probability map frame: %#v", probabilityFrame)
+	}
+	asset, err := store.ReadProbabilityMapAsset(
+		context.Background(), "rp026-mrms-nowcastnet-v1", "holdout-map-v1",
+		"midwest_case", "20210810T170000Z", "lead-010-threshold-005-truth",
+	)
+	if err != nil || string(asset.Data) != string(png) {
+		t.Fatalf("read probability map asset: asset=%#v err=%v", asset, err)
 	}
 }
 
@@ -695,6 +722,117 @@ func writeMapFixtureForModels(
 	}
 	if err := os.WriteFile(filepath.Join(directory, "maps", "index.json"), encodedIndex, 0o644); err != nil {
 		t.Fatalf("write map index fixture: %v", err)
+	}
+	return png
+}
+
+func writeProbabilityMapFixture(
+	t *testing.T,
+	root string,
+	profileVersion string,
+	runID string,
+) []byte {
+	t.Helper()
+	directory := filepath.Join(root, profileVersion, runID)
+	summaryPath := filepath.Join(directory, "summary.json")
+	var summary map[string]any
+	if err := json.Unmarshal(mustReadFile(t, summaryPath), &summary); err != nil {
+		t.Fatalf("decode probability map summary fixture: %v", err)
+	}
+	summary["probability_map_bundle_count"] = 1
+	summary["probability_map_layer_count"] = 15
+	summary["probability_map_renderer_version"] = "probability-renderer-v1"
+	encodedSummary, err := json.Marshal(summary)
+	if err != nil {
+		t.Fatalf("encode probability map summary fixture: %v", err)
+	}
+	if err := os.WriteFile(summaryPath, encodedSummary, 0o644); err != nil {
+		t.Fatalf("write probability map summary fixture: %v", err)
+	}
+
+	png, err := base64.StdEncoding.DecodeString(
+		"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+X7WmAAAAAElFTkSuQmCC",
+	)
+	if err != nil {
+		t.Fatalf("decode probability PNG fixture: %v", err)
+	}
+	digest := fmt.Sprintf("%x", sha256.Sum256(png))
+	issueDirectory := filepath.Join(directory, "probability-maps", "midwest_case", "20210810T170000Z")
+	if err := os.MkdirAll(filepath.Join(issueDirectory, "layers"), 0o755); err != nil {
+		t.Fatalf("create probability map fixture: %v", err)
+	}
+	layers := []map[string]any{}
+	for _, threshold := range []int{1, 5, 10, 20, 50} {
+		for _, identity := range []struct {
+			name  string
+			role  string
+			model any
+		}{
+			{name: "truth", role: "truth", model: nil},
+			{name: "nowcastnet", role: "forecast", model: "nowcastnet"},
+			{name: "steps", role: "forecast", model: "steps"},
+		} {
+			assetID := fmt.Sprintf("lead-010-threshold-%03d-%s", threshold, identity.name)
+			objectPath := "layers/" + assetID + ".png"
+			if err := os.WriteFile(filepath.Join(issueDirectory, filepath.FromSlash(objectPath)), png, 0o644); err != nil {
+				t.Fatalf("write probability PNG fixture: %v", err)
+			}
+			layers = append(layers, map[string]any{
+				"asset_id": assetID, "role": identity.role, "model": identity.model,
+				"lead_minutes": 10, "threshold_mm_h": threshold,
+				"valid_time_utc": "2021-08-10T17:10:00Z", "object_path": objectPath,
+				"media_type": "image/png", "sha256": digest, "size_bytes": len(png),
+				"width": 1, "height": 1, "valid_cell_count": 1,
+				"no_event_cell_count": 1, "event_cell_count": 0, "missing_cell_count": 0,
+			})
+		}
+	}
+	manifest := map[string]any{
+		"contract_version": "1.0", "renderer_version": "probability-renderer-v1",
+		"render_profile_version": "probability-map-v1", "palette_version": "probability-v1",
+		"verification_profile_version": profileVersion, "case_id": "midwest_case",
+		"issue_key": "20210810T170000Z", "issue_time_utc": "2021-08-10T17:00:00Z",
+		"truth_kind":           "observed_rate",
+		"calibration_status":   "raw_ensemble_relative_frequency_uncalibrated",
+		"operational_eligible": false, "product_publication_enabled": false,
+		"grid": map[string]any{
+			"grid_id": "grid", "grid_config_version": "grid-v1", "projection": "EPSG:4326",
+			"fit_bounds":        []float64{-95, 39, -90, 41},
+			"pixel_edge_bounds": []float64{-95.005, 38.995, -89.995, 41.005},
+			"width":             1, "height": 1,
+		},
+		"palette": map[string]any{
+			"valid_no_event_color": "#dce6e2",
+			"stops": []map[string]any{
+				{"minimum": 0.1, "color": "#bfe9ec"},
+				{"minimum": 100, "color": "#b31945"},
+			},
+		},
+		"lead_minutes": []int{10}, "thresholds_mm_h": []int{1, 5, 10, 20, 50},
+		"layers": layers,
+	}
+	encodedManifest, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatalf("encode probability map manifest fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(issueDirectory, "manifest.json"), encodedManifest, 0o644); err != nil {
+		t.Fatalf("write probability map manifest fixture: %v", err)
+	}
+	index := map[string]any{
+		"contract_version": "1.0", "verification_profile_version": profileVersion,
+		"renderer_version": "probability-renderer-v1", "bundle_count": 1,
+		"layer_count": 15, "issues": []map[string]any{{
+			"case_id": "midwest_case", "case_category": "wet",
+			"issue_time_utc": "2021-08-10T17:00:00Z", "issue_key": "20210810T170000Z",
+			"manifest_path": "midwest_case/20210810T170000Z/manifest.json", "layer_count": 15,
+		}},
+	}
+	encodedIndex, err := json.Marshal(index)
+	if err != nil {
+		t.Fatalf("encode probability map index fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "probability-maps", "index.json"), encodedIndex, 0o644); err != nil {
+		t.Fatalf("write probability map index fixture: %v", err)
 	}
 	return png
 }

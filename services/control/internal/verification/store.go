@@ -34,22 +34,26 @@ var (
 )
 
 type RunSummary struct {
-	ProfileVersion           string
-	RunID                    string
-	SchemaVersion            string
-	VerificationKind         string
-	PrimaryTruthKind         string
-	OperationalEligible      bool
-	CompletedIssueCount      int
-	FailedIssueCount         int
-	MotionFallbackIssueCount int
-	MetricRowCount           int
-	SkillStatus              string
-	MapsAvailable            bool
-	MapBundleCount           int
-	MapLayerCount            int
-	MapRendererVersion       string
-	ModifiedAt               time.Time
+	ProfileVersion                string
+	RunID                         string
+	SchemaVersion                 string
+	VerificationKind              string
+	PrimaryTruthKind              string
+	OperationalEligible           bool
+	CompletedIssueCount           int
+	FailedIssueCount              int
+	MotionFallbackIssueCount      int
+	MetricRowCount                int
+	SkillStatus                   string
+	MapsAvailable                 bool
+	MapBundleCount                int
+	MapLayerCount                 int
+	MapRendererVersion            string
+	ProbabilityMapsAvailable      bool
+	ProbabilityMapBundleCount     int
+	ProbabilityMapLayerCount      int
+	ProbabilityMapRendererVersion string
+	ModifiedAt                    time.Time
 }
 
 type SkillComparison struct {
@@ -272,33 +276,93 @@ type MapAssetContent struct {
 	SHA256 string
 }
 
+type ProbabilityMapFrameFilter struct {
+	CaseID       string
+	IssueTime    time.Time
+	LeadMinutes  int
+	ThresholdMMH float64
+}
+
+type ProbabilityMapLegendEntry struct {
+	MinimumProbabilityPercent float64 `json:"minimum"`
+	Color                     string  `json:"color"`
+}
+
+type ProbabilityMapLayer struct {
+	AssetID          string    `json:"asset_id"`
+	Role             string    `json:"role"`
+	Model            *string   `json:"model"`
+	LeadMinutes      int       `json:"lead_minutes"`
+	ThresholdMMH     float64   `json:"threshold_mm_h"`
+	ValidTime        time.Time `json:"-"`
+	ValidTimeText    string    `json:"valid_time_utc"`
+	ObjectPath       string    `json:"object_path"`
+	MediaType        string    `json:"media_type"`
+	SHA256           string    `json:"sha256"`
+	SizeBytes        int64     `json:"size_bytes"`
+	Width            int       `json:"width"`
+	Height           int       `json:"height"`
+	ValidCellCount   int64     `json:"valid_cell_count"`
+	NoEventCellCount int64     `json:"no_event_cell_count"`
+	EventCellCount   int64     `json:"event_cell_count"`
+	MissingCellCount int64     `json:"missing_cell_count"`
+}
+
+type ProbabilityMapFrame struct {
+	ContractVersion           string
+	RendererVersion           string
+	PaletteVersion            string
+	ProfileVersion            string
+	RunID                     string
+	CaseID                    string
+	IssueTime                 time.Time
+	ValidTime                 time.Time
+	LeadMinutes               int
+	ThresholdMMH              float64
+	TruthKind                 string
+	CalibrationStatus         string
+	OperationalEligible       bool
+	ProductPublicationEnabled bool
+	Projection                string
+	PixelEdgeBounds           []float64
+	FitBounds                 []float64
+	Width                     int
+	Height                    int
+	ValidNoEventColor         string
+	Legend                    []ProbabilityMapLegendEntry
+	Layers                    []ProbabilityMapLayer
+}
+
 type reportSummary struct {
-	SchemaVersion             string                                 `json:"schema_version"`
-	ProfileVersion            string                                 `json:"profile_version"`
-	PrimaryTruthKind          string                                 `json:"primary_truth_kind"`
-	OperationalEligible       bool                                   `json:"operational_eligible"`
-	CompletedIssueCount       int                                    `json:"completed_issue_count"`
-	FailedIssueCount          int                                    `json:"failed_issue_count"`
-	MotionFallbackIssueCount  int                                    `json:"motion_fallback_issue_count"`
-	MetricRowCount            int                                    `json:"metric_row_count"`
-	TruthDomainMetricRowCount int                                    `json:"truth_domain_metric_row_count"`
-	MapBundleCount            int                                    `json:"map_bundle_count"`
-	MapLayerCount             int                                    `json:"map_layer_count"`
-	MapRendererVersion        string                                 `json:"map_renderer_version"`
-	Errors                    []any                                  `json:"errors"`
-	SkillSummary              SkillSummary                           `json:"skill_summary"`
-	ReportFiles               reportFiles                            `json:"report_files"`
-	Split                     string                                 `json:"split"`
-	CalibrationStatus         string                                 `json:"calibration_status"`
-	ProductPublicationEnabled bool                                   `json:"product_publication_enabled"`
-	Models                    []string                               `json:"models"`
-	LeadMinutes               []int                                  `json:"lead_minutes"`
-	ThresholdsMMH             []float64                              `json:"thresholds_mm_h"`
-	NowcastNetMemberCount     int                                    `json:"nowcastnet_member_count"`
-	StepsMemberCount          int                                    `json:"steps_member_count"`
-	LeadBandSummary           map[string]probabilisticLeadBandReport `json:"lead_band_summary"`
-	PerformanceSummary        probabilisticPerformanceReport         `json:"performance_summary"`
-	Runtime                   probabilisticRuntimeReport             `json:"runtime"`
+	SchemaVersion                 string                                 `json:"schema_version"`
+	ProfileVersion                string                                 `json:"profile_version"`
+	PrimaryTruthKind              string                                 `json:"primary_truth_kind"`
+	OperationalEligible           bool                                   `json:"operational_eligible"`
+	CompletedIssueCount           int                                    `json:"completed_issue_count"`
+	FailedIssueCount              int                                    `json:"failed_issue_count"`
+	MotionFallbackIssueCount      int                                    `json:"motion_fallback_issue_count"`
+	MetricRowCount                int                                    `json:"metric_row_count"`
+	TruthDomainMetricRowCount     int                                    `json:"truth_domain_metric_row_count"`
+	MapBundleCount                int                                    `json:"map_bundle_count"`
+	MapLayerCount                 int                                    `json:"map_layer_count"`
+	MapRendererVersion            string                                 `json:"map_renderer_version"`
+	ProbabilityMapBundleCount     int                                    `json:"probability_map_bundle_count"`
+	ProbabilityMapLayerCount      int                                    `json:"probability_map_layer_count"`
+	ProbabilityMapRendererVersion string                                 `json:"probability_map_renderer_version"`
+	Errors                        []any                                  `json:"errors"`
+	SkillSummary                  SkillSummary                           `json:"skill_summary"`
+	ReportFiles                   reportFiles                            `json:"report_files"`
+	Split                         string                                 `json:"split"`
+	CalibrationStatus             string                                 `json:"calibration_status"`
+	ProductPublicationEnabled     bool                                   `json:"product_publication_enabled"`
+	Models                        []string                               `json:"models"`
+	LeadMinutes                   []int                                  `json:"lead_minutes"`
+	ThresholdsMMH                 []float64                              `json:"thresholds_mm_h"`
+	NowcastNetMemberCount         int                                    `json:"nowcastnet_member_count"`
+	StepsMemberCount              int                                    `json:"steps_member_count"`
+	LeadBandSummary               map[string]probabilisticLeadBandReport `json:"lead_band_summary"`
+	PerformanceSummary            probabilisticPerformanceReport         `json:"performance_summary"`
+	Runtime                       probabilisticRuntimeReport             `json:"runtime"`
 }
 
 type probabilisticModelScoreReport struct {
@@ -393,6 +457,30 @@ type mapPalette struct {
 	RainThresholdMMH float64          `json:"rain_threshold_mm_h"`
 	ValidNoRainColor string           `json:"valid_no_rain_color"`
 	Stops            []MapLegendEntry `json:"stops"`
+}
+
+type probabilityMapManifest struct {
+	ContractVersion            string                `json:"contract_version"`
+	RendererVersion            string                `json:"renderer_version"`
+	PaletteVersion             string                `json:"palette_version"`
+	VerificationProfileVersion string                `json:"verification_profile_version"`
+	CaseID                     string                `json:"case_id"`
+	IssueKey                   string                `json:"issue_key"`
+	IssueTimeText              string                `json:"issue_time_utc"`
+	TruthKind                  string                `json:"truth_kind"`
+	CalibrationStatus          string                `json:"calibration_status"`
+	OperationalEligible        bool                  `json:"operational_eligible"`
+	ProductPublicationEnabled  bool                  `json:"product_publication_enabled"`
+	Grid                       mapGrid               `json:"grid"`
+	Palette                    probabilityMapPalette `json:"palette"`
+	LeadMinutes                []int                 `json:"lead_minutes"`
+	ThresholdsMMH              []float64             `json:"thresholds_mm_h"`
+	Layers                     []ProbabilityMapLayer `json:"layers"`
+}
+
+type probabilityMapPalette struct {
+	ValidNoEventColor string                      `json:"valid_no_event_color"`
+	Stops             []ProbabilityMapLegendEntry `json:"stops"`
 }
 
 type fileStamp struct {
@@ -646,6 +734,161 @@ func (store *FileStore) ReadMapAsset(
 	return MapAssetContent{Data: data, SHA256: digest}, nil
 }
 
+func (store *FileStore) GetProbabilityMapFrame(
+	ctx context.Context,
+	profileVersion string,
+	runID string,
+	filter ProbabilityMapFrameFilter,
+) (ProbabilityMapFrame, error) {
+	if !validSegment(filter.CaseID) || filter.IssueTime.IsZero() ||
+		filter.LeadMinutes < 1 || filter.ThresholdMMH <= 0 || math.IsNaN(filter.ThresholdMMH) {
+		return ProbabilityMapFrame{}, fmt.Errorf("%w: probability map-frame filter is invalid", ErrInvalidReport)
+	}
+	if err := ctx.Err(); err != nil {
+		return ProbabilityMapFrame{}, err
+	}
+	issueTime := filter.IssueTime.UTC()
+	issueKey := issueTime.Format("20060102T150405Z")
+	manifest, _, err := store.readProbabilityMapManifest(
+		profileVersion, runID, filter.CaseID, issueKey,
+	)
+	if err != nil {
+		return ProbabilityMapFrame{}, err
+	}
+	if manifest.IssueTimeText != issueTime.Format(time.RFC3339) {
+		return ProbabilityMapFrame{}, fmt.Errorf("%w: probability map issue time differs from request", ErrInvalidReport)
+	}
+	issueParsed, err := time.Parse(time.RFC3339, manifest.IssueTimeText)
+	if err != nil {
+		return ProbabilityMapFrame{}, fmt.Errorf("%w: probability map issue time is invalid", ErrInvalidReport)
+	}
+	layers := make([]ProbabilityMapLayer, 0, 3)
+	var validTime time.Time
+	for _, layer := range manifest.Layers {
+		if layer.LeadMinutes != filter.LeadMinutes ||
+			math.Abs(layer.ThresholdMMH-filter.ThresholdMMH) >= 1e-9 {
+			continue
+		}
+		parsed, err := time.Parse(time.RFC3339, layer.ValidTimeText)
+		if err != nil {
+			return ProbabilityMapFrame{}, fmt.Errorf("%w: probability map valid time is invalid", ErrInvalidReport)
+		}
+		layer.ValidTime = parsed.UTC()
+		if validTime.IsZero() {
+			validTime = layer.ValidTime
+		} else if !validTime.Equal(layer.ValidTime) {
+			return ProbabilityMapFrame{}, fmt.Errorf("%w: probability map layer valid times differ", ErrInvalidReport)
+		}
+		layers = append(layers, layer)
+	}
+	if len(layers) != 3 || validTime.IsZero() || !validProbabilityFrameModels(layers) {
+		return ProbabilityMapFrame{}, ErrNotFound
+	}
+	return ProbabilityMapFrame{
+		ContractVersion: manifest.ContractVersion, RendererVersion: manifest.RendererVersion,
+		PaletteVersion: manifest.PaletteVersion, ProfileVersion: profileVersion, RunID: runID,
+		CaseID: filter.CaseID, IssueTime: issueParsed.UTC(), ValidTime: validTime,
+		LeadMinutes: filter.LeadMinutes, ThresholdMMH: filter.ThresholdMMH,
+		TruthKind: manifest.TruthKind, CalibrationStatus: manifest.CalibrationStatus,
+		OperationalEligible:       manifest.OperationalEligible,
+		ProductPublicationEnabled: manifest.ProductPublicationEnabled,
+		Projection:                manifest.Grid.Projection, PixelEdgeBounds: manifest.Grid.PixelEdgeBounds,
+		FitBounds: manifest.Grid.FitBounds, Width: manifest.Grid.Width, Height: manifest.Grid.Height,
+		ValidNoEventColor: manifest.Palette.ValidNoEventColor,
+		Legend:            manifest.Palette.Stops, Layers: layers,
+	}, nil
+}
+
+func (store *FileStore) ReadProbabilityMapAsset(
+	ctx context.Context,
+	profileVersion string,
+	runID string,
+	caseID string,
+	issueKey string,
+	assetID string,
+) (MapAssetContent, error) {
+	if err := ctx.Err(); err != nil {
+		return MapAssetContent{}, err
+	}
+	if !validSegment(assetID) {
+		return MapAssetContent{}, ErrNotFound
+	}
+	manifest, directory, err := store.readProbabilityMapManifest(
+		profileVersion, runID, caseID, issueKey,
+	)
+	if err != nil {
+		return MapAssetContent{}, err
+	}
+	var selected *ProbabilityMapLayer
+	for index := range manifest.Layers {
+		if manifest.Layers[index].AssetID == assetID {
+			selected = &manifest.Layers[index]
+			break
+		}
+	}
+	if selected == nil {
+		return MapAssetContent{}, ErrNotFound
+	}
+	path, err := safeMapAssetPath(directory, selected.ObjectPath)
+	if err != nil {
+		return MapAssetContent{}, err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return MapAssetContent{}, reportFileError(err)
+	}
+	if !info.Mode().IsRegular() || info.Size() < 24 || info.Size() > maximumMapAssetBytes ||
+		info.Size() != selected.SizeBytes {
+		return MapAssetContent{}, fmt.Errorf("%w: probability map asset size is invalid", ErrInvalidReport)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return MapAssetContent{}, reportFileError(err)
+	}
+	digest := fmt.Sprintf("%x", sha256.Sum256(data))
+	if digest != selected.SHA256 || !validPNG(data, selected.Width, selected.Height) {
+		return MapAssetContent{}, fmt.Errorf("%w: probability map asset failed integrity validation", ErrInvalidReport)
+	}
+	return MapAssetContent{Data: data, SHA256: digest}, nil
+}
+
+func (store *FileStore) readProbabilityMapManifest(
+	profileVersion string,
+	runID string,
+	caseID string,
+	issueKey string,
+) (probabilityMapManifest, string, error) {
+	if !validSegment(caseID) || !issueKeyPattern.MatchString(issueKey) {
+		return probabilityMapManifest{}, "", ErrNotFound
+	}
+	runDirectory, err := store.runDirectory(profileVersion, runID)
+	if err != nil {
+		return probabilityMapManifest{}, "", err
+	}
+	directory := filepath.Join(runDirectory, "probability-maps", caseID, issueKey)
+	path := filepath.Join(directory, "manifest.json")
+	info, err := os.Stat(path)
+	if err != nil {
+		return probabilityMapManifest{}, "", reportFileError(err)
+	}
+	if !info.Mode().IsRegular() || info.Size() < 1 || info.Size() > maximumMapManifestBytes {
+		return probabilityMapManifest{}, "", fmt.Errorf("%w: probability map manifest size is invalid", ErrInvalidReport)
+	}
+	handle, err := os.Open(path)
+	if err != nil {
+		return probabilityMapManifest{}, "", reportFileError(err)
+	}
+	defer handle.Close()
+	var manifest probabilityMapManifest
+	if err := json.NewDecoder(io.LimitReader(handle, maximumMapManifestBytes+1)).Decode(&manifest); err != nil {
+		return probabilityMapManifest{}, "", fmt.Errorf("%w: decode probability map manifest: %v", ErrInvalidReport, err)
+	}
+	if err := validateProbabilityMapManifest(manifest, profileVersion, caseID, issueKey); err != nil {
+		return probabilityMapManifest{}, "", err
+	}
+	return manifest, directory, nil
+}
+
 func (store *FileStore) readMapManifest(
 	profileVersion string,
 	runID string,
@@ -711,8 +954,12 @@ func (store *FileStore) loadRun(
 		cases := []Case{}
 		leadMinutes := []int{}
 		thresholds := []float64{}
-		if summary.MapsAvailable {
-			index, err := readMapIndex(filepath.Join(directory, "maps", "index.json"))
+		if summary.MapsAvailable || summary.ProbabilityMapsAvailable {
+			indexDirectory := "maps"
+			if !summary.MapsAvailable {
+				indexDirectory = "probability-maps"
+			}
+			index, err := readMapIndex(filepath.Join(directory, indexDirectory, "index.json"))
 			if err != nil {
 				return cachedRun{}, err
 			}
@@ -905,7 +1152,8 @@ func (store *FileStore) readSummary(
 		report.CompletedIssueCount < 0 || report.FailedIssueCount < 0 ||
 		report.MotionFallbackIssueCount < 0 || report.MetricRowCount < 0 ||
 		report.TruthDomainMetricRowCount < 0 ||
-		report.MapBundleCount < 0 || report.MapLayerCount < 0 {
+		report.MapBundleCount < 0 || report.MapLayerCount < 0 ||
+		report.ProbabilityMapBundleCount < 0 || report.ProbabilityMapLayerCount < 0 {
 		return RunSummary{}, reportSummary{}, fmt.Errorf("%w: summary identity or counts differ", ErrInvalidReport)
 	}
 	if report.CalibrationStatus != "" || len(report.LeadBandSummary) > 0 {
@@ -916,23 +1164,33 @@ func (store *FileStore) readSummary(
 		if err != nil {
 			return RunSummary{}, reportSummary{}, err
 		}
+		probabilityMapsAvailable, err := validateProbabilityMapSummary(
+			directory, profileVersion, report,
+		)
+		if err != nil {
+			return RunSummary{}, reportSummary{}, err
+		}
 		return RunSummary{
-			ProfileVersion:           report.ProfileVersion,
-			RunID:                    runID,
-			SchemaVersion:            report.SchemaVersion,
-			VerificationKind:         "probabilistic_ensemble",
-			PrimaryTruthKind:         "observed_mrms_preciprate_10min",
-			OperationalEligible:      report.OperationalEligible,
-			CompletedIssueCount:      report.CompletedIssueCount,
-			FailedIssueCount:         report.FailedIssueCount,
-			MotionFallbackIssueCount: report.MotionFallbackIssueCount,
-			MetricRowCount:           report.MetricRowCount,
-			SkillStatus:              "steps_retained_nowcastnet_offline",
-			MapsAvailable:            mapsAvailable,
-			MapBundleCount:           report.MapBundleCount,
-			MapLayerCount:            report.MapLayerCount,
-			MapRendererVersion:       report.MapRendererVersion,
-			ModifiedAt:               info.ModTime().UTC(),
+			ProfileVersion:                report.ProfileVersion,
+			RunID:                         runID,
+			SchemaVersion:                 report.SchemaVersion,
+			VerificationKind:              "probabilistic_ensemble",
+			PrimaryTruthKind:              "observed_mrms_preciprate_10min",
+			OperationalEligible:           report.OperationalEligible,
+			CompletedIssueCount:           report.CompletedIssueCount,
+			FailedIssueCount:              report.FailedIssueCount,
+			MotionFallbackIssueCount:      report.MotionFallbackIssueCount,
+			MetricRowCount:                report.MetricRowCount,
+			SkillStatus:                   "steps_retained_nowcastnet_offline",
+			MapsAvailable:                 mapsAvailable,
+			MapBundleCount:                report.MapBundleCount,
+			MapLayerCount:                 report.MapLayerCount,
+			MapRendererVersion:            report.MapRendererVersion,
+			ProbabilityMapsAvailable:      probabilityMapsAvailable,
+			ProbabilityMapBundleCount:     report.ProbabilityMapBundleCount,
+			ProbabilityMapLayerCount:      report.ProbabilityMapLayerCount,
+			ProbabilityMapRendererVersion: report.ProbabilityMapRendererVersion,
+			ModifiedAt:                    info.ModTime().UTC(),
 		}, report, nil
 	}
 	if report.PrimaryTruthKind == "" || report.SkillSummary.Status == "" {
@@ -946,22 +1204,26 @@ func (store *FileStore) readSummary(
 		return RunSummary{}, reportSummary{}, err
 	}
 	return RunSummary{
-		ProfileVersion:           report.ProfileVersion,
-		RunID:                    runID,
-		SchemaVersion:            report.SchemaVersion,
-		VerificationKind:         "deterministic_spatial",
-		PrimaryTruthKind:         report.PrimaryTruthKind,
-		OperationalEligible:      report.OperationalEligible,
-		CompletedIssueCount:      report.CompletedIssueCount,
-		FailedIssueCount:         report.FailedIssueCount,
-		MotionFallbackIssueCount: report.MotionFallbackIssueCount,
-		MetricRowCount:           report.MetricRowCount,
-		SkillStatus:              report.SkillSummary.Status,
-		MapsAvailable:            mapsAvailable,
-		MapBundleCount:           report.MapBundleCount,
-		MapLayerCount:            report.MapLayerCount,
-		MapRendererVersion:       report.MapRendererVersion,
-		ModifiedAt:               info.ModTime().UTC(),
+		ProfileVersion:                report.ProfileVersion,
+		RunID:                         runID,
+		SchemaVersion:                 report.SchemaVersion,
+		VerificationKind:              "deterministic_spatial",
+		PrimaryTruthKind:              report.PrimaryTruthKind,
+		OperationalEligible:           report.OperationalEligible,
+		CompletedIssueCount:           report.CompletedIssueCount,
+		FailedIssueCount:              report.FailedIssueCount,
+		MotionFallbackIssueCount:      report.MotionFallbackIssueCount,
+		MetricRowCount:                report.MetricRowCount,
+		SkillStatus:                   report.SkillSummary.Status,
+		MapsAvailable:                 mapsAvailable,
+		MapBundleCount:                report.MapBundleCount,
+		MapLayerCount:                 report.MapLayerCount,
+		MapRendererVersion:            report.MapRendererVersion,
+		ProbabilityMapsAvailable:      false,
+		ProbabilityMapBundleCount:     0,
+		ProbabilityMapLayerCount:      0,
+		ProbabilityMapRendererVersion: "",
+		ModifiedAt:                    info.ModTime().UTC(),
 	}, report, nil
 }
 
@@ -1136,6 +1398,36 @@ func validateMapSummary(
 	return true, nil
 }
 
+func validateProbabilityMapSummary(
+	directory string,
+	profileVersion string,
+	report reportSummary,
+) (bool, error) {
+	if report.ProbabilityMapBundleCount == 0 {
+		if report.ProbabilityMapLayerCount != 0 || report.ProbabilityMapRendererVersion != "" {
+			return false, fmt.Errorf("%w: probability map summary counts differ", ErrInvalidReport)
+		}
+		return false, nil
+	}
+	if report.ProbabilityMapRendererVersion == "" ||
+		report.ProbabilityMapLayerCount != report.ProbabilityMapBundleCount*
+			len(report.LeadMinutes)*len(report.ThresholdsMMH)*3 {
+		return false, fmt.Errorf("%w: probability map summary identity is invalid", ErrInvalidReport)
+	}
+	index, err := readMapIndex(filepath.Join(directory, "probability-maps", "index.json"))
+	if err != nil {
+		return false, err
+	}
+	if index.ContractVersion != "1.0" || index.VerificationProfileVersion != profileVersion ||
+		index.RendererVersion != report.ProbabilityMapRendererVersion ||
+		index.BundleCount != report.ProbabilityMapBundleCount ||
+		index.LayerCount != report.ProbabilityMapLayerCount ||
+		len(index.Issues) != report.ProbabilityMapBundleCount {
+		return false, fmt.Errorf("%w: probability map index differs from summary", ErrInvalidReport)
+	}
+	return true, nil
+}
+
 func probabilisticMapCases(index mapIndex) ([]Case, error) {
 	caseIssues := make(map[string]map[time.Time]bool)
 	categories := make(map[string]string)
@@ -1210,6 +1502,106 @@ func validateMapManifest(
 		seen[layer.AssetID] = true
 	}
 	return nil
+}
+
+func validateProbabilityMapManifest(
+	manifest probabilityMapManifest,
+	profileVersion string,
+	caseID string,
+	issueKey string,
+) error {
+	if manifest.ContractVersion != "1.0" || manifest.RendererVersion == "" ||
+		manifest.PaletteVersion == "" || manifest.VerificationProfileVersion != profileVersion ||
+		manifest.CaseID != caseID || manifest.IssueKey != issueKey || manifest.TruthKind == "" ||
+		manifest.CalibrationStatus != "raw_ensemble_relative_frequency_uncalibrated" ||
+		manifest.OperationalEligible || manifest.ProductPublicationEnabled ||
+		manifest.Grid.Projection != "EPSG:4326" || manifest.Grid.Width < 1 ||
+		manifest.Grid.Height < 1 || len(manifest.Grid.FitBounds) != 4 ||
+		len(manifest.Grid.PixelEdgeBounds) != 4 || manifest.Palette.ValidNoEventColor == "" ||
+		len(manifest.Palette.Stops) < 1 || len(manifest.Palette.Stops) > 32 ||
+		len(manifest.LeadMinutes) < 1 || len(manifest.ThresholdsMMH) < 1 ||
+		len(manifest.Layers) != len(manifest.LeadMinutes)*len(manifest.ThresholdsMMH)*3 {
+		return fmt.Errorf("%w: probability map manifest identity or dimensions are invalid", ErrInvalidReport)
+	}
+	if _, err := time.Parse(time.RFC3339, manifest.IssueTimeText); err != nil {
+		return fmt.Errorf("%w: probability map manifest issue time is invalid", ErrInvalidReport)
+	}
+	for index, stop := range manifest.Palette.Stops {
+		if stop.MinimumProbabilityPercent <= 0 || stop.MinimumProbabilityPercent > 100 ||
+			stop.Color == "" || (index > 0 && stop.MinimumProbabilityPercent <= manifest.Palette.Stops[index-1].MinimumProbabilityPercent) {
+			return fmt.Errorf("%w: probability palette is invalid", ErrInvalidReport)
+		}
+	}
+	seen := make(map[string]bool, len(manifest.Layers))
+	frameModels := make(map[string][]ProbabilityMapLayer)
+	for _, layer := range manifest.Layers {
+		if !validSegment(layer.AssetID) || seen[layer.AssetID] ||
+			(layer.Role != "truth" && layer.Role != "forecast") || layer.LeadMinutes < 1 ||
+			layer.ThresholdMMH <= 0 || layer.MediaType != "image/png" || len(layer.SHA256) != 64 ||
+			layer.SizeBytes < 24 || layer.SizeBytes > maximumMapAssetBytes ||
+			layer.Width != manifest.Grid.Width || layer.Height != manifest.Grid.Height ||
+			layer.ValidCellCount < 0 || layer.NoEventCellCount < 0 || layer.EventCellCount < 0 ||
+			layer.MissingCellCount < 0 ||
+			layer.ValidCellCount+layer.MissingCellCount != int64(layer.Width*layer.Height) ||
+			layer.NoEventCellCount+layer.EventCellCount != layer.ValidCellCount ||
+			!containsInt(manifest.LeadMinutes, layer.LeadMinutes) ||
+			!containsFloat(manifest.ThresholdsMMH, layer.ThresholdMMH) {
+			return fmt.Errorf("%w: probability map layer metadata is invalid", ErrInvalidReport)
+		}
+		if _, err := safeMapAssetPath("/probability-map", layer.ObjectPath); err != nil {
+			return err
+		}
+		if _, err := time.Parse(time.RFC3339, layer.ValidTimeText); err != nil {
+			return fmt.Errorf("%w: probability map layer valid time is invalid", ErrInvalidReport)
+		}
+		seen[layer.AssetID] = true
+		key := fmt.Sprintf("%d/%.9f", layer.LeadMinutes, layer.ThresholdMMH)
+		frameModels[key] = append(frameModels[key], layer)
+	}
+	for _, layers := range frameModels {
+		if len(layers) != 3 || !validProbabilityFrameModels(layers) {
+			return fmt.Errorf("%w: probability map frame identities are invalid", ErrInvalidReport)
+		}
+	}
+	return nil
+}
+
+func validProbabilityFrameModels(layers []ProbabilityMapLayer) bool {
+	seen := map[string]bool{}
+	for _, layer := range layers {
+		identity := ""
+		if layer.Role == "truth" && layer.Model == nil {
+			identity = "truth"
+		} else if layer.Role == "forecast" && layer.Model != nil &&
+			(*layer.Model == "nowcastnet" || *layer.Model == "steps") {
+			identity = *layer.Model
+		} else {
+			return false
+		}
+		if seen[identity] {
+			return false
+		}
+		seen[identity] = true
+	}
+	return seen["truth"] && seen["nowcastnet"] && seen["steps"]
+}
+
+func containsInt(values []int, target int) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
+func containsFloat(values []float64, target float64) bool {
+	for _, value := range values {
+		if math.Abs(value-target) < 1e-9 {
+			return true
+		}
+	}
+	return false
 }
 
 func safeMapAssetPath(directory string, objectPath string) (string, error) {

@@ -100,13 +100,13 @@ func (e AlertState) Valid() bool {
 
 // Defines values for AlgorithmVerificationMapFrameProjection.
 const (
-	EPSG4326 AlgorithmVerificationMapFrameProjection = "EPSG:4326"
+	AlgorithmVerificationMapFrameProjectionEPSG4326 AlgorithmVerificationMapFrameProjection = "EPSG:4326"
 )
 
 // Valid indicates whether the value is a known member of the AlgorithmVerificationMapFrameProjection enum.
 func (e AlgorithmVerificationMapFrameProjection) Valid() bool {
 	switch e {
-	case EPSG4326:
+	case AlgorithmVerificationMapFrameProjectionEPSG4326:
 		return true
 	default:
 		return false
@@ -115,16 +115,16 @@ func (e AlgorithmVerificationMapFrameProjection) Valid() bool {
 
 // Defines values for AlgorithmVerificationMapLayerRole.
 const (
-	Forecast AlgorithmVerificationMapLayerRole = "forecast"
-	Truth    AlgorithmVerificationMapLayerRole = "truth"
+	AlgorithmVerificationMapLayerRoleForecast AlgorithmVerificationMapLayerRole = "forecast"
+	AlgorithmVerificationMapLayerRoleTruth    AlgorithmVerificationMapLayerRole = "truth"
 )
 
 // Valid indicates whether the value is a known member of the AlgorithmVerificationMapLayerRole enum.
 func (e AlgorithmVerificationMapLayerRole) Valid() bool {
 	switch e {
-	case Forecast:
+	case AlgorithmVerificationMapLayerRoleForecast:
 		return true
-	case Truth:
+	case AlgorithmVerificationMapLayerRoleTruth:
 		return true
 	default:
 		return false
@@ -161,6 +161,84 @@ func (e AlgorithmVerificationProbabilisticSummarySplit) Valid() bool {
 	case Development:
 		return true
 	case Holdout:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AlgorithmVerificationProbabilityMapFrameCalibrationStatus.
+const (
+	AlgorithmVerificationProbabilityMapFrameCalibrationStatusRawEnsembleRelativeFrequencyUncalibrated AlgorithmVerificationProbabilityMapFrameCalibrationStatus = "raw_ensemble_relative_frequency_uncalibrated"
+)
+
+// Valid indicates whether the value is a known member of the AlgorithmVerificationProbabilityMapFrameCalibrationStatus enum.
+func (e AlgorithmVerificationProbabilityMapFrameCalibrationStatus) Valid() bool {
+	switch e {
+	case AlgorithmVerificationProbabilityMapFrameCalibrationStatusRawEnsembleRelativeFrequencyUncalibrated:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AlgorithmVerificationProbabilityMapFrameOperationalEligible.
+const (
+	AlgorithmVerificationProbabilityMapFrameOperationalEligibleFalse AlgorithmVerificationProbabilityMapFrameOperationalEligible = false
+)
+
+// Valid indicates whether the value is a known member of the AlgorithmVerificationProbabilityMapFrameOperationalEligible enum.
+func (e AlgorithmVerificationProbabilityMapFrameOperationalEligible) Valid() bool {
+	switch e {
+	case AlgorithmVerificationProbabilityMapFrameOperationalEligibleFalse:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AlgorithmVerificationProbabilityMapFrameProductPublicationEnabled.
+const (
+	AlgorithmVerificationProbabilityMapFrameProductPublicationEnabledFalse AlgorithmVerificationProbabilityMapFrameProductPublicationEnabled = false
+)
+
+// Valid indicates whether the value is a known member of the AlgorithmVerificationProbabilityMapFrameProductPublicationEnabled enum.
+func (e AlgorithmVerificationProbabilityMapFrameProductPublicationEnabled) Valid() bool {
+	switch e {
+	case AlgorithmVerificationProbabilityMapFrameProductPublicationEnabledFalse:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AlgorithmVerificationProbabilityMapFrameProjection.
+const (
+	AlgorithmVerificationProbabilityMapFrameProjectionEPSG4326 AlgorithmVerificationProbabilityMapFrameProjection = "EPSG:4326"
+)
+
+// Valid indicates whether the value is a known member of the AlgorithmVerificationProbabilityMapFrameProjection enum.
+func (e AlgorithmVerificationProbabilityMapFrameProjection) Valid() bool {
+	switch e {
+	case AlgorithmVerificationProbabilityMapFrameProjectionEPSG4326:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AlgorithmVerificationProbabilityMapLayerRole.
+const (
+	AlgorithmVerificationProbabilityMapLayerRoleForecast AlgorithmVerificationProbabilityMapLayerRole = "forecast"
+	AlgorithmVerificationProbabilityMapLayerRoleTruth    AlgorithmVerificationProbabilityMapLayerRole = "truth"
+)
+
+// Valid indicates whether the value is a known member of the AlgorithmVerificationProbabilityMapLayerRole enum.
+func (e AlgorithmVerificationProbabilityMapLayerRole) Valid() bool {
+	switch e {
+	case AlgorithmVerificationProbabilityMapLayerRoleForecast:
+		return true
+	case AlgorithmVerificationProbabilityMapLayerRoleTruth:
 		return true
 	default:
 		return false
@@ -310,13 +388,13 @@ func (e EnsembleProductAssetAssetType) Valid() bool {
 
 // Defines values for EnsembleProductBundleCalibrationStatus.
 const (
-	RawEnsembleRelativeFrequencyUncalibrated EnsembleProductBundleCalibrationStatus = "raw_ensemble_relative_frequency_uncalibrated"
+	EnsembleProductBundleCalibrationStatusRawEnsembleRelativeFrequencyUncalibrated EnsembleProductBundleCalibrationStatus = "raw_ensemble_relative_frequency_uncalibrated"
 )
 
 // Valid indicates whether the value is a known member of the EnsembleProductBundleCalibrationStatus enum.
 func (e EnsembleProductBundleCalibrationStatus) Valid() bool {
 	switch e {
-	case RawEnsembleRelativeFrequencyUncalibrated:
+	case EnsembleProductBundleCalibrationStatusRawEnsembleRelativeFrequencyUncalibrated:
 		return true
 	default:
 		return false
@@ -325,13 +403,13 @@ func (e EnsembleProductBundleCalibrationStatus) Valid() bool {
 
 // Defines values for EnsembleProductBundleOperationalEligible.
 const (
-	False EnsembleProductBundleOperationalEligible = false
+	EnsembleProductBundleOperationalEligibleFalse EnsembleProductBundleOperationalEligible = false
 )
 
 // Valid indicates whether the value is a known member of the EnsembleProductBundleOperationalEligible enum.
 func (e EnsembleProductBundleOperationalEligible) Valid() bool {
 	switch e {
-	case False:
+	case EnsembleProductBundleOperationalEligibleFalse:
 		return true
 	default:
 		return false
@@ -915,6 +993,72 @@ type AlgorithmVerificationProbabilisticSummary struct {
 // AlgorithmVerificationProbabilisticSummarySplit defines model for AlgorithmVerificationProbabilisticSummary.Split.
 type AlgorithmVerificationProbabilisticSummarySplit string
 
+// AlgorithmVerificationProbabilityMapFrame defines model for AlgorithmVerificationProbabilityMapFrame.
+type AlgorithmVerificationProbabilityMapFrame struct {
+	CalibrationStatus         AlgorithmVerificationProbabilityMapFrameCalibrationStatus         `json:"calibration_status"`
+	CaseId                    string                                                            `json:"case_id"`
+	ContractVersion           string                                                            `json:"contract_version"`
+	FitBounds                 []float64                                                         `json:"fit_bounds"`
+	Height                    int                                                               `json:"height"`
+	IssueTime                 time.Time                                                         `json:"issue_time"`
+	Layers                    []AlgorithmVerificationProbabilityMapLayer                        `json:"layers"`
+	LeadMinutes               int                                                               `json:"lead_minutes"`
+	Legend                    []AlgorithmVerificationProbabilityMapLegendEntry                  `json:"legend"`
+	OperationalEligible       AlgorithmVerificationProbabilityMapFrameOperationalEligible       `json:"operational_eligible"`
+	PaletteVersion            string                                                            `json:"palette_version"`
+	PixelEdgeBounds           []float64                                                         `json:"pixel_edge_bounds"`
+	ProductPublicationEnabled AlgorithmVerificationProbabilityMapFrameProductPublicationEnabled `json:"product_publication_enabled"`
+	ProfileVersion            string                                                            `json:"profile_version"`
+	Projection                AlgorithmVerificationProbabilityMapFrameProjection                `json:"projection"`
+	RendererVersion           string                                                            `json:"renderer_version"`
+	RunId                     string                                                            `json:"run_id"`
+	ThresholdMmH              float64                                                           `json:"threshold_mm_h"`
+	TruthKind                 string                                                            `json:"truth_kind"`
+	ValidNoEventColor         string                                                            `json:"valid_no_event_color"`
+	ValidTime                 time.Time                                                         `json:"valid_time"`
+	Width                     int                                                               `json:"width"`
+}
+
+// AlgorithmVerificationProbabilityMapFrameCalibrationStatus defines model for AlgorithmVerificationProbabilityMapFrame.CalibrationStatus.
+type AlgorithmVerificationProbabilityMapFrameCalibrationStatus string
+
+// AlgorithmVerificationProbabilityMapFrameOperationalEligible defines model for AlgorithmVerificationProbabilityMapFrame.OperationalEligible.
+type AlgorithmVerificationProbabilityMapFrameOperationalEligible bool
+
+// AlgorithmVerificationProbabilityMapFrameProductPublicationEnabled defines model for AlgorithmVerificationProbabilityMapFrame.ProductPublicationEnabled.
+type AlgorithmVerificationProbabilityMapFrameProductPublicationEnabled bool
+
+// AlgorithmVerificationProbabilityMapFrameProjection defines model for AlgorithmVerificationProbabilityMapFrame.Projection.
+type AlgorithmVerificationProbabilityMapFrameProjection string
+
+// AlgorithmVerificationProbabilityMapLayer defines model for AlgorithmVerificationProbabilityMapLayer.
+type AlgorithmVerificationProbabilityMapLayer struct {
+	AssetId          string                                       `json:"asset_id"`
+	EventCellCount   int64                                        `json:"event_cell_count"`
+	Height           int                                          `json:"height"`
+	ImageUrl         string                                       `json:"image_url"`
+	LeadMinutes      int                                          `json:"lead_minutes"`
+	MissingCellCount int64                                        `json:"missing_cell_count"`
+	Model            *string                                      `json:"model"`
+	NoEventCellCount int64                                        `json:"no_event_cell_count"`
+	Role             AlgorithmVerificationProbabilityMapLayerRole `json:"role"`
+	Sha256           string                                       `json:"sha256"`
+	SizeBytes        int64                                        `json:"size_bytes"`
+	ThresholdMmH     float64                                      `json:"threshold_mm_h"`
+	ValidCellCount   int64                                        `json:"valid_cell_count"`
+	ValidTime        time.Time                                    `json:"valid_time"`
+	Width            int                                          `json:"width"`
+}
+
+// AlgorithmVerificationProbabilityMapLayerRole defines model for AlgorithmVerificationProbabilityMapLayer.Role.
+type AlgorithmVerificationProbabilityMapLayerRole string
+
+// AlgorithmVerificationProbabilityMapLegendEntry defines model for AlgorithmVerificationProbabilityMapLegendEntry.
+type AlgorithmVerificationProbabilityMapLegendEntry struct {
+	Color                     string  `json:"color"`
+	MinimumProbabilityPercent float64 `json:"minimum_probability_percent"`
+}
+
 // AlgorithmVerificationRunDetail defines model for AlgorithmVerificationRunDetail.
 type AlgorithmVerificationRunDetail struct {
 	Cases                []AlgorithmVerificationCase                `json:"cases"`
@@ -931,22 +1075,26 @@ type AlgorithmVerificationRunList struct {
 
 // AlgorithmVerificationRunSummary defines model for AlgorithmVerificationRunSummary.
 type AlgorithmVerificationRunSummary struct {
-	CompletedIssueCount      int                                             `json:"completed_issue_count"`
-	FailedIssueCount         int                                             `json:"failed_issue_count"`
-	MapBundleCount           int                                             `json:"map_bundle_count"`
-	MapLayerCount            int                                             `json:"map_layer_count"`
-	MapRendererVersion       *string                                         `json:"map_renderer_version"`
-	MapsAvailable            bool                                            `json:"maps_available"`
-	MetricRowCount           int                                             `json:"metric_row_count"`
-	ModifiedAt               time.Time                                       `json:"modified_at"`
-	MotionFallbackIssueCount int                                             `json:"motion_fallback_issue_count"`
-	OperationalEligible      bool                                            `json:"operational_eligible"`
-	PrimaryTruthKind         string                                          `json:"primary_truth_kind"`
-	ProfileVersion           string                                          `json:"profile_version"`
-	RunId                    string                                          `json:"run_id"`
-	SchemaVersion            string                                          `json:"schema_version"`
-	SkillStatus              string                                          `json:"skill_status"`
-	VerificationKind         AlgorithmVerificationRunSummaryVerificationKind `json:"verification_kind"`
+	CompletedIssueCount           int                                             `json:"completed_issue_count"`
+	FailedIssueCount              int                                             `json:"failed_issue_count"`
+	MapBundleCount                int                                             `json:"map_bundle_count"`
+	MapLayerCount                 int                                             `json:"map_layer_count"`
+	MapRendererVersion            *string                                         `json:"map_renderer_version"`
+	MapsAvailable                 bool                                            `json:"maps_available"`
+	MetricRowCount                int                                             `json:"metric_row_count"`
+	ModifiedAt                    time.Time                                       `json:"modified_at"`
+	MotionFallbackIssueCount      int                                             `json:"motion_fallback_issue_count"`
+	OperationalEligible           bool                                            `json:"operational_eligible"`
+	PrimaryTruthKind              string                                          `json:"primary_truth_kind"`
+	ProbabilityMapBundleCount     int                                             `json:"probability_map_bundle_count"`
+	ProbabilityMapLayerCount      int                                             `json:"probability_map_layer_count"`
+	ProbabilityMapRendererVersion *string                                         `json:"probability_map_renderer_version"`
+	ProbabilityMapsAvailable      bool                                            `json:"probability_maps_available"`
+	ProfileVersion                string                                          `json:"profile_version"`
+	RunId                         string                                          `json:"run_id"`
+	SchemaVersion                 string                                          `json:"schema_version"`
+	SkillStatus                   string                                          `json:"skill_status"`
+	VerificationKind              AlgorithmVerificationRunSummaryVerificationKind `json:"verification_kind"`
 }
 
 // AlgorithmVerificationRunSummaryVerificationKind defines model for AlgorithmVerificationRunSummary.VerificationKind.
@@ -1640,6 +1788,14 @@ type ListAlgorithmVerificationMetricsParams struct {
 	WindowPixels int       `form:"window_pixels" json:"window_pixels"`
 }
 
+// GetAlgorithmVerificationProbabilityMapFrameParams defines parameters for GetAlgorithmVerificationProbabilityMapFrame.
+type GetAlgorithmVerificationProbabilityMapFrameParams struct {
+	CaseId       string    `form:"case_id" json:"case_id"`
+	IssueTime    time.Time `form:"issue_time" json:"issue_time"`
+	LeadMinutes  int       `form:"lead_minutes" json:"lead_minutes"`
+	ThresholdMmH float64   `form:"threshold_mm_h" json:"threshold_mm_h"`
+}
+
 // ListAnalysisCyclesParams defines parameters for ListAnalysisCycles.
 type ListAnalysisCyclesParams struct {
 	Limit  *Limit               `form:"limit,omitempty" json:"limit,omitempty"`
@@ -1730,6 +1886,12 @@ type ServerInterface interface {
 	// ListAlgorithmVerificationMetrics List one issue's model metrics for a threshold and FSS window
 	// (GET /algorithm-verification/runs/{profile_version}/{run_id}/metrics)
 	ListAlgorithmVerificationMetrics(w http.ResponseWriter, r *http.Request, profileVersion VerificationProfileVersion, runId VerificationRunId, params ListAlgorithmVerificationMetricsParams)
+	// GetAlgorithmVerificationProbabilityMapAsset Read one immutable probability PNG listed by a probability map manifest
+	// (GET /algorithm-verification/runs/{profile_version}/{run_id}/probability-map-assets/{case_id}/{issue_key}/{asset_id})
+	GetAlgorithmVerificationProbabilityMapAsset(w http.ResponseWriter, r *http.Request, profileVersion VerificationProfileVersion, runId VerificationRunId, caseId string, issueKey string, assetId string)
+	// GetAlgorithmVerificationProbabilityMapFrame Get synchronized truth and raw ensemble exceedance probability maps
+	// (GET /algorithm-verification/runs/{profile_version}/{run_id}/probability-map-frame)
+	GetAlgorithmVerificationProbabilityMapFrame(w http.ResponseWriter, r *http.Request, profileVersion VerificationProfileVersion, runId VerificationRunId, params GetAlgorithmVerificationProbabilityMapFrameParams)
 	// ListAnalysisCycles List fixed-time multi-radar analysis workflows
 	// (GET /analysis-cycles)
 	ListAnalysisCycles(w http.ResponseWriter, r *http.Request, params ListAnalysisCyclesParams)
@@ -1877,6 +2039,18 @@ func (_ Unimplemented) GetAlgorithmVerificationMapFrame(w http.ResponseWriter, r
 // ListAlgorithmVerificationMetrics List one issue's model metrics for a threshold and FSS window
 // (GET /algorithm-verification/runs/{profile_version}/{run_id}/metrics)
 func (_ Unimplemented) ListAlgorithmVerificationMetrics(w http.ResponseWriter, r *http.Request, profileVersion VerificationProfileVersion, runId VerificationRunId, params ListAlgorithmVerificationMetricsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAlgorithmVerificationProbabilityMapAsset Read one immutable probability PNG listed by a probability map manifest
+// (GET /algorithm-verification/runs/{profile_version}/{run_id}/probability-map-assets/{case_id}/{issue_key}/{asset_id})
+func (_ Unimplemented) GetAlgorithmVerificationProbabilityMapAsset(w http.ResponseWriter, r *http.Request, profileVersion VerificationProfileVersion, runId VerificationRunId, caseId string, issueKey string, assetId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAlgorithmVerificationProbabilityMapFrame Get synchronized truth and raw ensemble exceedance probability maps
+// (GET /algorithm-verification/runs/{profile_version}/{run_id}/probability-map-frame)
+func (_ Unimplemented) GetAlgorithmVerificationProbabilityMapFrame(w http.ResponseWriter, r *http.Request, profileVersion VerificationProfileVersion, runId VerificationRunId, params GetAlgorithmVerificationProbabilityMapFrameParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2430,6 +2604,158 @@ func (siw *ServerInterfaceWrapper) ListAlgorithmVerificationMetrics(w http.Respo
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListAlgorithmVerificationMetrics(w, r, profileVersion, runId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAlgorithmVerificationProbabilityMapAsset operation middleware
+func (siw *ServerInterfaceWrapper) GetAlgorithmVerificationProbabilityMapAsset(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "profile_version" -------------
+	var profileVersion VerificationProfileVersion
+
+	err = runtime.BindStyledParameterWithOptions("simple", "profile_version", chi.URLParam(r, "profile_version"), &profileVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "profile_version", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "run_id" -------------
+	var runId VerificationRunId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "run_id", chi.URLParam(r, "run_id"), &runId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "run_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "case_id" -------------
+	var caseId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "case_id", chi.URLParam(r, "case_id"), &caseId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "case_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "issue_key" -------------
+	var issueKey string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "issue_key", chi.URLParam(r, "issue_key"), &issueKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "issue_key", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "asset_id" -------------
+	var assetId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "asset_id", chi.URLParam(r, "asset_id"), &assetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "asset_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAlgorithmVerificationProbabilityMapAsset(w, r, profileVersion, runId, caseId, issueKey, assetId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAlgorithmVerificationProbabilityMapFrame operation middleware
+func (siw *ServerInterfaceWrapper) GetAlgorithmVerificationProbabilityMapFrame(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "profile_version" -------------
+	var profileVersion VerificationProfileVersion
+
+	err = runtime.BindStyledParameterWithOptions("simple", "profile_version", chi.URLParam(r, "profile_version"), &profileVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "profile_version", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "run_id" -------------
+	var runId VerificationRunId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "run_id", chi.URLParam(r, "run_id"), &runId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "run_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAlgorithmVerificationProbabilityMapFrameParams
+
+	// ------------- Required query parameter "case_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "case_id", r.URL.Query(), &params.CaseId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "case_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "case_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "issue_time" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "issue_time", r.URL.Query(), &params.IssueTime, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "issue_time"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "issue_time", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "lead_minutes" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "lead_minutes", r.URL.Query(), &params.LeadMinutes, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "lead_minutes"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "lead_minutes", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "threshold_mm_h" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "threshold_mm_h", r.URL.Query(), &params.ThresholdMmH, runtime.BindQueryParameterOptions{Type: "number", Format: "double"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "threshold_mm_h"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "threshold_mm_h", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAlgorithmVerificationProbabilityMapFrame(w, r, profileVersion, runId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3627,6 +3953,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/algorithm-verification/runs/{profile_version}/{run_id}/map-assets/{case_id}/{issue_key}/{asset_id}", wrapper.GetAlgorithmVerificationMapAsset)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/algorithm-verification/runs/{profile_version}/{run_id}/probability-map-frame", wrapper.GetAlgorithmVerificationProbabilityMapFrame)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/algorithm-verification/runs/{profile_version}/{run_id}/probability-map-assets/{case_id}/{issue_key}/{asset_id}", wrapper.GetAlgorithmVerificationProbabilityMapAsset)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/ensemble-products/latest", wrapper.GetLatestEnsembleProductBundle)

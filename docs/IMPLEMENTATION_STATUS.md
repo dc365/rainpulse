@@ -58,6 +58,7 @@ NowcastInput gate.
 | RP-028 | Engineering observability and business-alert gate complete | v1.1 radar/QC/grid/analysis Prometheus metrics are emitted from persisted evidence, missing latest scans fail closed, and rules only page for ready radars or publication-eligible analyses; the radar console makes that gate explicit |
 | RP-029 | Local alert-management and read-only operations loop complete | Prometheus pending/firing evidence and Alertmanager silence/inhibition state are fail-soft aggregated through the Go API and exposed in a responsive Web alert ledger; no external receiver or write action is enabled |
 | RP-032 | Probabilistic spatial-evidence implementation and server replay complete | The frozen RP-026 holdout completed 50/50 issues with 3,600 immutable EPSG:4326 MRMS/NowcastNet-mean/STEPS-mean and deterministic comparison layers; Go validates the map index and the Web exposes synchronized ensemble-mean GIS/timeline evidence without changing the offline-only gate |
+| RP-033 | Raw exceedance-probability GIS implemented; server replay pending | A separate probability-map contract, renderer, API and synchronized three-map Web mode expose MRMS 0/100 exceedance and raw NowcastNet/STEPS member frequencies for 1/5/10/20/50 mm/h; calibration, operational eligibility and publication remain disabled |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -569,6 +570,16 @@ The 105 holdout replay completed 50/50 issues with zero failures, 3,600 map
 layers, 15,000 score rows and 150,000 reliability rows. Its frozen score and
 coverage summaries match the original `holdout-v1` run exactly; all published
 map assets passed size and SHA-256 validation before atomic control-plane staging.
+
+RP-033 separates threshold-exceedance probability from the RP-032 ensemble-mean
+rain-rate evidence. Each lead and 1/5/10/20/50 mm/h threshold selects exactly
+three synchronized EPSG:4326 layers: MRMS 0/100 exceedance, raw NowcastNet member
+frequency and raw STEPS member frequency. Missing truth or any missing ensemble
+member remains transparent rather than becoming a zero-probability forecast. The
+Web uses an independent percent palette and explicit spatial-product switch. The
+result remains uncalibrated, offline-only and publication-disabled. Details are
+in `docs/RP033_超阈值概率空间地图实施记录.md`; the full 105 holdout replay remains
+to be recorded.
 
 The 2021-08, 2022-01, 2022-12, 2023-06, 2023-12, 2024-06, 2024-07, 2024-11,
 2025-01, 2025-03 and 2025-07 months are now spent verification data for their

@@ -821,6 +821,76 @@
   color: #965126;
 }
 
+.probability-spatial-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--verification-line);
+  border-radius: 4px;
+  background: #f8faf9;
+}
+
+.probability-spatial-controls > small {
+  color: var(--verification-muted);
+  font-size: 11px;
+}
+
+.probability-spatial-mode,
+.probability-threshold-selector {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.probability-spatial-mode > span,
+.probability-threshold-selector > span {
+  margin-right: 3px;
+  color: var(--verification-muted);
+  font-size: 10px;
+  font-weight: 720;
+  letter-spacing: .035em;
+}
+
+.probability-spatial-controls button {
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 1px solid #cbd8d4;
+  border-radius: 3px;
+  background: #fff;
+  color: #49615a;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.probability-spatial-controls button:hover:not(:disabled) {
+  border-color: #79a99f;
+}
+
+.probability-spatial-controls button.active {
+  border-color: var(--verification-accent);
+  background: #e7f3ef;
+  color: #075d53;
+  box-shadow: inset 0 -2px var(--verification-accent);
+}
+
+.probability-spatial-controls button:disabled {
+  cursor: not-allowed;
+  opacity: .42;
+}
+
+.probability-verification-map {
+  border-top-color: #9fb9c1;
+}
+
+.probability-map-note {
+  color: #675367;
+}
+
 .probabilistic-evidence {
   min-width: 0;
   padding: 2px 0 0;
@@ -1035,6 +1105,11 @@
 
   .probabilistic-run-facts {
     justify-content: flex-start;
+  }
+
+  .probability-spatial-controls {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .probabilistic-section-heading {

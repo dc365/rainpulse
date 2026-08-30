@@ -54,6 +54,13 @@ from .probabilistic import (
     score_deterministic_probability_baseline,
     score_probabilistic_forecast,
 )
+from .probability_map_bundle import (
+    ProbabilityVerificationMapProfile,
+    build_probability_verification_map_bundle,
+    load_probability_verification_map_profile,
+    write_probability_verification_map_bundle,
+    write_probability_verification_map_index,
+)
 
 
 def _write_report(path: Path, summary: Mapping[str, Any]) -> None:
@@ -117,9 +124,8 @@ def compute_nowcastnet_grid(
         slice(south_cells, south_cells + target.latitude_count),
         slice(west_cells, west_cells + target.longitude_count),
     )
-    if (
-        not np.array_equal(model_grid.latitude[crop[0]], target.latitude)
-        or not np.array_equal(model_grid.longitude[crop[1]], target.longitude)
+    if not np.array_equal(model_grid.latitude[crop[0]], target.latitude) or not np.array_equal(
+        model_grid.longitude[crop[1]], target.longitude
     ):
         raise ValueError("NowcastNet model grid does not crop exactly to the target")
     return model_grid, crop
@@ -239,32 +245,20 @@ def _summarize_band(
     models: Sequence[str],
 ) -> dict[str, Any]:
     selected = [
-        row
-        for row in metric_rows
-        if minimum_lead <= int(row["lead_minutes"]) <= maximum_lead
+        row for row in metric_rows if minimum_lead <= int(row["lead_minutes"]) <= maximum_lead
     ]
     scores: dict[str, Any] = {}
     for model in models:
         model_rows = [row for row in selected if row["model"] == model]
         first_threshold = float(thresholds[0])
-        continuous = [
-            row for row in model_rows if float(row["threshold_mm_h"]) == first_threshold
-        ]
+        continuous = [row for row in model_rows if float(row["threshold_mm_h"]) == first_threshold]
         scores[model] = {
             "crps_mm_h": _weighted_mean(continuous, "crps_mm_h"),
-            "ensemble_mean_rmse_mm_h": _weighted_mean(
-                continuous, "ensemble_mean_rmse_mm_h"
-            ),
-            "mean_ensemble_spread_mm_h": _weighted_mean(
-                continuous, "mean_ensemble_spread_mm_h"
-            ),
+            "ensemble_mean_rmse_mm_h": _weighted_mean(continuous, "ensemble_mean_rmse_mm_h"),
+            "mean_ensemble_spread_mm_h": _weighted_mean(continuous, "mean_ensemble_spread_mm_h"),
             "brier_score_by_threshold": {
                 str(threshold): _weighted_mean(
-                    [
-                        row
-                        for row in model_rows
-                        if float(row["threshold_mm_h"]) == float(threshold)
-                    ],
+                    [row for row in model_rows if float(row["threshold_mm_h"]) == float(threshold)],
                     "brier_score",
                 )
                 for threshold in thresholds
@@ -286,9 +280,7 @@ def _summarize_band(
         if baseline != "nowcastnet"
     }
     band_coverage = [
-        row
-        for row in coverage_rows
-        if minimum_lead <= int(row["lead_minutes"]) <= maximum_lead
+        row for row in coverage_rows if minimum_lead <= int(row["lead_minutes"]) <= maximum_lead
     ]
 
     def minimum_member_coverage(model: str) -> float | None:
@@ -322,9 +314,7 @@ def conform_nowcastnet_split(
     maximum_issues: int | None = None,
 ) -> dict[str, Any]:
     selected_split = profile.split(split)
-    cases = [
-        case for case in selected_split.cases if case_ids is None or case.case_id in case_ids
-    ]
+    cases = [case for case in selected_split.cases if case_ids is None or case.case_id in case_ids]
     if not cases:
         raise ValueError("no RP-026 cases selected")
     checked_issues = 0
@@ -393,13 +383,12 @@ def run_mrms_nowcastnet_hindcast(
     maximum_issues: int | None = None,
     base_random_seed: int = 20260830,
     map_profile: VerificationMapProfile | None = None,
+    probability_map_profile: ProbabilityVerificationMapProfile | None = None,
 ) -> dict[str, Any]:
     if split == "holdout" and profile.gate.status != "frozen_before_holdout":
         raise ValueError("RP-026 holdout is locked until the development gate is frozen")
     selected_split = profile.split(split)
-    cases = [
-        case for case in selected_split.cases if case_ids is None or case.case_id in case_ids
-    ]
+    cases = [case for case in selected_split.cases if case_ids is None or case.case_id in case_ids]
     if not cases:
         raise ValueError("no RP-026 cases selected")
     if maximum_issues is not None and maximum_issues < 1:
@@ -417,6 +406,8 @@ def run_mrms_nowcastnet_hindcast(
     runtime_rows: list[dict[str, Any]] = []
     map_issues: list[dict[str, Any]] = []
     map_layer_count = 0
+    probability_map_issues: list[dict[str, Any]] = []
+    probability_map_layer_count = 0
     errors: list[dict[str, str]] = []
     completed = 0
     nowcastnet_clipped_inputs = 0
@@ -450,6 +441,7 @@ def run_mrms_nowcastnet_hindcast(
             _reset_gpu_peak_memory(nowcastnet_backend)
             stage = "input_read"
             map_runtime_ms = 0
+            probability_map_runtime_ms = 0
             try:
                 input_times = tuple(
                     issue_time - timedelta(minutes=value) for value in range(80, -1, -10)
@@ -475,12 +467,8 @@ def run_mrms_nowcastnet_hindcast(
                     issue_time - timedelta(minutes=value) for value in (20, 10, 0)
                 )
                 baseline_frames = {value: input_frames[value] for value in baseline_times}
-                adapted = build_mrms_validation_sequence(
-                    baseline_frames, issue_time, model_grid
-                )
-                observed = build_mrms_observed_sequence(
-                    baseline_frames, issue_time, model_grid
-                )
+                adapted = build_mrms_validation_sequence(baseline_frames, issue_time, model_grid)
+                observed = build_mrms_observed_sequence(baseline_frames, issue_time, model_grid)
                 stage = "steps_forecast"
                 steps_started = time.perf_counter()
                 steps_result = run_pysteps_steps_fields(
@@ -509,29 +497,22 @@ def run_mrms_nowcastnet_hindcast(
                 nowcastnet_members = _crop(
                     nowcastnet_result.rain_rate_mm_h[:, : len(profile.lead_minutes)], crop
                 )
-                nowcastnet_member_valid = _crop(
-                    nowcastnet_result.valid_mask[:, : len(profile.lead_minutes)], crop
-                ) == 1
+                nowcastnet_member_valid = (
+                    _crop(nowcastnet_result.valid_mask[:, : len(profile.lead_minutes)], crop) == 1
+                )
                 steps_members = _crop(steps_result.rain_rate[:, indices], crop)
-                steps_member_valid = _crop(
-                    steps_result.member_valid_mask[:, indices], crop
-                ) == 1
+                steps_member_valid = _crop(steps_result.member_valid_mask[:, indices], crop) == 1
                 deterministic = steps_result.deterministic
                 forecasts = {
                     "lk": _crop(deterministic.rain_rate[0, indices], crop),
-                    "persistence": _crop(
-                        deterministic.persistence_rain_rate[indices], crop
-                    ),
+                    "persistence": _crop(deterministic.persistence_rain_rate[indices], crop),
                     "phase_correlation": _crop(phase.rate_mm_h, crop),
                 }
                 forecast_masks = {
                     "nowcastnet": np.all(nowcastnet_member_valid, axis=0),
                     "steps": _crop(steps_result.output_valid_mask[indices], crop) == 1,
                     "lk": _crop(deterministic.output_valid_mask[indices], crop) == 1,
-                    "persistence": _crop(
-                        deterministic.persistence_valid_mask[indices], crop
-                    )
-                    == 1,
+                    "persistence": _crop(deterministic.persistence_valid_mask[indices], crop) == 1,
                     "phase_correlation": _crop(phase.valid_mask, crop) == 1,
                 }
                 common_valid = truth_valid.copy()
@@ -648,11 +629,51 @@ def run_mrms_nowcastnet_hindcast(
                             "layer_count": len(map_manifest["layers"]),
                         }
                     )
+                if probability_map_profile is not None:
+                    stage = "probability_map_render"
+                    probability_map_started = time.perf_counter()
+                    probability_manifest, probability_objects = (
+                        build_probability_verification_map_bundle(
+                            profile=probability_map_profile,
+                            verification_profile_version=profile.profile_version,
+                            case_id=case.case_id,
+                            truth_kind="observed_mrms_preciprate_10min",
+                            issue_time=issue_time,
+                            lead_minutes=profile.lead_minutes,
+                            thresholds_mm_h=profile.thresholds_mm_h,
+                            grid=case.grid,
+                            truth_rate=truth_rate,
+                            truth_valid=truth_valid,
+                            nowcastnet_members=nowcastnet_members,
+                            nowcastnet_member_valid=nowcastnet_member_valid,
+                            steps_members=steps_members,
+                            steps_member_valid=steps_member_valid,
+                        )
+                    )
+                    write_probability_verification_map_bundle(
+                        output_directory / "probability-maps",
+                        probability_manifest,
+                        probability_objects,
+                    )
+                    probability_map_runtime_ms = _elapsed_ms(probability_map_started)
+                    probability_map_layer_count += len(probability_manifest["layers"])
+                    probability_map_issues.append(
+                        {
+                            "case_id": case.case_id,
+                            "case_category": case.category,
+                            "issue_time_utc": issue_key,
+                            "issue_key": probability_manifest["issue_key"],
+                            "manifest_path": (
+                                Path(case.case_id)
+                                / str(probability_manifest["issue_key"])
+                                / "manifest.json"
+                            ).as_posix(),
+                            "layer_count": len(probability_manifest["layers"]),
+                        }
+                    )
                 completed += 1
                 nowcastnet_clipped_inputs += nowcastnet_result.clipped_input_pixel_count
-                nowcastnet_clipped_outputs += (
-                    nowcastnet_result.clipped_negative_output_pixel_count
-                )
+                nowcastnet_clipped_outputs += nowcastnet_result.clipped_negative_output_pixel_count
                 steps_fallbacks += int(steps_result.ensemble_fallback_used)
                 motion_fallbacks += int(deterministic.motion_fallback_used)
                 phase_fallbacks += int(phase.estimate.fallback_used)
@@ -668,6 +689,7 @@ def run_mrms_nowcastnet_hindcast(
                         "steps_runtime_ms": steps_runtime_ms,
                         "scoring_runtime_ms": scoring_runtime_ms,
                         "map_runtime_ms": map_runtime_ms,
+                        "probability_map_runtime_ms": probability_map_runtime_ms,
                         "total_runtime_ms": _elapsed_ms(started),
                         "peak_rss_bytes": sampler.stop(),
                         **_gpu_peak_memory(nowcastnet_backend),
@@ -688,6 +710,7 @@ def run_mrms_nowcastnet_hindcast(
                         "steps_runtime_ms": None,
                         "scoring_runtime_ms": None,
                         "map_runtime_ms": None,
+                        "probability_map_runtime_ms": None,
                         "total_runtime_ms": _elapsed_ms(started),
                         "peak_rss_bytes": sampler.stop(),
                         **_gpu_peak_memory(nowcastnet_backend),
@@ -746,6 +769,11 @@ def run_mrms_nowcastnet_hindcast(
             "map_bundle_count": len(map_issues),
             "map_layer_count": map_layer_count,
             "map_renderer_version": map_profile.renderer_version if map_profile else "",
+            "probability_map_bundle_count": len(probability_map_issues),
+            "probability_map_layer_count": probability_map_layer_count,
+            "probability_map_renderer_version": (
+                probability_map_profile.renderer_version if probability_map_profile else ""
+            ),
             "errors": errors,
             "runtime": dict(runtime_info),
             "performance_summary": {
@@ -755,6 +783,7 @@ def run_mrms_nowcastnet_hindcast(
                     "steps_runtime_ms",
                     "scoring_runtime_ms",
                     "map_runtime_ms",
+                    "probability_map_runtime_ms",
                     "total_runtime_ms",
                     "peak_rss_bytes",
                     "gpu_peak_allocated_bytes",
@@ -796,6 +825,14 @@ def run_mrms_nowcastnet_hindcast(
             issues=map_issues,
             layer_count=map_layer_count,
         )
+    if probability_map_profile is not None:
+        write_probability_verification_map_index(
+            output_directory / "probability-maps",
+            verification_profile_version=profile.profile_version,
+            renderer_version=probability_map_profile.renderer_version,
+            issues=probability_map_issues,
+            layer_count=probability_map_layer_count,
+        )
     _write_csv(output_directory / "probabilistic_metrics.csv", metric_rows)
     _write_csv(output_directory / "coverage.csv", coverage_rows)
     _write_csv(output_directory / "runtime_metrics.csv", runtime_rows)
@@ -825,6 +862,11 @@ def _parser() -> argparse.ArgumentParser:
         "--map-profile",
         type=Path,
         default=Path("configs/verification/algorithm-map-v1.yaml"),
+    )
+    parser.add_argument(
+        "--probability-map-profile",
+        type=Path,
+        default=Path("configs/verification/algorithm-probability-map-v1.yaml"),
     )
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--run-id")
@@ -877,6 +919,12 @@ def main(argv: list[str] | None = None) -> int:
         if not map_profile_path.is_absolute():
             map_profile_path = repository_root / map_profile_path
         map_profile = load_verification_map_profile(map_profile_path)
+        probability_map_profile_path = args.probability_map_profile
+        if not probability_map_profile_path.is_absolute():
+            probability_map_profile_path = repository_root / probability_map_profile_path
+        probability_map_profile = load_probability_verification_map_profile(
+            probability_map_profile_path
+        )
         run_id = args.run_id or datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         output = args.output_root / profile.profile_version / args.split / run_id
         summary = run_mrms_nowcastnet_hindcast(
@@ -889,6 +937,7 @@ def main(argv: list[str] | None = None) -> int:
             case_ids=selected,
             maximum_issues=args.max_issues,
             map_profile=map_profile,
+            probability_map_profile=probability_map_profile,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True))
         return 0 if not summary["errors"] else 1

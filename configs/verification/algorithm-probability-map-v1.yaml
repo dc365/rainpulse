@@ -1,0 +1,19 @@
+schema_version: "1.0"
+profile_version: algorithm-verification-probability-map-v1
+renderer_version: algorithm-verification-probability-map-renderer-1.0.0
+bundle_contract_version: "1.0"
+projection: EPSG:4326
+
+palette:
+  version: raw-exceedance-probability-v1
+  valid_no_event_color: "#dce6e2"
+  valid_no_event_alpha: 56
+  event_alpha: 218
+  probability_percent:
+    - { minimum: 0.1, color: "#bfe9ec" }
+    - { minimum: 10.0, color: "#81d4dc" }
+    - { minimum: 25.0, color: "#3eb6c5" }
+    - { minimum: 50.0, color: "#2279b8" }
+    - { minimum: 75.0, color: "#5145a4" }
+    - { minimum: 90.0, color: "#8e2c75" }
+    - { minimum: 100.0, color: "#b31945" }

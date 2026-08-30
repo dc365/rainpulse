@@ -19,6 +19,10 @@ const run = {
   map_bundle_count: 53,
   map_layer_count: 2544,
   map_renderer_version: 'algorithm-verification-map-renderer-1.0.0',
+  probability_maps_available: false,
+  probability_map_bundle_count: 0,
+  probability_map_layer_count: 0,
+  probability_map_renderer_version: null,
   modified_at: '2026-08-26T08:00:00Z',
 }
 
@@ -69,6 +73,16 @@ const probabilisticMapRun = {
   map_layer_count: 3600,
   map_renderer_version: 'algorithm-verification-map-renderer-1.0.0',
   modified_at: '2026-08-30T09:00:00Z',
+}
+
+const probabilisticProbabilityMapRun = {
+  ...probabilisticMapRun,
+  run_id: 'holdout-probability-map-v1',
+  probability_maps_available: true,
+  probability_map_bundle_count: 50,
+  probability_map_layer_count: 9000,
+  probability_map_renderer_version: 'algorithm-verification-probability-map-renderer-1.0.0',
+  modified_at: '2026-08-30T10:00:00Z',
 }
 
 const brierValues = (value: number) => ({
@@ -139,6 +153,11 @@ const probabilisticMapDetail = {
     lead_minutes: [10, 20], thresholds_mm_h: [1, 5, 10, 20, 50],
     windows_pixels: [], fss_scales: [],
   },
+}
+
+const probabilisticProbabilityMapDetail = {
+  ...probabilisticMapDetail,
+  run: probabilisticProbabilityMapRun,
 }
 
 const comparison = (baseline: string, threshold: number, difference: number) => ({
@@ -244,6 +263,46 @@ const probabilisticMapFrame = {
     missing_cell_count: 701,
   })),
   motion: { ...mapFrame.motion, vectors: [] },
+}
+
+const probabilisticProbabilityMapFrame = {
+  contract_version: '1.0',
+  renderer_version: 'algorithm-verification-probability-map-renderer-1.0.0',
+  palette_version: 'raw-exceedance-probability-v1',
+  profile_version: probabilisticProbabilityMapRun.profile_version,
+  run_id: probabilisticProbabilityMapRun.run_id,
+  case_id: 'holdout_convection_20250304',
+  issue_time: '2025-03-04T06:00:00Z',
+  valid_time: '2025-03-04T06:10:00Z',
+  lead_minutes: 10,
+  threshold_mm_h: 5,
+  truth_kind: 'observed_mrms_preciprate_10min',
+  calibration_status: 'raw_ensemble_relative_frequency_uncalibrated',
+  operational_eligible: false,
+  product_publication_enabled: false,
+  projection: 'EPSG:4326',
+  pixel_edge_bounds: [-94.995, 38.995, -89.995, 41.005],
+  fit_bounds: [-94.99, 39, -90, 41],
+  width: 501,
+  height: 201,
+  valid_no_event_color: '#dce6e2',
+  legend: [
+    { minimum_probability_percent: .1, color: '#bfe9ec' },
+    { minimum_probability_percent: 25, color: '#3eb6c5' },
+    { minimum_probability_percent: 50, color: '#2279b8' },
+    { minimum_probability_percent: 75, color: '#5145a4' },
+    { minimum_probability_percent: 100, color: '#b31945' },
+  ],
+  layers: [
+    ['truth', null], ['forecast', 'nowcastnet'], ['forecast', 'steps'],
+  ].map(([role, model]) => ({
+    asset_id: `lead-010-threshold-005-${model ?? 'truth'}`,
+    role, model, lead_minutes: 10, threshold_mm_h: 5,
+    valid_time: '2025-03-04T06:10:00Z', image_url: `/probability-maps/${model ?? 'truth'}.png`,
+    width: 501, height: 201, sha256: 'c'.repeat(64), size_bytes: 100,
+    valid_cell_count: 100000, no_event_cell_count: 90000, event_cell_count: 10000,
+    missing_cell_count: 701,
+  })),
 }
 
 describe('AlgorithmVerificationWorkspace', () => {
@@ -370,6 +429,38 @@ describe('AlgorithmVerificationWorkspace', () => {
       expect(window.location.search).toContain('lead=10')
     })
     expect(fetchStatus.mock.calls.some(([url]) => String(url).includes('/metrics?'))).toBe(false)
+  })
+
+  it('shows synchronized raw threshold-exceedance probability GIS without changing scores', async () => {
+    const fetchStatus = vi.fn().mockImplementation((input: string) => {
+      let body: unknown = { items: [probabilisticProbabilityMapRun] }
+      if (input.includes('/probability-map-frame?')) body = probabilisticProbabilityMapFrame
+      else if (input.endsWith('/rp026-mrms-nowcastnet-v1/holdout-probability-map-v1')) {
+        body = probabilisticProbabilityMapDetail
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => body })
+    })
+    vi.stubGlobal('fetch', fetchStatus)
+
+    render(<AlgorithmVerificationWorkspace refreshToken={0} />)
+
+    expect(await screen.findByRole('heading', { name: '超阈值概率空间对比' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '超阈概率' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: '≥ 5 mm/h' }).getAttribute('aria-pressed')).toBe('true')
+    expect((await screen.findAllByText('NowcastNet 超阈概率')).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText('STEPS 超阈概率')).length).toBeGreaterThan(0)
+    expect(screen.getByText(/原始相对频率，未经校准、不可发布/)).toBeTruthy()
+    await waitFor(() => expect(fetchStatus).toHaveBeenCalledWith(
+      expect.stringContaining('/probability-map-frame?case_id=holdout_convection_20250304'),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    ))
+    await waitFor(() => {
+      expect(window.location.search).toContain('map=probability')
+      expect(window.location.search).toContain('probability_threshold=5')
+    })
+    fireEvent.click(screen.getByRole('button', { name: '集合均值雨强' }))
+    expect(await screen.findByRole('heading', { name: '集合均值空间对比' })).toBeTruthy()
+    await waitFor(() => expect(fetchStatus.mock.calls.some(([url]) => String(url).includes('/map-frame?'))).toBe(true))
   })
 
   it('does not query a newly selected run with stale selectors and labels its fixed truth domain', async () => {

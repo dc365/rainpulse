@@ -17,9 +17,17 @@ from rainpulse_algo.verification.map_bundle import (
     load_verification_map_profile,
     write_verification_map_bundle,
 )
+from rainpulse_algo.verification.probability_map_bundle import (
+    build_probability_verification_map_bundle,
+    load_probability_verification_map_profile,
+    write_probability_verification_map_bundle,
+)
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PROFILE_PATH = REPOSITORY_ROOT / "configs" / "verification" / "algorithm-map-v1.yaml"
+PROBABILITY_PROFILE_PATH = (
+    REPOSITORY_ROOT / "configs" / "verification" / "algorithm-probability-map-v1.yaml"
+)
 
 
 def _grid() -> RegularLatLonGrid:
@@ -156,6 +164,67 @@ def test_probabilistic_map_bundle_renders_common_support_ensemble_means() -> Non
     candidate = next(layer for layer in manifest["layers"] if layer.get("model") == "nowcastnet")
     assert candidate["valid_cell_count"] == grid.latitude_count * grid.longitude_count - 1
     assert candidate["missing_cell_count"] == 1
+
+
+def test_probability_map_bundle_renders_truth_and_raw_ensemble_frequencies(
+    tmp_path: Path,
+) -> None:
+    profile = load_probability_verification_map_profile(PROBABILITY_PROFILE_PATH)
+    grid = _grid()
+    truth = np.asarray([[[0, 1, 5, 10], [20, 50, 2, 0], [6, 9, 12, 3]]], dtype="float32")
+    truth_valid = np.ones_like(truth, dtype="uint8")
+    truth_valid[0, 0, 0] = 0
+    nowcastnet = np.stack((truth, truth * 2, truth * 3, truth * 4), axis=0)
+    nowcastnet_valid = np.ones_like(nowcastnet, dtype="uint8")
+    nowcastnet_valid[3, 0, 1, 1] = 0
+    steps = np.stack((truth, truth * 2), axis=0)
+    steps_valid = np.ones_like(steps, dtype="uint8")
+
+    manifest, objects = build_probability_verification_map_bundle(
+        profile=profile,
+        verification_profile_version="rp026-mrms-nowcastnet-v1",
+        case_id="wet_case",
+        truth_kind="observed_mrms_preciprate_10min",
+        issue_time=datetime(2025, 3, 4, 6, tzinfo=UTC),
+        lead_minutes=(10,),
+        thresholds_mm_h=(1, 5, 10, 20, 50),
+        grid=grid,
+        truth_rate=truth,
+        truth_valid=truth_valid,
+        nowcastnet_members=nowcastnet,
+        nowcastnet_member_valid=nowcastnet_valid,
+        steps_members=steps,
+        steps_member_valid=steps_valid,
+    )
+
+    assert manifest["calibration_status"] == "raw_ensemble_relative_frequency_uncalibrated"
+    assert manifest["operational_eligible"] is False
+    assert manifest["product_publication_enabled"] is False
+    assert manifest["thresholds_mm_h"] == [1.0, 5.0, 10.0, 20.0, 50.0]
+    assert len(manifest["layers"]) == 15
+    selected = [
+        layer
+        for layer in manifest["layers"]
+        if layer["lead_minutes"] == 10 and layer["threshold_mm_h"] == 5
+    ]
+    assert [layer.get("model") for layer in selected] == [None, "nowcastnet", "steps"]
+    assert selected[0]["event_cell_count"] == 7
+    assert selected[0]["missing_cell_count"] == 1
+    assert selected[1]["event_cell_count"] == 8
+    assert selected[1]["missing_cell_count"] == 1
+    candidate_rows = _decode_rgba_rows(objects[selected[1]["object_path"]])
+    assert tuple(candidate_rows[0, 3]) == (81, 69, 164, 218)  # 75% at 3 mm/h
+    assert tuple(candidate_rows[1, 1]) == (0, 0, 0, 0)  # any invalid member is missing
+    issue_directory = write_probability_verification_map_bundle(tmp_path, manifest, objects)
+    assert json.loads((issue_directory / "manifest.json").read_text()) == manifest
+
+
+def test_probability_map_profile_has_an_independent_percent_palette() -> None:
+    profile = load_probability_verification_map_profile(PROBABILITY_PROFILE_PATH)
+
+    assert profile.palette_version == "raw-exceedance-probability-v1"
+    assert profile.probability_stops[-1].minimum == 100
+    assert profile.probability_stops[-1].color == "#b31945"
 
 
 def _decode_rgba_rows(data: bytes) -> np.ndarray:
