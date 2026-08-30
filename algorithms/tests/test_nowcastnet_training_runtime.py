@@ -19,6 +19,11 @@ from rainpulse_algo.training.data import (
     TrainingDataError,
     downsample_all_valid_2x2,
 )
+from rainpulse_algo.training.evolution_train import (
+    EvolutionTrainError,
+    compare_resume_metrics,
+    deterministic_batch_indices,
+)
 from rainpulse_algo.training.profile import (
     NowcastNetTrainingRunError,
     load_nowcastnet_training_run_profile,
@@ -220,3 +225,71 @@ def test_conformance_materialization_reduces_512_native_cells_to_256() -> None:
     assert reduced.dtype == np.dtype("float16")
     assert reduced_mask.shape == reduced.shape
     assert np.all(reduced_mask == 1)
+
+
+def test_training_batch_indices_are_step_deterministic_without_duplicates() -> None:
+    first = deterministic_batch_indices(
+        dataset_size=100,
+        batch_size=16,
+        run_seed=2026083002,
+        global_step=17,
+    )
+    repeated = deterministic_batch_indices(
+        dataset_size=100,
+        batch_size=16,
+        run_seed=2026083002,
+        global_step=17,
+    )
+    following = deterministic_batch_indices(
+        dataset_size=100,
+        batch_size=16,
+        run_seed=2026083002,
+        global_step=18,
+    )
+
+    assert first == repeated
+    assert len(first) == len(set(first)) == 16
+    assert first != following
+
+
+def test_resume_metric_comparison_checks_post_resume_trajectory(tmp_path: Path) -> None:
+    reference = tmp_path / "reference.jsonl"
+    resumed = tmp_path / "resumed.jsonl"
+    rows = [
+        {
+            "global_step": step,
+            "batch_indices_sha256": f"batch-{step}",
+            "loss_total": float(step),
+            "loss_accumulation": float(step) - 0.1,
+            "loss_motion_regularization": 0.1,
+            "gradient_norm_before_clip": 1.0,
+        }
+        for step in range(1, 7)
+    ]
+    payload = "\n".join(json.dumps(row) for row in rows) + "\n"
+    reference.write_text(payload, encoding="utf-8")
+    resumed.write_text(payload, encoding="utf-8")
+
+    result = compare_resume_metrics(
+        reference,
+        resumed,
+        resume_after_step=3,
+        absolute_tolerance=0.0,
+    )
+
+    assert result["status"] == "passed"
+    assert result["compared_steps"] == 3
+
+    changed = list(rows)
+    changed[-1] = {**changed[-1], "loss_total": 99.0}
+    resumed.write_text(
+        "\n".join(json.dumps(row) for row in changed) + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(EvolutionTrainError, match="trajectory differs"):
+        compare_resume_metrics(
+            reference,
+            resumed,
+            resume_after_step=3,
+            absolute_tolerance=0.0,
+        )
