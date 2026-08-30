@@ -5,6 +5,11 @@ global:
 rule_files:
   - /etc/prometheus/rainpulse-alerts.yaml
 
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: [alertmanager:9093]
+
 scrape_configs:
   - job_name: rainpulse-api
     metrics_path: /metrics

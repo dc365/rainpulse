@@ -1,0 +1,19 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: rainpulse-local
+  group_by: [alertname, severity, radar_id]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+inhibit_rules:
+  - source_matchers:
+      - alertname="RainPulseRadarDataMissing"
+    target_matchers:
+      - alertname=~"RainPulseRadar(DataStale|ScanIncomplete|QualityLow|InterferenceHigh)"
+    equal: [radar_id]
+
+receivers:
+  - name: rainpulse-local

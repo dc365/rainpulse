@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/alerting"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/api"
 	ensembleproductstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/ensembleproducts"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/orchestration"
@@ -57,6 +58,43 @@ func TestSystemStatusReportsReadyControlPlane(t *testing.T) {
 	}
 	if body.Version != "test-version" {
 		t.Fatalf("expected injected version, got %q", body.Version)
+	}
+}
+
+func TestAlertSnapshotExposesReadOnlyAggregatedState(t *testing.T) {
+	activeAt := time.Date(2026, 8, 30, 6, 55, 0, 0, time.UTC)
+	observedAt := time.Date(2026, 8, 30, 7, 0, 0, 0, time.UTC)
+	handler := api.NewHandler(api.Options{Alerts: &fakeAlertReader{snapshot: alerting.Snapshot{
+		Status: alerting.SnapshotReady,
+		Sources: alerting.Sources{
+			Prometheus:   alerting.SourceReady,
+			Alertmanager: alerting.SourceReady,
+		},
+		Counts: alerting.Counts{Total: 1, Firing: 1},
+		Items: []alerting.Item{{
+			ID: "fixture-alert", Name: "RainPulseJobStuck",
+			Severity: alerting.SeverityCritical, State: alerting.StateFiring,
+			Summary: "A job remains stuck", ActiveAt: activeAt,
+			Labels:      map[string]string{"alertname": "RainPulseJobStuck", "severity": "critical"},
+			Annotations: map[string]string{"summary": "A job remains stuck"},
+		}},
+		ObservedAt: observedAt,
+	}}})
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/alerts", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", response.Code, response.Body.String())
+	}
+	if response.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("expected no-store alert response, got %q", response.Header().Get("Cache-Control"))
+	}
+	if !strings.Contains(response.Body.String(), `"status":"ready"`) ||
+		!strings.Contains(response.Body.String(), `"alert_id":"fixture-alert"`) ||
+		!strings.Contains(response.Body.String(), `"firing":1`) {
+		t.Fatalf("unexpected alert response: %s", response.Body.String())
 	}
 }
 
@@ -1014,6 +1052,14 @@ func (store *fakeProductStore) GetProductAsset(
 
 type fakeProductObjectReader struct {
 	objects map[string][]byte
+}
+
+type fakeAlertReader struct {
+	snapshot alerting.Snapshot
+}
+
+func (reader *fakeAlertReader) Snapshot(context.Context) alerting.Snapshot {
+	return reader.snapshot
 }
 
 type fakeEnsembleProductStore struct {

@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/alerting"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/api"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo"
 	ensembleproductstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/ensembleproducts"
@@ -66,6 +67,15 @@ func main() {
 		"RAINPULSE_ENSEMBLE_PRODUCT_ROOT",
 		"/var/lib/rainpulse/ensemble-products",
 	))
+	alertReader, err := alerting.NewClient(
+		environmentOrDefault("RAINPULSE_PROMETHEUS_URL", "http://prometheus:9090"),
+		environmentOrDefault("RAINPULSE_ALERTMANAGER_URL", "http://alertmanager:9093"),
+		alerting.Options{},
+	)
+	if err != nil {
+		slog.Error("configure alert readers", "error", err)
+		os.Exit(1)
+	}
 
 	server := &http.Server{
 		Addr: address,
@@ -81,6 +91,7 @@ func main() {
 			Verification:     verificationReports,
 			EnsembleProducts: ensembleProducts,
 			Metrics:          store,
+			Alerts:           alertReader,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,

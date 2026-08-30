@@ -13,6 +13,7 @@ tags:
   - name: analysis
   - name: products
   - name: verification
+  - name: alerts
   - name: system
   - name: admin
 paths:
@@ -712,6 +713,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SystemStatus"
+  /alerts:
+    get:
+      operationId: getAlertSnapshot
+      tags: [alerts]
+      summary: Get the current Prometheus rule and Alertmanager delivery state
+      responses:
+        "200":
+          description: Current read-only alert snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertSnapshot"
   /events/stream:
     get:
       operationId: streamEvents
@@ -953,6 +966,92 @@ components:
           enum: [ready, degraded, unavailable]
         version:
           type: string
+    AlertState:
+      type: string
+      enum: [pending, firing, silenced, inhibited]
+    AlertSeverity:
+      type: string
+      enum: [info, warning, critical, unknown]
+    AlertSourceAvailability:
+      type: string
+      enum: [ready, unavailable]
+    AlertSources:
+      type: object
+      additionalProperties: false
+      required: [prometheus, alertmanager]
+      properties:
+        prometheus:
+          $ref: "#/components/schemas/AlertSourceAvailability"
+        alertmanager:
+          $ref: "#/components/schemas/AlertSourceAvailability"
+    AlertCounts:
+      type: object
+      additionalProperties: false
+      required: [total, pending, firing, silenced, inhibited]
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        pending:
+          type: integer
+          minimum: 0
+        firing:
+          type: integer
+          minimum: 0
+        silenced:
+          type: integer
+          minimum: 0
+        inhibited:
+          type: integer
+          minimum: 0
+    AlertRecord:
+      type: object
+      additionalProperties: false
+      required: [alert_id, name, severity, state, summary, active_at, labels, annotations]
+      properties:
+        alert_id:
+          type: string
+        name:
+          type: string
+        severity:
+          $ref: "#/components/schemas/AlertSeverity"
+        state:
+          $ref: "#/components/schemas/AlertState"
+        summary:
+          type: string
+        active_at:
+          type: string
+          format: date-time
+        value:
+          type: string
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        annotations:
+          type: object
+          additionalProperties:
+            type: string
+    AlertSnapshot:
+      type: object
+      additionalProperties: false
+      required: [status, sources, counts, items, observed_at]
+      properties:
+        status:
+          type: string
+          enum: [ready, degraded]
+        sources:
+          $ref: "#/components/schemas/AlertSources"
+        counts:
+          $ref: "#/components/schemas/AlertCounts"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlertRecord"
+        observed_at:
+          type: string
+          format: date-time
     RadarLifecycle:
       type: string
       enum: [draft, ready, disabled]

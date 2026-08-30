@@ -614,6 +614,8 @@ services:
     environment:
       RAINPULSE_HTTP_ADDR: ":8080"
       RAINPULSE_VERSION: "${RAINPULSE_VERSION:-}"
+      RAINPULSE_PROMETHEUS_URL: http://prometheus:9090
+      RAINPULSE_ALERTMANAGER_URL: http://alertmanager:9093
       RAINPULSE_DATABASE_HOST: postgres
       RAINPULSE_DATABASE_NAME: rainpulse
       RAINPULSE_DATABASE_USER: rainpulse
@@ -665,6 +667,8 @@ services:
     depends_on:
       api:
         condition: service_healthy
+      alertmanager:
+        condition: service_healthy
       orchestrator:
         condition: service_healthy
     command:
@@ -680,8 +684,31 @@ services:
       - "${RAINPULSE_INFRA_BIND_ADDRESS:-127.0.0.1}:${RAINPULSE_PROMETHEUS_PORT:-9090}:9090"
     restart: unless-stopped
 
+  alertmanager:
+    image: rainpulse/alertmanager:v0.34.0
+    build:
+      context: ..
+      dockerfile: deploy/alertmanager/Dockerfile
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yaml
+      - --storage.path=/alertmanager
+      - --data.retention=120h
+    volumes:
+      - ./observability/alertmanager.yaml:/etc/alertmanager/alertmanager.yaml:ro
+      - alertmanager-data:/alertmanager
+    ports:
+      - "${RAINPULSE_INFRA_BIND_ADDRESS:-127.0.0.1}:${RAINPULSE_ALERTMANAGER_PORT:-9093}:9093"
+    healthcheck:
+      test: ["CMD", "/rainpulse-healthcheck", "http://127.0.0.1:9093/-/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   nats-data:
   minio-data:
   prometheus-data:
+  alertmanager-data:

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/alerting"
 	apiv1 "github.com/fonwee/rainpulse-nowcast/services/control/internal/api/generated"
 	ensembleproductstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/ensembleproducts"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/objectstore"
@@ -117,6 +118,7 @@ type Options struct {
 	Verification     AlgorithmVerificationStore
 	EnsembleProducts EnsembleProductStore
 	Metrics          operationalmetrics.Provider
+	Alerts           alerting.Reader
 	SSEPollInterval  time.Duration
 }
 
@@ -131,6 +133,7 @@ type server struct {
 	productObjects   ProductObjectReader
 	verification     AlgorithmVerificationStore
 	ensembleProducts EnsembleProductStore
+	alerts           alerting.Reader
 	ssePollInterval  time.Duration
 }
 
@@ -149,6 +152,7 @@ func NewHandler(options Options) http.Handler {
 		productObjects:   options.ProductObjects,
 		verification:     options.Verification,
 		ensembleProducts: options.EnsembleProducts,
+		alerts:           options.Alerts,
 		ssePollInterval:  pollInterval,
 	}, apiv1.ChiServerOptions{BaseURL: "/api/v1"})
 	protected := protectAdminRoutes(handler, options.AdminToken)
@@ -229,6 +233,51 @@ func (service *server) GetSystemStatus(response http.ResponseWriter, request *ht
 		Service: "rainpulse-control",
 		Status:  status,
 		Version: service.version,
+	})
+}
+
+func (service *server) GetAlertSnapshot(response http.ResponseWriter, request *http.Request) {
+	snapshot := alerting.Snapshot{
+		Status: alerting.SnapshotDegraded,
+		Sources: alerting.Sources{
+			Prometheus:   alerting.SourceUnavailable,
+			Alertmanager: alerting.SourceUnavailable,
+		},
+		ObservedAt: time.Now().UTC(),
+	}
+	if service.alerts != nil {
+		snapshot = service.alerts.Snapshot(request.Context())
+	}
+	items := make([]apiv1.AlertRecord, 0, len(snapshot.Items))
+	for _, item := range snapshot.Items {
+		items = append(items, apiv1.AlertRecord{
+			ActiveAt:    item.ActiveAt,
+			AlertId:     item.ID,
+			Annotations: item.Annotations,
+			Labels:      item.Labels,
+			Name:        item.Name,
+			Severity:    apiv1.AlertSeverity(item.Severity),
+			State:       apiv1.AlertState(item.State),
+			Summary:     item.Summary,
+			Value:       item.Value,
+		})
+	}
+	response.Header().Set("Cache-Control", "no-store")
+	writeJSON(response, http.StatusOK, apiv1.AlertSnapshot{
+		Status: apiv1.AlertSnapshotStatus(snapshot.Status),
+		Sources: apiv1.AlertSources{
+			Prometheus:   apiv1.AlertSourceAvailability(snapshot.Sources.Prometheus),
+			Alertmanager: apiv1.AlertSourceAvailability(snapshot.Sources.Alertmanager),
+		},
+		Counts: apiv1.AlertCounts{
+			Total:     snapshot.Counts.Total,
+			Pending:   snapshot.Counts.Pending,
+			Firing:    snapshot.Counts.Firing,
+			Silenced:  snapshot.Counts.Silenced,
+			Inhibited: snapshot.Counts.Inhibited,
+		},
+		Items:      items,
+		ObservedAt: snapshot.ObservedAt,
 	})
 }
 

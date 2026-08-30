@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import App from './App'
@@ -285,6 +285,37 @@ describe('RainPulse radar operations overview', () => {
     expect(screen.getByRole('button', { name: '短临预报' }).getAttribute('aria-current')).toBe('page')
     expect(window.location.search).not.toContain('view=verification')
     expect(window.location.search).toContain('case=midwest_convection_20210810')
+  })
+
+  it('opens the read-only alert workspace from the URL and refreshes it from the top bar', async () => {
+    window.history.replaceState(null, '', '/?view=alerts')
+    const fetchStatus = vi.fn().mockImplementation((input: string) => Promise.resolve({
+      ok: true,
+      status: 200,
+      json: async () => {
+        if (input.includes('/radars/status')) return []
+        if (input.includes('/alerts')) return {
+          status: 'ready',
+          sources: { prometheus: 'ready', alertmanager: 'ready' },
+          counts: { total: 0, pending: 0, firing: 0, silenced: 0, inhibited: 0 },
+          items: [],
+          observed_at: '2026-08-30T07:00:00Z',
+        }
+        return { service: 'rainpulse-control', status: 'ready', version: 'rp029-test' }
+      },
+    }))
+    vi.stubGlobal('fetch', fetchStatus)
+
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: '告警中心' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '告警中心' }).getAttribute('aria-current')).toBe('page')
+    expect(await screen.findByText('当前没有活动告警')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '刷新告警状态' }))
+    await waitFor(() => {
+      expect(fetchStatus.mock.calls.filter(([input]) => String(input).includes('/alerts')).length).toBeGreaterThanOrEqual(2)
+    })
   })
 
 })

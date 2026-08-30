@@ -565,6 +565,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the current Prometheus rule and Alertmanager delivery state */
+        get: operations["getAlertSnapshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/events/stream": {
         parameters: {
             query?: never;
@@ -649,6 +666,48 @@ export interface components {
             /** @enum {string} */
             status: "ready" | "degraded" | "unavailable";
             version: string;
+        };
+        /** @enum {string} */
+        AlertState: "pending" | "firing" | "silenced" | "inhibited";
+        /** @enum {string} */
+        AlertSeverity: "info" | "warning" | "critical" | "unknown";
+        /** @enum {string} */
+        AlertSourceAvailability: "ready" | "unavailable";
+        AlertSources: {
+            prometheus: components["schemas"]["AlertSourceAvailability"];
+            alertmanager: components["schemas"]["AlertSourceAvailability"];
+        };
+        AlertCounts: {
+            total: number;
+            pending: number;
+            firing: number;
+            silenced: number;
+            inhibited: number;
+        };
+        AlertRecord: {
+            alert_id: string;
+            name: string;
+            severity: components["schemas"]["AlertSeverity"];
+            state: components["schemas"]["AlertState"];
+            summary: string;
+            /** Format: date-time */
+            active_at: string;
+            value?: string | null;
+            labels: {
+                [key: string]: string;
+            };
+            annotations: {
+                [key: string]: string;
+            };
+        };
+        AlertSnapshot: {
+            /** @enum {string} */
+            status: "ready" | "degraded";
+            sources: components["schemas"]["AlertSources"];
+            counts: components["schemas"]["AlertCounts"];
+            items: components["schemas"]["AlertRecord"][];
+            /** Format: date-time */
+            observed_at: string;
         };
         /** @enum {string} */
         RadarLifecycle: "draft" | "ready" | "disabled";
@@ -2347,6 +2406,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SystemStatus"];
+                };
+            };
+        };
+    };
+    getAlertSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current read-only alert snapshot */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertSnapshot"];
                 };
             };
         };

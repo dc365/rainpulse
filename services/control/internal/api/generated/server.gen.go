@@ -14,6 +14,90 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AlertSeverity.
+const (
+	Critical AlertSeverity = "critical"
+	Info     AlertSeverity = "info"
+	Unknown  AlertSeverity = "unknown"
+	Warning  AlertSeverity = "warning"
+)
+
+// Valid indicates whether the value is a known member of the AlertSeverity enum.
+func (e AlertSeverity) Valid() bool {
+	switch e {
+	case Critical:
+		return true
+	case Info:
+		return true
+	case Unknown:
+		return true
+	case Warning:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AlertSnapshotStatus.
+const (
+	AlertSnapshotStatusDegraded AlertSnapshotStatus = "degraded"
+	AlertSnapshotStatusReady    AlertSnapshotStatus = "ready"
+)
+
+// Valid indicates whether the value is a known member of the AlertSnapshotStatus enum.
+func (e AlertSnapshotStatus) Valid() bool {
+	switch e {
+	case AlertSnapshotStatusDegraded:
+		return true
+	case AlertSnapshotStatusReady:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AlertSourceAvailability.
+const (
+	AlertSourceAvailabilityReady       AlertSourceAvailability = "ready"
+	AlertSourceAvailabilityUnavailable AlertSourceAvailability = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the AlertSourceAvailability enum.
+func (e AlertSourceAvailability) Valid() bool {
+	switch e {
+	case AlertSourceAvailabilityReady:
+		return true
+	case AlertSourceAvailabilityUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AlertState.
+const (
+	Firing    AlertState = "firing"
+	Inhibited AlertState = "inhibited"
+	Pending   AlertState = "pending"
+	Silenced  AlertState = "silenced"
+)
+
+// Valid indicates whether the value is a known member of the AlertState enum.
+func (e AlertState) Valid() bool {
+	switch e {
+	case Firing:
+		return true
+	case Inhibited:
+		return true
+	case Pending:
+		return true
+	case Silenced:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AlgorithmVerificationMapFrameProjection.
 const (
 	EPSG4326 AlgorithmVerificationMapFrameProjection = "EPSG:4326"
@@ -541,6 +625,55 @@ func (e SystemStatusStatus) Valid() bool {
 		return false
 	}
 }
+
+// AlertCounts defines model for AlertCounts.
+type AlertCounts struct {
+	Firing    int `json:"firing"`
+	Inhibited int `json:"inhibited"`
+	Pending   int `json:"pending"`
+	Silenced  int `json:"silenced"`
+	Total     int `json:"total"`
+}
+
+// AlertRecord defines model for AlertRecord.
+type AlertRecord struct {
+	ActiveAt    time.Time         `json:"active_at"`
+	AlertId     string            `json:"alert_id"`
+	Annotations map[string]string `json:"annotations"`
+	Labels      map[string]string `json:"labels"`
+	Name        string            `json:"name"`
+	Severity    AlertSeverity     `json:"severity"`
+	State       AlertState        `json:"state"`
+	Summary     string            `json:"summary"`
+	Value       *string           `json:"value,omitempty"`
+}
+
+// AlertSeverity defines model for AlertSeverity.
+type AlertSeverity string
+
+// AlertSnapshot defines model for AlertSnapshot.
+type AlertSnapshot struct {
+	Counts     AlertCounts         `json:"counts"`
+	Items      []AlertRecord       `json:"items"`
+	ObservedAt time.Time           `json:"observed_at"`
+	Sources    AlertSources        `json:"sources"`
+	Status     AlertSnapshotStatus `json:"status"`
+}
+
+// AlertSnapshotStatus defines model for AlertSnapshot.Status.
+type AlertSnapshotStatus string
+
+// AlertSourceAvailability defines model for AlertSourceAvailability.
+type AlertSourceAvailability string
+
+// AlertSources defines model for AlertSources.
+type AlertSources struct {
+	Alertmanager AlertSourceAvailability `json:"alertmanager"`
+	Prometheus   AlertSourceAvailability `json:"prometheus"`
+}
+
+// AlertState defines model for AlertState.
+type AlertState string
 
 // AlgorithmVerificationCase defines model for AlgorithmVerificationCase.
 type AlgorithmVerificationCase struct {
@@ -1485,6 +1618,9 @@ type ServerInterface interface {
 	// RerunForecastRun Create a new run using the selected run inputs and configuration
 	// (POST /admin/runs/{run_id}/rerun)
 	RerunForecastRun(w http.ResponseWriter, r *http.Request, runId RunId)
+	// GetAlertSnapshot Get the current Prometheus rule and Alertmanager delivery state
+	// (GET /alerts)
+	GetAlertSnapshot(w http.ResponseWriter, r *http.Request)
 	// ListAlgorithmVerificationRuns List available offline algorithm-verification runs
 	// (GET /algorithm-verification/runs)
 	ListAlgorithmVerificationRuns(w http.ResponseWriter, r *http.Request)
@@ -1608,6 +1744,12 @@ func (_ Unimplemented) EnableModel(w http.ResponseWriter, r *http.Request, model
 // RerunForecastRun Create a new run using the selected run inputs and configuration
 // (POST /admin/runs/{run_id}/rerun)
 func (_ Unimplemented) RerunForecastRun(w http.ResponseWriter, r *http.Request, runId RunId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAlertSnapshot Get the current Prometheus rule and Alertmanager delivery state
+// (GET /alerts)
+func (_ Unimplemented) GetAlertSnapshot(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1893,6 +2035,20 @@ func (siw *ServerInterfaceWrapper) RerunForecastRun(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RerunForecastRun(w, r, runId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAlertSnapshot operation middleware
+func (siw *ServerInterfaceWrapper) GetAlertSnapshot(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAlertSnapshot(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3363,6 +3519,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/system/status", wrapper.GetSystemStatus)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/alerts", wrapper.GetAlertSnapshot)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/events/stream", wrapper.StreamEvents)

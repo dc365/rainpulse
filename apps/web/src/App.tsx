@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import type { components } from './api/generated/schema'
+import { AlertWorkspace } from './AlertWorkspace'
 import { AlgorithmVerificationWorkspace } from './AlgorithmVerificationWorkspace'
 import { AnalysisDiagnostics } from './AnalysisDiagnostics'
 import { NowcastWorkspace } from './NowcastWorkspace'
@@ -10,9 +11,16 @@ import './verification.css'
 type SystemStatus = components['schemas']['SystemStatus']
 type RadarStatus = components['schemas']['RadarStatusSummary']
 type HealthState = components['schemas']['RadarHealthState']
-type WorkspaceView = 'nowcast' | 'analysis' | 'radar' | 'verification'
+type WorkspaceView = 'nowcast' | 'analysis' | 'radar' | 'alerts' | 'verification'
 
-const workspaceViews = new Set<WorkspaceView>(['nowcast', 'analysis', 'radar', 'verification'])
+const workspaceViews = new Set<WorkspaceView>(['nowcast', 'analysis', 'radar', 'alerts', 'verification'])
+const refreshLabels: Record<WorkspaceView, string> = {
+  nowcast: '刷新短临预报',
+  analysis: '刷新分析诊断',
+  radar: '刷新雷达状态',
+  alerts: '刷新告警状态',
+  verification: '刷新算法验证',
+}
 
 function readWorkspaceView(): WorkspaceView {
   const view = new URLSearchParams(window.location.search).get('view') as WorkspaceView | null
@@ -97,6 +105,7 @@ export default function App() {
   const [activeView, setActiveView] = useState<WorkspaceView>(readWorkspaceView)
   const [nowcastRefreshToken, setNowcastRefreshToken] = useState(0)
   const [analysisRefreshToken, setAnalysisRefreshToken] = useState(0)
+  const [alertRefreshToken, setAlertRefreshToken] = useState(0)
   const [verificationRefreshToken, setVerificationRefreshToken] = useState(0)
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null)
   const [radars, setRadars] = useState<RadarStatus[]>([])
@@ -172,6 +181,8 @@ export default function App() {
       setAnalysisRefreshToken((value) => value + 1)
     } else if (activeView === 'verification') {
       setVerificationRefreshToken((value) => value + 1)
+    } else if (activeView === 'alerts') {
+      setAlertRefreshToken((value) => value + 1)
     } else {
       void load(undefined, true)
     }
@@ -202,6 +213,7 @@ export default function App() {
           <button type="button" className={activeView === 'nowcast' ? 'active' : ''} aria-current={activeView === 'nowcast' ? 'page' : undefined} onClick={() => selectView('nowcast')}>短临预报</button>
           <button type="button" className={activeView === 'analysis' ? 'active' : ''} aria-current={activeView === 'analysis' ? 'page' : undefined} onClick={() => selectView('analysis')}>分析诊断</button>
           <button type="button" className={activeView === 'radar' ? 'active' : ''} aria-current={activeView === 'radar' ? 'page' : undefined} onClick={() => selectView('radar')}>雷达运行</button>
+          <button type="button" className={activeView === 'alerts' ? 'active' : ''} aria-current={activeView === 'alerts' ? 'page' : undefined} onClick={() => selectView('alerts')}>告警中心</button>
           <button type="button" className={activeView === 'verification' ? 'active' : ''} aria-current={activeView === 'verification' ? 'page' : undefined} onClick={() => selectView('verification')}>算法验证</button>
         </nav>
         <div className="system-meta" aria-live="polite">
@@ -212,7 +224,7 @@ export default function App() {
           <button
             className="refresh-button"
             type="button"
-            aria-label={activeView === 'nowcast' ? '刷新短临预报' : activeView === 'analysis' ? '刷新分析诊断' : activeView === 'verification' ? '刷新算法验证' : '刷新雷达状态'}
+            aria-label={refreshLabels[activeView]}
             disabled={activeView === 'radar' && refreshing}
             onClick={refreshActiveView}
           >
@@ -302,6 +314,8 @@ export default function App() {
         <AnalysisDiagnostics refreshToken={analysisRefreshToken} />
       ) : activeView === 'verification' ? (
         <AlgorithmVerificationWorkspace refreshToken={verificationRefreshToken} />
+      ) : activeView === 'alerts' ? (
+        <AlertWorkspace refreshToken={alertRefreshToken} />
       ) : (
         <NowcastWorkspace refreshToken={nowcastRefreshToken} />
       )}

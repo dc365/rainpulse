@@ -54,6 +54,13 @@ outbox records to `RAINPULSE_JOBS` and consumes terminal results through the
 durable `rainpulse-orchestrator-results-v2` consumer. The stream covers job
 subjects plus the immutable RP-015 `rainpulse.products.published` notification.
 
+RP-029 adds a loopback-bound Alertmanager and configures Prometheus to forward
+firing alerts to its local-only receiver. No external notification integration
+is configured. The control API reads Prometheus and Alertmanager concurrently,
+so `/api/v1/alerts` can expose pending rules, firing alerts, silence/inhibition
+state and partial-source degradation without granting Web clients direct
+access to either observability service.
+
 RP-004 adds `simulation-worker`, a long-lived Python pull consumer with a
 dedicated MinIO application user. It publishes small completion/failure events,
 uses `_SUCCESS.json` as the atomic object-prefix commit marker, and exposes an

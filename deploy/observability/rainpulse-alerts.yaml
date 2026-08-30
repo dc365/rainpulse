@@ -9,35 +9,35 @@ groups:
         annotations:
           summary: RainPulse control-plane component is unavailable
       - alert: RainPulseRadarDataStale
-        expr: max(rainpulse_radar_data_delay_seconds{lifecycle="ready"}) > 600
+        expr: max by (radar_id, lifecycle) (rainpulse_radar_data_delay_seconds{lifecycle="ready"}) > 600
         for: 10m
         labels:
           severity: warning
         annotations:
           summary: A business-enabled radar has no volume newer than ten minutes
       - alert: RainPulseRadarDataMissing
-        expr: min(rainpulse_radar_latest_scan_available{lifecycle="ready"}) < 1
+        expr: min by (radar_id, lifecycle) (rainpulse_radar_latest_scan_available{lifecycle="ready"}) < 1
         for: 2m
         labels:
           severity: critical
         annotations:
           summary: A business-enabled radar has no registered volume evidence
       - alert: RainPulseRadarScanIncomplete
-        expr: min(rainpulse_radar_scan_completeness{lifecycle="ready"}) < 0.97
+        expr: min by (radar_id, lifecycle) (rainpulse_radar_scan_completeness{lifecycle="ready"}) < 0.97
         for: 10m
         labels:
           severity: warning
         annotations:
           summary: A business-enabled radar remains below the engineering completeness threshold
       - alert: RainPulseRadarQualityLow
-        expr: min(rainpulse_radar_qi_mean{lifecycle="ready"}) < 0.50
+        expr: min by (radar_id, lifecycle) (rainpulse_radar_qi_mean{lifecycle="ready"}) < 0.50
         for: 10m
         labels:
           severity: warning
         annotations:
           summary: A business-enabled radar remains below the engineering mean-QI threshold
       - alert: RainPulseRadarInterferenceHigh
-        expr: max(rainpulse_radar_interference_ratio{lifecycle="ready"}) > 0.02
+        expr: max by (radar_id, lifecycle) (rainpulse_radar_interference_ratio{lifecycle="ready"}) > 0.02
         for: 5m
         labels:
           severity: warning

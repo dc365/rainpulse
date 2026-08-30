@@ -56,6 +56,7 @@ NowcastInput gate.
 | RP-026 | Independent MRMS NowcastNet engineering validation complete; STEPS retained | Frozen 2024 development and 2025 holdout splits complete 50/50 issues with zero failures; NowcastNet beats persistence/LK/phase translation on independent near leads but trails STEPS by 36.6% CRPS, so it remains an offline candidate and realtime, publication and Fujian eligibility stay disabled |
 | RP-027 | Offline probabilistic model-comparison workbench complete | The read-only control plane and Web now distinguish deterministic spatial verification from probabilistic ensemble evidence, expose the frozen RP-026 model ranking, skill, coverage and resource summary, and fail closed if an offline report enables operational or product publication |
 | RP-028 | Engineering observability and business-alert gate complete | v1.1 radar/QC/grid/analysis Prometheus metrics are emitted from persisted evidence, missing latest scans fail closed, and rules only page for ready radars or publication-eligible analyses; the radar console makes that gate explicit |
+| RP-029 | Local alert-management and read-only operations loop complete | Prometheus pending/firing evidence and Alertmanager silence/inhibition state are fail-soft aggregated through the Go API and exposed in a responsive Web alert ledger; no external receiver or write action is enabled |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -530,6 +531,14 @@ Thresholds remain engineering defaults and external notification is not yet
 configured. Details are in
 `docs/RP028_运行可观测性与业务告警门禁实施记录.md`.
 
+RP-029 adds a local-only Alertmanager and a read-only alert operations loop.
+Prometheus remains authoritative for pending and firing rule evaluation, while
+Alertmanager contributes grouping, silence and inhibition state. The control
+API preserves partial evidence when either upstream is unavailable, and the
+Web reports degraded source coverage instead of claiming an empty healthy
+state. No external receiver, acknowledgement or silence mutation is enabled.
+Details are in `docs/RP029_Alertmanager与只读告警中心实施记录.md`.
+
 The 2021-08, 2022-01, 2022-12, 2023-06, 2023-12, 2024-06, 2024-07, 2024-11,
 2025-01, 2025-03 and 2025-07 months are now spent verification data for their
 respective claims. Do not tune against their results and reuse them as
@@ -592,6 +601,7 @@ make test-grid
 make test-ancillary
 make test-probability-calibration
 make test-nowcastnet
+make test-alerting
 make test
 make lint
 make build
