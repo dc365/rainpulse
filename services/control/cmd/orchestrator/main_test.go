@@ -89,6 +89,7 @@ func TestDiscoverRadarBatchInputsSelectsOnlyRegularCAPFMTVolumes(t *testing.T) {
 		}
 		for _, name := range []string{
 			"Z_RADR_I_" + strings.ToUpper(radarID) + "_20260828095000_O_DOR_SAD_CAP_FMT.bin.bz2",
+			"Z_RADR_I_" + strings.ToUpper(radarID) + "_20260828094500_O_DOR_SAD_CAP_FMT.bin.bz2",
 			"Z_RADR_I_" + strings.ToUpper(radarID) + "_20260828095000_O_DOR_SAD_CAP_FMT_DPCTEST.bin.bz2",
 		} {
 			if err := os.WriteFile(filepath.Join(inputs, strings.ToUpper(radarID), name), []byte("test"), 0o600); err != nil {
@@ -101,8 +102,22 @@ func TestDiscoverRadarBatchInputsSelectsOnlyRegularCAPFMTVolumes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(discovered) != 2 || discovered[0].radarID != "z9591" || discovered[1].radarID != "z9593" {
+	if len(discovered) != 4 {
 		t.Fatalf("unexpected radar batch inputs: %#v", discovered)
+	}
+	wantOrder := []struct {
+		radarID string
+		timeKey string
+	}{
+		{"z9591", "20260828094500"},
+		{"z9593", "20260828094500"},
+		{"z9591", "20260828095000"},
+		{"z9593", "20260828095000"},
+	}
+	for index, want := range wantOrder {
+		if discovered[index].radarID != want.radarID || radarBatchChronologyKey(discovered[index].inputPath) != want.timeKey {
+			t.Fatalf("batch input %d = %#v, want radar=%s time=%s", index, discovered[index], want.radarID, want.timeKey)
+		}
 	}
 	for _, input := range discovered {
 		if strings.Contains(input.inputPath, "DPCTEST") {

@@ -538,15 +538,37 @@ func discoverRadarBatchInputs(configDirectory string, inputRoot string) ([]radar
 		}
 	}
 	sort.Slice(inputs, func(i, j int) bool {
-		if inputs[i].inputPath == inputs[j].inputPath {
+		leftKey := radarBatchChronologyKey(inputs[i].inputPath)
+		rightKey := radarBatchChronologyKey(inputs[j].inputPath)
+		if leftKey == rightKey {
 			return inputs[i].radarID < inputs[j].radarID
 		}
-		return inputs[i].inputPath < inputs[j].inputPath
+		return leftKey < rightKey
 	})
 	if len(inputs) == 0 {
 		return nil, fmt.Errorf("historical input root contains no regular CAP_FMT volumes")
 	}
 	return inputs, nil
+}
+
+func radarBatchChronologyKey(path string) string {
+	base := filepath.Base(path)
+	for _, part := range strings.Split(base, "_") {
+		if len(part) != len("20060102150405") {
+			continue
+		}
+		digitsOnly := true
+		for _, character := range part {
+			if character < '0' || character > '9' {
+				digitsOnly = false
+				break
+			}
+		}
+		if digitsOnly {
+			return part
+		}
+	}
+	return base
 }
 
 func createRadarDecode(
