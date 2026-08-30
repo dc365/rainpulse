@@ -131,7 +131,7 @@ func TestAlgorithmVerificationEndpointsExposeFilteredEvidence(t *testing.T) {
 			Run: verificationstore.RunSummary{
 				ProfileVersion: "rp016-mrms-v1", RunID: "full-202108-v2",
 				SchemaVersion: "1.0", VerificationKind: "deterministic_spatial",
-				PrimaryTruthKind: "observed_mrms_10min",
+				PrimaryTruthKind:    "observed_mrms_10min",
 				CompletedIssueCount: 53, MetricRowCount: 57240,
 				SkillStatus: "lk_supported", ModifiedAt: now,
 			},

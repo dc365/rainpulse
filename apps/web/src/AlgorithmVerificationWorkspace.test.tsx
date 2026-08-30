@@ -284,9 +284,9 @@ describe('AlgorithmVerificationWorkspace', () => {
     render(<AlgorithmVerificationWorkspace refreshToken={0} />)
 
     expect(await screen.findByText('STEPS 保持主基线，NowcastNet 保留为离线候选')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: '模型概率技巧对比' })).toBeTruthy()
     expect(screen.getAllByText('+20.2%').length).toBeGreaterThan(0)
     expect(screen.getAllByText('-36.6%').length).toBeGreaterThan(0)
-    expect(screen.getByRole('heading', { name: '模型概率技巧对比' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'NowcastNet 相对基线的 Brier 技巧' })).toBeTruthy()
     expect(screen.getAllByText('主概率基线 · 12 成员').length).toBe(2)
     expect(screen.getByText('完整流程')).toBeTruthy()
