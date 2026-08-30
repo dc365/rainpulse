@@ -1,0 +1,94 @@
+{
+  "schema_version": "1.0",
+  "status": "passed",
+  "measured_at": "2026-08-30T16:32:05+00:00",
+  "scope": "full_mrms_training_library_plan_and_bounded_real_shard_smoke",
+  "code_revision": "44fa0f6",
+  "profile": {
+    "version": "nowcastnet-mrms-full-samples-v1",
+    "sha256": "c84c76c399c9a0d74f94dea608bc4030e71b482a5247fc821fc7e245fe034be5",
+    "target_sample_count": 100000,
+    "target_shard_count": 4000,
+    "samples_per_shard": 25
+  },
+  "deterministic_plan": {
+    "plan_id": "8cc862459c1e82ea77a88587daf231a23ffcdb9b32ce41dbcc16ff6af60ac1f2",
+    "artifact_sha256": "562ddf20b519beb31f9df7b2e64098f63770a585b8d5ed14f62b53039063e426",
+    "artifact_size_bytes": 1552317,
+    "selected_window_count": 4000,
+    "planned_sample_count": 100000,
+    "year_window_counts": {
+      "2019": 800,
+      "2020": 800,
+      "2021": 800,
+      "2022": 800,
+      "2023": 800
+    },
+    "minimum_separation_minutes": 360,
+    "unique_window_count": 4000,
+    "training_window_count": 4000,
+    "holdout_window_count": 0
+  },
+  "storage_boundary": {
+    "raw_root_env": "RAINPULSE_MRMS_RAW_ROOT",
+    "output_root_env": "RAINPULSE_MRMS_FULL_ROOT",
+    "output_filesystem_type": "nfs",
+    "available_bytes_after_smoke": 1031069237248,
+    "minimum_free_bytes": 500000000000,
+    "maximum_logical_output_bytes": 600000000000,
+    "maximum_physical_output_bytes": 400000000000,
+    "raw_and_output_roots_overlap": false,
+    "local_runtime_sample_storage_allowed": false,
+    "checkpoints_and_runtime_artifacts_remain_local": true
+  },
+  "bounded_smoke": {
+    "worker_count": 1,
+    "processed_window_count": 2,
+    "sample_count": 50,
+    "importance_sample_count": 40,
+    "uniform_sample_count": 10,
+    "duration_seconds": 44.256957,
+    "logical_bytes": 285081600,
+    "stored_bytes": 21850601,
+    "filesystem_bytes": 21881240,
+    "sample_index_sha256": "614ddb8f7f25d2083a75340edbbc6719898d9c7765261c3f786329b45c292fd9",
+    "all_samples_valid": true,
+    "maximum_rain_rate_mm_h": 128.0,
+    "holdout_windows_processed": 0
+  },
+  "validation": {
+    "content_hash_verified": true,
+    "random_read_sample_count": 16,
+    "random_read_logical_mib_s": 526.4567295386825,
+    "sampled_rain_min_mm_h": 0.0,
+    "sampled_rain_max_mm_h": 101.3125,
+    "status": "passed"
+  },
+  "resume_check": {
+    "existing_shard_count": 2,
+    "second_run_duration_seconds": 0.019017,
+    "sample_index_sha256_unchanged": true,
+    "existing_shards_reused": true
+  },
+  "root_semantics_correction": {
+    "initial_problem": "audit_inventory_paths_include_a_historical_raw_prefix",
+    "incorrect_shard_emitted": false,
+    "fixed_revision": "44fa0f6",
+    "explicit_raw_root_semantics_preserved": true,
+    "resume_after_fix_passed": true
+  },
+  "resource_impact": {
+    "gpu_used": false,
+    "qwen_service_stopped": false,
+    "raw_data_mutated": false
+  },
+  "decision": {
+    "full_sample_profile_frozen": true,
+    "deterministic_plan_frozen": true,
+    "bounded_real_shard_smoke_passed": true,
+    "full_materialization_allowed": true,
+    "full_materialization_started": false,
+    "next_gate": "materialize_and_validate_100000_training_samples_on_external_storage"
+  },
+  "operational_eligible": false
+}
