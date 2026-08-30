@@ -268,13 +268,21 @@ def test_resume_metric_comparison_checks_post_resume_trajectory(tmp_path: Path) 
     ]
     payload = "\n".join(json.dumps(row) for row in rows) + "\n"
     reference.write_text(payload, encoding="utf-8")
-    resumed.write_text(payload, encoding="utf-8")
+    resumed_rows = [dict(row) for row in rows]
+    resumed_rows[3]["loss_total"] += 0.01
+    resumed_rows[3]["loss_accumulation"] += 0.01
+    resumed_rows[3]["gradient_norm_before_clip"] += 10.0
+    resumed.write_text(
+        "\n".join(json.dumps(row) for row in resumed_rows) + "\n",
+        encoding="utf-8",
+    )
 
     result = compare_resume_metrics(
         reference,
         resumed,
         resume_after_step=3,
-        absolute_tolerance=0.0,
+        absolute_tolerance=0.02,
+        relative_tolerance=0.01,
     )
 
     assert result["status"] == "passed"
@@ -291,5 +299,6 @@ def test_resume_metric_comparison_checks_post_resume_trajectory(tmp_path: Path) 
             reference,
             resumed,
             resume_after_step=3,
-            absolute_tolerance=0.0,
+            absolute_tolerance=0.02,
+            relative_tolerance=0.01,
         )

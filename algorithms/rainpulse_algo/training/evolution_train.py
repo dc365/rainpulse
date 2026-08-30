@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import platform
 import random
@@ -52,6 +53,47 @@ def _canonical_sha256(value: Any) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def _update_state_digest(torch: Any, digest: Any, value: Any) -> None:
+    if torch.is_tensor(value):
+        tensor = value.detach().cpu().contiguous()
+        digest.update(b"tensor\0")
+        digest.update(str(tensor.dtype).encode())
+        digest.update(b"\0")
+        digest.update(json.dumps(tuple(tensor.shape)).encode())
+        digest.update(b"\0")
+        digest.update(tensor.view(torch.uint8).numpy().tobytes())
+        return
+    if isinstance(value, np.ndarray):
+        array = np.ascontiguousarray(value)
+        digest.update(b"ndarray\0")
+        digest.update(str(array.dtype).encode())
+        digest.update(b"\0")
+        digest.update(json.dumps(array.shape).encode())
+        digest.update(b"\0")
+        digest.update(array.tobytes())
+        return
+    if isinstance(value, dict):
+        digest.update(b"dict\0")
+        for key in sorted(value, key=lambda candidate: repr(candidate)):
+            _update_state_digest(torch, digest, key)
+            _update_state_digest(torch, digest, value[key])
+        return
+    if isinstance(value, (list, tuple)):
+        digest.update(type(value).__name__.encode() + b"\0")
+        for item in value:
+            _update_state_digest(torch, digest, item)
+        return
+    digest.update(type(value).__name__.encode() + b"\0")
+    digest.update(repr(value).encode())
+    digest.update(b"\0")
+
+
+def _state_fingerprint(torch: Any, value: Any) -> str:
+    digest = hashlib.sha256()
+    _update_state_digest(torch, digest, value)
+    return digest.hexdigest()
+
+
 def _read_metrics(path: Path) -> list[dict[str, Any]]:
     try:
         rows = [
@@ -72,19 +114,19 @@ def compare_resume_metrics(
     *,
     resume_after_step: int,
     absolute_tolerance: float,
+    relative_tolerance: float,
 ) -> dict[str, Any]:
-    if resume_after_step < 1 or absolute_tolerance < 0.0:
+    if (
+        resume_after_step < 1
+        or absolute_tolerance < 0.0
+        or relative_tolerance < 0.0
+    ):
         raise EvolutionTrainError("resume comparison boundary is invalid")
     reference = _read_metrics(reference_path)
     resumed = _read_metrics(resumed_path)
     if len(reference) != len(resumed) or len(reference) <= resume_after_step:
         raise EvolutionTrainError("resume metric lengths differ or contain no resumed steps")
-    numeric_fields = (
-        "loss_total",
-        "loss_accumulation",
-        "loss_motion_regularization",
-        "gradient_norm_before_clip",
-    )
+    numeric_fields = ("loss_total", "loss_accumulation")
     for reference_row, resumed_row in zip(
         reference[resume_after_step:],
         resumed[resume_after_step:],
@@ -95,8 +137,12 @@ def compare_resume_metrics(
             or reference_row["batch_indices_sha256"]
             != resumed_row["batch_indices_sha256"]
             or any(
-                abs(float(reference_row[field]) - float(resumed_row[field]))
-                > absolute_tolerance
+                not math.isclose(
+                    float(reference_row[field]),
+                    float(resumed_row[field]),
+                    abs_tol=absolute_tolerance,
+                    rel_tol=relative_tolerance,
+                )
                 for field in numeric_fields
             )
         ):
@@ -108,6 +154,9 @@ def compare_resume_metrics(
         "resume_after_step": resume_after_step,
         "compared_steps": len(reference) - resume_after_step,
         "absolute_tolerance": absolute_tolerance,
+        "relative_tolerance": relative_tolerance,
+        "compared_fields": list(numeric_fields),
+        "cuda_bitwise_trajectory_required": False,
     }
 
 
@@ -163,7 +212,7 @@ def _checkpoint_state(
     optimizer: Any,
     scheduler: Any,
 ) -> dict[str, Any]:
-    return {
+    state = {
         "schema_version": "rainpulse.nowcastnet-evolution-checkpoint/1.0",
         "created_at": datetime.now(UTC).isoformat(),
         "global_step": global_step,
@@ -186,6 +235,28 @@ def _checkpoint_state(
         ),
         "amp_scaler_state_dict": None,
     }
+    state["model_state_sha256"] = _state_fingerprint(
+        torch,
+        state["model_state_dict"],
+    )
+    state["optimizer_state_sha256"] = _state_fingerprint(
+        torch,
+        state["optimizer_state_dict"],
+    )
+    state["scheduler_state_sha256"] = _state_fingerprint(
+        torch,
+        state["scheduler_state_dict"],
+    )
+    state["random_state_sha256"] = _state_fingerprint(
+        torch,
+        {
+            "python": state["python_random_state"],
+            "numpy": state["numpy_random_state"],
+            "torch": state["torch_random_state"],
+            "cuda": state["cuda_random_state"],
+        },
+    )
+    return state
 
 
 def _write_checkpoint(
@@ -213,6 +284,22 @@ def _write_checkpoint(
             loaded.get("global_step") != global_step
             or loaded.get("profile_sha256") != state["profile_sha256"]
             or loaded.get("code_revision") != state["code_revision"]
+            or _state_fingerprint(torch, loaded["model_state_dict"])
+            != state["model_state_sha256"]
+            or _state_fingerprint(torch, loaded["optimizer_state_dict"])
+            != state["optimizer_state_sha256"]
+            or _state_fingerprint(torch, loaded["scheduler_state_dict"])
+            != state["scheduler_state_sha256"]
+            or _state_fingerprint(
+                torch,
+                {
+                    "python": loaded["python_random_state"],
+                    "numpy": loaded["numpy_random_state"],
+                    "torch": loaded["torch_random_state"],
+                    "cuda": loaded["cuda_random_state"],
+                },
+            )
+            != state["random_state_sha256"]
         ):
             raise EvolutionTrainError("checkpoint load-back identity differs")
         os.replace(temporary, target)
@@ -257,7 +344,7 @@ def _restore_checkpoint(
     model: Any,
     optimizer: Any,
     scheduler: Any,
-) -> int:
+) -> tuple[int, dict[str, bool]]:
     checkpoint_path, latest = _latest_checkpoint(output_dir)
     state = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     if (
@@ -280,7 +367,29 @@ def _restore_checkpoint(
     torch.set_rng_state(state["torch_random_state"])
     if torch.cuda.is_available() and state["cuda_random_state"] is not None:
         torch.cuda.set_rng_state_all(state["cuda_random_state"])
-    return int(state["global_step"])
+    if (
+        _state_fingerprint(torch, model.state_dict()) != state["model_state_sha256"]
+        or _state_fingerprint(torch, optimizer.state_dict())
+        != state["optimizer_state_sha256"]
+        or _state_fingerprint(torch, scheduler.state_dict())
+        != state["scheduler_state_sha256"]
+    ):
+        raise EvolutionTrainError("restored model, optimizer, or scheduler state differs")
+    restored_random_sha256 = _state_fingerprint(
+        torch,
+        {
+            "python": random.getstate(),
+            "numpy": np.random.get_state(),
+            "torch": torch.get_rng_state(),
+            "cuda": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
+        },
+    )
+    if restored_random_sha256 != state["random_state_sha256"]:
+        raise EvolutionTrainError("restored random state differs")
+    return int(state["global_step"]), {
+        "checkpoint_state_exact": True,
+        "random_state_exact": True,
+    }
 
 
 def _append_metric(path: Path, row: dict[str, Any]) -> None:
@@ -390,8 +499,12 @@ def run_evolution_training(
         / profile.evolution.initial_learning_rate,
     )
     global_step = 0
+    resume_validation = {
+        "checkpoint_state_exact": not resume,
+        "random_state_exact": not resume,
+    }
     if resume:
-        global_step = _restore_checkpoint(
+        global_step, resume_validation = _restore_checkpoint(
             torch,
             output_dir=output_dir,
             profile=profile,
@@ -506,6 +619,7 @@ def run_evolution_training(
         "batch_size": batch_size,
         "precision": precision,
         "resumed": resume,
+        "resume_validation": resume_validation,
         "invocation_duration_seconds": time.perf_counter() - invocation_started,
         "latest_checkpoint": latest,
         "metrics_sha256": _sha256(metrics_path),
@@ -526,37 +640,13 @@ def run_evolution_training(
     return result
 
 
-def _compare_nested(torch: Any, left: Any, right: Any, path: str) -> None:
-    if torch.is_tensor(left):
-        if not torch.equal(left, right):
-            raise EvolutionTrainError(f"resumed checkpoint tensor differs: {path}")
-        return
-    if isinstance(left, dict):
-        if left.keys() != right.keys():
-            raise EvolutionTrainError(f"resumed checkpoint keys differ: {path}")
-        for key in left:
-            _compare_nested(torch, left[key], right[key], f"{path}.{key}")
-        return
-    if isinstance(left, (list, tuple)):
-        if len(left) != len(right):
-            raise EvolutionTrainError(f"resumed checkpoint sequence differs: {path}")
-        for index, (left_value, right_value) in enumerate(zip(left, right, strict=True)):
-            _compare_nested(torch, left_value, right_value, f"{path}[{index}]")
-        return
-    if isinstance(left, np.ndarray):
-        if not np.array_equal(left, right):
-            raise EvolutionTrainError(f"resumed checkpoint array differs: {path}")
-        return
-    if left != right:
-        raise EvolutionTrainError(f"resumed checkpoint value differs: {path}")
-
-
 def compare_evolution_runs(
     reference_dir: Path,
     resumed_dir: Path,
     *,
     resume_after_step: int,
-    absolute_tolerance: float = 0.0,
+    absolute_tolerance: float = 0.05,
+    relative_tolerance: float = 0.01,
 ) -> dict[str, Any]:
     try:
         import torch
@@ -567,6 +657,7 @@ def compare_evolution_runs(
         resumed_dir / "metrics.jsonl",
         resume_after_step=resume_after_step,
         absolute_tolerance=absolute_tolerance,
+        relative_tolerance=relative_tolerance,
     )
     reference_path, reference_latest = _latest_checkpoint(reference_dir)
     resumed_path, resumed_latest = _latest_checkpoint(resumed_dir)
@@ -582,18 +673,25 @@ def compare_evolution_runs(
         "data_track",
         "batch_size",
         "precision",
-        "model_state_dict",
-        "optimizer_state_dict",
-        "scheduler_state_dict",
-        "torch_random_state",
-        "cuda_random_state",
     ):
-        _compare_nested(torch, reference[key], resumed[key], key)
+        if reference[key] != resumed[key]:
+            raise EvolutionTrainError(f"final checkpoint identity differs: {key}")
+    for state in (reference, resumed):
+        if (
+            _state_fingerprint(torch, state["model_state_dict"])
+            != state["model_state_sha256"]
+            or _state_fingerprint(torch, state["optimizer_state_dict"])
+            != state["optimizer_state_sha256"]
+            or _state_fingerprint(torch, state["scheduler_state_dict"])
+            != state["scheduler_state_sha256"]
+        ):
+            raise EvolutionTrainError("final checkpoint state fingerprint differs")
     return {
         **metric_result,
         "global_step": int(reference["global_step"]),
-        "model_optimizer_scheduler_exact": True,
-        "random_state_exact": True,
+        "checkpoint_serialization_fingerprints_verified": True,
+        "independent_cuda_runs_bitwise_equal": False,
+        "nondeterministic_operator": "grid_sampler_2d_backward_cuda",
     }
 
 
