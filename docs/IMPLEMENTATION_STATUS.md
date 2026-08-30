@@ -1,6 +1,6 @@
 # RainPulse implementation status
 
-Updated: 2026-08-30
+Updated: 2026-08-31
 
 ## Active baseline
 
@@ -61,6 +61,7 @@ NowcastInput gate.
 | RP-033 | Raw exceedance-probability GIS implementation and server replay complete | A separate probability-map contract, renderer, API and synchronized three-map Web mode expose MRMS 0/100 exceedance and raw NowcastNet/STEPS member frequencies for 1/5/10/20/50 mm/h; all 50 frozen holdout issues and 9,000 probability assets passed staging validation, while calibration, operational eligibility and publication remain disabled |
 | RP-034 | Fujian four-radar historical engineering replay complete through QPE | Z9591/Z9593/Z9598/Z9599 completed real decode, polar QC and single-radar grids for 2026-08-28 10:00 UTC; all four aligned within 150 s, two contributed after quality decay, and the ineligible analysis completed QPE and diagnostics. The Web now separates real-time following from pinned historical issue selection |
 | RP-035 | Fujian continuous three-frame engineering replay complete; NowcastInput gate correctly closed | The four Fujian radars completed decode, QC, grids, mosaic, QPE and diagnostics at 09:50, 09:55 and 10:00 UTC. Actual contributors vary 3/4/2 by quality and time. All three analyses remain ineligible and below frozen coverage/QI gates, so no forecast run was created. A float32 QPE peak round-trip rejection was fixed and regression-tested |
+| RP-036 | Full Fujian historical radar analysis replay and unified history selector complete | All 452 regular 2026-08-28 four-station volumes reached `RADAR_GRID_READY` with zero real-data failures. Full paging produced 87 QPE/diagnostic analyses from 00:10–10:30 UTC; the existing nowcast history selector exposes the 84 analyses with at least two actual contributors alongside forecast runs, without adding a page or navigation entry. Forecast planning remained disabled and all operational gates remain closed |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
