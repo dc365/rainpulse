@@ -139,6 +139,52 @@ func TestFileStoreLoadsProbabilisticEnsembleSummaryWithoutDeterministicMetrics(t
 	}
 }
 
+func TestFileStoreLoadsProbabilisticSpatialEvidenceWithoutEnablingPublication(t *testing.T) {
+	root := t.TempDir()
+	writeProbabilisticReportFixture(t, root, "rp026-mrms-nowcastnet-v1", "holdout-map-v1", false)
+	writeMapFixtureForModels(
+		t, root, "rp026-mrms-nowcastnet-v1", "holdout-map-v1", []string{"nowcastnet", "steps"},
+	)
+	store := NewFileStore(root)
+
+	runs, err := store.ListRuns(context.Background())
+	if err != nil {
+		t.Fatalf("list probabilistic map run: %v", err)
+	}
+	if len(runs) != 1 || !runs[0].MapsAvailable || runs[0].MapBundleCount != 1 ||
+		runs[0].MapLayerCount != 3 || runs[0].OperationalEligible {
+		t.Fatalf("unexpected probabilistic map summary: %#v", runs)
+	}
+
+	detail, err := store.GetRun(
+		context.Background(), "rp026-mrms-nowcastnet-v1", "holdout-map-v1",
+	)
+	if err != nil {
+		t.Fatalf("get probabilistic map run: %v", err)
+	}
+	if len(detail.Cases) != 1 || detail.Cases[0].CaseID != "midwest_case" ||
+		fmt.Sprint(detail.Filters.LeadMinutes) != "[10]" ||
+		fmt.Sprint(detail.Filters.ThresholdsMMH) != "[1 5 10 20 50]" {
+		t.Fatalf("unexpected probabilistic map selectors: %#v", detail)
+	}
+
+	frame, err := store.GetMapFrame(
+		context.Background(), "rp026-mrms-nowcastnet-v1", "holdout-map-v1",
+		MapFrameFilter{
+			CaseID: "midwest_case", IssueTime: time.Date(2021, 8, 10, 17, 0, 0, 0, time.UTC),
+			LeadMinutes: 10,
+		},
+	)
+	if err != nil {
+		t.Fatalf("get probabilistic map frame: %v", err)
+	}
+	if len(frame.Layers) != 3 || frame.Layers[1].Model == nil ||
+		*frame.Layers[1].Model != "nowcastnet" || frame.Layers[2].Model == nil ||
+		*frame.Layers[2].Model != "steps" {
+		t.Fatalf("unexpected probabilistic map frame: %#v", frame)
+	}
+}
+
 func TestFileStoreRejectsProbabilisticReportThatEnablesPublication(t *testing.T) {
 	root := t.TempDir()
 	writeProbabilisticReportFixture(t, root, "rp026-mrms-nowcastnet-v1", "unsafe", true)
@@ -431,6 +477,8 @@ func writeProbabilisticReportFixture(
 		"nowcastnet_member_count":     4,
 		"steps_member_count":          12,
 		"models":                      models,
+		"lead_minutes":                []int{10},
+		"thresholds_mm_h":             []float64{1, 5, 10, 20, 50},
 		"lead_band_summary":           map[string]any{"near": band(10, 60), "far": band(70, 120)},
 		"performance_summary": map[string]any{
 			"nowcastnet_runtime_ms":    quantiles,
@@ -530,6 +578,17 @@ func metricFixtureRow(model string, lead int, fss string) string {
 
 func writeMapFixture(t *testing.T, root string, profileVersion string, runID string) []byte {
 	t.Helper()
+	return writeMapFixtureForModels(t, root, profileVersion, runID, []string{"lk"})
+}
+
+func writeMapFixtureForModels(
+	t *testing.T,
+	root string,
+	profileVersion string,
+	runID string,
+	models []string,
+) []byte {
+	t.Helper()
 	directory := filepath.Join(root, profileVersion, runID)
 	summaryPath := filepath.Join(directory, "summary.json")
 	var summary map[string]any
@@ -537,7 +596,7 @@ func writeMapFixture(t *testing.T, root string, profileVersion string, runID str
 		t.Fatalf("decode report summary fixture: %v", err)
 	}
 	summary["map_bundle_count"] = 1
-	summary["map_layer_count"] = 2
+	summary["map_layer_count"] = 1 + len(models)
 	summary["map_renderer_version"] = "verification-renderer-v1"
 	encodedSummary, err := json.Marshal(summary)
 	if err != nil {
@@ -559,14 +618,21 @@ func writeMapFixture(t *testing.T, root string, profileVersion string, runID str
 		t.Fatalf("create map fixture: %v", err)
 	}
 	layers := []map[string]any{}
-	for _, identity := range []struct {
+	identities := []struct {
 		assetID string
 		role    string
 		model   any
 	}{
 		{assetID: "lead-010-truth", role: "truth", model: nil},
-		{assetID: "lead-010-lk", role: "forecast", model: "lk"},
-	} {
+	}
+	for _, model := range models {
+		identities = append(identities, struct {
+			assetID string
+			role    string
+			model   any
+		}{assetID: "lead-010-" + strings.ReplaceAll(model, "_", "-"), role: "forecast", model: model})
+	}
+	for _, identity := range identities {
 		objectPath := "layers/" + identity.assetID + ".png"
 		if err := os.WriteFile(filepath.Join(issueDirectory, filepath.FromSlash(objectPath)), png, 0o644); err != nil {
 			t.Fatalf("write map PNG fixture: %v", err)
@@ -616,7 +682,12 @@ func writeMapFixture(t *testing.T, root string, profileVersion string, runID str
 	index := map[string]any{
 		"contract_version": "1.0", "verification_profile_version": profileVersion,
 		"renderer_version": "verification-renderer-v1", "bundle_count": 1,
-		"layer_count": 2, "issues": []any{},
+		"layer_count": 1 + len(models), "issues": []map[string]any{{
+			"case_id": "midwest_case", "issue_time_utc": "2021-08-10T17:00:00Z",
+			"issue_key":     "20210810T170000Z",
+			"manifest_path": "midwest_case/20210810T170000Z/manifest.json",
+			"layer_count":   1 + len(models),
+		}},
 	}
 	encodedIndex, err := json.Marshal(index)
 	if err != nil {

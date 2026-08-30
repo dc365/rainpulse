@@ -61,6 +61,16 @@ const probabilisticRun = {
   modified_at: '2026-08-30T08:00:00Z',
 }
 
+const probabilisticMapRun = {
+  ...probabilisticRun,
+  run_id: 'holdout-map-v1',
+  maps_available: true,
+  map_bundle_count: 50,
+  map_layer_count: 3600,
+  map_renderer_version: 'algorithm-verification-map-renderer-1.0.0',
+  modified_at: '2026-08-30T09:00:00Z',
+}
+
 const brierValues = (value: number) => ({
   '1.0': value, '5.0': value, '10.0': value, '20.0': value, '50.0': value,
 })
@@ -114,6 +124,20 @@ const probabilisticDetail = {
       gpu_peak_allocated_bytes: { p50: 1058564096, p95: 1061185536, max: 1061443584 },
       peak_rss_bytes: { p50: 5832470528, p95: 6134890496, max: 6153449472 },
     },
+  },
+}
+
+const probabilisticMapDetail = {
+  ...probabilisticDetail,
+  run: probabilisticMapRun,
+  cases: [{
+    case_id: 'holdout_convection_20250304', category: 'wet',
+    issue_times: ['2025-03-04T06:00:00Z'],
+  }],
+  filters: {
+    models: ['nowcastnet', 'steps', 'lk', 'persistence', 'phase_correlation'],
+    lead_minutes: [10, 20], thresholds_mm_h: [1, 5, 10, 20, 50],
+    windows_pixels: [], fss_scales: [],
   },
 }
 
@@ -199,6 +223,27 @@ const mapFrame = {
       u_pixels_per_step: 2, v_pixels_per_step: 1,
     }],
   },
+}
+
+const probabilisticMapFrame = {
+  ...mapFrame,
+  profile_version: probabilisticMapRun.profile_version,
+  run_id: probabilisticMapRun.run_id,
+  case_id: 'holdout_convection_20250304',
+  issue_time: '2025-03-04T06:00:00Z',
+  valid_time: '2025-03-04T06:10:00Z',
+  truth_kind: 'observed_mrms_preciprate_10min',
+  layers: [
+    ['truth', null], ['forecast', 'nowcastnet'], ['forecast', 'steps'],
+    ['forecast', 'lk'], ['forecast', 'persistence'], ['forecast', 'phase_correlation'],
+  ].map(([role, model]) => ({
+    asset_id: `lead-010-${model ?? 'truth'}`, role, model, lead_minutes: 10,
+    valid_time: '2025-03-04T06:10:00Z', image_url: `/maps/${model ?? 'truth'}.png`,
+    width: 501, height: 201, sha256: 'b'.repeat(64), size_bytes: 100,
+    valid_cell_count: 100000, no_rain_cell_count: 90000, rain_cell_count: 10000,
+    missing_cell_count: 701,
+  })),
+  motion: { ...mapFrame.motion, vectors: [] },
 }
 
 describe('AlgorithmVerificationWorkspace', () => {
@@ -297,6 +342,34 @@ describe('AlgorithmVerificationWorkspace', () => {
       expect(window.location.search).toContain('run=rp026-mrms-nowcastnet-v1%2Fholdout-v1')
       expect(window.location.search).not.toContain('case=')
     })
+  })
+
+  it('shows georeferenced ensemble-mean evidence when a probabilistic map bundle exists', async () => {
+    const fetchStatus = vi.fn().mockImplementation((input: string) => {
+      let body: unknown = { items: [probabilisticMapRun] }
+      if (input.includes('/map-frame?')) body = probabilisticMapFrame
+      else if (input.endsWith('/rp026-mrms-nowcastnet-v1/holdout-map-v1')) {
+        body = probabilisticMapDetail
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => body })
+    })
+    vi.stubGlobal('fetch', fetchStatus)
+
+    render(<AlgorithmVerificationWorkspace refreshToken={0} />)
+
+    expect(await screen.findByRole('heading', { name: '集合均值空间对比' })).toBeTruthy()
+    expect((await screen.findAllByText('NowcastNet 集合均值')).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText('STEPS 集合均值')).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/不是阈值概率图/).length).toBeGreaterThan(0)
+    await waitFor(() => expect(fetchStatus).toHaveBeenCalledWith(
+      expect.stringContaining('/map-frame?case_id=holdout_convection_20250304'),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    ))
+    await waitFor(() => {
+      expect(window.location.search).toContain('case=holdout_convection_20250304')
+      expect(window.location.search).toContain('lead=10')
+    })
+    expect(fetchStatus.mock.calls.some(([url]) => String(url).includes('/metrics?'))).toBe(false)
   })
 
   it('does not query a newly selected run with stale selectors and labels its fixed truth domain', async () => {

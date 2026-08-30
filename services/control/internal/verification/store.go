@@ -292,6 +292,8 @@ type reportSummary struct {
 	CalibrationStatus         string                                 `json:"calibration_status"`
 	ProductPublicationEnabled bool                                   `json:"product_publication_enabled"`
 	Models                    []string                               `json:"models"`
+	LeadMinutes               []int                                  `json:"lead_minutes"`
+	ThresholdsMMH             []float64                              `json:"thresholds_mm_h"`
 	NowcastNetMemberCount     int                                    `json:"nowcastnet_member_count"`
 	StepsMemberCount          int                                    `json:"steps_member_count"`
 	LeadBandSummary           map[string]probabilisticLeadBandReport `json:"lead_band_summary"`
@@ -360,11 +362,21 @@ type mapManifest struct {
 }
 
 type mapIndex struct {
-	ContractVersion            string `json:"contract_version"`
-	VerificationProfileVersion string `json:"verification_profile_version"`
-	RendererVersion            string `json:"renderer_version"`
-	BundleCount                int    `json:"bundle_count"`
-	LayerCount                 int    `json:"layer_count"`
+	ContractVersion            string          `json:"contract_version"`
+	VerificationProfileVersion string          `json:"verification_profile_version"`
+	RendererVersion            string          `json:"renderer_version"`
+	BundleCount                int             `json:"bundle_count"`
+	LayerCount                 int             `json:"layer_count"`
+	Issues                     []mapIndexIssue `json:"issues"`
+}
+
+type mapIndexIssue struct {
+	CaseID        string `json:"case_id"`
+	CaseCategory  string `json:"case_category"`
+	IssueTimeText string `json:"issue_time_utc"`
+	IssueKey      string `json:"issue_key"`
+	ManifestPath  string `json:"manifest_path"`
+	LayerCount    int    `json:"layer_count"`
 }
 
 type mapGrid struct {
@@ -696,15 +708,30 @@ func (store *FileStore) loadRun(
 		if ok && cached.SummaryStamp == summaryStamp {
 			return cached, nil
 		}
+		cases := []Case{}
+		leadMinutes := []int{}
+		thresholds := []float64{}
+		if summary.MapsAvailable {
+			index, err := readMapIndex(filepath.Join(directory, "maps", "index.json"))
+			if err != nil {
+				return cachedRun{}, err
+			}
+			cases, err = probabilisticMapCases(index)
+			if err != nil {
+				return cachedRun{}, err
+			}
+			leadMinutes = append([]int(nil), report.LeadMinutes...)
+			thresholds = append([]float64(nil), report.ThresholdsMMH...)
+		}
 		loaded := cachedRun{
 			SummaryStamp: summaryStamp,
 			Detail: RunDetail{
 				Run:   summary,
-				Cases: []Case{},
+				Cases: cases,
 				Filters: FilterOptions{
 					Models:        append([]string(nil), report.Models...),
-					LeadMinutes:   []int{},
-					ThresholdsMMH: []float64{},
+					LeadMinutes:   leadMinutes,
+					ThresholdsMMH: thresholds,
 					WindowsPixels: []int{},
 					FSSScales:     []FSSScale{},
 				},
@@ -885,6 +912,10 @@ func (store *FileStore) readSummary(
 		if err := report.validateProbabilistic(); err != nil {
 			return RunSummary{}, reportSummary{}, err
 		}
+		mapsAvailable, err := validateMapSummary(directory, profileVersion, report)
+		if err != nil {
+			return RunSummary{}, reportSummary{}, err
+		}
 		return RunSummary{
 			ProfileVersion:           report.ProfileVersion,
 			RunID:                    runID,
@@ -897,7 +928,10 @@ func (store *FileStore) readSummary(
 			MotionFallbackIssueCount: report.MotionFallbackIssueCount,
 			MetricRowCount:           report.MetricRowCount,
 			SkillStatus:              "steps_retained_nowcastnet_offline",
-			MapsAvailable:            false,
+			MapsAvailable:            mapsAvailable,
+			MapBundleCount:           report.MapBundleCount,
+			MapLayerCount:            report.MapLayerCount,
+			MapRendererVersion:       report.MapRendererVersion,
 			ModifiedAt:               info.ModTime().UTC(),
 		}, report, nil
 	}
@@ -907,25 +941,9 @@ func (store *FileStore) readSummary(
 	if _, _, _, err := report.displayMetricSource(); err != nil {
 		return RunSummary{}, reportSummary{}, err
 	}
-	mapsAvailable := false
-	if report.MapBundleCount == 0 {
-		if report.MapLayerCount != 0 {
-			return RunSummary{}, reportSummary{}, fmt.Errorf("%w: map summary counts differ", ErrInvalidReport)
-		}
-	} else {
-		if report.MapRendererVersion == "" || report.MapLayerCount < report.MapBundleCount*2 {
-			return RunSummary{}, reportSummary{}, fmt.Errorf("%w: map summary identity is invalid", ErrInvalidReport)
-		}
-		index, err := readMapIndex(filepath.Join(directory, "maps", "index.json"))
-		if err != nil {
-			return RunSummary{}, reportSummary{}, err
-		}
-		if index.ContractVersion != "1.0" || index.VerificationProfileVersion != profileVersion ||
-			index.RendererVersion != report.MapRendererVersion ||
-			index.BundleCount != report.MapBundleCount || index.LayerCount != report.MapLayerCount {
-			return RunSummary{}, reportSummary{}, fmt.Errorf("%w: map index differs from summary", ErrInvalidReport)
-		}
-		mapsAvailable = true
+	mapsAvailable, err := validateMapSummary(directory, profileVersion, report)
+	if err != nil {
+		return RunSummary{}, reportSummary{}, err
 	}
 	return RunSummary{
 		ProfileVersion:           report.ProfileVersion,
@@ -1089,6 +1107,65 @@ func readMapIndex(path string) (mapIndex, error) {
 		return mapIndex{}, fmt.Errorf("%w: decode map index: %v", ErrInvalidReport, err)
 	}
 	return index, nil
+}
+
+func validateMapSummary(
+	directory string,
+	profileVersion string,
+	report reportSummary,
+) (bool, error) {
+	if report.MapBundleCount == 0 {
+		if report.MapLayerCount != 0 || report.MapRendererVersion != "" {
+			return false, fmt.Errorf("%w: map summary counts differ", ErrInvalidReport)
+		}
+		return false, nil
+	}
+	if report.MapRendererVersion == "" || report.MapLayerCount < report.MapBundleCount*2 {
+		return false, fmt.Errorf("%w: map summary identity is invalid", ErrInvalidReport)
+	}
+	index, err := readMapIndex(filepath.Join(directory, "maps", "index.json"))
+	if err != nil {
+		return false, err
+	}
+	if index.ContractVersion != "1.0" || index.VerificationProfileVersion != profileVersion ||
+		index.RendererVersion != report.MapRendererVersion ||
+		index.BundleCount != report.MapBundleCount || index.LayerCount != report.MapLayerCount ||
+		len(index.Issues) != report.MapBundleCount {
+		return false, fmt.Errorf("%w: map index differs from summary", ErrInvalidReport)
+	}
+	return true, nil
+}
+
+func probabilisticMapCases(index mapIndex) ([]Case, error) {
+	caseIssues := make(map[string]map[time.Time]bool)
+	categories := make(map[string]string)
+	for _, issue := range index.Issues {
+		parsed, err := time.Parse(time.RFC3339, issue.IssueTimeText)
+		if !validSegment(issue.CaseID) || err != nil || issue.IssueKey != parsed.UTC().Format("20060102T150405Z") ||
+			issue.LayerCount < 2 {
+			return nil, fmt.Errorf("%w: probabilistic map index issue is invalid", ErrInvalidReport)
+		}
+		if caseIssues[issue.CaseID] == nil {
+			caseIssues[issue.CaseID] = make(map[time.Time]bool)
+		}
+		caseIssues[issue.CaseID][parsed.UTC()] = true
+		if issue.CaseCategory != "" {
+			categories[issue.CaseID] = issue.CaseCategory
+		}
+	}
+	cases := make([]Case, 0, len(caseIssues))
+	for caseID, issueSet := range caseIssues {
+		issueTimes := make([]time.Time, 0, len(issueSet))
+		for issueTime := range issueSet {
+			issueTimes = append(issueTimes, issueTime)
+		}
+		sort.Slice(issueTimes, func(i, j int) bool { return issueTimes[i].Before(issueTimes[j]) })
+		cases = append(cases, Case{
+			CaseID: caseID, Category: categories[caseID], IssueTimes: issueTimes,
+		})
+	}
+	sort.Slice(cases, func(i, j int) bool { return cases[i].CaseID < cases[j].CaseID })
+	return cases, nil
 }
 
 func validateMapManifest(

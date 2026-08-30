@@ -12,6 +12,7 @@ import numpy as np
 from rainpulse_algo.diagnostics.png import png_dimensions
 from rainpulse_algo.grid import RegularLatLonGrid
 from rainpulse_algo.verification.map_bundle import (
+    build_probabilistic_verification_map_bundle,
     build_verification_map_bundle,
     load_verification_map_profile,
     write_verification_map_bundle,
@@ -104,6 +105,57 @@ def test_map_profile_keeps_one_palette_and_limits_motion_payload() -> None:
     assert profile.rain_threshold_mm_h == 0.1
     assert profile.maximum_motion_vectors == 200
     assert profile.sample_step_pixels == 25
+
+
+def test_probabilistic_map_bundle_renders_common_support_ensemble_means() -> None:
+    profile = load_verification_map_profile(PROFILE_PATH)
+    grid = _grid()
+    truth = np.full((1, *grid.shape), 5.0, dtype="float32")
+    truth_valid = np.ones_like(truth, dtype="uint8")
+    nowcastnet = np.stack((truth, truth * 3), axis=0)
+    nowcastnet_valid = np.ones_like(nowcastnet, dtype="uint8")
+    nowcastnet_valid[1, 0, 0, 0] = 0
+    steps = np.stack((truth * 2, truth * 4), axis=0)
+    steps_valid = np.ones_like(steps, dtype="uint8")
+    deterministic = {
+        "lk": (truth.copy(), truth_valid.copy()),
+        "persistence": (truth.copy(), truth_valid.copy()),
+        "phase_correlation": (truth.copy(), truth_valid.copy()),
+    }
+
+    manifest, _ = build_probabilistic_verification_map_bundle(
+        profile=profile,
+        verification_profile_version="rp026-mrms-nowcastnet-v1",
+        case_id="wet_case",
+        truth_kind="observed_mrms_preciprate_10min",
+        issue_time=datetime(2025, 3, 4, 6, tzinfo=UTC),
+        lead_minutes=(10,),
+        grid=grid,
+        truth_rate=truth,
+        truth_valid=truth_valid,
+        nowcastnet_members=nowcastnet,
+        nowcastnet_member_valid=nowcastnet_valid,
+        steps_members=steps,
+        steps_member_valid=steps_valid,
+        deterministic_forecasts=deterministic,
+        velocity_pixels_per_step=np.zeros((2, *grid.shape), dtype="float32"),
+        motion_valid_mask=np.ones(grid.shape, dtype="uint8"),
+        motion_fallback_used=False,
+        motion_fallback_reason=None,
+    )
+
+    assert manifest["operational_eligible"] is False
+    assert [layer.get("model") for layer in manifest["layers"]] == [
+        None,
+        "nowcastnet",
+        "steps",
+        "lk",
+        "persistence",
+        "phase_correlation",
+    ]
+    candidate = next(layer for layer in manifest["layers"] if layer.get("model") == "nowcastnet")
+    assert candidate["valid_cell_count"] == grid.latitude_count * grid.longitude_count - 1
+    assert candidate["missing_cell_count"] == 1
 
 
 def _decode_rgba_rows(data: bytes) -> np.ndarray:

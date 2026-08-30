@@ -113,6 +113,135 @@ def build_verification_map_bundle(
 ) -> tuple[dict[str, Any], dict[str, bytes]]:
     """Build one issue's presentation-only map bundle without changing score arrays."""
 
+    return _build_rate_verification_map_bundle(
+        profile=profile,
+        verification_profile_version=verification_profile_version,
+        case_id=case_id,
+        truth_kind=truth_kind,
+        issue_time=issue_time,
+        lead_minutes=lead_minutes,
+        grid=grid,
+        truth_rate=truth_rate,
+        truth_valid=truth_valid,
+        forecasts=forecasts,
+        required_models=frozenset({"lk", "persistence", "translation"}),
+        optional_models=frozenset({"phase_correlation"}),
+        model_order=("lk", "persistence", "translation", "phase_correlation"),
+        velocity_pixels_per_step=velocity_pixels_per_step,
+        motion_valid_mask=motion_valid_mask,
+        motion_fallback_used=motion_fallback_used,
+        motion_fallback_reason=motion_fallback_reason,
+        motion_feature_count=motion_feature_count,
+        trackable_rain_pixel_count=trackable_rain_pixel_count,
+    )
+
+
+def build_probabilistic_verification_map_bundle(
+    *,
+    profile: VerificationMapProfile,
+    verification_profile_version: str,
+    case_id: str,
+    truth_kind: str,
+    issue_time: datetime,
+    lead_minutes: tuple[int, ...],
+    grid: RegularLatLonGrid,
+    truth_rate: np.ndarray,
+    truth_valid: np.ndarray,
+    nowcastnet_members: np.ndarray,
+    nowcastnet_member_valid: np.ndarray,
+    steps_members: np.ndarray,
+    steps_member_valid: np.ndarray,
+    deterministic_forecasts: dict[str, tuple[np.ndarray, np.ndarray]],
+    velocity_pixels_per_step: np.ndarray,
+    motion_valid_mask: np.ndarray,
+    motion_fallback_used: bool,
+    motion_fallback_reason: str | None,
+    motion_feature_count: int = 0,
+    trackable_rain_pixel_count: int = 0,
+) -> tuple[dict[str, Any], dict[str, bytes]]:
+    """Render ensemble-mean rate evidence without changing probability scores."""
+
+    leads = tuple(int(value) for value in lead_minutes)
+    member_shape = (len(leads), *grid.shape)
+
+    def ensemble_mean(
+        name: str,
+        values: np.ndarray,
+        valid: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        members = np.asarray(values, dtype="float32")
+        support = np.asarray(valid) == 1
+        if (
+            members.ndim != 4
+            or members.shape[0] < 1
+            or members.shape[1:] != member_shape
+            or support.shape != members.shape
+        ):
+            raise VerificationMapError(
+                f"{name} ensemble dimensions differ from lead/grid dimensions"
+            )
+        common_support = np.all(support, axis=0)
+        safe_values = np.where(support & np.isfinite(members), members, 0.0)
+        mean = np.mean(safe_values, axis=0, dtype="float32")
+        if np.any(~np.isfinite(members[support])) or np.any(members[support] < 0):
+            raise VerificationMapError(f"{name} valid ensemble rates are invalid")
+        return mean, common_support
+
+    forecasts = {
+        "nowcastnet": ensemble_mean(
+            "NowcastNet", nowcastnet_members, nowcastnet_member_valid
+        ),
+        "steps": ensemble_mean("STEPS", steps_members, steps_member_valid),
+        **deterministic_forecasts,
+    }
+    return _build_rate_verification_map_bundle(
+        profile=profile,
+        verification_profile_version=verification_profile_version,
+        case_id=case_id,
+        truth_kind=truth_kind,
+        issue_time=issue_time,
+        lead_minutes=leads,
+        grid=grid,
+        truth_rate=truth_rate,
+        truth_valid=truth_valid,
+        forecasts=forecasts,
+        required_models=frozenset(
+            {"nowcastnet", "steps", "lk", "persistence", "phase_correlation"}
+        ),
+        optional_models=frozenset(),
+        model_order=("nowcastnet", "steps", "lk", "persistence", "phase_correlation"),
+        velocity_pixels_per_step=velocity_pixels_per_step,
+        motion_valid_mask=motion_valid_mask,
+        motion_fallback_used=motion_fallback_used,
+        motion_fallback_reason=motion_fallback_reason,
+        motion_feature_count=motion_feature_count,
+        trackable_rain_pixel_count=trackable_rain_pixel_count,
+    )
+
+
+def _build_rate_verification_map_bundle(
+    *,
+    profile: VerificationMapProfile,
+    verification_profile_version: str,
+    case_id: str,
+    truth_kind: str,
+    issue_time: datetime,
+    lead_minutes: tuple[int, ...],
+    grid: RegularLatLonGrid,
+    truth_rate: np.ndarray,
+    truth_valid: np.ndarray,
+    forecasts: dict[str, tuple[np.ndarray, np.ndarray]],
+    required_models: frozenset[str],
+    optional_models: frozenset[str],
+    model_order: tuple[str, ...],
+    velocity_pixels_per_step: np.ndarray,
+    motion_valid_mask: np.ndarray,
+    motion_fallback_used: bool,
+    motion_fallback_reason: str | None,
+    motion_feature_count: int,
+    trackable_rain_pixel_count: int,
+) -> tuple[dict[str, Any], dict[str, bytes]]:
+
     issue = _utc(issue_time)
     leads = tuple(int(value) for value in lead_minutes)
     expected_shape = (len(leads), *grid.shape)
@@ -120,15 +249,12 @@ def build_verification_map_bundle(
     truth_support = np.asarray(truth_valid) == 1
     if not leads or truth_values.shape != expected_shape or truth_support.shape != expected_shape:
         raise VerificationMapError("verification truth arrays differ from lead/grid dimensions")
-    required_models = {"lk", "persistence", "translation"}
-    optional_models = {"phase_correlation"}
     forecast_models = set(forecasts)
     if not required_models.issubset(forecast_models) or forecast_models - (
         required_models | optional_models
     ):
         raise VerificationMapError(
-            "verification maps require LK and both frozen baselines; only the independent "
-            "phase-correlation baseline may be added"
+            "verification map forecast identities differ from the selected evidence contract"
         )
 
     normalized_forecasts: dict[str, tuple[np.ndarray, np.ndarray]] = {}
@@ -150,17 +276,16 @@ def build_verification_map_bundle(
     layers: list[dict[str, Any]] = []
     sources: list[tuple[str, str, str | None, np.ndarray, np.ndarray]] = [
         ("truth", "truth", None, truth_values, truth_support),
-        ("lk", "forecast", "lk", *normalized_forecasts["lk"]),
-        ("persistence", "forecast", "persistence", *normalized_forecasts["persistence"]),
-        ("translation", "forecast", "translation", *normalized_forecasts["translation"]),
     ]
-    if "phase_correlation" in normalized_forecasts:
+    for model in model_order:
+        if model not in normalized_forecasts:
+            continue
         sources.append(
             (
-                "phase-correlation",
+                model.replace("_", "-"),
                 "forecast",
-                "phase_correlation",
-                *normalized_forecasts["phase_correlation"],
+                model,
+                *normalized_forecasts[model],
             )
         )
     for lead_index, lead in enumerate(leads):

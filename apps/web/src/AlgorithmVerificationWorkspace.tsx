@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 
 import type { components } from './api/generated/schema'
+import { EnsembleVerificationMapMatrix } from './EnsembleVerificationMapMatrix'
 import { VerificationMapMatrix } from './VerificationMapMatrix'
 
 type RunSummary = components['schemas']['AlgorithmVerificationRunSummary']
@@ -120,8 +121,17 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
         const normalizedPayload = normalizeRunDetail(payload)
         setDetail(normalizedPayload)
         if (isProbabilisticRun(normalizedPayload.run)) {
-          setSelectedCaseID('')
-          setSelectedIssueTime('')
+          if (normalizedPayload.run.maps_available && normalizedPayload.cases.length > 0) {
+            const nextCase = pickCase(normalizedPayload.cases, selectedCaseID)
+            setSelectedCaseID(nextCase?.case_id ?? '')
+            setSelectedIssueTime(nextIssue(nextCase, selectedIssueTime))
+            setSelectedLeadMinutes((current) => pickNumber(
+              normalizedPayload.filters.lead_minutes, current, 10,
+            ))
+          } else {
+            setSelectedCaseID('')
+            setSelectedIssueTime('')
+          }
           setMetrics([])
           setMapFrame(null)
           setPlaying(false)
@@ -190,7 +200,7 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
   }, [activeDetail, selectedCaseID, selectedIssueTime, selectedRun, threshold, windowPixels])
 
   useEffect(() => {
-    if (!selectedRun || isProbabilisticRun(selectedRun) || !activeDetail || !selectedRun.maps_available || !selectedCaseID || !selectedIssueTime) {
+    if (!selectedRun || !activeDetail || !selectedRun.maps_available || !selectedCaseID || !selectedIssueTime) {
       setMapFrame(null)
       return
     }
@@ -244,7 +254,14 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
     query.set('view', 'verification')
     query.set('run', selectedRunKey)
     if (isProbabilisticRun(activeDetail.run)) {
-      for (const key of ['case', 'issue', 'lead', 'baseline', 'threshold', 'window']) query.delete(key)
+      for (const key of ['baseline', 'threshold', 'window']) query.delete(key)
+      if (activeDetail.run.maps_available && selectedCaseID && selectedIssueTime) {
+        query.set('case', selectedCaseID)
+        query.set('issue', selectedIssueTime)
+        query.set('lead', String(selectedLeadMinutes))
+      } else {
+        for (const key of ['case', 'issue', 'lead']) query.delete(key)
+      }
       window.history.replaceState(null, '', `${window.location.pathname}?${query}${window.location.hash}`)
       return
     }
@@ -308,6 +325,31 @@ export function AlgorithmVerificationWorkspace({ refreshToken }: AlgorithmVerifi
                 onRunChange={setSelectedRunKey}
                 run={activeDetail.run}
                 summary={activeDetail.probabilistic_summary}
+                cases={activeDetail.cases}
+                activeCase={activeCase}
+                selectedCaseID={selectedCaseID}
+                onCaseChange={(caseID) => {
+                  const nextCase = activeDetail.cases.find((item) => item.case_id === caseID) ?? null
+                  setPlaying(false)
+                  setSelectedCaseID(caseID)
+                  setSelectedIssueTime(nextIssue(nextCase, ''))
+                }}
+                selectedIssueTime={selectedIssueTime}
+                onIssueChange={(value) => {
+                  setPlaying(false)
+                  setSelectedIssueTime(value)
+                }}
+                mapFrame={activeMapFrame}
+                loadingMap={loadingMap}
+                mapError={mapError}
+                leadMinutes={activeDetail.filters.lead_minutes}
+                selectedLeadMinutes={selectedLeadMinutes}
+                playing={playing}
+                onTogglePlaying={() => setPlaying((value) => !value)}
+                onSelectLead={(lead) => {
+                  setPlaying(false)
+                  setSelectedLeadMinutes(lead)
+                }}
               />
             ) : (
             <section className="verification-workbench" aria-live="polite">
@@ -473,12 +515,40 @@ function ProbabilisticVerificationWorkbench({
   onRunChange,
   run,
   summary,
+  cases,
+  activeCase,
+  selectedCaseID,
+  onCaseChange,
+  selectedIssueTime,
+  onIssueChange,
+  mapFrame,
+  loadingMap,
+  mapError,
+  leadMinutes,
+  selectedLeadMinutes,
+  playing,
+  onTogglePlaying,
+  onSelectLead,
 }: {
   runs: RunSummary[]
   selectedRunKey: string
   onRunChange: (value: string) => void
   run: RunSummary
   summary: ProbabilisticSummary
+  cases: VerificationCase[]
+  activeCase: VerificationCase | null
+  selectedCaseID: string
+  onCaseChange: (value: string) => void
+  selectedIssueTime: string
+  onIssueChange: (value: string) => void
+  mapFrame: VerificationMapFrame | null
+  loadingMap: boolean
+  mapError: string | null
+  leadMinutes: number[]
+  selectedLeadMinutes: number
+  playing: boolean
+  onTogglePlaying: () => void
+  onSelectLead: (lead: number) => void
 }) {
   return (
     <section className="verification-workbench probabilistic-workbench" aria-live="polite">
@@ -493,6 +563,18 @@ function ProbabilisticVerificationWorkbench({
             ))}
           </select>
         </label>
+        {run.maps_available ? <label>
+          <span>典型案例</span>
+          <select aria-label="概率典型案例" value={selectedCaseID} onChange={(event) => onCaseChange(event.target.value)}>
+            {cases.map((item) => <option key={item.case_id} value={item.case_id}>{formatCaseName(item.case_id)} · {item.issue_times.length} 起报</option>)}
+          </select>
+        </label> : null}
+        {run.maps_available ? <label>
+          <span>起报时间</span>
+          <select aria-label="概率起报时间" value={selectedIssueTime} onChange={(event) => onIssueChange(event.target.value)}>
+            {activeCase?.issue_times.map((value) => <option key={value} value={value}>{formatUTC(value)}</option>)}
+          </select>
+        </label> : null}
         <div className="probabilistic-run-facts" aria-label="概率集合边界">
           <span>{summary.split === 'holdout' ? '独立留出集' : '开发集'}</span>
           <span>NowcastNet {summary.candidate_member_count} 成员</span>
@@ -501,6 +583,22 @@ function ProbabilisticVerificationWorkbench({
           <span className="caution">发布关闭</span>
         </div>
       </section>
+
+      {run.maps_available ? <>
+        <EnsembleVerificationMapMatrix
+          frame={mapFrame}
+          loading={loadingMap}
+          error={mapError}
+          mapsAvailable={run.maps_available}
+        />
+        <SpatialLeadTimeline
+          leads={leadMinutes}
+          selectedLead={selectedLeadMinutes}
+          playing={playing}
+          onTogglePlaying={onTogglePlaying}
+          onSelect={onSelectLead}
+        />
+      </> : null}
 
       <section className="probabilistic-evidence" aria-labelledby="probabilistic-comparison-title">
         <header className="probabilistic-section-heading">
@@ -538,9 +636,35 @@ function ProbabilisticVerificationWorkbench({
             <div><dt>GPU</dt><dd>{summary.device_name}</dd></div>
             <div><dt>产品发布</dt><dd>{summary.product_publication_enabled ? '已启用' : '关闭'}</dd></div>
           </dl>
-          <p>本页读取冻结汇总，不修改原始回算产物。当前没有逐时效概率地图，也不声明福建真实雷达就绪。</p>
+          <p>本页读取冻结汇总和不可变集合均值地图，不修改评分数组。集合均值不是阈值概率图，也不声明福建真实雷达就绪。</p>
         </section>
       </details>
+    </section>
+  )
+}
+
+function SpatialLeadTimeline({
+  leads,
+  selectedLead,
+  playing,
+  onTogglePlaying,
+  onSelect,
+}: {
+  leads: number[]
+  selectedLead: number
+  playing: boolean
+  onTogglePlaying: () => void
+  onSelect: (lead: number) => void
+}) {
+  return (
+    <section className="verification-timeline" aria-label="集合预报时效">
+      <header>
+        <div><span>预报时效</span><strong>联动切换三幅空间图层</strong></div>
+        <button type="button" className={playing ? 'active' : ''} aria-pressed={playing} disabled={leads.length < 2} onClick={onTogglePlaying}>{playing ? '暂停播放' : '播放时效'}</button>
+      </header>
+      <div className="verification-timeline-track">
+        {leads.map((lead) => <button type="button" className={lead === selectedLead ? 'active' : ''} aria-pressed={lead === selectedLead} key={lead} onClick={() => onSelect(lead)}><strong>+{lead}</strong><span>分钟</span></button>)}
+      </div>
     </section>
   )
 }

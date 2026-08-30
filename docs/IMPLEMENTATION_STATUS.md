@@ -57,6 +57,7 @@ NowcastInput gate.
 | RP-027 | Offline probabilistic model-comparison workbench complete | The read-only control plane and Web now distinguish deterministic spatial verification from probabilistic ensemble evidence, expose the frozen RP-026 model ranking, skill, coverage and resource summary, and fail closed if an offline report enables operational or product publication |
 | RP-028 | Engineering observability and business-alert gate complete | v1.1 radar/QC/grid/analysis Prometheus metrics are emitted from persisted evidence, missing latest scans fail closed, and rules only page for ready radars or publication-eligible analyses; the radar console makes that gate explicit |
 | RP-029 | Local alert-management and read-only operations loop complete | Prometheus pending/firing evidence and Alertmanager silence/inhibition state are fail-soft aggregated through the Go API and exposed in a responsive Web alert ledger; no external receiver or write action is enabled |
+| RP-032 | Probabilistic spatial-evidence implementation complete; server replay pending | The frozen RP-026 hindcast can now emit immutable EPSG:4326 MRMS/NowcastNet-mean/STEPS-mean and deterministic comparison layers; Go validates the map index and the Web exposes synchronized ensemble-mean GIS/timeline evidence without changing the offline-only gate |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -556,6 +557,14 @@ identity and bounded summary. The short-nowcast Web view exposes waiting,
 running, succeeded and failed verification state, while completion remains
 non-promoting. Details are in
 `docs/RP031_自动实况检验闭环实施记录.md`.
+
+RP-032 adds presentation-only spatial evidence to the frozen RP-026
+probabilistic comparison. Each issue can publish common-palette MRMS truth,
+NowcastNet ensemble mean, STEPS ensemble mean and the retained deterministic
+comparators with content hashes and EPSG:4326 bounds. The Web uses a synchronized
+three-map GIS and lead timeline; the layers remain offline-only and are explicitly
+not calibrated exceedance probabilities. Details are in
+`docs/RP032_NowcastNet空间地图包实施记录.md`.
 
 The 2021-08, 2022-01, 2022-12, 2023-06, 2023-12, 2024-06, 2024-07, 2024-11,
 2025-01, 2025-03 and 2025-07 months are now spent verification data for their

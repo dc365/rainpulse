@@ -24,6 +24,13 @@ from rainpulse_algo.nowcast.pysteps_steps import run_pysteps_steps_fields
 from rainpulse_algo.nowcast.steps_profile import load_pysteps_steps_profile
 
 from .baselines import build_phase_correlation_forecast
+from .map_bundle import (
+    VerificationMapProfile,
+    build_probabilistic_verification_map_bundle,
+    load_verification_map_profile,
+    write_verification_map_bundle,
+    write_verification_map_index,
+)
 from .mrms_ensemble_hindcast import (
     CachedMRMSFrameSource,
     _aggregate_reliability,
@@ -385,6 +392,7 @@ def run_mrms_nowcastnet_hindcast(
     case_ids: Collection[str] | None = None,
     maximum_issues: int | None = None,
     base_random_seed: int = 20260830,
+    map_profile: VerificationMapProfile | None = None,
 ) -> dict[str, Any]:
     if split == "holdout" and profile.gate.status != "frozen_before_holdout":
         raise ValueError("RP-026 holdout is locked until the development gate is frozen")
@@ -407,6 +415,8 @@ def run_mrms_nowcastnet_hindcast(
     reliability_rows: list[dict[str, Any]] = []
     coverage_rows: list[dict[str, Any]] = []
     runtime_rows: list[dict[str, Any]] = []
+    map_issues: list[dict[str, Any]] = []
+    map_layer_count = 0
     errors: list[dict[str, str]] = []
     completed = 0
     nowcastnet_clipped_inputs = 0
@@ -439,6 +449,7 @@ def run_mrms_nowcastnet_hindcast(
             sampler.start()
             _reset_gpu_peak_memory(nowcastnet_backend)
             stage = "input_read"
+            map_runtime_ms = 0
             try:
                 input_times = tuple(
                     issue_time - timedelta(minutes=value) for value in range(80, -1, -10)
@@ -588,6 +599,55 @@ def run_mrms_nowcastnet_hindcast(
                     )
                 )
                 scoring_runtime_ms = _elapsed_ms(scoring_started)
+                if map_profile is not None:
+                    stage = "map_render"
+                    map_started = time.perf_counter()
+                    map_manifest, map_objects = build_probabilistic_verification_map_bundle(
+                        profile=map_profile,
+                        verification_profile_version=profile.profile_version,
+                        case_id=case.case_id,
+                        truth_kind="observed_mrms_preciprate_10min",
+                        issue_time=issue_time,
+                        lead_minutes=profile.lead_minutes,
+                        grid=case.grid,
+                        truth_rate=truth_rate,
+                        truth_valid=truth_valid,
+                        nowcastnet_members=nowcastnet_members,
+                        nowcastnet_member_valid=nowcastnet_member_valid,
+                        steps_members=steps_members,
+                        steps_member_valid=steps_member_valid,
+                        deterministic_forecasts={
+                            model: (values, forecast_masks[model])
+                            for model, values in forecasts.items()
+                        },
+                        velocity_pixels_per_step=_crop(
+                            deterministic.velocity_pixels_per_step, crop
+                        ),
+                        motion_valid_mask=_crop(deterministic.motion_valid_mask, crop),
+                        motion_fallback_used=deterministic.motion_fallback_used,
+                        motion_fallback_reason=deterministic.motion_fallback_reason,
+                        motion_feature_count=deterministic.motion_feature_count,
+                        trackable_rain_pixel_count=deterministic.trackable_rain_pixel_count,
+                    )
+                    write_verification_map_bundle(
+                        output_directory / "maps", map_manifest, map_objects
+                    )
+                    map_runtime_ms = _elapsed_ms(map_started)
+                    map_layer_count += len(map_manifest["layers"])
+                    map_issues.append(
+                        {
+                            "case_id": case.case_id,
+                            "case_category": case.category,
+                            "issue_time_utc": issue_key,
+                            "issue_key": map_manifest["issue_key"],
+                            "manifest_path": (
+                                Path(case.case_id)
+                                / str(map_manifest["issue_key"])
+                                / "manifest.json"
+                            ).as_posix(),
+                            "layer_count": len(map_manifest["layers"]),
+                        }
+                    )
                 completed += 1
                 nowcastnet_clipped_inputs += nowcastnet_result.clipped_input_pixel_count
                 nowcastnet_clipped_outputs += (
@@ -607,6 +667,7 @@ def run_mrms_nowcastnet_hindcast(
                         "nowcastnet_runtime_ms": nowcastnet_runtime_ms,
                         "steps_runtime_ms": steps_runtime_ms,
                         "scoring_runtime_ms": scoring_runtime_ms,
+                        "map_runtime_ms": map_runtime_ms,
                         "total_runtime_ms": _elapsed_ms(started),
                         "peak_rss_bytes": sampler.stop(),
                         **_gpu_peak_memory(nowcastnet_backend),
@@ -626,6 +687,7 @@ def run_mrms_nowcastnet_hindcast(
                         "nowcastnet_runtime_ms": None,
                         "steps_runtime_ms": None,
                         "scoring_runtime_ms": None,
+                        "map_runtime_ms": None,
                         "total_runtime_ms": _elapsed_ms(started),
                         "peak_rss_bytes": sampler.stop(),
                         **_gpu_peak_memory(nowcastnet_backend),
@@ -663,8 +725,11 @@ def run_mrms_nowcastnet_hindcast(
             "selection_evidence_sha256": selected_split.selection_evidence_sha256,
             "operational_eligible": False,
             "product_publication_enabled": False,
+            "primary_truth_kind": "observed_mrms_preciprate_10min",
             "calibration_status": "raw_ensemble_relative_frequency_uncalibrated",
             "models": list(models),
+            "lead_minutes": list(profile.lead_minutes),
+            "thresholds_mm_h": list(profile.thresholds_mm_h),
             "nowcastnet_member_count": profile.nowcastnet_member_count,
             "steps_member_count": profile.steps_member_count,
             "model_grid_shape": [profile.model_height, profile.model_width],
@@ -678,6 +743,9 @@ def run_mrms_nowcastnet_hindcast(
             "steps_ensemble_fallback_issue_count": steps_fallbacks,
             "motion_fallback_issue_count": motion_fallbacks,
             "phase_correlation_fallback_issue_count": phase_fallbacks,
+            "map_bundle_count": len(map_issues),
+            "map_layer_count": map_layer_count,
+            "map_renderer_version": map_profile.renderer_version if map_profile else "",
             "errors": errors,
             "runtime": dict(runtime_info),
             "performance_summary": {
@@ -686,6 +754,7 @@ def run_mrms_nowcastnet_hindcast(
                     "nowcastnet_runtime_ms",
                     "steps_runtime_ms",
                     "scoring_runtime_ms",
+                    "map_runtime_ms",
                     "total_runtime_ms",
                     "peak_rss_bytes",
                     "gpu_peak_allocated_bytes",
@@ -719,6 +788,14 @@ def run_mrms_nowcastnet_hindcast(
             },
         }
     )
+    if map_profile is not None:
+        write_verification_map_index(
+            output_directory / "maps",
+            verification_profile_version=profile.profile_version,
+            renderer_version=map_profile.renderer_version,
+            issues=map_issues,
+            layer_count=map_layer_count,
+        )
     _write_csv(output_directory / "probabilistic_metrics.csv", metric_rows)
     _write_csv(output_directory / "coverage.csv", coverage_rows)
     _write_csv(output_directory / "runtime_metrics.csv", runtime_rows)
@@ -744,6 +821,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--output-root", type=Path, default=Path("runtime/reports/mrms"))
     parser.add_argument("--capsule-root", type=Path)
+    parser.add_argument(
+        "--map-profile",
+        type=Path,
+        default=Path("configs/verification/algorithm-map-v1.yaml"),
+    )
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--run-id")
     parser.add_argument("--case", action="append")
@@ -791,6 +873,10 @@ def main(argv: list[str] | None = None) -> int:
             profile=nowcastnet_profile,
             device=args.device,
         )
+        map_profile_path = args.map_profile
+        if not map_profile_path.is_absolute():
+            map_profile_path = repository_root / map_profile_path
+        map_profile = load_verification_map_profile(map_profile_path)
         run_id = args.run_id or datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         output = args.output_root / profile.profile_version / args.split / run_id
         summary = run_mrms_nowcastnet_hindcast(
@@ -802,6 +888,7 @@ def main(argv: list[str] | None = None) -> int:
             runtime_info=backend.runtime_info(),
             case_ids=selected,
             maximum_issues=args.max_issues,
+            map_profile=map_profile,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True))
         return 0 if not summary["errors"] else 1
