@@ -60,6 +60,7 @@ NowcastInput gate.
 | RP-032 | Probabilistic spatial-evidence implementation and server replay complete | The frozen RP-026 holdout completed 50/50 issues with 3,600 immutable EPSG:4326 MRMS/NowcastNet-mean/STEPS-mean and deterministic comparison layers; Go validates the map index and the Web exposes synchronized ensemble-mean GIS/timeline evidence without changing the offline-only gate |
 | RP-033 | Raw exceedance-probability GIS implementation and server replay complete | A separate probability-map contract, renderer, API and synchronized three-map Web mode expose MRMS 0/100 exceedance and raw NowcastNet/STEPS member frequencies for 1/5/10/20/50 mm/h; all 50 frozen holdout issues and 9,000 probability assets passed staging validation, while calibration, operational eligibility and publication remain disabled |
 | RP-034 | Fujian four-radar historical engineering replay complete through QPE | Z9591/Z9593/Z9598/Z9599 completed real decode, polar QC and single-radar grids for 2026-08-28 10:00 UTC; all four aligned within 150 s, two contributed after quality decay, and the ineligible analysis completed QPE and diagnostics. The Web now separates real-time following from pinned historical issue selection |
+| RP-035 | Fujian continuous three-frame engineering replay complete; NowcastInput gate correctly closed | The four Fujian radars completed decode, QC, grids, mosaic, QPE and diagnostics at 09:50, 09:55 and 10:00 UTC. Actual contributors vary 3/4/2 by quality and time. All three analyses remain ineligible and below frozen coverage/QI gates, so no forecast run was created. A float32 QPE peak round-trip rejection was fixed and regression-tested |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -595,6 +596,18 @@ but stays operationally ineligible because the inputs remain drafts. The Web now
 lists only displayable forecast states, explicitly reports stale real-time data,
 and pins a selected run in historical mode. Details and exact evidence are in
 `docs/RP034_福建四站雷达历史回放与时次选择实施记录.md`.
+
+RP-035 extends that evidence to three contiguous five-minute analysis times at
+09:50, 09:55 and 10:00 UTC. All 12 selected scans fall within the 150-second
+alignment window and completed decode, polar QC and single-radar gridding. The
+three mosaics have 3, 4 and 2 actual contributors respectively and all completed
+basic Z-R QPE plus diagnostic bundles. The sequence is identity-contiguous but
+not operationally eligible: coverage is 0.3827 to 0.4170 and mean QI is 0.2391
+to 0.3997, below the frozen 0.70 and 0.45 NowcastInput gates. A preflight rejected
+the input before persistence and left zero forecast rows. RP-035 also replaces
+an overly strict fixed absolute QPE peak tolerance with a float32-representation
+bound and logs rejected result events. Details are in
+`docs/RP035_福建四站连续时序工程回放实施记录.md`.
 
 The 2021-08, 2022-01, 2022-12, 2023-06, 2023-12, 2024-06, 2024-07, 2024-11,
 2025-01, 2025-03 and 2025-07 months are now spent verification data for their
