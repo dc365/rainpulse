@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -21,7 +20,6 @@ from rainpulse_algo.nowcast.nowcastnet_official_backend import (
     verify_file_sha256,
 )
 from rainpulse_algo.nowcast.nowcastnet_profile import (
-    NowcastNetConfigError,
     load_nowcastnet_profile,
 )
 
@@ -44,34 +42,20 @@ def _input(profile, fill: float = 1.0) -> tuple[np.ndarray, np.ndarray]:
     return np.full(shape, fill, dtype="float32"), np.ones(shape, dtype="uint8")
 
 
-def _ready(profile):
-    return replace(
-        profile,
-        source=replace(
-            profile.source,
-            official_source_reviewed=True,
-            license_approved=True,
-        ),
-        artifact=replace(
-            profile.artifact,
-            weights_uri="s3://rainpulse-models/nowcastnet/official-v1.pt",
-        ),
-        activation=replace(profile.activation, offline_inference_enabled=True),
-    )
-
-
-def test_profile_schema_and_disabled_boundary(profile) -> None:
+def test_profile_schema_and_offline_only_boundary(profile) -> None:
     schema = json.loads(SCHEMA_PATH.read_text())
     raw = yaml.safe_load(PROFILE_PATH.read_text())
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(raw)
 
-    assert profile.offline_readiness_blockers() == (
-        "versioned_weights_artifact_required",
-        "offline_inference_disabled",
+    assert profile.offline_readiness_blockers() == ()
+    profile.require_offline_ready()
+    assert profile.weights_path() == Path(
+        "/opt/rainpulse/nowcastnet/official-v1/data/checkpoints/mrms_model.ckpt"
     )
-    with pytest.raises(NowcastNetConfigError, match="offline inference is blocked"):
-        profile.require_offline_ready()
+    assert profile.activation.realtime_shadow_enabled is False
+    assert profile.activation.product_publication_enabled is False
+    assert profile.activation.operational_eligible is False
 
 
 def test_preparation_preserves_no_rain_and_records_clipping(profile) -> None:
@@ -112,7 +96,7 @@ def test_backend_output_contract_rejects_bad_shape_and_non_finite_values(profile
 
 
 def test_ready_adapter_runs_an_injected_backend_without_becoming_operational(profile) -> None:
-    configured = _ready(profile)
+    configured = profile
     rate, valid = _input(configured)
 
     def backend(values: np.ndarray, members: int, seed: int) -> np.ndarray:

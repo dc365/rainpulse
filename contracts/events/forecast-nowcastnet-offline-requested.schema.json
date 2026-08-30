@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/contracts/events/forecast-nowcastnet-offline-requested.schema.json",
+  "title": "RainPulse forecast.nowcastnet_offline.requested.v1 event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "event_type", "occurred_at", "run_id", "job_id", "trace_id", "payload"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "event_id": { "type": "string", "format": "uuid" },
+    "event_type": { "const": "forecast.nowcastnet_offline.requested.v1" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "run_id": { "type": "string", "format": "uuid" },
+    "job_id": { "type": "string", "format": "uuid" },
+    "trace_id": { "type": "string", "format": "uuid" },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input_uri", "output_prefix", "issue_time", "grid_id", "input_asset_ids", "model_id", "model_version", "config_version", "input_contract_version", "output_contract_version", "random_seed"],
+      "properties": {
+        "input_uri": { "type": "string", "pattern": "^s3://[^\\s]+$" },
+        "output_prefix": { "type": "string", "pattern": "^s3://[^\\s]+$" },
+        "issue_time": { "type": "string", "format": "date-time" },
+        "grid_id": { "type": "string", "minLength": 1 },
+        "input_asset_ids": {
+          "type": "array",
+          "minItems": 9,
+          "maxItems": 9,
+          "uniqueItems": true,
+          "items": { "type": "string", "format": "uuid" }
+        },
+        "model_id": { "const": "nowcastnet" },
+        "model_version": { "const": "official-codeocean-v1-cc0" },
+        "config_version": { "const": "rp026-nowcastnet-offline-v1" },
+        "input_contract_version": { "const": "1.0" },
+        "output_contract_version": { "const": "1.0" },
+        "random_seed": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+      }
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "event_id": "82600000-0000-4000-8000-000000000001",
+  "event_type": "forecast.nowcastnet_offline.requested.v1",
+  "occurred_at": "2026-08-30T08:00:00Z",
+  "run_id": "82600000-0000-4000-8000-000000000002",
+  "job_id": "82600000-0000-4000-8000-000000000003",
+  "trace_id": "82600000-0000-4000-8000-000000000004",
+  "payload": {
+    "input_uri": "s3://rainpulse-offline/nowcastnet/inputs/mrms-development/2024/07/01/080000Z/input.zarr",
+    "output_prefix": "s3://rainpulse-offline/nowcastnet/outputs/82600000-0000-4000-8000-000000000002/",
+    "issue_time": "2024-07-01T08:00:00Z",
+    "grid_id": "mrms_nowcastnet_512x512_v1",
+    "input_asset_ids": [
+      "82600000-0000-4000-8000-000000000101",
+      "82600000-0000-4000-8000-000000000102",
+      "82600000-0000-4000-8000-000000000103",
+      "82600000-0000-4000-8000-000000000104",
+      "82600000-0000-4000-8000-000000000105",
+      "82600000-0000-4000-8000-000000000106",
+      "82600000-0000-4000-8000-000000000107",
+      "82600000-0000-4000-8000-000000000108",
+      "82600000-0000-4000-8000-000000000109"
+    ],
+    "model_id": "nowcastnet",
+    "model_version": "official-codeocean-v1-cc0",
+    "config_version": "rp026-nowcastnet-offline-v1",
+    "input_contract_version": "1.0",
+    "output_contract_version": "1.0",
+    "random_seed": 20260830
+  }
+}

@@ -13,6 +13,7 @@ from .domain_contracts import (
     AnalysisMosaicRequestedV2,
     AnalysisQPERequestedV1,
     NowcastInputRequested,
+    NowcastNetOfflineRequested,
     ProductBuildRequested,
     PystepsLKRequested,
     RadarDecodeRequested,
@@ -60,6 +61,12 @@ def _execute_pysteps_lk(request: PystepsLKRequested) -> WorkerResult:
     from rainpulse_algo.nowcast.pysteps_worker import execute_pysteps_lk
 
     return execute_pysteps_lk(request)
+
+
+def _execute_nowcastnet_offline(request: NowcastNetOfflineRequested) -> WorkerResult:
+    from rainpulse_algo.nowcast.nowcastnet_worker import execute_nowcastnet_offline
+
+    return execute_nowcastnet_offline(request)
 
 
 def _execute_product_build(request: ProductBuildRequested) -> WorkerResult:
@@ -220,6 +227,17 @@ HANDLERS = {
         asset_type="forecast_output",
         artifact_name="forecast.zarr",
         ack_wait_seconds=900,
+    ),
+    "nowcastnet-offline": TaskHandler(
+        profile="nowcastnet-offline",
+        subject="rainpulse.jobs.requested.nowcastnet_offline",
+        consumer="rainpulse-nowcastnet-offline-rp026-v1",
+        request_model=NowcastNetOfflineRequested,
+        executor=_execute_nowcastnet_offline,
+        asset_type="nowcastnet_offline_output",
+        artifact_name="nowcastnet-output.zarr",
+        ack_wait_seconds=1800,
+        max_deliveries=1,
     ),
     "product-builder": TaskHandler(
         profile="product-builder",

@@ -265,6 +265,37 @@ class PystepsLKRequested(DomainRequest):
     payload: PystepsLKPayload
 
 
+class NowcastNetOfflinePayload(ObjectTaskPayload):
+    issue_time: datetime
+    grid_id: str = Field(min_length=1)
+    input_asset_ids: list[UUID] = Field(min_length=9, max_length=9)
+    model_id: Literal["nowcastnet"]
+    model_version: Literal["official-codeocean-v1-cc0"]
+    config_version: Literal["rp026-nowcastnet-offline-v1"]
+    input_contract_version: Literal["1.0"]
+    output_contract_version: Literal["1.0"]
+    random_seed: int = Field(ge=0, le=2**32 - 1)
+
+    @field_validator("input_uri", "output_prefix")
+    @classmethod
+    def validate_s3_uri(cls, value: str) -> str:
+        if urlparse(value).scheme != "s3":
+            raise ValueError("NowcastNet offline object URIs must use s3")
+        return value
+
+    @field_validator("input_asset_ids")
+    @classmethod
+    def validate_input_asset_ids(cls, values: list[UUID]) -> list[UUID]:
+        if len(values) != len(set(values)):
+            raise ValueError("NowcastNet input asset IDs must be unique")
+        return values
+
+
+class NowcastNetOfflineRequested(DomainRequest):
+    event_type: Literal["forecast.nowcastnet_offline.requested.v1"]
+    payload: NowcastNetOfflinePayload
+
+
 class ProductIDs(ContractModel):
     rain_rate: UUID
     accumulation_60: UUID

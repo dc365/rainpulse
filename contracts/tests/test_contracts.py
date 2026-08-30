@@ -27,8 +27,10 @@ EVENT_NAMES = (
     "nowcast-input-ready",
     "forecast-run-requested",
     "forecast-pysteps-lk-requested",
+    "forecast-nowcastnet-offline-requested",
     "forecast-baseline-ready",
     "product-build-requested",
+    "forecast-nowcastnet-offline-requested",
 )
 JOB_EVENT_NAMES = (
     "job-requested",

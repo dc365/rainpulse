@@ -60,3 +60,17 @@ uses `_SUCCESS.json` as the atomic object-prefix commit marker, and exposes an
 internal health endpoint. `make worker-smoke` verifies both result paths and
 request-redelivery idempotency. These outputs remain simulations and are not
 meteorological forecasts.
+
+RP-026 keeps the official NowcastNet GPU process outside the Phase-1 Compose
+stack. The reviewed capsule is exposed at
+`/opt/rainpulse/nowcastnet/official-v1`, and the optional systemd unit in
+`deploy/systemd` runs the long-lived `nowcastnet-offline` consumer from the
+dedicated CUDA/PyTorch environment. Copy its example environment to
+`/etc/rainpulse/nowcastnet-offline-worker.env`, replace placeholders, restrict
+it to mode `0600`, then install the unit under `/etc/systemd/system`.
+
+The service is deliberately not enabled by the normal deployment target. On
+the shared 105 GPU, start it only inside an approved offline inference window
+after enough GPU memory has been released, and stop it before restoring the
+displaced model service. It consumes no realtime subject and cannot publish
+application products.

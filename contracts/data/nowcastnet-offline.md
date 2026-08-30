@@ -18,6 +18,15 @@
 RainPulse 业务 `NowcastInput` 仍使用固定 5 分钟步长。NowcastNet 必须经过独立的
 10 分钟序列和空间预处理适配，不能把 5 分钟序列直接冒充模型原生输入。
 
+离线对象使用 `rainpulse.nowcastnet-offline-input` contract `1.0`，包含：
+
+- `rain_rate[time, lat, lon]`：`float32`；
+- `valid_mask[time, lat, lon]`：二值 `uint8`；
+- `lat[lat]`、`lon[lon]`：`float32`；
+- `issue_time`、`grid_id`、9 个不可变 `input_asset_ids` 和来源分组身份。
+
+该对象只能通过已提交对象标记读取，事件载荷只传对象 URI 和身份元数据。
+
 ## 输出
 
 - 4 个成员；
@@ -29,6 +38,12 @@ RainPulse 业务 `NowcastInput` 仍使用固定 5 分钟步长。NowcastNet 必�
 - 官方生成器没有非负激活，负雨强必须按配置显式截为 0，并记录
   `clipped_negative_output_pixel_count`；非有限值仍使整次任务失败；
 - 在真实后端通过审查前，不生成业务 `ForecastOutput` 或应用产品。
+
+Worker 输出使用独立的 `rainpulse.nowcastnet-offline-output` contract `1.0`，而不是
+五分钟业务 `ForecastOutput`。对象保存 `rain_rate[member, lead_time, lat, lon]`、
+`member_valid_mask`、`output_valid_mask`、10–200 分钟坐标、固定随机种子、模型/权重/
+输入身份和截断诊断；`operational_eligible=false` 与
+`product_publication_enabled=false` 必须同时存在。
 
 ## 激活门槛
 

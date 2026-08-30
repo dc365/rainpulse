@@ -53,10 +53,7 @@
           "pattern": "^[a-f0-9]{64}$"
         },
         "weights_uri": {
-          "oneOf": [
-            { "type": "null" },
-            { "type": "string", "pattern": "^(s3|file)://[^\\s]+$" }
-          ]
+          "const": "file:///opt/rainpulse/nowcastnet/official-v1/data/checkpoints/mrms_model.ckpt"
         },
         "weights_sha256": {
           "oneOf": [

@@ -12,7 +12,7 @@ source:
 
 artifact:
   capsule_archive_sha256: 3607858ca1fe0cd4a22b0c5ef51dc91f76ca156c182c348a08eecf41dbd66821
-  weights_uri: null
+  weights_uri: file:///opt/rainpulse/nowcastnet/official-v1/data/checkpoints/mrms_model.ckpt
   weights_sha256: 5faee618c4532dff0eec27cb79c29bd7109396a968f9b173a906f8592a2059a5
   weights_reviewed: true
 
@@ -41,7 +41,7 @@ runtime:
   environment_reviewed: true
 
 activation:
-  offline_inference_enabled: false
+  offline_inference_enabled: true
   realtime_shadow_enabled: false
   product_publication_enabled: false
   operational_eligible: false

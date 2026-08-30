@@ -69,6 +69,10 @@ def verify_official_capsule(capsule_root: str | Path, profile: NowcastNetProfile
     for relative_path, expected in _PATCHED_SOURCE_SHA256.items():
         verify_file_sha256(root / relative_path, expected)
     weights_path = root / "data" / "checkpoints" / "mrms_model.ckpt"
+    if weights_path.resolve() != profile.weights_path().resolve():
+        raise OfficialNowcastNetBackendError(
+            "official capsule weights do not resolve to the frozen weights URI"
+        )
     verify_file_sha256(weights_path, profile.artifact.weights_sha256)
     return weights_path
 

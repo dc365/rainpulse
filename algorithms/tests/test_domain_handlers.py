@@ -7,7 +7,11 @@ import pytest
 from pydantic import ValidationError
 
 from rainpulse_algo.worker.contracts import JobCompleted
-from rainpulse_algo.worker.domain_contracts import NowcastInputRequested, PystepsLKRequested
+from rainpulse_algo.worker.domain_contracts import (
+    NowcastInputRequested,
+    NowcastNetOfflineRequested,
+    PystepsLKRequested,
+)
 from rainpulse_algo.worker.handlers import HANDLERS, handler_for_profile
 from rainpulse_algo.worker.runtime import Worker, WorkerConfig
 
@@ -146,3 +150,14 @@ def test_pysteps_lk_contract_freezes_baseline_order_and_unique_inputs() -> None:
 
     with pytest.raises(ValidationError):
         PystepsLKRequested.model_validate(value)
+
+
+def test_nowcastnet_offline_contract_is_isolated_and_single_delivery() -> None:
+    value = json.loads(example_bytes("forecast-nowcastnet-offline-requested"))
+    request = NowcastNetOfflineRequested.model_validate(value)
+    handler = handler_for_profile("nowcastnet-offline")
+
+    assert request.payload.output_contract_version == "1.0"
+    assert handler.subject == "rainpulse.jobs.requested.nowcastnet_offline"
+    assert handler.max_deliveries == 1
+    assert handler.artifact_name == "nowcastnet-output.zarr"

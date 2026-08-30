@@ -1,0 +1,29 @@
+[Unit]
+Description=RainPulse RP-026 NowcastNet offline GPU worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=yons
+Group=yons
+WorkingDirectory=/home/yons/hwapp/fonwee/meteo-ai/rainpulse-nowcast
+EnvironmentFile=/etc/rainpulse/nowcastnet-offline-worker.env
+Environment="PYTHONPATH=/home/yons/hwapp/fonwee/meteo-ai/rainpulse-nowcast/algorithms:/home/yons/hwapp/fonwee/meteo-ai/rainpulse-nowcast/.build/worker-site-packages"
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=RAINPULSE_WORKER_PROFILE=nowcastnet-offline
+Environment=RAINPULSE_WORKER_ID=rp026-nowcastnet-offline-gpu0
+Environment=RAINPULSE_WORKER_HEALTH_ADDR=127.0.0.1:8096
+Environment=RAINPULSE_NOWCASTNET_CONFIG=/home/yons/hwapp/fonwee/meteo-ai/rainpulse-nowcast/configs/nowcast/rp026-nowcastnet-offline-v1.yaml
+Environment=RAINPULSE_NOWCASTNET_CAPSULE_ROOT=/opt/rainpulse/nowcastnet/official-v1
+Environment=RAINPULSE_NOWCASTNET_DEVICE=cuda:0
+ExecStart=/home/yons/hwapp/fonwee/meteo-ai/rainpulse-nowcast/runtime/nowcastnet/venv/bin/python -m rainpulse_algo.worker
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=60
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 import yaml
 
@@ -98,6 +99,23 @@ class NowcastNetProfile:
             raise NowcastNetConfigError(
                 "NowcastNet offline inference is blocked: " + ", ".join(blockers)
             )
+
+    def weights_path(self) -> Path:
+        uri = self.artifact.weights_uri
+        if not uri:
+            raise NowcastNetConfigError("NowcastNet weights URI is not configured")
+        parsed = urlparse(uri)
+        if (
+            parsed.scheme != "file"
+            or parsed.netloc
+            or parsed.query
+            or parsed.fragment
+            or not parsed.path.startswith("/")
+        ):
+            raise NowcastNetConfigError(
+                "RP-026 offline weights URI must be an absolute local file URI"
+            )
+        return Path(unquote(parsed.path))
 
 
 def load_nowcastnet_profile(path: str | Path) -> NowcastNetProfile:
@@ -222,6 +240,14 @@ def _validate_profile(profile: NowcastNetProfile) -> None:
             raise NowcastNetConfigError(f"{name} SHA-256 is invalid")
     if profile.artifact.weights_uri and not profile.artifact.weights_sha256:
         raise NowcastNetConfigError("weights URI requires a SHA-256")
+    if profile.artifact.weights_uri:
+        expected_weights_path = Path(
+            "/opt/rainpulse/nowcastnet/official-v1/data/checkpoints/mrms_model.ckpt"
+        )
+        if profile.weights_path() != expected_weights_path:
+            raise NowcastNetConfigError(
+                "NowcastNet weights URI differs from the frozen RP-026 runtime path"
+            )
     if profile.activation.realtime_shadow_enabled:
         raise NowcastNetConfigError("RP-026 cannot enable realtime NowcastNet shadow inference")
     if profile.activation.product_publication_enabled:

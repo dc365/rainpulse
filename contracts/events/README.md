@@ -27,6 +27,9 @@ only after validated output is atomically published. Examples in
 - `forecast.run.requested.v1` starts baseline nowcasting from that committed input.
 - `forecast.pysteps_lk.requested.v1` runs the versioned deterministic LK adapter
   together with persistence and whole-field translation diagnostics.
+- `forecast.nowcastnet_offline.requested.v1` runs the reviewed official
+  NowcastNet backend on a dedicated 9-frame, 10-minute MRMS research input. It
+  is isolated from realtime scheduling and product publication.
 - `forecast.baseline.ready.v1` proves that the validated 24-step ForecastOutput
   was committed before the forecast run entered `BASELINE_READY`.
 - `product.build.requested.v1` consumes exactly one committed ForecastOutput
@@ -51,6 +54,9 @@ machines to those idempotent job records.
   simulation remains isolated on `rainpulse.jobs.requested.model_pysteps_lk`.
 - The RP-015 application-product task uses
   `rainpulse.jobs.requested.product_build`.
+- The RP-026 offline-only task uses
+  `rainpulse.jobs.requested.nowcastnet_offline`; no production workflow emits
+  this subject.
 - Completion subject: `rainpulse.jobs.completed`
 - Failure subject: `rainpulse.jobs.failed`
 - Product publication subject: `rainpulse.products.published`

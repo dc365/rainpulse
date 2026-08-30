@@ -97,7 +97,7 @@ test-probability-calibration:
 	uv run --project algorithms pytest algorithms/tests/test_probability_calibration.py
 
 test-nowcastnet:
-	uv run --project algorithms pytest algorithms/tests/test_nowcastnet_adapter.py
+	uv run --project algorithms pytest algorithms/tests/test_nowcastnet_adapter.py algorithms/tests/test_nowcastnet_worker.py
 
 test-products:
 	bash tests/rp015_products_test.sh

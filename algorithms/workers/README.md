@@ -21,6 +21,7 @@ The registry currently exposes these profiles:
 | `analysis-qpe-basic` | `rainpulse.jobs.requested.analysis_qpe` | `analysis.zarr` |
 | `nowcast-input-synthetic` | `rainpulse.jobs.requested.nowcast_input_synthetic` | `input.zarr` |
 | `nowcast-input` | `rainpulse.jobs.requested.nowcast_input` | `input.zarr` |
+| `nowcastnet-offline` | `rainpulse.jobs.requested.nowcastnet_offline` | `nowcastnet-output.zarr` |
 
 Select one with `RAINPULSE_WORKER_PROFILE`; `simulation` retains the existing
 forecast control-plane smoke handler. The `radar-decode-fmt` profile is the
@@ -61,3 +62,10 @@ payload explicitly says that no radar array or meteorological algorithm ran.
 They do not QC, grid, mosaic, estimate rain rate, or build real NowcastInput
 data. Production workers remain
 separate long-lived processes with distinct durable consumers.
+
+`nowcastnet-offline` is an RP-026 research-only GPU profile. It loads the
+reviewed official capsule and frozen weights on the first accepted task and
+reuses that in-process model for later tasks. It consumes only dedicated
+9-frame/10-minute offline objects. Its output is not a business
+`ForecastOutput`, realtime scheduling does not emit its subject, and product
+publication remains disabled.
