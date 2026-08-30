@@ -17,6 +17,7 @@ from rainpulse_algo.datasets.mrms_full_samples import (
     enforce_capacity_gate,
     load_full_sample_plan,
     load_mrms_full_sample_profile,
+    normalize_inventory_relative_path,
     resolve_storage_roots,
     validate_full_sample_output,
     write_full_sample_shard,
@@ -88,6 +89,18 @@ def test_storage_roots_require_absolute_non_overlapping_nfs_paths(tmp_path: Path
             },
             filesystem_type="ext4",
         )
+
+
+def test_inventory_paths_are_resolved_relative_to_the_explicit_raw_root() -> None:
+    assert (
+        normalize_inventory_relative_path(
+            "raw/noaa-mrms-pds/CONUS/PrecipRate_00.00/frame.grib2.gz"
+        )
+        == "noaa-mrms-pds/CONUS/PrecipRate_00.00/frame.grib2.gz"
+    )
+    assert normalize_inventory_relative_path("year/frame.grib2.gz") == "year/frame.grib2.gz"
+    with pytest.raises(MRMSFullSampleError, match="unsafe"):
+        normalize_inventory_relative_path("../raw/frame.grib2.gz")
 
 
 def test_capacity_gate_runs_for_existing_output_and_reserves_in_flight_shards(

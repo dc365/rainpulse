@@ -575,8 +575,23 @@ def _load_asset_inventory(
             row = json.loads(line)
             if int(row.get("asset_index", -1)) != len(assets):
                 raise MRMSFullSampleError("full-sample asset indices are not contiguous")
+            row = {
+                **row,
+                "relative_path": normalize_inventory_relative_path(row["relative_path"]),
+            }
             assets.append(row)
     return assets
+
+
+def normalize_inventory_relative_path(value: Any) -> str:
+    """Resolve the audit inventory's historical ``raw/`` prefix against raw root."""
+    relative = Path(str(value))
+    if relative.is_absolute() or ".." in relative.parts:
+        raise MRMSFullSampleError("full-sample inventory asset path is unsafe")
+    parts = relative.parts[1:] if relative.parts[:1] == ("raw",) else relative.parts
+    if not parts:
+        raise MRMSFullSampleError("full-sample inventory asset path is empty")
+    return Path(*parts).as_posix()
 
 
 def _process_window_shard(
