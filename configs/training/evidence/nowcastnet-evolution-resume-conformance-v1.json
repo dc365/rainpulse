@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "validated_at": "2026-08-30T15:09:15.081464+00:00",
+  "status": "passed",
+  "code_revision": "299c61852fb3a3fe6623529e0418fa252e4a7aaf",
+  "profile_sha256": "1f8fe80408fe45f6c74b4f94c69ad757034779570a7a35257f76e810381fb8b7",
+  "sample_index_sha256": "0d1569b1d2c36302f969711be8b935b458e0b424e5e2ce44acb2dc577a34bdff",
+  "data_track": "foundation_0p01",
+  "batch_size": 2,
+  "precision": "bf16",
+  "continuous_final_step": 6,
+  "interrupted_after_step": 3,
+  "resumed_final_step": 6,
+  "compared_resumed_steps": 3,
+  "compared_loss_fields": [
+    "loss_total",
+    "loss_accumulation"
+  ],
+  "loss_absolute_tolerance": 0.05,
+  "loss_relative_tolerance": 0.01,
+  "loss_trajectory_within_tolerance": true,
+  "checkpoint_serialization_fingerprints_verified": true,
+  "restored_model_optimizer_scheduler_state_exact": true,
+  "restored_random_state_exact": true,
+  "cuda_bitwise_trajectory_required": false,
+  "nondeterministic_operator": "grid_sampler_2d_backward_cuda",
+  "reference_report_sha256": "ebd62d85bc4f11f5228fe6ed6e9c2ce37a835d29ac63e87af918e793fad0bd43",
+  "resumed_report_sha256": "0578fce67e64db110b8081e658375e415cb9f8a68ecaa7a159ffd9c4d53b22c9",
+  "operational_eligible": false
+}
