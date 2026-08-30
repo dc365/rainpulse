@@ -166,6 +166,8 @@ def test_independent_acceptance_is_hash_bound_and_keeps_steps_baseline() -> None
     assert acceptance["acceptance_status"] == "passed_with_steps_baseline_retained"
     assert acceptance["operational_eligible"] is False
     assert acceptance["product_publication_enabled"] is False
+    profile_path = REPOSITORY_ROOT / acceptance["profile_path"]
+    assert _sha256(profile_path) == acceptance["profile_sha256"]
     for section in ("development", "holdout"):
         for name in ("selection", "summary", "reliability"):
             referenced = REPOSITORY_ROOT / acceptance[section][f"{name}_path"]
