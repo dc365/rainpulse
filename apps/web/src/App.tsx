@@ -359,6 +359,8 @@ function RadarDetail({ radar }: { radar: RadarStatus }) {
         />
       </div>
 
+      <OperationalAlertGate radar={radar} />
+
       <div className="detail-grid">
         <article className="module completeness-module">
           <ModuleHeading eyebrow="Scan integrity" title="体扫完整性" />
@@ -471,6 +473,77 @@ function RadarDetail({ radar }: { radar: RadarStatus }) {
         </article>
       </div>
     </>
+  )
+}
+
+function OperationalAlertGate({ radar }: { radar: RadarStatus }) {
+  const operationalEnabled = radar.lifecycle === 'ready'
+  const completeness = radar.health_metrics?.scan_completeness ?? radar.scan_completeness
+  const quality = radar.qc_metrics?.mean_quality_index ?? radar.mean_quality_index
+  const actualRadials = radar.health_metrics?.actual_radial_count ?? 0
+  const interference = actualRadials > 0 && radar.qc_metrics
+    ? radar.qc_metrics.radial_interference_ray_count / actualRadials
+    : null
+  const signals = [
+    {
+      label: '数据时效',
+      value: formatDelay(radar.data_delay_seconds),
+      threshold: '工程门槛 ≤ 10 分钟',
+      breached: radar.data_delay_seconds == null || radar.data_delay_seconds > 600,
+    },
+    {
+      label: '体扫完整率',
+      value: percent(completeness),
+      threshold: '工程门槛 ≥ 97%',
+      breached: completeness == null || completeness < 0.97,
+    },
+    {
+      label: '平均 QI',
+      value: percent(quality),
+      threshold: '工程门槛 ≥ 50%',
+      breached: quality == null || quality < 0.5,
+    },
+    {
+      label: '径向干扰比例',
+      value: percent(interference),
+      threshold: '工程门槛 ≤ 2%',
+      breached: interference == null || interference > 0.02,
+    },
+  ]
+  const breachedCount = signals.filter((signal) => signal.breached).length
+
+  return (
+    <section
+      className={`operational-alert-gate ${operationalEnabled ? 'enabled' : 'suppressed'}`}
+      aria-label="业务告警门禁"
+    >
+      <div className="alert-gate-summary">
+        <div>
+          <p>Operational alert gate</p>
+          <strong>{operationalEnabled ? '业务告警已启用' : '业务告警已抑制'}</strong>
+        </div>
+        <span className={operationalEnabled && breachedCount > 0 ? 'warning' : ''}>
+          {operationalEnabled ? `${breachedCount} 项越界` : '非业务态'}
+        </span>
+        <small>
+          {operationalEnabled
+            ? '配置 ready，Prometheus 按工程阈值持续评估。'
+            : `配置 ${radar.lifecycle}，仅保留工程监测，不触发业务告警。`}
+        </small>
+      </div>
+      <div className="alert-signal-list">
+        {signals.map((signal) => (
+          <div
+            className={operationalEnabled && signal.breached ? 'breached' : ''}
+            key={signal.label}
+          >
+            <span>{signal.label}</span>
+            <strong>{signal.value}</strong>
+            <small>{signal.threshold}</small>
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
 

@@ -99,11 +99,47 @@ describe('RainPulse radar operations overview', () => {
     expect(screen.getByText('静态地物杂波')).toBeTruthy()
     expect(screen.getAllByText('已跳过').length).toBeGreaterThan(0)
     expect(screen.getAllByText('降级运行').length).toBeGreaterThan(0)
+    expect(screen.getByRole('region', { name: '业务告警门禁' })).toBeTruthy()
+    expect(screen.getByText('业务告警已抑制')).toBeTruthy()
+    expect(screen.getByText('配置 draft，仅保留工程监测，不触发业务告警。')).toBeTruthy()
+    expect(screen.getAllByText('2 分钟').length).toBeGreaterThan(1)
+    expect(screen.getAllByText('99.9%').length).toBeGreaterThan(1)
+    expect(screen.getByText('0.1%')).toBeTruthy()
     expect(fetchStatus).toHaveBeenCalledWith('/api/v1/system/status', expect.objectContaining({ signal: expect.any(AbortSignal) }))
     expect(fetchStatus).toHaveBeenCalledWith('/api/v1/radars/status', expect.objectContaining({ signal: expect.any(AbortSignal) }))
 
     fireEvent.click(screen.getByRole('button', { name: '刷新雷达状态' }))
     expect(fetchStatus.mock.calls.length).toBeGreaterThanOrEqual(4)
+  })
+
+  it('fails closed when a ready radar has no observation evidence', async () => {
+    const readyWithoutData = {
+      ...status,
+      lifecycle: 'ready',
+      health: 'UNKNOWN',
+      latest_scan_id: null,
+      latest_scan_time: null,
+      scan_status: null,
+      scan_completeness: null,
+      mean_quality_index: null,
+      data_delay_seconds: null,
+      health_metrics: null,
+      qc_metrics: null,
+    }
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((input: string) => Promise.resolve({
+      ok: true,
+      status: 200,
+      json: async () => input.includes('/radars/status')
+        ? [readyWithoutData]
+        : { service: 'rainpulse-control', status: 'ready', version: 'rp028-test' },
+    })))
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: '雷达运行' }))
+
+    expect(await screen.findByText('业务告警已启用')).toBeTruthy()
+    expect(screen.getByText('4 项越界')).toBeTruthy()
+    expect(screen.getAllByText('暂无数据').length).toBeGreaterThan(0)
   })
 
   it('renders the analysis evidence rail and real diagnostic layer switcher', async () => {
