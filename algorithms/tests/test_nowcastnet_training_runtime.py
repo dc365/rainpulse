@@ -28,6 +28,10 @@ from rainpulse_algo.training.generative_profile import (
     GenerativeTrainingProfileError,
     load_generative_training_profile,
 )
+from rainpulse_algo.training.generative_train import (
+    GenerativeTrainError,
+    compare_generative_metrics,
+)
 from rainpulse_algo.training.profile import (
     NowcastNetTrainingRunError,
     load_nowcastnet_training_run_profile,
@@ -163,6 +167,58 @@ def test_generative_profile_rejects_an_official_training_source_claim(
 
     with pytest.raises(GenerativeTrainingProfileError, match="differs from frozen v1"):
         load_generative_training_profile(path, repository_root=REPOSITORY_ROOT)
+
+
+def test_generative_resume_comparison_checks_batches_and_all_losses(
+    tmp_path: Path,
+) -> None:
+    reference_path = tmp_path / "reference.jsonl"
+    resumed_path = tmp_path / "resumed.jsonl"
+    rows = [
+        {
+            "global_step": step,
+            "batch_indices_sha256": f"batch-{step}",
+            "generator_loss_total": 100.0 + step,
+            "generator_loss_adversarial": 0.5 + step / 100.0,
+            "generator_loss_pool_regularization": 4.0 + step / 10.0,
+            "discriminator_loss_total": 1.4 + step / 100.0,
+        }
+        for step in range(1, 7)
+    ]
+    reference_path.write_text(
+        "".join(json.dumps(row) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+    resumed_path.write_text(
+        "".join(json.dumps(row) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+
+    result = compare_generative_metrics(
+        reference_path,
+        resumed_path,
+        resume_after_step=3,
+        absolute_tolerance=0.05,
+        relative_tolerance=0.01,
+    )
+
+    assert result["status"] == "passed"
+    assert result["compared_steps"] == 3
+
+    changed = [dict(row) for row in rows]
+    changed[4]["generator_loss_pool_regularization"] = 99.0
+    resumed_path.write_text(
+        "".join(json.dumps(row) + "\n" for row in changed),
+        encoding="utf-8",
+    )
+    with pytest.raises(GenerativeTrainError, match="step 5"):
+        compare_generative_metrics(
+            reference_path,
+            resumed_path,
+            resume_after_step=3,
+            absolute_tolerance=0.05,
+            relative_tolerance=0.01,
+        )
 
 
 def test_run_profile_rejects_claim_that_official_downsample_kernel_is_known(
