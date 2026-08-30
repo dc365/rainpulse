@@ -1,0 +1,55 @@
+{
+  "approved_to_run_holdout": true,
+  "configuration_sha256": "08eb33a1f4b8585204a4d2ff7f0c0527e43dddcf3cbff54776f8b7f462b920b9",
+  "criteria": {
+    "completed_issue_count_must_equal_expected": true,
+    "far_minimum_common_verification_coverage": 0.05,
+    "far_skill_policy": "descriptive_only_retain_all_baselines",
+    "maximum_failed_issue_count": 0,
+    "near_minimum_common_verification_coverage": 0.7,
+    "near_wet_brier_skill_thresholds_mm_h": [
+      1.0,
+      5.0,
+      10.0
+    ],
+    "near_wet_minimum_crps_skill_against_persistence": 0.0,
+    "near_wet_minimum_finite_brier_skill_threshold_count": 2,
+    "near_wet_minimum_mean_brier_skill_against_persistence": 0.0,
+    "steps_and_lk_comparison_policy": "descriptive_until_independent_holdout"
+  },
+  "development_evaluation": {
+    "checks": {
+      "completed_issue_count": true,
+      "failed_issue_count": true,
+      "far_common_verification_coverage": true,
+      "near_common_verification_coverage": true,
+      "near_wet_crps_skill_against_persistence": true,
+      "near_wet_finite_brier_skill_threshold_count": true,
+      "near_wet_mean_brier_skill_against_persistence": true
+    },
+    "expected_issue_count": 50,
+    "observed": {
+      "completed_issue_count": 50,
+      "failed_issue_count": 0,
+      "far_minimum_common_verification_coverage": 0.5490908729804074,
+      "near_minimum_common_verification_coverage": 0.8083236512050526,
+      "near_wet_brier_skill_against_persistence": {
+        "1.0": 0.2417926842753112,
+        "10.0": 0.1795191354689586,
+        "5.0": 0.16359162486112733
+      },
+      "near_wet_crps_skill_against_persistence": 0.22972037221468977,
+      "near_wet_mean_brier_skill_against_persistence": 0.1949678148684657
+    },
+    "passed": true
+  },
+  "development_profile_sha256": "7c7de428dcdf5c871d07316dba9b8620e1d8bb76ab51356f63101f82a97111dd",
+  "development_selection_evidence_sha256": "3561526fe6ab0c521a94e6ff0f43aed4f9c4d100f33614b79aaffc8af410a8c0",
+  "development_summary_path": "configs/verification/rp026-development-summary-v1.json",
+  "development_summary_sha256": "a34a523818aa3499f6b190f5a1bb3e3eef7bf805745711b292448ef91445ff1a",
+  "frozen_before_holdout_forecast": true,
+  "gate_policy_version": "rp026-nowcastnet-development-gate-v1",
+  "generated_at_utc": "2026-08-30T05:34:34.740934Z",
+  "profile_version": "rp026-mrms-nowcastnet-v1",
+  "schema_version": "1.0"
+}

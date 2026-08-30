@@ -20,6 +20,7 @@ from rainpulse_algo.verification.mrms_nowcastnet_hindcast import (
 )
 from rainpulse_algo.verification.mrms_nowcastnet_profile import (
     FROZEN_GATE_CRITERIA,
+    MRMSNowcastNetGate,
     load_mrms_nowcastnet_profile,
 )
 
@@ -77,7 +78,9 @@ def test_frozen_profile_uses_disjoint_unspent_observation_only_splits() -> None:
     assert len(profile.holdout.cases) == 6
     assert profile.development.issue_count == 50
     assert profile.holdout.issue_count == 50
-    assert profile.gate.status == "development_pending"
+    assert profile.gate.status == "frozen_before_holdout"
+    assert profile.gate.artifact is not None
+    assert profile.gate.artifact["approved_to_run_holdout"] is True
     assert profile.operational_eligible is False
 
 
@@ -114,9 +117,18 @@ def test_conformance_checks_raw_inputs_and_truth_and_holdout_is_locked(
     assert report["complete"] is True
     assert report["checked_issue_count"] == 1
     assert report["checked_frame_count"] == 21
+    pending = replace(
+        profile,
+        gate=MRMSNowcastNetGate(
+            status="development_pending",
+            artifact_path=None,
+            artifact_sha256=None,
+            artifact=None,
+        ),
+    )
     with pytest.raises(ValueError, match="holdout is locked"):
         run_mrms_nowcastnet_hindcast(
-            replace(profile),
+            pending,
             split="holdout",
             frame_source=DryMRMSFrameSource(),
             output_directory=tmp_path,
