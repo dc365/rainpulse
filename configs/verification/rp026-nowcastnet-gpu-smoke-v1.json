@@ -1,0 +1,64 @@
+{
+  "schema_version": "1.0",
+  "evidence_id": "rp026-nowcastnet-gpu-smoke-v1",
+  "observed_at": "2026-08-30T03:38:56Z",
+  "scope": "offline_hardware_smoke_only",
+  "operational_eligible": false,
+  "hardware": {
+    "gpu_name": "NVIDIA RTX 6000D",
+    "compute_capability": "12.0",
+    "driver_version": "595.71.05",
+    "memory_total_mib": 85651,
+    "memory_free_before_test_mib": 38084
+  },
+  "runtime": {
+    "python_version": "3.13",
+    "torch_version": "2.12.1+cu132",
+    "torch_cuda_version": "13.2"
+  },
+  "artifacts": {
+    "capsule_archive_sha256": "3607858ca1fe0cd4a22b0c5ef51dc91f76ca156c182c348a08eecf41dbd66821",
+    "weights_sha256": "5faee618c4532dff0eec27cb79c29bd7109396a968f9b173a906f8592a2059a5",
+    "compatibility_patch_sha256": "7a42637adacb6d37ffec1b559d6a31ba05c45338e01fb2d054448f3c0dfe7f32",
+    "raw_output_sha256": "d42c71b957b6d8114cea58f74dce0d17549ef14b6ae9b38b59064c8838d4b073",
+    "raw_output_size_bytes": 83886208
+  },
+  "input": {
+    "source": "official_capsule_mrms_figure_00000",
+    "shape": [9, 512, 512, 2],
+    "valid_fraction": 1.0,
+    "minimum_mm_h": 0.0,
+    "maximum_mm_h": 128.0
+  },
+  "output": {
+    "shape": [4, 20, 512, 512],
+    "raw_minimum_mm_h": -12.012460708618164,
+    "raw_maximum_mm_h": 240.0892333984375,
+    "raw_negative_pixel_count": 8597696,
+    "non_finite_pixel_count": 0,
+    "postprocessed_minimum_mm_h": 0.0,
+    "postprocessed_maximum_mm_h": 240.0892333984375,
+    "postprocessed_mean_mm_h": 1.1904664039611816,
+    "member_0_1_mean_absolute_difference_mm_h": 0.3971356749534607,
+    "member_0_1_max_absolute_difference_mm_h": 121.09146118164062
+  },
+  "performance": {
+    "model_load_seconds": 0.8949283435940742,
+    "inference_seconds": [0.3869283990934491, 0.15315243881195784],
+    "gpu_peak_memory_bytes": 1061443584,
+    "repeat_max_absolute_delta_mm_h": 0.0
+  },
+  "resource_coordination": {
+    "temporarily_stopped_service": "Qwen3.8-27B port 8004",
+    "restored_after_test": true,
+    "restored_health": "ok",
+    "restored_gpu_memory_mib": 37518
+  },
+  "gate": {
+    "gpu_smoke_passed": true,
+    "offline_worker_enabled": false,
+    "realtime_shadow_enabled": false,
+    "product_publication_enabled": false,
+    "fujian_operational_eligible": false
+  }
+}

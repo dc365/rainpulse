@@ -53,7 +53,7 @@ NowcastInput gate.
 | RP-023 | Offline ensemble product and GIS loop complete | Eight probability/quantile layers produce 384 PNG/NetCDF assets behind a checksum-validated read-only API and shared OpenLayers timeline; 12/24-member full-grid resource evidence keeps the first hindcast at 12 members and operational publication disabled |
 | RP-024 | Independent MRMS probability validation complete | Frozen 2022 development and 2023 holdout splits verify 12-member STEPS on 50/50 independent issues; near-lead CRPS/Brier skill passes the precommitted gate, while raw probabilities remain uncalibrated and operational publication disabled |
 | RP-025 | Probability calibration and shadow foundation complete | Versioned isotonic calibration artifacts, fit-readiness checks, split-leakage rejection, threshold coherence and shadow-only scoring pass synthetic acceptance; fitting, shadow application and publication remain disabled pending Fujian QC/QPE data |
-| RP-026 | Official NowcastNet backend and CPU smoke complete; GPU acceptance blocked | Reviewed MIT/CC0 capsule and checkpoint hashes, official 9+20-frame protocol, device compatibility patch, four-member seeded inference, explicit negative-output clipping diagnostics and a real MRMS sample pass repeatable CPU smoke; offline activation remains false because 105 had only 435 MiB free GPU memory and the fixed runtime URI/hindcast gates remain open |
+| RP-026 | Official NowcastNet backend and CPU/GPU smoke complete; offline worker pending | Reviewed MIT/CC0 capsule and checkpoint hashes, official 9+20-frame protocol, device compatibility patch, four-member seeded inference and explicit negative-output clipping diagnostics pass repeatable CPU/GPU smoke on a real capsule MRMS sample; Qwen3.8 was restored after the authorized GPU window, while offline worker, fixed runtime URI, hindcast and publication gates remain open |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -489,8 +489,10 @@ adapter records input and negative-output clipping, rejects missing input and
 malformed backend output, and remains non-operational. The official source,
 MIT code license, CC0 data/weight license, capsule and checkpoint hashes are
 frozen. A device-patched real backend passes repeatable four-member CPU inference
-on an official MRMS sample. GPU acceptance remains blocked by unrelated workloads
-occupying almost all 105 GPU memory; RainPulse did not stop them. Details are
+on an official MRMS sample. An authorized Qwen3.8 maintenance window also passes
+four-member GPU inference with zero repeat delta, about 1.06 GB peak allocated
+memory and 0.153-second warm latency; Qwen3.8 was restored healthy afterward.
+Offline Worker, hindcast and publication remain disabled. Details are
 in `docs/RP026_NowcastNet离线适配基础实施记录.md`.
 
 The 2021-08, 2024-06, 2025-01, 2022-01, 2022-12, 2023-06 and 2023-12 months are
