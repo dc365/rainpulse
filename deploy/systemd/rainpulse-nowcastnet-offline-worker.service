@@ -8,7 +8,6 @@ Type=simple
 User=yons
 Group=yons
 WorkingDirectory=/home/yons/hwapp/fonwee/meteo-ai/rainpulse-nowcast
-EnvironmentFile=/etc/rainpulse/nowcastnet-offline-worker.env
 Environment="PYTHONPATH=/home/yons/hwapp/fonwee/meteo-ai/rainpulse-nowcast/algorithms:/home/yons/hwapp/fonwee/meteo-ai/rainpulse-nowcast/.build/worker-site-packages"
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=RAINPULSE_WORKER_PROFILE=nowcastnet-offline
@@ -17,7 +16,7 @@ Environment=RAINPULSE_WORKER_HEALTH_ADDR=127.0.0.1:8096
 Environment=RAINPULSE_NOWCASTNET_CONFIG=/home/yons/hwapp/fonwee/meteo-ai/rainpulse-nowcast/configs/nowcast/rp026-nowcastnet-offline-v1.yaml
 Environment=RAINPULSE_NOWCASTNET_CAPSULE_ROOT=/opt/rainpulse/nowcastnet/official-v1
 Environment=RAINPULSE_NOWCASTNET_DEVICE=cuda:0
-ExecStart=/home/yons/hwapp/fonwee/meteo-ai/rainpulse-nowcast/runtime/nowcastnet/venv/bin/python -m rainpulse_algo.worker
+ExecStart=/home/yons/hwapp/fonwee/meteo-ai/rainpulse-nowcast/scripts/run_nowcastnet_offline_worker.sh
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=60

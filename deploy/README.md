@@ -65,9 +65,10 @@ RP-026 keeps the official NowcastNet GPU process outside the Phase-1 Compose
 stack. The reviewed capsule is exposed at
 `/opt/rainpulse/nowcastnet/official-v1`, and the optional systemd unit in
 `deploy/systemd` runs the long-lived `nowcastnet-offline` consumer from the
-dedicated CUDA/PyTorch environment. Copy its example environment to
-`/etc/rainpulse/nowcastnet-offline-worker.env`, replace placeholders, restrict
-it to mode `0600`, then install the unit under `/etc/systemd/system`.
+dedicated CUDA/PyTorch environment. Install the unit under
+`/etc/systemd/system`. The launcher reads
+the existing ignored `deploy/.env` and maps its worker-only NATS/MinIO values;
+it does not create a second secret file.
 
 The service is deliberately not enabled by the normal deployment target. On
 the shared 105 GPU, start it only inside an approved offline inference window
