@@ -65,7 +65,7 @@ NowcastInput gate.
 | RP-037 | Unified time picker and shared analysis/forecast timeline complete | The existing nowcast page now selects live following, historical radar analysis and historical forecasts from one time control. Both radar analysis and forecast views use the same previous/play/next, direct selection, scrubbing and keyboard timeline; 84 real Fujian analysis times were verified on desktop and 390 px mobile without adding a page or navigation entry |
 | RP-038 | Unified analysis-cycle and product workspace complete | Historical selections now reconstruct the product workspace of that cycle: radar QPE T0, LK deterministic and STEPS ensemble occupy stable product slots, missing outputs remain explicitly disabled, and the timeline only represents valid times within the selected cycle. Lightweight STEPS cycle catalog and exact by-cycle retrieval prevent latest-bundle leakage into historical replay |
 | RP-039 | Four-radar quality-dominant alignment and historical hindcast complete | The historical alignment window is 300 s with an 0.80 time-quality floor, so source QC remains dominant and Z9598 at -145 s contributes to a verified 4/4-station 10:30 UTC mosaic. All 38 eligible historical cycles completed LK and 12-member STEPS products in the existing unified timeline, while gapped cycles correctly remain analysis-only |
-| RP-040 | Fujian radial-interference QC convergence and representative historical-cycle reconstruction complete | Long contiguous saturated rays are rejected even when their neighbouring azimuths are similarly contaminated. The corrected 06:30 UTC cycle uses all four radars, removes the visible eastern interference fan, and republishes QPE, 24-lead LK and 12-member STEPS evidence through the existing unified workspace; this remains engineering replay rather than an operational QC sign-off |
+| RP-040 | Fujian radial-interference QC convergence and selective historical reconstruction complete | A read-only replay of the production detector audited all 110 Z9591 volumes and selected 44 affected scans. Their QC, grids and 35 dependent four-radar analyses were rebuilt; all 28 affected forecast cycles now expose corrected QPE, 24-lead LK and 12-member STEPS evidence through the existing unified workspace. This remains engineering replay rather than an operational QC sign-off |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -91,15 +91,25 @@ UTC historical image. Neighbour-only azimuth comparison could not reject the
 interior of a wide contiguous saturated fan, while one two-thirds-saturated
 edge ray narrowly missed the first long-range threshold. The immutable v3 QC
 profile combines a minimum 400-gate high-reflectivity run, a 0.60 high-gate
-fraction and 12 dB range growth. It flags 73 Z9591 rays and removes both the
-wide fan and its residual ray without weakening source-quality-first four-radar
-fusion. The corrected analysis has four actual contributors, 0.4939 coverage
-and 0.5399 mean QI; its QPE maximum falls from the original 220.35 mm/h to
-80.46 mm/h. A versioned reprocessing transition now permits a completed grid
-scan to enter a new QC version without overwriting prior artifacts. The same
-06:30 UTC issue was reconstructed as a three-frame NowcastInput, 24-lead LK
-run and 12-member, 24-lead STEPS cycle. Exact evidence and remaining operational
-gates are in `docs/RP040_福建径向干扰质控收敛与历史周期重建记录.md`.
+fraction and 12 dB range growth. A resumable, read-only audit reuses that exact
+detector against persisted normalized polar data: all 110 Z9591 volumes were
+checked, 44 were selected with zero audit errors, and all 44 reached the v3 QC
+and grid identities. Their 35 dependent analyses all use four radars and have
+0.4103–0.5107 coverage and 0.4153–0.5399 mean QI. Across paired old/new
+analyses, mean rain rate falls from 8.754 to 2.271 mm/h and mean P95 from
+47.570 to 7.908 mm/h. The three most contaminated cycles at 02:40, 02:45 and
+02:50 UTC were checked from actual diagnostic PNGs; the eastern red/purple fan
+does not enter the gridded QPE.
+
+The 28 forecast cycles whose T0/T-5/T-10 inputs depended on those analyses now
+all use `rp040-historical-replay-v3`; 27 were rebuilt and the already-correct
+06:30 cycle was retained. All 28 published 24-lead LK products and all 28 have
+12-member, 24-lead STEPS bundles selected by the exact `by-cycle` API. A
+versioned reprocessing transition permits completed grids to enter a new QC
+version without overwriting prior artifacts, while a resumable audit manifest
+prevents future selective repair from relying on stale QC summaries. Exact
+evidence and remaining operational gates are in
+`docs/RP040_福建径向干扰质控收敛与历史周期重建记录.md`.
 
 ## Completed engineering foundation
 
