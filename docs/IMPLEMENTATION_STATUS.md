@@ -64,11 +64,26 @@ NowcastInput gate.
 | RP-036 | Full Fujian historical radar analysis replay and unified history selector complete | All 452 regular 2026-08-28 four-station volumes reached `RADAR_GRID_READY` with zero real-data failures. Full paging produced 87 QPE/diagnostic analyses from 00:10–10:30 UTC; the existing nowcast history selector exposes the 84 analyses with at least two actual contributors alongside forecast runs, without adding a page or navigation entry. Forecast planning remained disabled and all operational gates remain closed |
 | RP-037 | Unified time picker and shared analysis/forecast timeline complete | The existing nowcast page now selects live following, historical radar analysis and historical forecasts from one time control. Both radar analysis and forecast views use the same previous/play/next, direct selection, scrubbing and keyboard timeline; 84 real Fujian analysis times were verified on desktop and 390 px mobile without adding a page or navigation entry |
 | RP-038 | Unified analysis-cycle and product workspace complete | Historical selections now reconstruct the product workspace of that cycle: radar QPE T0, LK deterministic and STEPS ensemble occupy stable product slots, missing outputs remain explicitly disabled, and the timeline only represents valid times within the selected cycle. Lightweight STEPS cycle catalog and exact by-cycle retrieval prevent latest-bundle leakage into historical replay |
+| RP-039 | Four-radar quality-dominant alignment and historical hindcast implemented | The historical alignment window is 300 s with an 0.80 time-quality floor, so source QC remains dominant and Z9598 at -145 s contributes to a verified 4/4-station 10:30 UTC mosaic. All 38 eligible historical cycles completed LK/product publication; STEPS uses a frozen sparse-domain-stable 12-member profile and the existing unified product timeline, while gapped cycles correctly remain analysis-only |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
 old control-plane work is an RP-004 foundation, and the old simulated Worker is
 the RP-005 foundation.
+
+RP-039 makes time alignment a bounded secondary modifier instead of allowing a
+small volume-end offset to dominate radar quality. The effective mosaic quality
+is source QC quality multiplied by a time term that remains between 0.80 and
+1.00 inside the 300-second window. The representative 2026-08-28 10:30 UTC
+analysis has actual contributions from Z9591, Z9593, Z9598 and Z9599, including
+Z9598 at -145 seconds. Historical issue times now use the same product semantics
+as realtime: T0 analysis plus model outputs inferred from the contiguous frames
+ending at T0. The replay planner found 38 eligible sequences and published all
+38 LK runs; gaps remain explicit rather than being filled into synthetic model
+input. Reprocessed analysis, QPE and NowcastInput artifact paths now include
+their immutable workflow identities, and historical STEPS bundles are published
+with cross-UID-readable permissions. Details are in
+`docs/RP039_四站时效融合与历史回算实施记录.md`.
 
 ## Completed engineering foundation
 
