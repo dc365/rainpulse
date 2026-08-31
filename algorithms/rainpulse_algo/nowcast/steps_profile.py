@@ -154,7 +154,10 @@ def _validate(profile: PystepsStepsProfile) -> None:
         raise PystepsStepsConfigError("ensemble random seed is outside uint32")
     if ensemble.num_workers != 1:
         raise PystepsStepsConfigError("RP-022 freezes one worker for reproducibility")
-    if not 2 <= ensemble.cascade_levels <= 12 or ensemble.autoregressive_order != 2:
+    if not 2 <= ensemble.cascade_levels <= 12 or ensemble.autoregressive_order not in {
+        1,
+        2,
+    }:
         raise PystepsStepsConfigError("invalid STEPS cascade or autoregressive order")
     if ensemble.transformation != "dB" or ensemble.precipitation_threshold_mm_h <= 0:
         raise PystepsStepsConfigError("STEPS precipitation transform is invalid")

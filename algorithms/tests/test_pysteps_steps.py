@@ -38,6 +38,9 @@ RP039_PROFILE_PATH = (
 RP039_V2_PROFILE_PATH = (
     REPOSITORY_ROOT / "configs" / "nowcast" / "rp039-pysteps-steps-history-v2.yaml"
 )
+RP039_V3_PROFILE_PATH = (
+    REPOSITORY_ROOT / "configs" / "nowcast" / "rp039-pysteps-steps-history-v3.yaml"
+)
 SCHEMA_PATH = REPOSITORY_ROOT / "configs" / "schemas" / "pysteps-steps-profile.schema.json"
 PRODUCT_PROFILE_PATH = (
     REPOSITORY_ROOT / "configs" / "products" / "rp022-ensemble-products-v1.yaml"
@@ -123,6 +126,10 @@ def test_profile_conforms_to_schema_and_freezes_probability_semantics() -> None:
     Draft202012Validator(schema).validate(rp039_v2_raw)
     rp039_v2 = load_pysteps_steps_profile(RP039_V2_PROFILE_PATH)
     assert rp039_v2.ensemble.noise_stddev_adjustment == "none"
+    rp039_v3_raw = yaml.safe_load(RP039_V3_PROFILE_PATH.read_text())
+    Draft202012Validator(schema).validate(rp039_v3_raw)
+    rp039_v3 = load_pysteps_steps_profile(RP039_V3_PROFILE_PATH)
+    assert rp039_v3.ensemble.autoregressive_order == 1
 
 
 def test_probability_product_profile_matches_the_model_profile_and_stays_offline() -> None:
@@ -281,7 +288,7 @@ def test_historical_missing_policy_runs_frozen_backend_on_partial_radar_domain()
         valid_mask=valid,
         low_quality_mask=fields.low_quality_mask,
     )
-    configured = load_pysteps_steps_profile(RP039_V2_PROFILE_PATH)
+    configured = load_pysteps_steps_profile(RP039_V3_PROFILE_PATH)
     configured = replace(
         configured,
         grid_id=tiny_grid().grid_id,

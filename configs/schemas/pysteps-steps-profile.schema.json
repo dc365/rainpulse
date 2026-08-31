@@ -64,7 +64,7 @@
         "random_seed": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
         "num_workers": { "const": 1 },
         "cascade_levels": { "type": "integer", "minimum": 2, "maximum": 12 },
-        "autoregressive_order": { "const": 2 },
+        "autoregressive_order": { "enum": [1, 2] },
         "transformation": { "const": "dB" },
         "precipitation_threshold_mm_h": { "type": "number", "exclusiveMinimum": 0 },
         "minimum_trackable_precipitation_pixels": {
