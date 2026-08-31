@@ -580,6 +580,26 @@ def test_rp016_pysteps_lk_profile_versions_motion_safeguards_immutably() -> None
     )
 
 
+def test_pipeline_and_workers_mount_the_same_rp040_radar_profiles() -> None:
+    compose = yaml.safe_load(
+        (REPOSITORY_ROOT / "deploy" / "docker-compose.yaml").read_text()
+    )
+    services = compose["services"]
+    orchestrator = services["orchestrator"]["environment"]
+    qc_worker = services["radar-qc-worker"]["environment"]
+    grid_worker = services["radar-grid-worker"]["environment"]
+
+    assert orchestrator["RAINPULSE_PIPELINE_QC_CONFIG"] == qc_worker[
+        "RAINPULSE_RADAR_QC_CONFIG"
+    ]
+    assert orchestrator["RAINPULSE_PIPELINE_GRID_CONFIG"] == grid_worker[
+        "RAINPULSE_RADAR_GRID_CONFIG"
+    ]
+    assert orchestrator["RAINPULSE_PIPELINE_GRID_CONFIG"].endswith(
+        "/rp040-hybrid-qc-v2.yaml"
+    )
+
+
 def test_rp015_product_profile_freezes_all_distribution_formats() -> None:
     schema = json.loads(
         (CONFIG_ROOT / "schemas" / "product-builder-profile.schema.json").read_text()
