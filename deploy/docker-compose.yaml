@@ -195,7 +195,9 @@ services:
       RAINPULSE_PIPELINE_FORECAST_ENABLED: "${RAINPULSE_PIPELINE_FORECAST_ENABLED:-true}"
       RAINPULSE_PIPELINE_REQUIRE_ALL_RADARS: "${RAINPULSE_PIPELINE_REQUIRE_ALL_RADARS:-false}"
       RAINPULSE_PIPELINE_QC_CONFIG: /opt/rainpulse/configs/qc/rp040-fujian-radial-v2.yaml
+      RAINPULSE_PIPELINE_GRID_CONFIG: /opt/rainpulse/configs/gridding/rp040-hybrid-qc-v1.yaml
       RAINPULSE_PIPELINE_MOSAIC_CONFIG: /opt/rainpulse/configs/mosaic/rp040-fujian-four-radar-qc-v1.yaml
+      RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG: /opt/rainpulse/configs/nowcast/rp040-historical-replay-v2.yaml
       TZ: UTC
     volumes:
       - ../configs:/opt/rainpulse/configs:ro

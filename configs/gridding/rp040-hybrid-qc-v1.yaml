@@ -1,0 +1,49 @@
+schema_version: "1.0"
+profile_version: rp040-hybrid-qc-v1
+algorithm_version: hybrid-scan-1.2.0-rp040-qc
+flag_definition_version: qc-flags-v1
+
+grid_id: fuzhou_118_123_25_27_0p01deg_v1
+grid_config_version: fuzhou-grid-0p01deg-v1
+ancillary_config_version: ancillary-fujian-taiwan-v1
+
+dem:
+  asset_version: copernicus-dem-glo30-2022-v1
+  horizontal_crs: EPSG:4326
+  vertical_crs: EPSG:3855
+  sampling: nearest_native_pixel
+
+beam_geometry:
+  effective_earth_radius_factor: 1.3333333333333333
+  earth_radius_m: 6371000.0
+  antenna_altitude_source: radar_config
+  vertical_beam_width_source: radar_config
+  unverified_vertical_datum_policy: allow_engineering_only
+
+blockage:
+  method: circular_beam_partial_blockage
+  cumulative_rule: maximum_along_ray
+  flag_fraction: 0.10
+  maximum_usable_fraction: 0.70
+
+polar_mapping:
+  method: nearest_polar_gate
+  maximum_azimuth_offset_deg: 0.75
+  maximum_range_offset_gate_fraction: 0.55
+
+hybrid_scan:
+  selection: lowest_usable_elevation
+  minimum_source_quality_index: 0.10
+  low_quality_threshold: 0.45
+  maximum_beam_height_agl_m: 10000.0
+  beam_height_quality_scale_m: 6000.0
+  # RP-040 creates a new artifact identity so the newly detected radial
+  # interference flags cannot be bypassed by a persisted pre-fix grid.
+  reject_flags:
+    - MISSING
+    - HARDWARE_ANOMALY
+    - RADIAL_INTERFERENCE
+    - GROUND_CLUTTER
+    - SEA_CLUTTER
+    - ANOMALOUS_PROPAGATION
+    - BIOLOGICAL_ECHO
