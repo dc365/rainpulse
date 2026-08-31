@@ -35,6 +35,9 @@ RP024_PROFILE_PATH = (
 RP039_PROFILE_PATH = (
     REPOSITORY_ROOT / "configs" / "nowcast" / "rp039-pysteps-steps-history-v1.yaml"
 )
+RP039_V2_PROFILE_PATH = (
+    REPOSITORY_ROOT / "configs" / "nowcast" / "rp039-pysteps-steps-history-v2.yaml"
+)
 SCHEMA_PATH = REPOSITORY_ROOT / "configs" / "schemas" / "pysteps-steps-profile.schema.json"
 PRODUCT_PROFILE_PATH = (
     REPOSITORY_ROOT / "configs" / "products" / "rp022-ensemble-products-v1.yaml"
@@ -116,6 +119,10 @@ def test_profile_conforms_to_schema_and_freezes_probability_semantics() -> None:
     Draft202012Validator(schema).validate(rp039_raw)
     rp039 = load_pysteps_steps_profile(RP039_PROFILE_PATH)
     assert rp039.support.input_missing_policy.startswith("dry_floor_working_copy")
+    rp039_v2_raw = yaml.safe_load(RP039_V2_PROFILE_PATH.read_text())
+    Draft202012Validator(schema).validate(rp039_v2_raw)
+    rp039_v2 = load_pysteps_steps_profile(RP039_V2_PROFILE_PATH)
+    assert rp039_v2.ensemble.noise_stddev_adjustment == "none"
 
 
 def test_probability_product_profile_matches_the_model_profile_and_stays_offline() -> None:
@@ -262,6 +269,35 @@ def test_historical_missing_policy_uses_finite_working_copy_and_preserves_suppor
     assert np.any(result.output_valid_mask == 0)
     assert np.all(np.isnan(result.rain_rate[result.member_valid_mask == 0]))
 
+
+def test_historical_missing_policy_runs_frozen_backend_on_partial_radar_domain() -> None:
+    fields = steps_fields()
+    valid = np.zeros_like(fields.valid_mask, dtype="uint8")
+    valid[:, :, :32] = 1
+    partial = PystepsLKFields(
+        reflectivity_dbz=np.where(valid == 1, fields.reflectivity_dbz, np.nan),
+        rate_mm_h=np.where(valid == 1, fields.rate_mm_h, np.nan),
+        quality_index=np.where(valid == 1, fields.quality_index, np.nan),
+        valid_mask=valid,
+        low_quality_mask=fields.low_quality_mask,
+    )
+    configured = load_pysteps_steps_profile(RP039_V2_PROFILE_PATH)
+    configured = replace(
+        configured,
+        grid_id=tiny_grid().grid_id,
+        grid_config_version=tiny_grid().config_version,
+        ensemble=replace(configured.ensemble, member_count=2, cascade_levels=3),
+    )
+
+    result = run_pysteps_steps_fields(
+        partial,
+        profile=configured,
+        lk_profile=lk_profile(),
+        grid=tiny_grid(),
+    )
+
+    assert result.rain_rate.shape == (2, 24, 64, 64)
+    assert np.all(np.isnan(result.rain_rate[result.member_valid_mask == 0]))
 
 def test_wraps_backend_failure_for_independent_lk_fallback_orchestration() -> None:
     def failing_backend(*_args, **_kwargs):

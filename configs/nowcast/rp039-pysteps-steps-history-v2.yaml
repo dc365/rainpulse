@@ -1,0 +1,46 @@
+schema_version: "1.0"
+profile_version: rp039-pysteps-steps-history-v2
+model_id: pysteps-steps
+model_version: pysteps-steps-0.3.1-history
+pysteps_version: 1.21.5
+nowcast_input_contract_version: "1.2"
+forecast_output_contract_version: "1.2"
+
+grid_id: fuzhou_118_123_25_27_0p01deg_v1
+grid_config_version: fuzhou-grid-0p01deg-v1
+
+sequence:
+  minimum_frames: 3
+  maximum_frames: 6
+  timestep_minutes: 5
+
+ensemble:
+  member_count: 12
+  random_seed: 20260829
+  num_workers: 1
+  cascade_levels: 6
+  autoregressive_order: 2
+  transformation: dB
+  precipitation_threshold_mm_h: 0.1
+  minimum_trackable_precipitation_pixels: 64
+  decomposition_method: fft
+  bandpass_filter_method: gaussian
+  precipitation_noise_method: nonparametric
+  # The automatic coefficient estimator is numerically unstable on a large
+  # dry-filled partial radar domain. Keep stochastic precipitation noise, but
+  # do not rescale it from the incomplete rectangular support.
+  noise_stddev_adjustment: none
+  velocity_perturbation_method: bps
+  probability_matching_method: cdf
+  mask_method: incremental
+  domain: spatial
+
+support:
+  input_missing_policy: dry_floor_working_copy_preserve_deterministic_support
+  output_support_policy: deterministic_support_intersect_all_members_finite
+
+probability_products:
+  event_operator: greater_than
+  calibration_status: raw_ensemble_relative_frequency_uncalibrated
+  rain_rate_thresholds_mm_h: [1.0, 5.0, 10.0, 20.0, 50.0]
+  quantiles: [0.1, 0.5, 0.9]
