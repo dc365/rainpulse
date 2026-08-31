@@ -30,6 +30,24 @@ func TestFileStoreReturnsLatestBundleAndChecksAssetIntegrity(t *testing.T) {
 	if bundle.BundleID.String() != newer || bundle.MemberCount != 12 || len(bundle.Layers) != 8 {
 		t.Fatalf("unexpected latest bundle: %#v", bundle)
 	}
+	byCycle, err := store.GetByCycle(
+		context.Background(),
+		time.Date(2026, 8, 29, 0, 0, 0, 0, time.UTC),
+		"fuzhou_118_123_25_27_0p01deg_v1",
+	)
+	if err != nil {
+		t.Fatalf("get ensemble bundle by cycle: %v", err)
+	}
+	if byCycle.BundleID.String() != newer {
+		t.Fatalf("expected newest matching cycle bundle, got %#v", byCycle)
+	}
+	if _, err := store.GetByCycle(
+		context.Background(),
+		time.Date(2026, 8, 29, 0, 5, 0, 0, time.UTC),
+		"fuzhou_118_123_25_27_0p01deg_v1",
+	); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected missing cycle to be not found, got %v", err)
+	}
 	asset, err := store.ReadAsset(
 		context.Background(), newer, "probability-gt-1-lead-005-png",
 	)

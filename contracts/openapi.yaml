@@ -752,6 +752,47 @@ paths:
                 $ref: "#/components/schemas/EnsembleProductBundle"
         "404":
           $ref: "#/components/responses/NotFound"
+  /ensemble-products/cycles:
+    get:
+      operationId: listEnsembleProductCycles
+      tags: [products]
+      summary: List offline ensemble product cycles available for historical replay
+      responses:
+        "200":
+          description: Lightweight ensemble-product cycle catalog
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EnsembleProductCycle"
+  /ensemble-products/by-cycle:
+    get:
+      operationId: getEnsembleProductBundleByCycle
+      tags: [products]
+      summary: Get an offline ensemble application-product bundle for one analysis cycle
+      parameters:
+        - name: issue_time
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: grid_id
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+      responses:
+        "200":
+          description: Offline probability and quantile GIS product bundle for the cycle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnsembleProductBundle"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /ensemble-products/{bundle_id}/assets/{asset_id}:
     get:
       operationId: getEnsembleProductAsset
@@ -2377,6 +2418,27 @@ components:
           format: int64
           minimum: 0
           nullable: true
+        created_at:
+          type: string
+          format: date-time
+    EnsembleProductCycle:
+      type: object
+      additionalProperties: false
+      required: [bundle_id, issue_time, grid_id, model_id, member_count, created_at]
+      properties:
+        bundle_id:
+          type: string
+          format: uuid
+        issue_time:
+          type: string
+          format: date-time
+        grid_id:
+          type: string
+        model_id:
+          type: string
+        member_count:
+          type: integer
+          minimum: 2
         created_at:
           type: string
           format: date-time

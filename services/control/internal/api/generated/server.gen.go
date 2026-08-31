@@ -1353,6 +1353,16 @@ type EnsembleProductBundleCalibrationStatus string
 // EnsembleProductBundleOperationalEligible defines model for EnsembleProductBundle.OperationalEligible.
 type EnsembleProductBundleOperationalEligible bool
 
+// EnsembleProductCycle defines model for EnsembleProductCycle.
+type EnsembleProductCycle struct {
+	BundleId    openapi_types.UUID `json:"bundle_id"`
+	CreatedAt   time.Time          `json:"created_at"`
+	GridId      string             `json:"grid_id"`
+	IssueTime   time.Time          `json:"issue_time"`
+	MemberCount int                `json:"member_count"`
+	ModelId     string             `json:"model_id"`
+}
+
 // EnsembleProductLayer defines model for EnsembleProductLayer.
 type EnsembleProductLayer struct {
 	Assets       []EnsembleProductAsset       `json:"assets"`
@@ -1811,6 +1821,12 @@ type GetAreaStatisticsParams struct {
 	LeadTimeMinutes int       `form:"lead_time_minutes" json:"lead_time_minutes"`
 }
 
+// GetEnsembleProductBundleByCycleParams defines parameters for GetEnsembleProductBundleByCycle.
+type GetEnsembleProductBundleByCycleParams struct {
+	IssueTime time.Time `form:"issue_time" json:"issue_time"`
+	GridId    string    `form:"grid_id" json:"grid_id"`
+}
+
 // StreamEventsParams defines parameters for StreamEvents.
 type StreamEventsParams struct {
 	RunId *openapi_types.UUID `form:"run_id,omitempty" json:"run_id,omitempty"`
@@ -1913,6 +1929,12 @@ type ServerInterface interface {
 	// GetDiagnosticLayer Read one immutable PNG layer listed by a diagnostic manifest
 	// (GET /diagnostics/{job_id}/layers/{layer_id})
 	GetDiagnosticLayer(w http.ResponseWriter, r *http.Request, jobId JobId, layerId LayerId)
+	// GetEnsembleProductBundleByCycle Get an offline ensemble application-product bundle for one analysis cycle
+	// (GET /ensemble-products/by-cycle)
+	GetEnsembleProductBundleByCycle(w http.ResponseWriter, r *http.Request, params GetEnsembleProductBundleByCycleParams)
+	// ListEnsembleProductCycles List offline ensemble product cycles available for historical replay
+	// (GET /ensemble-products/cycles)
+	ListEnsembleProductCycles(w http.ResponseWriter, r *http.Request)
 	// GetLatestEnsembleProductBundle Get the newest offline ensemble application-product bundle
 	// (GET /ensemble-products/latest)
 	GetLatestEnsembleProductBundle(w http.ResponseWriter, r *http.Request)
@@ -2093,6 +2115,18 @@ func (_ Unimplemented) GetAreaStatistics(w http.ResponseWriter, r *http.Request,
 // GetDiagnosticLayer Read one immutable PNG layer listed by a diagnostic manifest
 // (GET /diagnostics/{job_id}/layers/{layer_id})
 func (_ Unimplemented) GetDiagnosticLayer(w http.ResponseWriter, r *http.Request, jobId JobId, layerId LayerId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetEnsembleProductBundleByCycle Get an offline ensemble application-product bundle for one analysis cycle
+// (GET /ensemble-products/by-cycle)
+func (_ Unimplemented) GetEnsembleProductBundleByCycle(w http.ResponseWriter, r *http.Request, params GetEnsembleProductBundleByCycleParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListEnsembleProductCycles List offline ensemble product cycles available for historical replay
+// (GET /ensemble-products/cycles)
+func (_ Unimplemented) ListEnsembleProductCycles(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3000,6 +3034,66 @@ func (siw *ServerInterfaceWrapper) GetDiagnosticLayer(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetDiagnosticLayer(w, r, jobId, layerId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetEnsembleProductBundleByCycle operation middleware
+func (siw *ServerInterfaceWrapper) GetEnsembleProductBundleByCycle(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetEnsembleProductBundleByCycleParams
+
+	// ------------- Required query parameter "issue_time" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "issue_time", r.URL.Query(), &params.IssueTime, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "issue_time"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "issue_time", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "grid_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "grid_id", r.URL.Query(), &params.GridId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "grid_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "grid_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetEnsembleProductBundleByCycle(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListEnsembleProductCycles operation middleware
+func (siw *ServerInterfaceWrapper) ListEnsembleProductCycles(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListEnsembleProductCycles(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3962,6 +4056,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/ensemble-products/latest", wrapper.GetLatestEnsembleProductBundle)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/ensemble-products/cycles", wrapper.ListEnsembleProductCycles)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/ensemble-products/by-cycle", wrapper.GetEnsembleProductBundleByCycle)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/ensemble-products/{bundle_id}/assets/{asset_id}", wrapper.GetEnsembleProductAsset)

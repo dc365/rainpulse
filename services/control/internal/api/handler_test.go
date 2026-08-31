@@ -444,6 +444,24 @@ func TestOfflineEnsembleProductEndpointsExposeGISAssetsWithoutPublishing(t *test
 		) {
 		t.Fatalf("unexpected ensemble bundle response: status=%d body=%s", response.Code, response.Body.String())
 	}
+	request = httptest.NewRequest(http.MethodGet, "/api/v1/ensemble-products/cycles", nil)
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK ||
+		!strings.Contains(response.Body.String(), `"model_id":"pysteps-steps"`) {
+		t.Fatalf("unexpected ensemble cycle catalog: status=%d body=%s", response.Code, response.Body.String())
+	}
+	request = httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/ensemble-products/by-cycle?issue_time=2026-08-29T02%3A00%3A00Z&grid_id=fuzhou_118_123_25_27_0p01deg_v1",
+		nil,
+	)
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !store.issueTime.Equal(now) ||
+		store.gridID != "fuzhou_118_123_25_27_0p01deg_v1" {
+		t.Fatalf("unexpected ensemble cycle response: status=%d issue=%s grid=%s body=%s", response.Code, store.issueTime, store.gridID, response.Body.String())
+	}
 
 	request = httptest.NewRequest(
 		http.MethodGet,
@@ -1243,14 +1261,32 @@ func (reader *fakeAlertReader) Snapshot(context.Context) alerting.Snapshot {
 }
 
 type fakeEnsembleProductStore struct {
-	bundle ensembleproductstore.Bundle
-	asset  ensembleproductstore.AssetContent
-	err    error
+	bundle    ensembleproductstore.Bundle
+	asset     ensembleproductstore.AssetContent
+	err       error
+	issueTime time.Time
+	gridID    string
 }
 
 func (store *fakeEnsembleProductStore) GetLatest(
 	context.Context,
 ) (ensembleproductstore.Bundle, error) {
+	return store.bundle, store.err
+}
+
+func (store *fakeEnsembleProductStore) ListCycles(
+	context.Context,
+) ([]ensembleproductstore.Bundle, error) {
+	return []ensembleproductstore.Bundle{store.bundle}, store.err
+}
+
+func (store *fakeEnsembleProductStore) GetByCycle(
+	_ context.Context,
+	issueTime time.Time,
+	gridID string,
+) (ensembleproductstore.Bundle, error) {
+	store.issueTime = issueTime
+	store.gridID = gridID
 	return store.bundle, store.err
 }
 

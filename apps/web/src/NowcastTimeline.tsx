@@ -55,7 +55,6 @@ export function NowcastTimeline({
   const activeIndex = Math.max(0, assets.findIndex((asset) => asset.asset_id === selectedAsset?.asset_id))
   const activeLead = selectedAsset?.lead_time_minutes ?? 0
   const analysisMode = mode === 'analysis'
-  const firstAsset = assets[0] ?? null
   const lastAsset = assets.at(-1) ?? null
 
   useEffect(() => {
@@ -140,18 +139,18 @@ export function NowcastTimeline({
         </div>
         <div className="timeline-active-state">
           <span>{playing ? <i aria-hidden="true" /> : null}{fixedWindow
-            ? productLabel
-            : analysisMode ? `${assets.length} 个雷达分析时次` : `${assets.length} 帧 · 5 分钟间隔`}</span>
+            ? analysisMode ? '1 帧 · 周期 T0' : productLabel
+            : `${assets.length} 帧 · 5 分钟间隔`}</span>
           <strong>{analysisMode
-            ? `${formatCst(selectedAsset?.valid_time, true)} · ${formatUtc(selectedAsset?.valid_time)}`
+            ? `T0 · ${formatUtc(selectedAsset?.valid_time)}`
             : `T+${activeLead} · ${formatUtc(selectedAsset?.valid_time)}`}</strong>
         </div>
       </header>
 
       <div className="timeline-context-band" aria-hidden="true">
-        <span>{analysisMode ? formatCst(firstAsset?.valid_time, true) : `起报 ${formatUtc(issueTime)}`}</span>
-        <strong>{analysisMode ? '历史雷达分析' : fixedWindow ? productLabel : '未来 0–2 小时'}</strong>
-        <span>{analysisMode ? formatCst(lastAsset?.valid_time, true) : formatUtc(lastAsset?.valid_time)}</span>
+        <span>{analysisMode ? `分析 ${formatUtc(issueTime)}` : `起报 ${formatUtc(issueTime)}`}</span>
+        <strong>{analysisMode ? '雷达实况 T0' : fixedWindow ? productLabel : '未来 0–2 小时'}</strong>
+        <span>{analysisMode ? `有效 ${formatUtc(selectedAsset?.valid_time)}` : formatUtc(lastAsset?.valid_time)}</span>
       </div>
 
       <div
@@ -172,10 +171,7 @@ export function NowcastTimeline({
         {assets.map((asset) => {
           const lead = asset.lead_time_minutes ?? 0
           const active = asset.asset_id === selectedAsset?.asset_id
-          const validDate = asset.valid_time ? new Date(asset.valid_time) : null
-          const major = analysisMode
-            ? validDate?.getUTCMinutes() === 0
-            : lead === 60 || lead === 120
+          const major = analysisMode || lead === 60 || lead === 120
           return (
             <button
               type="button"
@@ -183,23 +179,23 @@ export function NowcastTimeline({
               className={active ? 'active' : ''}
               aria-current={active ? 'step' : undefined}
               aria-label={analysisMode
-                ? `分析 ${formatCst(asset.valid_time, true)}，${formatUtc(asset.valid_time)}`
+                ? `实况 T0，${formatCst(asset.valid_time, true)}，${formatUtc(asset.valid_time)}`
                 : `T+${lead}，${formatUtc(asset.valid_time)}`}
               disabled={fixedWindow}
               data-major={major}
-              data-frame-kind={analysisMode ? 'analysis' : 'forecast'}
+              data-frame-kind={analysisMode ? 'observation' : 'forecast'}
               onClick={() => onSelect(asset)}
             >
               <i />
-              <span>{analysisMode ? formatCst(asset.valid_time) : `T+${lead}`}</span>
+              <span>{analysisMode ? 'T0' : `T+${lead}`}</span>
             </button>
           )
         })}
       </div>
 
       <footer className="timeline-footer">
-        <span><i />当前{analysisMode ? '分析' : '时效'}</span>
-        <span>{analysisMode ? '地图随分析时次同步更新' : `起报 ${formatUtc(issueTime)}`} · ← → 键逐帧查看</span>
+        <span><i />当前时效</span>
+        <span>{analysisMode ? `分析周期 ${formatUtc(issueTime)} · 实况为 T0` : `起报 ${formatUtc(issueTime)} · ← → 键逐帧查看`}</span>
       </footer>
     </div>
   )

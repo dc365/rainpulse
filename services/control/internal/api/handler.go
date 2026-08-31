@@ -125,6 +125,8 @@ type ForecastVerificationStore interface {
 
 type EnsembleProductStore interface {
 	GetLatest(context.Context) (ensembleproductstore.Bundle, error)
+	ListCycles(context.Context) ([]ensembleproductstore.Bundle, error)
+	GetByCycle(context.Context, time.Time, string) (ensembleproductstore.Bundle, error)
 	ReadAsset(context.Context, string, string) (ensembleproductstore.AssetContent, error)
 }
 
@@ -613,6 +615,56 @@ func (service *server) GetLatestEnsembleProductBundle(
 		return
 	}
 	bundle, err := service.ensembleProducts.GetLatest(request.Context())
+	if err != nil {
+		writeEnsembleProductError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, toAPIEnsembleProductBundle(bundle))
+}
+
+func (service *server) ListEnsembleProductCycles(
+	response http.ResponseWriter,
+	request *http.Request,
+) {
+	if service.ensembleProducts == nil {
+		writeJSON(response, http.StatusOK, []apiv1.EnsembleProductCycle{})
+		return
+	}
+	bundles, err := service.ensembleProducts.ListCycles(request.Context())
+	if errors.Is(err, ensembleproductstore.ErrNotFound) {
+		writeJSON(response, http.StatusOK, []apiv1.EnsembleProductCycle{})
+		return
+	}
+	if err != nil {
+		writeEnsembleProductError(response, err)
+		return
+	}
+	cycles := make([]apiv1.EnsembleProductCycle, 0, len(bundles))
+	for _, bundle := range bundles {
+		cycles = append(cycles, apiv1.EnsembleProductCycle{
+			BundleId:    bundle.BundleID,
+			IssueTime:   bundle.IssueTime,
+			GridId:      bundle.GridID,
+			ModelId:     bundle.ModelID,
+			MemberCount: bundle.MemberCount,
+			CreatedAt:   bundle.CreatedAt,
+		})
+	}
+	writeJSON(response, http.StatusOK, cycles)
+}
+
+func (service *server) GetEnsembleProductBundleByCycle(
+	response http.ResponseWriter,
+	request *http.Request,
+	params apiv1.GetEnsembleProductBundleByCycleParams,
+) {
+	if service.ensembleProducts == nil {
+		writeError(response, http.StatusNotFound, "not_found", "offline ensemble product was not found")
+		return
+	}
+	bundle, err := service.ensembleProducts.GetByCycle(
+		request.Context(), params.IssueTime, params.GridId,
+	)
 	if err != nil {
 		writeEnsembleProductError(response, err)
 		return

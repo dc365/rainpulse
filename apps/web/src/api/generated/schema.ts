@@ -565,6 +565,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ensemble-products/cycles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List offline ensemble product cycles available for historical replay */
+        get: operations["listEnsembleProductCycles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ensemble-products/by-cycle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get an offline ensemble application-product bundle for one analysis cycle */
+        get: operations["getEnsembleProductBundleByCycle"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ensemble-products/{bundle_id}/assets/{asset_id}": {
         parameters: {
             query?: never;
@@ -1266,6 +1300,17 @@ export interface components {
             missing_cell_count?: number | null;
             /** Format: int64 */
             no_rain_cell_count?: number | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        EnsembleProductCycle: {
+            /** Format: uuid */
+            bundle_id: string;
+            /** Format: date-time */
+            issue_time: string;
+            grid_id: string;
+            model_id: string;
+            member_count: number;
             /** Format: date-time */
             created_at: string;
         };
@@ -2575,6 +2620,50 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Offline probability and quantile GIS product bundle */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnsembleProductBundle"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listEnsembleProductCycles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Lightweight ensemble-product cycle catalog */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnsembleProductCycle"][];
+                };
+            };
+        };
+    };
+    getEnsembleProductBundleByCycle: {
+        parameters: {
+            query: {
+                issue_time: string;
+                grid_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Offline probability and quantile GIS product bundle for the cycle */
             200: {
                 headers: {
                     [name: string]: unknown;

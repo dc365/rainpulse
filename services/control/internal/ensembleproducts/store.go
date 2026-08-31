@@ -105,17 +105,52 @@ func NewFileStore(root string) *FileStore {
 }
 
 func (store *FileStore) GetLatest(ctx context.Context) (Bundle, error) {
-	entries, err := os.ReadDir(store.root)
-	if errors.Is(err, os.ErrNotExist) {
+	bundles, err := store.ListCycles(ctx)
+	if err != nil {
+		return Bundle{}, err
+	}
+	if len(bundles) == 0 {
 		return Bundle{}, ErrNotFound
 	}
+	return bundles[0], nil
+}
+
+func (store *FileStore) ListCycles(ctx context.Context) ([]Bundle, error) {
+	return store.listBundles(ctx)
+}
+
+func (store *FileStore) GetByCycle(
+	ctx context.Context,
+	issueTime time.Time,
+	gridID string,
+) (Bundle, error) {
+	if issueTime.IsZero() || strings.TrimSpace(gridID) == "" {
+		return Bundle{}, ErrNotFound
+	}
+	bundles, err := store.ListCycles(ctx)
 	if err != nil {
-		return Bundle{}, fmt.Errorf("list ensemble-product root: %w", err)
+		return Bundle{}, err
+	}
+	for _, bundle := range bundles {
+		if bundle.IssueTime.Equal(issueTime) && bundle.GridID == gridID {
+			return bundle, nil
+		}
+	}
+	return Bundle{}, ErrNotFound
+}
+
+func (store *FileStore) listBundles(ctx context.Context) ([]Bundle, error) {
+	entries, err := os.ReadDir(store.root)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("list ensemble-product root: %w", err)
 	}
 	bundles := make([]Bundle, 0, len(entries))
 	for _, entry := range entries {
 		if err := ctx.Err(); err != nil {
-			return Bundle{}, err
+			return nil, err
 		}
 		if !entry.IsDir() || !validUUID(entry.Name()) {
 			continue
@@ -125,17 +160,14 @@ func (store *FileStore) GetLatest(ctx context.Context) (Bundle, error) {
 			continue
 		}
 		if err != nil {
-			return Bundle{}, err
+			return nil, err
 		}
 		bundles = append(bundles, bundle)
-	}
-	if len(bundles) == 0 {
-		return Bundle{}, ErrNotFound
 	}
 	sort.Slice(bundles, func(left, right int) bool {
 		return bundles[left].CreatedAt.After(bundles[right].CreatedAt)
 	})
-	return bundles[0], nil
+	return bundles, nil
 }
 
 func (store *FileStore) ReadAsset(
