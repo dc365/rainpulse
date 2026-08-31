@@ -16,6 +16,7 @@ from rainpulse_algo.radar.qc import (
     QCInputError,
     _radial_probability,
     apply_basic_qc,
+    audit_long_range_saturated_radials,
     load_qc_profile,
 )
 from rainpulse_algo.radar.qc_worker import _execute_basic_qc
@@ -200,6 +201,33 @@ def test_radial_interference_detects_two_thirds_high_long_range_ray(
     )
     assert np.nanmax(probability[:6, :]) == 0.0
     assert np.nanmax(probability[7:, :]) == 0.0
+
+
+def test_radial_audit_reports_the_same_two_thirds_signature(tmp_path: Path) -> None:
+    """The read-only audit must select the exact residual-ray shape QC rejects."""
+    store = MemoryStore()
+    root = zarr.group(store=store)
+    root.attrs["contract_name"] = "rainpulse.normalized-radar-volume"
+    root.create_dataset("sweep_number", data=np.array([0], dtype="int16"))
+    sweep = root.create_group("sweep_000")
+    gate_count = 600
+    values = np.full((2, gate_count), 30.0, dtype="float32")
+    values[1, :] = np.linspace(35.0, 65.0, gate_count, dtype="float32")
+    sweep.create_dataset("DBZH", data=values)
+    sweep.create_dataset("azimuth", data=np.array([10.0, 63.52], dtype="float32"))
+    normalized = {str(key): bytes(value) for key, value in store.items()}
+
+    audit = audit_long_range_saturated_radials(
+        normalized,
+        load_qc_profile(QC_CONFIG, FLAG_CONFIG),
+    )
+
+    assert audit["saturated_ray_count"] == 1
+    assert audit["sweeps"][0]["saturated_ray_count"] == 1
+    evidence = audit["sweeps"][0]["rays"][0]
+    assert evidence["ray_index"] == 1
+    assert evidence["high_gate_fraction"] == pytest.approx(2 / 3, abs=0.02)
+    assert evidence["range_growth_db"] >= 12.0
 
 
 def test_unavailable_radar_health_is_a_hard_qc_gate(tmp_path: Path) -> None:

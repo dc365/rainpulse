@@ -11,7 +11,6 @@ import yaml
 import zarr
 from zarr.storage import MemoryStore
 
-
 # A constant-power transmitter/interference signal grows with range after the
 # radar's range correction and can occupy a contiguous fan of neighbouring
 # rays.  Immediate-neighbour differencing cannot see the interior of that fan.
@@ -23,6 +22,7 @@ _SATURATED_RADIAL_MINIMUM_HIGH_DBZH = 45.0
 _SATURATED_RADIAL_MINIMUM_HIGH_FRACTION = 0.60
 _SATURATED_RADIAL_MINIMUM_HIGH_RUN = 400
 _SATURATED_RADIAL_MINIMUM_RANGE_GROWTH_DB = 12.0
+_SATURATED_RADIAL_SIGNATURE_VERSION = "long-range-saturated-radial-v2"
 
 
 class QCConfigError(ValueError):
@@ -93,6 +93,22 @@ class BasicQCProfile:
     sea_ap: SeaAPConfig
     quality_index: QualityIndexConfig
     flag_masks: dict[str, np.uint32]
+
+
+@dataclass(frozen=True)
+class SaturatedRadialEvidence:
+    high_gate_fraction: float
+    longest_high_run: int
+    range_growth_db: float
+    peak_dbzh: float
+
+    def value(self) -> dict[str, float | int]:
+        return {
+            "high_gate_fraction": self.high_gate_fraction,
+            "longest_high_run": self.longest_high_run,
+            "range_growth_db": self.range_growth_db,
+            "peak_dbzh": self.peak_dbzh,
+        }
 
 
 @dataclass(frozen=True)
@@ -425,6 +441,68 @@ def apply_basic_qc(
     )
 
 
+def audit_long_range_saturated_radials(
+    normalized_objects: dict[str, bytes],
+    profile: BasicQCProfile,
+) -> dict[str, Any]:
+    """Read normalized polar DBZH and report only the RP-040 saturation signature."""
+    store = MemoryStore()
+    store.update(normalized_objects)
+    root = zarr.open_group(store=store, mode="r")
+    if root.attrs.get("contract_name") != "rainpulse.normalized-radar-volume":
+        raise QCInputError("radial audit input is not a NormalizedRadarVolume")
+
+    sweep_results: list[dict[str, Any]] = []
+    total = 0
+    lower, upper = profile.echo.dbzh_valid_range_dbz
+    for sweep_number in root["sweep_number"][:]:
+        name = f"sweep_{int(sweep_number):03d}"
+        group = root[name]
+        rays: list[dict[str, Any]] = []
+        if "DBZH" in group:
+            dbzh = group["DBZH"][:].astype("float32", copy=False)
+            valid = np.isfinite(dbzh) & (dbzh >= lower) & (dbzh <= upper)
+            azimuth = group["azimuth"][:] if "azimuth" in group else None
+            for ray_index in range(dbzh.shape[0]):
+                evidence = _long_range_saturated_radial_evidence(
+                    dbzh[ray_index], valid[ray_index]
+                )
+                if evidence is None:
+                    continue
+                rays.append(
+                    {
+                        "ray_index": ray_index,
+                        "azimuth_deg": (
+                            float(azimuth[ray_index]) if azimuth is not None else None
+                        ),
+                        **evidence.value(),
+                    }
+                )
+        total += len(rays)
+        sweep_results.append(
+            {
+                "sweep": name,
+                "saturated_ray_count": len(rays),
+                "rays": rays,
+            }
+        )
+
+    return {
+        "signature_version": _SATURATED_RADIAL_SIGNATURE_VERSION,
+        "qc_profile": profile.profile_version,
+        "qc_pipeline_version": profile.pipeline_version,
+        "criteria": {
+            "minimum_valid_gate_fraction": _SATURATED_RADIAL_MINIMUM_VALID_FRACTION,
+            "minimum_high_dbzh": _SATURATED_RADIAL_MINIMUM_HIGH_DBZH,
+            "minimum_high_gate_fraction": _SATURATED_RADIAL_MINIMUM_HIGH_FRACTION,
+            "minimum_high_run": _SATURATED_RADIAL_MINIMUM_HIGH_RUN,
+            "minimum_range_growth_db": _SATURATED_RADIAL_MINIMUM_RANGE_GROWTH_DB,
+        },
+        "saturated_ray_count": total,
+        "sweeps": sweep_results,
+    }
+
+
 def _meteorological_probability(
     dbzh: np.ndarray,
     valid: np.ndarray,
@@ -503,23 +581,39 @@ def _radial_probability(
 
 def _is_long_range_saturated_radial(dbzh: np.ndarray, valid: np.ndarray) -> bool:
     """Detect a range-growing, nearly full-ray interference signature."""
+    return _long_range_saturated_radial_evidence(dbzh, valid) is not None
+
+
+def _long_range_saturated_radial_evidence(
+    dbzh: np.ndarray,
+    valid: np.ndarray,
+) -> SaturatedRadialEvidence | None:
     if np.mean(valid) < _SATURATED_RADIAL_MINIMUM_VALID_FRACTION:
-        return False
+        return None
     high = valid & (dbzh >= _SATURATED_RADIAL_MINIMUM_HIGH_DBZH)
     valid_count = int(np.count_nonzero(valid))
-    if np.count_nonzero(high) / valid_count < _SATURATED_RADIAL_MINIMUM_HIGH_FRACTION:
-        return False
-    if _longest_run(high) < _SATURATED_RADIAL_MINIMUM_HIGH_RUN:
-        return False
+    high_fraction = float(np.count_nonzero(high) / valid_count)
+    if high_fraction < _SATURATED_RADIAL_MINIMUM_HIGH_FRACTION:
+        return None
+    high_run = _longest_run(high)
+    if high_run < _SATURATED_RADIAL_MINIMUM_HIGH_RUN:
+        return None
 
     gate_count = dbzh.shape[0]
     quartile = max(gate_count // 4, 1)
     near_values = dbzh[:quartile][valid[:quartile]]
     far_values = dbzh[-quartile:][valid[-quartile:]]
     if near_values.size == 0 or far_values.size == 0:
-        return False
+        return None
     range_growth = float(np.median(far_values) - np.median(near_values))
-    return range_growth >= _SATURATED_RADIAL_MINIMUM_RANGE_GROWTH_DB
+    if range_growth < _SATURATED_RADIAL_MINIMUM_RANGE_GROWTH_DB:
+        return None
+    return SaturatedRadialEvidence(
+        high_gate_fraction=high_fraction,
+        longest_high_run=high_run,
+        range_growth_db=range_growth,
+        peak_dbzh=float(np.max(dbzh[valid])),
+    )
 
 
 def _range_quality(ranges: np.ndarray, minimum: float) -> np.ndarray:
