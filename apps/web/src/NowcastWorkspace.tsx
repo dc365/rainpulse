@@ -447,21 +447,23 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
         }))
         nextAssets = Object.fromEntries(assetPairs)
         let cycleEnsemble: EnsembleProductBundle | null = null
-        try {
-          const query = new URLSearchParams({
-            issue_time: new Date(selected.time).toISOString(),
-            grid_id: selected.gridID,
-          })
-          const ensembleResponse = await fetch(`/api/v1/ensemble-products/by-cycle?${query}`, {
-            signal: controller.signal,
-          })
-          if (ensembleResponse.ok) {
-            const candidate = await ensembleResponse.json() as unknown
-            if (isEnsembleBundle(candidate)) cycleEnsemble = candidate
+        if (selected.ensemble) {
+          try {
+            const query = new URLSearchParams({
+              issue_time: new Date(selected.time).toISOString(),
+              grid_id: selected.gridID,
+            })
+            const ensembleResponse = await fetch(`/api/v1/ensemble-products/by-cycle?${query}`, {
+              signal: controller.signal,
+            })
+            if (ensembleResponse.ok) {
+              const candidate = await ensembleResponse.json() as unknown
+              if (isEnsembleBundle(candidate)) cycleEnsemble = candidate
+            }
+          } catch (ensembleRequestError: unknown) {
+            if (ensembleRequestError instanceof DOMException
+              && ensembleRequestError.name === 'AbortError') throw ensembleRequestError
           }
-        } catch (ensembleRequestError: unknown) {
-          if (ensembleRequestError instanceof DOMException
-            && ensembleRequestError.name === 'AbortError') throw ensembleRequestError
         }
         let latestVerification: VerificationSummary | null = null
         try {
