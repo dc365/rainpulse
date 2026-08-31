@@ -65,6 +65,7 @@ NowcastInput gate.
 | RP-037 | Unified time picker and shared analysis/forecast timeline complete | The existing nowcast page now selects live following, historical radar analysis and historical forecasts from one time control. Both radar analysis and forecast views use the same previous/play/next, direct selection, scrubbing and keyboard timeline; 84 real Fujian analysis times were verified on desktop and 390 px mobile without adding a page or navigation entry |
 | RP-038 | Unified analysis-cycle and product workspace complete | Historical selections now reconstruct the product workspace of that cycle: radar QPE T0, LK deterministic and STEPS ensemble occupy stable product slots, missing outputs remain explicitly disabled, and the timeline only represents valid times within the selected cycle. Lightweight STEPS cycle catalog and exact by-cycle retrieval prevent latest-bundle leakage into historical replay |
 | RP-039 | Four-radar quality-dominant alignment and historical hindcast complete | The historical alignment window is 300 s with an 0.80 time-quality floor, so source QC remains dominant and Z9598 at -145 s contributes to a verified 4/4-station 10:30 UTC mosaic. All 38 eligible historical cycles completed LK and 12-member STEPS products in the existing unified timeline, while gapped cycles correctly remain analysis-only |
+| RP-040 | Fujian radial-interference QC convergence and representative historical-cycle reconstruction complete | Long contiguous saturated rays are rejected even when their neighbouring azimuths are similarly contaminated. The corrected 06:30 UTC cycle uses all four radars, removes the visible eastern interference fan, and republishes QPE, 24-lead LK and 12-member STEPS evidence through the existing unified workspace; this remains engineering replay rather than an operational QC sign-off |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -84,6 +85,21 @@ being filled into synthetic model input. Reprocessed analysis, QPE and NowcastIn
 their immutable workflow identities, and historical STEPS bundles are published
 with cross-UID-readable permissions. Details are in
 `docs/RP039_四站时效融合与历史回算实施记录.md`.
+
+RP-040 closes the radial-interference defect exposed by the 2026-08-28 06:30
+UTC historical image. Neighbour-only azimuth comparison could not reject the
+interior of a wide contiguous saturated fan, while one two-thirds-saturated
+edge ray narrowly missed the first long-range threshold. The immutable v3 QC
+profile combines a minimum 400-gate high-reflectivity run, a 0.60 high-gate
+fraction and 12 dB range growth. It flags 73 Z9591 rays and removes both the
+wide fan and its residual ray without weakening source-quality-first four-radar
+fusion. The corrected analysis has four actual contributors, 0.4939 coverage
+and 0.5399 mean QI; its QPE maximum falls from the original 220.35 mm/h to
+80.46 mm/h. A versioned reprocessing transition now permits a completed grid
+scan to enter a new QC version without overwriting prior artifacts. The same
+06:30 UTC issue was reconstructed as a three-frame NowcastInput, 24-lead LK
+run and 12-member, 24-lead STEPS cycle. Exact evidence and remaining operational
+gates are in `docs/RP040_福建径向干扰质控收敛与历史周期重建记录.md`.
 
 ## Completed engineering foundation
 
