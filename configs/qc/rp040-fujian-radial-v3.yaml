@@ -1,0 +1,43 @@
+schema_version: "1.0"
+profile_version: rp040-fujian-radial-v3
+pipeline_version: rp040-fujian-radial-1.2.0
+flag_definition_version: qc-flags-v1
+
+health_gate:
+  reject_states: [UNAVAILABLE]
+  degraded_quality_multiplier: 0.80
+
+echo:
+  dbzh_valid_range_dbz: [-32.0, 80.0]
+  no_rain_below_dbz: -10.0
+  low_snr_db: 3.0
+  snr_meteo_range_db: [0.0, 12.0]
+  rhohv_meteo_range: [0.70, 0.97]
+  fallback_meteo_probability: 0.60
+
+# v3 retains both isolated-ray neighbour differencing and the range-growing
+# saturation signature. The latter accepts the observed 66.7%-high boundary
+# ray while still requiring >=400 consecutive high gates and >=12 dB growth.
+radial_interference:
+  minimum_valid_gate_fraction: 0.55
+  minimum_consecutive_gates: 80
+  neighbour_difference_db: 12.0
+  low_quality_probability: 0.65
+  flag_probability: 0.80
+
+static_ground_clutter:
+  asset_uri: null
+  asset_version: null
+  flag_probability: 0.70
+
+sea_ap:
+  coastline_asset_uri: null
+  asset_version: null
+  flag_probability: 0.70
+
+quality_index:
+  aggregation: product
+  components: [QI_METEO, QI_INTERFERENCE, QI_RANGE]
+  minimum_range_quality: 0.92
+  low_quality_threshold: 0.45
+  unavailable_component_policy: skip_and_record

@@ -194,10 +194,10 @@ services:
       RAINPULSE_PIPELINE_MOSAIC_DELAY: "${RAINPULSE_PIPELINE_MOSAIC_DELAY:-2m}"
       RAINPULSE_PIPELINE_FORECAST_ENABLED: "${RAINPULSE_PIPELINE_FORECAST_ENABLED:-true}"
       RAINPULSE_PIPELINE_REQUIRE_ALL_RADARS: "${RAINPULSE_PIPELINE_REQUIRE_ALL_RADARS:-false}"
-      RAINPULSE_PIPELINE_QC_CONFIG: /opt/rainpulse/configs/qc/rp040-fujian-radial-v2.yaml
-      RAINPULSE_PIPELINE_GRID_CONFIG: /opt/rainpulse/configs/gridding/rp040-hybrid-qc-v2.yaml
-      RAINPULSE_PIPELINE_MOSAIC_CONFIG: /opt/rainpulse/configs/mosaic/rp040-fujian-four-radar-qc-v1.yaml
-      RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG: /opt/rainpulse/configs/nowcast/rp040-historical-replay-v2.yaml
+      RAINPULSE_PIPELINE_QC_CONFIG: /opt/rainpulse/configs/qc/rp040-fujian-radial-v3.yaml
+      RAINPULSE_PIPELINE_GRID_CONFIG: /opt/rainpulse/configs/gridding/rp040-hybrid-qc-v3.yaml
+      RAINPULSE_PIPELINE_MOSAIC_CONFIG: /opt/rainpulse/configs/mosaic/rp040-fujian-four-radar-qc-v2.yaml
+      RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG: /opt/rainpulse/configs/nowcast/rp040-historical-replay-v3.yaml
       TZ: UTC
     volumes:
       - ../configs:/opt/rainpulse/configs:ro
@@ -306,7 +306,7 @@ services:
       RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
       RAINPULSE_WORKER_ID: rp008-basic-qc
       RAINPULSE_WORKER_PROFILE: radar-qc-basic
-      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/rp040-fujian-radial-v2.yaml
+      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/rp040-fujian-radial-v3.yaml
       RAINPULSE_QC_FLAG_DEFINITIONS: /opt/rainpulse/configs/qc/flag-definitions.yaml
       RAINPULSE_QC_ASSET_ROOTS: /opt/rainpulse/configs/qc/assets
       TZ: UTC
@@ -345,7 +345,7 @@ services:
       RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
       RAINPULSE_WORKER_ID: rp016-hybrid-grid
       RAINPULSE_WORKER_PROFILE: radar-grid-hybrid
-      RAINPULSE_RADAR_GRID_CONFIG: /opt/rainpulse/configs/gridding/rp040-hybrid-qc-v2.yaml
+      RAINPULSE_RADAR_GRID_CONFIG: /opt/rainpulse/configs/gridding/rp040-hybrid-qc-v3.yaml
       RAINPULSE_GRID_CONFIG: /opt/rainpulse/configs/grids/fuzhou-0p01deg-v1.yaml
       RAINPULSE_ANCILLARY_CONFIG: /opt/rainpulse/configs/ancillary/fujian-taiwan-v1.yaml
       RAINPULSE_ANCILLARY_ROOT: /opt/rainpulse/ancillary
@@ -388,7 +388,7 @@ services:
       RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
       RAINPULSE_WORKER_ID: rp016-qi-mosaic
       RAINPULSE_WORKER_PROFILE: analysis-mosaic-qi
-      RAINPULSE_RADAR_MOSAIC_CONFIG: /opt/rainpulse/configs/mosaic/rp040-fujian-four-radar-qc-v1.yaml
+      RAINPULSE_RADAR_MOSAIC_CONFIG: /opt/rainpulse/configs/mosaic/rp040-fujian-four-radar-qc-v2.yaml
       RAINPULSE_GRID_CONFIG: /opt/rainpulse/configs/grids/fuzhou-0p01deg-v1.yaml
       RAINPULSE_QC_FLAG_DEFINITIONS: /opt/rainpulse/configs/qc/flag-definitions.yaml
       TZ: UTC
@@ -503,7 +503,7 @@ services:
       RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
       RAINPULSE_WORKER_ID: rp013-nowcast-input
       RAINPULSE_WORKER_PROFILE: nowcast-input
-      RAINPULSE_NOWCAST_INPUT_CONFIG: /opt/rainpulse/configs/nowcast/rp040-historical-replay-v2.yaml
+      RAINPULSE_NOWCAST_INPUT_CONFIG: /opt/rainpulse/configs/nowcast/rp040-historical-replay-v3.yaml
       RAINPULSE_NOWCAST_INPUT_CONFIG_DIR: /opt/rainpulse/configs/nowcast
       RAINPULSE_GRID_CONFIG: /opt/rainpulse/configs/grids/fuzhou-0p01deg-v1.yaml
       TZ: UTC

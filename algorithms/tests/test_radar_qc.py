@@ -176,6 +176,32 @@ def test_radial_interference_detects_adjacent_long_range_saturated_rays(
     assert np.nanmax(probability[10:, :]) == 0.0
 
 
+def test_radial_interference_detects_two_thirds_high_long_range_ray(
+    tmp_path: Path,
+) -> None:
+    """The observed Z9591 boundary ray is still interference at 66.7% high gates."""
+    profile = load_qc_profile(QC_CONFIG, FLAG_CONFIG)
+    dbzh = np.full((12, 600), np.nan, dtype="float32")
+
+    dbzh[:, :180] = 30.0
+    dbzh[6, :] = np.linspace(35.0, 65.0, 600, dtype="float32")
+    valid = np.isfinite(dbzh)
+
+    probability, flagged_count = _radial_probability(
+        dbzh,
+        valid,
+        profile.radial_interference,
+    )
+
+    assert flagged_count == 1
+    assert np.all(
+        probability[6, :]
+        >= profile.radial_interference.flag_probability
+    )
+    assert np.nanmax(probability[:6, :]) == 0.0
+    assert np.nanmax(probability[7:, :]) == 0.0
+
+
 def test_unavailable_radar_health_is_a_hard_qc_gate(tmp_path: Path) -> None:
     normalized = normalized_fixture(tmp_path)
     health = json.loads(normalized["health/summary.json"])

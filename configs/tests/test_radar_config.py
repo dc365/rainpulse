@@ -598,7 +598,7 @@ def test_pipeline_and_workers_mount_the_same_rp040_radar_profiles() -> None:
         "RAINPULSE_RADAR_GRID_CONFIG"
     ]
     assert orchestrator["RAINPULSE_PIPELINE_GRID_CONFIG"].endswith(
-        "/rp040-hybrid-qc-v2.yaml"
+        "/rp040-hybrid-qc-v3.yaml"
     )
     assert orchestrator["RAINPULSE_PIPELINE_MOSAIC_CONFIG"] == mosaic_worker[
         "RAINPULSE_RADAR_MOSAIC_CONFIG"
