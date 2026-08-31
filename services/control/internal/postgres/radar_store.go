@@ -183,8 +183,7 @@ WHERE run_id = $1 FOR UPDATE`, bundle.Job.RunID).Scan(&scanID, &status, &normali
 	if scanID != bundle.ScanID {
 		return fmt.Errorf("radar QC scan identity differs from its run")
 	}
-	if status != workflow.RadarScanNormalized && status != workflow.RadarScanQCRunning &&
-		status != workflow.RadarScanQCReady && status != workflow.RadarScanFailed {
+	if !radarScanCanCreateQC(status) {
 		return fmt.Errorf("radar scan status %s cannot create a QC job", status)
 	}
 	if normalizedURI == "" {
@@ -249,6 +248,14 @@ WHERE run_id = $1`, bundle.Job.RunID, createdOutbox)
 		return fmt.Errorf("commit radar QC transaction: %w", err)
 	}
 	return nil
+}
+
+func radarScanCanCreateQC(status workflow.RadarScanStatus) bool {
+	return status == workflow.RadarScanNormalized ||
+		status == workflow.RadarScanQCRunning ||
+		status == workflow.RadarScanQCReady ||
+		status == workflow.RadarScanGridReady ||
+		status == workflow.RadarScanFailed
 }
 
 func (store *Store) CreateRadarGridBundle(ctx context.Context, bundle workflow.RadarGridBundle) error {
