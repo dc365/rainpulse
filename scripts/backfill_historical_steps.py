@@ -208,6 +208,10 @@ def _write_bundle(root: Path, run_id: UUID, objects: dict[str, bytes]) -> None:
             path = staging / relative_path
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data)
+        # mkdtemp creates the staging root with mode 0700.  The published
+        # bundle is read through a read-only bind mount by the API container,
+        # which intentionally runs under a different UID.
+        staging.chmod(0o755)
         staging.rename(destination)
 
 
