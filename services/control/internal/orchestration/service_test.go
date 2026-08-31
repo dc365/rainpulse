@@ -284,7 +284,7 @@ func TestCreateAnalysisMosaicAlignsClosestReadyGridAndUsesV2Contract(t *testing.
 	}
 	if requested.Payload.MosaicAlgorithm != input.MosaicAlgorithmVersion ||
 		requested.Payload.OutputPrefix != "s3://rainpulse/analysis/mosaic/"+
-			input.GridID+"/2026/08/25/120500Z/qi-mosaic-1.1.0/" {
+			input.GridID+"/2026/08/25/120500Z/qi-mosaic-1.1.0/"+analysis.ID.String()+"/" {
 		t.Fatalf("unexpected mosaic request: %#v", requested.Payload)
 	}
 	secondAnalysis, secondJob, err := service.CreateAnalysisMosaic(context.Background(), input)
@@ -332,7 +332,7 @@ func TestCreateAnalysisQPEUsesCommittedMosaicAndDeterministicIDs(t *testing.T) {
 	}
 	if requested.Payload.InputURI != input.MosaicURI ||
 		requested.Payload.OutputPrefix != "s3://rainpulse/analysis/"+input.GridID+
-			"/2026/08/25/120500Z/basic-zr-qpe-1.0.0/" ||
+			"/2026/08/25/120500Z/basic-zr-qpe-1.0.0/"+input.AnalysisID.String()+"/" ||
 		requested.Payload.QPEConfigVersion != input.QPEConfigVersion {
 		t.Fatalf("unexpected QPE request: %#v", requested.Payload)
 	}
@@ -546,7 +546,9 @@ func TestCreateNowcastInputSelectsLatestContiguousOperationalFrames(t *testing.T
 	}
 	if requested.EventType != NowcastInputRequestedEventType ||
 		repository.nowcastInput.Outbox.Subject != NowcastInputRequestedSubject ||
-		len(requested.Payload.AnalysisIDs) != 3 {
+		len(requested.Payload.AnalysisIDs) != 3 ||
+		requested.Payload.OutputPrefix != "s3://rainpulse/nowcast-input/"+input.GridID+
+			"/2026/08/25/121000Z/nowcast-input-builder-1.0.0/"+run.ID.String()+"/" {
 		t.Fatalf("unexpected RP-013 request: %#v", requested)
 	}
 	secondRun, secondJob, err := service.CreateNowcastInput(context.Background(), input)

@@ -545,10 +545,11 @@ func (service *Service) CreateAnalysisMosaic(
 	traceID := stableID("analysis-mosaic-trace", runID.String(), input.MosaicAlgorithmVersion)
 	eventID := stableID("analysis-mosaic-request", jobID.String())
 	outputPrefix := fmt.Sprintf(
-		"s3://rainpulse/analysis/mosaic/%s/%s/%s/",
+		"s3://rainpulse/analysis/mosaic/%s/%s/%s/%s/",
 		input.GridID,
 		analysisTime.Format("2006/01/02/150405Z"),
 		url.PathEscape(input.MosaicAlgorithmVersion),
+		analysisID.String(),
 	)
 	requestInputs := make([]AnalysisMosaicRequestedInput, 0, len(selected))
 	for _, candidate := range selected {
@@ -664,10 +665,11 @@ func (service *Service) CreateAnalysisQPE(
 	traceID := stableID("analysis-qpe-trace", input.RunID.String(), input.QPEAlgorithmVersion)
 	eventID := stableID("analysis-qpe-request", jobID.String())
 	outputPrefix := fmt.Sprintf(
-		"s3://rainpulse/analysis/%s/%s/%s/",
+		"s3://rainpulse/analysis/%s/%s/%s/%s/",
 		input.GridID,
 		input.AnalysisTime.UTC().Format("2006/01/02/150405Z"),
 		url.PathEscape(input.QPEAlgorithmVersion),
+		input.AnalysisID.String(),
 	)
 	request := AnalysisQPERequested{
 		SchemaVersion: SchemaVersion,
@@ -876,10 +878,11 @@ func (service *Service) CreateNowcastInput(
 	traceID := stableID("nowcast-input-trace", runID.String())
 	eventID := stableID("nowcast-input-request", jobID.String())
 	outputPrefix := fmt.Sprintf(
-		"s3://rainpulse/nowcast-input/%s/%s/%s/",
+		"s3://rainpulse/nowcast-input/%s/%s/%s/%s/",
 		input.GridID,
 		issueTime.Format("2006/01/02/150405Z"),
 		url.PathEscape(input.PreprocessVersion),
+		runID.String(),
 	)
 	analysisIDs := make([]uuid.UUID, len(frames))
 	inputURIs := make([]string, len(frames))
