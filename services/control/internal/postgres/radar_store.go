@@ -236,7 +236,7 @@ ON CONFLICT (event_id) DO NOTHING`,
 	_, err = tx.Exec(ctx, `
 UPDATE radar_scan_runs
 SET status = CASE
-        WHEN $2 AND status IN ('NORMALIZED', 'FAILED', 'QC_READY') THEN 'QC_RUNNING'
+        WHEN $2 AND status IN ('NORMALIZED', 'FAILED', 'QC_READY', 'RADAR_GRID_READY') THEN 'QC_RUNNING'
         ELSE status
     END,
     degraded_reason = CASE WHEN $2 AND status = 'FAILED' THEN NULL ELSE degraded_reason END,

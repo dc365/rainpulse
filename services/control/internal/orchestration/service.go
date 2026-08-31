@@ -427,6 +427,7 @@ func validateRadarQCInput(input RadarQCInput) error {
 	if input.CurrentStatus != workflow.RadarScanNormalized &&
 		input.CurrentStatus != workflow.RadarScanQCRunning &&
 		input.CurrentStatus != workflow.RadarScanQCReady &&
+		input.CurrentStatus != workflow.RadarScanGridReady &&
 		input.CurrentStatus != workflow.RadarScanFailed {
 		return fmt.Errorf("radar scan status %q cannot enter QC", input.CurrentStatus)
 	}

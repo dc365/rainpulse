@@ -164,6 +164,11 @@ func TestCreateRadarQCUsesNormalizedInputAndStableIdentity(t *testing.T) {
 	}
 
 	input.Health = workflow.RadarHealthDegraded
+	input.CurrentStatus = workflow.RadarScanGridReady
+	if _, err := service.CreateRadarQC(context.Background(), input); err != nil {
+		t.Fatalf("completed grid with a new QC version must be reprocessable: %v", err)
+	}
+
 	input.CurrentStatus = workflow.RadarScanFailed
 	if _, err := service.CreateRadarQC(context.Background(), input); err != nil {
 		t.Fatalf("failed QC scan with normalized input must be retryable: %v", err)
