@@ -1,0 +1,108 @@
+{
+  "schema_version": "1.0",
+  "status": "passed",
+  "measured_at": "2026-08-31T23:17:33.056516+00:00",
+  "scope": "complete_mrms_training_sample_library_materialization_and_validation",
+  "deployed_code_revision": "def7027",
+  "profile": {
+    "version": "nowcastnet-mrms-full-samples-v1",
+    "sha256": "c84c76c399c9a0d74f94dea608bc4030e71b482a5247fc821fc7e245fe034be5",
+    "training_profile_sha256": "c54d200a88e9f60d9dd1bfb44c4e2421700b4e1bb9ac3e60e36097b2b5c618bc",
+    "sample_count": 100000,
+    "shard_count": 4000,
+    "samples_per_shard": 25
+  },
+  "deterministic_plan": {
+    "plan_id": "5ce3859f8f914c9cd55ea92a96a5dd860d46e297fff229472843d21e0bc26892",
+    "artifact_sha256": "f75194464cc22c309b67dbe86e80e1616021452048f7d30853d5c1d009d98a09",
+    "revision": 6,
+    "selected_window_count": 4000,
+    "planned_sample_count": 100000,
+    "holdout_window_count": 0,
+    "superseded_plan_count": 5,
+    "replacements": [
+      {
+        "shard_index": 723,
+        "rejected_window_id": "6874036cbd14855effecc20d2fa59fcc6430d6cc19ea194bae35831d517d8a27",
+        "replacement_window_id": "c7efb2852b73509edba195667cdb444a00af0b4633d9e4471385a820d0c0960a",
+        "reason": "insufficient_separated_all_valid_spatial_crops"
+      },
+      {
+        "shard_index": 1994,
+        "rejected_window_id": "b13063383a9843969e1c02d0423150d02a893de67a644e370d61ec945280687d",
+        "replacement_window_id": "2e1ffb0f00c3bbfc6276ed760eba27bedf2a0a8e03a84afa647649c0126e47d8",
+        "reason": "source_asset_not_gzip"
+      },
+      {
+        "shard_index": 2435,
+        "rejected_window_id": "e74a1a6b1c6bf77d41e638429ad4c081b0545b4223f6096dec5fa8167c96f3ec",
+        "replacement_window_id": "9c88aca3ae648ca14d386c06132bed756c2a2f37ef33b7d813bc2d8793877d1e",
+        "reason": "insufficient_all_valid_spatial_crops"
+      },
+      {
+        "shard_index": 3180,
+        "rejected_window_id": "38ea2ae669a03887918aa8c3b4bfca52a7ad5b5cb98e8660391c6e100ba59560",
+        "replacement_window_id": "f22a93b08f11f1d76a6feb20ff854b6342968337fe7896f0ecf9d39c838e0588",
+        "reason": "insufficient_all_valid_spatial_crops"
+      },
+      {
+        "shard_index": 3281,
+        "rejected_window_id": "4e5b1e1c9119298428d82b60cf670059cc7c80277d61b80875439da60a4cfc55",
+        "replacement_window_id": "e35a00ce7e48b1fca5862101f94fbf7116f5b0e9a847b529fd9d770ef80f603d",
+        "reason": "source_asset_not_gzip"
+      }
+    ],
+    "completed_shards_identity_verified_before_each_revision": true,
+    "superseded_plan_artifacts_retained": true
+  },
+  "materialization": {
+    "status": "complete",
+    "report_sha256": "1edf054c1650539aee2c90a38f46b77365c240da314ef5060afccfef9a6b780f",
+    "started_at": "2026-08-31T12:14:06.033330+00:00",
+    "finished_at": "2026-08-31T22:08:07.414909+00:00",
+    "duration_seconds": 35641.381579,
+    "processed_window_count": 4000,
+    "sample_count": 100000,
+    "importance_sample_count": 80000,
+    "uniform_sample_count": 20000,
+    "logical_bytes": 570163200000,
+    "stored_bytes": 57250395156,
+    "sample_index_sha256": "e758c938c929020c64e17ea827b05431f08b059c4033fcaa3b27a72ec1decddf",
+    "all_samples_valid": true,
+    "maximum_rain_rate_mm_h": 128.0,
+    "holdout_windows_processed": 0
+  },
+  "validation": {
+    "status": "passed",
+    "scope": "complete_library",
+    "report_sha256": "c844c92f886030bda3ec931a4b62adf01c192864ee023e93ef132929c115fb23",
+    "content_hash_verified": true,
+    "shard_count": 4000,
+    "sample_count": 100000,
+    "sample_index_sha256": "e758c938c929020c64e17ea827b05431f08b059c4033fcaa3b27a72ec1decddf",
+    "random_read_sample_count": 64,
+    "random_read_logical_mib_s": 79.3011009509592,
+    "sampled_rain_min_mm_h": 0.0,
+    "sampled_rain_max_mm_h": 128.0,
+    "holdout_windows_processed": 0
+  },
+  "storage_boundary": {
+    "samples_on_external_storage": true,
+    "checkpoints_and_metrics_remain_local": true,
+    "available_bytes_after_validation": 836348674048,
+    "raw_data_mutated": false
+  },
+  "resource_impact": {
+    "gpu_training_started": false,
+    "qwen_service_stopped": false,
+    "other_services_stopped": false
+  },
+  "decision": {
+    "full_training_sample_library_ready": true,
+    "full_gpu_training_allowed": false,
+    "development_set_opened": false,
+    "independent_holdout_opened": false,
+    "next_gate": "validate_the_formal_training_runtime_and_nightly_stop_resume_schedule"
+  },
+  "operational_eligible": false
+}
