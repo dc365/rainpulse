@@ -49,7 +49,8 @@ func applyNowcastInputCompletion(
 		metrics.MaxDataAgeMinutes < 0 || metrics.ValidCellCount < 0 ||
 		metrics.MissingCellCount < 0 || metrics.LowQualityCellCount < 0 ||
 		metrics.LowQualityCellCount > metrics.ValidCellCount ||
-		!metrics.OperationalEligible || len(metrics.OperationalReasons) != 0 {
+		(metrics.OperationalEligible && len(metrics.OperationalReasons) != 0) ||
+		(!metrics.OperationalEligible && len(metrics.OperationalReasons) == 0) {
 		return fmt.Errorf("%w: invalid NowcastInput diagnostics", orchestration.ErrInvalidEvent)
 	}
 	var issueTime time.Time
@@ -76,8 +77,16 @@ FOR UPDATE OF n, f`, event.JobID, event.RunID).Scan(
 	if err := json.Unmarshal(rawRequest, &requested); err != nil {
 		return fmt.Errorf("decode stored NowcastInput request: %w", err)
 	}
+	if requested.Payload.ExecutionMode == "operational" && !metrics.OperationalEligible {
+		return fmt.Errorf("%w: operational NowcastInput cannot be degraded", orchestration.ErrInvalidEvent)
+	}
+	if requested.Payload.ExecutionMode == "historical_replay" &&
+		(metrics.OperationalEligible || metrics.ExecutionMode != "historical_replay") {
+		return fmt.Errorf("%w: historical NowcastInput provenance is invalid", orchestration.ErrInvalidEvent)
+	}
 	if !metrics.IssueTimeUTC.Equal(issueTime) || !requested.Payload.IssueTime.Equal(issueTime) ||
 		metrics.GridID != gridID || requested.Payload.GridID != gridID ||
+		metrics.ExecutionMode != requested.Payload.ExecutionMode ||
 		metrics.PreprocessVersion != preprocessVersion ||
 		requested.Payload.PreprocessVersion != preprocessVersion ||
 		metrics.ProfileVersion != gateConfigVersion ||
@@ -183,14 +192,22 @@ func (store *Store) ListNowcastInputCandidates(
 	}
 	rows, err := store.pool.Query(ctx, `
 SELECT analysis_id, analysis_time, grid_id, analysis_uri, status,
-       degraded_reason IS NULL,
-       COALESCE(valid_coverage_ratio, 0), COALESCE(mean_quality_index, 0)
-FROM analysis_cycles
-WHERE grid_id = $1
-  AND analysis_time <= $2
-  AND analysis_time >= $2 - ($3::int - 1) * INTERVAL '5 minutes'
-  AND status = 'ANALYSIS_READY'
-  AND analysis_uri IS NOT NULL
+       operational_eligible, valid_coverage_ratio, mean_quality_index
+FROM (
+    SELECT DISTINCT ON (analysis_time)
+           analysis_id, analysis_time, grid_id, analysis_uri, status,
+           degraded_reason IS NULL AS operational_eligible,
+           COALESCE(valid_coverage_ratio, 0) AS valid_coverage_ratio,
+           COALESCE(mean_quality_index, 0) AS mean_quality_index,
+           created_at
+    FROM analysis_cycles
+    WHERE grid_id = $1
+      AND analysis_time <= $2
+      AND analysis_time >= $2 - ($3::int - 1) * INTERVAL '5 minutes'
+      AND status = 'ANALYSIS_READY'
+      AND analysis_uri IS NOT NULL
+    ORDER BY analysis_time DESC, created_at DESC
+) AS preferred
 ORDER BY analysis_time DESC`, gridID, issueTime.UTC(), maximumFrames)
 	if err != nil {
 		return nil, fmt.Errorf("list NowcastInput RadarAnalysis candidates: %w", err)
@@ -249,10 +266,10 @@ ON CONFLICT (run_id) DO NOTHING`, bundle.Run.ID, bundle.Run.CreatedAt); err != n
 	if _, err = tx.Exec(ctx, `
 INSERT INTO forecast_runs (
     run_id, issue_time, grid_id, config_version, status, reason, created_at, updated_at
-) VALUES ($1, $2, $3, $4, $5, 'RP-013 fixed-step NowcastInput', $6, $6)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
 ON CONFLICT (run_id) DO NOTHING`, bundle.Run.ID, bundle.Run.IssueTime,
 		bundle.Run.GridID, bundle.Run.ConfigVersion, bundle.Run.Status,
-		bundle.Run.CreatedAt); err != nil {
+		nowcastRunReason(bundle.ExecutionMode), bundle.Run.CreatedAt); err != nil {
 		return fmt.Errorf("insert RP-013 forecast run: %w", err)
 	}
 	if _, err = tx.Exec(ctx, `
@@ -289,7 +306,8 @@ FROM analysis_cycles WHERE analysis_id = $1 FOR SHARE`, frame.AnalysisID).Scan(
 			return fmt.Errorf("verify NowcastInput frame %s: %w", frame.AnalysisID, err)
 		}
 		if status != workflow.AnalysisReady || !analysisTime.Equal(frame.AnalysisTime) ||
-			gridID != bundle.Run.GridID || analysisURI != frame.InputURI || degradedReason != nil {
+			gridID != bundle.Run.GridID || analysisURI != frame.InputURI ||
+			(bundle.RequireAllFramesOperationalEligible && degradedReason != nil) {
 			return fmt.Errorf("NowcastInput frame %s is not a committed operational RadarAnalysis", frame.AnalysisID)
 		}
 		if _, err = tx.Exec(ctx, `
@@ -315,4 +333,11 @@ ON CONFLICT (event_id) DO NOTHING`, bundle.Outbox.ID, bundle.Outbox.AggregateID,
 		return fmt.Errorf("commit NowcastInput transaction: %w", err)
 	}
 	return nil
+}
+
+func nowcastRunReason(executionMode string) string {
+	if executionMode == "historical_replay" {
+		return "HISTORICAL_REPLAY engineering forecast"
+	}
+	return "RP-013 fixed-step NowcastInput"
 }

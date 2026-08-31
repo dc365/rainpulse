@@ -1,0 +1,36 @@
+schema_version: "1.0"
+profile_version: rp039-fujian-four-radar-history-v1
+algorithm_version: qi-mosaic-1.2.0
+analysis_cycle_version: analysis-cycle-rp010-v1
+flag_definition_version: qc-flags-v1
+
+grid_id: fuzhou_118_123_25_27_0p01deg_v1
+grid_config_version: fuzhou-grid-0p01deg-v1
+
+alignment:
+  step_seconds: 300
+  selection: closest_volume_end_to_analysis_time
+  maximum_absolute_offset_seconds: 300
+  # The hard window admits a neighbouring five-minute radar volume. Time is
+  # only a secondary soft factor: source QC quality still supplies at least
+  # 80% of its value even at the edge of the alignment window.
+  minimum_time_quality: 0.80
+  minimum_contributors: 1
+  minimum_operational_contributors: 2
+  expected_radar_ids: [z9591, z9593, z9598, z9599]
+
+fusion:
+  method: highest_qi_then_linear_z_blend
+  minimum_quality_index: 0.10
+  similar_quality_max_difference: 0.10
+  quality_weight_power: 2.0
+  low_quality_threshold: 0.45
+  blended_source_code: 65535
+  reject_flags:
+    - MISSING
+    - HARDWARE_ANOMALY
+    - RADIAL_INTERFERENCE
+    - GROUND_CLUTTER
+    - SEA_CLUTTER
+    - ANOMALOUS_PROPAGATION
+    - BIOLOGICAL_ECHO

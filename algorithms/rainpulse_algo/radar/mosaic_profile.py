@@ -16,6 +16,7 @@ class RadarMosaicConfigError(ValueError):
 class MosaicAlignmentConfig:
     step_seconds: int
     maximum_absolute_offset_seconds: int
+    minimum_time_quality: float
     minimum_contributors: int
     minimum_operational_contributors: int
     expected_radar_ids: tuple[str, ...]
@@ -67,6 +68,9 @@ def load_radar_mosaic_profile(path: str | Path) -> RadarMosaicProfile:
                 maximum_absolute_offset_seconds=int(
                     alignment["maximum_absolute_offset_seconds"]
                 ),
+                minimum_time_quality=float(
+                    alignment.get("minimum_time_quality", 0.0)
+                ),
                 minimum_contributors=int(alignment["minimum_contributors"]),
                 minimum_operational_contributors=int(
                     alignment["minimum_operational_contributors"]
@@ -103,6 +107,8 @@ def _validate_profile(profile: RadarMosaicProfile) -> None:
         raise RadarMosaicConfigError("analysis step must be positive")
     if alignment.maximum_absolute_offset_seconds <= 0:
         raise RadarMosaicConfigError("alignment tolerance must be positive")
+    if not 0 <= alignment.minimum_time_quality <= 1:
+        raise RadarMosaicConfigError("minimum time quality must be within [0, 1]")
     if alignment.minimum_contributors <= 0:
         raise RadarMosaicConfigError("minimum contributors must be positive")
     if alignment.minimum_operational_contributors < alignment.minimum_contributors:

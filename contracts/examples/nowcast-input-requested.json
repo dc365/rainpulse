@@ -21,6 +21,7 @@
     "issue_time": "2026-08-24T03:00:00Z",
     "grid_id": "synthetic-grid-v1",
     "preprocess_version": "nowcast-input-contract-v1",
-    "gate_config_version": "nowcast-gates-contract-v1"
+    "gate_config_version": "nowcast-gates-contract-v1",
+    "execution_mode": "operational"
   }
 }

@@ -18,24 +18,25 @@ import (
 )
 
 type pipelineSettings struct {
-	interval           time.Duration
-	lookback           time.Duration
-	mosaicDelay        time.Duration
-	radarIDs           map[string]struct{}
-	qcConfig           string
-	gridConfig         string
-	mosaicConfig       string
-	qpeConfig          string
-	diagnosticConfig   string
-	nowcastConfig      string
-	pystepsConfig      string
-	productConfig      string
-	verificationConfig string
-	gridID             string
-	minimumFrames      int
-	maximumFrames      int
-	forecastEnabled    bool
-	requireAllRadars   bool
+	interval            time.Duration
+	lookback            time.Duration
+	mosaicDelay         time.Duration
+	radarIDs            map[string]struct{}
+	qcConfig            string
+	gridConfig          string
+	mosaicConfig        string
+	qpeConfig           string
+	diagnosticConfig    string
+	nowcastConfig       string
+	pystepsConfig       string
+	productConfig       string
+	verificationConfig  string
+	gridID              string
+	maximumMosaicOffset time.Duration
+	minimumFrames       int
+	maximumFrames       int
+	forecastEnabled     bool
+	requireAllRadars    bool
 }
 
 type pipelinePlanner struct {
@@ -200,6 +201,12 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 		}
 	}
 	settings.gridID = nowcast.GridID
+	settings.maximumMosaicOffset = time.Duration(
+		mosaic.Alignment.MaximumAbsoluteOffsetSeconds,
+	) * time.Second
+	if settings.maximumMosaicOffset <= 0 {
+		return nil, fmt.Errorf("pipeline mosaic config requires a positive alignment window")
+	}
 	settings.minimumFrames = nowcast.Sequence.MinimumFrames
 	settings.maximumFrames = nowcast.Sequence.MaximumFrames
 	return settings, nil
@@ -303,7 +310,7 @@ func (planner *pipelinePlanner) planMosaics(ctx context.Context) error {
 			continue
 		}
 		analysisTime := scan.VolumeEndTime.UTC().Round(5 * time.Minute)
-		if absoluteDuration(scan.VolumeEndTime.Sub(analysisTime)) > 150*time.Second {
+		if absoluteDuration(scan.VolumeEndTime.Sub(analysisTime)) > planner.settings.maximumMosaicOffset {
 			continue
 		}
 		byTime[analysisTime] = append(byTime[analysisTime], scan)
@@ -414,40 +421,35 @@ func (planner *pipelinePlanner) planAnalyses(ctx context.Context) error {
 			}
 		}
 	}
-	var latest *workflow.AnalysisCycle
 	for index := range ready {
-		if ready[index].GridID == planner.settings.gridID &&
-			!planner.outsideLookback(ready[index].AnalysisTime) {
-			latest = &ready[index]
-			break
+		cycle := &ready[index]
+		if cycle.GridID != planner.settings.gridID || planner.outsideLookback(cycle.AnalysisTime) {
+			continue
 		}
+		if _, exists := planner.plannedNowcast[cycle.AnalysisTime]; exists {
+			continue
+		}
+		candidates, candidateErr := planner.store.ListNowcastInputCandidates(
+			ctx, cycle.AnalysisTime, planner.settings.gridID, planner.settings.maximumFrames,
+		)
+		if candidateErr != nil {
+			return candidateErr
+		}
+		if len(candidates) < planner.settings.minimumFrames {
+			continue
+		}
+		if createErr := nowcastInput(
+			ctx,
+			planner.store,
+			planner.service,
+			cycle.AnalysisTime.Format(time.RFC3339Nano),
+			planner.settings.nowcastConfig,
+		); createErr != nil {
+			slog.Error("plan NowcastInput", "issue_time", cycle.AnalysisTime, "error", createErr)
+			continue
+		}
+		planner.plannedNowcast[cycle.AnalysisTime] = struct{}{}
 	}
-	if latest == nil {
-		return nil
-	}
-	if _, exists := planner.plannedNowcast[latest.AnalysisTime]; exists {
-		return nil
-	}
-	candidates, err := planner.store.ListNowcastInputCandidates(
-		ctx, latest.AnalysisTime, planner.settings.gridID, planner.settings.maximumFrames,
-	)
-	if err != nil {
-		return err
-	}
-	if len(candidates) < planner.settings.minimumFrames {
-		return nil
-	}
-	if err := nowcastInput(
-		ctx,
-		planner.store,
-		planner.service,
-		latest.AnalysisTime.Format(time.RFC3339Nano),
-		planner.settings.nowcastConfig,
-	); err != nil {
-		slog.Error("plan NowcastInput", "issue_time", latest.AnalysisTime, "error", err)
-		return nil
-	}
-	planner.plannedNowcast[latest.AnalysisTime] = struct{}{}
 	return nil
 }
 

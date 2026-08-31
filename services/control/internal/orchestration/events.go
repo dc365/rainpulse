@@ -260,6 +260,7 @@ type NowcastInputRequestedPayload struct {
 	GridID            string      `json:"grid_id"`
 	PreprocessVersion string      `json:"preprocess_version"`
 	GateConfigVersion string      `json:"gate_config_version"`
+	ExecutionMode     string      `json:"execution_mode"`
 }
 
 type NowcastInputReady struct {

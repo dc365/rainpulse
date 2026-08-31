@@ -88,7 +88,12 @@
       "additionalProperties": false,
       "required": ["input_missing_policy", "output_support_policy"],
       "properties": {
-        "input_missing_policy": { "const": "reject_any_missing" },
+        "input_missing_policy": {
+          "enum": [
+            "reject_any_missing",
+            "dry_floor_working_copy_preserve_deterministic_support"
+          ]
+        },
         "output_support_policy": {
           "const": "deterministic_support_intersect_all_members_finite"
         }

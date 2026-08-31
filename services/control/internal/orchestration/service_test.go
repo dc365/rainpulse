@@ -565,6 +565,48 @@ func TestCreateNowcastInputSelectsLatestContiguousOperationalFrames(t *testing.T
 	}
 }
 
+func TestCreateHistoricalNowcastInputAcceptsExplicitEngineeringFrames(t *testing.T) {
+	repository := &fakeRepository{}
+	issueTime := time.Date(2026, 8, 28, 10, 20, 0, 0, time.UTC)
+	service := NewService(repository, Options{Now: func() time.Time {
+		return time.Date(2026, 8, 31, 4, 0, 0, 0, time.UTC)
+	}})
+	candidates := make([]NowcastInputCandidate, 3)
+	for index := range candidates {
+		candidates[index] = NowcastInputCandidate{
+			AnalysisID:    uuid.MustParse(fmt.Sprintf("91000000-0000-4000-8000-%012d", index+1)),
+			AnalysisTime:  issueTime.Add(time.Duration(index-2) * 5 * time.Minute),
+			GridID:        "fuzhou_118_123_25_27_0p01deg_v1",
+			AnalysisURI:   fmt.Sprintf("s3://rainpulse/history/%d/analysis.zarr", index),
+			CurrentStatus: workflow.AnalysisReady, OperationalEligible: false,
+			ValidCoverageRatio: 0.38, MeanQualityIndex: 0.20,
+		}
+	}
+	input := NowcastInputInput{
+		IssueTime: issueTime, GridID: "fuzhou_118_123_25_27_0p01deg_v1",
+		GridConfigVersion:                   "fuzhou-grid-0p01deg-v1",
+		PreprocessVersion:                   "nowcast-input-builder-1.1.0",
+		GateConfigVersion:                   "rp039-historical-replay-v1",
+		ExecutionMode:                       "historical_replay",
+		RequireAllFramesOperationalEligible: false,
+		MinimumFrames:                       3, MaximumFrames: 6, Timestep: 5 * time.Minute,
+		MinimumValidCoverageRatio: 0.30, MinimumMeanQualityIndex: 0.10,
+		Candidates:   candidates,
+		Config:       json.RawMessage(`{"profile_version":"rp039-historical-replay-v1","execution_mode":"historical_replay"}`),
+		ConfigSHA256: "73266c7c72321262a01b945281060abd84153a8f3ad64a95c5b73b9fd510f679",
+	}
+
+	run, _, err := service.CreateNowcastInput(context.Background(), input)
+	if err != nil {
+		t.Fatalf("CreateNowcastInput(historical) error = %v", err)
+	}
+	if run.ConfigVersion != "rp039-historical-replay-v1" ||
+		repository.nowcastInput.ExecutionMode != "historical_replay" ||
+		repository.nowcastInput.RequireAllFramesOperationalEligible {
+		t.Fatalf("historical replay identity was not preserved: %#v", repository.nowcastInput)
+	}
+}
+
 func TestCreatePystepsLKSchedulesOnlyCommittedInputReadyRun(t *testing.T) {
 	repository := &fakeRepository{}
 	now := time.Date(2026, 8, 25, 12, 12, 0, 0, time.UTC)

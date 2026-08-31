@@ -24,6 +24,9 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PROFILE_PATH = (
     REPOSITORY_ROOT / "configs" / "nowcast" / "rp013-fixed-5min-v1.yaml"
 )
+HISTORICAL_PROFILE_PATH = (
+    REPOSITORY_ROOT / "configs" / "nowcast" / "rp039-historical-replay-v1.yaml"
+)
 ISSUE_TIME = datetime(2026, 8, 25, 12, 10, tzinfo=UTC)
 ANALYSIS_IDS = [
     UUID("81000000-0000-4000-8000-000000000001"),
@@ -51,6 +54,16 @@ def tiny_grid() -> RegularLatLonGrid:
 
 def profile():
     configured = load_nowcast_input_profile(PROFILE_PATH)
+    grid = tiny_grid()
+    return replace(
+        configured,
+        grid_id=grid.grid_id,
+        grid_config_version=grid.config_version,
+    )
+
+
+def historical_profile():
+    configured = load_nowcast_input_profile(HISTORICAL_PROFILE_PATH)
     grid = tiny_grid()
     return replace(
         configured,
@@ -185,6 +198,28 @@ def test_rejects_missing_fixed_time_step() -> None:
 def test_rejects_upstream_non_operational_frame() -> None:
     with pytest.raises(NowcastInputError, match="upstream_analysis_not_operational"):
         build(sequence(operational_eligible=False))
+
+
+def test_historical_replay_preserves_degraded_provenance_and_builds_input() -> None:
+    objects = build_nowcast_input_zarr_store(
+        sequence(operational_eligible=False, quality=0.38),
+        analysis_ids=ANALYSIS_IDS,
+        input_uris=[
+            f"s3://rainpulse/analysis/{value}/analysis.zarr"
+            for value in ANALYSIS_IDS
+        ],
+        issue_time=ISSUE_TIME,
+        profile=historical_profile(),
+        grid=tiny_grid(),
+        asset_id="82000000-0000-4000-8000-000000000039",
+    )
+
+    validation = validate_nowcast_input_zarr_store(objects)
+    summary = json.loads(objects["input/summary.json"])
+    assert validation["operational_eligible"] is False
+    assert summary["execution_mode"] == "historical_replay"
+    assert "historical_replay" in summary["operational_reasons"]
+    assert "upstream_analysis_not_operational" in summary["operational_reasons"]
 
 
 def test_rejects_quality_and_data_age_below_gate() -> None:

@@ -19,7 +19,10 @@ from rainpulse_algo.nowcast.pysteps_steps import (
     PystepsStepsInputError,
     run_pysteps_steps_fields,
 )
-from rainpulse_algo.nowcast.steps_profile import load_pysteps_steps_profile
+from rainpulse_algo.nowcast.steps_profile import (
+    StepsSupportConfig,
+    load_pysteps_steps_profile,
+)
 
 from .test_pysteps_lk import INPUT_ASSET_IDS, ISSUE_TIME, tiny_grid
 from .test_pysteps_lk import profile as lk_profile
@@ -28,6 +31,9 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PROFILE_PATH = REPOSITORY_ROOT / "configs" / "nowcast" / "rp022-pysteps-steps-v1.yaml"
 RP024_PROFILE_PATH = (
     REPOSITORY_ROOT / "configs" / "nowcast" / "rp024-pysteps-steps-v1.yaml"
+)
+RP039_PROFILE_PATH = (
+    REPOSITORY_ROOT / "configs" / "nowcast" / "rp039-pysteps-steps-history-v1.yaml"
 )
 SCHEMA_PATH = REPOSITORY_ROOT / "configs" / "schemas" / "pysteps-steps-profile.schema.json"
 PRODUCT_PROFILE_PATH = (
@@ -106,6 +112,10 @@ def test_profile_conforms_to_schema_and_freezes_probability_semantics() -> None:
     Draft202012Validator(schema).validate(rp024_raw)
     rp024 = load_pysteps_steps_profile(RP024_PROFILE_PATH)
     assert rp024.ensemble.minimum_trackable_precipitation_pixels == 64
+    rp039_raw = yaml.safe_load(RP039_PROFILE_PATH.read_text())
+    Draft202012Validator(schema).validate(rp039_raw)
+    rp039 = load_pysteps_steps_profile(RP039_PROFILE_PATH)
+    assert rp039.support.input_missing_policy.startswith("dry_floor_working_copy")
 
 
 def test_probability_product_profile_matches_the_model_profile_and_stays_offline() -> None:
@@ -224,6 +234,33 @@ def test_rejects_missing_input_instead_of_turning_it_into_no_rain() -> None:
             grid=tiny_grid(),
             backend=seeded_backend([]),
         )
+
+
+def test_historical_missing_policy_uses_finite_working_copy_and_preserves_support() -> None:
+    calls: list[dict[str, object]] = []
+
+    def finite_backend(precip, velocity, timesteps, **kwargs):
+        assert np.all(np.isfinite(precip))
+        return seeded_backend(calls)(precip, velocity, timesteps, **kwargs)
+
+    configured = replace(
+        steps_profile(),
+        support=StepsSupportConfig(
+            "dry_floor_working_copy_preserve_deterministic_support",
+            "deterministic_support_intersect_all_members_finite",
+        ),
+    )
+    result = run_pysteps_steps_fields(
+        steps_fields(missing=True),
+        profile=configured,
+        lk_profile=lk_profile(),
+        grid=tiny_grid(),
+        backend=finite_backend,
+    )
+
+    assert calls
+    assert np.any(result.output_valid_mask == 0)
+    assert np.all(np.isnan(result.rain_rate[result.member_valid_mask == 0]))
 
 
 def test_wraps_backend_failure_for_independent_lk_fallback_orchestration() -> None:

@@ -9,6 +9,7 @@
     "schema_version": { "const": "1.0" },
     "profile_version": { "$ref": "#/$defs/identifier" },
     "builder_version": { "$ref": "#/$defs/identifier" },
+    "execution_mode": { "enum": ["operational", "historical_replay"] },
     "nowcast_input_contract_version": { "const": "1.2" },
     "radar_analysis_contract_version": { "const": "1.2" },
     "grid_id": { "$ref": "#/$defs/identifier" },
@@ -32,7 +33,7 @@
         "minimum_valid_coverage_ratio": { "$ref": "#/$defs/probability" },
         "minimum_mean_quality_index": { "$ref": "#/$defs/probability" },
         "maximum_data_age_minutes": { "type": "number", "exclusiveMinimum": 0, "maximum": 60 },
-        "require_all_frames_operational_eligible": { "const": true }
+        "require_all_frames_operational_eligible": { "type": "boolean" }
       }
     }
   },

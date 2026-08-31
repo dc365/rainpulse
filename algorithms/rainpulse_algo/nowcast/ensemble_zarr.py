@@ -283,7 +283,10 @@ def validate_ensemble_forecast_output_zarr_store(
         raise PystepsStepsInputError("ensemble probability event operator is invalid")
     if root.attrs.get("ensemble_member_count") != len(members):
         raise PystepsStepsInputError("ensemble member-count attribute is invalid")
-    if root.attrs.get("input_missing_policy") != "reject_any_missing":
+    if root.attrs.get("input_missing_policy") not in {
+        "reject_any_missing",
+        "dry_floor_working_copy_preserve_deterministic_support",
+    }:
         raise PystepsStepsInputError("ensemble input missing policy is invalid")
     if (
         root.attrs.get("output_support_policy")

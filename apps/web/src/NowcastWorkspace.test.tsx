@@ -47,6 +47,8 @@ const analysisCycles = ['09:50', '09:55', '10:00'].map((time, index) => ({
   radars: [
     { radar_id: 'z9591', state: 'PARTICIPATING' },
     { radar_id: 'z9593', state: 'PARTICIPATING' },
+    { radar_id: 'z9598', state: 'PARTICIPATING' },
+    { radar_id: 'z9599', state: 'PARTICIPATING' },
   ],
   created_at: '2026-08-30T15:40:00Z',
   updated_at: '2026-08-30T15:50:00Z',
@@ -382,6 +384,7 @@ describe('RainPulse short-nowcast workspace', () => {
       analysis_id: '913f1871-c119-5fa9-865f-3afbd91f0d21',
       run_id: run.run_id,
       analysis_time: run.issue_time,
+      radar_count: 3,
     }
     const fetchStatus = vi.fn().mockImplementation((input: string) => {
       let body: unknown = {}
@@ -431,6 +434,7 @@ describe('RainPulse short-nowcast workspace', () => {
 
     fireEvent.click(radarButton)
     expect(await screen.findByRole('img', { name: /雷达 QPE 瞬时雨强图层/ })).toBeTruthy()
+    expect(screen.getByText('4 站输入 · 3 站有效')).toBeTruthy()
     expect(screen.getByText('雷达实况 T0')).toBeTruthy()
     fireEvent.click(lkButton)
     expect(await screen.findByRole('img', { name: 'T+5 分钟降水率图层' })).toBeTruthy()

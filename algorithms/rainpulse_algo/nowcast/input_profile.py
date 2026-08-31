@@ -30,6 +30,7 @@ class GateConfig:
 class NowcastInputProfile:
     profile_version: str
     builder_version: str
+    execution_mode: str
     nowcast_input_contract_version: str
     radar_analysis_contract_version: str
     grid_id: str
@@ -49,6 +50,7 @@ def load_nowcast_input_profile(path: str | Path) -> NowcastInputProfile:
         profile = NowcastInputProfile(
             profile_version=str(raw["profile_version"]),
             builder_version=str(raw["builder_version"]),
+            execution_mode=str(raw.get("execution_mode", "operational")),
             nowcast_input_contract_version=str(
                 raw["nowcast_input_contract_version"]
             ),
@@ -87,6 +89,8 @@ def load_nowcast_input_profile(path: str | Path) -> NowcastInputProfile:
 def _validate(profile: NowcastInputProfile) -> None:
     if profile.nowcast_input_contract_version != "1.2":
         raise NowcastInputConfigError("RP-013 requires NowcastInput contract 1.2")
+    if profile.execution_mode not in {"operational", "historical_replay"}:
+        raise NowcastInputConfigError("unsupported NowcastInput execution mode")
     if profile.radar_analysis_contract_version != "1.2":
         raise NowcastInputConfigError("RP-013 requires RadarAnalysis contract 1.2")
     if profile.sequence != SequenceConfig(3, 6, 5, "latest_contiguous"):
@@ -104,7 +108,17 @@ def _validate(profile: NowcastInputProfile) -> None:
             raise NowcastInputConfigError(f"{name} must be within [0, 1]")
     if profile.gates.maximum_data_age_minutes <= 0:
         raise NowcastInputConfigError("maximum data age must be positive")
-    if not profile.gates.require_all_frames_operational_eligible:
+    if (
+        profile.execution_mode == "operational"
+        and not profile.gates.require_all_frames_operational_eligible
+    ):
         raise NowcastInputConfigError(
-            "RP-013 cannot admit upstream engineering-only analysis frames"
+            "operational NowcastInput cannot admit engineering-only analysis frames"
+        )
+    if (
+        profile.execution_mode == "historical_replay"
+        and profile.gates.require_all_frames_operational_eligible
+    ):
+        raise NowcastInputConfigError(
+            "historical replay must preserve engineering-only input provenance"
         )

@@ -211,6 +211,7 @@ class NowcastInputPayload(ContractModel):
     grid_id: str = Field(min_length=1)
     preprocess_version: str = Field(min_length=1)
     gate_config_version: str = Field(min_length=1)
+    execution_mode: Literal["operational", "historical_replay"]
 
     @field_validator("input_uris")
     @classmethod

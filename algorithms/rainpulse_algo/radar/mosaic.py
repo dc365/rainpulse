@@ -89,10 +89,11 @@ def build_radar_mosaic(
     source_valid = _stack(roots, "VALID_MASK") == 1
     time_quality = np.asarray(
         [
-            max(
+            profile.alignment.minimum_time_quality
+            + (1.0 - profile.alignment.minimum_time_quality)
+            * max(
                 0.0,
-                1.0
-                - abs(item.time_offset_seconds)
+                1.0 - abs(item.time_offset_seconds)
                 / profile.alignment.maximum_absolute_offset_seconds,
             )
             for item in inputs

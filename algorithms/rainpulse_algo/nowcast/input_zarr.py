@@ -66,12 +66,18 @@ def build_nowcast_input_zarr_store(
     input_asset_ids = _ordered_unique(
         asset_id for root in roots for asset_id in root.attrs["input_asset_ids"]
     )
+    operational_reasons: list[str] = []
+    if profile.execution_mode == "historical_replay":
+        operational_reasons.append("historical_replay")
+    if any(not bool(root.attrs.get("operational_eligible")) for root in roots):
+        operational_reasons.append("upstream_analysis_not_operational")
     summary = {
         "schema_version": "1.0",
         "issue_time_utc": issue_time.isoformat(),
         "grid_id": grid.grid_id,
         "profile_version": profile.profile_version,
         "preprocess_version": profile.builder_version,
+        "execution_mode": profile.execution_mode,
         "analysis_ids": [str(value) for value in analysis_ids],
         "input_asset_ids": input_asset_ids,
         "input_uris": list(input_uris),
@@ -83,8 +89,8 @@ def build_nowcast_input_zarr_store(
         "valid_cell_count": int(np.count_nonzero(valid)),
         "missing_cell_count": int(np.count_nonzero(~valid)),
         "low_quality_cell_count": int(np.count_nonzero(low)),
-        "operational_eligible": True,
-        "operational_reasons": [],
+        "operational_eligible": not operational_reasons,
+        "operational_reasons": operational_reasons,
     }
     _enforce_gates(summary, roots, profile)
 
@@ -110,6 +116,7 @@ def build_nowcast_input_zarr_store(
             "source_version": str(roots[0].attrs["qpe_algorithm_version"]),
             "preprocess_version": profile.builder_version,
             "gate_config_version": profile.profile_version,
+            "execution_mode": profile.execution_mode,
             "input_asset_ids": input_asset_ids,
             "analysis_ids": [str(value) for value in analysis_ids],
             "qc_pipeline_versions": _ordered_unique(
@@ -118,8 +125,8 @@ def build_nowcast_input_zarr_store(
             "qpe_config_version": qpe_config_version,
             "input_uris": list(input_uris),
             "frame_count": len(roots),
-            "operational_eligible": True,
-            "operational_reasons": [],
+            "operational_eligible": summary["operational_eligible"],
+            "operational_reasons": summary["operational_reasons"],
             "valid_coverage_ratio": summary["valid_coverage_ratio"],
             "mean_quality_index": summary["mean_quality_index"],
             "max_data_age_minutes": summary["max_data_age_minutes"],
@@ -227,6 +234,24 @@ def validate_nowcast_input_zarr_store(
     ):
         raise NowcastInputError("NowcastInput quality is outside [0, 1]")
     summary = json.loads(objects["input/summary.json"])
+    # Artifacts committed before RP-039 did not carry an explicit execution
+    # mode. They were produced by the operational-only path, so keep them
+    # readable while requiring every new historical artifact to be explicit.
+    execution_mode = summary.get("execution_mode", "operational")
+    operational_eligible = summary.get("operational_eligible")
+    operational_reasons = summary.get("operational_reasons")
+    if execution_mode not in {"operational", "historical_replay"}:
+        raise NowcastInputError("NowcastInput execution mode is invalid")
+    if not isinstance(operational_eligible, bool) or not isinstance(
+        operational_reasons, list
+    ):
+        raise NowcastInputError("NowcastInput operational provenance is invalid")
+    if operational_eligible == bool(operational_reasons):
+        raise NowcastInputError("NowcastInput operational state contradicts reasons")
+    if execution_mode == "historical_replay" and (
+        operational_eligible or "historical_replay" not in operational_reasons
+    ):
+        raise NowcastInputError("historical NowcastInput must remain non-operational")
     if (
         summary.get("analysis_ids") != root.attrs.get("analysis_ids")
         or summary.get("input_asset_ids") != root.attrs.get("input_asset_ids")
@@ -234,8 +259,9 @@ def validate_nowcast_input_zarr_store(
         or summary.get("valid_cell_count") != int(np.count_nonzero(valid))
         or summary.get("missing_cell_count") != int(np.count_nonzero(missing))
         or summary.get("low_quality_cell_count") != int(np.count_nonzero(low))
-        or summary.get("operational_eligible") is not True
-        or summary.get("operational_reasons") != []
+        or execution_mode != root.attrs.get("execution_mode", "operational")
+        or operational_eligible != root.attrs.get("operational_eligible")
+        or operational_reasons != root.attrs.get("operational_reasons")
     ):
         raise NowcastInputError("NowcastInput summary differs from arrays or attributes")
     return {
@@ -247,6 +273,9 @@ def validate_nowcast_input_zarr_store(
         "valid_coverage_ratio": float(summary["valid_coverage_ratio"]),
         "mean_quality_index": float(summary["mean_quality_index"]),
         "max_data_age_minutes": float(summary["max_data_age_minutes"]),
+        "operational_eligible": operational_eligible,
+        "operational_reasons": operational_reasons,
+        "execution_mode": execution_mode,
         "object_count": len(objects),
         "size_bytes": sum(len(value) for value in objects.values()),
     }

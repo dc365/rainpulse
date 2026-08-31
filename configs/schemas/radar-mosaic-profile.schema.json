@@ -21,6 +21,7 @@
         "step_seconds": { "const": 300 },
         "selection": { "const": "closest_volume_end_to_analysis_time" },
         "maximum_absolute_offset_seconds": { "type": "integer", "minimum": 1, "maximum": 300 },
+        "minimum_time_quality": { "$ref": "#/$defs/probability" },
         "minimum_contributors": { "type": "integer", "minimum": 1, "maximum": 32 },
         "minimum_operational_contributors": { "type": "integer", "minimum": 2, "maximum": 32 },
         "expected_radar_ids": {

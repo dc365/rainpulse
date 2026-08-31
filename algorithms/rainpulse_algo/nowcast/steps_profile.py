@@ -181,9 +181,12 @@ def _validate(profile: PystepsStepsProfile) -> None:
         raise PystepsStepsConfigError("unsupported STEPS mask method")
     if ensemble.domain not in {"spatial", "spectral"}:
         raise PystepsStepsConfigError("unsupported STEPS compute domain")
-    if profile.support != StepsSupportConfig(
-        "reject_any_missing", "deterministic_support_intersect_all_members_finite"
-    ):
+    if profile.support.output_support_policy != (
+        "deterministic_support_intersect_all_members_finite"
+    ) or profile.support.input_missing_policy not in {
+        "reject_any_missing",
+        "dry_floor_working_copy_preserve_deterministic_support",
+    }:
         raise PystepsStepsConfigError("RP-022 support policy differs from the frozen gate")
     probability = profile.probability_products
     if probability.event_operator != "greater_than":

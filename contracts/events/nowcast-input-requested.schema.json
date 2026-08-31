@@ -16,7 +16,7 @@
     "payload": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["analysis_ids", "input_uris", "output_prefix", "issue_time", "grid_id", "preprocess_version", "gate_config_version"],
+      "required": ["analysis_ids", "input_uris", "output_prefix", "issue_time", "grid_id", "preprocess_version", "gate_config_version", "execution_mode"],
       "properties": {
         "analysis_ids": {
           "type": "array",
@@ -36,7 +36,8 @@
         "issue_time": { "type": "string", "format": "date-time" },
         "grid_id": { "type": "string", "minLength": 1 },
         "preprocess_version": { "type": "string", "minLength": 1 },
-        "gate_config_version": { "type": "string", "minLength": 1 }
+        "gate_config_version": { "type": "string", "minLength": 1 },
+        "execution_mode": { "enum": ["operational", "historical_replay"] }
       }
     }
   }

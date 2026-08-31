@@ -54,6 +54,20 @@ func main() {
 			slog.Error("RainPulse orchestrator stopped", "error", err)
 			os.Exit(1)
 		}
+	case "pipeline-once":
+		settings, settingsErr := pipelineSettingsFromEnvironment()
+		if settingsErr != nil {
+			slog.Error("load pipeline settings", "error", settingsErr)
+			os.Exit(1)
+		}
+		if settings == nil {
+			slog.Error("pipeline-once requires RAINPULSE_PIPELINE_ENABLED=true")
+			os.Exit(2)
+		}
+		if err := newPipelinePlanner(*settings, store, service).PlanOnce(ctx); err != nil {
+			slog.Error("plan RainPulse pipeline once", "error", err)
+			os.Exit(1)
+		}
 	case "simulate":
 		if err := simulate(ctx, service, false); err != nil {
 			slog.Error("create simulated run", "error", err)
@@ -254,6 +268,7 @@ type diagnosticConfiguration struct {
 type nowcastInputConfiguration struct {
 	ProfileVersion    string `yaml:"profile_version"`
 	BuilderVersion    string `yaml:"builder_version"`
+	ExecutionMode     string `yaml:"execution_mode"`
 	GridID            string `yaml:"grid_id"`
 	GridConfigVersion string `yaml:"grid_config_version"`
 	Sequence          struct {
@@ -263,8 +278,9 @@ type nowcastInputConfiguration struct {
 		Selection       string `yaml:"selection"`
 	} `yaml:"sequence"`
 	Gates struct {
-		MinimumValidCoverageRatio float64 `yaml:"minimum_valid_coverage_ratio"`
-		MinimumMeanQualityIndex   float64 `yaml:"minimum_mean_quality_index"`
+		MinimumValidCoverageRatio           float64 `yaml:"minimum_valid_coverage_ratio"`
+		MinimumMeanQualityIndex             float64 `yaml:"minimum_mean_quality_index"`
+		RequireAllFramesOperationalEligible bool    `yaml:"require_all_frames_operational_eligible"`
 	} `yaml:"gates"`
 }
 
@@ -288,6 +304,13 @@ type productConfiguration struct {
 	ForecastOutputContractVersion string `yaml:"forecast_output_contract_version"`
 	GridID                        string `yaml:"grid_id"`
 	GridConfigVersion             string `yaml:"grid_config_version"`
+}
+
+func executionModeOrOperational(value string) string {
+	if value == "" {
+		return "operational"
+	}
+	return value
 }
 
 type forecastVerificationConfiguration struct {
@@ -1010,15 +1033,17 @@ func nowcastInput(
 	configHash := sha256.Sum256(configBytes)
 	run, job, err := service.CreateNowcastInput(ctx, orchestration.NowcastInputInput{
 		IssueTime: issueTime, GridID: config.GridID,
-		GridConfigVersion:         config.GridConfigVersion,
-		PreprocessVersion:         config.BuilderVersion,
-		GateConfigVersion:         config.ProfileVersion,
-		MinimumFrames:             config.Sequence.MinimumFrames,
-		MaximumFrames:             config.Sequence.MaximumFrames,
-		Timestep:                  time.Duration(config.Sequence.TimestepMinutes) * time.Minute,
-		MinimumValidCoverageRatio: config.Gates.MinimumValidCoverageRatio,
-		MinimumMeanQualityIndex:   config.Gates.MinimumMeanQualityIndex,
-		Candidates:                candidates, Config: configJSON,
+		GridConfigVersion:                   config.GridConfigVersion,
+		PreprocessVersion:                   config.BuilderVersion,
+		GateConfigVersion:                   config.ProfileVersion,
+		ExecutionMode:                       executionModeOrOperational(config.ExecutionMode),
+		RequireAllFramesOperationalEligible: config.Gates.RequireAllFramesOperationalEligible,
+		MinimumFrames:                       config.Sequence.MinimumFrames,
+		MaximumFrames:                       config.Sequence.MaximumFrames,
+		Timestep:                            time.Duration(config.Sequence.TimestepMinutes) * time.Minute,
+		MinimumValidCoverageRatio:           config.Gates.MinimumValidCoverageRatio,
+		MinimumMeanQualityIndex:             config.Gates.MinimumMeanQualityIndex,
+		Candidates:                          candidates, Config: configJSON,
 		ConfigSHA256: fmt.Sprintf("%x", configHash),
 	})
 	if err != nil {

@@ -258,6 +258,45 @@ def test_time_quality_changes_selection_and_tracks_data_age() -> None:
     assert result.fields["DATA_AGE"][0, 0] == pytest.approx(0.0)
 
 
+def test_gentle_time_weight_keeps_near_cycle_radar_data_dominant() -> None:
+    recent = mosaic_input(
+        "radar-a",
+        "10000000-0000-4000-8000-000000000012",
+        np.full((2, 2), 12.0, dtype="float32"),
+        np.full((2, 2), 0.55, dtype="float32"),
+    )
+    near_cycle = mosaic_input(
+        "radar-b",
+        "20000000-0000-4000-8000-000000000012",
+        np.full((2, 2), 30.0, dtype="float32"),
+        np.full((2, 2), 0.90, dtype="float32"),
+        offset_seconds=-145,
+    )
+    relaxed = replace(
+        profile(),
+        alignment=replace(
+            profile().alignment,
+            maximum_absolute_offset_seconds=300,
+            minimum_time_quality=0.80,
+        ),
+    )
+
+    result = build_radar_mosaic(
+        (recent, near_cycle),
+        analysis_time=ANALYSIS_TIME,
+        grid=small_grid(),
+        profile=relaxed,
+        flag_masks=flag_masks(),
+    )
+
+    assert result.contributors[1]["contributing_cell_count"] == 4
+    assert result.contributors[1]["mean_adjusted_quality_index"] == pytest.approx(
+        0.90 * (0.80 + 0.20 * (1 - 145 / 300)),
+        rel=1e-6,
+    )
+    assert np.all(result.fields["QI_TIME"] >= 0.80)
+
+
 def test_rejects_flagged_high_qi_contributor_before_blending() -> None:
     contaminated = mosaic_input(
         "radar-a",

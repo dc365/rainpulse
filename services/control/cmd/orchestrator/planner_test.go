@@ -33,7 +33,7 @@ func TestPipelineSettingsRejectMixedGridConfigurations(t *testing.T) {
 	}
 	gridPath := write("grid", "grid_id: "+grid+"\ngrid_config_version: "+version+"\n")
 	qcPath := write("qc", "profile_version: qc-v1\npipeline_version: qc-pipeline-v1\n")
-	mosaicPath := write("mosaic", "grid_id: "+grid+"\ngrid_config_version: "+version+"\nalignment:\n  expected_radar_ids: []\n")
+	mosaicPath := write("mosaic", "grid_id: "+grid+"\ngrid_config_version: "+version+"\nalignment:\n  maximum_absolute_offset_seconds: 300\n  expected_radar_ids: []\n")
 	qpePath := write("qpe", "grid_id: "+grid+"\ngrid_config_version: "+version+"\n")
 	nowcastPath := write("nowcast", "grid_id: "+grid+"\ngrid_config_version: "+version+"\nsequence:\n  minimum_frames: 3\n  maximum_frames: 6\n  timestep_minutes: 5\n")
 	pystepsPath := write("pysteps", "grid_id: "+grid+"\ngrid_config_version: "+version+"\nextrapolation:\n  lead_count: 24\n  lead_step_minutes: 5\n")
@@ -88,6 +88,9 @@ promotion_eligible: false
 	}
 	if !settings.forecastEnabled || settings.requireAllRadars {
 		t.Fatalf("unexpected operational planner defaults: %#v", settings)
+	}
+	if settings.maximumMosaicOffset != 5*time.Minute {
+		t.Fatalf("mosaic alignment window = %s", settings.maximumMosaicOffset)
 	}
 	t.Setenv("RAINPULSE_PIPELINE_FORECAST_ENABLED", "false")
 	t.Setenv("RAINPULSE_PIPELINE_REQUIRE_ALL_RADARS", "true")

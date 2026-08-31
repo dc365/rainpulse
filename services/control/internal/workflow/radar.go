@@ -248,14 +248,16 @@ type NowcastInputFrame struct {
 }
 
 type NowcastInputBundle struct {
-	Run               Run
-	Frames            []NowcastInputFrame
-	PreprocessVersion string
-	GateConfigVersion string
-	Config            json.RawMessage
-	ConfigSHA256      string
-	Job               Job
-	Outbox            OutboxEvent
+	Run                                 Run
+	Frames                              []NowcastInputFrame
+	PreprocessVersion                   string
+	GateConfigVersion                   string
+	ExecutionMode                       string
+	RequireAllFramesOperationalEligible bool
+	Config                              json.RawMessage
+	ConfigSHA256                        string
+	Job                                 Job
+	Outbox                              OutboxEvent
 }
 
 type NowcastInputMetrics struct {
@@ -264,6 +266,7 @@ type NowcastInputMetrics struct {
 	GridID              string      `json:"grid_id"`
 	ProfileVersion      string      `json:"profile_version"`
 	PreprocessVersion   string      `json:"preprocess_version"`
+	ExecutionMode       string      `json:"execution_mode"`
 	AnalysisIDs         []uuid.UUID `json:"analysis_ids"`
 	InputAssetIDs       []uuid.UUID `json:"input_asset_ids"`
 	InputURIs           []string    `json:"input_uris"`

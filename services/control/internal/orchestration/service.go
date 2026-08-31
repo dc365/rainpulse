@@ -150,19 +150,21 @@ type NowcastInputCandidate struct {
 }
 
 type NowcastInputInput struct {
-	IssueTime                 time.Time
-	GridID                    string
-	GridConfigVersion         string
-	PreprocessVersion         string
-	GateConfigVersion         string
-	MinimumFrames             int
-	MaximumFrames             int
-	Timestep                  time.Duration
-	MinimumValidCoverageRatio float64
-	MinimumMeanQualityIndex   float64
-	Candidates                []NowcastInputCandidate
-	Config                    json.RawMessage
-	ConfigSHA256              string
+	IssueTime                           time.Time
+	GridID                              string
+	GridConfigVersion                   string
+	PreprocessVersion                   string
+	GateConfigVersion                   string
+	ExecutionMode                       string
+	RequireAllFramesOperationalEligible bool
+	MinimumFrames                       int
+	MaximumFrames                       int
+	Timestep                            time.Duration
+	MinimumValidCoverageRatio           float64
+	MinimumMeanQualityIndex             float64
+	Candidates                          []NowcastInputCandidate
+	Config                              json.RawMessage
+	ConfigSHA256                        string
 }
 
 type PystepsLKInput struct {
@@ -856,6 +858,7 @@ func (service *Service) CreateNowcastInput(
 	ctx context.Context,
 	input NowcastInputInput,
 ) (workflow.Run, workflow.Job, error) {
+	input = normalizeNowcastInput(input)
 	frames, err := validateAndSelectNowcastFrames(input)
 	if err != nil {
 		return workflow.Run{}, workflow.Job{}, err
@@ -897,6 +900,7 @@ func (service *Service) CreateNowcastInput(
 			OutputPrefix: outputPrefix, IssueTime: issueTime, GridID: input.GridID,
 			PreprocessVersion: input.PreprocessVersion,
 			GateConfigVersion: input.GateConfigVersion,
+			ExecutionMode:     input.ExecutionMode,
 		},
 	}
 	payload, err := json.Marshal(request)
@@ -915,9 +919,11 @@ func (service *Service) CreateNowcastInput(
 	}
 	bundle := workflow.NowcastInputBundle{
 		Run: run, Frames: frames,
-		PreprocessVersion: input.PreprocessVersion,
-		GateConfigVersion: input.GateConfigVersion,
-		Config:            input.Config, ConfigSHA256: input.ConfigSHA256,
+		PreprocessVersion:                   input.PreprocessVersion,
+		GateConfigVersion:                   input.GateConfigVersion,
+		ExecutionMode:                       input.ExecutionMode,
+		RequireAllFramesOperationalEligible: input.RequireAllFramesOperationalEligible,
+		Config:                              input.Config, ConfigSHA256: input.ConfigSHA256,
 		Job: job,
 		Outbox: workflow.OutboxEvent{
 			ID: eventID, AggregateID: jobID.String(),
@@ -929,6 +935,14 @@ func (service *Service) CreateNowcastInput(
 		return workflow.Run{}, workflow.Job{}, err
 	}
 	return run, job, nil
+}
+
+func normalizeNowcastInput(input NowcastInputInput) NowcastInputInput {
+	if input.ExecutionMode == "" {
+		input.ExecutionMode = "operational"
+		input.RequireAllFramesOperationalEligible = true
+	}
+	return input
 }
 
 func (service *Service) CreatePystepsLK(
@@ -1281,6 +1295,15 @@ func validateAndSelectNowcastFrames(
 		input.PreprocessVersion == "" || input.GateConfigVersion == "" {
 		return nil, fmt.Errorf("NowcastInput identity and version fields are required")
 	}
+	if input.ExecutionMode != "operational" && input.ExecutionMode != "historical_replay" {
+		return nil, fmt.Errorf("NowcastInput execution mode is invalid")
+	}
+	if input.ExecutionMode == "operational" && !input.RequireAllFramesOperationalEligible {
+		return nil, fmt.Errorf("operational NowcastInput requires eligible analysis frames")
+	}
+	if input.ExecutionMode == "historical_replay" && input.RequireAllFramesOperationalEligible {
+		return nil, fmt.Errorf("historical replay must retain engineering analysis frames")
+	}
 	if input.MinimumFrames != 3 || input.MaximumFrames != 6 ||
 		input.Timestep != 5*time.Minute {
 		return nil, fmt.Errorf("Phase-1 NowcastInput requires 3-6 frames at five-minute steps")
@@ -1317,7 +1340,7 @@ func validateAndSelectNowcastFrames(
 		if !exists {
 			break
 		}
-		if !candidate.OperationalEligible {
+		if input.RequireAllFramesOperationalEligible && !candidate.OperationalEligible {
 			return nil, fmt.Errorf("RadarAnalysis %s is not operationally eligible", candidate.AnalysisID)
 		}
 		if candidate.ValidCoverageRatio < input.MinimumValidCoverageRatio {

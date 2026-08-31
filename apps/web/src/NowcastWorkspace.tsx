@@ -164,7 +164,7 @@ function buildCycleCatalog(
       time: analysis.analysis_time,
       gridID: analysis.grid_id,
       run: existing?.run,
-      analysis,
+      analysis: existing?.analysis ?? analysis,
       ensemble: existing?.ensemble,
     })
   })
@@ -788,6 +788,10 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
   const lkAvailable = deterministicRenderedAssets.length > 0
   const stepsAvailable = ensembleBundle?.layers.some((layer) =>
     layer.assets.some((asset) => asset.asset_type === 'rendered_png')) === true
+  const participatingRadarCount = analysis?.radars.filter(
+    (radar) => radar.state === 'PARTICIPATING',
+  ).length ?? 0
+  const inputRadarCount = Math.max(participatingRadarCount, analysis?.radar_count ?? 0)
   const currentProductLabel = analysisActive
     ? '雷达瞬时雨强'
     : displayMode === 'probability'
@@ -995,7 +999,9 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
               <span className={`run-state${ensembleActive ? ' offline' : ''}${analysisActive ? ' analysis' : ''}${['PUBLISHED', 'VERIFYING', 'VERIFIED'].includes(run?.status ?? '') && lkActive ? ' published' : ''}${run?.status === 'FAILED' && lkActive ? ' failed' : ''}`}>
                 {analysisActive ? analysis?.status ?? '无实况' : ensembleActive ? 'OFFLINE' : run?.status ?? (loading ? '读取中' : '无产品')}
               </span>
-              <strong>{analysisActive ? `${analysis?.radar_count ?? 0} 站融合` : formatLead(currentLead)}</strong>
+              <strong>{analysisActive
+                ? `${inputRadarCount} 站输入 · ${analysis?.radar_count ?? 0} 站有效`
+                : formatLead(currentLead)}</strong>
             </div>
             <div className="stage-status-row"><span>分析周期</span><strong>{formatUtc(issueTime, true)}</strong></div>
             <div className="stage-status-row stage-status-valid-time"><span>有效时间</span><strong>{formatUtc(selectedAsset?.valid_time, true)}</strong></div>

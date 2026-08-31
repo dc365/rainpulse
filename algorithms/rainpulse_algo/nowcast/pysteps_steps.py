@@ -96,6 +96,15 @@ def run_pysteps_steps_fields(
         )
     if np.any(~np.isfinite(rate[valid])) or np.any(rate[valid] < 0.0):
         raise PystepsStepsInputError("STEPS input contains invalid precipitation rates")
+    working_rate = rate
+    if (
+        profile.support.input_missing_policy
+        == "dry_floor_working_copy_preserve_deterministic_support"
+    ):
+        # pySTEPS requires finite rectangular arrays. Missing source cells are
+        # dry only in this private compute copy; publication support continues
+        # to come from the deterministic advected validity mask below.
+        working_rate = np.where(valid, rate, 0.0).astype("float32")
 
     deterministic = run_pysteps_lk_fields(
         fields,
@@ -127,7 +136,7 @@ def run_pysteps_steps_fields(
     else:
         ar_frames = profile.ensemble.autoregressive_order + 1
         transformed, metadata = _transform_to_db(
-            rate[-ar_frames:],
+            working_rate[-ar_frames:],
             profile.ensemble.precipitation_threshold_mm_h,
         )
         forecast = backend or _load_steps_backend()

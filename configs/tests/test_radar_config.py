@@ -423,6 +423,31 @@ def test_rp034_fujian_four_radar_profile_is_engineering_only_and_complete() -> N
     } <= set(profile["fusion"]["reject_flags"])
 
 
+def test_rp039_fujian_profile_relaxes_alignment_without_overriding_data_quality() -> None:
+    schema = json.loads(
+        (CONFIG_ROOT / "schemas" / "radar-mosaic-profile.schema.json").read_text()
+    )
+    profile = yaml.safe_load(
+        (
+            CONFIG_ROOT
+            / "mosaic"
+            / "rp039-fujian-four-radar-history-v1.yaml"
+        ).read_text()
+    )
+
+    Draft202012Validator(schema).validate(profile)
+    assert profile["profile_version"] == "rp039-fujian-four-radar-history-v1"
+    assert profile["algorithm_version"] == "qi-mosaic-1.2.0"
+    assert profile["alignment"]["maximum_absolute_offset_seconds"] == 300
+    assert profile["alignment"]["minimum_time_quality"] == 0.80
+    assert profile["alignment"]["expected_radar_ids"] == [
+        "z9591",
+        "z9593",
+        "z9598",
+        "z9599",
+    ]
+
+
 def test_rp011_qpe_profile_freezes_basic_zr_and_disables_gauge_adjustment() -> None:
     schema = json.loads(
         (CONFIG_ROOT / "schemas" / "qpe-profile.schema.json").read_text()

@@ -500,6 +500,7 @@ services:
       RAINPULSE_WORKER_ID: rp013-nowcast-input
       RAINPULSE_WORKER_PROFILE: nowcast-input
       RAINPULSE_NOWCAST_INPUT_CONFIG: /opt/rainpulse/configs/nowcast/rp013-fixed-5min-v1.1.yaml
+      RAINPULSE_NOWCAST_INPUT_CONFIG_DIR: /opt/rainpulse/configs/nowcast
       RAINPULSE_GRID_CONFIG: /opt/rainpulse/configs/grids/fuzhou-0p01deg-v1.yaml
       TZ: UTC
     volumes:

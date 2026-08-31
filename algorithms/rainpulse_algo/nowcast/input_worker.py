@@ -15,7 +15,11 @@ from rainpulse_algo.worker.object_store import (
 )
 from rainpulse_algo.worker.runtime import WorkerResult
 
-from .input_profile import NowcastInputProfile, load_nowcast_input_profile
+from .input_profile import (
+    NowcastInputConfigError,
+    NowcastInputProfile,
+    load_nowcast_input_profile,
+)
 from .input_zarr import (
     NowcastInputError,
     build_nowcast_input_zarr_store,
@@ -31,9 +35,7 @@ def _execute_nowcast_input(
     request: NowcastInputRequested,
     client: Minio,
 ) -> WorkerResult:
-    profile = load_nowcast_input_profile(
-        _required_file("RAINPULSE_NOWCAST_INPUT_CONFIG")
-    )
+    profile = _load_requested_profile(request.payload.gate_config_version)
     grid = load_grid_config(_required_file("RAINPULSE_GRID_CONFIG"))
     _validate_request(request, profile, grid.grid_id, grid.config_version)
     reader = ArtifactObjectReader(client)
@@ -68,7 +70,7 @@ def _execute_nowcast_input(
             "valid_coverage_ratio": float(validation["valid_coverage_ratio"]),
             "mean_quality_index": float(validation["mean_quality_index"]),
             "max_data_age_minutes": float(validation["max_data_age_minutes"]),
-            "operational_eligible": 1.0,
+            "operational_eligible": float(validation["operational_eligible"]),
         },
     )
 
@@ -93,6 +95,7 @@ def _validate_request(
             request.payload.gate_config_version,
             profile.profile_version,
         ),
+        ("execution_mode", request.payload.execution_mode, profile.execution_mode),
     )
     for name, requested, configured in expected:
         if requested != configured:
@@ -113,3 +116,32 @@ def _required_file(name: str) -> Path:
     if not path.is_file():
         raise NowcastInputError(f"{name} must identify a file")
     return path
+
+
+def _load_requested_profile(profile_version: str) -> NowcastInputProfile:
+    directory_value = os.getenv("RAINPULSE_NOWCAST_INPUT_CONFIG_DIR")
+    if directory_value:
+        directory = Path(directory_value).resolve(strict=True)
+        if not directory.is_dir():
+            raise NowcastInputError(
+                "RAINPULSE_NOWCAST_INPUT_CONFIG_DIR must identify a directory"
+            )
+        matches: list[NowcastInputProfile] = []
+        for candidate in sorted(directory.glob("*.yaml")):
+            try:
+                profile = load_nowcast_input_profile(candidate)
+            except (NowcastInputConfigError, OSError):
+                continue
+            if profile.profile_version == profile_version:
+                matches.append(profile)
+        if len(matches) != 1:
+            raise NowcastInputError(
+                f"requested NowcastInput profile {profile_version!r} is not uniquely configured"
+            )
+        return matches[0]
+    profile = load_nowcast_input_profile(
+        _required_file("RAINPULSE_NOWCAST_INPUT_CONFIG")
+    )
+    if profile.profile_version != profile_version:
+        raise NowcastInputError("requested NowcastInput profile is not mounted")
+    return profile
