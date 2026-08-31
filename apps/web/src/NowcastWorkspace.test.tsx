@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { NowcastWorkspace } from './NowcastWorkspace'
@@ -243,12 +243,15 @@ describe('RainPulse short-nowcast workspace', () => {
     expect(screen.getByText('实况检验')).toBeTruthy()
     expect(await screen.findByText('0.713')).toBeTruthy()
     expect(screen.getByText('工程验证 / RP-023')).toBeTruthy()
-    expect(screen.getByRole('button', { name: '实时' }).getAttribute('aria-pressed')).toBe('true')
-    expect(await screen.findByText('当前无实时更新')).toBeTruthy()
     const firstLayer = await screen.findByRole('img', { name: 'T+5 分钟降水率图层' })
     expect(firstLayer.getAttribute('data-source')).toBe('/api/lead-5.png')
+    const timePickerTrigger = screen.getByRole('button', { name: '选择数据时次' })
+    expect(timePickerTrigger.textContent).toContain('实时跟随')
+    fireEvent.click(timePickerTrigger)
+    expect(await screen.findByText('当前无实时更新，显示最新正式预报')).toBeTruthy()
+    fireEvent.click(timePickerTrigger)
     expect(screen.getByRole('application', { name: /可交互降水 GIS 地图/ })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '播放全部时效' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '播放时间轴' })).toBeTruthy()
     expect((await screen.findAllByText('1.83 mm/h')).length).toBeGreaterThan(0)
     expect(await screen.findByText('技术质量 0.78（非概率）')).toBeTruthy()
     expect(screen.getByText(/峰值 2.40/)).toBeTruthy()
@@ -263,7 +266,7 @@ describe('RainPulse short-nowcast workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: '收起 ▴' }))
     expect(drawer.classList.contains('open')).toBe(false)
 
-    const timeline = screen.getByLabelText('五分钟预报时间轴')
+    const timeline = screen.getByLabelText('降水时间轴')
     const rail = timeline.querySelector<HTMLElement>('.nowcast-timeline-rail')
     expect(rail).toBeTruthy()
     Object.defineProperty(rail as HTMLElement, 'scrollWidth', { configurable: true, value: 200 })
@@ -278,7 +281,7 @@ describe('RainPulse short-nowcast workspace', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /^2 小时累计/ }))
     expect(await screen.findByRole('img', { name: '0–2 小时累计降水图层' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '播放全部时效' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: '播放时间轴' }).hasAttribute('disabled')).toBe(true)
 
     await waitFor(() => {
       expect(fetchStatus.mock.calls.some(([url]) => String(url).includes('/point-forecast?'))).toBe(true)
@@ -405,32 +408,37 @@ describe('RainPulse short-nowcast workspace', () => {
     render(<NowcastWorkspace refreshToken={0} />)
 
     await screen.findByRole('img', { name: 'T+5 分钟降水率图层' })
-    fireEvent.click(screen.getByRole('button', { name: '历史时次' }))
-    const picker = await screen.findByRole('combobox', { name: '历史数据时次' })
-    expect(picker.querySelectorAll('option')).toHaveLength(2)
-    fireEvent.change(picker, { target: { value: olderRun.run_id } })
+    fireEvent.click(screen.getByRole('button', { name: '选择数据时次' }))
+    const picker = await screen.findByRole('listbox', { name: '数据时次' })
+    expect(within(picker).getAllByRole('option')).toHaveLength(3)
+    const olderOption = within(picker).getAllByRole('option').find(
+      (option) => option.textContent?.includes('08/24 18:00 CST'),
+    )
+    expect(olderOption).toBeTruthy()
+    fireEvent.click(olderOption!)
 
     await waitFor(() => {
       expect(fetchStatus.mock.calls.some(([url]) => String(url).includes(
         `/products?run_id=${olderRun.run_id}`,
       ))).toBe(true)
     })
-    expect(screen.getByRole('button', { name: '历史时次' }).getAttribute('aria-pressed')).toBe('true')
-    expect(screen.getByRole<HTMLSelectElement>('combobox', { name: '历史数据时次' }).value)
-      .toBe(olderRun.run_id)
+    const timePickerTrigger = screen.getByRole('button', { name: '选择数据时次' })
+    expect(timePickerTrigger.textContent).toContain('历史预报')
+    expect(timePickerTrigger.textContent).toContain('08/24 18:00 CST')
   })
 
   it('reuses the historical picker for multiple radar QPE analysis times', async () => {
-    const latestAnalysis = analysisCycles.at(-1)!
     const fetchStatus = vi.fn().mockImplementation((input: string) => {
       let body: unknown = {}
       if (input.includes('/runs?status=')) body = { items: [run] }
       else if (input.includes('/analysis-cycles?')) body = { items: analysisCycles }
-      else if (input.endsWith(`/${latestAnalysis.analysis_id}/diagnostics`)) {
-        body = analysisDiagnostic(latestAnalysis.analysis_id, latestAnalysis.analysis_time)
+      else if (input.endsWith('/diagnostics')) {
+        const item = analysisCycles.find((cycle) => input.includes(cycle.analysis_id))
+        if (item) body = analysisDiagnostic(item.analysis_id, item.analysis_time)
       }
-      else if (input.endsWith(`/${latestAnalysis.analysis_id}/qpe-summary`)) {
-        body = analysisQPE(latestAnalysis.analysis_id, latestAnalysis.analysis_time)
+      else if (input.endsWith('/qpe-summary')) {
+        const item = analysisCycles.find((cycle) => input.includes(cycle.analysis_id))
+        if (item) body = analysisQPE(item.analysis_id, item.analysis_time)
       }
       else if (input.includes('/products?run_id=')) body = { items: products }
       else if (input.endsWith('/products/rain-product/assets')) body = rainAssets
@@ -453,17 +461,29 @@ describe('RainPulse short-nowcast workspace', () => {
     render(<NowcastWorkspace refreshToken={0} />)
 
     await screen.findByRole('img', { name: 'T+5 分钟降水率图层' })
-    fireEvent.click(screen.getByRole('button', { name: '历史时次' }))
-    const picker = await screen.findByRole<HTMLSelectElement>('combobox', {
-      name: '历史数据时次',
-    })
-    expect(picker.querySelectorAll('option')).toHaveLength(4)
-    expect(picker.value).toBe(`analysis:${latestAnalysis.analysis_id}`)
+    fireEvent.click(screen.getByRole('button', { name: '选择数据时次' }))
+    const picker = await screen.findByRole('listbox', { name: '数据时次' })
+    await waitFor(() => expect(within(picker).getAllByRole('option')).toHaveLength(5))
+    const latestAnalysisOption = within(picker).getAllByRole('option').find(
+      (option) => option.textContent?.includes('08/28 18:00 CST'),
+    )
+    expect(latestAnalysisOption).toBeTruthy()
+    fireEvent.click(latestAnalysisOption!)
+
+    const timePickerTrigger = screen.getByRole('button', { name: '选择数据时次' })
+    expect(timePickerTrigger.textContent).toContain('历史分析')
+    expect(timePickerTrigger.textContent).toContain('08/28 18:00 CST')
     expect((await screen.findByText('雷达 QPE')).textContent).toBe('雷达 QPE')
     const layer = await screen.findByRole('img', { name: /雷达 QPE 瞬时雨强图层/ })
     expect(layer.getAttribute('data-source')).toBe('/api/v1/diagnostics/job/layers/grid-rate-qpe')
     expect(screen.getByText('41.0%')).toBeTruthy()
     expect(screen.getByRole('tab', { name: '单点雨强' }).hasAttribute('disabled')).toBe(true)
-    expect(screen.queryByLabelText('五分钟预报时间轴')).toBeNull()
+    const timeline = screen.getByLabelText('降水时间轴')
+    expect(timeline.querySelectorAll('[data-frame-kind="analysis"]')).toHaveLength(3)
+    expect(within(timeline).getByRole('button', { name: '播放时间轴' })).toBeTruthy()
+
+    fireEvent.click(within(timeline).getByRole('button', { name: /分析 08\/28 17:55 CST/ }))
+    expect(await screen.findByRole('img', { name: /08\/28 17:55 CST.*雷达 QPE 瞬时雨强图层/ })).toBeTruthy()
+    expect(timePickerTrigger.textContent).toContain('08/28 17:55 CST')
   })
 })

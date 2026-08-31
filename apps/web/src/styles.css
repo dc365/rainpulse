@@ -1645,9 +1645,20 @@ h1 {
 .timeline-active-state span { display: flex; align-items: center; justify-content: flex-end; gap: 6px; color: var(--muted); font-size: 11px; }
 .timeline-active-state span i { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); animation: nowcast-playing 900ms ease-out infinite; }
 .timeline-active-state strong { display: block; margin-top: 4px; font-size: 11px; font-variant-numeric: tabular-nums; }
-.timeline-hour-bands { height: 22px; display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--line); }
-.timeline-hour-bands span { display: flex; align-items: center; padding-left: 10px; color: var(--muted); font-size: 11px; letter-spacing: .08em; }
-.timeline-hour-bands span:first-child { border-right: 1px solid var(--line-strong); }
+.timeline-context-band {
+  min-height: 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.timeline-context-band strong { color: #546761; font-size: 10px; letter-spacing: .08em; }
+.timeline-context-band span:last-child { text-align: right; }
 
 .nowcast-timeline-rail {
   display: flex;
@@ -1677,6 +1688,7 @@ h1 {
 }
 
 .nowcast-timeline-rail button i { position: absolute; z-index: 1; top: -4px; left: calc(50% - 4px); width: 7px; height: 7px; border: 1px solid #fafbf9; border-radius: 50%; background: #99a7a2; }
+.nowcast-timeline-rail button[data-frame-kind="analysis"] { flex-basis: 62px; min-width: 62px; }
 .nowcast-timeline-rail button[data-major="true"] { color: #53655f; font-weight: 750; }
 .nowcast-timeline-rail button[data-major="true"] i { top: -5px; left: calc(50% - 5px); width: 9px; height: 9px; }
 .nowcast-timeline-rail button.active { color: #075e52; background: #e7f1ee; }
@@ -2071,83 +2083,153 @@ h1 {
 
 .forecast-stage {
   margin-top: 12px;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid var(--line-strong);
   border-radius: 7px;
   background: var(--paper);
 }
 
 .forecast-mode-bar {
+  position: relative;
+  z-index: 12;
   min-height: 46px;
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(360px, 460px) auto minmax(0, 1fr) auto;
   align-items: stretch;
   border-bottom: 1px solid var(--line);
   color: #52645f;
   background: #f8faf8;
 }
-.forecast-source-control {
-  display: flex;
+.forecast-time-control {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: stretch;
   border-right: 1px solid var(--line);
   background: #f4f8f6;
 }
-.forecast-source-switch,
-.forecast-run-picker,
-.forecast-live-state {
+.forecast-control-label {
   display: flex;
   align-items: center;
-}
-.forecast-source-switch { border-right: 1px solid var(--line); }
-.forecast-source-switch > span,
-.forecast-run-picker > span {
   padding: 0 8px;
   color: #73807c;
   font-size: 11px;
   letter-spacing: .05em;
   white-space: nowrap;
 }
-.forecast-run-picker select {
-  width: 292px;
-  min-height: 34px;
-  margin: 5px 7px 5px 0;
-  padding: 0 28px 0 8px;
-  border: 1px solid var(--line-strong);
-  border-radius: 7px;
-  color: #35514a;
-  background: #fff;
-  font: inherit;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-.forecast-run-picker select:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--teal), transparent 45%);
-  outline-offset: 1px;
-}
-.forecast-live-state {
-  position: relative;
-  min-width: 214px;
+.time-picker-trigger {
+  min-width: 0;
+  min-height: 45px;
   display: grid;
-  grid-template-columns: 8px 1fr;
-  align-content: center;
-  column-gap: 7px;
-  padding: 4px 10px;
+  grid-template-columns: 8px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 9px;
+  border: 0;
+  border-left: 1px solid #e3e9e6;
+  color: #35514a;
+  background: #f9fbfa;
+  text-align: left;
+  cursor: pointer;
 }
-.forecast-live-state > span {
+.time-picker-trigger:hover { background: #edf4f1; }
+.time-picker-trigger:focus-visible,
+.time-picker-option:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--teal), transparent 45%);
+  outline-offset: -2px;
+}
+.time-picker-trigger > i,
+.time-picker-option.realtime > i {
   width: 7px;
   height: 7px;
-  grid-row: 1 / span 2;
-  align-self: center;
   border-radius: 50%;
   background: #b36c43;
   box-shadow: 0 0 0 3px #f3e5dc;
 }
-.forecast-live-state strong,
-.forecast-live-state small { white-space: nowrap; }
-.forecast-live-state strong { color: #7e4c31; font-size: 11px; }
-.forecast-live-state small { color: #71807b; font-size: 10px; font-variant-numeric: tabular-nums; }
-.forecast-live-state.fresh > span { background: var(--teal); box-shadow: 0 0 0 3px #dcece7; }
-.forecast-live-state.fresh strong { color: #075e52; }
+.time-picker-trigger > i.fresh,
+.time-picker-option.realtime > i.fresh { background: var(--teal); box-shadow: 0 0 0 3px #dcece7; }
+.time-picker-trigger > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.time-picker-trigger small { color: #62736d; font-size: 9px; font-weight: 700; letter-spacing: .08em; }
+.time-picker-trigger strong {
+  overflow: hidden;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.time-picker-trigger > b { color: #71817c; font-size: 15px; font-weight: 500; text-align: right; }
+.time-picker-trigger[aria-expanded="true"] { color: #075e52; background: #e7f1ee; box-shadow: inset 0 -2px var(--teal); }
+.time-picker-popover {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 6px);
+  left: 8px;
+  width: 460px;
+  max-width: calc(100vw - 64px);
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: #fbfcfb;
+}
+.time-picker-popover > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.time-picker-popover > header strong { color: var(--ink); font-size: 11px; }
+.time-picker-popover > header small { color: var(--muted); font-size: 10px; }
+.time-picker-popover > p {
+  margin: 0;
+  padding: 7px 10px 5px;
+  border-top: 1px solid var(--line);
+  color: #72817c;
+  background: #f4f7f5;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .1em;
+}
+.time-picker-history { max-height: 318px; overflow-y: auto; overscroll-behavior: contain; }
+.time-picker-option {
+  width: 100%;
+  min-height: 46px;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 6px 10px;
+  border: 0;
+  border-bottom: 1px solid #e7ece9;
+  color: #40544f;
+  background: #fbfcfb;
+  text-align: left;
+  cursor: pointer;
+}
+.time-picker-option:hover { color: #075e52; background: #edf4f1; }
+.time-picker-option.active { color: #075e52; background: #e4f0ec; box-shadow: inset 3px 0 var(--teal); }
+.time-picker-option:disabled { color: #97a19e; cursor: not-allowed; }
+.time-picker-option > em {
+  padding: 3px 4px;
+  border: 1px solid #b8c9c4;
+  color: #526963;
+  background: #f5f8f7;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 750;
+  letter-spacing: .06em;
+  text-align: center;
+}
+.time-picker-option > span { min-width: 0; display: grid; gap: 2px; }
+.time-picker-option > span strong { overflow: hidden; font-size: 11px; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.time-picker-option > span small { color: #7a8883; font-size: 9px; }
+.time-picker-option.realtime { grid-template-columns: 8px minmax(0, 1fr) auto; min-height: 58px; }
+.time-picker-option.realtime time { color: #64756f; font-size: 10px; font-variant-numeric: tabular-nums; }
 .forecast-mode-switch,
 .ensemble-layer-switch,
 .ensemble-layer-switch > div {
@@ -2175,7 +2257,8 @@ h1 {
   box-shadow: inset 0 -2px var(--teal);
   font-size: 11px;
 }
-.forecast-mode-bar button {
+.forecast-mode-switch button,
+.ensemble-layer-switch button {
   min-width: 44px;
   min-height: 45px;
   padding: 0 9px;
@@ -2186,9 +2269,12 @@ h1 {
   font-size: 11px;
   cursor: pointer;
 }
-.forecast-mode-bar button:hover:not(:disabled) { color: var(--teal); background: #edf3f0; }
-.forecast-mode-bar button.active { color: #075e52; background: #e3efeb; box-shadow: inset 0 -2px var(--teal); }
-.forecast-mode-bar button:disabled { color: #9aa5a1; cursor: not-allowed; }
+.forecast-mode-switch button:hover:not(:disabled),
+.ensemble-layer-switch button:hover:not(:disabled) { color: var(--teal); background: #edf3f0; }
+.forecast-mode-switch button.active,
+.ensemble-layer-switch button.active { color: #075e52; background: #e3efeb; box-shadow: inset 0 -2px var(--teal); }
+.forecast-mode-switch button:disabled,
+.ensemble-layer-switch button:disabled { color: #9aa5a1; cursor: not-allowed; }
 .ensemble-layer-switch { min-width: 0; overflow-x: auto; }
 .ensemble-layer-switch > div { flex: 0 0 auto; height: 100%; }
 .ensemble-boundary {
@@ -2208,7 +2294,7 @@ h1 {
 .ensemble-boundary.active strong { color: #8a4d31; }
 .ensemble-unavailable { align-self: center; padding: 0 10px; color: #89938f; }
 
-.forecast-map-host { position: relative; }
+.forecast-map-host { position: relative; overflow: hidden; }
 .forecast-map-host .nowcast-gis-shell {
   height: clamp(520px, calc(100svh - 296px), 960px);
   min-height: 480px;
@@ -2360,21 +2446,18 @@ h1 {
 .drawer-tabpanel .query-panel, .drawer-tabpanel .provenance-panel { background: transparent; }
 
 @media (max-width: 700px) {
-  .forecast-mode-bar { display: block; overflow: hidden; }
-  .forecast-source-control {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
+  .forecast-mode-bar { display: block; overflow: visible; }
+  .forecast-time-control {
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
-  .forecast-source-switch button { min-width: 52px; }
-  .forecast-run-picker select { width: min(220px, calc(100vw - 236px)); }
-  .forecast-live-state { min-width: 0; }
+  .time-picker-popover { right: 8px; left: 8px; width: auto; max-width: none; }
   .forecast-mode-switch { border-right: 0; border-bottom: 1px solid var(--line); }
   .forecast-mode-switch button { flex: 1; }
   .ensemble-layer-switch { min-height: 42px; border-bottom: 1px solid var(--line); }
   .ensemble-layer-switch > div { min-height: 42px; }
-  .forecast-mode-bar button { min-height: 41px; }
+  .forecast-mode-switch button,
+  .ensemble-layer-switch button { min-height: 41px; }
   .ensemble-boundary {
     min-width: 0;
     min-height: 40px;
@@ -2405,9 +2488,9 @@ h1 {
 }
 
 @media (max-width: 430px) {
-  .forecast-source-control { display: block; }
-  .forecast-source-switch { border-right: 0; border-bottom: 1px solid var(--line); }
-  .forecast-source-switch button { flex: 1; }
-  .forecast-run-picker select { width: calc(100% - 52px); min-height: 40px; margin-block: 5px; }
-  .forecast-live-state { min-height: 44px; }
+  .forecast-control-label { padding-inline: 7px; }
+  .time-picker-trigger { min-height: 50px; padding-inline: 7px; }
+  .time-picker-popover > header { align-items: flex-start; flex-direction: column; gap: 2px; }
+  .time-picker-option.realtime { grid-template-columns: 8px minmax(0, 1fr); }
+  .time-picker-option.realtime time { grid-column: 2; }
 }

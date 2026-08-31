@@ -12,6 +12,7 @@ interface NowcastTimelineProps {
   issueTime?: string | null
   fixedWindow: boolean
   productLabel: string
+  mode?: 'forecast' | 'analysis'
   onSelect: (asset: TimelineAsset) => void
 }
 
@@ -25,18 +26,37 @@ function formatUtc(value?: string | null) {
   }).format(new Date(value))} UTC`
 }
 
+function formatCst(value?: string | null, includeDate = false) {
+  if (!value) return '暂无'
+  const options: Intl.DateTimeFormatOptions = {
+    timeZone: 'Asia/Taipei',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }
+  if (includeDate) {
+    options.month = '2-digit'
+    options.day = '2-digit'
+  }
+  return `${new Intl.DateTimeFormat('zh-CN', options).format(new Date(value))} CST`
+}
+
 export function NowcastTimeline({
   assets,
   selectedAsset,
   issueTime,
   fixedWindow,
   productLabel,
+  mode = 'forecast',
   onSelect,
 }: NowcastTimelineProps) {
   const [playing, setPlaying] = useState(false)
   const railRef = useRef<HTMLDivElement>(null)
   const activeIndex = Math.max(0, assets.findIndex((asset) => asset.asset_id === selectedAsset?.asset_id))
   const activeLead = selectedAsset?.lead_time_minutes ?? 0
+  const analysisMode = mode === 'analysis'
+  const firstAsset = assets[0] ?? null
+  const lastAsset = assets.at(-1) ?? null
 
   useEffect(() => {
     if (!playing || fixedWindow || assets.length < 2) return
@@ -47,10 +67,12 @@ export function NowcastTimeline({
   }, [activeIndex, assets, fixedWindow, onSelect, playing])
 
   useEffect(() => {
-    const active = railRef.current?.querySelector<HTMLElement>('[aria-current="step"]')
-    if (typeof active?.scrollIntoView === 'function') {
-      active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
-    }
+    const rail = railRef.current
+    const active = rail?.querySelector<HTMLElement>('[aria-current="step"]')
+    if (!rail || !active) return
+    const left = active.offsetLeft - (rail.clientWidth - active.clientWidth) / 2
+    if (typeof rail.scrollTo === 'function') rail.scrollTo({ left, behavior: 'smooth' })
+    else rail.scrollLeft = left
   }, [activeIndex])
 
   const scrubbingRef = useRef(false)
@@ -99,35 +121,38 @@ export function NowcastTimeline({
       data-playing={playing}
       tabIndex={0}
       onKeyDown={handleKeyDown}
-      aria-label="五分钟预报时间轴"
+      aria-label="降水时间轴"
     >
       <header className="nowcast-timeline-toolbar">
         <div className="timeline-playback">
-          <button type="button" disabled={fixedWindow || activeIndex === 0} aria-label="上一个时效" onClick={() => move(-1)}><span aria-hidden="true">◀</span></button>
+          <button type="button" disabled={fixedWindow || activeIndex === 0} aria-label="上一帧" onClick={() => move(-1)}><span aria-hidden="true">◀</span></button>
           <button
             type="button"
             className="timeline-play-button"
             disabled={fixedWindow || assets.length < 2}
             aria-pressed={playing}
-            aria-label={playing ? '暂停时效播放' : '播放全部时效'}
+            aria-label={playing ? '暂停时间轴' : '播放时间轴'}
             onClick={() => setPlaying((value) => !value)}
           >
             <span aria-hidden="true">{playing ? 'Ⅱ' : '▶'}</span>{playing ? '暂停' : '播放'}
           </button>
-          <button type="button" disabled={fixedWindow || activeIndex >= assets.length - 1} aria-label="下一个时效" onClick={() => move(1)}><span aria-hidden="true">▶</span></button>
+          <button type="button" disabled={fixedWindow || activeIndex >= assets.length - 1} aria-label="下一帧" onClick={() => move(1)}><span aria-hidden="true">▶</span></button>
         </div>
         <div className="timeline-active-state">
-          <span>{playing ? <i aria-hidden="true" /> : null}{fixedWindow ? productLabel : `${assets.length} 帧 · 5 分钟间隔`}</span>
-          <strong>T+{activeLead} · {formatUtc(selectedAsset?.valid_time)}</strong>
+          <span>{playing ? <i aria-hidden="true" /> : null}{fixedWindow
+            ? productLabel
+            : analysisMode ? `${assets.length} 个雷达分析时次` : `${assets.length} 帧 · 5 分钟间隔`}</span>
+          <strong>{analysisMode
+            ? `${formatCst(selectedAsset?.valid_time, true)} · ${formatUtc(selectedAsset?.valid_time)}`
+            : `T+${activeLead} · ${formatUtc(selectedAsset?.valid_time)}`}</strong>
         </div>
       </header>
 
-      {!fixedWindow ? (
-        <div className="timeline-hour-bands" aria-hidden="true">
-          <span>0–1 小时</span>
-          <span>1–2 小时</span>
-        </div>
-      ) : null}
+      <div className="timeline-context-band" aria-hidden="true">
+        <span>{analysisMode ? formatCst(firstAsset?.valid_time, true) : `起报 ${formatUtc(issueTime)}`}</span>
+        <strong>{analysisMode ? '历史雷达分析' : fixedWindow ? productLabel : '未来 0–2 小时'}</strong>
+        <span>{analysisMode ? formatCst(lastAsset?.valid_time, true) : formatUtc(lastAsset?.valid_time)}</span>
+      </div>
 
       <div
         className="nowcast-timeline-rail"
@@ -147,27 +172,34 @@ export function NowcastTimeline({
         {assets.map((asset) => {
           const lead = asset.lead_time_minutes ?? 0
           const active = asset.asset_id === selectedAsset?.asset_id
+          const validDate = asset.valid_time ? new Date(asset.valid_time) : null
+          const major = analysisMode
+            ? validDate?.getUTCMinutes() === 0
+            : lead === 60 || lead === 120
           return (
             <button
               type="button"
               key={asset.asset_id}
               className={active ? 'active' : ''}
               aria-current={active ? 'step' : undefined}
-              aria-label={`T+${lead}，${formatUtc(asset.valid_time)}`}
+              aria-label={analysisMode
+                ? `分析 ${formatCst(asset.valid_time, true)}，${formatUtc(asset.valid_time)}`
+                : `T+${lead}，${formatUtc(asset.valid_time)}`}
               disabled={fixedWindow}
-              data-major={lead === 60 || lead === 120}
+              data-major={major}
+              data-frame-kind={analysisMode ? 'analysis' : 'forecast'}
               onClick={() => onSelect(asset)}
             >
               <i />
-              <span>T+{lead}</span>
+              <span>{analysisMode ? formatCst(asset.valid_time) : `T+${lead}`}</span>
             </button>
           )
         })}
       </div>
 
       <footer className="timeline-footer">
-        <span><i />当前时效</span>
-        <span>起报 {formatUtc(issueTime)} · ← → 键逐帧查看</span>
+        <span><i />当前{analysisMode ? '分析' : '时效'}</span>
+        <span>{analysisMode ? '地图随分析时次同步更新' : `起报 ${formatUtc(issueTime)}`} · ← → 键逐帧查看</span>
       </footer>
     </div>
   )

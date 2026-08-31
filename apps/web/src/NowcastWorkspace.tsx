@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
 } from 'react'
@@ -132,6 +133,103 @@ function formatRunOption(value: string) {
     hour12: false,
   }).format(timestamp)
   return `${local} CST · ${utc} UTC`
+}
+
+function TimeCatalogPicker({
+  dataMode,
+  items,
+  selectedHistoryID,
+  realtimeFresh,
+  onSelect,
+}: {
+  dataMode: DataMode
+  items: HistoryItem[]
+  selectedHistoryID: string | null
+  realtimeFresh: boolean
+  onSelect: (value: 'realtime' | string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const latestForecast = items.find((item) => item.kind === 'forecast') ?? null
+  const selected = dataMode === 'historical'
+    ? items.find((item) => item.id === selectedHistoryID) ?? null
+    : latestForecast
+  const selectedValue = dataMode === 'realtime' ? 'realtime' : selected?.id ?? ''
+  const selectedKind = dataMode === 'realtime'
+    ? '实时跟随'
+    : selected?.kind === 'analysis' ? '历史分析' : '历史预报'
+
+  useEffect(() => {
+    if (!open) return
+    const closeOutside = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const closeWithEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOutside)
+    document.addEventListener('keydown', closeWithEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside)
+      document.removeEventListener('keydown', closeWithEscape)
+    }
+  }, [open])
+
+  const choose = (value: 'realtime' | string) => {
+    onSelect(value)
+    setOpen(false)
+  }
+
+  return (
+    <div className="forecast-time-control" ref={rootRef}>
+      <span className="forecast-control-label">时间</span>
+      <button
+        type="button"
+        className="time-picker-trigger"
+        aria-label="选择数据时次"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <i className={dataMode === 'realtime' && realtimeFresh ? 'fresh' : ''} aria-hidden="true" />
+        <span><small>{selectedKind}</small><strong>{selected ? formatRunOption(selected.time) : '暂无可用时次'}</strong></span>
+        <b aria-hidden="true">⌄</b>
+      </button>
+      {open ? (
+        <div className="time-picker-popover" role="listbox" aria-label="数据时次">
+          <header><strong>选择数据时次</strong><small>分析与预报使用同一时间入口</small></header>
+          <button
+            type="button"
+            role="option"
+            aria-selected={selectedValue === 'realtime'}
+            className={`time-picker-option realtime${selectedValue === 'realtime' ? ' active' : ''}`}
+            disabled={!latestForecast}
+            onClick={() => choose('realtime')}
+          >
+            <i className={realtimeFresh ? 'fresh' : ''} aria-hidden="true" />
+            <span><strong>实时跟随</strong><small>{realtimeFresh ? '跟随最新正式产品' : '当前无实时更新，显示最新正式预报'}</small></span>
+            <time>{latestForecast ? formatRunOption(latestForecast.time) : '暂无'}</time>
+          </button>
+          <p>历史分析与预报</p>
+          <div className="time-picker-history">
+            {items.map((item) => (
+              <button
+                type="button"
+                role="option"
+                aria-selected={selectedValue === item.id}
+                className={`time-picker-option${selectedValue === item.id ? ' active' : ''}`}
+                key={item.id}
+                onClick={() => choose(item.id)}
+              >
+                <em>{item.kind === 'analysis' ? '分析' : '预报'}</em>
+                <span><strong>{formatRunOption(item.time)}</strong><small>{item.kind === 'analysis' ? '雷达 QPE' : '0–2 小时预报'}</small></span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 function formatLead(value?: number | null) {
@@ -435,6 +533,21 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
         .map(toDisplayAsset),
     [analysisAsset, assets, currentLead, displayMode, selectedEnsembleLayer, selectedProduct],
   )
+  const analysisTimelineAssets = useMemo(
+    () => availableHistory
+      .filter((item): item is Extract<HistoryItem, { kind: 'analysis' }> => item.kind === 'analysis')
+      .slice()
+      .reverse()
+      .map((item): TimelineAsset => ({
+        asset_id: item.id,
+        lead_time_minutes: 0,
+        valid_time: item.time,
+      })),
+    [availableHistory],
+  )
+  const selectedAnalysisTimelineAsset = analysisTimelineAssets.find(
+    (item) => item.asset_id === selectedHistoryID,
+  ) ?? null
 
   useEffect(() => {
     if (!rainProduct) return
@@ -618,16 +731,29 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
   const issueTime = analysisActive
     ? analysis.analysis_time
     : ensembleActive ? ensembleBundle?.issue_time : run?.issue_time
-  const realtimeFresh = dataMode === 'realtime'
-    && run != null
-    && updatedAt != null
-    && updatedAt.getTime() - Date.parse(run.issue_time) <= 15 * 60 * 1000
+  const latestForecastItem = availableHistory.find((item) => item.kind === 'forecast') ?? null
+  const realtimeAgeMs = latestForecastItem != null && updatedAt != null
+    ? updatedAt.getTime() - Date.parse(latestForecastItem.time)
+    : null
+  const realtimeFresh = realtimeAgeMs != null && realtimeAgeMs >= 0
+    && realtimeAgeMs <= 15 * 60 * 1000
 
-  const switchDataMode = (nextMode: DataMode) => {
-    if (nextMode === 'historical') setSelectedHistoryID(null)
-    setDataMode(nextMode)
+  const selectCatalogTime = (value: 'realtime' | string) => {
+    if (value === 'realtime') {
+      setDataMode('realtime')
+      setSelectedHistoryID(null)
+    } else {
+      setDataMode('historical')
+      setSelectedHistoryID(value)
+    }
     setLayerError(false)
   }
+
+  const selectAnalysisTimelineAsset = useCallback((asset: TimelineAsset) => {
+    setDataMode('historical')
+    setSelectedHistoryID(asset.asset_id)
+    setLayerError(false)
+  }, [])
 
   return (
     <section className="forecast-page" aria-labelledby="forecast-title">
@@ -648,45 +774,13 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
 
       <section className="forecast-stage">
         <div className="forecast-mode-bar" aria-label="数据时次、预报模型与集合产品选择">
-          <div className="forecast-source-control">
-            <div className="forecast-source-switch" role="group" aria-label="数据时次模式">
-              <span>时次</span>
-              <button
-                type="button"
-                className={dataMode === 'realtime' ? 'active' : ''}
-                aria-pressed={dataMode === 'realtime'}
-                onClick={() => switchDataMode('realtime')}
-              >实时</button>
-              <button
-                type="button"
-                className={dataMode === 'historical' ? 'active' : ''}
-                aria-pressed={dataMode === 'historical'}
-                onClick={() => switchDataMode('historical')}
-              >历史时次</button>
-            </div>
-            {dataMode === 'historical' ? (
-              <label className="forecast-run-picker">
-                <span>时次</span>
-                <select
-                  aria-label="历史数据时次"
-                  value={selectedHistoryID ?? run?.run_id ?? ''}
-                  onChange={(event) => setSelectedHistoryID(event.target.value)}
-                >
-                  {availableHistory.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.kind === 'analysis' ? '分析' : '预报'} · {formatRunOption(item.time)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : (
-              <div className={`forecast-live-state${realtimeFresh ? ' fresh' : ''}`}>
-                <span aria-hidden="true" />
-                <strong>{realtimeFresh ? '跟随最新产品' : '当前无实时更新'}</strong>
-                <small>{run ? formatRunOption(run.issue_time) : '等待产品目录'}</small>
-              </div>
-            )}
-          </div>
+          <TimeCatalogPicker
+            dataMode={dataMode}
+            items={availableHistory}
+            selectedHistoryID={selectedHistoryID}
+            realtimeFresh={realtimeFresh}
+            onSelect={selectCatalogTime}
+          />
           {analysisActive ? (
             <div className="forecast-mode-switch analysis-source" aria-label="当前数据类型">
               <span>数据</span>
@@ -860,15 +954,28 @@ export function NowcastWorkspace({ refreshToken }: { refreshToken: number }) {
           </div>
         </div>
 
-        {!analysisActive ? <NowcastTimeline
-          key={`${displayMode}-${productType}-${selectedEnsembleLayer?.layer_id ?? 'none'}`}
-          assets={renderedAssets}
-          selectedAsset={selectedAsset}
-          issueTime={issueTime}
-          fixedWindow={!ensembleActive && productType !== 'rain_rate'}
-          productLabel={currentProductLabel}
-          onSelect={selectTimelineAsset}
-        /> : null}
+        {analysisActive ? (
+          <NowcastTimeline
+            key="radar-analysis-history"
+            assets={analysisTimelineAssets}
+            selectedAsset={selectedAnalysisTimelineAsset}
+            issueTime={issueTime}
+            fixedWindow={false}
+            productLabel="雷达 QPE"
+            mode="analysis"
+            onSelect={selectAnalysisTimelineAsset}
+          />
+        ) : (
+          <NowcastTimeline
+            key={`${displayMode}-${productType}-${selectedEnsembleLayer?.layer_id ?? 'none'}`}
+            assets={renderedAssets}
+            selectedAsset={selectedAsset}
+            issueTime={issueTime}
+            fixedWindow={!ensembleActive && productType !== 'rain_rate'}
+            productLabel={currentProductLabel}
+            onSelect={selectTimelineAsset}
+          />
+        )}
 
         <section className={`forecast-drawer${drawerOpen ? ' open' : ''}`} aria-label="预报细节抽屉">
           <header className="drawer-bar">
