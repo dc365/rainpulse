@@ -588,6 +588,8 @@ def test_pipeline_and_workers_mount_the_same_rp040_radar_profiles() -> None:
     orchestrator = services["orchestrator"]["environment"]
     qc_worker = services["radar-qc-worker"]["environment"]
     grid_worker = services["radar-grid-worker"]["environment"]
+    mosaic_worker = services["radar-mosaic-worker"]["environment"]
+    nowcast_input_worker = services["nowcast-input-worker"]["environment"]
 
     assert orchestrator["RAINPULSE_PIPELINE_QC_CONFIG"] == qc_worker[
         "RAINPULSE_RADAR_QC_CONFIG"
@@ -597,6 +599,12 @@ def test_pipeline_and_workers_mount_the_same_rp040_radar_profiles() -> None:
     ]
     assert orchestrator["RAINPULSE_PIPELINE_GRID_CONFIG"].endswith(
         "/rp040-hybrid-qc-v2.yaml"
+    )
+    assert orchestrator["RAINPULSE_PIPELINE_MOSAIC_CONFIG"] == mosaic_worker[
+        "RAINPULSE_RADAR_MOSAIC_CONFIG"
+    ]
+    assert orchestrator["RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG"] == (
+        nowcast_input_worker["RAINPULSE_NOWCAST_INPUT_CONFIG"]
     )
 
 

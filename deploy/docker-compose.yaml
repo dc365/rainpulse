@@ -388,7 +388,7 @@ services:
       RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
       RAINPULSE_WORKER_ID: rp016-qi-mosaic
       RAINPULSE_WORKER_PROFILE: analysis-mosaic-qi
-      RAINPULSE_RADAR_MOSAIC_CONFIG: "${RAINPULSE_RADAR_MOSAIC_CONFIG:-/opt/rainpulse/configs/mosaic/rp016-qi-mosaic-v1.yaml}"
+      RAINPULSE_RADAR_MOSAIC_CONFIG: /opt/rainpulse/configs/mosaic/rp040-fujian-four-radar-qc-v1.yaml
       RAINPULSE_GRID_CONFIG: /opt/rainpulse/configs/grids/fuzhou-0p01deg-v1.yaml
       RAINPULSE_QC_FLAG_DEFINITIONS: /opt/rainpulse/configs/qc/flag-definitions.yaml
       TZ: UTC
@@ -503,7 +503,7 @@ services:
       RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
       RAINPULSE_WORKER_ID: rp013-nowcast-input
       RAINPULSE_WORKER_PROFILE: nowcast-input
-      RAINPULSE_NOWCAST_INPUT_CONFIG: /opt/rainpulse/configs/nowcast/rp013-fixed-5min-v1.1.yaml
+      RAINPULSE_NOWCAST_INPUT_CONFIG: /opt/rainpulse/configs/nowcast/rp040-historical-replay-v2.yaml
       RAINPULSE_NOWCAST_INPUT_CONFIG_DIR: /opt/rainpulse/configs/nowcast
       RAINPULSE_GRID_CONFIG: /opt/rainpulse/configs/grids/fuzhou-0p01deg-v1.yaml
       TZ: UTC
