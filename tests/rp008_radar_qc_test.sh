@@ -7,6 +7,7 @@ cd "$repo_root"
 
 required_files=(
   configs/qc/rp008-basic-v1.yaml
+  configs/qc/rp040-fujian-radial-v3.yaml
   configs/schemas/radar-qc.schema.json
   algorithms/rainpulse_algo/radar/qc.py
   algorithms/rainpulse_algo/radar/qc_worker.py
@@ -25,6 +26,7 @@ done
 rg --quiet 'rainpulse.qc-radar-volume' algorithms/rainpulse_algo/radar/qc_zarr.py
 rg --quiet 'radar-qc-basic' algorithms/rainpulse_algo/worker/handlers.py
 rg --quiet '^  radar-qc-worker:' deploy/docker-compose.yaml
+rg --quiet 'RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/rp040-fujian-radial-v3.yaml' deploy/docker-compose.yaml
 rg --quiet 'CREATE TABLE radar_qc_metrics' deploy/postgres/migrations/0007_radar_qc.sql
 rg --quiet 'radar.qc.requested.v1' services/control/internal/orchestration/events.go
 

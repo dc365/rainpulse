@@ -26,6 +26,63 @@ class TrainingSample:
     window_id: str
 
 
+def deterministic_batch_indices(
+    *,
+    dataset_size: int,
+    batch_size: int,
+    run_seed: int,
+    global_step: int,
+) -> tuple[int, ...]:
+    if dataset_size < 1 or batch_size < 1 or batch_size > dataset_size or global_step < 0:
+        raise TrainingDataError("deterministic batch dimensions are invalid")
+    identity = f"{run_seed}:{global_step}".encode()
+    seed = int.from_bytes(hashlib.sha256(identity).digest()[:8], "big", signed=False)
+    generator = np.random.default_rng(seed)
+    indices = generator.choice(dataset_size, size=batch_size, replace=False)
+    return tuple(int(index) for index in indices)
+
+
+class DeterministicStepBatchSampler:
+    """Yield one reproducible, without-replacement batch for each optimizer step."""
+
+    def __init__(
+        self,
+        *,
+        dataset_size: int,
+        batch_size: int,
+        run_seed: int,
+        start_step: int,
+        stop_step: int,
+    ) -> None:
+        if start_step < 0 or stop_step <= start_step:
+            raise TrainingDataError("deterministic sampler step boundary is invalid")
+        self.dataset_size = dataset_size
+        self.batch_size = batch_size
+        self.run_seed = run_seed
+        self.start_step = start_step
+        self.stop_step = stop_step
+        deterministic_batch_indices(
+            dataset_size=dataset_size,
+            batch_size=batch_size,
+            run_seed=run_seed,
+            global_step=start_step,
+        )
+
+    def __iter__(self):
+        for global_step in range(self.start_step, self.stop_step):
+            yield list(
+                deterministic_batch_indices(
+                    dataset_size=self.dataset_size,
+                    batch_size=self.batch_size,
+                    run_seed=self.run_seed,
+                    global_step=global_step,
+                )
+            )
+
+    def __len__(self) -> int:
+        return self.stop_step - self.start_step
+
+
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -72,9 +129,15 @@ class MRMSZarrTrainingDataset:
         self,
         root: Path,
         *,
-        expected_sample_index_sha256: str,
+        expected_sample_index_sha256: str | None,
         expected_sample_count: int,
         expected_crop_size: int,
+        expected_shard_count: int | None = None,
+        dataset_contract: str = "pilot_v1",
+        expected_dataset_version: str | None = None,
+        expected_profile_sha256: str | None = None,
+        expected_plan_id: str | None = None,
+        require_validation_report: bool = False,
         input_frames: int = 9,
         target_frames: int = 20,
         maximum_open_shards: int = 4,
@@ -85,16 +148,26 @@ class MRMSZarrTrainingDataset:
         self.target_frames = int(target_frames)
         self.total_frames = self.input_frames + self.target_frames
         self.maximum_open_shards = int(maximum_open_shards)
+        self.dataset_contract = str(dataset_contract)
+        self.expected_dataset_version = expected_dataset_version
+        self.expected_profile_sha256 = expected_profile_sha256
+        self.expected_plan_id = expected_plan_id
+        self.expected_shard_count = expected_shard_count
         if (
             self.expected_crop_size < 1
             or self.input_frames < 1
             or self.target_frames < 1
             or self.maximum_open_shards < 1
+            or self.dataset_contract not in {"pilot_v1", "full_sample_v1"}
         ):
             raise TrainingDataError("training dataset dimensions or cache size are invalid")
 
         index_path = self.root / "samples.jsonl"
-        report_path = self.root / "pilot-report.json"
+        report_path = self.root / (
+            "pilot-report.json"
+            if self.dataset_contract == "pilot_v1"
+            else "full-sample-report.json"
+        )
         marker_path = self.root / "COMPLETED"
         try:
             actual_sha256 = _sha256(index_path)
@@ -102,7 +175,10 @@ class MRMSZarrTrainingDataset:
             report = json.loads(report_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise TrainingDataError(f"cannot open completed training dataset: {exc}") from exc
-        if actual_sha256 != expected_sample_index_sha256:
+        if (
+            expected_sample_index_sha256 is not None
+            and actual_sha256 != expected_sample_index_sha256
+        ):
             raise TrainingDataError("sample index SHA-256 differs from frozen evidence")
         if marker != actual_sha256:
             raise TrainingDataError("completion marker differs from the sample index")
@@ -112,8 +188,48 @@ class MRMSZarrTrainingDataset:
             or report.get("sample_index_sha256") != actual_sha256
             or report.get("all_samples_valid") is not True
             or int(report.get("holdout_windows_processed", -1)) != 0
+            or (
+                expected_shard_count is not None
+                and int(report.get("processed_window_count", expected_shard_count))
+                != expected_shard_count
+            )
         ):
             raise TrainingDataError("training dataset report differs from frozen evidence")
+        if self.dataset_contract == "full_sample_v1":
+            if (
+                report.get("dataset_version") != expected_dataset_version
+                or report.get("full_sample_profile_sha256")
+                != expected_profile_sha256
+                or report.get("plan_id") != expected_plan_id
+            ):
+                raise TrainingDataError("full-sample dataset identity differs")
+            validation_path = self.root / "validation-report.json"
+            if require_validation_report:
+                try:
+                    validation = json.loads(validation_path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError) as exc:
+                    raise TrainingDataError(
+                        f"cannot read full-sample validation report: {exc}"
+                    ) from exc
+                if (
+                    validation.get("status") != "passed"
+                    or validation.get("validation_scope") != "complete_library"
+                    or validation.get("dataset_version") != expected_dataset_version
+                    or validation.get("full_sample_profile_sha256")
+                    != expected_profile_sha256
+                    or validation.get("plan_id") != expected_plan_id
+                    or int(validation.get("sample_count", -1))
+                    != expected_sample_count
+                    or (
+                        expected_shard_count is not None
+                        and int(validation.get("shard_count", -1))
+                        != expected_shard_count
+                    )
+                    or validation.get("sample_index_sha256") != actual_sha256
+                    or validation.get("content_hash_verified") is not True
+                    or int(validation.get("holdout_windows_processed", -1)) != 0
+                ):
+                    raise TrainingDataError("full-sample validation report differs")
 
         try:
             samples = [
@@ -138,6 +254,7 @@ class MRMSZarrTrainingDataset:
                 raise TrainingDataError("training sample metadata is invalid")
         self._samples = samples
         self._shards: OrderedDict[int, Any] = OrderedDict()
+        self.sample_index_sha256 = actual_sha256
 
     def __len__(self) -> int:
         return len(self._samples)
@@ -159,6 +276,17 @@ class MRMSZarrTrainingDataset:
         if (
             group.attrs.get("missing_value_policy") != "reject_any_missing"
             or group.attrs.get("unit") != "mm/h"
+            or (
+                self.dataset_contract == "full_sample_v1"
+                and (
+                    group.attrs.get("schema_version")
+                    != "rainpulse.nowcastnet-mrms-full-sample-shard/1.0"
+                    or group.attrs.get("dataset_version")
+                    != self.expected_dataset_version
+                    or group.attrs.get("full_sample_profile_sha256")
+                    != self.expected_profile_sha256
+                )
+            )
         ):
             raise TrainingDataError(f"training shard contract differs: {path.name}")
         expected_shape = (
@@ -178,11 +306,11 @@ class MRMSZarrTrainingDataset:
             self._shards.popitem(last=False)
         return group
 
-    def __getitem__(self, index: int) -> TrainingSample:
+    def _read_sample(self, index: int, group: Any | None = None) -> TrainingSample:
         sample = self._samples[index]
         shard_index = int(sample["shard_index"])
         offset = int(sample["sample_index_in_shard"])
-        group = self._open_shard(shard_index)
+        group = group if group is not None else self._open_shard(shard_index)
         if offset >= int(group["rain_rate"].shape[0]):
             raise TrainingDataError("training sample offset exceeds its shard")
         rain = np.asarray(group["rain_rate"][offset], dtype="float32")
@@ -206,6 +334,23 @@ class MRMSZarrTrainingDataset:
             window_id=str(sample["window_id"]),
         )
 
+    def __getitem__(self, index: int) -> TrainingSample:
+        return self._read_sample(index)
+
+    def __getitems__(self, indices: list[int]) -> list[TrainingSample]:
+        grouped: dict[int, list[tuple[int, int]]] = {}
+        for position, index in enumerate(indices):
+            sample = self._samples[index]
+            grouped.setdefault(int(sample["shard_index"]), []).append((position, index))
+        output: list[TrainingSample | None] = [None] * len(indices)
+        for shard_index, positions in grouped.items():
+            group = self._open_shard(shard_index)
+            for position, index in positions:
+                output[position] = self._read_sample(index, group)
+        if any(sample is None for sample in output):
+            raise TrainingDataError("batched training sample read did not close")
+        return [sample for sample in output if sample is not None]
+
 
 class TorchMRMSZarrTrainingDataset:
     """PyTorch adapter kept import-safe for CPU environments without PyTorch."""
@@ -222,6 +367,10 @@ class TorchMRMSZarrTrainingDataset:
         except ImportError as exc:
             raise TrainingDataError("PyTorch is required for the training adapter") from exc
         sample = self.dataset[index]
+        return self._to_torch(sample, index=index, torch=torch)
+
+    @staticmethod
+    def _to_torch(sample: TrainingSample, *, index: int, torch: Any) -> dict[str, Any]:
         return {
             "inputs": torch.from_numpy(sample.input_rate_mm_h),
             "targets": torch.from_numpy(sample.target_rate_mm_h),
@@ -230,4 +379,60 @@ class TorchMRMSZarrTrainingDataset:
             "sample_id": sample.sample_id,
             "branch": sample.branch,
             "window_id": sample.window_id,
+            "sample_index": index,
         }
+
+    def __getitems__(self, indices: list[int]) -> list[dict[str, Any]]:
+        try:
+            import torch
+        except ImportError as exc:
+            raise TrainingDataError("PyTorch is required for the training adapter") from exc
+        samples = self.dataset.__getitems__(indices)
+        return [
+            self._to_torch(sample, index=index, torch=torch)
+            for index, sample in zip(indices, samples, strict=True)
+        ]
+
+
+def build_deterministic_training_dataloader(
+    dataset: MRMSZarrTrainingDataset,
+    *,
+    batch_size: int,
+    run_seed: int,
+    start_step: int,
+    stop_step: int,
+    worker_count: int,
+    prefetch_factor: int,
+    persistent_workers: bool,
+    pin_memory: bool,
+    in_order: bool,
+):
+    try:
+        import torch
+    except ImportError as exc:
+        raise TrainingDataError("PyTorch is required for the training data loader") from exc
+    if worker_count < 0 or prefetch_factor < 1:
+        raise TrainingDataError("training data loader worker settings are invalid")
+    sampler = DeterministicStepBatchSampler(
+        dataset_size=len(dataset),
+        batch_size=batch_size,
+        run_seed=run_seed,
+        start_step=start_step,
+        stop_step=stop_step,
+    )
+    worker_options: dict[str, Any] = {}
+    if worker_count > 0:
+        worker_options.update(
+            {
+                "prefetch_factor": prefetch_factor,
+                "persistent_workers": persistent_workers,
+            }
+        )
+    return torch.utils.data.DataLoader(
+        TorchMRMSZarrTrainingDataset(dataset),
+        batch_sampler=sampler,
+        num_workers=worker_count,
+        pin_memory=pin_memory,
+        in_order=in_order,
+        **worker_options,
+    )

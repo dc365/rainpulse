@@ -8,6 +8,7 @@ required_files=(
   "configs/schemas/nowcast-input-profile.schema.json"
   "configs/nowcast/rp013-fixed-5min-v1.yaml"
   "configs/nowcast/rp013-fixed-5min-v1.1.yaml"
+  "configs/nowcast/rp040-historical-replay-v3.yaml"
   "contracts/data/nowcast-input.md"
   "contracts/events/nowcast-input-requested.schema.json"
   "contracts/events/nowcast-input-ready.schema.json"
@@ -26,6 +27,8 @@ for relative_path in "${required_files[@]}"; do
 done
 
 grep -q 'RAINPULSE_WORKER_PROFILE: nowcast-input' \
+  "$repo_root/deploy/docker-compose.yaml"
+grep -q 'RAINPULSE_NOWCAST_INPUT_CONFIG: /opt/rainpulse/configs/nowcast/rp040-historical-replay-v3.yaml' \
   "$repo_root/deploy/docker-compose.yaml"
 grep -q 'NowcastInputJobType' \
   "$repo_root/services/control/internal/orchestration/events.go"

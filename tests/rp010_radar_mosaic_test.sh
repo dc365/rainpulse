@@ -8,6 +8,7 @@ required_files=(
   "configs/schemas/radar-mosaic-profile.schema.json"
   "configs/mosaic/rp010-qi-mosaic-v1.yaml"
   "configs/mosaic/rp016-qi-mosaic-v1.yaml"
+  "configs/mosaic/rp040-fujian-four-radar-qc-v2.yaml"
   "contracts/data/radar-mosaic.md"
   "contracts/events/analysis-mosaic-requested-v2.schema.json"
   "algorithms/rainpulse_algo/radar/mosaic.py"
@@ -27,9 +28,9 @@ done
 
 grep -q 'RAINPULSE_WORKER_PROFILE: analysis-mosaic-qi' \
   "$repo_root/deploy/docker-compose.yaml"
-grep -q 'RAINPULSE_RADAR_MOSAIC_CONFIG:.*RAINPULSE_RADAR_MOSAIC_CONFIG.*rp016-qi-mosaic-v1.yaml' \
+grep -q 'RAINPULSE_RADAR_MOSAIC_CONFIG: /opt/rainpulse/configs/mosaic/rp040-fujian-four-radar-qc-v2.yaml' \
   "$repo_root/deploy/docker-compose.yaml"
 grep -q 'AnalysisMosaicJobType' \
   "$repo_root/services/control/internal/orchestration/events.go"
 
-printf 'RP-010 baseline and RP-016 hardened mosaic artifacts are present.\n'
+printf 'RP-010 baseline, RP-016 hardened, and RP-040 QC-aware mosaic artifacts are present.\n'

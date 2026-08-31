@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import pickle
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -15,8 +18,10 @@ from rainpulse_algo.training.conformance import (
     select_conformance_windows,
 )
 from rainpulse_algo.training.data import (
+    DeterministicStepBatchSampler,
     MRMSZarrTrainingDataset,
     TrainingDataError,
+    build_deterministic_training_dataloader,
     downsample_all_valid_2x2,
 )
 from rainpulse_algo.training.evolution_train import (
@@ -36,13 +41,30 @@ from rainpulse_algo.training.profile import (
     NowcastNetTrainingRunError,
     load_nowcastnet_training_run_profile,
 )
+from rainpulse_algo.training.runtime_report import (
+    _checkpoint_preflight,
+    build_nightly_training_report,
+    build_training_preflight_report,
+)
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PROFILE_PATH = (
     REPOSITORY_ROOT / "configs" / "training" / "nowcastnet-mrms-run-v1.yaml"
 )
+FOUNDATION_PROFILE_PATH = (
+    REPOSITORY_ROOT / "configs" / "training" / "nowcastnet-mrms-foundation-v1.yaml"
+)
 SCHEMA_PATH = (
     REPOSITORY_ROOT / "configs" / "schemas" / "nowcastnet-training-run.schema.json"
+)
+FOUNDATION_SCHEMA_PATH = (
+    REPOSITORY_ROOT / "configs" / "schemas" / "nowcastnet-foundation-run.schema.json"
+)
+PREFLIGHT_SCHEMA_PATH = (
+    REPOSITORY_ROOT / "configs" / "schemas" / "nowcastnet-training-preflight.schema.json"
+)
+NIGHTLY_SCHEMA_PATH = (
+    REPOSITORY_ROOT / "configs" / "schemas" / "nowcastnet-nightly-report.schema.json"
 )
 GENERATIVE_PROFILE_PATH = (
     REPOSITORY_ROOT / "configs" / "training" / "nowcastnet-mrms-generative-v1.yaml"
@@ -108,6 +130,55 @@ def _write_fixture_dataset(root: Path) -> str:
     return digest
 
 
+def _write_full_fixture_dataset(root: Path) -> str:
+    digest = _write_fixture_dataset(root)
+    (root / "pilot-report.json").unlink()
+    full_profile_sha256 = "a" * 64
+    plan_id = "b" * 64
+    (root / "full-sample-report.json").write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "dataset_version": "nowcastnet-mrms-full-samples-v1",
+                "full_sample_profile_sha256": full_profile_sha256,
+                "plan_id": plan_id,
+                "processed_window_count": 1,
+                "sample_count": 2,
+                "sample_index_sha256": digest,
+                "all_samples_valid": True,
+                "holdout_windows_processed": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (root / "validation-report.json").write_text(
+        json.dumps(
+            {
+                "status": "passed",
+                "validation_scope": "complete_library",
+                "dataset_version": "nowcastnet-mrms-full-samples-v1",
+                "full_sample_profile_sha256": full_profile_sha256,
+                "plan_id": plan_id,
+                "shard_count": 1,
+                "sample_count": 2,
+                "sample_index_sha256": digest,
+                "content_hash_verified": True,
+                "holdout_windows_processed": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    group = zarr.open_group(str(root / "shards" / "shard-00000.zarr"), mode="a")
+    group.attrs.update(
+        {
+            "schema_version": "rainpulse.nowcastnet-mrms-full-sample-shard/1.0",
+            "dataset_version": "nowcastnet-mrms-full-samples-v1",
+            "full_sample_profile_sha256": full_profile_sha256,
+        }
+    )
+    return digest
+
+
 def test_repository_run_profile_matches_schema_and_frozen_evidence() -> None:
     raw = yaml.safe_load(PROFILE_PATH.read_text(encoding="utf-8"))
     Draft202012Validator(json.loads(SCHEMA_PATH.read_text())).validate(raw)
@@ -131,6 +202,36 @@ def test_repository_run_profile_matches_schema_and_frozen_evidence() -> None:
     assert profile.evolution.base_channels == 32
     assert profile.evolution.motion_regularization_lambda == 0.01
     assert profile.evolution.weight_cap == 24.0
+
+
+def test_repository_foundation_profile_binds_full_sample_plan_without_holdout() -> None:
+    raw = yaml.safe_load(FOUNDATION_PROFILE_PATH.read_text(encoding="utf-8"))
+    Draft202012Validator(json.loads(FOUNDATION_SCHEMA_PATH.read_text())).validate(raw)
+
+    profile = load_nowcastnet_training_run_profile(
+        FOUNDATION_PROFILE_PATH,
+        repository_root=REPOSITORY_ROOT,
+    )
+
+    assert profile.profile_version == "nowcastnet-mrms-foundation-v1"
+    assert profile.sample_index_sha256 is None
+    assert profile.foundation.data_root_env == "RAINPULSE_MRMS_FULL_ROOT"
+    assert profile.foundation.dataset_contract == "full_sample_v1"
+    assert profile.foundation.expected_sample_count == 100000
+    assert profile.foundation.expected_shard_count == 4000
+    assert profile.foundation.expected_dataset_version == "nowcastnet-mrms-full-samples-v1"
+    assert profile.foundation.expected_profile_sha256 == (
+        "c84c76c399c9a0d74f94dea608bc4030e71b482a5247fc821fc7e245fe034be5"
+    )
+    assert profile.foundation.expected_plan_id == (
+        "8cc862459c1e82ea77a88587daf231a23ffcdb9b32ce41dbcc16ff6af60ac1f2"
+    )
+    assert profile.foundation.require_validation_report is True
+    assert profile.data_loading.worker_count == 4
+    assert profile.data_loading.prefetch_factor == 2
+    assert profile.data_loading.pin_memory is True
+    assert profile.checkpoint.maximum_interval_steps == 5000
+    assert profile.checkpoint.maximum_interval_seconds == 1800
 
 
 def test_generative_profile_matches_schema_and_published_contract() -> None:
@@ -289,6 +390,50 @@ def test_zarr_training_dataset_requires_a_matching_completion_marker(
         )
 
 
+def test_full_zarr_training_dataset_requires_final_validation_and_identity(
+    tmp_path: Path,
+) -> None:
+    digest = _write_full_fixture_dataset(tmp_path)
+
+    dataset = MRMSZarrTrainingDataset(
+        tmp_path,
+        expected_sample_index_sha256=None,
+        expected_sample_count=2,
+        expected_crop_size=8,
+        expected_shard_count=1,
+        dataset_contract="full_sample_v1",
+        expected_dataset_version="nowcastnet-mrms-full-samples-v1",
+        expected_profile_sha256="a" * 64,
+        expected_plan_id="b" * 64,
+        require_validation_report=True,
+    )
+
+    assert dataset.sample_index_sha256 == digest
+    assert dataset.dataset_contract == "full_sample_v1"
+    assert [sample.sample_id for sample in dataset.__getitems__([1, 0])] == [
+        "fixture-1",
+        "fixture-0",
+    ]
+
+    validation_path = tmp_path / "validation-report.json"
+    validation = json.loads(validation_path.read_text())
+    validation["holdout_windows_processed"] = 1
+    validation_path.write_text(json.dumps(validation), encoding="utf-8")
+    with pytest.raises(TrainingDataError, match="validation report"):
+        MRMSZarrTrainingDataset(
+            tmp_path,
+            expected_sample_index_sha256=None,
+            expected_sample_count=2,
+            expected_crop_size=8,
+            expected_shard_count=1,
+            dataset_contract="full_sample_v1",
+            expected_dataset_version="nowcastnet-mrms-full-samples-v1",
+            expected_profile_sha256="a" * 64,
+            expected_plan_id="b" * 64,
+            require_validation_report=True,
+        )
+
+
 def test_conformance_window_selection_is_year_stratified_and_reindexed() -> None:
     windows = [
         {
@@ -354,6 +499,72 @@ def test_training_batch_indices_are_step_deterministic_without_duplicates() -> N
     assert first != following
 
 
+def test_step_batch_sampler_preserves_global_step_identity_across_resume() -> None:
+    sampler = DeterministicStepBatchSampler(
+        dataset_size=100,
+        batch_size=16,
+        run_seed=2026083002,
+        start_step=17,
+        stop_step=20,
+    )
+
+    batches = list(sampler)
+
+    assert len(sampler) == 3
+    assert batches[0] == list(
+        deterministic_batch_indices(
+            dataset_size=100,
+            batch_size=16,
+            run_seed=2026083002,
+            global_step=17,
+        )
+    )
+    assert batches[2] == list(
+        deterministic_batch_indices(
+            dataset_size=100,
+            batch_size=16,
+            run_seed=2026083002,
+            global_step=19,
+        )
+    )
+
+
+def test_dataloader_emits_requested_indices_with_batched_shard_reads(
+    tmp_path: Path,
+) -> None:
+    torch = pytest.importorskip("torch")
+    digest = _write_fixture_dataset(tmp_path)
+    dataset = MRMSZarrTrainingDataset(
+        tmp_path,
+        expected_sample_index_sha256=digest,
+        expected_sample_count=2,
+        expected_crop_size=8,
+    )
+    loader = build_deterministic_training_dataloader(
+        dataset,
+        batch_size=2,
+        run_seed=17,
+        start_step=0,
+        stop_step=1,
+        worker_count=0,
+        prefetch_factor=1,
+        persistent_workers=False,
+        pin_memory=False,
+        in_order=True,
+    )
+
+    batch = next(iter(loader))
+    expected = deterministic_batch_indices(
+        dataset_size=2,
+        batch_size=2,
+        run_seed=17,
+        global_step=0,
+    )
+    assert tuple(int(value) for value in batch["sample_index"]) == expected
+    assert tuple(batch["inputs"].shape) == (2, 9, 8, 8)
+    assert batch["inputs"].dtype == torch.float32
+
+
 def test_resume_metric_comparison_checks_post_resume_trajectory(tmp_path: Path) -> None:
     reference = tmp_path / "reference.jsonl"
     resumed = tmp_path / "resumed.jsonl"
@@ -404,3 +615,189 @@ def test_resume_metric_comparison_checks_post_resume_trajectory(tmp_path: Path) 
             absolute_tolerance=0.02,
             relative_tolerance=0.01,
         )
+
+
+def test_preflight_writes_a_sanitized_failure_report_for_incomplete_data(
+    tmp_path: Path,
+) -> None:
+    report = build_training_preflight_report(
+        profile_path=FOUNDATION_PROFILE_PATH,
+        repository_root=REPOSITORY_ROOT,
+        data_root=tmp_path / "private-full-samples",
+        output_dir=tmp_path / "private-run",
+        device_name="cpu",
+        batch_size=16,
+        precision="bf16",
+        run_mode="new",
+        minimum_output_free_bytes=1,
+        minimum_shared_memory_bytes=0,
+        minimum_cuda_free_bytes=0,
+        require_clean_training_tree=False,
+        sample_probe_count=1,
+    )
+
+    assert report["status"] == "failed"
+    assert report["checks"]["profile_contract"]["status"] == "passed"
+    assert report["checks"]["dataset_contract"]["status"] == "failed"
+    assert str(tmp_path) not in json.dumps(report)
+    assert report["operational_eligible"] is False
+    Draft202012Validator(json.loads(PREFLIGHT_SCHEMA_PATH.read_text())).validate(report)
+
+
+def test_checkpoint_preflight_reports_a_corrupt_checkpoint_as_failed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def reject_corrupt_checkpoint(*args: object, **kwargs: object) -> None:
+        raise pickle.UnpicklingError("invalid load key")
+
+    monkeypatch.setitem(
+        sys.modules,
+        "torch",
+        SimpleNamespace(load=reject_corrupt_checkpoint),
+    )
+    output_dir = tmp_path / "run"
+    checkpoint = output_dir / "checkpoints" / "evolution-step-000000006.pt"
+    checkpoint.parent.mkdir(parents=True)
+    checkpoint.write_bytes(b"not-a-pytorch-checkpoint")
+    (output_dir / "LATEST.json").write_text(
+        json.dumps(
+            {
+                "global_step": 6,
+                "path": "checkpoints/evolution-step-000000006.pt",
+                "sha256": _sha256(checkpoint),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = _checkpoint_preflight(
+        output_dir=output_dir,
+        run_mode="resume",
+        profile=SimpleNamespace(
+            profile_sha256="a" * 64,
+            foundation=SimpleNamespace(name="full_sample_v1"),
+        ),
+        code_revision="b" * 40,
+        sample_index_sha256="c" * 64,
+        batch_size=16,
+        precision="bf16",
+    )
+
+    assert report == {
+        "status": "failed",
+        "reason": "resume_checkpoint_load_failed",
+    }
+
+
+def test_nightly_report_summarizes_only_the_current_invocation(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    checkpoint_dir = run_dir / "checkpoints"
+    checkpoint_dir.mkdir(parents=True)
+    checkpoint = checkpoint_dir / "evolution-step-000000006.pt"
+    checkpoint.write_bytes(b"checkpoint")
+    checkpoint_sha256 = _sha256(checkpoint)
+    (run_dir / "LATEST.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "global_step": 6,
+                "path": "checkpoints/evolution-step-000000006.pt",
+                "sha256": checkpoint_sha256,
+            }
+        ),
+        encoding="utf-8",
+    )
+    metrics = [
+        {
+            "global_step": step,
+            "loss_total": float(step),
+            "duration_seconds": 2.0,
+        }
+        for step in range(1, 7)
+    ]
+    (run_dir / "metrics.jsonl").write_text(
+        "".join(json.dumps(row) + "\n" for row in metrics),
+        encoding="utf-8",
+    )
+    training_report = {
+        "schema_version": "1.0",
+        "status": "stopped",
+        "started_at": "2026-08-31T12:00:00+00:00",
+        "finished_at": "2026-08-31T12:00:06+00:00",
+        "profile_sha256": "a" * 64,
+        "code_revision": "b" * 40,
+        "sample_index_sha256": "c" * 64,
+        "device": "cuda",
+        "batch_size": 16,
+        "precision": "bf16",
+        "resumed": True,
+        "global_step": 6,
+        "invocation_start_step": 3,
+        "invocation_target_step": 300000,
+        "planned_total_steps": 300000,
+        "stop_signal": "SIGTERM",
+        "input_checkpoint": {"global_step": 3, "sha256": "d" * 64},
+        "latest_checkpoint": {
+            "global_step": 6,
+            "sha256": checkpoint_sha256,
+        },
+        "invocation_duration_seconds": 6.0,
+        "peak_allocated_memory_bytes": 123,
+        "peak_reserved_memory_bytes": 456,
+        "operational_eligible": False,
+    }
+    (run_dir / "training-report.json").write_text(
+        json.dumps(training_report),
+        encoding="utf-8",
+    )
+    preflight = {
+        "schema_version": "rainpulse.nowcastnet-training-preflight/1.0",
+        "status": "passed",
+        "preflight_id": "e" * 64,
+        "code_revision": "b" * 40,
+        "profile_sha256": "a" * 64,
+        "sample_index_sha256": "c" * 64,
+        "run_mode": "resume",
+        "device": "cuda",
+        "batch_size": 16,
+        "precision": "bf16",
+        "training_start_allowed": True,
+        "checks": {
+            "checkpoint": {
+                "status": "passed",
+                "mode": "resume",
+                "resume_step": 3,
+                "checkpoint_sha256": "d" * 64,
+            }
+        },
+    }
+
+    report = build_nightly_training_report(
+        run_dir=run_dir,
+        preflight_report=preflight,
+        shared_service_recovery="passed",
+    )
+
+    assert report["status"] == "passed"
+    assert report["steps"] == {
+        "start": 3,
+        "end": 6,
+        "completed_this_invocation": 3,
+        "planned_total": 300000,
+    }
+    assert report["loss_summary"]["loss_total"]["mean"] == pytest.approx(5.0)
+    assert report["stop_reason"] == "signal:SIGTERM"
+    assert report["preflight_identity_verified"] is True
+    assert report["next_night_auto_resume_allowed"] is True
+    assert str(tmp_path) not in json.dumps(report)
+    Draft202012Validator(json.loads(NIGHTLY_SCHEMA_PATH.read_text())).validate(report)
+
+    mismatched = build_nightly_training_report(
+        run_dir=run_dir,
+        preflight_report={**preflight, "code_revision": "f" * 40},
+        shared_service_recovery="passed",
+    )
+    assert mismatched["status"] == "failed"
+    assert mismatched["preflight_identity_verified"] is False
+    assert mismatched["next_night_auto_resume_allowed"] is False

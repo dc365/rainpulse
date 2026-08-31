@@ -7,8 +7,10 @@ import math
 import os
 import platform
 import random
+import signal
 import subprocess
 import tempfile
+import threading
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -16,28 +18,16 @@ from typing import Any
 
 import numpy as np
 
-from .data import MRMSZarrTrainingDataset
+from .data import (
+    MRMSZarrTrainingDataset,
+    build_deterministic_training_dataloader,
+    deterministic_batch_indices,
+)
 from .profile import NowcastNetTrainingRunProfile, load_nowcastnet_training_run_profile
 
 
 class EvolutionTrainError(RuntimeError):
     """Raised when deterministic evolution training or exact recovery is unsafe."""
-
-
-def deterministic_batch_indices(
-    *,
-    dataset_size: int,
-    batch_size: int,
-    run_seed: int,
-    global_step: int,
-) -> tuple[int, ...]:
-    if dataset_size < 1 or batch_size < 1 or batch_size > dataset_size or global_step < 0:
-        raise EvolutionTrainError("deterministic batch dimensions are invalid")
-    identity = f"{run_seed}:{global_step}".encode()
-    seed = int.from_bytes(hashlib.sha256(identity).digest()[:8], "big", signed=False)
-    generator = np.random.default_rng(seed)
-    indices = generator.choice(dataset_size, size=batch_size, replace=False)
-    return tuple(int(index) for index in indices)
 
 
 def _sha256(path: Path) -> str:
@@ -409,8 +399,12 @@ def run_evolution_training(
     batch_size: int,
     precision: str,
     stop_after_steps: int,
-    checkpoint_every_steps: int,
+    checkpoint_every_steps: int | None,
     resume: bool,
+    checkpoint_every_seconds: int | None = None,
+    data_loader_workers: int | None = None,
+    data_loader_prefetch_factor: int | None = None,
+    data_loader_pin_memory: bool | None = None,
 ) -> dict[str, Any]:
     try:
         import torch
@@ -423,6 +417,31 @@ def run_evolution_training(
         repository_root=repository_root,
     )
     track = profile.foundation
+    checkpoint_interval_steps = (
+        profile.checkpoint.maximum_interval_steps
+        if checkpoint_every_steps is None
+        else checkpoint_every_steps
+    )
+    checkpoint_interval_seconds = (
+        profile.checkpoint.maximum_interval_seconds
+        if checkpoint_every_seconds is None
+        else checkpoint_every_seconds
+    )
+    loader_workers = (
+        profile.data_loading.worker_count
+        if data_loader_workers is None
+        else data_loader_workers
+    )
+    loader_prefetch_factor = (
+        profile.data_loading.prefetch_factor
+        if data_loader_prefetch_factor is None
+        else data_loader_prefetch_factor
+    )
+    loader_pin_memory = (
+        profile.data_loading.pin_memory
+        if data_loader_pin_memory is None
+        else data_loader_pin_memory
+    )
     code_revision = _code_revision(repository_root)
     if device_name == "cuda" and not torch.cuda.is_available():
         raise EvolutionTrainError("CUDA was requested but is unavailable")
@@ -433,7 +452,10 @@ def run_evolution_training(
     if (
         stop_after_steps < 1
         or stop_after_steps > profile.evolution.total_steps
-        or checkpoint_every_steps < 1
+        or checkpoint_interval_steps < 1
+        or checkpoint_interval_seconds < 0
+        or loader_workers < 0
+        or loader_prefetch_factor < 1
     ):
         raise EvolutionTrainError("training stop or checkpoint interval is invalid")
 
@@ -442,10 +464,17 @@ def run_evolution_training(
         expected_sample_index_sha256=profile.sample_index_sha256,
         expected_sample_count=track.expected_sample_count,
         expected_crop_size=track.model_crop_size,
+        expected_shard_count=track.expected_shard_count,
+        dataset_contract=track.dataset_contract,
+        expected_dataset_version=track.expected_dataset_version,
+        expected_profile_sha256=track.expected_profile_sha256,
+        expected_plan_id=track.expected_plan_id,
+        require_validation_report=track.require_validation_report,
         input_frames=profile.sequence[0],
         target_frames=profile.sequence[1],
         maximum_open_shards=64,
     )
+    sample_index_sha256 = dataset.sample_index_sha256
     metrics_path = output_dir / "metrics.jsonl"
     manifest_path = output_dir / "run-manifest.json"
     if resume:
@@ -455,9 +484,17 @@ def run_evolution_training(
         if (
             manifest.get("profile_sha256") != profile.profile_sha256
             or manifest.get("code_revision") != code_revision
-            or manifest.get("sample_index_sha256") != profile.sample_index_sha256
+            or manifest.get("sample_index_sha256") != sample_index_sha256
             or manifest.get("batch_size") != batch_size
             or manifest.get("precision") != precision
+            or int(manifest.get("data_loader_workers", -1)) != loader_workers
+            or int(manifest.get("data_loader_prefetch_factor", -1))
+            != loader_prefetch_factor
+            or bool(manifest.get("data_loader_pin_memory")) != loader_pin_memory
+            or int(manifest.get("checkpoint_interval_steps", -1))
+            != checkpoint_interval_steps
+            or int(manifest.get("checkpoint_interval_seconds", -1))
+            != checkpoint_interval_seconds
         ):
             raise EvolutionTrainError("resume run manifest differs")
     else:
@@ -471,12 +508,22 @@ def run_evolution_training(
             "profile_version": profile.profile_version,
             "profile_sha256": profile.profile_sha256,
             "code_revision": code_revision,
-            "sample_index_sha256": profile.sample_index_sha256,
+            "sample_index_sha256": sample_index_sha256,
             "data_track": track.name,
             "batch_size": batch_size,
             "precision": precision,
             "run_seed": profile.run_seed,
             "sampler": "sha256(run_seed:global_step)-numpy-choice-without-replacement",
+            "data_loader_workers": loader_workers,
+            "data_loader_prefetch_factor": loader_prefetch_factor,
+            "data_loader_pin_memory": loader_pin_memory,
+            "data_loader_persistent_workers": (
+                profile.data_loading.persistent_workers and loader_workers > 0
+            ),
+            "data_loader_in_order": profile.data_loading.in_order,
+            "batched_shard_reads": profile.data_loading.batched_shard_reads,
+            "checkpoint_interval_steps": checkpoint_interval_steps,
+            "checkpoint_interval_seconds": checkpoint_interval_seconds,
             "operational_eligible": False,
         }
         _atomic_json(manifest_path, manifest)
@@ -499,17 +546,19 @@ def run_evolution_training(
         / profile.evolution.initial_learning_rate,
     )
     global_step = 0
+    input_checkpoint: dict[str, Any] | None = None
     resume_validation = {
         "checkpoint_state_exact": not resume,
         "random_state_exact": not resume,
     }
     if resume:
+        _, input_checkpoint = _latest_checkpoint(output_dir)
         global_step, resume_validation = _restore_checkpoint(
             torch,
             output_dir=output_dir,
             profile=profile,
             code_revision=code_revision,
-            sample_index_sha256=profile.sample_index_sha256,
+            sample_index_sha256=sample_index_sha256,
             batch_size=batch_size,
             precision=precision,
             model=model,
@@ -521,106 +570,203 @@ def run_evolution_training(
             raise EvolutionTrainError("resume metrics do not end at the checkpoint step")
     if stop_after_steps <= global_step:
         raise EvolutionTrainError("training stop step is not after the current checkpoint")
+    invocation_start_step = global_step
+
+    stop_requested = False
+    stop_signal: str | None = None
+    old_handlers: dict[int, Any] = {}
+    if threading.current_thread() is threading.main_thread():
+
+        def request_stop(signum: int, _frame: Any) -> None:
+            nonlocal stop_requested, stop_signal
+            stop_requested = True
+            stop_signal = signal.Signals(signum).name
+
+        for signum in (signal.SIGINT, signal.SIGTERM):
+            old_handlers[signum] = signal.getsignal(signum)
+            signal.signal(signum, request_stop)
 
     if device_name == "cuda":
         torch.cuda.reset_peak_memory_stats()
+    invocation_started_at = datetime.now(UTC).isoformat()
     invocation_started = time.perf_counter()
+    last_checkpoint_at = time.monotonic()
     latest: dict[str, Any] | None = None
-    while global_step < stop_after_steps:
-        step_started = time.perf_counter()
-        indices = deterministic_batch_indices(
-            dataset_size=len(dataset),
-            batch_size=batch_size,
-            run_seed=profile.run_seed,
-            global_step=global_step,
-        )
-        samples = [dataset[index] for index in indices]
-        inputs = torch.from_numpy(
-            np.stack([sample.input_rate_mm_h for sample in samples])
-        ).to(device_name)
-        targets = torch.from_numpy(
-            np.stack([sample.target_rate_mm_h for sample in samples])
-        ).to(device_name)
-        optimizer.zero_grad(set_to_none=True)
-        autocast_enabled = device_name == "cuda" and precision == "bf16"
-        with torch.autocast(
-            device_type=device_name,
-            dtype=torch.bfloat16 if precision == "bf16" else torch.float32,
-            enabled=autocast_enabled,
-        ):
-            intensity, motion = model(inputs)
-            loss = evolution_loss(
-                inputs,
-                targets,
-                intensity,
-                motion,
-                motion_regularization_lambda=(
-                    profile.evolution.motion_regularization_lambda
-                ),
-                weight_cap=profile.evolution.weight_cap,
+    loader = build_deterministic_training_dataloader(
+        dataset,
+        batch_size=batch_size,
+        run_seed=profile.run_seed,
+        start_step=global_step,
+        stop_step=stop_after_steps,
+        worker_count=loader_workers,
+        prefetch_factor=loader_prefetch_factor,
+        persistent_workers=(
+            profile.data_loading.persistent_workers and loader_workers > 0
+        ),
+        pin_memory=loader_pin_memory and device_name == "cuda",
+        in_order=profile.data_loading.in_order,
+    )
+    try:
+        for batch in loader:
+            step_started = time.perf_counter()
+            indices = deterministic_batch_indices(
+                dataset_size=len(dataset),
+                batch_size=batch_size,
+                run_seed=profile.run_seed,
+                global_step=global_step,
             )
-        if not bool(torch.isfinite(loss.total)):
-            raise EvolutionTrainError(f"non-finite loss before step {global_step + 1}")
-        loss.total.backward()
-        gradient_norm = torch.nn.utils.clip_grad_norm_(
-            model.parameters(),
-            max_norm=profile.evolution.gradient_clip_norm,
-        )
-        if not bool(torch.isfinite(gradient_norm)):
-            raise EvolutionTrainError(f"non-finite gradient before step {global_step + 1}")
-        optimizer.step()
-        scheduler.step()
-        global_step += 1
-        if device_name == "cuda":
-            torch.cuda.synchronize()
-        metric = {
-            "global_step": global_step,
-            "batch_indices_sha256": _canonical_sha256(indices),
-            "loss_total": float(loss.total.detach().float().cpu()),
-            "loss_accumulation": float(loss.accumulation.detach().float().cpu()),
-            "loss_motion_regularization": float(
-                loss.motion_regularization.detach().float().cpu()
-            ),
-            "gradient_norm_before_clip": float(gradient_norm.detach().float().cpu()),
-            "learning_rate": float(optimizer.param_groups[0]["lr"]),
-            "duration_seconds": time.perf_counter() - step_started,
-        }
-        _append_metric(metrics_path, metric)
-        if global_step % checkpoint_every_steps == 0 or global_step == stop_after_steps:
-            latest = _write_checkpoint(
-                torch,
-                output_dir=output_dir,
-                state=_checkpoint_state(
+            loaded_indices = tuple(int(value) for value in batch["sample_index"])
+            if loaded_indices != indices:
+                raise EvolutionTrainError("training data loader batch identity differs")
+            inputs = batch["inputs"].to(
+                device_name,
+                non_blocking=loader_pin_memory and device_name == "cuda",
+            )
+            targets = batch["targets"].to(
+                device_name,
+                non_blocking=loader_pin_memory and device_name == "cuda",
+            )
+            optimizer.zero_grad(set_to_none=True)
+            autocast_enabled = device_name == "cuda" and precision == "bf16"
+            with torch.autocast(
+                device_type=device_name,
+                dtype=torch.bfloat16 if precision == "bf16" else torch.float32,
+                enabled=autocast_enabled,
+            ):
+                intensity, motion = model(inputs)
+                loss = evolution_loss(
+                    inputs,
+                    targets,
+                    intensity,
+                    motion,
+                    motion_regularization_lambda=(
+                        profile.evolution.motion_regularization_lambda
+                    ),
+                    weight_cap=profile.evolution.weight_cap,
+                )
+            if not bool(torch.isfinite(loss.total)):
+                raise EvolutionTrainError(f"non-finite loss before step {global_step + 1}")
+            loss.total.backward()
+            gradient_norm = torch.nn.utils.clip_grad_norm_(
+                model.parameters(),
+                max_norm=profile.evolution.gradient_clip_norm,
+            )
+            if not bool(torch.isfinite(gradient_norm)):
+                raise EvolutionTrainError(
+                    f"non-finite gradient before step {global_step + 1}"
+                )
+            optimizer.step()
+            scheduler.step()
+            global_step += 1
+            if device_name == "cuda":
+                torch.cuda.synchronize()
+            metric = {
+                "global_step": global_step,
+                "batch_indices_sha256": _canonical_sha256(indices),
+                "loss_total": float(loss.total.detach().float().cpu()),
+                "loss_accumulation": float(loss.accumulation.detach().float().cpu()),
+                "loss_motion_regularization": float(
+                    loss.motion_regularization.detach().float().cpu()
+                ),
+                "gradient_norm_before_clip": float(gradient_norm.detach().float().cpu()),
+                "learning_rate": float(optimizer.param_groups[0]["lr"]),
+                "duration_seconds": time.perf_counter() - step_started,
+            }
+            _append_metric(metrics_path, metric)
+            checkpoint_due_to_time = (
+                checkpoint_interval_seconds > 0
+                and time.monotonic() - last_checkpoint_at >= checkpoint_interval_seconds
+            )
+            if (
+                global_step % checkpoint_interval_steps == 0
+                or checkpoint_due_to_time
+                or global_step == stop_after_steps
+                or stop_requested
+            ):
+                latest = _write_checkpoint(
                     torch,
-                    profile=profile,
-                    code_revision=code_revision,
-                    data_track=track.name,
-                    sample_index_sha256=profile.sample_index_sha256,
-                    batch_size=batch_size,
-                    precision=precision,
-                    global_step=global_step,
-                    model=model,
-                    optimizer=optimizer,
-                    scheduler=scheduler,
-                ),
-            )
+                    output_dir=output_dir,
+                    state=_checkpoint_state(
+                        torch,
+                        profile=profile,
+                        code_revision=code_revision,
+                        data_track=track.name,
+                        sample_index_sha256=sample_index_sha256,
+                        batch_size=batch_size,
+                        precision=precision,
+                        global_step=global_step,
+                        model=model,
+                        optimizer=optimizer,
+                        scheduler=scheduler,
+                    ),
+                )
+                last_checkpoint_at = time.monotonic()
+            if stop_requested:
+                break
+    finally:
+        for signum, handler in old_handlers.items():
+            signal.signal(signum, handler)
 
+    if stop_requested and (
+        latest is None or int(latest.get("global_step", -1)) != global_step
+    ):
+        latest = _write_checkpoint(
+            torch,
+            output_dir=output_dir,
+            state=_checkpoint_state(
+                torch,
+                profile=profile,
+                code_revision=code_revision,
+                data_track=track.name,
+                sample_index_sha256=sample_index_sha256,
+                batch_size=batch_size,
+                precision=precision,
+                global_step=global_step,
+                model=model,
+                optimizer=optimizer,
+                scheduler=scheduler,
+            ),
+        )
     if latest is None:
         _, latest = _latest_checkpoint(output_dir)
     gpu = torch.cuda.get_device_properties(0) if device_name == "cuda" else None
     result = {
         "schema_version": "1.0",
-        "status": "passed",
+        "status": "stopped" if stop_requested else "passed",
+        "started_at": invocation_started_at,
         "finished_at": datetime.now(UTC).isoformat(),
         "profile_sha256": profile.profile_sha256,
         "code_revision": code_revision,
-        "sample_index_sha256": profile.sample_index_sha256,
+        "sample_index_sha256": sample_index_sha256,
+        "device": device_name,
         "global_step": global_step,
+        "invocation_start_step": invocation_start_step,
+        "invocation_target_step": stop_after_steps,
+        "planned_total_steps": profile.evolution.total_steps,
         "batch_size": batch_size,
         "precision": precision,
+        "stop_requested": stop_requested,
+        "stop_signal": stop_signal,
         "resumed": resume,
         "resume_validation": resume_validation,
+        "input_checkpoint": input_checkpoint,
         "invocation_duration_seconds": time.perf_counter() - invocation_started,
+        "data_loader": {
+            "worker_count": loader_workers,
+            "prefetch_factor": loader_prefetch_factor,
+            "persistent_workers": (
+                profile.data_loading.persistent_workers and loader_workers > 0
+            ),
+            "pin_memory": loader_pin_memory and device_name == "cuda",
+            "in_order": profile.data_loading.in_order,
+            "batched_shard_reads": profile.data_loading.batched_shard_reads,
+        },
+        "checkpoint_policy": {
+            "maximum_interval_steps": checkpoint_interval_steps,
+            "maximum_interval_seconds": checkpoint_interval_seconds,
+            "after_complete_optimizer_step": True,
+            "atomic_write_and_loadback": True,
+        },
         "latest_checkpoint": latest,
         "metrics_sha256": _sha256(metrics_path),
         "torch_version": str(torch.__version__),
@@ -705,7 +851,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--precision", choices=("fp32", "bf16"), default="bf16")
     parser.add_argument("--stop-after-steps", type=int, required=True)
-    parser.add_argument("--checkpoint-every-steps", type=int, default=100)
+    parser.add_argument("--checkpoint-every-steps", type=int)
+    parser.add_argument("--checkpoint-every-seconds", type=int)
+    parser.add_argument("--data-loader-workers", type=int)
+    parser.add_argument("--data-loader-prefetch-factor", type=int)
+    parser.add_argument(
+        "--data-loader-pin-memory",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+    )
     parser.add_argument("--resume", action="store_true")
     return parser
 
@@ -722,6 +876,10 @@ def main() -> int:
         precision=args.precision,
         stop_after_steps=args.stop_after_steps,
         checkpoint_every_steps=args.checkpoint_every_steps,
+        checkpoint_every_seconds=args.checkpoint_every_seconds,
+        data_loader_workers=args.data_loader_workers,
+        data_loader_prefetch_factor=args.data_loader_prefetch_factor,
+        data_loader_pin_memory=args.data_loader_pin_memory,
         resume=args.resume,
     )
     print(json.dumps(result, ensure_ascii=False, sort_keys=True))

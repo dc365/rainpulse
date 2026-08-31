@@ -24,6 +24,12 @@ class TrainingDataTrack:
     model_crop_size: int
     downsample_method: str
     expected_sample_count: int
+    expected_shard_count: int
+    dataset_contract: str
+    expected_dataset_version: str | None
+    expected_profile_sha256: str | None
+    expected_plan_id: str | None
+    require_validation_report: bool
     official_kernel_published: bool | None
 
 
@@ -42,16 +48,36 @@ class EvolutionTrainingContract:
 
 
 @dataclass(frozen=True)
+class DataLoadingContract:
+    worker_count: int
+    prefetch_factor: int
+    persistent_workers: bool
+    pin_memory: bool
+    in_order: bool
+    batched_shard_reads: bool
+
+
+@dataclass(frozen=True)
+class CheckpointContract:
+    maximum_interval_steps: int
+    maximum_interval_seconds: int
+    graceful_signals: tuple[str, ...]
+    atomic_write_and_loadback: bool
+
+
+@dataclass(frozen=True)
 class NowcastNetTrainingRunProfile:
     profile_version: str
     profile_sha256: str
     sequence: tuple[int, int, int]
     cadence_minutes: int
     rain_rate_cap_mm_h: float
-    sample_index_sha256: str
+    sample_index_sha256: str | None
     foundation: TrainingDataTrack
     paper_conformance: TrainingDataTrack
     evolution: EvolutionTrainingContract
+    data_loading: DataLoadingContract
+    checkpoint: CheckpointContract
     run_seed: int
 
     def track(self, name: str) -> TrainingDataTrack:
@@ -78,6 +104,7 @@ def _sha256(path: Path) -> str:
 
 
 def _load_track(name: str, raw: dict[str, Any]) -> TrainingDataTrack:
+    default_shards = 400 if name == "foundation_0p01" else 16
     return TrainingDataTrack(
         name=name,
         purpose=str(raw["purpose"]),
@@ -88,6 +115,24 @@ def _load_track(name: str, raw: dict[str, Any]) -> TrainingDataTrack:
         model_crop_size=int(raw["model_crop_size"]),
         downsample_method=str(raw["downsample_method"]),
         expected_sample_count=int(raw["expected_sample_count"]),
+        expected_shard_count=int(raw.get("expected_shard_count", default_shards)),
+        dataset_contract=str(raw.get("dataset_contract", "pilot_v1")),
+        expected_dataset_version=(
+            str(raw["expected_dataset_version"])
+            if "expected_dataset_version" in raw
+            else None
+        ),
+        expected_profile_sha256=(
+            str(raw["expected_profile_sha256"])
+            if "expected_profile_sha256" in raw
+            else None
+        ),
+        expected_plan_id=(
+            str(raw["expected_plan_id"])
+            if "expected_plan_id" in raw
+            else None
+        ),
+        require_validation_report=bool(raw.get("require_validation_report", False)),
         official_kernel_published=(
             bool(raw["official_kernel_published"])
             if "official_kernel_published" in raw
@@ -112,31 +157,79 @@ def load_nowcastnet_training_run_profile(
         evolution = raw["evolution"]
         optimization = raw["optimization"]
         reproducibility = raw["reproducibility"]
+        data_loading = raw.get("data_loading", {})
+        checkpoint = raw.get("checkpoint", {})
     except (KeyError, OSError, TypeError, yaml.YAMLError) as exc:
         raise NowcastNetTrainingRunError(f"cannot load training run profile {path}: {exc}") from exc
 
-    for name in ("training_profile", "pilot_profile", "pilot_evidence"):
+    profile_version = str(raw.get("profile_version", ""))
+    if profile_version == "nowcastnet-mrms-run-v1":
+        reference_names = ("training_profile", "pilot_profile", "pilot_evidence")
+    elif profile_version == "nowcastnet-mrms-foundation-v1":
+        reference_names = (
+            "training_profile",
+            "full_sample_profile",
+            "full_sample_smoke_evidence",
+        )
+    else:
+        raise NowcastNetTrainingRunError("unknown training run profile version")
+    for name in reference_names:
         reference = frozen[name]
         referenced_path = _resolve_local(repository_root, str(reference["path"]))
         if _sha256(referenced_path) != str(reference["sha256"]):
             raise NowcastNetTrainingRunError(f"{name} SHA-256 differs")
 
-    evidence_path = _resolve_local(repository_root, str(frozen["pilot_evidence"]["path"]))
-    try:
-        evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise NowcastNetTrainingRunError(f"cannot load pilot evidence: {exc}") from exc
-    sample_index_sha256 = str(frozen["pilot_evidence"]["sample_index_sha256"])
-    if (
-        evidence.get("result", {}).get("status") != "passed"
-        or evidence.get("result", {}).get("sample_count") != 10000
-        or evidence.get("result", {}).get("all_samples_valid") is not True
-        or evidence.get("source_integrity", {}).get("holdout_windows_processed") != 0
-        or evidence.get("artifacts", {}).get("sample_index_sha256")
-        != sample_index_sha256
-        or evidence.get("operational_eligible") is not False
-    ):
-        raise NowcastNetTrainingRunError("pilot evidence differs from the accepted boundary")
+    sample_index_sha256: str | None = None
+    if profile_version == "nowcastnet-mrms-run-v1":
+        evidence_path = _resolve_local(
+            repository_root,
+            str(frozen["pilot_evidence"]["path"]),
+        )
+        try:
+            evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise NowcastNetTrainingRunError(f"cannot load pilot evidence: {exc}") from exc
+        sample_index_sha256 = str(frozen["pilot_evidence"]["sample_index_sha256"])
+        if (
+            evidence.get("result", {}).get("status") != "passed"
+            or evidence.get("result", {}).get("sample_count") != 10000
+            or evidence.get("result", {}).get("all_samples_valid") is not True
+            or evidence.get("source_integrity", {}).get("holdout_windows_processed") != 0
+            or evidence.get("artifacts", {}).get("sample_index_sha256")
+            != sample_index_sha256
+            or evidence.get("operational_eligible") is not False
+        ):
+            raise NowcastNetTrainingRunError(
+                "pilot evidence differs from the accepted boundary"
+            )
+    else:
+        evidence_path = _resolve_local(
+            repository_root,
+            str(frozen["full_sample_smoke_evidence"]["path"]),
+        )
+        try:
+            evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise NowcastNetTrainingRunError(
+                f"cannot load full-sample smoke evidence: {exc}"
+            ) from exc
+        if (
+            evidence.get("status") != "passed"
+            or evidence.get("profile", {}).get("sha256")
+            != "c84c76c399c9a0d74f94dea608bc4030e71b482a5247fc821fc7e245fe034be5"
+            or evidence.get("deterministic_plan", {}).get("plan_id")
+            != "8cc862459c1e82ea77a88587daf231a23ffcdb9b32ce41dbcc16ff6af60ac1f2"
+            or evidence.get("deterministic_plan", {}).get("planned_sample_count")
+            != 100000
+            or evidence.get("deterministic_plan", {}).get("holdout_window_count") != 0
+            or evidence.get("decision", {}).get("bounded_real_shard_smoke_passed")
+            is not True
+            or evidence.get("decision", {}).get("full_materialization_allowed") is not True
+            or evidence.get("operational_eligible") is not False
+        ):
+            raise NowcastNetTrainingRunError(
+                "full-sample smoke evidence differs from the accepted boundary"
+            )
 
     foundation = _load_track("foundation_0p01", tracks["foundation_0p01"])
     conformance = _load_track(
@@ -148,9 +241,8 @@ def load_nowcastnet_training_run_profile(
         int(sequence["target_frames"]),
         int(sequence["total_frames"]),
     )
-    if (
+    common_invariants_differ = (
         raw.get("schema_version") != "1.0"
-        or raw.get("profile_version") != "nowcastnet-mrms-run-v1"
         or raw.get("lifecycle") != "offline_training"
         or raw.get("operational_eligible") is not False
         or frame_tuple != (9, 20, 29)
@@ -163,7 +255,6 @@ def load_nowcastnet_training_run_profile(
         or foundation.native_crop_size != 256
         or foundation.model_crop_size != 256
         or foundation.downsample_method != "none"
-        or foundation.expected_sample_count != 10000
         or conformance.purpose != "trainer_protocol_conformance_only"
         or conformance.source_resolution_deg != 0.01
         or conformance.resolution_deg != 0.02
@@ -195,7 +286,68 @@ def load_nowcastnet_training_run_profile(
         or reproducibility.get("deterministic_sample_order") is not True
         or reproducibility.get("checkpoint_after_complete_optimizer_step") is not True
         or reproducibility.get("exact_resume_required") is not True
-    ):
+    )
+    if profile_version == "nowcastnet-mrms-run-v1":
+        version_invariants_differ = (
+            foundation.data_root_env != "RAINPULSE_MRMS_PILOT_ROOT"
+            or foundation.dataset_contract != "pilot_v1"
+            or foundation.expected_sample_count != 10000
+            or foundation.expected_shard_count != 400
+            or foundation.require_validation_report
+        )
+        data_loading_contract = DataLoadingContract(
+            worker_count=0,
+            prefetch_factor=2,
+            persistent_workers=False,
+            pin_memory=False,
+            in_order=True,
+            batched_shard_reads=False,
+        )
+        checkpoint_contract = CheckpointContract(
+            maximum_interval_steps=100,
+            maximum_interval_seconds=0,
+            graceful_signals=(),
+            atomic_write_and_loadback=True,
+        )
+    else:
+        version_invariants_differ = (
+            foundation.data_root_env != "RAINPULSE_MRMS_FULL_ROOT"
+            or foundation.dataset_contract != "full_sample_v1"
+            or foundation.expected_dataset_version
+            != "nowcastnet-mrms-full-samples-v1"
+            or foundation.expected_profile_sha256
+            != "c84c76c399c9a0d74f94dea608bc4030e71b482a5247fc821fc7e245fe034be5"
+            or foundation.expected_plan_id
+            != "8cc862459c1e82ea77a88587daf231a23ffcdb9b32ce41dbcc16ff6af60ac1f2"
+            or foundation.expected_sample_count != 100000
+            or foundation.expected_shard_count != 4000
+            or not foundation.require_validation_report
+            or int(data_loading.get("worker_count", -1)) != 4
+            or int(data_loading.get("prefetch_factor", -1)) != 2
+            or data_loading.get("persistent_workers") is not True
+            or data_loading.get("pin_memory") is not True
+            or data_loading.get("in_order") is not True
+            or data_loading.get("batched_shard_reads") is not True
+            or int(checkpoint.get("maximum_interval_steps", -1)) != 5000
+            or int(checkpoint.get("maximum_interval_seconds", -1)) != 1800
+            or checkpoint.get("graceful_signals") != ["SIGINT", "SIGTERM"]
+            or checkpoint.get("atomic_write_and_loadback") is not True
+        )
+        data_loading_contract = DataLoadingContract(
+            worker_count=int(data_loading["worker_count"]),
+            prefetch_factor=int(data_loading["prefetch_factor"]),
+            persistent_workers=bool(data_loading["persistent_workers"]),
+            pin_memory=bool(data_loading["pin_memory"]),
+            in_order=bool(data_loading["in_order"]),
+            batched_shard_reads=bool(data_loading["batched_shard_reads"]),
+        )
+        checkpoint_contract = CheckpointContract(
+            maximum_interval_steps=int(checkpoint["maximum_interval_steps"]),
+            maximum_interval_seconds=int(checkpoint["maximum_interval_seconds"]),
+            graceful_signals=tuple(str(value) for value in checkpoint["graceful_signals"]),
+            atomic_write_and_loadback=bool(checkpoint["atomic_write_and_loadback"]),
+        )
+    if common_invariants_differ or version_invariants_differ:
         raise NowcastNetTrainingRunError("training run profile differs from frozen v1 invariants")
     if conformance.official_kernel_published is not False:
         raise NowcastNetTrainingRunError(
@@ -225,5 +377,7 @@ def load_nowcastnet_training_run_profile(
             default_precision=str(optimization["default_precision"]),
             gradient_clip_norm=float(optimization["gradient_clip_norm"]),
         ),
+        data_loading=data_loading_contract,
+        checkpoint=checkpoint_contract,
         run_seed=int(reproducibility["run_seed"]),
     )

@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.internal/schemas/nowcastnet-training-preflight.schema.json",
+  "title": "RainPulse NowcastNet training preflight report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "preflight_id",
+    "generated_at",
+    "code_revision",
+    "profile_sha256",
+    "sample_index_sha256",
+    "run_mode",
+    "device",
+    "batch_size",
+    "precision",
+    "checks",
+    "training_start_allowed",
+    "operational_eligible"
+  ],
+  "properties": {
+    "schema_version": {"const": "rainpulse.nowcastnet-training-preflight/1.0"},
+    "status": {"enum": ["passed", "failed"]},
+    "preflight_id": {"$ref": "#/$defs/sha256"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "code_revision": {"type": "string", "minLength": 1},
+    "profile_sha256": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+    "sample_index_sha256": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+    "run_mode": {"enum": ["new", "resume"]},
+    "device": {"enum": ["cpu", "cuda"]},
+    "batch_size": {"type": "integer", "minimum": 1},
+    "precision": {"enum": ["fp32", "bf16"]},
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository_state",
+        "profile_contract",
+        "dataset_contract",
+        "dataset_probe",
+        "output_storage",
+        "data_output_separation",
+        "shared_memory",
+        "runtime",
+        "checkpoint"
+      ],
+      "properties": {
+        "repository_state": {"$ref": "#/$defs/check"},
+        "profile_contract": {"$ref": "#/$defs/check"},
+        "dataset_contract": {"$ref": "#/$defs/check"},
+        "dataset_probe": {"$ref": "#/$defs/check"},
+        "output_storage": {"$ref": "#/$defs/check"},
+        "data_output_separation": {"$ref": "#/$defs/check"},
+        "shared_memory": {"$ref": "#/$defs/check"},
+        "runtime": {"$ref": "#/$defs/check"},
+        "checkpoint": {"$ref": "#/$defs/check"}
+      }
+    },
+    "training_start_allowed": {"type": "boolean"},
+    "operational_eligible": {"const": false}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "check": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["passed", "failed"]},
+        "reason": {"type": "string", "pattern": "^[a-z0-9_]+$"}
+      }
+    }
+  }
+}

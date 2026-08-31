@@ -1,10 +1,11 @@
 import json
 import subprocess
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
+from rainpulse_algo.datasets import mrms_archive
 from rainpulse_algo.datasets.mrms_archive import (
     IEM_SOURCE_ID,
     NOAA_ARCHIVE_START,
@@ -83,6 +84,39 @@ def test_iem_listing_supports_pre_noaa_archive_days() -> None:
         .as_posix()
         .startswith("raw/iem-mtarchive/CONUS/PrecipRate_00.00/10min/2019/01/01/")
     )
+
+
+def test_list_day_replaces_zero_byte_noaa_object_with_iem_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    day = date(2022, 7, 3)
+    start = datetime(2022, 7, 3, tzinfo=UTC)
+    contents = "".join(
+        f"""
+        <Contents>
+          <Key>CONUS/PrecipRate_00.00/20220703/MRMS_PrecipRate_00.00_{timestamp:%Y%m%d-%H%M%S}.grib2.gz</Key>
+          <ETag>&quot;abc123&quot;</ETag>
+          <Size>{0 if index == 15 else 100}</Size>
+        </Contents>
+        """
+        for index in range(144)
+        for timestamp in (start + timedelta(minutes=index * 10),)
+    )
+    noaa_listing = f"""
+    <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+      <IsTruncated>false</IsTruncated>
+      {contents}
+    </ListBucketResult>
+    """.encode()
+    iem_listing = b'<a href="PrecipRate_00.00_20220703-023000.grib2.gz">fallback</a>'
+    monkeypatch.setattr(mrms_archive, "_list_day_xml", lambda *_: noaa_listing)
+    monkeypatch.setattr(mrms_archive, "_list_iem_day_html", lambda *_: iem_listing)
+
+    objects = mrms_archive.list_day(day, 10, None)
+
+    assert len(objects) == 144
+    assert objects[15].source_id == IEM_SOURCE_ID
+    assert all(item.size_bytes != 0 for item in objects)
 
 
 def test_unknown_size_partial_is_resumed_before_becoming_final(

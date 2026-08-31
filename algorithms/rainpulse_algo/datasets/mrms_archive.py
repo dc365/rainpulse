@@ -179,7 +179,7 @@ def parse_listing(payload: bytes, cadence_minutes: int) -> tuple[MRMSObject, ...
             etag=(item.findtext("s3:ETag", namespaces=S3_NAMESPACE) or "").strip('"'),
             cadence_minutes=cadence_minutes,
         )
-        if obj is not None:
+        if obj is not None and obj.size_bytes > 0:
             objects.append(obj)
     return tuple(sorted(objects, key=lambda item: item.valid_time))
 

@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.internal/schemas/nowcastnet-nightly-report.schema.json",
+  "title": "RainPulse NowcastNet nightly training report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "generated_at",
+    "preflight_id",
+    "preflight_identity_verified",
+    "training_status",
+    "stage",
+    "started_at",
+    "finished_at",
+    "steps",
+    "identity",
+    "input_checkpoint",
+    "output_checkpoint",
+    "loss_summary",
+    "performance",
+    "stop_reason",
+    "shared_service_recovery",
+    "next_night_auto_resume_allowed",
+    "operational_eligible"
+  ],
+  "properties": {
+    "schema_version": {"const": "rainpulse.nowcastnet-nightly-report/1.0"},
+    "status": {"enum": ["passed", "failed"]},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "preflight_id": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+    "preflight_identity_verified": {"type": "boolean"},
+    "training_status": {"enum": ["passed", "stopped"]},
+    "stage": {"const": "evolution"},
+    "started_at": {"type": ["string", "null"]},
+    "finished_at": {"type": ["string", "null"]},
+    "steps": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end", "completed_this_invocation", "planned_total"],
+      "properties": {
+        "start": {"type": "integer", "minimum": 0},
+        "end": {"type": "integer", "minimum": 1},
+        "completed_this_invocation": {"type": "integer", "minimum": 1},
+        "planned_total": {"type": "integer", "minimum": 1}
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile_sha256", "code_revision", "sample_index_sha256"],
+      "properties": {
+        "profile_sha256": {"$ref": "#/$defs/sha256"},
+        "code_revision": {"type": "string", "minLength": 1},
+        "sample_index_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "input_checkpoint": {
+      "anyOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["global_step", "sha256"],
+          "properties": {
+            "global_step": {"type": "integer", "minimum": 1},
+            "sha256": {"$ref": "#/$defs/sha256"}
+          }
+        }
+      ]
+    },
+    "output_checkpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["global_step", "sha256", "hash_verified"],
+      "properties": {
+        "global_step": {"type": "integer", "minimum": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "hash_verified": {"const": true}
+      }
+    },
+    "loss_summary": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/summary"}
+    },
+    "performance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["duration_seconds", "steps_per_second", "peak_allocated_memory_bytes", "peak_reserved_memory_bytes"],
+      "properties": {
+        "duration_seconds": {"type": "number", "minimum": 0},
+        "steps_per_second": {"type": "number", "minimum": 0},
+        "peak_allocated_memory_bytes": {"type": "integer", "minimum": 0},
+        "peak_reserved_memory_bytes": {"type": "integer", "minimum": 0}
+      }
+    },
+    "stop_reason": {"type": "string", "minLength": 1},
+    "shared_service_recovery": {"enum": ["passed", "failed", "not_required"]},
+    "next_night_auto_resume_allowed": {"type": "boolean"},
+    "operational_eligible": {"const": false}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minimum", "maximum", "mean", "last"],
+      "properties": {
+        "minimum": {"type": "number"},
+        "maximum": {"type": "number"},
+        "mean": {"type": "number"},
+        "last": {"type": "number"}
+      }
+    }
+  }
+}
