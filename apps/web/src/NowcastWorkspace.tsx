@@ -273,7 +273,12 @@ function TimeCatalogPicker({
                   <em data-available={item.run != null}>LK</em>
                   <em data-available={item.ensemble != null}>STEPS</em>
                 </div>
-                <span><strong>{formatRunOption(item.time)}</strong><small>{item.analysis && item.run ? '实况与预报同周期' : item.analysis ? '当前仅有雷达实况' : '当前有正式预报'}</small></span>
+                <span><strong>{formatRunOption(item.time)}</strong><small>{item.analysis && item.run
+                  ? '实况与预报同周期'
+                  : item.analysis ? '当前仅有雷达实况'
+                  : item.run ? '当前有正式预报'
+                  : item.ensemble ? '当前仅有 STEPS 集合'
+                  : '当前周期无可用产品'}</small></span>
               </button>
             ))}
           </div>
