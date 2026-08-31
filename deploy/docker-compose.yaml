@@ -194,6 +194,8 @@ services:
       RAINPULSE_PIPELINE_MOSAIC_DELAY: "${RAINPULSE_PIPELINE_MOSAIC_DELAY:-2m}"
       RAINPULSE_PIPELINE_FORECAST_ENABLED: "${RAINPULSE_PIPELINE_FORECAST_ENABLED:-true}"
       RAINPULSE_PIPELINE_REQUIRE_ALL_RADARS: "${RAINPULSE_PIPELINE_REQUIRE_ALL_RADARS:-false}"
+      RAINPULSE_PIPELINE_QC_CONFIG: /opt/rainpulse/configs/qc/rp040-fujian-radial-v2.yaml
+      RAINPULSE_PIPELINE_MOSAIC_CONFIG: /opt/rainpulse/configs/mosaic/rp040-fujian-four-radar-qc-v1.yaml
       TZ: UTC
     volumes:
       - ../configs:/opt/rainpulse/configs:ro
@@ -302,7 +304,7 @@ services:
       RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
       RAINPULSE_WORKER_ID: rp008-basic-qc
       RAINPULSE_WORKER_PROFILE: radar-qc-basic
-      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/rp008-basic-v1.yaml
+      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/rp040-fujian-radial-v2.yaml
       RAINPULSE_QC_FLAG_DEFINITIONS: /opt/rainpulse/configs/qc/flag-definitions.yaml
       RAINPULSE_QC_ASSET_ROOTS: /opt/rainpulse/configs/qc/assets
       TZ: UTC

@@ -12,6 +12,19 @@ import zarr
 from zarr.storage import MemoryStore
 
 
+# A constant-power transmitter/interference signal grows with range after the
+# radar's range correction and can occupy a contiguous fan of neighbouring
+# rays.  Immediate-neighbour differencing cannot see the interior of that fan.
+# These deliberately conservative limits describe the Z9591 long-range
+# saturation signature: hundreds of consecutive gates, most of a full ray
+# above convective reflectivity, and a pronounced increase towards far range.
+_SATURATED_RADIAL_MINIMUM_VALID_FRACTION = 0.80
+_SATURATED_RADIAL_MINIMUM_HIGH_DBZH = 45.0
+_SATURATED_RADIAL_MINIMUM_HIGH_FRACTION = 0.70
+_SATURATED_RADIAL_MINIMUM_HIGH_RUN = 400
+_SATURATED_RADIAL_MINIMUM_RANGE_GROWTH_DB = 12.0
+
+
 class QCConfigError(ValueError):
     pass
 
@@ -457,11 +470,24 @@ def _radial_probability(
             continue
         if _longest_run(ray_valid) < config.minimum_consecutive_gates:
             continue
+        if _is_long_range_saturated_radial(dbzh[ray_index], ray_valid):
+            probabilities[ray_index, ray_valid] = config.flag_probability
+            flagged_count += 1
+            continue
         neighbour_index = (ray_index + 1) % dbzh.shape[0]
         if dbzh.shape[0] > 2:
             previous = (ray_index - 1) % dbzh.shape[0]
-            neighbours = np.stack([dbzh[previous], dbzh[neighbour_index]])
-            baseline = np.nanmedian(neighbours, axis=0)
+            previous_values = dbzh[previous]
+            next_values = dbzh[neighbour_index]
+            previous_finite = np.isfinite(previous_values)
+            next_finite = np.isfinite(next_values)
+            baseline = np.full(dbzh.shape[1], np.nan, dtype="float32")
+            both = previous_finite & next_finite
+            baseline[both] = (previous_values[both] + next_values[both]) / 2.0
+            only_previous = previous_finite & ~next_finite
+            baseline[only_previous] = previous_values[only_previous]
+            only_next = next_finite & ~previous_finite
+            baseline[only_next] = next_values[only_next]
         else:
             baseline = dbzh[neighbour_index]
         overlap = ray_valid & np.isfinite(baseline)
@@ -473,6 +499,27 @@ def _radial_probability(
         probabilities[ray_index, ray_valid] = config.flag_probability
         flagged_count += 1
     return probabilities, flagged_count
+
+
+def _is_long_range_saturated_radial(dbzh: np.ndarray, valid: np.ndarray) -> bool:
+    """Detect a range-growing, nearly full-ray interference signature."""
+    if np.mean(valid) < _SATURATED_RADIAL_MINIMUM_VALID_FRACTION:
+        return False
+    high = valid & (dbzh >= _SATURATED_RADIAL_MINIMUM_HIGH_DBZH)
+    valid_count = int(np.count_nonzero(valid))
+    if np.count_nonzero(high) / valid_count < _SATURATED_RADIAL_MINIMUM_HIGH_FRACTION:
+        return False
+    if _longest_run(high) < _SATURATED_RADIAL_MINIMUM_HIGH_RUN:
+        return False
+
+    gate_count = dbzh.shape[0]
+    quartile = max(gate_count // 4, 1)
+    near_values = dbzh[:quartile][valid[:quartile]]
+    far_values = dbzh[-quartile:][valid[-quartile:]]
+    if near_values.size == 0 or far_values.size == 0:
+        return False
+    range_growth = float(np.median(far_values) - np.median(near_values))
+    return range_growth >= _SATURATED_RADIAL_MINIMUM_RANGE_GROWTH_DB
 
 
 def _range_quality(ranges: np.ndarray, minimum: float) -> np.ndarray:

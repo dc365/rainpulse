@@ -12,7 +12,12 @@ from zarr.storage import MemoryStore
 from rainpulse_algo.radar.config import load_radar_config
 from rainpulse_algo.radar.fmt import decode_fmt_volume
 from rainpulse_algo.radar.health import assess_volume_health, load_radar_health_config
-from rainpulse_algo.radar.qc import QCInputError, apply_basic_qc, load_qc_profile
+from rainpulse_algo.radar.qc import (
+    QCInputError,
+    _radial_probability,
+    apply_basic_qc,
+    load_qc_profile,
+)
 from rainpulse_algo.radar.qc_worker import _execute_basic_qc
 from rainpulse_algo.radar.qc_zarr import build_qc_zarr_store, validate_qc_zarr_store
 from rainpulse_algo.radar.zarr_volume import build_zarr_store
@@ -141,6 +146,34 @@ def test_radial_interference_flags_without_erasing_observation(tmp_path: Path) -
     assert np.all(flagged.valid_mask[0] == 1)
     assert np.all(flagged.dbzh_qc[0] == 35.0)
     assert result.summary["radial_interference_ray_count"] >= 1
+
+
+def test_radial_interference_detects_adjacent_long_range_saturated_rays(
+    tmp_path: Path,
+) -> None:
+    """A contiguous interference fan must not hide behind similar neighbours."""
+    profile = load_qc_profile(QC_CONFIG, FLAG_CONFIG)
+    dbzh = np.full((12, 600), np.nan, dtype="float32")
+
+    # Ordinary meteorological echoes have limited radial support in this fixture.
+    dbzh[:, :180] = 30.0
+    # Z9591-like constant-power interference rises with range after calibration.
+    dbzh[4:10, :] = np.linspace(46.0, 66.0, 600, dtype="float32")
+    valid = np.isfinite(dbzh)
+
+    probability, flagged_count = _radial_probability(
+        dbzh,
+        valid,
+        profile.radial_interference,
+    )
+
+    assert flagged_count == 6
+    assert np.all(
+        probability[4:10, :]
+        >= profile.radial_interference.flag_probability
+    )
+    assert np.nanmax(probability[:4, :]) == 0.0
+    assert np.nanmax(probability[10:, :]) == 0.0
 
 
 def test_unavailable_radar_health_is_a_hard_qc_gate(tmp_path: Path) -> None:
