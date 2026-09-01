@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "profile_version": "fujian-realtime-shadow-v1",
+  "execution_mode": "realtime_shadow",
+  "interval_seconds": 15,
+  "state_directory": "/var/lib/rainpulse/ingest",
+  "sources": [
+    {
+      "source_id": "z9591-realtime",
+      "radar_id": "z9591",
+      "config_path": "/opt/rainpulse/configs/radars/fujian-20260828/z9591.yaml",
+      "arrival_root": "/data/Weather/RADA/RADA_L2_FMT/OBS_TEMP",
+      "minimum_file_age_seconds": 30,
+      "lookback_hours": 24,
+      "file_name_contains": "Z9591"
+    },
+    {
+      "source_id": "z9593-realtime",
+      "radar_id": "z9593",
+      "config_path": "/opt/rainpulse/configs/radars/fujian-20260828/z9593.yaml",
+      "arrival_root": "/data/Weather/RADA/RADA_L2_FMT/OBS_TEMP",
+      "minimum_file_age_seconds": 30,
+      "lookback_hours": 24,
+      "file_name_contains": "Z9593"
+    },
+    {
+      "source_id": "z9598-realtime",
+      "radar_id": "z9598",
+      "config_path": "/opt/rainpulse/configs/radars/fujian-20260828/z9598.yaml",
+      "arrival_root": "/data/Weather/RADA/RADA_L2_FMT/OBS_TEMP",
+      "minimum_file_age_seconds": 30,
+      "lookback_hours": 24,
+      "file_name_contains": "Z9598"
+    },
+    {
+      "source_id": "z9599-realtime",
+      "radar_id": "z9599",
+      "config_path": "/opt/rainpulse/configs/radars/fujian-20260828/z9599.yaml",
+      "arrival_root": "/data/Weather/RADA/RADA_L2_FMT/OBS_TEMP",
+      "minimum_file_age_seconds": 30,
+      "lookback_hours": 24,
+      "file_name_contains": "Z9599"
+    }
+  ]
+}

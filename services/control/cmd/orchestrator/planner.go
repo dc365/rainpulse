@@ -18,25 +18,28 @@ import (
 )
 
 type pipelineSettings struct {
-	interval            time.Duration
-	lookback            time.Duration
-	mosaicDelay         time.Duration
-	radarIDs            map[string]struct{}
-	qcConfig            string
-	gridConfig          string
-	mosaicConfig        string
-	qpeConfig           string
-	diagnosticConfig    string
-	nowcastConfig       string
-	pystepsConfig       string
-	productConfig       string
-	verificationConfig  string
-	gridID              string
-	maximumMosaicOffset time.Duration
-	minimumFrames       int
-	maximumFrames       int
-	forecastEnabled     bool
-	requireAllRadars    bool
+	mode                      string
+	interval                  time.Duration
+	lookback                  time.Duration
+	mosaicEarliestDelay       time.Duration
+	mosaicMaximumWait         time.Duration
+	radarIDs                  map[string]struct{}
+	qcConfig                  string
+	gridConfig                string
+	mosaicConfig              string
+	qpeConfig                 string
+	diagnosticConfig          string
+	nowcastConfig             string
+	pystepsConfig             string
+	productConfig             string
+	verificationConfig        string
+	gridID                    string
+	maximumMosaicOffset       time.Duration
+	minimumMosaicContributors int
+	minimumFrames             int
+	maximumFrames             int
+	forecastEnabled           bool
+	requireAllRadars          bool
 }
 
 type pipelinePlanner struct {
@@ -54,6 +57,12 @@ type pipelinePlanner struct {
 	plannedVerification map[uuid.UUID]struct{}
 }
 
+type mosaicWaterlineDecision struct {
+	Ready    bool
+	Complete bool
+	Reason   string
+}
+
 func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 	enabled, err := strconv.ParseBool(environmentOrDefault("RAINPULSE_PIPELINE_ENABLED", "false"))
 	if err != nil {
@@ -61,6 +70,10 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 	}
 	if !enabled {
 		return nil, nil
+	}
+	mode := strings.TrimSpace(environmentOrDefault("RAINPULSE_PIPELINE_MODE", "operational"))
+	if mode != "operational" && mode != "realtime_shadow" {
+		return nil, fmt.Errorf("RAINPULSE_PIPELINE_MODE must be operational or realtime_shadow")
 	}
 	interval, err := time.ParseDuration(environmentOrDefault("RAINPULSE_PIPELINE_INTERVAL", "2s"))
 	if err != nil || interval <= 0 {
@@ -70,11 +83,17 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 	if err != nil || lookback < 0 {
 		return nil, fmt.Errorf("RAINPULSE_PIPELINE_LOOKBACK must be a non-negative duration")
 	}
-	mosaicDelay, err := time.ParseDuration(
-		environmentOrDefault("RAINPULSE_PIPELINE_MOSAIC_DELAY", "2m"),
+	mosaicEarliestDelay, err := time.ParseDuration(
+		environmentOrDefault("RAINPULSE_PIPELINE_MOSAIC_DELAY", "30s"),
 	)
-	if err != nil || mosaicDelay < 0 {
+	if err != nil || mosaicEarliestDelay < 0 {
 		return nil, fmt.Errorf("RAINPULSE_PIPELINE_MOSAIC_DELAY must be a non-negative duration")
+	}
+	mosaicMaximumWait, err := time.ParseDuration(
+		environmentOrDefault("RAINPULSE_PIPELINE_MOSAIC_MAX_WAIT", "4m"),
+	)
+	if err != nil || mosaicMaximumWait <= 0 || mosaicMaximumWait < mosaicEarliestDelay {
+		return nil, fmt.Errorf("RAINPULSE_PIPELINE_MOSAIC_MAX_WAIT must be positive and not shorter than the earliest delay")
 	}
 	forecastEnabled, err := strconv.ParseBool(
 		environmentOrDefault("RAINPULSE_PIPELINE_FORECAST_ENABLED", "true"),
@@ -90,7 +109,7 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 	}
 	radarIDs := make(map[string]struct{})
 	for _, raw := range strings.Split(os.Getenv("RAINPULSE_PIPELINE_RADAR_IDS"), ",") {
-		if value := strings.TrimSpace(raw); value != "" {
+		if value := strings.ToLower(strings.TrimSpace(raw)); value != "" {
 			radarIDs[value] = struct{}{}
 		}
 	}
@@ -98,21 +117,24 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 		return nil, fmt.Errorf("enabled real pipeline requires a non-empty radar allowlist")
 	}
 	settings := &pipelineSettings{
-		interval:           interval,
-		lookback:           lookback,
-		mosaicDelay:        mosaicDelay,
-		radarIDs:           radarIDs,
-		qcConfig:           environmentOrDefault("RAINPULSE_PIPELINE_QC_CONFIG", "/opt/rainpulse/configs/qc/rp008-basic-v1.yaml"),
-		gridConfig:         environmentOrDefault("RAINPULSE_PIPELINE_GRID_CONFIG", "/opt/rainpulse/configs/gridding/rp016-hybrid-v1.yaml"),
-		mosaicConfig:       environmentOrDefault("RAINPULSE_PIPELINE_MOSAIC_CONFIG", "/opt/rainpulse/configs/mosaic/rp016-qi-mosaic-v1.yaml"),
-		qpeConfig:          environmentOrDefault("RAINPULSE_PIPELINE_QPE_CONFIG", "/opt/rainpulse/configs/qpe/rp011-basic-zr-v1.yaml"),
-		diagnosticConfig:   environmentOrDefault("RAINPULSE_PIPELINE_DIAGNOSTIC_CONFIG", "/opt/rainpulse/configs/diagnostics/rp012-operational-diagnostics-v1.yaml"),
-		nowcastConfig:      environmentOrDefault("RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG", "/opt/rainpulse/configs/nowcast/rp013-fixed-5min-v1.1.yaml"),
-		pystepsConfig:      environmentOrDefault("RAINPULSE_PIPELINE_PYSTEPS_CONFIG", "/opt/rainpulse/configs/nowcast/rp016-pysteps-lk-v1.yaml"),
-		productConfig:      environmentOrDefault("RAINPULSE_PIPELINE_PRODUCT_CONFIG", "/opt/rainpulse/configs/products/rp015-application-products-v1.yaml"),
-		verificationConfig: environmentOrDefault("RAINPULSE_PIPELINE_VERIFICATION_CONFIG", "/opt/rainpulse/configs/verification/rp031-operational-deterministic-v1.yaml"),
-		forecastEnabled:    forecastEnabled,
-		requireAllRadars:   requireAllRadars,
+		mode:                      mode,
+		interval:                  interval,
+		lookback:                  lookback,
+		mosaicEarliestDelay:       mosaicEarliestDelay,
+		mosaicMaximumWait:         mosaicMaximumWait,
+		radarIDs:                  radarIDs,
+		qcConfig:                  environmentOrDefault("RAINPULSE_PIPELINE_QC_CONFIG", "/opt/rainpulse/configs/qc/rp008-basic-v1.yaml"),
+		gridConfig:                environmentOrDefault("RAINPULSE_PIPELINE_GRID_CONFIG", "/opt/rainpulse/configs/gridding/rp016-hybrid-v1.yaml"),
+		mosaicConfig:              environmentOrDefault("RAINPULSE_PIPELINE_MOSAIC_CONFIG", "/opt/rainpulse/configs/mosaic/rp016-qi-mosaic-v1.yaml"),
+		qpeConfig:                 environmentOrDefault("RAINPULSE_PIPELINE_QPE_CONFIG", "/opt/rainpulse/configs/qpe/rp011-basic-zr-v1.yaml"),
+		diagnosticConfig:          environmentOrDefault("RAINPULSE_PIPELINE_DIAGNOSTIC_CONFIG", "/opt/rainpulse/configs/diagnostics/rp012-operational-diagnostics-v1.yaml"),
+		nowcastConfig:             environmentOrDefault("RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG", "/opt/rainpulse/configs/nowcast/rp013-fixed-5min-v1.1.yaml"),
+		pystepsConfig:             environmentOrDefault("RAINPULSE_PIPELINE_PYSTEPS_CONFIG", "/opt/rainpulse/configs/nowcast/rp016-pysteps-lk-v1.yaml"),
+		productConfig:             environmentOrDefault("RAINPULSE_PIPELINE_PRODUCT_CONFIG", "/opt/rainpulse/configs/products/rp015-application-products-v1.yaml"),
+		verificationConfig:        environmentOrDefault("RAINPULSE_PIPELINE_VERIFICATION_CONFIG", "/opt/rainpulse/configs/verification/rp031-operational-deterministic-v1.yaml"),
+		forecastEnabled:           forecastEnabled,
+		requireAllRadars:          requireAllRadars,
+		minimumMosaicContributors: 1,
 	}
 	for _, path := range []string{
 		settings.qcConfig,
@@ -167,6 +189,9 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 		nowcast.Sequence.TimestepMinutes != 5 {
 		return nil, fmt.Errorf("pipeline NowcastInput config has invalid grid or frame limits")
 	}
+	if !pipelineModeCompatible(mode, executionModeOrOperational(nowcast.ExecutionMode)) {
+		return nil, fmt.Errorf("pipeline mode differs from NowcastInput execution_mode")
+	}
 	if qc.ProfileVersion == "" || qc.PipelineVersion == "" ||
 		diagnostic.ProfileVersion == "" || diagnostic.RendererVersion == "" {
 		return nil, fmt.Errorf("pipeline QC or diagnostic config lacks a version identity")
@@ -191,13 +216,16 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 	}
 	expectedRadars := make(map[string]struct{}, len(mosaic.Alignment.ExpectedRadarIDs))
 	for _, radarID := range mosaic.Alignment.ExpectedRadarIDs {
-		expectedRadars[radarID] = struct{}{}
+		expectedRadars[strings.ToLower(radarID)] = struct{}{}
 	}
 	if len(expectedRadars) > 0 {
 		for radarID := range radarIDs {
 			if _, expected := expectedRadars[radarID]; !expected {
 				return nil, fmt.Errorf("pipeline radar %s is absent from the mosaic inventory", radarID)
 			}
+		}
+		if mode == "realtime_shadow" && len(expectedRadars) != len(radarIDs) {
+			return nil, fmt.Errorf("realtime shadow radar allowlist must equal the mosaic inventory")
 		}
 	}
 	settings.gridID = nowcast.GridID
@@ -207,9 +235,25 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 	if settings.maximumMosaicOffset <= 0 {
 		return nil, fmt.Errorf("pipeline mosaic config requires a positive alignment window")
 	}
+	if mosaic.Alignment.MinimumContributors > 0 {
+		settings.minimumMosaicContributors = mosaic.Alignment.MinimumContributors
+	}
+	if settings.minimumMosaicContributors > len(radarIDs) {
+		return nil, fmt.Errorf("pipeline mosaic minimum contributors exceeds radar allowlist")
+	}
 	settings.minimumFrames = nowcast.Sequence.MinimumFrames
 	settings.maximumFrames = nowcast.Sequence.MaximumFrames
 	return settings, nil
+}
+
+func pipelineModeCompatible(pipelineMode string, inputMode string) bool {
+	if pipelineMode == inputMode {
+		return true
+	}
+	// NowcastInput contract 1.2 predates realtime shadow execution and exposes
+	// only operational or historical_replay. RP-041 maps the latter to the
+	// enclosing realtime_shadow pipeline while retaining non-operational gates.
+	return pipelineMode == "realtime_shadow" && inputMode == "historical_replay"
 }
 
 func newPipelinePlanner(
@@ -267,7 +311,7 @@ func (planner *pipelinePlanner) planRadarStage(ctx context.Context, status workf
 		return err
 	}
 	for _, scan := range scans {
-		if _, allowed := planner.settings.radarIDs[scan.RadarID]; !allowed {
+		if _, allowed := planner.settings.radarIDs[strings.ToLower(scan.RadarID)]; !allowed {
 			continue
 		}
 		if planner.outsideLookback(scan.VolumeEndTime) {
@@ -303,7 +347,7 @@ func (planner *pipelinePlanner) planMosaics(ctx context.Context) error {
 	}
 	byTime := make(map[time.Time][]workflow.RadarScan)
 	for _, scan := range scans {
-		if _, allowed := planner.settings.radarIDs[scan.RadarID]; !allowed {
+		if _, allowed := planner.settings.radarIDs[strings.ToLower(scan.RadarID)]; !allowed {
 			continue
 		}
 		if planner.outsideLookback(scan.VolumeEndTime) {
@@ -320,15 +364,25 @@ func (planner *pipelinePlanner) planMosaics(ctx context.Context) error {
 		times = append(times, analysisTime)
 	}
 	sort.Slice(times, func(i, j int) bool { return times[i].Before(times[j]) })
+	now := time.Now().UTC()
 	for _, analysisTime := range times {
-		if time.Now().UTC().Before(analysisTime.Add(planner.settings.mosaicDelay)) {
-			continue
-		}
 		if _, exists := planner.plannedMosaic[analysisTime]; exists {
 			continue
 		}
 		selected := closestScanByRadar(byTime[analysisTime], analysisTime)
-		if planner.settings.requireAllRadars && len(selected) < len(planner.settings.radarIDs) {
+		if len(selected) < planner.settings.minimumMosaicContributors {
+			continue
+		}
+		decision := decideMosaicWaterline(
+			now,
+			analysisTime,
+			len(selected),
+			len(planner.settings.radarIDs),
+			planner.settings.mosaicEarliestDelay,
+			planner.settings.mosaicMaximumWait,
+			planner.settings.requireAllRadars,
+		)
+		if !decision.Ready {
 			continue
 		}
 		scanIDs := make([]string, 0, len(selected))
@@ -348,8 +402,43 @@ func (planner *pipelinePlanner) planMosaics(ctx context.Context) error {
 			continue
 		}
 		planner.plannedMosaic[analysisTime] = struct{}{}
+		slog.Info("radar mosaic crossed waterline",
+			"analysis_time", analysisTime,
+			"contributors", len(selected),
+			"expected", len(planner.settings.radarIDs),
+			"complete", decision.Complete,
+			"reason", decision.Reason,
+		)
 	}
 	return nil
+}
+
+func decideMosaicWaterline(
+	now time.Time,
+	analysisTime time.Time,
+	contributors int,
+	expected int,
+	earliestDelay time.Duration,
+	maximumWait time.Duration,
+	requireAll bool,
+) mosaicWaterlineDecision {
+	if contributors < 1 || expected < 1 {
+		return mosaicWaterlineDecision{Reason: "no_contributors"}
+	}
+	complete := contributors >= expected
+	if complete {
+		if now.Before(analysisTime.Add(earliestDelay)) {
+			return mosaicWaterlineDecision{Complete: true, Reason: "waiting_earliest_delay"}
+		}
+		return mosaicWaterlineDecision{Ready: true, Complete: true, Reason: "all_radars_arrived"}
+	}
+	if requireAll {
+		return mosaicWaterlineDecision{Reason: "waiting_all_radars"}
+	}
+	if now.Before(analysisTime.Add(maximumWait)) {
+		return mosaicWaterlineDecision{Reason: "waiting_maximum_watermark"}
+	}
+	return mosaicWaterlineDecision{Ready: true, Reason: "maximum_wait_elapsed"}
 }
 
 func (planner *pipelinePlanner) listRadarScans(
@@ -549,10 +638,11 @@ func (planner *pipelinePlanner) outsideVerificationLookback(value time.Time) boo
 func closestScanByRadar(scans []workflow.RadarScan, analysisTime time.Time) []workflow.RadarScan {
 	selected := make(map[string]workflow.RadarScan)
 	for _, scan := range scans {
-		current, exists := selected[scan.RadarID]
+		key := strings.ToLower(scan.RadarID)
+		current, exists := selected[key]
 		if !exists || absoluteDuration(scan.VolumeEndTime.Sub(analysisTime)) <
 			absoluteDuration(current.VolumeEndTime.Sub(analysisTime)) {
-			selected[scan.RadarID] = scan
+			selected[key] = scan
 		}
 	}
 	result := make([]workflow.RadarScan, 0, len(selected))

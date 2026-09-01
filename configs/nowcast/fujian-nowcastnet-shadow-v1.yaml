@@ -1,0 +1,27 @@
+schema_version: "1.0"
+profile_version: fujian-nowcastnet-shadow-v1
+source_model_profile: rp026-nowcastnet-offline-v1
+grid_id: fuzhou_118_123_25_27_0p01deg_v1
+grid_config_version: fuzhou-grid-0p01deg-v1
+
+protocol:
+  input_frames: 9
+  timestep_minutes: 10
+  output_lead_minutes: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
+  missing_policy: reject_any_missing
+  spatial_multiple: 32
+
+# Native 0.01-degree crop inside the 201 x 501 Fujian grid. It is intentionally
+# fixed across cycles; the shape must pass an explicit GPU probe before inference.
+fixed_roi:
+  y_start: 4
+  x_start: 10
+  height: 192
+  width: 480
+
+activation:
+  input_probe_enabled: true
+  spatial_shape_validated: false
+  inference_enabled: false
+  product_publication_enabled: false
+  operational_eligible: false

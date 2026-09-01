@@ -1,81 +1,66 @@
-# RainPulse web design direction
+# RainPulse unified workspace design
 
-## 1. Visual theme and atmosphere
+## Product surface
 
-RainPulse is a restrained scientific operations console for forecasters and
-duty staff. The real georeferenced rainfall layer is the visual anchor; status,
-quality and provenance stay dense, quiet and immediately scannable.
+RainPulse now has two routes only:
 
-## 2. Color palette and roles
+- `/`: the operational and engineering evidence workspace.
+- `/admin`: read-only data-source, pipeline, alert, and failure evidence.
 
-- `canvas`: `oklch(94.5% 0.007 165)`, page background.
-- `paper`: `oklch(98.5% 0.004 165)`, primary work surfaces.
-- `ink`: `oklch(25% 0.018 165)`, primary text.
-- `muted`: `oklch(52% 0.014 165)`, secondary text.
-- `teal`: `oklch(50% 0.092 175)`, operational selection and healthy state.
-- `risk`: `oklch(53% 0.12 48)`, degraded state and warnings.
-- Rainfall colors follow the frozen `rainfall-operational-v1` product palette.
+The main workspace owns one cycle selector, one absolute-valid-time timeline,
+and one synchronized map view. Quality control, nowcasting, and verification are
+presets of the same workspace rather than separate pages.
 
-## 3. Typography rules
+## Main workspace hierarchy
 
-Use the existing system stack, led by Apple system Latin and PingFang SC for
-Chinese. Operational numbers use tabular figures. Headlines remain compact;
-long Chinese descriptions use a line height of at least 1.65.
+1. Compact header: product identity, live-follow/history state, issue cycle,
+   freshness, and the Admin entry.
+2. Preset strip: forecast comparison, QC investigation, or verification replay.
+3. One to four maps sharing the same OpenLayers `View` and raster palette.
+4. One timeline based on `valid_time`, not model-specific lead indices.
+5. Detailed provenance stays in APIs/Admin; the map title shows only lifecycle,
+   model, and native cadence.
 
-## 4. Component styling
+Stable forecast slots are Radar QPE, pySTEPS-LK, STEPS, and NowcastNet.
+Historical cycles append later Radar QPE analyses to the same absolute timeline,
+so the QPE slot becomes synchronized verification truth at forecast valid times. A
+missing model output keeps its slot and states the reason. It is never replaced
+by another model and is never interpolated to a cadence the model did not
+produce.
 
-Buttons use the existing 7 px control radius and a visible focus outline.
-Panels are mostly flush sections separated by one-pixel dividers. Product tabs,
-timeline frames and map selections use background steps instead of decorative
-shadows. Pressed controls scale to 0.97.
+## QC preset
 
-## 5. Layout principles
+The selected radar uses four synchronized slots where evidence exists:
 
-The desktop forecast workspace uses a wide map and a narrow evidence rail.
-Status is placed above the map; the five-minute timeline sits immediately below
-it. Point and area results stay adjacent to the map so the operator does not
-lose geographic context.
+- raw polar reflectivity;
+- QC reflectivity;
+- gridded QC flags;
+- final radar QPE.
 
-## 6. Depth and elevation
+This layout is intentionally optimized for checking whether a removed echo was
+non-meteorological and whether that removal changed the downstream mosaic.
 
-Depth is communicated with `canvas`, `paper` and elevated white background
-steps. Borders remain structural dividers. The rainfall PNG is an OpenLayers
-`ImageStatic` layer above a configurable XYZ basemap, local coastline and
-latitude/longitude graticule, without glass effects.
+## Visual rules
 
-## 7. Guardrails
+- The raster is the primary evidence, not decorative cards.
+- Borders and background steps provide hierarchy; avoid gradients and shadows.
+- Missing coverage remains transparent and distinct from valid no-rain.
+- Engineering/shadow/offline lifecycle is always visible.
+- CST is the operator-facing timezone; UTC remains visible and authoritative.
+- Desktop shows two-by-two synchronized maps. Mobile shows one map at a time
+  with panel tabs while retaining the same cycle and timeline.
+- OpenLayers remains the only GIS runtime and the local GSHHG coastline remains
+  available when the XYZ basemap is unavailable.
 
-- Never hide missing-data semantics behind zero rainfall.
-- Never imply that publication status proves meteorological skill.
-- Do not expose internal Zarr artifacts to the browser.
-- Keep OpenLayers as the single GIS runtime; do not add a second map framework.
-- Preserve the product pixel-edge extent separately from the point-centre grid.
-- Keep the local GSHHG coastline available when the XYZ basemap is unavailable.
-- Keep UTC explicit on every forecast time.
-- Keep the data-source mode separate from the lead-time timeline: real-time
-  follows the newest displayable run, while historical mode pins one issue time.
-- Show historical issue times in CST and UTC, but retain UTC as the API and
-  product contract time zone.
-- Never label a stale latest product as live; expose the absence of a current
-  real-time update while keeping the most recent displayable run available.
-- Preserve product, model, configuration and source SHA provenance.
-- Avoid decorative gradients, generic card grids and ornamental animation.
+## Data contract
 
-## 8. Responsive behavior
+The browser consumes the UI-oriented projection:
 
-At 980 px the evidence rail moves below the map. At 700 px status metrics and
-query panels become single-column, map controls condense without covering the
-valid-time or legend overlays, and the 24-frame timeline scrolls horizontally.
-Controls retain a minimum 40 px hit area down to 375 px.
+- `GET /api/v1/workspace/cycles`
+- `GET /api/v1/workspace/cycles/{cycle_id}`
+- `GET /api/v1/workspace/ingest-status`
+- `GET /api/v1/workspace/nowcastnet-shadow-status`
 
-## 9. Agent prompt guide
-
-- Build a forecast status strip on `paper` with 11 px labels, 24 px tabular
-  values, one-pixel structural dividers and no decorative shadow.
-- Build an EPSG:4326 OpenLayers workspace with a configurable XYZ basemap,
-  GSHHG fallback, graticule, scale line, city labels and the 501x201 product PNG
-  at pixel-edge extent `117.995,24.995,123.005,27.005`.
-- Build a 24-frame timeline using 40 px minimum targets, previous/play/next
-  controls, 900 ms playback, 0–1h/1–2h bands, teal selected state and UTC labels.
-- Build a point forecast line chart using the product teal, subtle horizontal
-  guides and tabular rain-rate values; do not use bars for the time series.
+The projection composes existing bounded domain APIs inside the Go control
+process. React does not join run, analysis, product, diagnostic, and ensemble
+catalogs itself and never reads Zarr or object storage directly.
