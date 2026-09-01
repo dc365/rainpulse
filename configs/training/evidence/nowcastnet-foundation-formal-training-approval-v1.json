@@ -1,0 +1,87 @@
+{
+  "schema_version": "1.0",
+  "status": "passed",
+  "measured_at": "2026-09-01T05:11:00+00:00",
+  "scope": "foundation_checkpoint_promotion_and_formal_nightly_schedule",
+  "authorization": {
+    "source": "explicit_user_approval",
+    "approved_stage": "evolution",
+    "approved_start_step": 2819,
+    "approved_target_step": 300000
+  },
+  "identity": {
+    "configuration_revision": "2b3131f6b4c69701fe27faaffb5d15482d0b7290",
+    "training_code_revision": "4675567f5a682eb7d62ac178f2d72b1eec6a351d",
+    "profile_sha256": "874775edd697ee4771e1302e3d62c2054cac3f16d112b0ca14f13811bd0920e8",
+    "plan_id": "5ce3859f8f914c9cd55ea92a96a5dd860d46e297fff229472843d21e0bc26892",
+    "sample_index_sha256": "e758c938c929020c64e17ea827b05431f08b059c4033fcaa3b27a72ec1decddf",
+    "sample_count": 100000,
+    "shard_count": 4000,
+    "holdout_windows_processed": 0
+  },
+  "promotion": {
+    "rehearsal_evidence_sha256": "d6f2ccda872f7b5a6eaa74fb460859d24ff71b6766dcd52f4a7edae6f1a4a82d",
+    "checkpoint_global_step": 2819,
+    "checkpoint_sha256": "328a295439abcd6b4356a01d1c7c8b537935bfd6de3b253ea7b4584d21cb47ab",
+    "checkpoint_state_fingerprints_verified": true,
+    "random_state_exact_in_rehearsal": true,
+    "promoted_as_formal_start": true
+  },
+  "preflight": {
+    "initial_main_worktree_attempt": {
+      "status": "rejected",
+      "reason": "checkpoint_code_revision_differs_after_non_training_commits",
+      "report_sha256": "23012f5778bf433b0c766aea05bc2f8eb90ea964ac7a3d6737d33148c227541d"
+    },
+    "pinned_training_worktree": {
+      "status": "passed",
+      "preflight_id": "d68f7b7e5ee01c30df717cc918ca69a4ff265e0c4e8528b91a25968d5b58bd98",
+      "report_sha256": "2a8f17424706f05189fd3ae165d9f4be2473afd5456720b0ca47d067c52b939c",
+      "code_revision_exact": true,
+      "checkpoint_contract_verified": true,
+      "sample_probe_count": 16,
+      "training_start_allowed": true
+    }
+  },
+  "schedule": {
+    "timezone": "Asia/Taipei",
+    "start_time": "20:00",
+    "stop_time": "07:45",
+    "start_timer_enabled": true,
+    "stop_timer_enabled": true,
+    "start_timer_persistent": false,
+    "stop_timer_persistent": true,
+    "first_window_manual_continuation_gate": true,
+    "automatic_second_window_approved": false,
+    "runtime_backstop_hours": 12,
+    "checkpoint_interval_steps": 5000,
+    "checkpoint_interval_seconds": 1800,
+    "kill_mode": "mixed",
+    "next_start_local": "2026-09-01T20:00:00+08:00",
+    "next_stop_local": "2026-09-02T07:45:00+08:00"
+  },
+  "shared_service": {
+    "authorized_service_only": true,
+    "health_before_schedule_enable": "passed",
+    "enabled_after_schedule_enable": true,
+    "other_gpu_services_stopped": false,
+    "training_processes_remaining": 0
+  },
+  "storage": {
+    "training_output_free_bytes": 325638721536,
+    "sample_storage_free_bytes": 796256632832,
+    "checkpoints_and_metrics_remain_server_local": true,
+    "training_samples_remain_on_external_storage": true,
+    "raw_data_mutated": false,
+    "samples_mutated": false
+  },
+  "decision": {
+    "rehearsal_checkpoint_promoted": true,
+    "formal_evolution_training_approved": true,
+    "formal_evolution_training_started": false,
+    "formal_nightly_schedule_enabled": true,
+    "independent_holdout_opened": false,
+    "next_gate": "validate_the_first_formal_nightly_window_and_checkpoint"
+  },
+  "operational_eligible": false
+}

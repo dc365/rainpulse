@@ -73,6 +73,13 @@ SYSTEMD_REHEARSAL_EVIDENCE_PATH = (
     / "evidence"
     / "nowcastnet-foundation-systemd-rehearsal-v1.json"
 )
+FORMAL_TRAINING_APPROVAL_EVIDENCE_PATH = (
+    REPOSITORY_ROOT
+    / "configs"
+    / "training"
+    / "evidence"
+    / "nowcastnet-foundation-formal-training-approval-v1.json"
+)
 NIGHTLY_RUNBOOK_PATH = (
     REPOSITORY_ROOT / "docs" / "nowcastnet-training" / "RUNBOOK_NIGHTLY.md"
 )
@@ -277,6 +284,49 @@ def test_systemd_rehearsal_evidence_keeps_formal_training_closed() -> None:
     runbook = NIGHTLY_RUNBOOK_PATH.read_text()
     assert "`KillMode=mixed`" in runbook
     assert "默认 `control-group` 模式" in runbook
+
+
+def test_formal_training_approval_preserves_identity_and_holdout_boundaries() -> None:
+    evidence = json.loads(FORMAL_TRAINING_APPROVAL_EVIDENCE_PATH.read_text())
+
+    assert evidence["status"] == "passed"
+    assert evidence["identity"]["holdout_windows_processed"] == 0
+    assert evidence["promotion"] == {
+        "rehearsal_evidence_sha256": (
+            "d6f2ccda872f7b5a6eaa74fb460859d24ff71b6766dcd52f4a7edae6f1a4a82d"
+        ),
+        "checkpoint_global_step": 2819,
+        "checkpoint_sha256": (
+            "328a295439abcd6b4356a01d1c7c8b537935bfd6de3b253ea7b4584d21cb47ab"
+        ),
+        "checkpoint_state_fingerprints_verified": True,
+        "random_state_exact_in_rehearsal": True,
+        "promoted_as_formal_start": True,
+    }
+    assert evidence["preflight"]["initial_main_worktree_attempt"]["status"] == (
+        "rejected"
+    )
+    assert evidence["preflight"]["pinned_training_worktree"]["status"] == (
+        "passed"
+    )
+    assert evidence["schedule"]["timezone"] == "Asia/Taipei"
+    assert evidence["schedule"]["start_time"] == "20:00"
+    assert evidence["schedule"]["stop_time"] == "07:45"
+    assert evidence["schedule"]["kill_mode"] == "mixed"
+    assert evidence["schedule"]["first_window_manual_continuation_gate"] is True
+    assert evidence["schedule"]["automatic_second_window_approved"] is False
+    assert evidence["decision"] == {
+        "rehearsal_checkpoint_promoted": True,
+        "formal_evolution_training_approved": True,
+        "formal_evolution_training_started": False,
+        "formal_nightly_schedule_enabled": True,
+        "independent_holdout_opened": False,
+        "next_gate": "validate_the_first_formal_nightly_window_and_checkpoint",
+    }
+    assert evidence["operational_eligible"] is False
+    runbook = NIGHTLY_RUNBOOK_PATH.read_text()
+    assert "固定训练代码提交" in runbook
+    assert "`Persistent=false`" in runbook
 
 
 def test_generative_profile_matches_schema_and_published_contract() -> None:
