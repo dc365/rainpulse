@@ -1,0 +1,131 @@
+{
+  "schema_version": "1.0",
+  "status": "passed",
+  "measured_at": "2026-09-01T03:38:16.327563+00:00",
+  "scope": "foundation_cuda_systemd_start_stop_resume_and_shared_service_recovery",
+  "code_revision": "4675567f5a682eb7d62ac178f2d72b1eec6a351d",
+  "identity": {
+    "profile_sha256": "874775edd697ee4771e1302e3d62c2054cac3f16d112b0ca14f13811bd0920e8",
+    "plan_id": "5ce3859f8f914c9cd55ea92a96a5dd860d46e297fff229472843d21e0bc26892",
+    "sample_index_sha256": "e758c938c929020c64e17ea827b05431f08b059c4033fcaa3b27a72ec1decddf",
+    "sample_count": 100000,
+    "shard_count": 4000,
+    "holdout_windows_processed": 0
+  },
+  "runtime": {
+    "device": "cuda",
+    "gpu_name": "NVIDIA RTX 6000D",
+    "torch_version": "2.12.1+cu132",
+    "cuda_version": "13.2",
+    "batch_size": 16,
+    "precision": "bf16",
+    "data_loader_workers": 4,
+    "user_systemd_linger_enabled": true,
+    "stop_signal": "SIGTERM",
+    "kill_mode": "mixed",
+    "timeout_stop_seconds": 180,
+    "checkpoint_interval_steps": 5000,
+    "checkpoint_interval_seconds": 300
+  },
+  "corrective_actions": [
+    {
+      "attempt": 1,
+      "failure": "wrapper_passed_an_obsolete_train_subcommand",
+      "training_started": false,
+      "output_directory_created": false,
+      "resolution": "removed_the_obsolete_subcommand"
+    },
+    {
+      "attempt": 2,
+      "failure": "systemd_control_group_sigterm_terminated_data_loader_workers",
+      "metrics_rows_written": 1181,
+      "last_verified_checkpoint_step": 525,
+      "last_verified_checkpoint_sha256": "12d6d37c4af2e2c7f3ba6356b7cd4e97eb131b8995013729765da0b3954d7e81",
+      "training_report_written": false,
+      "failed_attempt_retained_outside_repository": true,
+      "failed_attempt_checkpoint_promoted": false,
+      "resolution": "changed_systemd_kill_mode_from_control_group_to_mixed"
+    }
+  ],
+  "validated_invocations": [
+    {
+      "run_mode": "new",
+      "preflight_id": "ecd84d02a241ed0c3cd224f5b3ae74af3e2811e601ed7ff79680c812a54c102d",
+      "preflight_report_sha256": "3ca49e24a1e1619330cc3d3784eaa9e0dfc7f30c9f1e6cfad6d89a33be61549f",
+      "nightly_report_sha256": "ea0d453cf73934237f803fb15ec885633fc156dac0f85ac4e9e549752fbafb63",
+      "started_at": "2026-09-01T03:21:47.426301+00:00",
+      "finished_at": "2026-09-01T03:31:44.705737+00:00",
+      "start_step": 0,
+      "end_step": 2096,
+      "completed_steps": 2096,
+      "duration_seconds": 597.279444030486,
+      "steps_per_second": 3.5092451631283947,
+      "input_checkpoint": null,
+      "output_checkpoint_sha256": "8267d59553cb1bb99cab7eb52bbfd56b4b3eaef4f3afcd4c6a478cf3f108fd5e",
+      "peak_allocated_memory_bytes": 7392349184,
+      "peak_reserved_memory_bytes": 8376025088,
+      "preflight_identity_verified": true,
+      "stop_reason": "signal:SIGTERM",
+      "next_resume_allowed": true
+    },
+    {
+      "run_mode": "resume",
+      "preflight_id": "a981bdb8e5b5f657415fd31a57db8acb4524f5a9622b04ed72ffcdf890357dc2",
+      "preflight_report_sha256": "9b09570ffd88e02169bee42d48b034431e5d2c8840dafcb3a95ad5a816ce7a3d",
+      "nightly_report_sha256": "aad28dab58de03528ad07278ee59c07738e776e6266a355a69efdbbec33744ab",
+      "started_at": "2026-09-01T03:32:41.681585+00:00",
+      "finished_at": "2026-09-01T03:37:39.236134+00:00",
+      "start_step": 2096,
+      "end_step": 2819,
+      "completed_steps": 723,
+      "duration_seconds": 297.5545567618683,
+      "steps_per_second": 2.429806513024144,
+      "input_checkpoint_sha256": "8267d59553cb1bb99cab7eb52bbfd56b4b3eaef4f3afcd4c6a478cf3f108fd5e",
+      "output_checkpoint_sha256": "328a295439abcd6b4356a01d1c7c8b537935bfd6de3b253ea7b4584d21cb47ab",
+      "checkpoint_state_exact": true,
+      "random_state_exact": true,
+      "peak_allocated_memory_bytes": 7389203456,
+      "peak_reserved_memory_bytes": 8438939648,
+      "preflight_identity_verified": true,
+      "stop_reason": "signal:SIGTERM",
+      "shared_service_recovery": "passed",
+      "next_resume_allowed": true
+    }
+  ],
+  "aggregate": {
+    "validated_step_count": 2819,
+    "duration_seconds": 894.8340007923543,
+    "steps_per_second": 3.150304969976378,
+    "projected_evolution_gpu_hours_at_aggregate_rate": 26.452465436690147,
+    "projected_evolution_gpu_hours_at_slower_resume_rate": 34.29628362861553,
+    "recommended_twelve_hour_windows": 3,
+    "recommended_additional_buffer_windows": 1,
+    "final_checkpoint_sha256": "328a295439abcd6b4356a01d1c7c8b537935bfd6de3b253ea7b4584d21cb47ab",
+    "latest_marker_sha256": "5cc3adcaab3345b166b544f7f4bf19af4568c13f807d9128619b09f29bbd7b7a",
+    "training_report_sha256": "84f8129057068094f46c66b231d6fc5d52fc0814900f24ab3314ab673df9d34f",
+    "metrics_sha256": "ab81463a86f0cc645658cae6dee1b2e092e81761ee7a889848ce26d24651f093"
+  },
+  "shared_service": {
+    "authorized_service_only": true,
+    "managed_by_server_side_user_systemd": true,
+    "enabled_after_rehearsal": true,
+    "health_before_rehearsal": "passed",
+    "health_after_rehearsal": "passed",
+    "other_gpu_services_stopped": false,
+    "training_processes_remaining": 0
+  },
+  "storage": {
+    "training_output_free_bytes_after_rehearsal": 325652717568,
+    "sample_storage_free_bytes_after_rehearsal": 802534457344,
+    "raw_data_mutated": false,
+    "samples_mutated": false
+  },
+  "decision": {
+    "systemd_rehearsal_gate_passed": true,
+    "formal_evolution_training_started": false,
+    "rehearsal_checkpoint_promoted": false,
+    "independent_holdout_opened": false,
+    "next_gate": "approve_rehearsal_checkpoint_promotion_and_enable_the_formal_nightly_schedule"
+  },
+  "operational_eligible": false
+}

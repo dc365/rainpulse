@@ -66,6 +66,16 @@ PREFLIGHT_SCHEMA_PATH = (
 NIGHTLY_SCHEMA_PATH = (
     REPOSITORY_ROOT / "configs" / "schemas" / "nowcastnet-nightly-report.schema.json"
 )
+SYSTEMD_REHEARSAL_EVIDENCE_PATH = (
+    REPOSITORY_ROOT
+    / "configs"
+    / "training"
+    / "evidence"
+    / "nowcastnet-foundation-systemd-rehearsal-v1.json"
+)
+NIGHTLY_RUNBOOK_PATH = (
+    REPOSITORY_ROOT / "docs" / "nowcastnet-training" / "RUNBOOK_NIGHTLY.md"
+)
 GENERATIVE_PROFILE_PATH = (
     REPOSITORY_ROOT / "configs" / "training" / "nowcastnet-mrms-generative-v1.yaml"
 )
@@ -238,6 +248,35 @@ def test_repository_foundation_profile_binds_full_sample_plan_without_holdout() 
     assert profile.data_loading.pin_memory is True
     assert profile.checkpoint.maximum_interval_steps == 5000
     assert profile.checkpoint.maximum_interval_seconds == 1800
+
+
+def test_systemd_rehearsal_evidence_keeps_formal_training_closed() -> None:
+    evidence = json.loads(SYSTEMD_REHEARSAL_EVIDENCE_PATH.read_text())
+    invocations = evidence["validated_invocations"]
+
+    assert evidence["status"] == "passed"
+    assert evidence["identity"]["holdout_windows_processed"] == 0
+    assert evidence["runtime"]["kill_mode"] == "mixed"
+    assert [invocation["run_mode"] for invocation in invocations] == [
+        "new",
+        "resume",
+    ]
+    assert invocations[1]["checkpoint_state_exact"] is True
+    assert invocations[1]["random_state_exact"] is True
+    assert invocations[1]["shared_service_recovery"] == "passed"
+    assert evidence["decision"] == {
+        "systemd_rehearsal_gate_passed": True,
+        "formal_evolution_training_started": False,
+        "rehearsal_checkpoint_promoted": False,
+        "independent_holdout_opened": False,
+        "next_gate": (
+            "approve_rehearsal_checkpoint_promotion_and_enable_the_formal_nightly_schedule"
+        ),
+    }
+    assert evidence["operational_eligible"] is False
+    runbook = NIGHTLY_RUNBOOK_PATH.read_text()
+    assert "`KillMode=mixed`" in runbook
+    assert "默认 `control-group` 模式" in runbook
 
 
 def test_generative_profile_matches_schema_and_published_contract() -> None:
