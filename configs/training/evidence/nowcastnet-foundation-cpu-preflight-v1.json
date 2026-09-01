@@ -1,0 +1,67 @@
+{
+  "batch_size": 16,
+  "checks": {
+    "checkpoint": {
+      "checkpoint_sha256": null,
+      "mode": "new",
+      "resume_step": 0,
+      "status": "passed"
+    },
+    "data_output_separation": {
+      "separate_filesystems": true,
+      "status": "passed"
+    },
+    "dataset_contract": {
+      "dataset_version": "nowcastnet-mrms-full-samples-v1",
+      "holdout_windows_processed": 0,
+      "plan_id": "5ce3859f8f914c9cd55ea92a96a5dd860d46e297fff229472843d21e0bc26892",
+      "sample_count": 100000,
+      "sample_index_sha256": "e758c938c929020c64e17ea827b05431f08b059c4033fcaa3b27a72ec1decddf",
+      "shard_count": 4000,
+      "status": "passed"
+    },
+    "dataset_probe": {
+      "all_finite": true,
+      "all_valid": true,
+      "sample_count": 16,
+      "status": "passed"
+    },
+    "output_storage": {
+      "free_bytes": 334164332544,
+      "minimum_free_bytes": 100000000000,
+      "status": "passed"
+    },
+    "profile_contract": {
+      "profile_sha256": "874775edd697ee4771e1302e3d62c2054cac3f16d112b0ca14f13811bd0920e8",
+      "profile_version": "nowcastnet-mrms-foundation-v1",
+      "status": "passed"
+    },
+    "repository_state": {
+      "changed_entry_count": 0,
+      "status": "passed"
+    },
+    "runtime": {
+      "cuda_version": "13.2",
+      "device": "cpu",
+      "status": "passed",
+      "torch_version": "2.12.1+cu132"
+    },
+    "shared_memory": {
+      "free_bytes": 84065075200,
+      "minimum_free_bytes": 8000000000,
+      "status": "passed"
+    }
+  },
+  "code_revision": "125f68c90fc2663f6d79c00acb55cdc64e9debe2",
+  "device": "cpu",
+  "generated_at": "2026-09-01T02:21:51.867390+00:00",
+  "operational_eligible": false,
+  "precision": "bf16",
+  "preflight_id": "e9fabcdc39acfb94ef3806e68379f368873a8531e25e1e55b2ee155e91214cda",
+  "profile_sha256": "874775edd697ee4771e1302e3d62c2054cac3f16d112b0ca14f13811bd0920e8",
+  "run_mode": "new",
+  "sample_index_sha256": "e758c938c929020c64e17ea827b05431f08b059c4033fcaa3b27a72ec1decddf",
+  "schema_version": "rainpulse.nowcastnet-training-preflight/1.0",
+  "status": "passed",
+  "training_start_allowed": true
+}
