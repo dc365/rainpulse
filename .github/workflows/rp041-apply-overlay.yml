@@ -1,0 +1,103 @@
+name: Apply RP-041 realtime workspace overlay
+
+on:
+  push:
+    branches:
+      - review/realtime-workspace-v1
+    paths:
+      - .rainpulse-patch/READY
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rp041-apply-overlay-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  apply-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Verify and apply the atomic overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .rainpulse-patch/chunk-* | base64 --decode > /tmp/rp041-overlay.tar.gz
+          echo "ede2babe50c64b4df69b606bbb33b943d05ea3276455b91ddbdb1d843efa215d  /tmp/rp041-overlay.tar.gz" | sha256sum --check --strict
+          if tar -tzf /tmp/rp041-overlay.tar.gz | grep -E '(^/|(^|/)\.\.(/|$))'; then
+            echo "unsafe path in overlay" >&2
+            exit 1
+          fi
+          tar -xzf /tmp/rp041-overlay.tar.gz -C .
+          while IFS= read -r path; do
+            [[ -z "$path" ]] || rm -f -- "$path"
+          done < .rainpulse-patch/delete-list.txt
+          rm -rf .rainpulse-patch
+          rm -f .github/workflows/rp041-apply-overlay.yml
+          git status --short
+
+      - name: Install system test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ripgrep
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.x"
+          cache-dependency-path: services/control/go.sum
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.10.0
+          run_install: false
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.10"
+          enable-cache: true
+          cache-dependency-glob: algorithms/uv.lock
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install Ruff
+        run: uv tool install ruff==0.15.12
+
+      - name: Bootstrap
+        run: make bootstrap
+
+      - name: Check generated contracts
+        run: make contracts-check
+
+      - name: Test
+        run: make test
+
+      - name: Lint
+        run: make lint
+
+      - name: Build
+        run: make build
+
+      - name: Commit verified implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "feat: add Fujian realtime shadow pipeline and unified workspace"
+          git push origin "HEAD:${{ github.ref_name }}"
