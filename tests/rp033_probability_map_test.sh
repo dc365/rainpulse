@@ -9,7 +9,8 @@ required_files=(
   contracts/data/algorithm-verification-probability-map-bundle.md
   configs/verification/algorithm-probability-map-v1.yaml
   algorithms/rainpulse_algo/verification/probability_map_bundle.py
-  apps/web/src/ProbabilityVerificationMapMatrix.tsx
+  services/control/internal/workspace/handler.go
+  apps/web/src/workspace/MainWorkspace.tsx
   docs/RP033_超阈值概率空间地图实施记录.md
 )
 
@@ -19,7 +20,8 @@ done
 
 rg --quiet 'raw_ensemble_relative_frequency_uncalibrated' algorithms/rainpulse_algo/verification/probability_map_bundle.py
 rg --quiet 'probability-map-frame' contracts/openapi.yaml
-rg --quiet '超阈值概率空间对比' apps/web/src/ProbabilityVerificationMapMatrix.tsx
+rg --quiet 'probability_exceedance' services/control/internal/workspace/handler.go
+rg --quiet 'panel.data_kind.*probability_exceedance' apps/web/src/workspace/MainWorkspace.tsx
 rg --quiet 'probability map asset digest differs' scripts/stage_probabilistic_verification_map_run.sh
 rg --quiet 'operational_eligible.*false|operational_eligible` is always `false`' contracts/data/algorithm-verification-probability-map-bundle.md
 

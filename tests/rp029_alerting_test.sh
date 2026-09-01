@@ -10,7 +10,7 @@ required_files=(
   deploy/observability/alertmanager.yaml
   deploy/observability/prometheus.yaml
   services/control/internal/alerting/client.go
-  apps/web/src/AlertWorkspace.tsx
+  apps/web/src/workspace/AdminWorkspace.tsx
 )
 
 for path in "${required_files[@]}"; do
@@ -24,6 +24,8 @@ rg --quiet 'RAINPULSE_ALERTMANAGER_URL' deploy/docker-compose.yaml
 rg --quiet '^alerting:' deploy/observability/prometheus.yaml
 rg --quiet 'alertmanager:9093' deploy/observability/prometheus.yaml
 rg --quiet 'receiver: rainpulse-local' deploy/observability/alertmanager.yaml
+rg --quiet '/api/v1/alerts' apps/web/src/workspace/AdminWorkspace.tsx
+rg --quiet 'Prometheus / Alertmanager' apps/web/src/workspace/AdminWorkspace.tsx
 
 if rg --quiet 'webhook_configs|email_configs|slack_configs|wechat_configs|msteams_configs' deploy/observability/alertmanager.yaml; then
   printf 'RP-029 must not enable external notifications before recipients are approved\n' >&2

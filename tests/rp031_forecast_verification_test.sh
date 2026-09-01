@@ -14,6 +14,8 @@ required_files=(
   algorithms/rainpulse_algo/verification/operational.py
   algorithms/rainpulse_algo/verification/worker.py
   services/control/internal/postgres/forecast_verification_store.go
+  services/control/internal/workspace/handler.go
+  apps/web/src/workspace/MainWorkspace.tsx
 )
 
 for path in "${required_files[@]}"; do
@@ -24,6 +26,7 @@ rg --quiet 'RAINPULSE_WORKER_PROFILE: forecast-verification' deploy/docker-compo
 rg --quiet 'forecast.verification.requested.v1' contracts/events/forecast-verification-requested.schema.json
 rg --quiet 'CREATE TABLE forecast_verification_runs' deploy/postgres/migrations/0015_forecast_verification.sql
 rg --quiet 'GetVerificationSummary' services/control/internal/api/handler.go
-rg --quiet '等待实况' apps/web/src/NowcastWorkspace.tsx
+rg --quiet 'addObservedTimeline' services/control/internal/workspace/handler.go
+rg --quiet "verification: '检验回放'" apps/web/src/workspace/MainWorkspace.tsx
 
 printf 'RP-031 automatic forecast-verification artifacts are present.\n'

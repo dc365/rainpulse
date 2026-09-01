@@ -14,6 +14,8 @@ required_files=(
   "algorithms/rainpulse_algo/diagnostics/worker.py"
   "algorithms/tests/test_diagnostics.py"
   "deploy/postgres/migrations/0011_analysis_diagnostics.sql"
+  "services/control/internal/workspace/handler.go"
+  "apps/web/src/workspace/MainWorkspace.tsx"
 )
 
 for relative_path in "${required_files[@]}"; do
@@ -27,6 +29,9 @@ grep -q 'RAINPULSE_WORKER_PROFILE: analysis-diagnostics' \
   "$repo_root/deploy/docker-compose.yaml"
 grep -q 'AnalysisDiagnosticsJobType' \
   "$repo_root/services/control/internal/orchestration/events.go"
-grep -q '分析诊断' "$repo_root/apps/web/src/App.tsx"
+grep -q 'analysis-diagnostics' \
+  "$repo_root/services/control/internal/workspace/handler.go"
+grep -q "panel.role === 'diagnostic'" \
+  "$repo_root/apps/web/src/workspace/MainWorkspace.tsx"
 
 printf 'RP-012 analysis diagnostic artifacts are present.\n'

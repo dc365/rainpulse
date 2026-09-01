@@ -9,7 +9,8 @@ required_files=(
   contracts/data/algorithm-verification-probabilistic-map-bundle.md
   algorithms/rainpulse_algo/verification/map_bundle.py
   algorithms/rainpulse_algo/verification/mrms_nowcastnet_hindcast.py
-  apps/web/src/EnsembleVerificationMapMatrix.tsx
+  services/control/internal/workspace/handler.go
+  apps/web/src/workspace/MainWorkspace.tsx
   scripts/stage_probabilistic_verification_map_run.sh
   docs/RP032_NowcastNet空间地图包实施记录.md
 )
@@ -20,7 +21,9 @@ done
 
 rg --quiet 'build_probabilistic_verification_map_bundle' algorithms/rainpulse_algo/verification/map_bundle.py
 rg --quiet 'map_bundle_count' algorithms/rainpulse_algo/verification/mrms_nowcastnet_hindcast.py
-rg --quiet 'NowcastNet 集合均值' apps/web/src/EnsembleVerificationMapMatrix.tsx
+rg --quiet 'DisplayName: "NowcastNet"' services/control/internal/workspace/handler.go
+rg --quiet 'DisplayName: "pySTEPS-STEPS"' services/control/internal/workspace/handler.go
+rg --quiet 'cycle.capabilities.nowcastnet' apps/web/src/workspace/MainWorkspace.tsx
 rg --quiet 'operational_eligible.*false|operational_eligible` is always `false`' contracts/data/algorithm-verification-probabilistic-map-bundle.md
 rg --quiet 'map asset digest differs' scripts/stage_probabilistic_verification_map_run.sh
 

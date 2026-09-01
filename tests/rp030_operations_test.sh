@@ -8,7 +8,7 @@ cd "$repo_root"
 required_files=(
   services/control/internal/operationalissues/issues.go
   services/control/internal/postgres/operational_issues.go
-  apps/web/src/AlertWorkspace.tsx
+  apps/web/src/workspace/AdminWorkspace.tsx
 )
 
 for path in "${required_files[@]}"; do
@@ -25,5 +25,7 @@ rg --quiet 'rainpulse_job_failure_timestamp_seconds' deploy/observability/rainpu
 rg --quiet 'rainpulse_outbox_event_pending_seconds' deploy/observability/rainpulse-alerts.yaml
 rg --quiet 'minio_cluster_capacity_usable_free_bytes' deploy/observability/rainpulse-alerts.yaml
 rg --quiet 'node_filesystem_avail_bytes' deploy/observability/rainpulse-alerts.yaml
+rg --quiet '/api/v1/operations/issues' apps/web/src/workspace/AdminWorkspace.tsx
+rg --quiet '运行问题' apps/web/src/workspace/AdminWorkspace.tsx
 
 printf 'RP-030 operational correlation and capacity checks passed\n'
