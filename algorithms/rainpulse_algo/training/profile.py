@@ -13,6 +13,17 @@ class NowcastNetTrainingRunError(ValueError):
     """Raised when the frozen offline-training run contract is inconsistent."""
 
 
+FULL_SAMPLE_PROFILE_SHA256 = (
+    "c84c76c399c9a0d74f94dea608bc4030e71b482a5247fc821fc7e245fe034be5"
+)
+FULL_SAMPLE_PLAN_ID = (
+    "5ce3859f8f914c9cd55ea92a96a5dd860d46e297fff229472843d21e0bc26892"
+)
+FULL_SAMPLE_INDEX_SHA256 = (
+    "e758c938c929020c64e17ea827b05431f08b059c4033fcaa3b27a72ec1decddf"
+)
+
+
 @dataclass(frozen=True)
 class TrainingDataTrack:
     name: str
@@ -169,7 +180,7 @@ def load_nowcastnet_training_run_profile(
         reference_names = (
             "training_profile",
             "full_sample_profile",
-            "full_sample_smoke_evidence",
+            "full_sample_library_evidence",
         )
     else:
         raise NowcastNetTrainingRunError("unknown training run profile version")
@@ -205,31 +216,46 @@ def load_nowcastnet_training_run_profile(
     else:
         evidence_path = _resolve_local(
             repository_root,
-            str(frozen["full_sample_smoke_evidence"]["path"]),
+            str(frozen["full_sample_library_evidence"]["path"]),
         )
         try:
             evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise NowcastNetTrainingRunError(
-                f"cannot load full-sample smoke evidence: {exc}"
+                f"cannot load full-sample library evidence: {exc}"
             ) from exc
         if (
             evidence.get("status") != "passed"
             or evidence.get("profile", {}).get("sha256")
-            != "c84c76c399c9a0d74f94dea608bc4030e71b482a5247fc821fc7e245fe034be5"
+            != FULL_SAMPLE_PROFILE_SHA256
             or evidence.get("deterministic_plan", {}).get("plan_id")
-            != "8cc862459c1e82ea77a88587daf231a23ffcdb9b32ce41dbcc16ff6af60ac1f2"
+            != FULL_SAMPLE_PLAN_ID
             or evidence.get("deterministic_plan", {}).get("planned_sample_count")
             != 100000
+            or evidence.get("deterministic_plan", {}).get("selected_window_count")
+            != 4000
             or evidence.get("deterministic_plan", {}).get("holdout_window_count") != 0
-            or evidence.get("decision", {}).get("bounded_real_shard_smoke_passed")
+            or evidence.get("materialization", {}).get("status") != "complete"
+            or evidence.get("materialization", {}).get("sample_count") != 100000
+            or evidence.get("materialization", {}).get("holdout_windows_processed") != 0
+            or evidence.get("materialization", {}).get("sample_index_sha256")
+            != FULL_SAMPLE_INDEX_SHA256
+            or evidence.get("validation", {}).get("status") != "passed"
+            or evidence.get("validation", {}).get("content_hash_verified") is not True
+            or evidence.get("validation", {}).get("shard_count") != 4000
+            or evidence.get("validation", {}).get("sample_count") != 100000
+            or evidence.get("validation", {}).get("holdout_windows_processed") != 0
+            or evidence.get("validation", {}).get("sample_index_sha256")
+            != FULL_SAMPLE_INDEX_SHA256
+            or evidence.get("decision", {}).get("full_training_sample_library_ready")
             is not True
-            or evidence.get("decision", {}).get("full_materialization_allowed") is not True
+            or evidence.get("decision", {}).get("full_gpu_training_allowed") is not False
             or evidence.get("operational_eligible") is not False
         ):
             raise NowcastNetTrainingRunError(
-                "full-sample smoke evidence differs from the accepted boundary"
+                "full-sample library evidence differs from the accepted boundary"
             )
+        sample_index_sha256 = FULL_SAMPLE_INDEX_SHA256
 
     foundation = _load_track("foundation_0p01", tracks["foundation_0p01"])
     conformance = _load_track(
@@ -316,9 +342,8 @@ def load_nowcastnet_training_run_profile(
             or foundation.expected_dataset_version
             != "nowcastnet-mrms-full-samples-v1"
             or foundation.expected_profile_sha256
-            != "c84c76c399c9a0d74f94dea608bc4030e71b482a5247fc821fc7e245fe034be5"
-            or foundation.expected_plan_id
-            != "8cc862459c1e82ea77a88587daf231a23ffcdb9b32ce41dbcc16ff6af60ac1f2"
+            != FULL_SAMPLE_PROFILE_SHA256
+            or foundation.expected_plan_id != FULL_SAMPLE_PLAN_ID
             or foundation.expected_sample_count != 100000
             or foundation.expected_shard_count != 4000
             or not foundation.require_validation_report

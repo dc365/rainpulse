@@ -10,9 +10,9 @@ frozen_inputs:
   full_sample_profile:
     path: configs/training/nowcastnet-mrms-full-samples-v1.yaml
     sha256: c84c76c399c9a0d74f94dea608bc4030e71b482a5247fc821fc7e245fe034be5
-  full_sample_smoke_evidence:
-    path: configs/training/evidence/nowcastnet-full-sample-smoke-v1.json
-    sha256: 3897557c80459209699edb0b16e1386317b3cb812e13aba397900e7648eceda1
+  full_sample_library_evidence:
+    path: configs/training/evidence/nowcastnet-full-sample-library-v1.json
+    sha256: aa04f27b6b43907974310684150e2f6cea6b4dfd7c56c20b7e098a0d51a3c692
 
 sequence:
   input_frames: 9
@@ -28,7 +28,7 @@ data_tracks:
     dataset_contract: full_sample_v1
     expected_dataset_version: nowcastnet-mrms-full-samples-v1
     expected_profile_sha256: c84c76c399c9a0d74f94dea608bc4030e71b482a5247fc821fc7e245fe034be5
-    expected_plan_id: 8cc862459c1e82ea77a88587daf231a23ffcdb9b32ce41dbcc16ff6af60ac1f2
+    expected_plan_id: 5ce3859f8f914c9cd55ea92a96a5dd860d46e297fff229472843d21e0bc26892
     require_validation_report: true
     crs: EPSG:4326
     source_resolution_deg: 0.01

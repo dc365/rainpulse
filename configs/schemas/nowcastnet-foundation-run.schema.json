@@ -13,11 +13,11 @@
     "frozen_inputs": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["training_profile", "full_sample_profile", "full_sample_smoke_evidence"],
+      "required": ["training_profile", "full_sample_profile", "full_sample_library_evidence"],
       "properties": {
         "training_profile": {"$ref": "#/$defs/pathHash"},
         "full_sample_profile": {"$ref": "#/$defs/pathHash"},
-        "full_sample_smoke_evidence": {"$ref": "#/$defs/pathHash"}
+        "full_sample_library_evidence": {"$ref": "#/$defs/pathHash"}
       }
     },
     "sequence": {"$ref": "#/$defs/sequence"},
@@ -36,7 +36,7 @@
             "dataset_contract": {"const": "full_sample_v1"},
             "expected_dataset_version": {"const": "nowcastnet-mrms-full-samples-v1"},
             "expected_profile_sha256": {"const": "c84c76c399c9a0d74f94dea608bc4030e71b482a5247fc821fc7e245fe034be5"},
-            "expected_plan_id": {"const": "8cc862459c1e82ea77a88587daf231a23ffcdb9b32ce41dbcc16ff6af60ac1f2"},
+            "expected_plan_id": {"const": "5ce3859f8f914c9cd55ea92a96a5dd860d46e297fff229472843d21e0bc26892"},
             "require_validation_report": {"const": true},
             "crs": {"const": "EPSG:4326"},
             "source_resolution_deg": {"const": 0.01},

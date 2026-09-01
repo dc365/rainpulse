@@ -214,7 +214,13 @@ def test_repository_foundation_profile_binds_full_sample_plan_without_holdout() 
     )
 
     assert profile.profile_version == "nowcastnet-mrms-foundation-v1"
-    assert profile.sample_index_sha256 is None
+    assert raw["frozen_inputs"]["full_sample_library_evidence"] == {
+        "path": "configs/training/evidence/nowcastnet-full-sample-library-v1.json",
+        "sha256": "aa04f27b6b43907974310684150e2f6cea6b4dfd7c56c20b7e098a0d51a3c692",
+    }
+    assert profile.sample_index_sha256 == (
+        "e758c938c929020c64e17ea827b05431f08b059c4033fcaa3b27a72ec1decddf"
+    )
     assert profile.foundation.data_root_env == "RAINPULSE_MRMS_FULL_ROOT"
     assert profile.foundation.dataset_contract == "full_sample_v1"
     assert profile.foundation.expected_sample_count == 100000
@@ -224,7 +230,7 @@ def test_repository_foundation_profile_binds_full_sample_plan_without_holdout() 
         "c84c76c399c9a0d74f94dea608bc4030e71b482a5247fc821fc7e245fe034be5"
     )
     assert profile.foundation.expected_plan_id == (
-        "8cc862459c1e82ea77a88587daf231a23ffcdb9b32ce41dbcc16ff6af60ac1f2"
+        "5ce3859f8f914c9cd55ea92a96a5dd860d46e297fff229472843d21e0bc26892"
     )
     assert profile.foundation.require_validation_report is True
     assert profile.data_loading.worker_count == 4
