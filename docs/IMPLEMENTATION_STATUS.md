@@ -148,6 +148,12 @@ remain observation-only. Deployed artifacts confirm 1,835 flagged target gates
 at 10:25 CST and 1,836 at 10:45 CST. Details are in
 `docs/RP043_福建径向干扰扇区闭合与历史重建记录.md`.
 
+The 105 shadow workspace retains only the current RP-043 derived data chain.
+Superseded QC, grid, analysis, nowcast-input and product artifacts are removed;
+the MinIO bucket runs with versioning suspended and lifecycle cleanup for
+noncurrent derived objects. Immutable raw and normalized radar inputs remain
+available for reproducible reprocessing.
+
 ## Completed engineering foundation
 
 RP-019 adds the non-data-dependent operational foundation described in

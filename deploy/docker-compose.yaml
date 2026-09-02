@@ -104,7 +104,7 @@ services:
         condition: service_completed_successfully
     environment:
       MC_HOST_rainpulse: "http://${RAINPULSE_MINIO_ROOT_USER:?set RAINPULSE_MINIO_ROOT_USER in deploy/.env}:${RAINPULSE_MINIO_ROOT_PASSWORD:?set RAINPULSE_MINIO_ROOT_PASSWORD in deploy/.env}@minio:9000"
-    command: ["version", "enable", "rainpulse/rainpulse"]
+    command: ["version", "suspend", "rainpulse/rainpulse"]
     restart: "no"
 
   minio-worker-user:
