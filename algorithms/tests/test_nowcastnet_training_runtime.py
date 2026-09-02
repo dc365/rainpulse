@@ -80,6 +80,13 @@ FORMAL_TRAINING_APPROVAL_EVIDENCE_PATH = (
     / "evidence"
     / "nowcastnet-foundation-formal-training-approval-v1.json"
 )
+FIRST_FORMAL_WINDOW_EVIDENCE_PATH = (
+    REPOSITORY_ROOT
+    / "configs"
+    / "training"
+    / "evidence"
+    / "nowcastnet-foundation-first-formal-window-v1.json"
+)
 NIGHTLY_RUNBOOK_PATH = (
     REPOSITORY_ROOT / "docs" / "nowcastnet-training" / "RUNBOOK_NIGHTLY.md"
 )
@@ -313,6 +320,10 @@ def test_formal_training_approval_preserves_identity_and_holdout_boundaries() ->
     assert evidence["schedule"]["start_time"] == "20:00"
     assert evidence["schedule"]["stop_time"] == "07:45"
     assert evidence["schedule"]["kill_mode"] == "mixed"
+    assert evidence["schedule"]["checkpoint_interval_seconds"] == 300
+    assert evidence["schedule"]["checkpoint_interval_source"] == (
+        "promoted_run_manifest"
+    )
     assert evidence["schedule"]["first_window_manual_continuation_gate"] is True
     assert evidence["schedule"]["automatic_second_window_approved"] is False
     assert evidence["decision"] == {
@@ -327,6 +338,47 @@ def test_formal_training_approval_preserves_identity_and_holdout_boundaries() ->
     runbook = NIGHTLY_RUNBOOK_PATH.read_text()
     assert "固定训练代码提交" in runbook
     assert "`Persistent=false`" in runbook
+
+
+def test_first_formal_window_acceptance_keeps_second_window_closed() -> None:
+    evidence = json.loads(FIRST_FORMAL_WINDOW_EVIDENCE_PATH.read_text())
+    valid = evidence["attempts"][1]
+
+    assert evidence["status"] == "passed"
+    assert evidence["identity"]["holdout_windows_processed"] == 0
+    assert evidence["attempts"][0]["status"] == "rejected_before_training"
+    assert evidence["attempts"][0]["completed_steps"] == 0
+    assert valid["start_step"] == 2819
+    assert valid["end_step"] == 243046
+    assert valid["completed_steps"] == 240227
+    assert valid["checkpoint_interval_seconds"] == 300
+    assert valid["checkpoint_state_exact_on_resume"] is True
+    assert valid["random_state_exact_on_resume"] is True
+    assert evidence["metrics"]["global_steps_contiguous"] is True
+    assert evidence["metrics"]["all_required_values_finite"] is True
+    assert evidence["output_checkpoint"]["state_fingerprints_verified"] is True
+    assert evidence["reports"]["nightly_status"] == "passed"
+    assert evidence["shared_services"]["qwen3_8_recovery"] == "passed"
+    assert evidence["shared_services"]["qwen3_6_stopped"] is False
+    assert evidence["scheduler_lifecycle"]["training_artifacts_affected"] is False
+    assert evidence["scheduler_lifecycle"]["corrected_finalizer_dry_run_status"] == (
+        "passed"
+    )
+    assert evidence["scheduler_lifecycle"]["start_timer_enabled"] is False
+    assert evidence["scheduler_lifecycle"]["second_window_start_permit_present"] is (
+        False
+    )
+    assert evidence["decision"] == {
+        "first_formal_window_accepted": True,
+        "second_formal_window_approved": False,
+        "independent_holdout_opened": False,
+        "evolution_training_complete": False,
+        "next_gate": "approve_a_one_time_second_window_to_finish_evolution_training",
+    }
+    assert evidence["operational_eligible"] is False
+    runbook = NIGHTLY_RUNBOOK_PATH.read_text()
+    assert "一次性启动许可" in runbook
+    assert "不能在 `ExecStopPost` 内控制 timer" in runbook
 
 
 def test_generative_profile_matches_schema_and_published_contract() -> None:

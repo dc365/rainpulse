@@ -1,0 +1,118 @@
+{
+  "schema_version": "1.0",
+  "status": "passed",
+  "measured_at": "2026-09-02T00:00:00+00:00",
+  "scope": "foundation_first_formal_nightly_window",
+  "identity": {
+    "configuration_revision": "3747291",
+    "training_code_revision": "4675567f5a682eb7d62ac178f2d72b1eec6a351d",
+    "profile_sha256": "874775edd697ee4771e1302e3d62c2054cac3f16d112b0ca14f13811bd0920e8",
+    "plan_id": "5ce3859f8f914c9cd55ea92a96a5dd860d46e297fff229472843d21e0bc26892",
+    "sample_index_sha256": "e758c938c929020c64e17ea827b05431f08b059c4033fcaa3b27a72ec1decddf",
+    "holdout_windows_processed": 0
+  },
+  "attempts": [
+    {
+      "started_at": "2026-09-01T12:00:00+00:00",
+      "status": "rejected_before_training",
+      "resume_step": 2819,
+      "completed_steps": 0,
+      "reason": "requested_checkpoint_interval_differed_from_promoted_run_manifest",
+      "run_manifest_checkpoint_interval_seconds": 300,
+      "requested_checkpoint_interval_seconds": 1800,
+      "shared_service_recovery": "passed",
+      "independent_holdout_opened": false
+    },
+    {
+      "started_at": "2026-09-01T12:50:30.321297+00:00",
+      "finished_at": "2026-09-01T23:45:00.766732+00:00",
+      "status": "passed",
+      "start_step": 2819,
+      "end_step": 243046,
+      "completed_steps": 240227,
+      "target_step": 300000,
+      "remaining_steps": 56954,
+      "duration_seconds": 39270.44544222485,
+      "steps_per_second": 6.117246628980179,
+      "stop_reason": "signal:SIGTERM",
+      "checkpoint_interval_steps": 5000,
+      "checkpoint_interval_seconds": 300,
+      "checkpoint_state_exact_on_resume": true,
+      "random_state_exact_on_resume": true,
+      "peak_allocated_memory_bytes": 7390514176,
+      "peak_reserved_memory_bytes": 8438939648
+    }
+  ],
+  "metrics": {
+    "total_rows": 243046,
+    "invocation_rows": 240227,
+    "global_steps_contiguous": true,
+    "all_required_values_finite": true,
+    "metrics_sha256": "3251e6dc2377a6f7a1f2d3594df7e540258dcf5a43b75a9b5bc3d92c66833589",
+    "loss_total": {
+      "minimum": 17.47260093688965,
+      "maximum": 1126.531005859375,
+      "mean": 158.35224806841364,
+      "last": 144.87718200683594
+    }
+  },
+  "output_checkpoint": {
+    "global_step": 243046,
+    "sha256": "5b4068d05ee9ff391ac9f6c64619fe237ba9d36eb7a7667a33e8f81bd529dae6",
+    "hash_verified": true,
+    "state_fingerprints_verified": true,
+    "acceptance_preflight_id": "1f646fa42997295faf5e08fd7863d87d2b0b0e7a9d6a1604293d9d7457e21def",
+    "acceptance_preflight_sha256": "39054e62775bbf0cb7195d2df6571c710a2473d121387f13d7aad028c318de81"
+  },
+  "reports": {
+    "preflight_sha256": "a0343aa53ab633341af6fab5d1ab82ecb030dba6e3ef452bda4de77c91ce2905",
+    "latest_marker_sha256": "74b7747ace3933a53cdd89406647ef658794d9fc74a33202bdc5f7e2312f20ae",
+    "training_report_sha256": "799f3f5a3bd31939758e33ef051bdb9c92bca1f9f514855ab2c99aec6abb7568",
+    "nightly_report_sha256": "775249a15fab6a6c01e54992454f7850db71ba4319b2b84fc1c9f33ef0e60f85",
+    "nightly_status": "passed",
+    "preflight_identity_verified": true
+  },
+  "shared_services": {
+    "qwen3_8_stopped_for_training": true,
+    "qwen3_8_recovery": "passed",
+    "qwen3_6_stopped": false,
+    "qwen3_6_health_after_window": "passed",
+    "other_gpu_services_stopped": false,
+    "training_processes_remaining": 0
+  },
+  "scheduler_lifecycle": {
+    "training_and_checkpoint_status": "passed",
+    "shared_service_recovery_status": "passed",
+    "original_unit_result": "timeout_after_successful_finalize",
+    "timeout_reason": "nested_timer_disable_waited_inside_exec_stop_post",
+    "training_artifacts_affected": false,
+    "shared_service_recovery_affected": false,
+    "correction": "removed_timer_control_from_finalizer_and_added_one_time_start_permit",
+    "corrected_finalizer_dry_run_seconds": 1,
+    "corrected_finalizer_dry_run_status": "passed",
+    "service_state_after_correction": "inactive_success",
+    "start_timer_enabled": false,
+    "stop_timer_enabled": false,
+    "second_window_start_permit_present": false
+  },
+  "storage": {
+    "checkpoint_count": 164,
+    "checkpoint_bytes": 17539893152,
+    "training_output_free_bytes": 249315594240,
+    "sample_storage_free_bytes": 721015013376,
+    "raw_data_mutated": false,
+    "samples_mutated": false
+  },
+  "projection": {
+    "remaining_steps": 56954,
+    "remaining_gpu_hours_at_first_window_rate": 2.5862216312493254
+  },
+  "decision": {
+    "first_formal_window_accepted": true,
+    "second_formal_window_approved": false,
+    "independent_holdout_opened": false,
+    "evolution_training_complete": false,
+    "next_gate": "approve_a_one_time_second_window_to_finish_evolution_training"
+  },
+  "operational_eligible": false
+}

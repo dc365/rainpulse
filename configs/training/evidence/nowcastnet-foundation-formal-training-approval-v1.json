@@ -55,7 +55,9 @@
     "automatic_second_window_approved": false,
     "runtime_backstop_hours": 12,
     "checkpoint_interval_steps": 5000,
-    "checkpoint_interval_seconds": 1800,
+    "checkpoint_interval_seconds": 300,
+    "original_requested_checkpoint_interval_seconds": 1800,
+    "checkpoint_interval_source": "promoted_run_manifest",
     "kill_mode": "mixed",
     "next_start_local": "2026-09-01T20:00:00+08:00",
     "next_stop_local": "2026-09-02T07:45:00+08:00"
