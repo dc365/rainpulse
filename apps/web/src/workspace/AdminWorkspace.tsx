@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
+
+import type { CycleList, CycleSummary } from './model'
 
 type SystemStatus = { status?: string, version?: string }
 type RadarStatus = {
@@ -51,13 +53,14 @@ type AdminSnapshot = {
   radars: RadarStatus[]
   ingest: IngestStatus | null
   nowcastnet: NowcastNetShadowStatus | null
+  cycles: CycleSummary[]
   issues: unknown
   alerts: unknown
 }
 
 export function AdminWorkspace() {
   const [snapshot, setSnapshot] = useState<AdminSnapshot>({
-    system: null, radars: [], ingest: null, nowcastnet: null, issues: null, alerts: null,
+    system: null, radars: [], ingest: null, nowcastnet: null, cycles: [], issues: null, alerts: null,
   })
   const [error, setError] = useState<string | null>(null)
 
@@ -68,14 +71,16 @@ export function AdminWorkspace() {
       read<RadarStatus[]>('/api/v1/radars/status', controller.signal),
       readOptional('/api/v1/workspace/ingest-status', controller.signal),
       readOptional('/api/v1/workspace/nowcastnet-shadow-status', controller.signal),
+      read<CycleList>('/api/v1/workspace/cycles?limit=200', controller.signal),
       readOptional('/api/v1/operations/issues', controller.signal),
       readOptional('/api/v1/alerts', controller.signal),
-    ]).then(([system, radars, ingest, nowcastnet, issues, alerts]) => {
+    ]).then(([system, radars, ingest, nowcastnet, cycles, issues, alerts]) => {
       setSnapshot({
         system,
         radars,
         ingest: ingest as IngestStatus,
         nowcastnet: nowcastnet as NowcastNetShadowStatus,
+        cycles: cycles.items,
         issues,
         alerts,
       })
@@ -102,6 +107,8 @@ export function AdminWorkspace() {
         <article><span>运行问题</span><strong>{evidenceCount(snapshot.issues)}</strong><small>只读证据</small></article>
         <article><span>活动告警</span><strong>{evidenceCount(snapshot.alerts)}</strong><small>Prometheus / Alertmanager</small></article>
       </section>
+
+      <RegenerationPanel cycles={snapshot.cycles} />
 
       <section className="admin-panel">
         <header><div><span>Ingest sources</span><h1>实时文件接入</h1></div><small>{snapshot.ingest?.profile_version ?? snapshot.ingest?.reason ?? '读取中'}</small></header>
@@ -159,6 +166,209 @@ export function AdminWorkspace() {
       </section>
     </main>
   )
+}
+
+type RegenerationPreset = 'forecast_all' | 'pysteps_lk' | 'products'
+
+const regenerationPresets: Array<{
+  value: RegenerationPreset
+  label: string
+  route: string
+}> = [
+  { value: 'forecast_all', label: '主链路全部', route: '输入 → LK → 产品' },
+  { value: 'pysteps_lk', label: 'pySTEPS-LK', route: '输入 → 光流外推 → 产品' },
+  { value: 'products', label: '应用产品', route: '安全重走依赖 → 产品' },
+]
+
+type RegenerationResult = {
+  run_id?: string
+  rerun_of?: string
+  status?: string
+  code?: string
+  message?: string
+}
+
+function RegenerationPanel({ cycles }: { cycles: CycleSummary[] }) {
+  const runnableCycles = cycles.filter((cycle) => cycle.run_id)
+  const [cycleID, setCycleID] = useState('')
+  const [preset, setPreset] = useState<RegenerationPreset>('forecast_all')
+  const [reason, setReason] = useState('验证更新后的算法配置')
+  const [token, setToken] = useState('')
+  const [confirming, setConfirming] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [result, setResult] = useState<RegenerationResult | null>(null)
+
+  const effectiveCycleID = runnableCycles.some((cycle) => cycle.cycle_id === cycleID)
+    ? cycleID
+    : runnableCycles[0]?.cycle_id ?? ''
+  const selectedCycle = runnableCycles.find((cycle) => cycle.cycle_id === effectiveCycleID)
+  const selectedPreset = regenerationPresets.find((option) => option.value === preset) ?? regenerationPresets[0]
+  const reasonLength = Array.from(reason.trim()).length
+  const ready = Boolean(selectedCycle?.run_id && token && reasonLength >= 3 && reasonLength <= 240)
+
+  const resetDecision = () => {
+    setConfirming(false)
+    setError(null)
+    setResult(null)
+  }
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!ready || !selectedCycle?.run_id) {
+      setError('请选择可重算周期，并填写管理令牌和 3～240 字的原因。')
+      setConfirming(false)
+      return
+    }
+    if (!confirming) {
+      setConfirming(true)
+      return
+    }
+    setSubmitting(true)
+    setError(null)
+    setResult(null)
+    try {
+      const response = await fetch(`/api/v1/admin/runs/${encodeURIComponent(selectedCycle.run_id)}/rerun`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ preset, reason: reason.trim() }),
+      })
+      const payload = await response.json() as RegenerationResult
+      if (!response.ok) {
+        throw new Error(regenerationError(payload, response.status))
+      }
+      setResult(payload)
+      setToken('')
+      setConfirming(false)
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : '重算请求提交失败')
+      setConfirming(false)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <section className="admin-panel admin-regeneration-panel">
+      <header>
+        <div><span>Manual regeneration</span><h1>数据重算</h1></div>
+        <small>固定预设 · 新运行发布 · 旧结果成功前保留</small>
+      </header>
+      <form className="admin-regeneration" onSubmit={(event) => void submit(event)}>
+        <div className="admin-regeneration-fields">
+          <label>
+            <span>起报周期</span>
+            <select
+              aria-label="重算起报周期"
+              value={effectiveCycleID}
+              onChange={(event) => { setCycleID(event.target.value); resetDecision() }}
+              disabled={!runnableCycles.length || submitting}
+            >
+              {runnableCycles.length ? null : <option value="">暂无可重算周期</option>}
+              {runnableCycles.map((cycle) => (
+                <option key={cycle.cycle_id} value={cycle.cycle_id}>
+                  {formatTime(cycle.issue_time)} · {capabilityLabel(cycle)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <fieldset className="admin-regeneration-presets">
+            <legend>重算范围</legend>
+            {regenerationPresets.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={preset === option.value ? 'active' : ''}
+                aria-pressed={preset === option.value}
+                onClick={() => { setPreset(option.value); resetDecision() }}
+                disabled={submitting}
+              >
+                <strong>{option.label}</strong><small>{option.route}</small>
+              </button>
+            ))}
+          </fieldset>
+          <label>
+            <span>重算原因 <small>{reasonLength}/240</small></span>
+            <input
+              aria-label="重算原因"
+              value={reason}
+              onChange={(event) => { setReason(event.target.value); resetDecision() }}
+              maxLength={240}
+              disabled={submitting}
+            />
+          </label>
+          <label>
+            <span>管理令牌 <small>仅本次请求使用，不保存</small></span>
+            <input
+              aria-label="管理令牌"
+              type="password"
+              value={token}
+              onChange={(event) => { setToken(event.target.value); resetDecision() }}
+              autoComplete="off"
+              spellCheck={false}
+              disabled={submitting}
+            />
+          </label>
+        </div>
+
+        <aside className="admin-regeneration-trace" aria-live="polite">
+          <span>本次谱系</span>
+          <strong>{selectedPreset.label}</strong>
+          <dl>
+            <div><dt>起报</dt><dd>{formatTime(selectedCycle?.issue_time)}</dd></div>
+            <div><dt>源运行</dt><dd title={selectedCycle?.run_id}>{shortID(selectedCycle?.run_id)}</dd></div>
+            <div><dt>格点</dt><dd title={selectedCycle?.grid_id}>{selectedCycle?.grid_id ?? '—'}</dd></div>
+          </dl>
+          <p>创建新的可追溯运行；新结果成功发布后，工作台自动选择最新版本。</p>
+          {confirming ? (
+            <div className="admin-regeneration-confirm">
+              <strong>确认提交这次重算？</strong>
+              <span>同一周期、同一预设正在运行时会被拒绝。</span>
+              <div>
+                <button type="button" onClick={() => setConfirming(false)}>取消</button>
+                <button type="submit" disabled={submitting}>{submitting ? '提交中…' : '确认执行'}</button>
+              </div>
+            </div>
+          ) : (
+            <button className="admin-regeneration-submit" type="submit" disabled={!ready || submitting}>
+              {submitting ? '提交中…' : '准备重算'}
+            </button>
+          )}
+          {result ? <p className="admin-regeneration-success">已受理：{shortID(result.run_id)} · {result.status ?? 'QUEUED'}</p> : null}
+          {error ? <p className="admin-regeneration-error" role="alert">{error}</p> : null}
+        </aside>
+      </form>
+      <footer className="admin-regeneration-note">
+        当前界面覆盖控制面主链路；pySTEPS-STEPS 与 NowcastNet 离线产物仍沿用服务器受控入口。
+      </footer>
+    </section>
+  )
+}
+
+function regenerationError(payload: RegenerationResult, status: number) {
+  const labels: Record<string, string> = {
+    invalid_token: '管理令牌无效。',
+    regeneration_active: '该周期与预设已有重算任务正在执行。',
+    unsupported_rerun: '所选周期缺少可复用的已提交输入谱系。',
+    invalid_regeneration_reason: '重算原因必须为 3～240 个字符。',
+  }
+  return labels[payload.code ?? ''] ?? payload.message ?? `重算请求响应 ${status}`
+}
+
+function capabilityLabel(cycle: CycleSummary) {
+  const values = ['QPE']
+  if (cycle.capabilities.lk) values.push('LK')
+  if (cycle.capabilities.steps) values.push('STEPS')
+  if (cycle.capabilities.nowcastnet) values.push('NowcastNet')
+  return values.join('/')
+}
+
+function shortID(value?: string) {
+  if (!value) return '—'
+  return value.length > 12 ? `${value.slice(0, 8)}…${value.slice(-4)}` : value
 }
 
 async function read<T>(path: string, signal: AbortSignal): Promise<T> {

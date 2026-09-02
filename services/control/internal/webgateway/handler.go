@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 type Options struct {
@@ -41,6 +43,8 @@ func NewHandler(options Options) (http.Handler, error) {
 			response.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			response.WriteHeader(http.StatusOK)
 			_, _ = response.Write([]byte("ok\n"))
+		case isForecastRegenerationRequest(request):
+			proxy.ServeHTTP(response, request)
 		case strings.HasPrefix(request.URL.Path, "/api/v1/admin/"):
 			http.NotFound(response, request)
 		case strings.HasPrefix(request.URL.Path, "/api/"):
@@ -49,6 +53,23 @@ func NewHandler(options Options) (http.Handler, error) {
 			serveSPA(options.WebRoot, response, request)
 		}
 	}), nil
+}
+
+func isForecastRegenerationRequest(request *http.Request) bool {
+	if request.Method != http.MethodPost {
+		return false
+	}
+	const prefix = "/api/v1/admin/runs/"
+	const suffix = "/rerun"
+	if !strings.HasPrefix(request.URL.Path, prefix) || !strings.HasSuffix(request.URL.Path, suffix) {
+		return false
+	}
+	runID := strings.TrimSuffix(strings.TrimPrefix(request.URL.Path, prefix), suffix)
+	if strings.Contains(runID, "/") {
+		return false
+	}
+	_, err := uuid.Parse(runID)
+	return err == nil
 }
 
 func serveSPA(webRoot string, response http.ResponseWriter, request *http.Request) {

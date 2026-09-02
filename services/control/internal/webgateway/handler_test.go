@@ -74,14 +74,19 @@ func TestHandlerServesSPAAndProxiesAPI(t *testing.T) {
 	}
 }
 
-func TestPublicGatewayDoesNotProxyAdministrativeAPI(t *testing.T) {
+func TestPublicGatewayOnlyProxiesBoundedForecastRegeneration(t *testing.T) {
 	webRoot := t.TempDir()
 	if err := os.WriteFile(filepath.Join(webRoot, "index.html"), []byte("ok"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	upstreamCalled := false
-	upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-		upstreamCalled = true
+	upstreamCalls := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		upstreamCalls++
+		if request.URL.Path != "/api/v1/admin/runs/0b390d5f-33e7-4ed8-aab9-8568063dc18c/rerun" ||
+			request.Header.Get("Authorization") != "Bearer operator-secret" {
+			t.Fatalf("unexpected proxied request: path=%q authorization=%q", request.URL.Path, request.Header.Get("Authorization"))
+		}
+		response.WriteHeader(http.StatusAccepted)
 	}))
 	t.Cleanup(upstream.Close)
 	handler, err := webgateway.NewHandler(webgateway.Options{
@@ -90,12 +95,27 @@ func TestPublicGatewayDoesNotProxyAdministrativeAPI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response := httptest.NewRecorder()
-	handler.ServeHTTP(
-		response,
-		httptest.NewRequest(http.MethodPost, "/api/v1/admin/runs/id/rerun", nil),
+	allowed := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/admin/runs/0b390d5f-33e7-4ed8-aab9-8568063dc18c/rerun",
+		strings.NewReader(`{"preset":"pysteps_lk","reason":"operator validation"}`),
 	)
-	if response.Code != http.StatusNotFound || upstreamCalled {
-		t.Fatalf("admin response=%d, upstream_called=%t", response.Code, upstreamCalled)
+	allowed.Header.Set("Authorization", "Bearer operator-secret")
+	allowedResponse := httptest.NewRecorder()
+	handler.ServeHTTP(allowedResponse, allowed)
+	if allowedResponse.Code != http.StatusAccepted || upstreamCalls != 1 {
+		t.Fatalf("allowed response=%d, upstream_calls=%d", allowedResponse.Code, upstreamCalls)
+	}
+
+	for _, target := range []string{
+		"/api/v1/admin/runs/not-a-uuid/rerun",
+		"/api/v1/admin/runs/0b390d5f-33e7-4ed8-aab9-8568063dc18c/delete",
+		"/api/v1/admin/system/reload",
+	} {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, target, nil))
+		if response.Code != http.StatusNotFound || upstreamCalls != 1 {
+			t.Fatalf("target=%q response=%d upstream_calls=%d", target, response.Code, upstreamCalls)
+		}
 	}
 }

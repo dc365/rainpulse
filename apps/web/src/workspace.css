@@ -828,6 +828,151 @@ button, select { min-height: 40px; }
 .admin-panel h1 { margin: 2px 0 0; font-size: 18px; }
 .admin-panel header span,
 .admin-panel header small { color: var(--rp-muted); font-size: 11px; }
+.admin-regeneration-panel > header { align-items: center; }
+.admin-regeneration {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(280px, .85fr);
+  gap: 0;
+}
+.admin-regeneration-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+  border-right: 1px solid var(--rp-line);
+}
+.admin-regeneration-fields > label { display: grid; align-content: start; gap: 5px; }
+.admin-regeneration-fields > label > span,
+.admin-regeneration-presets legend {
+  color: var(--rp-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+.admin-regeneration-fields > label > span { display: flex; justify-content: space-between; }
+.admin-regeneration-fields > label > span small { font-weight: 500; }
+.admin-regeneration-fields input,
+.admin-regeneration-fields select {
+  width: 100%;
+  min-height: 38px;
+  padding: 7px 9px;
+  border: 1px solid var(--rp-line);
+  border-radius: 6px;
+  outline: none;
+  background: color-mix(in srgb, var(--rp-canvas) 58%, var(--rp-paper));
+  color: var(--rp-ink);
+  font: inherit;
+  font-size: 12px;
+}
+.admin-regeneration-fields input:focus,
+.admin-regeneration-fields select:focus {
+  border-color: color-mix(in srgb, var(--rp-teal) 62%, var(--rp-line));
+  box-shadow: 0 0 0 2px var(--rp-teal-soft);
+}
+.admin-regeneration-fields input:disabled,
+.admin-regeneration-fields select:disabled { color: var(--rp-muted); cursor: not-allowed; }
+.admin-regeneration-presets {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.admin-regeneration-presets legend { margin-bottom: 5px; }
+.admin-regeneration-presets button {
+  display: grid;
+  gap: 2px;
+  min-height: 48px;
+  padding: 7px 9px;
+  border: 1px solid var(--rp-line);
+  border-radius: 6px;
+  background: var(--rp-paper);
+  color: var(--rp-ink);
+  text-align: left;
+  cursor: pointer;
+}
+.admin-regeneration-presets button strong { font-size: 12px; }
+.admin-regeneration-presets button small { color: var(--rp-muted); font-size: 9px; }
+.admin-regeneration-presets button.active {
+  border-color: color-mix(in srgb, var(--rp-teal) 52%, var(--rp-line));
+  background: var(--rp-teal-soft);
+  color: var(--rp-teal);
+}
+.admin-regeneration-presets button:focus-visible,
+.admin-regeneration-submit:focus-visible,
+.admin-regeneration-confirm button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--rp-teal) 65%, transparent);
+  outline-offset: 1px;
+}
+.admin-regeneration-trace {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 14px;
+  background: color-mix(in srgb, var(--rp-canvas) 34%, var(--rp-paper));
+}
+.admin-regeneration-trace > span { color: var(--rp-muted); font-size: 10px; }
+.admin-regeneration-trace > strong { margin-top: 3px; color: var(--rp-teal); font-size: 16px; }
+.admin-regeneration-trace dl { margin: 11px 0 8px; }
+.admin-regeneration-trace dl > div {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--rp-line) 70%, transparent);
+  font-size: 11px;
+}
+.admin-regeneration-trace dt { color: var(--rp-muted); }
+.admin-regeneration-trace dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.admin-regeneration-trace > p { margin: 0 0 10px; color: var(--rp-muted); font-size: 10px; line-height: 1.55; }
+.admin-regeneration-submit,
+.admin-regeneration-confirm button {
+  min-height: 34px;
+  padding: 6px 11px;
+  border: 1px solid color-mix(in srgb, var(--rp-teal) 55%, var(--rp-line));
+  border-radius: 6px;
+  background: var(--rp-teal);
+  color: var(--rp-paper);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.admin-regeneration-submit { margin-top: auto; }
+.admin-regeneration-submit:disabled { border-color: var(--rp-line); background: var(--rp-line); color: var(--rp-muted); cursor: not-allowed; }
+.admin-regeneration-confirm {
+  display: grid;
+  gap: 5px;
+  margin-top: auto;
+  padding: 9px;
+  border: 1px solid color-mix(in srgb, var(--rp-risk) 38%, var(--rp-line));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--rp-risk) 6%, var(--rp-paper));
+}
+.admin-regeneration-confirm > strong { font-size: 11px; }
+.admin-regeneration-confirm > span { color: var(--rp-muted); font-size: 9px; }
+.admin-regeneration-confirm > div { display: flex; justify-content: flex-end; gap: 6px; }
+.admin-regeneration-confirm button:first-child { border-color: var(--rp-line); background: var(--rp-paper); color: var(--rp-ink); }
+.admin-regeneration-success,
+.admin-regeneration-error { margin-top: 8px !important; padding: 6px 8px; border-radius: 4px; }
+.admin-regeneration-success { background: var(--rp-teal-soft); color: var(--rp-teal) !important; }
+.admin-regeneration-error { background: color-mix(in srgb, var(--rp-risk) 8%, var(--rp-paper)); color: var(--rp-risk) !important; }
+.admin-regeneration-note {
+  padding: 7px 14px;
+  border-top: 1px solid var(--rp-line);
+  color: var(--rp-muted);
+  font-size: 10px;
+}
 .admin-radar-table > div {
   display: grid;
   grid-template-columns: 1.4fr .7fr .7fr 1fr .5fr 1fr;
@@ -1017,6 +1162,11 @@ button, select { min-height: 40px; }
   .admin-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); border-left: 0; border-right: 0; }
   .admin-summary article:nth-child(2) { border-right: 0; }
   .admin-panel { border-left: 0; border-right: 0; }
+  .admin-panel > header { align-items: flex-start; gap: 8px; }
+  .admin-regeneration { grid-template-columns: 1fr; }
+  .admin-regeneration-fields { grid-template-columns: 1fr; border-right: 0; border-bottom: 1px solid var(--rp-line); }
+  .admin-regeneration-presets { grid-template-columns: 1fr; }
+  .admin-regeneration-trace { min-height: 260px; }
   .admin-radar-table { overflow-x: auto; }
   .admin-radar-table > div { min-width: 760px; }
   .admin-evidence-grid { grid-template-columns: 1fr; }
