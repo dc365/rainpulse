@@ -7,6 +7,7 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 required_files=(
   "configs/schemas/diagnostic-profile.schema.json"
   "configs/diagnostics/rp012-operational-diagnostics-v1.yaml"
+  "configs/diagnostics/rp012-operational-diagnostics-v2.yaml"
   "contracts/data/diagnostic-bundle.md"
   "contracts/events/analysis-diagnostics-requested.schema.json"
   "algorithms/rainpulse_algo/diagnostics/profile.py"

@@ -72,6 +72,15 @@ export type WorkspaceRadar = {
 
 export type WorkspaceCycleDetail = CycleSummary & {
   schema_version: '1.0'
+  analysis_trace?: {
+    analysis_id: string
+    analysis_config_version?: string
+    analysis_created_at?: string
+    mosaic_config_version?: string
+    mosaic_algorithm_version?: string
+    input_mosaic_uri?: string
+    qpe_config_version?: string
+  }
   grid: {
     grid_id: string
     bounds: [number, number, number, number]
@@ -105,6 +114,32 @@ export function radarIDs(detail: WorkspaceCycleDetail) {
   return Array.from(values).sort()
 }
 
+export function analysisCycleAt(
+  cycles: CycleSummary[],
+  gridID: string,
+  issueTime: string,
+) {
+  const target = Date.parse(issueTime)
+  if (!Number.isFinite(target)) return null
+  return cycles.find((cycle) => (
+    cycle.grid_id === gridID
+    && cycle.capabilities.radar
+    && Date.parse(cycle.issue_time) === target
+  )) ?? null
+}
+
+export function timelineForPreset(
+  detail: WorkspaceCycleDetail,
+  cycles: CycleSummary[],
+  preset: WorkspacePreset,
+) {
+  if (preset !== 'qc') return detail.timeline
+  return detail.timeline.filter((value) => (
+    Date.parse(value) === Date.parse(detail.issue_time)
+    || analysisCycleAt(cycles, detail.grid_id, value) != null
+  ))
+}
+
 export function panelsForPreset(
   detail: WorkspaceCycleDetail,
   preset: WorkspacePreset,
@@ -116,10 +151,11 @@ export function panelsForPreset(
       .filter((panel): panel is WorkspacePanel => panel != null)
   }
   const selectedRadar = radarID ?? radarIDs(detail)[0] ?? ''
+  const radarFlagsPanelID = `qc_flags:${selectedRadar}`
   const candidates = [
     `dbzh_raw:${selectedRadar}`,
     `dbzh_qc:${selectedRadar}`,
-    'analysis:qc_flags',
+    panelByID(detail, radarFlagsPanelID) ? radarFlagsPanelID : 'analysis:qc_flags',
     'qpe',
   ]
   const selected = candidates
@@ -192,4 +228,26 @@ export function reasonLabel(reason?: string) {
     shadow_status_unknown: 'NowcastNet 影子状态未知',
   }
   return labels[reason ?? ''] ?? reason ?? '当前面板不可用'
+}
+
+const qcFlagLabels: Record<string, string> = {
+  GROUND_CLUTTER: '地物杂波',
+  SEA_CLUTTER: '海杂波',
+  ANOMALOUS_PROPAGATION: '异常传播',
+  RADIAL_INTERFERENCE: '径向干扰',
+  HARDWARE_ANOMALY: '硬件异常',
+  BIOLOGICAL_ECHO: '生物回波',
+  BEAM_BLOCKED: '波束遮挡',
+  ATTENUATED: '信号衰减',
+  WET_RADOME: '湿天线罩',
+  BRIGHT_BAND: '零度层亮带',
+  VELOCITY_ALIASED: '速度模糊',
+  LOW_SNR: '低信噪比',
+  MISSING: '缺测',
+  CORRECTED: '已订正',
+  LOW_QUALITY: '低质量',
+}
+
+export function qcFlagLabel(value: string) {
+  return qcFlagLabels[value] ?? value
 }

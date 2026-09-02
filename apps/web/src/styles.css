@@ -1491,6 +1491,7 @@ h1 {
 
 .gis-display-controls button[aria-pressed="true"] { color: #075e52; background: #e3efeb; }
 .gis-display-controls button:active { transform: scale(.96); }
+.gis-raster-style { display: contents; }
 .gis-display-controls label { display: grid; grid-template-columns: auto 72px; align-items: center; gap: 6px; padding: 0 8px; color: var(--gis-muted); font-size: 11px; white-space: nowrap; }
 .gis-display-controls input { width: 72px; margin: 0; accent-color: var(--teal); cursor: pointer; }
 

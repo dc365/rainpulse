@@ -64,6 +64,12 @@ def _execute_basic_qc(request: RadarQCRequested, client: Minio) -> WorkerResult:
             "radial_interference_ray_count": float(
                 summary["radial_interference_ray_count"]
             ),
+            "radial_interference_gate_count": float(
+                summary["radial_interference_gate_count"]
+            ),
+            "radial_interference_area_km2": float(
+                summary["radial_interference_area_km2"]
+            ),
         },
     )
 

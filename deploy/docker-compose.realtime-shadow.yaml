@@ -2,6 +2,9 @@ services:
   api:
     environment:
       RAINPULSE_WORKSPACE_EXECUTION_MODE: realtime_shadow
+      RAINPULSE_WORKSPACE_CYCLE_GRID_ID: fuzhou_118_123_25_27_0p01deg_v1
+      RAINPULSE_WORKSPACE_CYCLE_DATE_UTC: "2026-08-28"
+      RAINPULSE_WORKSPACE_REQUIRE_ANALYSIS: "true"
       RAINPULSE_INGEST_STATUS_URL: http://radar-ingest:8092/status
       RAINPULSE_NOWCASTNET_SHADOW_STATUS_URL: http://nowcastnet-shadow-probe:8094/status
 
@@ -18,10 +21,31 @@ services:
       RAINPULSE_PIPELINE_MOSAIC_MAX_WAIT: 4m
       RAINPULSE_PIPELINE_FORECAST_ENABLED: "true"
       RAINPULSE_PIPELINE_REQUIRE_ALL_RADARS: "false"
-      RAINPULSE_PIPELINE_QC_CONFIG: /opt/rainpulse/configs/qc/rp040-fujian-radial-v3.yaml
-      RAINPULSE_PIPELINE_GRID_CONFIG: /opt/rainpulse/configs/gridding/rp040-hybrid-qc-v3.yaml
-      RAINPULSE_PIPELINE_MOSAIC_CONFIG: /opt/rainpulse/configs/mosaic/rp041-fujian-realtime-shadow-v1.yaml
-      RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG: /opt/rainpulse/configs/nowcast/rp041-realtime-shadow-5min-v1.yaml
+      RAINPULSE_PIPELINE_QC_CONFIG: /opt/rainpulse/configs/qc/rp042-fujian-evidence-v1.yaml
+      RAINPULSE_PIPELINE_GRID_CONFIG: /opt/rainpulse/configs/gridding/rp042-hybrid-evidence-v1.yaml
+      RAINPULSE_PIPELINE_MOSAIC_CONFIG: /opt/rainpulse/configs/mosaic/rp042-fujian-realtime-shadow-v1.yaml
+      RAINPULSE_PIPELINE_DIAGNOSTIC_CONFIG: /opt/rainpulse/configs/diagnostics/rp012-operational-diagnostics-v2.yaml
+      RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG: /opt/rainpulse/configs/nowcast/rp042-realtime-shadow-5min-v1.yaml
+
+  radar-qc-worker:
+    environment:
+      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/rp042-fujian-evidence-v1.yaml
+
+  radar-grid-worker:
+    environment:
+      RAINPULSE_RADAR_GRID_CONFIG: /opt/rainpulse/configs/gridding/rp042-hybrid-evidence-v1.yaml
+
+  radar-mosaic-worker:
+    environment:
+      RAINPULSE_RADAR_MOSAIC_CONFIG: /opt/rainpulse/configs/mosaic/rp042-fujian-realtime-shadow-v1.yaml
+
+  analysis-diagnostics-worker:
+    environment:
+      RAINPULSE_DIAGNOSTIC_CONFIG: /opt/rainpulse/configs/diagnostics/rp012-operational-diagnostics-v2.yaml
+
+  nowcast-input-worker:
+    environment:
+      RAINPULSE_NOWCAST_INPUT_CONFIG: /opt/rainpulse/configs/nowcast/rp042-realtime-shadow-5min-v1.yaml
 
   radar-ingest:
     image: rainpulse-radar-ingest

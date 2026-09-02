@@ -8,8 +8,11 @@ cd "$repo_root"
 required_files=(
   configs/qc/rp008-basic-v1.yaml
   configs/qc/rp040-fujian-radial-v3.yaml
+  configs/qc/rp042-fujian-evidence-v1.yaml
   configs/schemas/radar-qc.schema.json
   algorithms/rainpulse_algo/radar/qc.py
+  algorithms/rainpulse_algo/radar/qc_acceptance.py
+  algorithms/rainpulse_algo/radar/qc_metrics.py
   algorithms/rainpulse_algo/radar/qc_worker.py
   algorithms/rainpulse_algo/radar/qc_zarr.py
   deploy/postgres/migrations/0007_radar_qc.sql

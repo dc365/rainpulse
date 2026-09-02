@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  frameAt,
-  panelsForPreset,
-  radarIDs,
-  type WorkspaceCycleDetail,
+	analysisCycleAt,
+	frameAt,
+	panelsForPreset,
+	qcFlagLabel,
+	timelineForPreset,
+	radarIDs,
+	type CycleSummary,
+	type WorkspaceCycleDetail,
 } from './model'
 
 const detail: WorkspaceCycleDetail = {
@@ -30,6 +34,8 @@ const detail: WorkspaceCycleDetail = {
     { panel_id: 'nowcastnet', algorithm_id: 'nowcastnet', display_name: 'NowcastNet', role: 'forecast', lifecycle: 'shadow', data_kind: 'rain_rate', cadence_minutes: 10, status: 'ready', frames: [{ asset_id: 'nc10', valid_time: '2026-09-01T01:10:00Z', lead_time_minutes: 10, image_url: '/nc10', media_type: 'image/png' }] },
     { panel_id: 'dbzh_raw:z9591', algorithm_id: 'radar', display_name: 'Raw', role: 'qc', lifecycle: 'analysis', data_kind: 'reflectivity', cadence_minutes: 5, status: 'ready', radar_id: 'z9591', frames: [] },
     { panel_id: 'dbzh_qc:z9591', algorithm_id: 'radar', display_name: 'QC', role: 'qc', lifecycle: 'analysis', data_kind: 'reflectivity', cadence_minutes: 5, status: 'ready', radar_id: 'z9591', frames: [] },
+    { panel_id: 'qc_flags:z9591', algorithm_id: 'radar', display_name: 'Z9591 · 质控标志', role: 'qc', lifecycle: 'analysis', data_kind: 'reflectivity', cadence_minutes: 5, status: 'ready', radar_id: 'z9591', frames: [] },
+    { panel_id: 'analysis:qc_flags', algorithm_id: 'radar', display_name: '融合质控标志', role: 'diagnostic', lifecycle: 'analysis', data_kind: 'diagnostic', cadence_minutes: 5, status: 'ready', frames: [] },
   ],
 }
 
@@ -48,6 +54,48 @@ describe('workspace model', () => {
   it('selects raw and QC evidence for one radar', () => {
     expect(radarIDs(detail)).toEqual(['z9591'])
     expect(panelsForPreset(detail, 'qc', 'z9591').map((panel) => panel.panel_id))
-      .toEqual(['dbzh_raw:z9591', 'dbzh_qc:z9591', 'qpe'])
+      .toEqual(['dbzh_raw:z9591', 'dbzh_qc:z9591', 'qc_flags:z9591', 'qpe'])
+  })
+
+  it('falls back to fused QC flags only when a radar flag layer is absent', () => {
+    const withoutRadarFlags = {
+      ...detail,
+      panels: detail.panels.filter((panel) => panel.panel_id !== 'qc_flags:z9591'),
+    }
+    expect(panelsForPreset(withoutRadarFlags, 'qc', 'z9591').map((panel) => panel.panel_id))
+      .toEqual(['dbzh_raw:z9591', 'dbzh_qc:z9591', 'analysis:qc_flags', 'qpe'])
+  })
+
+  it('localizes QC flag codes without changing unknown values', () => {
+    expect(qcFlagLabel('GROUND_CLUTTER')).toBe('地物杂波')
+    expect(qcFlagLabel('BRIGHT_BAND')).toBe('零度层亮带')
+    expect(qcFlagLabel('UNKNOWN_FLAG')).toBe('UNKNOWN_FLAG')
+  })
+
+  it('maps a QC effective time to its complete radar analysis cycle', () => {
+    const cycles: CycleSummary[] = [
+      {
+        cycle_id: 'cycle-current',
+        issue_time: detail.issue_time,
+        grid_id: detail.grid_id,
+        execution_mode: 'realtime_shadow',
+        freshness_seconds: 0,
+        capabilities: { radar: true, lk: false, steps: false, nowcastnet: false },
+      },
+      {
+        cycle_id: 'cycle-next',
+        issue_time: '2026-09-01T01:05:00Z',
+        grid_id: detail.grid_id,
+        execution_mode: 'realtime_shadow',
+        freshness_seconds: 0,
+        capabilities: { radar: true, lk: false, steps: false, nowcastnet: false },
+      },
+    ]
+
+    expect(analysisCycleAt(cycles, detail.grid_id, '2026-09-01T01:05:00Z')?.cycle_id)
+      .toBe('cycle-next')
+    expect(timelineForPreset(detail, cycles, 'qc'))
+      .toEqual(['2026-09-01T01:00:00Z', '2026-09-01T01:05:00Z'])
+    expect(timelineForPreset(detail, cycles, 'forecast')).toEqual(detail.timeline)
   })
 })

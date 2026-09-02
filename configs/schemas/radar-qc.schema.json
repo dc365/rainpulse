@@ -54,6 +54,54 @@
         "fallback_meteo_probability": { "$ref": "#/$defs/probability" }
       }
     },
+    "dual_pol_fuzzy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "mode",
+        "zdr_plausible_range_db",
+        "zdr_transition_db",
+        "phidp_step_range_deg",
+        "weights"
+      ],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "mode": { "enum": ["diagnostic_only", "quality_index"] },
+        "zdr_plausible_range_db": { "$ref": "#/$defs/pair" },
+        "zdr_transition_db": { "type": "number", "exclusiveMinimum": 0 },
+        "phidp_step_range_deg": { "$ref": "#/$defs/pair" },
+        "weights": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["rhohv", "snr", "zdr", "phidp"],
+          "properties": {
+            "rhohv": { "type": "number", "minimum": 0 },
+            "snr": { "type": "number", "minimum": 0 },
+            "zdr": { "type": "number", "minimum": 0 },
+            "phidp": { "type": "number", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "vertical_consistency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "mode",
+        "minimum_dbzh",
+        "support_tolerance_db",
+        "maximum_range_m"
+      ],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "mode": { "enum": ["diagnostic_only", "radial_evidence"] },
+        "minimum_dbzh": { "type": "number" },
+        "support_tolerance_db": { "type": "number", "exclusiveMinimum": 0 },
+        "maximum_range_m": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
     "radial_interference": {
       "type": "object",
       "additionalProperties": false,
@@ -69,7 +117,31 @@
         "minimum_consecutive_gates": { "type": "integer", "minimum": 2 },
         "neighbour_difference_db": { "type": "number", "exclusiveMinimum": 0 },
         "low_quality_probability": { "$ref": "#/$defs/probability" },
-        "flag_probability": { "$ref": "#/$defs/probability" }
+        "flag_probability": { "$ref": "#/$defs/probability" },
+        "morphology": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled",
+            "mode",
+            "candidate_difference_db",
+            "minimum_segment_gates",
+            "intermittent_minimum_segments",
+            "short_range_max_m",
+            "reverse_minimum_drop_db",
+            "diagnostic_probability"
+          ],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "mode": { "enum": ["diagnostic_only", "quality_index"] },
+            "candidate_difference_db": { "type": "number", "exclusiveMinimum": 0 },
+            "minimum_segment_gates": { "type": "integer", "minimum": 2 },
+            "intermittent_minimum_segments": { "type": "integer", "minimum": 2 },
+            "short_range_max_m": { "type": "number", "exclusiveMinimum": 0 },
+            "reverse_minimum_drop_db": { "type": "number", "exclusiveMinimum": 0 },
+            "diagnostic_probability": { "$ref": "#/$defs/probability" }
+          }
+        }
       }
     },
     "static_ground_clutter": {

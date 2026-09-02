@@ -34,12 +34,15 @@ var (
 // deliberately composes its bounded JSON responses instead of reaching into
 // PostgreSQL or object storage directly.
 type Handler struct {
-	core                http.Handler
-	now                 func() time.Time
-	executionMode       string
-	ingestStatusURL     string
-	nowcastNetStatusURL string
-	httpClient          *http.Client
+	core                 http.Handler
+	now                  func() time.Time
+	executionMode        string
+	catalogGridID        string
+	catalogDateUTC       string
+	catalogNeedsAnalysis bool
+	ingestStatusURL      string
+	nowcastNetStatusURL  string
+	httpClient           *http.Client
 }
 
 // NewHandler wraps the existing control API with the unified workspace routes.
@@ -48,8 +51,18 @@ func NewHandler(core http.Handler) http.Handler {
 	if mode != "realtime_shadow" && mode != "operational" {
 		mode = ""
 	}
+	catalogDateUTC := strings.TrimSpace(os.Getenv("RAINPULSE_WORKSPACE_CYCLE_DATE_UTC"))
+	if _, err := time.Parse(time.DateOnly, catalogDateUTC); err != nil {
+		catalogDateUTC = ""
+	}
 	return &Handler{
 		core: core, executionMode: mode,
+		catalogGridID:  strings.TrimSpace(os.Getenv("RAINPULSE_WORKSPACE_CYCLE_GRID_ID")),
+		catalogDateUTC: catalogDateUTC,
+		catalogNeedsAnalysis: strings.EqualFold(
+			strings.TrimSpace(os.Getenv("RAINPULSE_WORKSPACE_REQUIRE_ANALYSIS")),
+			"true",
+		),
 		ingestStatusURL: strings.TrimSpace(os.Getenv("RAINPULSE_INGEST_STATUS_URL")),
 		nowcastNetStatusURL: strings.TrimSpace(
 			os.Getenv("RAINPULSE_NOWCASTNET_SHADOW_STATUS_URL"),
@@ -165,12 +178,23 @@ type panelView struct {
 type cycleDetail struct {
 	SchemaVersion string `json:"schema_version"`
 	cycleSummary
-	Grid     gridView       `json:"grid"`
-	Quality  qualitySummary `json:"quality"`
-	Radars   []radarView    `json:"radars"`
-	Timeline []string       `json:"timeline"`
-	Panels   []panelView    `json:"panels"`
-	Warnings []string       `json:"warnings,omitempty"`
+	Grid          gridView       `json:"grid"`
+	Quality       qualitySummary `json:"quality"`
+	AnalysisTrace *analysisTrace `json:"analysis_trace,omitempty"`
+	Radars        []radarView    `json:"radars"`
+	Timeline      []string       `json:"timeline"`
+	Panels        []panelView    `json:"panels"`
+	Warnings      []string       `json:"warnings,omitempty"`
+}
+
+type analysisTrace struct {
+	AnalysisID             string `json:"analysis_id"`
+	AnalysisConfigVersion  string `json:"analysis_config_version,omitempty"`
+	AnalysisCreatedAt      string `json:"analysis_created_at,omitempty"`
+	MosaicConfigVersion    string `json:"mosaic_config_version,omitempty"`
+	MosaicAlgorithmVersion string `json:"mosaic_algorithm_version,omitempty"`
+	InputMosaicURI         string `json:"input_mosaic_uri,omitempty"`
+	QPEConfigVersion       string `json:"qpe_config_version,omitempty"`
 }
 
 type forecastRunPage struct {
@@ -194,7 +218,10 @@ type analysisCycle struct {
 	RunID          string          `json:"run_id"`
 	AnalysisTime   string          `json:"analysis_time"`
 	GridID         string          `json:"grid_id"`
+	ConfigVersion  string          `json:"config_version"`
+	CreatedAt      string          `json:"created_at"`
 	Status         string          `json:"status"`
+	MosaicURI      *string         `json:"mosaic_uri"`
 	AnalysisURI    *string         `json:"analysis_uri"`
 	RadarCount     int             `json:"radar_count"`
 	CoverageRatio  *float64        `json:"valid_coverage_ratio"`
@@ -243,10 +270,17 @@ type diagnosticLegend struct {
 }
 
 type qpeSummary struct {
-	CoverageRatio    *float64 `json:"valid_coverage_ratio"`
-	MeanQualityIndex *float64 `json:"mean_quality_index"`
-	MaximumRateMMH   *float64 `json:"maximum_observed_rate_mm_h"`
-	P95RateMMH       *float64 `json:"p95_rate_mm_h"`
+	AnalysisID             string   `json:"analysis_id"`
+	AnalysisTime           string   `json:"analysis_time"`
+	GridID                 string   `json:"grid_id"`
+	QPEConfigVersion       string   `json:"qpe_config_version"`
+	MosaicConfigVersion    string   `json:"mosaic_config_version"`
+	MosaicAlgorithmVersion string   `json:"mosaic_algorithm_version"`
+	InputMosaicURI         string   `json:"input_mosaic_uri"`
+	CoverageRatio          *float64 `json:"valid_coverage_ratio"`
+	MeanQualityIndex       *float64 `json:"mean_quality_index"`
+	MaximumRateMMH         *float64 `json:"maximum_observed_rate_mm_h"`
+	P95RateMMH             *float64 `json:"p95_rate_mm_h"`
 }
 
 type productPage struct {
@@ -417,6 +451,9 @@ func (handler *Handler) listCycles(response http.ResponseWriter, request *http.R
 	catalog, degraded := handler.catalog(request.Context())
 	items := make([]cycleSummary, 0, len(catalog))
 	for _, item := range catalog {
+		if !handler.catalogCycleVisible(item.summary) {
+			continue
+		}
 		items = append(items, item.summary)
 	}
 	sort.Slice(items, func(left, right int) bool {
@@ -430,6 +467,20 @@ func (handler *Handler) listCycles(response http.ResponseWriter, request *http.R
 		SchemaVersion: workspaceContractVersion,
 		Items:         items, GeneratedAt: handler.now().Format(time.RFC3339), DegradedSources: degraded,
 	})
+}
+
+func (handler *Handler) catalogCycleVisible(item cycleSummary) bool {
+	if handler.catalogGridID != "" && item.GridID != handler.catalogGridID {
+		return false
+	}
+	if handler.catalogNeedsAnalysis && item.AnalysisID == "" {
+		return false
+	}
+	if handler.catalogDateUTC == "" {
+		return true
+	}
+	issueTime, ok := normalizedTime(item.IssueTime)
+	return ok && issueTime.Format(time.DateOnly) == handler.catalogDateUTC
 }
 
 func (handler *Handler) getCycle(response http.ResponseWriter, request *http.Request) {
@@ -520,6 +571,9 @@ func (handler *Handler) catalog(ctx context.Context) (map[string]*cycleAccumulat
 				continue
 			}
 			entry := accumulator(catalog, analysis.GridID, parsed, handler.now(), handler.executionMode)
+			if !preferAnalysis(entry.analysis, analysis) {
+				continue
+			}
 			copy := analysis
 			entry.analysis = &copy
 			entry.summary.AnalysisID = analysis.AnalysisID
@@ -545,6 +599,18 @@ func (handler *Handler) catalog(ctx context.Context) (map[string]*cycleAccumulat
 		}
 	}
 	return catalog, uniqueStrings(degraded)
+}
+
+func preferAnalysis(existing *analysisCycle, candidate analysisCycle) bool {
+	if existing == nil {
+		return true
+	}
+	candidateCreatedAt, candidateOK := normalizedTime(candidate.CreatedAt)
+	existingCreatedAt, existingOK := normalizedTime(existing.CreatedAt)
+	if candidateOK != existingOK {
+		return candidateOK
+	}
+	return candidateOK && candidateCreatedAt.After(existingCreatedAt)
 }
 
 func accumulator(
@@ -587,6 +653,11 @@ func (handler *Handler) addAnalysis(ctx context.Context, detail *cycleDetail, su
 		detail.Warnings = append(detail.Warnings, "analysis-detail")
 		full = summary
 	}
+	detail.AnalysisTrace = &analysisTrace{
+		AnalysisID:            full.AnalysisID,
+		AnalysisConfigVersion: full.ConfigVersion,
+		AnalysisCreatedAt:     full.CreatedAt,
+	}
 	for _, radar := range full.Radars {
 		item := radarView{RadarID: radar.RadarID, State: radar.State,
 			TimeOffsetSeconds: radar.TimeOffsetSeconds, MeanQualityIndex: radar.MeanQualityIndex}
@@ -601,6 +672,14 @@ func (handler *Handler) addAnalysis(ctx context.Context, detail *cycleDetail, su
 	if err := handler.readCore(ctx, "/api/v1/analysis-cycles/"+url.PathEscape(summary.AnalysisID)+"/qpe-summary", &qpe); err != nil {
 		detail.Warnings = append(detail.Warnings, "qpe-summary")
 	} else {
+		detail.AnalysisTrace.MosaicConfigVersion = qpe.MosaicConfigVersion
+		detail.AnalysisTrace.MosaicAlgorithmVersion = qpe.MosaicAlgorithmVersion
+		detail.AnalysisTrace.InputMosaicURI = qpe.InputMosaicURI
+		detail.AnalysisTrace.QPEConfigVersion = qpe.QPEConfigVersion
+		if !qpeLineageMatches(full, qpe) {
+			detail.Warnings = append(detail.Warnings, "qpe-lineage")
+			return
+		}
 		detail.Quality = qualitySummary{CoverageRatio: qpe.CoverageRatio,
 			MeanQualityIndex: qpe.MeanQualityIndex, MaximumRateMMH: qpe.MaximumRateMMH,
 			P95RateMMH: qpe.P95RateMMH}
@@ -623,6 +702,28 @@ func (handler *Handler) addAnalysis(ctx context.Context, detail *cycleDetail, su
 			}
 		}
 	}
+}
+
+func qpeLineageMatches(analysis analysisCycle, qpe qpeSummary) bool {
+	if qpe.AnalysisID != "" && qpe.AnalysisID != analysis.AnalysisID {
+		return false
+	}
+	if qpe.GridID != "" && qpe.GridID != analysis.GridID {
+		return false
+	}
+	if qpe.AnalysisTime != "" {
+		qpeTime, qpeOK := normalizedTime(qpe.AnalysisTime)
+		analysisTime, analysisOK := normalizedTime(analysis.AnalysisTime)
+		if !qpeOK || !analysisOK || !qpeTime.Equal(analysisTime) {
+			return false
+		}
+	}
+	if analysis.MosaicURI != nil && qpe.InputMosaicURI != "" &&
+		qpe.InputMosaicURI != *analysis.MosaicURI {
+		return false
+	}
+	return qpe.MosaicConfigVersion == "" || analysis.ConfigVersion == "" ||
+		qpe.MosaicConfigVersion == analysis.ConfigVersion
 }
 
 func (handler *Handler) addObservedTimeline(
@@ -711,7 +812,7 @@ func diagnosticPanel(layer diagnosticLayer, validTime string) (panelView, bool) 
 		if layer.Field == "DBZH_RAW" {
 			display = strings.ToUpper(layer.RadarID) + " 原始反射率"
 		} else if layer.Field == "DBZH_QC" {
-			display = strings.ToUpper(layer.RadarID) + " 质控后反射率"
+			display = strings.ToUpper(layer.RadarID) + " 业务质控反射率"
 		}
 	} else if layer.Field == "RATE_QPE" {
 		role = "observation"

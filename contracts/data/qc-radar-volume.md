@@ -39,6 +39,9 @@ The volume uses the exact `sweep`/`ray`/`gate` representation of its
 | `P_AP` | float32 | `[0, 1]`; `NaN` when prerequisites are unavailable | yes in Phase 1 |
 | `P_SEA_CLUTTER` | float32 | `[0, 1]`; `NaN` when prerequisites are unavailable | yes in Phase 1 |
 | `P_RADIAL_INTERFERENCE` | float32 | `[0, 1]`; `NaN` when unavailable | yes in Phase 1 |
+| `P_METEO_DUAL_POL` | float32 | `[0, 1]`; optional diagnostic fuzzy probability | when enabled |
+| `P_VERTICAL_CONSISTENCY` | float32 | `[0, 1]`; `NaN` without a higher elevation comparison | when enabled |
+| `INTERFERENCE_TYPE` | uint8 | `0` none, `1` narrow, `2` broad, `3` intermittent, `4` short-range, `5` reverse | when morphology detection is enabled |
 
 `QC_FLAGS` follows the versioned `configs/qc/flag-definitions.yaml` definition.
 Missing, low-quality, and valid no-rain remain separate states. A QC module may
