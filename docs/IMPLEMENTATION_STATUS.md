@@ -67,6 +67,7 @@ NowcastInput gate.
 | RP-039 | Four-radar quality-dominant alignment and historical hindcast complete | The historical alignment window is 300 s with an 0.80 time-quality floor, so source QC remains dominant and Z9598 at -145 s contributes to a verified 4/4-station 10:30 UTC mosaic. All 38 eligible historical cycles completed LK and 12-member STEPS products in the existing unified timeline, while gapped cycles correctly remain analysis-only |
 | RP-040 | Fujian radial-interference QC convergence and selective historical reconstruction complete | A read-only replay of the production detector audited all 110 Z9591 volumes and selected 44 affected scans. Their QC, grids and 35 dependent four-radar analyses were rebuilt; all 28 affected forecast cycles now expose corrected QPE, 24-lead LK and 12-member STEPS evidence through the existing unified workspace. This remains engineering replay rather than an operational QC sign-off |
 | RP-042 | Existing-data multi-evidence QC and acceptance framework complete; production promotion gated | The 452 available Fujian volumes support diagnostic radial morphology, dual-polarisation and within-volume vertical evidence. A 110-volume Z9591 audit classified 2,893 evidence rays with zero processing errors while exact same-input comparison preserves RP-040 hard flags, low-quality gates and mean QI. Metrics fail closed when labels, gauges, coastline, temporal or neighbouring-radar context are absent |
+| RP-043 | Seeded radial-fan closure, immutable shadow replay and historical reconstruction complete | Bounded one- or two-ray closure and short/long azimuth evidence promote only already seeded or diagnosed radial interference. A zero-error 452-volume audit adds 43 hard rays on Z9591, one on Z9598 and none on Z9593/Z9599; all 123 analyses and 114 eligible LK, application-product and 12-member STEPS cycles were rebuilt from RP-043-only inputs on the 105 shadow workspace |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -131,6 +132,27 @@ without operational promotion. The 2026-08-28 archive was replayed through
 eligible NowcastInput, pySTEPS-LK, application-product and STEPS cycles. Nine
 analysis cycles correctly remain observation-only because a contiguous
 three-frame sequence was unavailable.
+
+RP-043 closes the residual radial-fan holes visible at 2026-08-28 10:25 and
+10:45 CST without weakening the global RP-040 thresholds. One- or two-ray gaps
+are filled only when bounded by existing hard seeds and when high-reflectivity,
+validity and range-growth signatures agree. Existing RP-042 diagnostic rays can
+be promoted only when a ±4-ray discontinuity remains stronger than the ±40-ray
+background and the frozen gate-count and growth thresholds also pass. A full
+read-only audit of all 452 Fujian volumes adds 43 hard rays on Z9591 and one on
+Z9598, with Z9593 and Z9599 unchanged. The 105 shadow workspace completed
+452/452 QC volumes and grids, 123/123 analyses, and 114/114 eligible
+NowcastInput, LK, application-product and 12-member STEPS cycles. The 660
+committed input frames all reference RP-043 analyses; nine ineligible cycles
+remain observation-only. Deployed artifacts confirm 1,835 flagged target gates
+at 10:25 CST and 1,836 at 10:45 CST. Details are in
+`docs/RP043_福建径向干扰扇区闭合与历史重建记录.md`.
+
+The 105 shadow workspace retains only the current RP-043 derived data chain.
+Superseded QC, grid, analysis, nowcast-input and product artifacts are removed;
+the MinIO bucket runs with versioning suspended and lifecycle cleanup for
+noncurrent derived objects. Immutable raw and normalized radar inputs remain
+available for reproducible reprocessing.
 
 ## Completed engineering foundation
 

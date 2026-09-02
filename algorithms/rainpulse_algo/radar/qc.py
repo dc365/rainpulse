@@ -80,6 +80,31 @@ class VerticalConsistencyConfig:
 
 
 @dataclass(frozen=True)
+class RadialFanClosureConfig:
+    enabled: bool
+    maximum_gap_rays: int
+    minimum_valid_gate_fraction: float
+    minimum_high_dbzh: float
+    minimum_high_gate_fraction: float
+    minimum_high_run: int
+    minimum_range_growth_db: float
+
+
+@dataclass(frozen=True)
+class RadialMultiscalePromotionConfig:
+    enabled: bool
+    echo_threshold_dbzh: float
+    short_window_rays: int
+    long_window_rays: int
+    minimum_score_gate_fraction: float
+    minimum_edge_jump_gate_fraction: float
+    minimum_diagnostic_gates: int
+    minimum_high_dbzh: float
+    minimum_high_gates: int
+    minimum_range_growth_db: float
+
+
+@dataclass(frozen=True)
 class RadialMorphologyConfig:
     enabled: bool
     mode: Literal["diagnostic_only", "quality_index"]
@@ -89,6 +114,8 @@ class RadialMorphologyConfig:
     short_range_max_m: float
     reverse_minimum_drop_db: float
     diagnostic_probability: float
+    fan_closure: RadialFanClosureConfig
+    multiscale_promotion: RadialMultiscalePromotionConfig
 
 
 @dataclass(frozen=True)
@@ -250,6 +277,8 @@ def load_qc_profile(path: str | Path, flag_path: str | Path) -> BasicQCProfile:
     vertical = value.get("vertical_consistency") or {}
     radial = value["radial_interference"]
     morphology = radial.get("morphology") or {}
+    fan_closure = morphology.get("fan_closure") or {}
+    multiscale = morphology.get("multiscale_promotion") or {}
     clutter = value["static_ground_clutter"]
     sea_ap = value["sea_ap"]
     qi = value["quality_index"]
@@ -322,6 +351,51 @@ def load_qc_profile(path: str | Path, flag_path: str | Path) -> BasicQCProfile:
                 ),
                 diagnostic_probability=float(
                     morphology.get("diagnostic_probability", 0.65)
+                ),
+                fan_closure=RadialFanClosureConfig(
+                    enabled=bool(fan_closure.get("enabled", False)),
+                    maximum_gap_rays=int(fan_closure.get("maximum_gap_rays", 2)),
+                    minimum_valid_gate_fraction=float(
+                        fan_closure.get("minimum_valid_gate_fraction", 0.90)
+                    ),
+                    minimum_high_dbzh=float(
+                        fan_closure.get("minimum_high_dbzh", 45.0)
+                    ),
+                    minimum_high_gate_fraction=float(
+                        fan_closure.get("minimum_high_gate_fraction", 0.50)
+                    ),
+                    minimum_high_run=int(
+                        fan_closure.get("minimum_high_run", 120)
+                    ),
+                    minimum_range_growth_db=float(
+                        fan_closure.get("minimum_range_growth_db", 20.0)
+                    ),
+                ),
+                multiscale_promotion=RadialMultiscalePromotionConfig(
+                    enabled=bool(multiscale.get("enabled", False)),
+                    echo_threshold_dbzh=float(
+                        multiscale.get("echo_threshold_dbzh", 30.0)
+                    ),
+                    short_window_rays=int(multiscale.get("short_window_rays", 4)),
+                    long_window_rays=int(multiscale.get("long_window_rays", 40)),
+                    minimum_score_gate_fraction=float(
+                        multiscale.get("minimum_score_gate_fraction", 0.02)
+                    ),
+                    minimum_edge_jump_gate_fraction=float(
+                        multiscale.get("minimum_edge_jump_gate_fraction", 0.10)
+                    ),
+                    minimum_diagnostic_gates=int(
+                        multiscale.get("minimum_diagnostic_gates", 100)
+                    ),
+                    minimum_high_dbzh=float(
+                        multiscale.get("minimum_high_dbzh", 45.0)
+                    ),
+                    minimum_high_gates=int(
+                        multiscale.get("minimum_high_gates", 100)
+                    ),
+                    minimum_range_growth_db=float(
+                        multiscale.get("minimum_range_growth_db", 12.0)
+                    ),
                 ),
             ),
         ),
@@ -986,6 +1060,23 @@ def _detect_radial_interference(
             probability,
         )
 
+    if config.morphology.fan_closure.enabled:
+        _close_seeded_radial_fans(
+            dbzh,
+            valid,
+            probabilities,
+            interference_type,
+            config,
+        )
+    if config.morphology.multiscale_promotion.enabled:
+        _promote_multiscale_radial_evidence(
+            dbzh,
+            valid,
+            probabilities,
+            interference_type,
+            config,
+        )
+
     flagged_ray_count = int(
         np.count_nonzero(
             np.any(
@@ -1006,6 +1097,153 @@ def _detect_radial_interference(
         flagged_ray_count,
         type_ray_counts,
         type_gate_counts,
+    )
+
+
+def _close_seeded_radial_fans(
+    dbzh: np.ndarray,
+    valid: np.ndarray,
+    probabilities: np.ndarray,
+    interference_type: np.ndarray,
+    config: RadialInterferenceConfig,
+) -> None:
+    """Fill only bounded holes inside an already confirmed radial fan."""
+    closure = config.morphology.fan_closure
+    hard_rays = np.any(
+        np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability,
+        axis=1,
+    )
+    if np.count_nonzero(hard_rays) < 2:
+        return
+    bounded = _bounded_circular_gaps(hard_rays, closure.maximum_gap_rays)
+    for ray_index in np.flatnonzero(bounded):
+        ray_valid = valid[ray_index]
+        if not _has_radial_fan_boundary_signature(
+            dbzh[ray_index],
+            ray_valid,
+            closure,
+        ):
+            continue
+        _record_radial_type(
+            probabilities,
+            interference_type,
+            int(ray_index),
+            ray_valid,
+            "broad",
+            config.flag_probability,
+        )
+
+
+def _bounded_circular_gaps(hard_rays: np.ndarray, maximum_gap_rays: int) -> np.ndarray:
+    bounded = np.zeros(hard_rays.shape, dtype=bool)
+    ray_count = hard_rays.size
+    if ray_count == 0 or maximum_gap_rays <= 0:
+        return bounded
+    for start in np.flatnonzero(hard_rays):
+        for gap_size in range(1, maximum_gap_rays + 1):
+            interior = [int((start + offset) % ray_count) for offset in range(1, gap_size + 1)]
+            end = int((start + gap_size + 1) % ray_count)
+            if hard_rays[end] and not np.any(hard_rays[interior]):
+                bounded[interior] = True
+                break
+    return bounded
+
+
+def _has_radial_fan_boundary_signature(
+    values: np.ndarray,
+    valid: np.ndarray,
+    config: RadialFanClosureConfig,
+) -> bool:
+    if float(np.mean(valid)) < config.minimum_valid_gate_fraction:
+        return False
+    high = valid & (values >= config.minimum_high_dbzh)
+    valid_count = int(np.count_nonzero(valid))
+    if valid_count == 0:
+        return False
+    if float(np.count_nonzero(high) / valid_count) < config.minimum_high_gate_fraction:
+        return False
+    if _longest_run(high) < config.minimum_high_run:
+        return False
+    growth = _near_to_far_growth(values, valid)
+    return growth is not None and growth >= config.minimum_range_growth_db
+
+
+def _promote_multiscale_radial_evidence(
+    dbzh: np.ndarray,
+    valid: np.ndarray,
+    probabilities: np.ndarray,
+    interference_type: np.ndarray,
+    config: RadialInterferenceConfig,
+) -> None:
+    """Confirm sparse longitudinal spikes with short/long azimuth context."""
+    promotion = config.morphology.multiscale_promotion
+    diagnostic = (
+        np.nan_to_num(probabilities, nan=0.0)
+        >= config.morphology.diagnostic_probability
+    ) & (
+        np.nan_to_num(probabilities, nan=0.0) < config.flag_probability
+    )
+    diagnostic_counts = np.count_nonzero(diagnostic, axis=1)
+    if not np.any(diagnostic_counts >= promotion.minimum_diagnostic_gates):
+        return
+
+    echo_counts = np.count_nonzero(
+        valid & (dbzh >= promotion.echo_threshold_dbzh),
+        axis=1,
+    ).astype("float64")
+    edge_jump = np.maximum(
+        np.abs(echo_counts - np.roll(echo_counts, 1)),
+        np.abs(echo_counts - np.roll(echo_counts, -1)),
+    )
+    short_scale = _circular_window_mean(edge_jump, promotion.short_window_rays)
+    long_scale = _circular_window_mean(edge_jump, promotion.long_window_rays)
+    scale_score = short_scale - long_scale
+    gate_count = dbzh.shape[1]
+    minimum_edge_jump = promotion.minimum_edge_jump_gate_fraction * gate_count
+    minimum_score = promotion.minimum_score_gate_fraction * gate_count
+
+    for ray_index in np.flatnonzero(
+        diagnostic_counts >= promotion.minimum_diagnostic_gates
+    ):
+        if edge_jump[ray_index] < minimum_edge_jump:
+            continue
+        if scale_score[ray_index] < minimum_score:
+            continue
+        high = valid[ray_index] & (
+            dbzh[ray_index] >= promotion.minimum_high_dbzh
+        )
+        if np.count_nonzero(high) < promotion.minimum_high_gates:
+            continue
+        growth = _near_to_far_growth(dbzh[ray_index], valid[ray_index])
+        if growth is None or growth < promotion.minimum_range_growth_db:
+            continue
+        _record_radial_type(
+            probabilities,
+            interference_type,
+            int(ray_index),
+            diagnostic[ray_index],
+            _interference_type_name(interference_type[ray_index], diagnostic[ray_index]),
+            config.flag_probability,
+        )
+
+
+def _circular_window_mean(values: np.ndarray, radius: int) -> np.ndarray:
+    if radius <= 0:
+        return values.astype("float64", copy=True)
+    total = np.zeros(values.shape, dtype="float64")
+    for offset in range(-radius, radius + 1):
+        total += np.roll(values, offset)
+    return total / (2 * radius + 1)
+
+
+def _interference_type_name(types: np.ndarray, mask: np.ndarray) -> str:
+    codes, counts = np.unique(types[mask], return_counts=True)
+    if codes.size == 0:
+        return "narrow"
+    code = int(codes[int(np.argmax(counts))])
+    return next(
+        (name for name, candidate in INTERFERENCE_TYPE_CODES.items() if candidate == code),
+        "narrow",
     )
 
 
@@ -1062,6 +1300,15 @@ def _near_to_far_drop(values: np.ndarray, valid: np.ndarray) -> float:
     if near.size == 0 or far.size == 0:
         return 0.0
     return float(np.median(near) - np.median(far))
+
+
+def _near_to_far_growth(values: np.ndarray, valid: np.ndarray) -> float | None:
+    quartile = max(values.size // 4, 1)
+    near = values[:quartile][valid[:quartile]]
+    far = values[-quartile:][valid[-quartile:]]
+    if near.size == 0 or far.size == 0:
+        return None
+    return float(np.median(far) - np.median(near))
 
 
 def _rising_membership(values: np.ndarray, bounds: tuple[float, float]) -> np.ndarray:
@@ -1243,6 +1490,12 @@ def _module_records(
                 "morphology_diagnostic_only": float(
                     profile.radial_interference.morphology.mode == "diagnostic_only"
                 ),
+                "fan_closure_enabled": float(
+                    profile.radial_interference.morphology.fan_closure.enabled
+                ),
+                "multiscale_promotion_enabled": float(
+                    profile.radial_interference.morphology.multiscale_promotion.enabled
+                ),
             },
         ),
         QCModuleRecord(
@@ -1322,6 +1575,29 @@ def _validate_profile(profile: BasicQCProfile) -> None:
         raise QCConfigError("radial diagnostic probability must not exceed flag probability")
     if not 0 <= morphology.diagnostic_probability <= 1:
         raise QCConfigError("invalid radial diagnostic probability")
+    closure = morphology.fan_closure
+    if closure.maximum_gap_rays <= 0 or closure.minimum_high_run < 2:
+        raise QCConfigError("invalid radial fan-closure dimensions")
+    if not 0 <= closure.minimum_valid_gate_fraction <= 1:
+        raise QCConfigError("invalid radial fan-closure valid fraction")
+    if not 0 <= closure.minimum_high_gate_fraction <= 1:
+        raise QCConfigError("invalid radial fan-closure high-gate fraction")
+    if closure.minimum_range_growth_db <= 0:
+        raise QCConfigError("invalid radial fan-closure range growth")
+    multiscale = morphology.multiscale_promotion
+    if (
+        multiscale.short_window_rays <= 0
+        or multiscale.long_window_rays <= multiscale.short_window_rays
+    ):
+        raise QCConfigError("radial multiscale windows must increase")
+    if multiscale.minimum_diagnostic_gates < 2 or multiscale.minimum_high_gates < 2:
+        raise QCConfigError("invalid radial multiscale gate counts")
+    if not 0 <= multiscale.minimum_score_gate_fraction <= 1:
+        raise QCConfigError("invalid radial multiscale score fraction")
+    if not 0 <= multiscale.minimum_edge_jump_gate_fraction <= 1:
+        raise QCConfigError("invalid radial multiscale edge fraction")
+    if multiscale.minimum_range_growth_db <= 0:
+        raise QCConfigError("invalid radial multiscale range growth")
     if profile.dual_pol_fuzzy.enabled:
         required_weights = {"rhohv", "snr", "zdr", "phidp"}
         if set(profile.dual_pol_fuzzy.weights) != required_weights:
