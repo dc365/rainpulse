@@ -13,8 +13,12 @@ from rainpulse_algo.radar.config import load_radar_config
 from rainpulse_algo.radar.fmt import decode_fmt_volume
 from rainpulse_algo.radar.health import assess_volume_health, load_radar_health_config
 from rainpulse_algo.radar.qc import (
+    INTERFERENCE_TYPE_CODES,
     QCInputError,
+    _detect_radial_interference,
+    _dual_pol_meteorological_probability,
     _radial_probability,
+    _vertical_consistency_probabilities,
     apply_basic_qc,
     audit_long_range_saturated_radials,
     load_qc_profile,
@@ -30,6 +34,7 @@ from .test_object_store import FakeMinio
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 QC_CONFIG = REPOSITORY_ROOT / "configs" / "qc" / "rp008-basic-v1.yaml"
+RP042_QC_CONFIG = REPOSITORY_ROOT / "configs" / "qc" / "rp042-fujian-evidence-v1.yaml"
 FLAG_CONFIG = REPOSITORY_ROOT / "configs" / "qc" / "flag-definitions.yaml"
 
 
@@ -84,6 +89,9 @@ def test_basic_qc_preserves_geometry_missing_and_no_rain_states(tmp_path: Path) 
     assert np.isnan(sweep["P_AP"][:]).all()
     assert np.isnan(sweep["P_SEA_CLUTTER"][:]).all()
     assert np.isnan(sweep["QI_BLOCKAGE"][:]).all()
+    assert "P_METEO_DUAL_POL" not in sweep
+    assert "P_VERTICAL_CONSISTENCY" not in sweep
+    assert "INTERFERENCE_TYPE" not in sweep
     assert result.summary["no_rain_gate_count"] > 0
     assert result.module_status("static_ground_clutter") == "skipped"
     assert result.module_status("sea_ap") == "skipped"
@@ -201,6 +209,175 @@ def test_radial_interference_detects_two_thirds_high_long_range_ray(
     )
     assert np.nanmax(probability[:6, :]) == 0.0
     assert np.nanmax(probability[7:, :]) == 0.0
+
+
+def test_radial_morphology_classifies_interrupted_and_short_range_segments(
+    tmp_path: Path,
+) -> None:
+    profile = load_qc_profile(QC_CONFIG, FLAG_CONFIG)
+    morphology = replace(
+        profile.radial_interference.morphology,
+        enabled=True,
+        minimum_segment_gates=4,
+        intermittent_minimum_segments=3,
+        short_range_max_m=3_000.0,
+    )
+    radial = replace(profile.radial_interference, morphology=morphology)
+    dbzh = np.full((7, 40), 5.0, dtype="float32")
+    dbzh[2, 4:10] = 35.0
+    dbzh[2, 15:21] = 35.0
+    dbzh[2, 27:33] = 35.0
+    dbzh[5, 2:10] = 38.0
+    ranges = np.arange(40, dtype="float32") * 250.0
+
+    detection = _detect_radial_interference(
+        dbzh,
+        np.isfinite(dbzh),
+        radial,
+        ranges_m=ranges,
+    )
+
+    assert detection.type_ray_counts["intermittent"] == 1
+    assert detection.type_ray_counts["short_range"] == 1
+    assert np.all(
+        detection.interference_type[2, 4:10]
+        == INTERFERENCE_TYPE_CODES["intermittent"]
+    )
+    assert np.all(
+        detection.interference_type[5, 2:10]
+        == INTERFERENCE_TYPE_CODES["short_range"]
+    )
+    assert np.all(detection.probability[2, 10:15] == 0.0)
+
+
+def test_radial_morphology_classifies_reverse_range_spike(tmp_path: Path) -> None:
+    profile = load_qc_profile(QC_CONFIG, FLAG_CONFIG)
+    morphology = replace(
+        profile.radial_interference.morphology,
+        enabled=True,
+        minimum_segment_gates=8,
+        reverse_minimum_drop_db=12.0,
+    )
+    radial = replace(profile.radial_interference, morphology=morphology)
+    dbzh = np.full((7, 80), 5.0, dtype="float32")
+    dbzh[3, :] = np.linspace(45.0, 10.0, 80, dtype="float32")
+
+    detection = _detect_radial_interference(
+        dbzh,
+        np.isfinite(dbzh),
+        radial,
+        ranges_m=np.arange(80, dtype="float32") * 250.0,
+    )
+
+    assert detection.type_ray_counts["reverse"] == 1
+    assert np.count_nonzero(
+        detection.interference_type[3] == INTERFERENCE_TYPE_CODES["reverse"]
+    ) >= 8
+
+
+def test_radial_morphology_keeps_legacy_high_confidence_flags() -> None:
+    profile = load_qc_profile(RP042_QC_CONFIG, FLAG_CONFIG)
+    dbzh = np.full((7, 100), 5.0, dtype="float32")
+    dbzh[3, :] = 35.0
+
+    detection = _detect_radial_interference(
+        dbzh,
+        np.isfinite(dbzh),
+        profile.radial_interference,
+        ranges_m=np.arange(100, dtype="float32") * 250.0,
+    )
+
+    assert detection.flagged_ray_count >= 1
+    assert np.all(
+        detection.probability[3]
+        >= profile.radial_interference.flag_probability
+    )
+
+
+def test_rp042_zarr_writes_optional_evidence_fields(tmp_path: Path) -> None:
+    normalized = normalized_fixture(tmp_path)
+    profile = load_qc_profile(RP042_QC_CONFIG, FLAG_CONFIG)
+
+    result = apply_basic_qc(normalized, profile)
+    objects = build_qc_zarr_store(
+        normalized,
+        result,
+        asset_id=UUID("50000000-0000-4000-8000-000000000042"),
+        normalized_volume_uri="s3://rainpulse/radar/normalized/z9598/scan/volume.zarr",
+    )
+    sweep = open_store(objects)["sweep_000"]
+
+    assert "P_METEO_DUAL_POL" in sweep
+    assert "P_VERTICAL_CONSISTENCY" in sweep
+    assert "INTERFERENCE_TYPE" in sweep
+
+
+def test_radial_morphology_preserves_full_legacy_ray_when_segments_are_partial() -> None:
+    profile = load_qc_profile(RP042_QC_CONFIG, FLAG_CONFIG)
+    dbzh = np.full((7, 100), 5.0, dtype="float32")
+    dbzh[3, :60] = 35.0
+
+    detection = _detect_radial_interference(
+        dbzh,
+        np.isfinite(dbzh),
+        profile.radial_interference,
+        ranges_m=np.arange(100, dtype="float32") * 250.0,
+    )
+
+    assert np.all(
+        detection.probability[3]
+        >= profile.radial_interference.flag_probability
+    )
+
+
+def test_vertical_consistency_matches_next_distinct_elevation() -> None:
+    low = {
+        "dbzh": np.array([[30.0, 25.0], [20.0, 15.0]], dtype="float32"),
+        "azimuth": np.array([0.0, 180.0], dtype="float32"),
+        "range": np.array([1_000.0, 2_000.0], dtype="float32"),
+        "elevation": 0.5,
+    }
+    high = {
+        "dbzh": np.array([[28.0, 20.0], [np.nan, np.nan]], dtype="float32"),
+        "azimuth": np.array([0.2, 180.2], dtype="float32"),
+        "range": np.array([1_000.0, 2_000.0], dtype="float32"),
+        "elevation": 1.5,
+    }
+
+    probabilities = _vertical_consistency_probabilities(
+        (low, high),
+        minimum_dbzh=10.0,
+        support_tolerance_db=12.0,
+        maximum_range_m=100_000.0,
+    )
+
+    assert probabilities[0][0, 0] > 0.8
+    assert probabilities[0][1, 0] == 0.0
+    assert np.isnan(probabilities[1]).all()
+
+
+def test_dual_pol_fuzzy_probability_is_diagnostic_and_missing_aware(
+    tmp_path: Path,
+) -> None:
+    profile = load_qc_profile(QC_CONFIG, FLAG_CONFIG)
+    fuzzy = replace(profile.dual_pol_fuzzy, enabled=True)
+    dbzh = np.array([[25.0, 25.0, np.nan]], dtype="float32")
+    valid = np.isfinite(dbzh)
+    probability = _dual_pol_meteorological_probability(
+        dbzh,
+        valid,
+        np.zeros_like(valid),
+        snr=np.array([[20.0, 2.0, np.nan]], dtype="float32"),
+        rhohv=np.array([[0.99, 0.55, np.nan]], dtype="float32"),
+        zdr=np.array([[0.5, 7.8, np.nan]], dtype="float32"),
+        phidp=np.array([[40.0, 200.0, np.nan]], dtype="float32"),
+        config=fuzzy,
+        echo=profile.echo,
+    )
+
+    assert probability[0, 0] > 0.8
+    assert probability[0, 1] < 0.3
+    assert np.isnan(probability[0, 2])
 
 
 def test_radial_audit_reports_the_same_two_thirds_signature(tmp_path: Path) -> None:

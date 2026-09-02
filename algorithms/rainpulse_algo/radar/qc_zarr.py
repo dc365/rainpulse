@@ -109,6 +109,12 @@ def build_qc_zarr_store(
             "P_SEA_CLUTTER": qc_sweep.p_sea_clutter,
             "P_RADIAL_INTERFERENCE": qc_sweep.p_radial_interference,
         }
+        if result.profile.dual_pol_fuzzy.enabled:
+            fields["P_METEO_DUAL_POL"] = qc_sweep.p_meteo_dual_pol
+        if result.profile.vertical_consistency.enabled:
+            fields["P_VERTICAL_CONSISTENCY"] = qc_sweep.p_vertical_consistency
+        if result.profile.radial_interference.morphology.enabled:
+            fields["INTERFERENCE_TYPE"] = qc_sweep.interference_type
         for name, values in fields.items():
             array = group.create_dataset(
                 name,
@@ -185,11 +191,21 @@ def validate_qc_zarr_store(objects: Mapping[str, bytes]) -> dict[str, Any]:
             "P_AP",
             "P_SEA_CLUTTER",
             "P_RADIAL_INTERFERENCE",
+            "P_METEO_DUAL_POL",
+            "P_VERTICAL_CONSISTENCY",
         ):
+            if name not in group:
+                continue
             values = group[name][:]
             finite = values[np.isfinite(values)]
             if finite.size and (finite.min() < 0 or finite.max() > 1):
                 raise QCInputError(f"QC probability or quality field {name} is outside [0, 1]")
+        if "INTERFERENCE_TYPE" in group:
+            values = group["INTERFERENCE_TYPE"][:]
+            if values.shape != shape or values.dtype != np.dtype("uint8"):
+                raise QCInputError("QC interference type has invalid shape or dtype")
+            if np.any(values > 5):
+                raise QCInputError("QC interference type contains an unknown code")
         valid_total += int(np.count_nonzero(valid))
         missing_total += int(np.count_nonzero(missing))
         quality = group["QUALITY_INDEX"][:]
@@ -231,6 +247,18 @@ def _field_attributes(name: str) -> dict[str, Any]:
         return {"units": "1", "storage_dtype": "uint32"}
     if name.endswith("_MASK"):
         return {"units": "1", "valid_values": [0, 1]}
+    if name == "INTERFERENCE_TYPE":
+        return {
+            "units": "1",
+            "codes": {
+                "0": "none",
+                "1": "narrow",
+                "2": "broad",
+                "3": "intermittent",
+                "4": "short_range",
+                "5": "reverse",
+            },
+        }
     if name.startswith(("QI_", "P_")) or name == "QUALITY_INDEX":
         return {"units": "1", "valid_range": [0.0, 1.0], "missing_value": "NaN"}
     if name.startswith("DBZH"):

@@ -69,6 +69,18 @@ FLAG_COLORS = (
     "#4d78a4",
     "#1b7569",
 )
+BUSINESS_HARD_REJECT_FLAG_NAMES = (
+    "MISSING",
+    "HARDWARE_ANOMALY",
+    "RADIAL_INTERFERENCE",
+    "GROUND_CLUTTER",
+    "SEA_CLUTTER",
+    "ANOMALOUS_PROPAGATION",
+    "BIOLOGICAL_ECHO",
+)
+BUSINESS_REFLECTIVITY_MASK_RENDERERS = frozenset(
+    {"radar-diagnostic-renderer-1.1.0"}
+)
 
 
 def build_diagnostic_bundle(
@@ -204,9 +216,26 @@ def build_diagnostic_bundle(
         group, sweep_number = _lowest_dbzh_sweep(qc)
         maximum_range_km = float(np.max(group["range"][:]) / 1000.0)
         elevation_deg = float(np.nanmedian(group["elevation"][:]))
+        business_reject = _flagged_by_name(
+            group["QC_FLAGS"][:],
+            flag_definitions,
+            BUSINESS_HARD_REJECT_FLAG_NAMES,
+        )
+        business_reflectivity_title = (
+            "业务质控反射率"
+            if profile.renderer_version in BUSINESS_REFLECTIVITY_MASK_RENDERERS
+            else "质控后反射率"
+        )
         polar_specs = (
             ("dbzh-raw", "原始反射率", "DBZH_RAW", "scalar", "dBZ", REFLECTIVITY_STOPS),
-            ("dbzh-qc", "质控后反射率", "DBZH_QC", "scalar", "dBZ", REFLECTIVITY_STOPS),
+            (
+                "dbzh-qc",
+                business_reflectivity_title,
+                "DBZH_QC",
+                "scalar",
+                "dBZ",
+                REFLECTIVITY_STOPS,
+            ),
             (
                 "quality-index",
                 "极坐标质量指数",
@@ -218,6 +247,11 @@ def build_diagnostic_bundle(
         )
         for suffix, title, field, rendering, unit, stops in polar_specs:
             field_valid = np.isfinite(group[field][:])
+            if (
+                field == "DBZH_QC"
+                and profile.renderer_version in BUSINESS_REFLECTIVITY_MASK_RENDERERS
+            ):
+                field_valid &= ~business_reject
             rgba = _scalar_rgba(group[field][:], field_valid, stops)
             projected = _polar_to_ppi(
                 rgba,
@@ -400,6 +434,19 @@ def _flag_rgba(
     unflagged = valid & (flags == 0)
     rgba[unflagged] = _hex_rgba("#94a09c", 90)
     return rgba
+
+
+def _flagged_by_name(
+    flags: np.ndarray,
+    definitions: Mapping[str, int],
+    names: Sequence[str],
+) -> np.ndarray:
+    combined = np.uint32(0)
+    for name in names:
+        mask = definitions.get(name)
+        if mask is not None:
+            combined |= np.uint32(mask)
+    return (np.asarray(flags, dtype="uint32") & combined) != 0
 
 
 def _polar_to_ppi(

@@ -15,12 +15,12 @@ from rainpulse_algo.worker.object_store import (
     minio_client_from_environment,
 )
 
-from .qc import audit_long_range_saturated_radials, load_qc_profile
+from .qc import apply_basic_qc, audit_long_range_saturated_radials, load_qc_profile
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Audit normalized radar volumes for the RP-040 saturation signature."
+        description="Audit normalized radar volumes for versioned radial QC evidence."
     )
     parser.add_argument("--catalog-url", default="http://api:8080/api/v1/radar-scans")
     parser.add_argument("--radar-id", required=True)
@@ -39,6 +39,12 @@ def main() -> int:
         default=_environment_path("RAINPULSE_QC_FLAG_DEFINITIONS"),
     )
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument(
+        "--audit-mode",
+        choices=("saturation", "evidence"),
+        default="saturation",
+        help="retain RP-040 saturation-only output or evaluate all configured evidence",
+    )
     args = parser.parse_args()
 
     start = _parse_time(args.start_time)
@@ -64,17 +70,35 @@ def main() -> int:
         if scan_id in completed:
             continue
         try:
-            audit = audit_long_range_saturated_radials(
-                reader.load(str(scan["normalized_uri"])),
-                profile,
-            )
+            normalized = reader.load(str(scan["normalized_uri"]))
+            if args.audit_mode == "saturation":
+                audit = audit_long_range_saturated_radials(normalized, profile)
+                affected = audit["saturated_ray_count"] > 0
+            else:
+                summary = apply_basic_qc(normalized, profile).summary
+                type_counts = summary["interference_type_ray_counts"]
+                audit = {
+                    "signature_version": "configured-radial-evidence-v1",
+                    "qc_profile": profile.profile_version,
+                    "qc_pipeline_version": profile.pipeline_version,
+                    "evidence_ray_count": int(sum(type_counts.values())),
+                    "flagged_ray_count": summary["radial_interference_ray_count"],
+                    "flagged_gate_count": summary["radial_interference_gate_count"],
+                    "flagged_area_km2": summary["radial_interference_area_km2"],
+                    "interference_type_ray_counts": type_counts,
+                    "interference_type_gate_counts": summary[
+                        "interference_type_gate_counts"
+                    ],
+                    "module_statuses": summary["module_statuses"],
+                }
+                affected = audit["evidence_ray_count"] > 0
             record = {
                 "scan_id": scan_id,
                 "radar_id": scan["radar_id"],
                 "volume_start_time": scan["volume_start_time"],
                 "volume_end_time": scan["volume_end_time"],
                 "normalized_uri": scan["normalized_uri"],
-                "affected": audit["saturated_ray_count"] > 0,
+                "affected": affected,
                 **audit,
             }
         except Exception as error:  # noqa: BLE001 - retain per-scan evidence and continue
@@ -94,6 +118,7 @@ def main() -> int:
             end=end,
             profile_version=profile.profile_version,
             pipeline_version=profile.pipeline_version,
+            audit_mode=args.audit_mode,
             expected_count=len(scans),
             records=completed,
         )
@@ -106,6 +131,7 @@ def main() -> int:
                     "scan_id": scan_id,
                     "affected": record["affected"],
                     "saturated_ray_count": record.get("saturated_ray_count"),
+                    "evidence_ray_count": record.get("evidence_ray_count"),
                     "error": record.get("error"),
                     "catalog_index": index,
                 },
@@ -120,6 +146,7 @@ def main() -> int:
         end=end,
         profile_version=profile.profile_version,
         pipeline_version=profile.pipeline_version,
+        audit_mode=args.audit_mode,
         expected_count=len(scans),
         records=completed,
     )
@@ -155,6 +182,7 @@ def _build_manifest(
     end: datetime,
     profile_version: str,
     pipeline_version: str,
+    audit_mode: str,
     expected_count: int,
     records: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
@@ -172,6 +200,7 @@ def _build_manifest(
         "end_time": end.isoformat(),
         "qc_profile": profile_version,
         "qc_pipeline_version": pipeline_version,
+        "audit_mode": audit_mode,
         "summary": {
             "expected_scan_count": expected_count,
             "completed_scan_count": len(ordered),

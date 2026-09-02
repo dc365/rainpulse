@@ -11,6 +11,8 @@ import yaml
 import zarr
 from zarr.storage import MemoryStore
 
+from .qc_metrics import polar_mask_area_km2
+
 # A constant-power transmitter/interference signal grows with range after the
 # radar's range correction and can occupy a contiguous fan of neighbouring
 # rays.  Immediate-neighbour differencing cannot see the interior of that fan.
@@ -23,6 +25,15 @@ _SATURATED_RADIAL_MINIMUM_HIGH_FRACTION = 0.60
 _SATURATED_RADIAL_MINIMUM_HIGH_RUN = 400
 _SATURATED_RADIAL_MINIMUM_RANGE_GROWTH_DB = 12.0
 _SATURATED_RADIAL_SIGNATURE_VERSION = "long-range-saturated-radial-v2"
+
+INTERFERENCE_TYPE_CODES = {
+    "none": 0,
+    "narrow": 1,
+    "broad": 2,
+    "intermittent": 3,
+    "short_range": 4,
+    "reverse": 5,
+}
 
 
 class QCConfigError(ValueError):
@@ -50,12 +61,44 @@ class EchoConfig:
 
 
 @dataclass(frozen=True)
+class DualPolFuzzyConfig:
+    enabled: bool
+    mode: Literal["diagnostic_only", "quality_index"]
+    zdr_plausible_range_db: tuple[float, float]
+    zdr_transition_db: float
+    phidp_step_range_deg: tuple[float, float]
+    weights: dict[str, float]
+
+
+@dataclass(frozen=True)
+class VerticalConsistencyConfig:
+    enabled: bool
+    mode: Literal["diagnostic_only", "radial_evidence"]
+    minimum_dbzh: float
+    support_tolerance_db: float
+    maximum_range_m: float
+
+
+@dataclass(frozen=True)
+class RadialMorphologyConfig:
+    enabled: bool
+    mode: Literal["diagnostic_only", "quality_index"]
+    candidate_difference_db: float
+    minimum_segment_gates: int
+    intermittent_minimum_segments: int
+    short_range_max_m: float
+    reverse_minimum_drop_db: float
+    diagnostic_probability: float
+
+
+@dataclass(frozen=True)
 class RadialInterferenceConfig:
     minimum_valid_gate_fraction: float
     minimum_consecutive_gates: int
     neighbour_difference_db: float
     low_quality_probability: float
     flag_probability: float
+    morphology: RadialMorphologyConfig
 
 
 @dataclass(frozen=True)
@@ -88,6 +131,8 @@ class BasicQCProfile:
     flag_definition_version: str
     health_gate: HealthGateConfig
     echo: EchoConfig
+    dual_pol_fuzzy: DualPolFuzzyConfig
+    vertical_consistency: VerticalConsistencyConfig
     radial_interference: RadialInterferenceConfig
     static_ground_clutter: StaticGroundClutterConfig
     sea_ap: SeaAPConfig
@@ -109,6 +154,15 @@ class SaturatedRadialEvidence:
             "range_growth_db": self.range_growth_db,
             "peak_dbzh": self.peak_dbzh,
         }
+
+
+@dataclass(frozen=True)
+class RadialInterferenceDetection:
+    probability: np.ndarray
+    interference_type: np.ndarray
+    flagged_ray_count: int
+    type_ray_counts: dict[str, int]
+    type_gate_counts: dict[str, int]
 
 
 @dataclass(frozen=True)
@@ -148,6 +202,9 @@ class QCSweep:
     p_ap: np.ndarray
     p_sea_clutter: np.ndarray
     p_radial_interference: np.ndarray
+    p_meteo_dual_pol: np.ndarray
+    p_vertical_consistency: np.ndarray
+    interference_type: np.ndarray
 
 
 @dataclass(frozen=True)
@@ -189,7 +246,10 @@ def load_qc_profile(path: str | Path, flag_path: str | Path) -> BasicQCProfile:
 
     health = value["health_gate"]
     echo = value["echo"]
+    dual_pol = value.get("dual_pol_fuzzy") or {}
+    vertical = value.get("vertical_consistency") or {}
     radial = value["radial_interference"]
+    morphology = radial.get("morphology") or {}
     clutter = value["static_ground_clutter"]
     sea_ap = value["sea_ap"]
     qi = value["quality_index"]
@@ -209,12 +269,61 @@ def load_qc_profile(path: str | Path, flag_path: str | Path) -> BasicQCProfile:
             rhohv_meteo_range=_pair(echo["rhohv_meteo_range"]),
             fallback_meteo_probability=float(echo["fallback_meteo_probability"]),
         ),
+        dual_pol_fuzzy=DualPolFuzzyConfig(
+            enabled=bool(dual_pol.get("enabled", False)),
+            mode=dual_pol.get("mode", "diagnostic_only"),
+            zdr_plausible_range_db=_pair(
+                dual_pol.get("zdr_plausible_range_db", [-2.0, 5.0])
+            ),
+            zdr_transition_db=float(dual_pol.get("zdr_transition_db", 2.0)),
+            phidp_step_range_deg=_pair(
+                dual_pol.get("phidp_step_range_deg", [3.0, 30.0])
+            ),
+            weights={
+                name: float(weight)
+                for name, weight in (
+                    dual_pol.get("weights")
+                    or {"rhohv": 0.55, "snr": 0.15, "zdr": 0.15, "phidp": 0.15}
+                ).items()
+            },
+        ),
+        vertical_consistency=VerticalConsistencyConfig(
+            enabled=bool(vertical.get("enabled", False)),
+            mode=vertical.get("mode", "diagnostic_only"),
+            minimum_dbzh=float(vertical.get("minimum_dbzh", 10.0)),
+            support_tolerance_db=float(vertical.get("support_tolerance_db", 15.0)),
+            maximum_range_m=float(vertical.get("maximum_range_m", 150_000.0)),
+        ),
         radial_interference=RadialInterferenceConfig(
             minimum_valid_gate_fraction=float(radial["minimum_valid_gate_fraction"]),
             minimum_consecutive_gates=int(radial["minimum_consecutive_gates"]),
             neighbour_difference_db=float(radial["neighbour_difference_db"]),
             low_quality_probability=float(radial["low_quality_probability"]),
             flag_probability=float(radial["flag_probability"]),
+            morphology=RadialMorphologyConfig(
+                enabled=bool(morphology.get("enabled", False)),
+                mode=morphology.get("mode", "diagnostic_only"),
+                candidate_difference_db=float(
+                    morphology.get(
+                        "candidate_difference_db", radial["neighbour_difference_db"]
+                    )
+                ),
+                minimum_segment_gates=int(
+                    morphology.get("minimum_segment_gates", 12)
+                ),
+                intermittent_minimum_segments=int(
+                    morphology.get("intermittent_minimum_segments", 3)
+                ),
+                short_range_max_m=float(
+                    morphology.get("short_range_max_m", 60_000.0)
+                ),
+                reverse_minimum_drop_db=float(
+                    morphology.get("reverse_minimum_drop_db", 12.0)
+                ),
+                diagnostic_probability=float(
+                    morphology.get("diagnostic_probability", 0.65)
+                ),
+            ),
         ),
         static_ground_clutter=StaticGroundClutterConfig(
             asset_uri=clutter["asset_uri"],
@@ -263,8 +372,13 @@ def apply_basic_qc(
     if health.get("radar_id") != root.attrs.get("radar_id"):
         raise QCInputError("radar health identity differs from normalized volume")
 
+    vertical_probabilities = _volume_vertical_consistency(root, profile)
     sweeps: list[QCSweep] = []
     radial_ray_count = 0
+    radial_gate_count = 0
+    radial_area_km2 = 0.0
+    type_ray_counts = {name: 0 for name in INTERFERENCE_TYPE_CODES if name != "none"}
+    type_gate_counts = {name: 0 for name in INTERFERENCE_TYPE_CODES if name != "none"}
     missing_count = 0
     low_quality_count = 0
     valid_count = 0
@@ -298,16 +412,56 @@ def apply_basic_qc(
 
         snr = group["SNR"][:] if "SNR" in group else None
         rhohv = group["RHOHV"][:] if "RHOHV" in group else None
+        zdr = group["ZDR"][:] if "ZDR" in group else None
+        phidp = group["PHIDP"][:] if "PHIDP" in group else None
         p_meteo = _meteorological_probability(dbzh, valid, no_rain, snr, rhohv, profile)
+        p_meteo_dual_pol = _dual_pol_meteorological_probability(
+            dbzh,
+            valid,
+            no_rain,
+            snr=snr,
+            rhohv=rhohv,
+            zdr=zdr,
+            phidp=phidp,
+            config=profile.dual_pol_fuzzy,
+            echo=profile.echo,
+        )
+        if profile.dual_pol_fuzzy.mode == "quality_index":
+            available = np.isfinite(p_meteo_dual_pol)
+            p_meteo[available] = p_meteo_dual_pol[available]
         low_snr = np.zeros(dbzh.shape, dtype=bool)
         if snr is not None:
             low_snr = valid & ~no_rain & np.isfinite(snr) & (snr < profile.echo.low_snr_db)
             flags[low_snr] |= profile.flag_masks["LOW_SNR"]
 
-        p_radial, radial_rays = _radial_probability(dbzh, valid, profile.radial_interference)
+        ranges = group["range"][:]
+        p_vertical = vertical_probabilities.get(
+            name, np.full(dbzh.shape, np.nan, dtype="float32")
+        )
+        detection = _detect_radial_interference(
+            dbzh,
+            valid,
+            profile.radial_interference,
+            ranges_m=ranges,
+            vertical_consistency=(
+                p_vertical
+                if profile.vertical_consistency.mode == "radial_evidence"
+                else None
+            ),
+        )
+        p_radial = detection.probability
         radial_flags = valid & (p_radial >= profile.radial_interference.flag_probability)
         flags[radial_flags] |= profile.flag_masks["RADIAL_INTERFERENCE"]
-        radial_ray_count += radial_rays
+        radial_ray_count += detection.flagged_ray_count
+        radial_gate_count += int(np.count_nonzero(radial_flags))
+        radial_area_km2 += polar_mask_area_km2(
+            radial_flags,
+            ranges,
+            group["azimuth"][:],
+        )
+        for type_name in type_ray_counts:
+            type_ray_counts[type_name] += detection.type_ray_counts[type_name]
+            type_gate_counts[type_name] += detection.type_gate_counts[type_name]
 
         sweep_maps = (ancillary_maps or {}).get(name, {})
         if clutter_available:
@@ -335,8 +489,18 @@ def apply_basic_qc(
         for probability in (p_ground, p_sea, p_ap):
             available = np.isfinite(probability)
             qi_meteo[available] *= 1.0 - probability[available]
-        qi_interference = np.where(valid, 1.0 - np.nan_to_num(p_radial, nan=0.0), np.nan)
-        ranges = group["range"][:]
+        operational_radial = p_radial
+        if profile.radial_interference.morphology.mode == "diagnostic_only":
+            operational_radial = np.where(
+                p_radial >= profile.radial_interference.flag_probability,
+                p_radial,
+                0.0,
+            )
+        qi_interference = np.where(
+            valid,
+            1.0 - np.nan_to_num(operational_radial, nan=0.0),
+            np.nan,
+        )
         range_quality = _range_quality(ranges, profile.quality_index.minimum_range_quality)
         qi_range = np.broadcast_to(range_quality, dbzh.shape).astype("float32", copy=True)
         qi_range[missing] = np.nan
@@ -362,7 +526,10 @@ def apply_basic_qc(
         low_quality = valid & (
             (quality < profile.quality_index.low_quality_threshold)
             | low_snr
-            | (p_radial >= profile.radial_interference.low_quality_probability)
+            | (
+                operational_radial
+                >= profile.radial_interference.low_quality_probability
+            )
         )
         flags[low_quality] |= profile.flag_masks["LOW_QUALITY"]
         dbzh_qc = dbzh.copy()
@@ -391,6 +558,9 @@ def apply_basic_qc(
                 p_ap=p_ap.astype("float32"),
                 p_sea_clutter=p_sea.astype("float32"),
                 p_radial_interference=p_radial.astype("float32"),
+                p_meteo_dual_pol=p_meteo_dual_pol.astype("float32"),
+                p_vertical_consistency=p_vertical.astype("float32"),
+                interference_type=detection.interference_type,
             )
         )
         missing_count += int(np.count_nonzero(missing))
@@ -398,11 +568,20 @@ def apply_basic_qc(
         valid_count += int(np.count_nonzero(valid))
         no_rain_count += int(np.count_nonzero(no_rain))
 
+    dual_pol_available = any(
+        np.any(np.isfinite(sweep.p_meteo_dual_pol)) for sweep in sweeps
+    )
+    vertical_available = any(
+        np.any(np.isfinite(sweep.p_vertical_consistency)) for sweep in sweeps
+    )
     modules = _module_records(
         profile,
         clutter_available=clutter_available,
         sea_ap_available=sea_ap_available,
+        dual_pol_available=dual_pol_available,
+        vertical_available=vertical_available,
         radial_ray_count=radial_ray_count,
+        type_ray_counts=type_ray_counts,
         ground_count=ground_count,
         sea_count=sea_count,
         ap_count=ap_count,
@@ -425,6 +604,10 @@ def apply_basic_qc(
         "low_quality_gate_count": low_quality_count,
         "no_rain_gate_count": no_rain_count,
         "radial_interference_ray_count": radial_ray_count,
+        "radial_interference_gate_count": radial_gate_count,
+        "radial_interference_area_km2": round(radial_area_km2, 6),
+        "interference_type_ray_counts": type_ray_counts,
+        "interference_type_gate_counts": type_gate_counts,
         "ground_clutter_gate_count": ground_count,
         "sea_clutter_gate_count": sea_count,
         "ap_gate_count": ap_count,
@@ -532,51 +715,400 @@ def _meteorological_probability(
     return probability
 
 
+def _dual_pol_meteorological_probability(
+    dbzh: np.ndarray,
+    valid: np.ndarray,
+    no_rain: np.ndarray,
+    *,
+    snr: np.ndarray | None,
+    rhohv: np.ndarray | None,
+    zdr: np.ndarray | None,
+    phidp: np.ndarray | None,
+    config: DualPolFuzzyConfig,
+    echo: EchoConfig,
+) -> np.ndarray:
+    probability = np.full(dbzh.shape, np.nan, dtype="float32")
+    if not config.enabled:
+        return probability
+    weighted = np.zeros(dbzh.shape, dtype="float32")
+    weight_sum = np.zeros(dbzh.shape, dtype="float32")
+
+    def add(values: np.ndarray | None, membership: np.ndarray, name: str) -> None:
+        if values is None:
+            return
+        weight = config.weights[name]
+        available = valid & np.isfinite(values) & np.isfinite(membership)
+        weighted[available] += membership[available] * weight
+        weight_sum[available] += weight
+
+    if rhohv is not None:
+        add(
+            rhohv,
+            _rising_membership(rhohv, echo.rhohv_meteo_range),
+            "rhohv",
+        )
+    if snr is not None:
+        add(snr, _rising_membership(snr, echo.snr_meteo_range_db), "snr")
+    if zdr is not None:
+        add(
+            zdr,
+            _trapezoid_membership(
+                zdr,
+                config.zdr_plausible_range_db,
+                config.zdr_transition_db,
+            ),
+            "zdr",
+        )
+    if phidp is not None:
+        step = _minimum_circular_neighbour_step(phidp, period=360.0)
+        lower, upper = config.phidp_step_range_deg
+        smoothness = 1.0 - np.clip((step - lower) / (upper - lower), 0.0, 1.0)
+        add(phidp, smoothness.astype("float32"), "phidp")
+
+    available = weight_sum > 0
+    probability[available] = weighted[available] / weight_sum[available]
+    probability[no_rain] = 1.0
+    probability[~valid] = np.nan
+    return probability
+
+
+def _volume_vertical_consistency(
+    root: zarr.Group,
+    profile: BasicQCProfile,
+) -> dict[str, np.ndarray]:
+    if not profile.vertical_consistency.enabled:
+        return {}
+    inputs: list[dict[str, Any]] = []
+    names: list[str] = []
+    for sweep_number in root["sweep_number"][:]:
+        name = f"sweep_{int(sweep_number):03d}"
+        group = root[name]
+        shape = (len(group["azimuth"]), len(group["range"]))
+        dbzh = (
+            group["DBZH"][:].astype("float32", copy=False)
+            if "DBZH" in group
+            else np.full(shape, np.nan, dtype="float32")
+        )
+        inputs.append(
+            {
+                "dbzh": dbzh,
+                "azimuth": group["azimuth"][:],
+                "range": group["range"][:],
+                "elevation": float(np.nanmedian(group["elevation"][:])),
+            }
+        )
+        names.append(name)
+    values = _vertical_consistency_probabilities(
+        tuple(inputs),
+        minimum_dbzh=profile.vertical_consistency.minimum_dbzh,
+        support_tolerance_db=profile.vertical_consistency.support_tolerance_db,
+        maximum_range_m=profile.vertical_consistency.maximum_range_m,
+    )
+    return dict(zip(names, values, strict=True))
+
+
+def _vertical_consistency_probabilities(
+    sweeps: tuple[dict[str, Any], ...],
+    *,
+    minimum_dbzh: float,
+    support_tolerance_db: float,
+    maximum_range_m: float,
+) -> tuple[np.ndarray, ...]:
+    results = [
+        np.full(np.asarray(sweep["dbzh"]).shape, np.nan, dtype="float32")
+        for sweep in sweeps
+    ]
+    for low_index, low in enumerate(sweeps):
+        higher = [
+            (index, item)
+            for index, item in enumerate(sweeps)
+            if float(item["elevation"]) > float(low["elevation"]) + 0.2
+        ]
+        if not higher:
+            continue
+        _, high = min(higher, key=lambda item: float(item[1]["elevation"]))
+        low_dbzh = np.asarray(low["dbzh"], dtype="float32")
+        high_dbzh = np.asarray(high["dbzh"], dtype="float32")
+        if low_dbzh.ndim != 2 or high_dbzh.ndim != 2:
+            raise QCInputError("vertical consistency expects two-dimensional sweeps")
+        ray_index = _nearest_azimuth_indices(
+            np.asarray(low["azimuth"], dtype="float64"),
+            np.asarray(high["azimuth"], dtype="float64"),
+        )
+        gate_index = _nearest_coordinate_indices(
+            np.asarray(low["range"], dtype="float64"),
+            np.asarray(high["range"], dtype="float64"),
+        )
+        matched = high_dbzh[ray_index[:, None], gate_index[None, :]]
+        eligible = (
+            np.isfinite(low_dbzh)
+            & (low_dbzh >= minimum_dbzh)
+            & (np.asarray(low["range"])[None, :] <= maximum_range_m)
+        )
+        difference = np.maximum(low_dbzh - matched, 0.0)
+        consistency = 1.0 - np.clip(difference / support_tolerance_db, 0.0, 1.0)
+        consistency[eligible & ~np.isfinite(matched)] = 0.0
+        results[low_index][eligible] = consistency[eligible]
+    return tuple(results)
+
+
 def _radial_probability(
     dbzh: np.ndarray,
     valid: np.ndarray,
     config: RadialInterferenceConfig,
 ) -> tuple[np.ndarray, int]:
+    detection = _detect_radial_interference(dbzh, valid, config)
+    return detection.probability, detection.flagged_ray_count
+
+
+def _detect_radial_interference(
+    dbzh: np.ndarray,
+    valid: np.ndarray,
+    config: RadialInterferenceConfig,
+    *,
+    ranges_m: np.ndarray | None = None,
+    vertical_consistency: np.ndarray | None = None,
+) -> RadialInterferenceDetection:
     probabilities = np.zeros(dbzh.shape, dtype="float32")
     probabilities[~valid] = np.nan
+    interference_type = np.zeros(dbzh.shape, dtype="uint8")
+    type_ray_counts = {name: 0 for name in INTERFERENCE_TYPE_CODES if name != "none"}
+    type_gate_counts = {name: 0 for name in INTERFERENCE_TYPE_CODES if name != "none"}
     if dbzh.shape[0] < 2:
-        return probabilities, 0
-    flagged_count = 0
+        return RadialInterferenceDetection(
+            probabilities,
+            interference_type,
+            0,
+            type_ray_counts,
+            type_gate_counts,
+        )
+    ranges = (
+        np.asarray(ranges_m, dtype="float64")
+        if ranges_m is not None
+        else np.arange(dbzh.shape[1], dtype="float64")
+    )
+    if ranges.shape != (dbzh.shape[1],):
+        raise QCInputError("radial interference range coordinate differs from gate shape")
+    if vertical_consistency is not None and vertical_consistency.shape != dbzh.shape:
+        raise QCInputError("vertical consistency differs from radial gate shape")
+
     for ray_index in range(dbzh.shape[0]):
         ray_valid = valid[ray_index]
-        if np.mean(ray_valid) < config.minimum_valid_gate_fraction:
-            continue
-        if _longest_run(ray_valid) < config.minimum_consecutive_gates:
-            continue
         if _is_long_range_saturated_radial(dbzh[ray_index], ray_valid):
-            probabilities[ray_index, ray_valid] = config.flag_probability
-            flagged_count += 1
+            _record_radial_type(
+                probabilities,
+                interference_type,
+                ray_index,
+                ray_valid,
+                "broad",
+                config.flag_probability,
+            )
             continue
-        neighbour_index = (ray_index + 1) % dbzh.shape[0]
-        if dbzh.shape[0] > 2:
-            previous = (ray_index - 1) % dbzh.shape[0]
-            previous_values = dbzh[previous]
-            next_values = dbzh[neighbour_index]
-            previous_finite = np.isfinite(previous_values)
-            next_finite = np.isfinite(next_values)
-            baseline = np.full(dbzh.shape[1], np.nan, dtype="float32")
-            both = previous_finite & next_finite
-            baseline[both] = (previous_values[both] + next_values[both]) / 2.0
-            only_previous = previous_finite & ~next_finite
-            baseline[only_previous] = previous_values[only_previous]
-            only_next = next_finite & ~previous_finite
-            baseline[only_next] = next_values[only_next]
-        else:
-            baseline = dbzh[neighbour_index]
+        baseline = _neighbour_baseline(dbzh, ray_index)
         overlap = ray_valid & np.isfinite(baseline)
-        if not np.any(overlap):
+        legacy_detected = (
+            np.mean(ray_valid) >= config.minimum_valid_gate_fraction
+            and _longest_run(ray_valid) >= config.minimum_consecutive_gates
+            and np.any(overlap)
+            and float(
+                np.median(np.abs(dbzh[ray_index, overlap] - baseline[overlap]))
+            )
+            >= config.neighbour_difference_db
+        )
+        if legacy_detected and not config.morphology.enabled:
+            _record_radial_type(
+                probabilities,
+                interference_type,
+                ray_index,
+                ray_valid,
+                "narrow",
+                config.flag_probability,
+            )
             continue
-        difference = float(np.median(np.abs(dbzh[ray_index, overlap] - baseline[overlap])))
-        if difference < config.neighbour_difference_db:
+        if not config.morphology.enabled or not np.any(overlap):
+            if legacy_detected:
+                _record_radial_type(
+                    probabilities,
+                    interference_type,
+                    ray_index,
+                    ray_valid,
+                    "narrow",
+                    config.flag_probability,
+                )
             continue
-        probabilities[ray_index, ray_valid] = config.flag_probability
-        flagged_count += 1
-    return probabilities, flagged_count
+        candidate = overlap & (
+            dbzh[ray_index] - baseline >= config.morphology.candidate_difference_db
+        )
+        segments = _true_segments(candidate, config.morphology.minimum_segment_gates)
+        if not segments:
+            if legacy_detected:
+                _record_radial_type(
+                    probabilities,
+                    interference_type,
+                    ray_index,
+                    ray_valid,
+                    "narrow",
+                    config.flag_probability,
+                )
+            continue
+        evidence = np.zeros(candidate.shape, dtype=bool)
+        for start, end in segments:
+            evidence[start:end] = True
+        drop = _near_to_far_drop(dbzh[ray_index], ray_valid)
+        if (
+            len(segments) == 1
+            and np.count_nonzero(evidence) >= 0.5 * np.count_nonzero(ray_valid)
+            and drop >= config.morphology.reverse_minimum_drop_db
+        ):
+            type_name = "reverse"
+        elif len(segments) >= config.morphology.intermittent_minimum_segments:
+            type_name = "intermittent"
+        elif ranges[max(end for _, end in segments) - 1] <= config.morphology.short_range_max_m:
+            type_name = "short_range"
+        else:
+            type_name = "narrow"
+        probability = (
+            config.flag_probability
+            if legacy_detected
+            else config.morphology.diagnostic_probability
+        )
+        if vertical_consistency is not None:
+            support = vertical_consistency[ray_index, evidence]
+            finite_support = support[np.isfinite(support)]
+            if finite_support.size and float(np.median(finite_support)) <= 0.2:
+                probability = config.flag_probability
+        _record_radial_type(
+            probabilities,
+            interference_type,
+            ray_index,
+            ray_valid if legacy_detected else evidence,
+            type_name,
+            probability,
+        )
+
+    flagged_ray_count = int(
+        np.count_nonzero(
+            np.any(
+                np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability,
+                axis=1,
+            )
+        )
+    )
+    for type_name, code in INTERFERENCE_TYPE_CODES.items():
+        if type_name == "none":
+            continue
+        typed = interference_type == code
+        type_ray_counts[type_name] = int(np.count_nonzero(np.any(typed, axis=1)))
+        type_gate_counts[type_name] = int(np.count_nonzero(typed))
+    return RadialInterferenceDetection(
+        probabilities,
+        interference_type,
+        flagged_ray_count,
+        type_ray_counts,
+        type_gate_counts,
+    )
+
+
+def _record_radial_type(
+    probabilities: np.ndarray,
+    interference_type: np.ndarray,
+    ray_index: int,
+    mask: np.ndarray,
+    type_name: str,
+    probability: float,
+) -> None:
+    replace = mask & (
+        np.nan_to_num(probabilities[ray_index], nan=-1.0) < probability
+    )
+    probabilities[ray_index, replace] = probability
+    interference_type[ray_index, replace] = INTERFERENCE_TYPE_CODES[type_name]
+
+
+def _neighbour_baseline(dbzh: np.ndarray, ray_index: int) -> np.ndarray:
+    following = (ray_index + 1) % dbzh.shape[0]
+    if dbzh.shape[0] == 2:
+        return dbzh[following]
+    previous = (ray_index - 1) % dbzh.shape[0]
+    previous_values = dbzh[previous]
+    next_values = dbzh[following]
+    previous_finite = np.isfinite(previous_values)
+    next_finite = np.isfinite(next_values)
+    baseline = np.full(dbzh.shape[1], np.nan, dtype="float32")
+    both = previous_finite & next_finite
+    baseline[both] = (previous_values[both] + next_values[both]) / 2.0
+    baseline[previous_finite & ~next_finite] = previous_values[
+        previous_finite & ~next_finite
+    ]
+    baseline[next_finite & ~previous_finite] = next_values[
+        next_finite & ~previous_finite
+    ]
+    return baseline
+
+
+def _true_segments(values: np.ndarray, minimum_length: int) -> list[tuple[int, int]]:
+    padded = np.concatenate(([False], np.asarray(values, dtype=bool), [False]))
+    changes = np.flatnonzero(padded[1:] != padded[:-1])
+    return [
+        (int(start), int(end))
+        for start, end in zip(changes[::2], changes[1::2], strict=True)
+        if end - start >= minimum_length
+    ]
+
+
+def _near_to_far_drop(values: np.ndarray, valid: np.ndarray) -> float:
+    quartile = max(values.size // 4, 1)
+    near = values[:quartile][valid[:quartile]]
+    far = values[-quartile:][valid[-quartile:]]
+    if near.size == 0 or far.size == 0:
+        return 0.0
+    return float(np.median(near) - np.median(far))
+
+
+def _rising_membership(values: np.ndarray, bounds: tuple[float, float]) -> np.ndarray:
+    return np.clip((values - bounds[0]) / (bounds[1] - bounds[0]), 0.0, 1.0).astype(
+        "float32"
+    )
+
+
+def _trapezoid_membership(
+    values: np.ndarray,
+    plateau: tuple[float, float],
+    transition: float,
+) -> np.ndarray:
+    lower, upper = plateau
+    rising = np.clip((values - (lower - transition)) / transition, 0.0, 1.0)
+    falling = np.clip(((upper + transition) - values) / transition, 0.0, 1.0)
+    return np.minimum(rising, falling).astype("float32")
+
+
+def _minimum_circular_neighbour_step(values: np.ndarray, *, period: float) -> np.ndarray:
+    current = np.asarray(values, dtype="float32")
+    previous = np.roll(current, 1, axis=1)
+    following = np.roll(current, -1, axis=1)
+    before = np.abs((current - previous + period / 2.0) % period - period / 2.0)
+    after = np.abs((following - current + period / 2.0) % period - period / 2.0)
+    before[:, 0] = np.nan
+    after[:, -1] = np.nan
+    return np.fmin(before, after).astype("float32")
+
+
+def _nearest_azimuth_indices(source: np.ndarray, target: np.ndarray) -> np.ndarray:
+    if target.size == 0:
+        raise QCInputError("vertical comparison target has no azimuths")
+    difference = np.abs(
+        (source[:, None] - target[None, :] + 180.0) % 360.0 - 180.0
+    )
+    return np.argmin(difference, axis=1)
+
+
+def _nearest_coordinate_indices(source: np.ndarray, target: np.ndarray) -> np.ndarray:
+    if target.size == 0:
+        raise QCInputError("vertical comparison target has no range gates")
+    insertion = np.searchsorted(target, source)
+    following = np.clip(insertion, 0, target.size - 1)
+    previous = np.clip(insertion - 1, 0, target.size - 1)
+    use_previous = np.abs(source - target[previous]) <= np.abs(source - target[following])
+    return np.where(use_previous, previous, following)
 
 
 def _is_long_range_saturated_radial(dbzh: np.ndarray, valid: np.ndarray) -> bool:
@@ -639,7 +1171,10 @@ def _module_records(
     *,
     clutter_available: bool,
     sea_ap_available: bool,
+    dual_pol_available: bool,
+    vertical_available: bool,
     radial_ray_count: int,
+    type_ray_counts: dict[str, int],
     ground_count: int,
     sea_count: int,
     ap_count: int,
@@ -658,13 +1193,57 @@ def _module_records(
             {},
         ),
         QCModuleRecord(
+            "dual_pol_fuzzy",
+            profile.pipeline_version,
+            "applied" if dual_pol_available else "skipped",
+            ("DBZH", "RHOHV", "ZDR", "PHIDP", "SNR"),
+            ("P_METEO_DUAL_POL",),
+            (
+                None
+                if dual_pol_available
+                else "dual_pol_fuzzy_disabled_or_fields_unavailable"
+            ),
+            {"diagnostic_only": float(profile.dual_pol_fuzzy.mode == "diagnostic_only")},
+        ),
+        QCModuleRecord(
+            "vertical_consistency",
+            profile.pipeline_version,
+            "applied" if vertical_available else "skipped",
+            ("DBZH", "azimuth", "range", "elevation"),
+            ("P_VERTICAL_CONSISTENCY",),
+            (
+                None
+                if vertical_available
+                else "vertical_consistency_disabled_or_higher_sweep_unavailable"
+            ),
+            {
+                "diagnostic_only": float(
+                    profile.vertical_consistency.mode == "diagnostic_only"
+                )
+            },
+        ),
+        QCModuleRecord(
             "radial_interference",
             profile.pipeline_version,
             "applied",
             ("DBZH",),
-            ("P_RADIAL_INTERFERENCE", "QC_FLAGS", "QI_INTERFERENCE"),
+            (
+                "P_RADIAL_INTERFERENCE",
+                "INTERFERENCE_TYPE",
+                "QC_FLAGS",
+                "QI_INTERFERENCE",
+            ),
             None,
-            {"flagged_ray_count": float(radial_ray_count)},
+            {
+                "flagged_ray_count": float(radial_ray_count),
+                **{
+                    f"{name}_ray_count": float(count)
+                    for name, count in type_ray_counts.items()
+                },
+                "morphology_diagnostic_only": float(
+                    profile.radial_interference.morphology.mode == "diagnostic_only"
+                ),
+            },
         ),
         QCModuleRecord(
             "static_ground_clutter",
@@ -738,6 +1317,24 @@ def _validate_profile(profile: BasicQCProfile) -> None:
         > profile.radial_interference.flag_probability
     ):
         raise QCConfigError("radial low-quality probability must not exceed flag probability")
+    morphology = profile.radial_interference.morphology
+    if morphology.diagnostic_probability > profile.radial_interference.flag_probability:
+        raise QCConfigError("radial diagnostic probability must not exceed flag probability")
+    if not 0 <= morphology.diagnostic_probability <= 1:
+        raise QCConfigError("invalid radial diagnostic probability")
+    if profile.dual_pol_fuzzy.enabled:
+        required_weights = {"rhohv", "snr", "zdr", "phidp"}
+        if set(profile.dual_pol_fuzzy.weights) != required_weights:
+            raise QCConfigError("dual-pol fuzzy weights are incomplete")
+        if sum(profile.dual_pol_fuzzy.weights.values()) <= 0:
+            raise QCConfigError("dual-pol fuzzy weights must contain positive evidence")
+        if profile.dual_pol_fuzzy.zdr_transition_db <= 0:
+            raise QCConfigError("dual-pol ZDR transition must be positive")
+    if (
+        profile.vertical_consistency.support_tolerance_db <= 0
+        or profile.vertical_consistency.maximum_range_m <= 0
+    ):
+        raise QCConfigError("vertical consistency limits must be positive")
     if profile.static_ground_clutter.asset_uri and not profile.static_ground_clutter.asset_version:
         raise QCConfigError("configured clutter asset requires an asset version")
     if profile.sea_ap.coastline_asset_uri and not profile.sea_ap.asset_version:

@@ -18,6 +18,7 @@ import (
 	postgresstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/postgres"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/runtimeconfig"
 	verificationstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/verification"
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/workspace"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -77,24 +78,25 @@ func main() {
 		os.Exit(1)
 	}
 
+	coreHandler := api.NewHandler(api.Options{
+		Version:              version,
+		AdminToken:           os.Getenv("RAINPULSE_ADMIN_TOKEN"),
+		Runs:                 store,
+		Observations:         store,
+		Commands:             commands,
+		DiagnosticLayers:     diagnosticLayers,
+		Products:             store,
+		ProductObjects:       diagnosticLayers,
+		Verification:         verificationReports,
+		ForecastVerification: store,
+		EnsembleProducts:     ensembleProducts,
+		Metrics:              store,
+		Alerts:               alertReader,
+		OperationalIssues:    store,
+	})
 	server := &http.Server{
-		Addr: address,
-		Handler: api.NewHandler(api.Options{
-			Version:              version,
-			AdminToken:           os.Getenv("RAINPULSE_ADMIN_TOKEN"),
-			Runs:                 store,
-			Observations:         store,
-			Commands:             commands,
-			DiagnosticLayers:     diagnosticLayers,
-			Products:             store,
-			ProductObjects:       diagnosticLayers,
-			Verification:         verificationReports,
-			ForecastVerification: store,
-			EnsembleProducts:     ensembleProducts,
-			Metrics:              store,
-			Alerts:               alertReader,
-			OperationalIssues:    store,
-		}),
+		Addr:              address,
+		Handler:           workspace.NewHandler(coreHandler),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      0,

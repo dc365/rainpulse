@@ -1,0 +1,124 @@
+services:
+  api:
+    environment:
+      RAINPULSE_WORKSPACE_EXECUTION_MODE: realtime_shadow
+      RAINPULSE_WORKSPACE_CYCLE_GRID_ID: fuzhou_118_123_25_27_0p01deg_v1
+      RAINPULSE_WORKSPACE_CYCLE_DATE_UTC: "2026-08-28"
+      RAINPULSE_WORKSPACE_REQUIRE_ANALYSIS: "true"
+      RAINPULSE_INGEST_STATUS_URL: http://radar-ingest:8092/status
+      RAINPULSE_NOWCASTNET_SHADOW_STATUS_URL: http://nowcastnet-shadow-probe:8094/status
+
+  orchestrator:
+    environment:
+      # The dedicated radar-ingest service replaces the original single-source watcher.
+      RAINPULSE_RADAR_INGEST_ENABLED: "false"
+      RAINPULSE_PIPELINE_ENABLED: "true"
+      RAINPULSE_PIPELINE_MODE: realtime_shadow
+      RAINPULSE_PIPELINE_RADAR_IDS: z9591,z9593,z9598,z9599
+      RAINPULSE_PIPELINE_INTERVAL: 2s
+      RAINPULSE_PIPELINE_LOOKBACK: 2h
+      RAINPULSE_PIPELINE_MOSAIC_DELAY: 30s
+      RAINPULSE_PIPELINE_MOSAIC_MAX_WAIT: 4m
+      RAINPULSE_PIPELINE_FORECAST_ENABLED: "true"
+      RAINPULSE_PIPELINE_REQUIRE_ALL_RADARS: "false"
+      RAINPULSE_PIPELINE_QC_CONFIG: /opt/rainpulse/configs/qc/rp042-fujian-evidence-v1.yaml
+      RAINPULSE_PIPELINE_GRID_CONFIG: /opt/rainpulse/configs/gridding/rp042-hybrid-evidence-v1.yaml
+      RAINPULSE_PIPELINE_MOSAIC_CONFIG: /opt/rainpulse/configs/mosaic/rp042-fujian-realtime-shadow-v1.yaml
+      RAINPULSE_PIPELINE_DIAGNOSTIC_CONFIG: /opt/rainpulse/configs/diagnostics/rp012-operational-diagnostics-v2.yaml
+      RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG: /opt/rainpulse/configs/nowcast/rp042-realtime-shadow-5min-v1.yaml
+
+  radar-qc-worker:
+    environment:
+      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/rp042-fujian-evidence-v1.yaml
+
+  radar-grid-worker:
+    environment:
+      RAINPULSE_RADAR_GRID_CONFIG: /opt/rainpulse/configs/gridding/rp042-hybrid-evidence-v1.yaml
+
+  radar-mosaic-worker:
+    environment:
+      RAINPULSE_RADAR_MOSAIC_CONFIG: /opt/rainpulse/configs/mosaic/rp042-fujian-realtime-shadow-v1.yaml
+
+  analysis-diagnostics-worker:
+    environment:
+      RAINPULSE_DIAGNOSTIC_CONFIG: /opt/rainpulse/configs/diagnostics/rp012-operational-diagnostics-v2.yaml
+
+  nowcast-input-worker:
+    environment:
+      RAINPULSE_NOWCAST_INPUT_CONFIG: /opt/rainpulse/configs/nowcast/rp042-realtime-shadow-5min-v1.yaml
+
+  radar-ingest:
+    image: rainpulse-radar-ingest
+    build:
+      context: ..
+      dockerfile: services/control/ingest.Dockerfile
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      minio-worker-policy:
+        condition: service_completed_successfully
+      orchestrator:
+        condition: service_healthy
+    environment:
+      RAINPULSE_DATABASE_HOST: postgres
+      RAINPULSE_DATABASE_NAME: rainpulse
+      RAINPULSE_DATABASE_USER: rainpulse
+      RAINPULSE_DATABASE_PASSWORD: "${RAINPULSE_POSTGRES_PASSWORD:?set RAINPULSE_POSTGRES_PASSWORD in deploy/.env}"
+      RAINPULSE_OBJECT_STORE_ENDPOINT: http://minio:9000
+      RAINPULSE_OBJECT_STORE_BUCKET: rainpulse
+      RAINPULSE_MINIO_WORKER_ACCESS_KEY: "${RAINPULSE_MINIO_WORKER_ACCESS_KEY:?set RAINPULSE_MINIO_WORKER_ACCESS_KEY in deploy/.env}"
+      RAINPULSE_MINIO_WORKER_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
+      RAINPULSE_RADAR_INGEST_MANIFEST: /opt/rainpulse/configs/ingest/fujian-realtime-shadow-v1.json
+      RAINPULSE_INGEST_HEALTH_ADDR: :8092
+      TZ: UTC
+    volumes:
+      - ../configs:/opt/rainpulse/configs:ro
+      - /data/Weather/RADA/RADA_L2_FMT/OBS_TEMP:/data/Weather/RADA/RADA_L2_FMT/OBS_TEMP:ro
+      - radar-ingest-state:/var/lib/rainpulse/ingest
+    healthcheck:
+      test: ["CMD", "/rainpulse-healthcheck", "http://127.0.0.1:8092/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
+
+  nowcastnet-shadow-probe:
+    image: rainpulse-nowcastnet-shadow-probe
+    build:
+      context: ..
+      dockerfile: algorithms/worker.Dockerfile
+    entrypoint: ["python", "-m", "rainpulse_algo.nowcast.nowcastnet_shadow_service"]
+    depends_on:
+      api:
+        condition: service_healthy
+      minio-worker-policy:
+        condition: service_completed_successfully
+    environment:
+      RAINPULSE_ANALYSIS_CATALOG_URL: http://api:8080/api/v1/analysis-cycles?status=ANALYSIS_READY&limit=200
+      RAINPULSE_NOWCASTNET_SHADOW_CONFIG: /opt/rainpulse/configs/nowcast/fujian-nowcastnet-shadow-v1.yaml
+      RAINPULSE_NOWCASTNET_SHADOW_INTERVAL_SECONDS: "30"
+      RAINPULSE_NOWCASTNET_SHADOW_STATUS_HOST: 0.0.0.0
+      RAINPULSE_NOWCASTNET_SHADOW_STATUS_PORT: "8094"
+      RAINPULSE_OBJECT_STORE_ENDPOINT: http://minio:9000
+      RAINPULSE_OBJECT_STORE_BUCKET: rainpulse
+      RAINPULSE_OBJECT_STORE_ACCESS_KEY: "${RAINPULSE_MINIO_WORKER_ACCESS_KEY:?set RAINPULSE_MINIO_WORKER_ACCESS_KEY in deploy/.env}"
+      RAINPULSE_OBJECT_STORE_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
+      RAINPULSE_MAX_INPUT_ARTIFACT_BYTES: "${RAINPULSE_MAX_INPUT_ARTIFACT_BYTES:-2147483648}"
+      TZ: UTC
+    volumes:
+      - ../configs:/opt/rainpulse/configs:ro
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import json,urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:8094/healthz', timeout=2))['status'] in {'starting','waiting','input_ineligible','input_eligible','running','failed'}"
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  radar-ingest-state:

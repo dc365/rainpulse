@@ -224,6 +224,62 @@ def test_rp008_qc_profile_is_valid_and_keeps_external_assets_explicit() -> None:
     assert profile["quality_index"]["aggregation"] == "product"
 
 
+def test_rp042_qc_profile_enables_only_evidence_supported_by_current_data() -> None:
+    schema = json.loads((CONFIG_ROOT / "schemas" / "radar-qc.schema.json").read_text())
+    profile = yaml.safe_load(
+        (CONFIG_ROOT / "qc" / "rp042-fujian-evidence-v1.yaml").read_text()
+    )
+
+    Draft202012Validator(schema).validate(profile)
+    assert profile["radial_interference"]["morphology"]["enabled"] is True
+    assert profile["radial_interference"]["morphology"]["mode"] == "diagnostic_only"
+    assert profile["dual_pol_fuzzy"]["mode"] == "diagnostic_only"
+    assert profile["vertical_consistency"]["mode"] == "diagnostic_only"
+    assert profile["static_ground_clutter"]["asset_uri"] is None
+    assert profile["sea_ap"]["coastline_asset_uri"] is None
+
+
+def test_rp042_realtime_shadow_versions_the_full_reprocessing_chain() -> None:
+    profiles = (
+        (
+            "schemas/radar-grid-profile.schema.json",
+            "gridding/rp042-hybrid-evidence-v1.yaml",
+        ),
+        (
+            "schemas/radar-mosaic-profile.schema.json",
+            "mosaic/rp042-fujian-realtime-shadow-v1.yaml",
+        ),
+        (
+            "schemas/nowcast-input-profile.schema.json",
+            "nowcast/rp042-realtime-shadow-5min-v1.yaml",
+        ),
+    )
+    for schema_name, profile_name in profiles:
+        schema = json.loads((CONFIG_ROOT / schema_name).read_text())
+        profile = yaml.safe_load((CONFIG_ROOT / profile_name).read_text())
+        Draft202012Validator(schema).validate(profile)
+
+    override = yaml.safe_load(
+        (REPOSITORY_ROOT / "deploy" / "docker-compose.realtime-shadow.yaml").read_text()
+    )["services"]
+    orchestrator = override["orchestrator"]["environment"]
+    assert orchestrator["RAINPULSE_PIPELINE_QC_CONFIG"] == override[
+        "radar-qc-worker"
+    ]["environment"]["RAINPULSE_RADAR_QC_CONFIG"]
+    assert orchestrator["RAINPULSE_PIPELINE_GRID_CONFIG"] == override[
+        "radar-grid-worker"
+    ]["environment"]["RAINPULSE_RADAR_GRID_CONFIG"]
+    assert orchestrator["RAINPULSE_PIPELINE_MOSAIC_CONFIG"] == override[
+        "radar-mosaic-worker"
+    ]["environment"]["RAINPULSE_RADAR_MOSAIC_CONFIG"]
+    assert orchestrator["RAINPULSE_PIPELINE_DIAGNOSTIC_CONFIG"] == override[
+        "analysis-diagnostics-worker"
+    ]["environment"]["RAINPULSE_DIAGNOSTIC_CONFIG"]
+    assert orchestrator["RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG"] == override[
+        "nowcast-input-worker"
+    ]["environment"]["RAINPULSE_NOWCAST_INPUT_CONFIG"]
+
+
 def test_fuzhou_grid_is_valid_and_matches_inclusive_point_registration() -> None:
     schema = json.loads((CONFIG_ROOT / "schemas" / "grid-config.schema.json").read_text())
     grid = yaml.safe_load((CONFIG_ROOT / "grids" / "fuzhou-0p01deg-v1.yaml").read_text())
@@ -478,13 +534,14 @@ def test_rp012_diagnostic_profile_freezes_layers_and_transparency() -> None:
         (
             CONFIG_ROOT
             / "diagnostics"
-            / "rp012-operational-diagnostics-v1.yaml"
+            / "rp012-operational-diagnostics-v2.yaml"
         ).read_text()
     )
 
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(profile)
-    assert profile["renderer_version"] == "radar-diagnostic-renderer-1.0.0"
+    assert profile["profile_version"] == "rp012-operational-diagnostics-v2"
+    assert profile["renderer_version"] == "radar-diagnostic-renderer-1.1.0"
     assert profile["grid_render"] == {
         "pixel_scale": 2,
         "north_up": True,

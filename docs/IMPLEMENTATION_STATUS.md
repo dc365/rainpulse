@@ -1,6 +1,6 @@
 # RainPulse implementation status
 
-Updated: 2026-08-31
+Updated: 2026-09-02
 
 ## Active baseline
 
@@ -66,6 +66,7 @@ NowcastInput gate.
 | RP-038 | Unified analysis-cycle and product workspace complete | Historical selections now reconstruct the product workspace of that cycle: radar QPE T0, LK deterministic and STEPS ensemble occupy stable product slots, missing outputs remain explicitly disabled, and the timeline only represents valid times within the selected cycle. Lightweight STEPS cycle catalog and exact by-cycle retrieval prevent latest-bundle leakage into historical replay |
 | RP-039 | Four-radar quality-dominant alignment and historical hindcast complete | The historical alignment window is 300 s with an 0.80 time-quality floor, so source QC remains dominant and Z9598 at -145 s contributes to a verified 4/4-station 10:30 UTC mosaic. All 38 eligible historical cycles completed LK and 12-member STEPS products in the existing unified timeline, while gapped cycles correctly remain analysis-only |
 | RP-040 | Fujian radial-interference QC convergence and selective historical reconstruction complete | A read-only replay of the production detector audited all 110 Z9591 volumes and selected 44 affected scans. Their QC, grids and 35 dependent four-radar analyses were rebuilt; all 28 affected forecast cycles now expose corrected QPE, 24-lead LK and 12-member STEPS evidence through the existing unified workspace. This remains engineering replay rather than an operational QC sign-off |
+| RP-042 | Existing-data multi-evidence QC and acceptance framework complete; production promotion gated | The 452 available Fujian volumes support diagnostic radial morphology, dual-polarisation and within-volume vertical evidence. A 110-volume Z9591 audit classified 2,893 evidence rays with zero processing errors while exact same-input comparison preserves RP-040 hard flags, low-quality gates and mean QI. Metrics fail closed when labels, gauges, coastline, temporal or neighbouring-radar context are absent |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -110,6 +111,26 @@ version without overwriting prior artifacts, while a resumable audit manifest
 prevents future selective repair from relying on stale QC summaries. Exact
 evidence and remaining operational gates are in
 `docs/RP040_福建径向干扰质控收敛与历史周期重建记录.md`.
+
+RP-042 adds evidence without changing the RP-040 production decision. Optional
+QCRadarVolume fields identify narrow, broad, intermittent, short-range and
+reverse radial morphology and retain dual-polarisation and adjacent-elevation
+probabilities for later calibration. All 110 available Z9591 volumes completed
+the evidence audit with zero errors; direct RP-040/RP-042 comparison on the
+same current inputs preserves hard radial flags, low-quality gate counts and
+mean QI. The acceptance module computes classification, precipitation
+retention, contamination area, QPE distribution and gauge statistics only when
+their required truth is supplied, otherwise recording a skipped reason. Static
+clutter, sea/AP, temporal and neighbouring-radar evidence remain gated by
+missing assets or input contracts. Details are in
+`docs/RP042_福建雷达质控多证据与验收框架实施记录.md`.
+
+The RP-042 evidence chain is deployed to the 105 `realtime_shadow` workspace,
+without operational promotion. The 2026-08-28 archive was replayed through
+452/452 QC volumes and grids, 123/123 mosaics, QPE and diagnostics, and 114/114
+eligible NowcastInput, pySTEPS-LK, application-product and STEPS cycles. Nine
+analysis cycles correctly remain observation-only because a contiguous
+three-frame sequence was unavailable.
 
 ## Completed engineering foundation
 
