@@ -69,6 +69,9 @@ type Bundle struct {
 	Lifecycle           string        `json:"lifecycle"`
 	OperationalEligible bool          `json:"operational_eligible"`
 	ROI                 ROI           `json:"roi"`
+	Width               int           `json:"width"`
+	Height              int           `json:"height"`
+	Bounds              [4]float64    `json:"pixel_edge_bounds"`
 	LegendUnit          string        `json:"legend_unit"`
 	Legend              []LegendEntry `json:"legend"`
 	Frames              []Frame       `json:"frames"`
@@ -163,8 +166,9 @@ func (store *FileStore) ReadAsset(ctx context.Context, bundleID, assetID string)
 		return AssetContent{}, fileError(err)
 	}
 	digest := fmt.Sprintf("%x", sha256.Sum256(data))
+	width, height := rasterDimensions(bundle)
 	if int64(len(data)) != selected.SizeBytes || digest != selected.SHA256 ||
-		!validPNG(data, bundle.ROI.Width, bundle.ROI.Height) {
+		!validPNG(data, width, height) {
 		return AssetContent{}, fmt.Errorf("%w: asset integrity differs", ErrInvalidBundle)
 	}
 	return AssetContent{Data: data, MediaType: selected.MediaType, SHA256: digest}, nil
@@ -198,31 +202,59 @@ func (store *FileStore) readBundle(bundleID string) (Bundle, error) {
 
 func validateBundle(bundle Bundle, directoryID string) error {
 	if bundle.ContractName != "rainpulse.nowcastnet-shadow-product-bundle" ||
-		bundle.ContractVersion != "1.0" || bundle.BundleID.String() != directoryID ||
+		(bundle.ContractVersion != "1.0" && bundle.ContractVersion != "1.1") ||
+		bundle.BundleID.String() != directoryID ||
 		bundle.IssueTime.IsZero() || bundle.GridID == "" || bundle.ModelID != "nowcastnet" ||
 		bundle.ModelVersion == "" || bundle.ProfileVersion == "" || bundle.MemberCount != 4 ||
 		bundle.CadenceMinutes != 10 || bundle.Lifecycle != "shadow" || bundle.OperationalEligible ||
-		bundle.ROI.Width < 32 || bundle.ROI.Height < 32 || bundle.ROI.Width%32 != 0 || bundle.ROI.Height%32 != 0 ||
 		bundle.LegendUnit != "mm/h" || len(bundle.Legend) < 2 || len(bundle.Frames) != 12 || bundle.CreatedAt.IsZero() {
 		return fmt.Errorf("%w: manifest identity differs", ErrInvalidBundle)
 	}
+	width, height := rasterDimensions(bundle)
+	if bundle.ContractVersion == "1.0" {
+		if width < 32 || height < 32 || width%32 != 0 || height%32 != 0 {
+			return fmt.Errorf("%w: ROI geometry differs", ErrInvalidBundle)
+		}
+	} else if width < 1 || height < 1 || !validBounds(bundle.Bounds) {
+		return fmt.Errorf("%w: full-grid geometry differs", ErrInvalidBundle)
+	}
 	assets := make(map[string]bool, len(bundle.Frames))
 	paths := make(map[string]bool, len(bundle.Frames))
-	cellCount := int64(bundle.ROI.Width) * int64(bundle.ROI.Height)
+	cellCount := int64(width) * int64(height)
 	for index, frame := range bundle.Frames {
 		expectedLead := (index + 1) * 10
 		if frame.AssetID == "" || !validSegment(frame.AssetID) || assets[frame.AssetID] ||
 			!validObjectPath(frame.ObjectPath) || paths[frame.ObjectPath] || frame.MediaType != "image/png" ||
 			!validSHA(frame.SHA256) || frame.SizeBytes < 8 || frame.SizeBytes > maximumAssetBytes ||
 			frame.LeadMinutes != expectedLead || !frame.ValidTime.Equal(bundle.IssueTime.Add(time.Duration(expectedLead)*time.Minute)) ||
-			frame.Unit != bundle.LegendUnit || frame.ValidCellCount != cellCount || frame.MissingCellCount != 0 ||
-			math.Abs(frame.CoverageRatio-1) > 1e-9 || !validBounds(frame.Bounds) {
+			frame.Unit != bundle.LegendUnit || !validBounds(frame.Bounds) {
 			return fmt.Errorf("%w: frame metadata differs", ErrInvalidBundle)
+		}
+		if bundle.ContractVersion == "1.0" {
+			if frame.ValidCellCount != cellCount || frame.MissingCellCount != 0 ||
+				math.Abs(frame.CoverageRatio-1) > 1e-9 {
+				return fmt.Errorf("%w: ROI coverage differs", ErrInvalidBundle)
+			}
+		} else {
+			expectedCoverage := float64(frame.ValidCellCount) / float64(cellCount)
+			if frame.ValidCellCount < 1 || frame.MissingCellCount < 0 ||
+				frame.ValidCellCount+frame.MissingCellCount != cellCount ||
+				math.Abs(frame.CoverageRatio-expectedCoverage) > 1e-9 ||
+				!sameBounds(frame.Bounds, bundle.Bounds) {
+				return fmt.Errorf("%w: full-grid coverage differs", ErrInvalidBundle)
+			}
 		}
 		assets[frame.AssetID] = true
 		paths[frame.ObjectPath] = true
 	}
 	return nil
+}
+
+func rasterDimensions(bundle Bundle) (int, int) {
+	if bundle.ContractVersion == "1.0" {
+		return bundle.ROI.Width, bundle.ROI.Height
+	}
+	return bundle.Width, bundle.Height
 }
 
 func safeAssetPath(root, bundleID, objectPath string) (string, error) {
@@ -277,6 +309,15 @@ func validSHA(value string) bool {
 
 func validBounds(bounds [4]float64) bool {
 	return bounds[0] < bounds[2] && bounds[1] < bounds[3]
+}
+
+func sameBounds(left, right [4]float64) bool {
+	for index := range left {
+		if math.Abs(left[index]-right[index]) > 1e-9 {
+			return false
+		}
+	}
+	return true
 }
 
 func validPNG(data []byte, width, height int) bool {

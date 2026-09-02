@@ -105,7 +105,7 @@ test-probability-calibration:
 	uv run --project algorithms pytest algorithms/tests/test_probability_calibration.py
 
 test-nowcastnet:
-	uv run --project algorithms pytest algorithms/tests/test_nowcastnet_adapter.py algorithms/tests/test_nowcastnet_worker.py algorithms/tests/test_mrms_nowcastnet_hindcast.py
+	uv run --project algorithms pytest algorithms/tests/test_nowcastnet_adapter.py algorithms/tests/test_nowcastnet_tiling.py algorithms/tests/test_nowcastnet_worker.py algorithms/tests/test_mrms_nowcastnet_hindcast.py
 
 test-nowcastnet-training:
 	uv run --project algorithms pytest algorithms/tests/test_mrms_training.py

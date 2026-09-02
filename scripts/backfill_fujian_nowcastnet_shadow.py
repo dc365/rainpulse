@@ -3,8 +3,9 @@
 
 The public MRMS checkpoint rejects missing input cells.  This command therefore
 selects only model-aligned cycles with complete 9 x 10-minute history and full
-+10..+120-minute verification truth, then runs the largest all-valid rectangular
-ROI whose dimensions are multiples of 32.  It never fills missing radar coverage.
++10..+120-minute verification truth. It runs overlapping all-valid tiles and
+blends them back onto the full product grid without ever filling missing radar
+coverage.
 """
 
 from __future__ import annotations
@@ -37,12 +38,18 @@ from rainpulse_algo.nowcast.nowcastnet_shadow_service import (
     load_analysis_frame,
     parse_analysis_catalog,
 )
+from rainpulse_algo.nowcast.nowcastnet_tiling import (
+    NowcastNetStitchedResult,
+    NowcastNetTileSelection,
+    blend_tile_forecasts,
+    select_all_valid_tiles,
+)
 from rainpulse_algo.products.builder import rainfall_rgba
 from rainpulse_algo.products.profile import load_product_builder_profile
 from rainpulse_algo.worker.object_store import ArtifactObjectReader, minio_client_from_environment
 
 CONTRACT_NAME = "rainpulse.nowcastnet-shadow-product-bundle"
-CONTRACT_VERSION = "1.0"
+CONTRACT_VERSION = "1.1"
 MODEL_CADENCE_MINUTES = 10
 INPUT_FRAMES = 9
 OUTPUT_LEADS = tuple(range(10, 121, 10))
@@ -60,8 +67,9 @@ def main() -> None:
     parser.add_argument("--capsule-root", type=Path, required=True)
     parser.add_argument("--date-utc", default="2026-08-28")
     parser.add_argument("--device", default="cuda:0")
-    parser.add_argument("--minimum-height", type=int, default=64)
-    parser.add_argument("--minimum-width", type=int, default=128)
+    parser.add_argument("--minimum-tile-size", type=int, default=64)
+    parser.add_argument("--candidate-stride", type=int, default=8)
+    parser.add_argument("--maximum-tiles", type=int, default=64)
     parser.add_argument("--issue-time", action="append", default=[])
     args = parser.parse_args()
 
@@ -91,6 +99,7 @@ def main() -> None:
     reader = ArtifactObjectReader(minio_client_from_environment())
     frame_cache: dict[datetime, tuple[np.ndarray, np.ndarray]] = {}
     prepared: list[dict[str, Any]] = []
+    groups: dict[tuple[int, int], list[dict[str, Any]]] = defaultdict(list)
     for issue_time in candidates:
         history = required_frame_times(
             issue_time, input_frames=INPUT_FRAMES, timestep_minutes=MODEL_CADENCE_MINUTES
@@ -101,92 +110,67 @@ def main() -> None:
         rates = np.stack([frame_cache[value][0] for value in history], axis=0)
         valid = np.stack([frame_cache[value][1] for value in history], axis=0)
         common_valid = np.all(valid == 1, axis=0)
-        roi = largest_aligned_valid_rectangle(
+        selection = select_all_valid_tiles(
             common_valid,
-            multiple=32,
-            minimum_height=args.minimum_height,
-            minimum_width=args.minimum_width,
+            minimum_tile_size=args.minimum_tile_size,
+            candidate_stride=args.candidate_stride,
+            maximum_tiles=args.maximum_tiles,
         )
-        if roi is None:
-            continue
-        y_start, x_start, height, width = roi
-        prepared.append(
-            {
-                "issue_time": issue_time,
-                "history": history,
-                "references": [by_time[value] for value in history],
+        cycle: dict[str, Any] = {
+            "issue_time": issue_time,
+            "references": [by_time[value] for value in history],
+            "selection": selection,
+            "tile_forecasts": [],
+            "runtime_seconds": 0.0,
+            "clipped_input_pixel_count": 0,
+            "clipped_negative_output_pixel_count": 0,
+            "runtime_info": None,
+        }
+        prepared.append(cycle)
+        for tile_index, tile in enumerate(selection.tiles):
+            y_start, x_start = tile.y_start, tile.x_start
+            height, width = tile.height, tile.width
+            job = {
+                "cycle": cycle,
+                "tile": tile,
+                "tile_index": tile_index,
                 "rate": np.ascontiguousarray(
                     rates[:, y_start : y_start + height, x_start : x_start + width],
                     dtype="float32",
                 ),
                 "valid": np.ones((INPUT_FRAMES, height, width), dtype="uint8"),
-                "roi": roi,
             }
-        )
+            groups[(height, width)].append(job)
     if not prepared:
-        raise RuntimeError("strict cycles have no sufficiently large all-valid model ROI")
+        raise RuntimeError("strict cycles have no sufficiently large all-valid model tile")
 
     reports: list[dict[str, Any]] = []
     published_ids: set[str] = set()
-    groups: dict[tuple[int, int], list[dict[str, Any]]] = defaultdict(list)
-    for item in prepared:
-        groups[(item["roi"][2], item["roi"][3])].append(item)
-
-    for (height, width), items in sorted(groups.items()):
+    for (height, width), jobs in sorted(groups.items()):
         profile = experimental_profile(parent, height=height, width=width)
         backend = OfficialNowcastNetBackend(
             args.capsule_root, profile=profile, device=args.device
         )
-        for item in items:
-            issue_time = item["issue_time"]
+        for job in jobs:
+            cycle = job["cycle"]
+            issue_time = cycle["issue_time"]
             started = time.perf_counter()
             result = run_nowcastnet_fields(
-                item["rate"],
-                item["valid"],
+                job["rate"],
+                job["valid"],
                 profile=profile,
                 backend=backend,
                 random_seed=int(issue_time.timestamp()) % (2**32),
             )
             runtime_seconds = time.perf_counter() - started
             ensemble_mean = np.mean(result.rain_rate_mm_h[:, : len(OUTPUT_LEADS)], axis=0)
-            bundle_id, bundle = build_bundle(
-                ensemble_mean,
-                issue_time=issue_time,
-                references=item["references"],
-                roi=item["roi"],
-                grid=grid,
-                profile=profile,
-                palette=products.palette,
-                clipped_input_pixel_count=result.clipped_input_pixel_count,
-                clipped_negative_output_pixel_count=result.clipped_negative_output_pixel_count,
-                runtime_seconds=runtime_seconds,
-                runtime_info=backend.runtime_info(),
+            cycle["tile_forecasts"].append((job["tile"], ensemble_mean))
+            cycle["runtime_seconds"] += runtime_seconds
+            cycle["clipped_input_pixel_count"] += result.clipped_input_pixel_count
+            cycle["clipped_negative_output_pixel_count"] += (
+                result.clipped_negative_output_pixel_count
             )
-            write_bundle(args.output_root, bundle_id, bundle)
-            prune_cycle_versions(
-                args.output_root,
-                issue_time=issue_time,
-                grid_id=grid.grid_id,
-                keep_bundle_id=bundle_id,
-            )
-            published_ids.add(bundle_id)
-            report = {
-                "bundle_id": bundle_id,
-                "issue_time": issue_time.isoformat(),
-                "roi": {
-                    "y_start": item["roi"][0],
-                    "x_start": item["roi"][1],
-                    "height": height,
-                    "width": width,
-                },
-                "member_count": profile.protocol.ensemble_members,
-                "lead_minutes": list(OUTPUT_LEADS),
-                "runtime_seconds": round(runtime_seconds, 3),
-                "maximum_mean_rate_mm_h": round(float(np.max(ensemble_mean)), 3),
-                "operational_eligible": False,
-            }
-            reports.append(report)
-            print(json.dumps(report, ensure_ascii=False), flush=True)
+            cycle["runtime_info"] = backend.runtime_info()
         del backend
         gc.collect()
         try:
@@ -196,18 +180,69 @@ def main() -> None:
         except (ImportError, RuntimeError):
             pass
 
-    if not requested:
-        prune_date_versions(
-            args.output_root,
-            target_date=target_date,
-            grid_id=grid.grid_id,
-            keep_bundle_ids=published_ids,
+    for cycle in prepared:
+        selection: NowcastNetTileSelection = cycle["selection"]
+        tile_forecasts = sorted(
+            cycle["tile_forecasts"],
+            key=lambda item: selection.tiles.index(item[0]),
         )
+        stitched = blend_tile_forecasts(tile_forecasts, output_shape=grid.shape)
+        gate = stitched_gate(
+            stitched,
+            selection=selection,
+            runtime_seconds=cycle["runtime_seconds"],
+        )
+        report: dict[str, Any] = {
+            "issue_time": cycle["issue_time"].isoformat(),
+            "tile_count": len(selection.tiles),
+            "domain_coverage_ratio": round(selection.domain_coverage_ratio, 4),
+            "common_valid_coverage_ratio": round(
+                selection.common_valid_coverage_ratio, 4
+            ),
+            "coverage_gain_over_primary": round(
+                selection.covered_cell_count / selection.tiles[0].area, 4
+            ),
+            "runtime_seconds": round(cycle["runtime_seconds"], 3),
+            "stitch_gate": gate,
+            "operational_eligible": False,
+        }
+        if gate["passed"]:
+            bundle_id, bundle = build_bundle(
+                stitched,
+                issue_time=cycle["issue_time"],
+                references=cycle["references"],
+                selection=selection,
+                grid=grid,
+                parent_profile=parent,
+                palette=products.palette,
+                clipped_input_pixel_count=cycle["clipped_input_pixel_count"],
+                clipped_negative_output_pixel_count=cycle[
+                    "clipped_negative_output_pixel_count"
+                ],
+                runtime_seconds=cycle["runtime_seconds"],
+                runtime_info=cycle["runtime_info"],
+            )
+            write_bundle(args.output_root, bundle_id, bundle)
+            prune_cycle_versions(
+                args.output_root,
+                issue_time=cycle["issue_time"],
+                grid_id=grid.grid_id,
+                keep_bundle_id=bundle_id,
+            )
+            published_ids.add(bundle_id)
+            report["bundle_id"] = bundle_id
+            report["status"] = "published"
+        else:
+            report["status"] = "retained_previous_product"
+        reports.append(report)
+        print(json.dumps(report, ensure_ascii=False), flush=True)
+
     print(
         json.dumps(
             {
                 "status": "generated",
-                "cycle_count": len(reports),
+                "cycle_count": len(prepared),
+                "published_cycle_count": len(published_ids),
                 "bundle_ids": sorted(published_ids),
                 "operational_eligible": False,
             },
@@ -232,39 +267,6 @@ def comparison_candidates(
     return candidates
 
 
-def largest_aligned_valid_rectangle(
-    valid: np.ndarray,
-    *,
-    multiple: int,
-    minimum_height: int,
-    minimum_width: int,
-) -> tuple[int, int, int, int] | None:
-    support = np.asarray(valid, dtype=bool)
-    if support.ndim != 2 or multiple < 1:
-        raise ValueError("valid support must be a 2-D array with a positive alignment")
-    heights = range(_round_up(minimum_height, multiple), support.shape[0] + 1, multiple)
-    widths = range(_round_up(minimum_width, multiple), support.shape[1] + 1, multiple)
-    shapes = sorted(
-        ((height, width) for height in heights for width in widths),
-        key=lambda value: (value[0] * value[1], min(value), value[1]),
-        reverse=True,
-    )
-    missing = (~support).astype("int32")
-    integral = np.pad(missing, ((1, 0), (1, 0))).cumsum(0).cumsum(1)
-    for height, width in shapes:
-        window_missing = (
-            integral[height:, width:]
-            - integral[:-height, width:]
-            - integral[height:, :-width]
-            + integral[:-height, :-width]
-        )
-        positions = np.argwhere(window_missing == 0)
-        if positions.size:
-            y_start, x_start = (int(value) for value in positions[0])
-            return y_start, x_start, height, width
-    return None
-
-
 def experimental_profile(
     parent: NowcastNetProfile, *, height: int, width: int
 ) -> NowcastNetProfile:
@@ -275,35 +277,88 @@ def experimental_profile(
     )
 
 
+def stitched_gate(
+    stitched: NowcastNetStitchedResult,
+    *,
+    selection: NowcastNetTileSelection,
+    runtime_seconds: float,
+) -> dict[str, Any]:
+    primary_cell_count = selection.tiles[0].area
+    coverage_gain = selection.covered_cell_count / primary_cell_count
+    checks = {
+        "common_valid_coverage_ratio": selection.common_valid_coverage_ratio >= 0.70,
+        "coverage_gain_over_primary": coverage_gain >= 1.20,
+        "primary_consistency_mae_mm_h": (
+            stitched.primary_consistency_mae_mm_h <= 1.0
+        ),
+        "primary_consistency_p95_mm_h": (
+            stitched.primary_consistency_p95_mm_h <= 5.0
+        ),
+        "seam_gradient_ratio": (
+            np.isfinite(stitched.seam_gradient_ratio)
+            and stitched.seam_gradient_ratio <= 1.25
+        ),
+        "runtime_seconds": runtime_seconds <= 30.0,
+    }
+    return {
+        "passed": all(checks.values()),
+        "checks": checks,
+        "thresholds": {
+            "minimum_common_valid_coverage_ratio": 0.70,
+            "minimum_coverage_gain_over_primary": 1.20,
+            "maximum_primary_consistency_mae_mm_h": 1.0,
+            "maximum_primary_consistency_p95_mm_h": 5.0,
+            "maximum_seam_gradient_ratio": 1.25,
+            "maximum_runtime_seconds": 30.0,
+        },
+        "measurements": {
+            "common_valid_coverage_ratio": selection.common_valid_coverage_ratio,
+            "coverage_gain_over_primary": coverage_gain,
+            "primary_consistency_mae_mm_h": (
+                stitched.primary_consistency_mae_mm_h
+            ),
+            "primary_consistency_p95_mm_h": (
+                stitched.primary_consistency_p95_mm_h
+            ),
+            "seam_gradient_ratio": stitched.seam_gradient_ratio,
+            "runtime_seconds": runtime_seconds,
+        },
+    }
+
+
 def build_bundle(
-    ensemble_mean: np.ndarray,
+    stitched: NowcastNetStitchedResult,
     *,
     issue_time: datetime,
     references: list[AnalysisReference],
-    roi: tuple[int, int, int, int],
+    selection: NowcastNetTileSelection,
     grid: RegularLatLonGrid,
-    profile: NowcastNetProfile,
+    parent_profile: NowcastNetProfile,
     palette: Any,
     clipped_input_pixel_count: int,
     clipped_negative_output_pixel_count: int,
     runtime_seconds: float,
-    runtime_info: dict[str, object],
+    runtime_info: dict[str, object] | None,
 ) -> tuple[str, dict[str, bytes]]:
-    values = np.asarray(ensemble_mean, dtype="float32")
-    y_start, x_start, height, width = roi
-    if values.shape != (len(OUTPUT_LEADS), height, width):
-        raise ValueError("NowcastNet comparison output dimensions differ")
-    bounds = roi_bounds(grid, roi)
+    values = np.asarray(stitched.rain_rate_mm_h, dtype="float32")
+    valid = np.asarray(stitched.valid_mask, dtype="uint8")
+    if values.shape != (len(OUTPUT_LEADS), *grid.shape) or valid.shape != values.shape:
+        raise ValueError("stitched NowcastNet output dimensions differ")
+    if not np.array_equal(valid, np.broadcast_to(valid[0], valid.shape)):
+        raise ValueError("stitched NowcastNet support must remain fixed across leads")
+    bounds = grid.pixel_edge_bounds
     bundle_id = str(uuid4())
     created_at = datetime.now(UTC)
     objects: dict[str, bytes] = {}
     frames: list[dict[str, Any]] = []
-    valid = np.ones((height, width), dtype="uint8")
+    support = valid[0] == 1
+    valid_count = int(np.count_nonzero(support))
+    cell_count = int(support.size)
     for index, lead in enumerate(OUTPUT_LEADS):
         png = encode_rgba_png(
             rainfall_rgba(
                 values[index],
-                valid,
+                support,
                 palette.rain_rate,
                 transparent_below=palette.transparent_below_mm,
                 opacity=palette.opacity,
@@ -322,12 +377,11 @@ def build_bundle(
                 "lead_time_minutes": lead,
                 "valid_time": (issue_time + timedelta(minutes=lead)).isoformat(),
                 "unit": "mm/h",
-                "coverage_ratio": 1.0,
-                "domain_coverage_ratio": height * width / (grid.latitude_count * grid.longitude_count),
-                "valid_cell_count": height * width,
-                "missing_cell_count": 0,
-                "minimum": float(np.min(values[index])),
-                "maximum": float(np.max(values[index])),
+                "coverage_ratio": valid_count / cell_count,
+                "valid_cell_count": valid_count,
+                "missing_cell_count": cell_count - valid_count,
+                "minimum": float(np.min(values[index][support])),
+                "maximum": float(np.max(values[index][support])),
                 "pixel_edge_bounds": list(bounds),
             }
         )
@@ -338,21 +392,46 @@ def build_bundle(
         "issue_time": issue_time.isoformat(),
         "grid_id": grid.grid_id,
         "grid_config_version": grid.config_version,
+        "width": grid.longitude_count,
+        "height": grid.latitude_count,
+        "pixel_edge_bounds": list(bounds),
         "model_id": "nowcastnet",
-        "model_version": profile.model_version,
-        "profile_version": profile.profile_version,
-        "member_count": profile.protocol.ensemble_members,
+        "model_version": parent_profile.model_version,
+        "profile_version": "fujian-nowcastnet-public-shadow-stitched-v1",
+        "member_count": parent_profile.protocol.ensemble_members,
         "cadence_minutes": MODEL_CADENCE_MINUTES,
         "lifecycle": "shadow",
         "operational_eligible": False,
         "preprocessing": "native-0.01-degree-engineering-feasibility-v1",
         "missing_policy": "reject_any_missing",
-        "roi": {
-            "y_start": y_start,
-            "x_start": x_start,
-            "height": height,
-            "width": width,
-            "pixel_edge_bounds": list(bounds),
+        "stitching": {
+            "algorithm": "all-valid-greedy-tiles-cosine-weighted-v1",
+            "minimum_tile_size": min(
+                min(tile.height, tile.width) for tile in selection.tiles
+            ),
+            "tile_count": len(selection.tiles),
+            "common_valid_cell_count": selection.common_valid_cell_count,
+            "covered_cell_count": selection.covered_cell_count,
+            "common_valid_coverage_ratio": selection.common_valid_coverage_ratio,
+            "domain_coverage_ratio": selection.domain_coverage_ratio,
+            "overlap_cell_count": stitched.overlap_cell_count,
+            "overlap_difference_p95_mm_h": stitched.overlap_difference_p95_mm_h,
+            "primary_consistency_mae_mm_h": stitched.primary_consistency_mae_mm_h,
+            "primary_consistency_p95_mm_h": stitched.primary_consistency_p95_mm_h,
+            "seam_gradient_ratio": stitched.seam_gradient_ratio,
+            "tiles": [
+                {
+                    "tile_index": index,
+                    "y_start": tile.y_start,
+                    "x_start": tile.x_start,
+                    "height": tile.height,
+                    "width": tile.width,
+                    "profile_version": (
+                        f"fujian-nowcastnet-public-shadow-v1-{tile.height}x{tile.width}"
+                    ),
+                }
+                for index, tile in enumerate(selection.tiles)
+            ],
         },
         "input_analysis": [
             {
@@ -382,19 +461,6 @@ def build_bundle(
     return bundle_id, objects
 
 
-def roi_bounds(
-    grid: RegularLatLonGrid, roi: tuple[int, int, int, int]
-) -> tuple[float, float, float, float]:
-    y_start, x_start, height, width = roi
-    half_x = grid.longitude_interval_deg / 2
-    half_y = grid.latitude_interval_deg / 2
-    west = grid.west + x_start * grid.longitude_interval_deg - half_x
-    east = grid.west + (x_start + width - 1) * grid.longitude_interval_deg + half_x
-    south = grid.south + y_start * grid.latitude_interval_deg - half_y
-    north = grid.south + (y_start + height - 1) * grid.latitude_interval_deg + half_y
-    return west, south, east, north
-
-
 def write_bundle(root: Path, bundle_id: str, objects: dict[str, bytes]) -> None:
     root = root.resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -413,25 +479,15 @@ def prune_cycle_versions(
     root: Path, *, issue_time: datetime, grid_id: str, keep_bundle_id: str
 ) -> None:
     for path, manifest in bundle_manifests(root):
+        try:
+            manifest_issue_time = _parse_time(str(manifest.get("issue_time")))
+        except ValueError:
+            continue
         if (
             path.name != keep_bundle_id
             and manifest.get("grid_id") == grid_id
-            and _parse_time(str(manifest.get("issue_time"))) == issue_time
+            and manifest_issue_time == issue_time
         ):
-            shutil.rmtree(path)
-
-
-def prune_date_versions(
-    root: Path, *, target_date: Any, grid_id: str, keep_bundle_ids: set[str]
-) -> None:
-    for path, manifest in bundle_manifests(root):
-        if path.name in keep_bundle_ids or manifest.get("grid_id") != grid_id:
-            continue
-        try:
-            issue_time = _parse_time(str(manifest.get("issue_time")))
-        except ValueError:
-            continue
-        if issue_time.date() == target_date:
             shutil.rmtree(path)
 
 
@@ -450,10 +506,6 @@ def bundle_manifests(root: Path) -> list[tuple[Path, dict[str, Any]]]:
         if manifest.get("contract_name") == CONTRACT_NAME:
             result.append((path, manifest))
     return result
-
-
-def _round_up(value: int, multiple: int) -> int:
-    return ((value + multiple - 1) // multiple) * multiple
 
 
 def _parse_time(value: str) -> datetime:
