@@ -15,8 +15,8 @@ provenance:
 
 frozen_evolution:
   run_profile:
-    path: configs/training/nowcastnet-mrms-run-v1.yaml
-    sha256: 1f8fe80408fe45f6c74b4f94c69ad757034779570a7a35257f76e810381fb8b7
+    path: configs/training/nowcastnet-mrms-foundation-v1.yaml
+    sha256: 874775edd697ee4771e1302e3d62c2054cac3f16d112b0ca14f13811bd0920e8
   checkpoint_schema: rainpulse.nowcastnet-evolution-checkpoint/1.0
   require_completed_pretraining: true
   completed_pretraining_step: 300000
@@ -72,6 +72,13 @@ optimization:
   default_precision: bf16
   gradient_clip_norm: 1.0
   update_order: discriminator_then_generator
+
+checkpoint:
+  maximum_interval_steps: 1000
+  maximum_interval_seconds: 300
+  rolling_keep: 3
+  milestone_interval_steps: 10000
+  preserve_window_final: true
 
 reproducibility:
   run_seed: 2026083003

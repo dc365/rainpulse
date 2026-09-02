@@ -14,6 +14,7 @@
     "architecture",
     "loss",
     "optimization",
+    "checkpoint",
     "reproducibility"
   ],
   "properties": {
@@ -217,6 +218,24 @@
         "default_precision": {"const": "bf16"},
         "gradient_clip_norm": {"const": 1.0},
         "update_order": {"const": "discriminator_then_generator"}
+      }
+    },
+    "checkpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maximum_interval_steps",
+        "maximum_interval_seconds",
+        "rolling_keep",
+        "milestone_interval_steps",
+        "preserve_window_final"
+      ],
+      "properties": {
+        "maximum_interval_steps": {"const": 1000},
+        "maximum_interval_seconds": {"const": 300},
+        "rolling_keep": {"const": 3},
+        "milestone_interval_steps": {"const": 10000},
+        "preserve_window_final": {"const": true}
       }
     },
     "reproducibility": {

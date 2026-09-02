@@ -16,6 +16,7 @@ class GenerativeTrainingProfileError(ValueError):
 class GenerativeTrainingProfile:
     profile_version: str
     profile_sha256: str
+    evolution_profile_path: Path
     evolution_profile_sha256: str
     completed_pretraining_step: int
     stage_b_smoke_minimum_step: int
@@ -36,6 +37,11 @@ class GenerativeTrainingProfile:
     total_steps: int
     default_precision: str
     gradient_clip_norm: float
+    checkpoint_maximum_interval_steps: int
+    checkpoint_maximum_interval_seconds: int
+    checkpoint_rolling_keep: int
+    checkpoint_milestone_interval_steps: int
+    checkpoint_preserve_window_final: bool
     run_seed: int
 
 
@@ -80,6 +86,7 @@ def load_generative_training_profile(
         adversarial = loss["adversarial"]
         pool = loss["pool_regularization"]
         optimization = raw["optimization"]
+        checkpoint = raw["checkpoint"]
         reproducibility = raw["reproducibility"]
     except (KeyError, OSError, TypeError, yaml.YAMLError) as exc:
         raise GenerativeTrainingProfileError(
@@ -87,6 +94,10 @@ def load_generative_training_profile(
         ) from exc
 
     _verify_reference(repository_root, provenance["upstream_license"])
+    evolution_profile_path = _resolve_local(
+        repository_root,
+        str(frozen["run_profile"]["path"]),
+    )
     evolution_profile_sha256 = _verify_reference(repository_root, frozen["run_profile"])
     if (
         raw.get("schema_version") != "1.0"
@@ -95,13 +106,11 @@ def load_generative_training_profile(
         or raw.get("operational_eligible") is not False
         or provenance.get("paper_doi") != "10.1038/s41586-023-06184-4"
         or provenance.get("generator_source") != "official_mit_inference_capsule"
-        or provenance.get("discriminator_source")
-        != "paper_methods_and_extended_data_figure_1c"
+        or provenance.get("discriminator_source") != "paper_methods_and_extended_data_figure_1c"
         or provenance.get("official_training_source_published") is not False
         or provenance.get("reconstruction_note")
         != "rainpulse_explicit_reconstruction_of_unpublished_training_code"
-        or frozen.get("checkpoint_schema")
-        != "rainpulse.nowcastnet-evolution-checkpoint/1.0"
+        or frozen.get("checkpoint_schema") != "rainpulse.nowcastnet-evolution-checkpoint/1.0"
         or frozen.get("require_completed_pretraining") is not True
         or int(frozen["completed_pretraining_step"]) != 300000
         or int(frozen["stage_b_smoke_minimum_step"]) != 1000
@@ -120,16 +129,12 @@ def load_generative_training_profile(
         or int(projector["latent_grid_divisor"]) != 32
         or int(projector["projected_grid_divisor"]) != 8
         or int(projector["channel_to_space_factor"]) != 4
-        or discriminator.get("spatial_branch")
-        != "conv2d_channels_64_kernel_9_stride_2"
-        or discriminator.get("short_branch")
-        != "conv3d_channels_4_kernel_4x9x9_stride_1x2x2"
-        or discriminator.get("long_branch")
-        != "conv3d_channels_8_kernel_20x9x9_stride_1x2x2"
+        or discriminator.get("spatial_branch") != "conv2d_channels_64_kernel_9_stride_2"
+        or discriminator.get("short_branch") != "conv3d_channels_4_kernel_4x9x9_stride_1x2x2"
+        or discriminator.get("long_branch") != "conv3d_channels_8_kernel_20x9x9_stride_1x2x2"
         or int(discriminator["flattened_channels"]) != 188
         or list(discriminator["residual_channels"]) != [128, 256, 512, 512]
-        or discriminator.get("downsampling")
-        != "bilinear_before_first_three_residual_blocks"
+        or discriminator.get("downsampling") != "bilinear_before_first_three_residual_blocks"
         or discriminator.get("output") != "patch_logits"
         or int(loss["ensemble_members"]) != 4
         or adversarial.get("type") != "binary_cross_entropy_with_logits"
@@ -149,6 +154,11 @@ def load_generative_training_profile(
         or optimization.get("default_precision") != "bf16"
         or float(optimization["gradient_clip_norm"]) != 1.0
         or optimization.get("update_order") != "discriminator_then_generator"
+        or int(checkpoint["maximum_interval_steps"]) != 1000
+        or int(checkpoint["maximum_interval_seconds"]) != 300
+        or int(checkpoint["rolling_keep"]) != 3
+        or int(checkpoint["milestone_interval_steps"]) != 10000
+        or checkpoint.get("preserve_window_final") is not True
         or int(reproducibility["run_seed"]) != 2026083003
         or reproducibility.get("deterministic_sample_order") is not True
         or reproducibility.get("checkpoint_after_complete_optimizer_pair") is not True
@@ -159,6 +169,7 @@ def load_generative_training_profile(
     return GenerativeTrainingProfile(
         profile_version=str(raw["profile_version"]),
         profile_sha256=hashlib.sha256(payload).hexdigest(),
+        evolution_profile_path=evolution_profile_path,
         evolution_profile_sha256=evolution_profile_sha256,
         completed_pretraining_step=int(frozen["completed_pretraining_step"]),
         stage_b_smoke_minimum_step=int(frozen["stage_b_smoke_minimum_step"]),
@@ -179,5 +190,10 @@ def load_generative_training_profile(
         total_steps=int(optimization["total_steps"]),
         default_precision=str(optimization["default_precision"]),
         gradient_clip_norm=float(optimization["gradient_clip_norm"]),
+        checkpoint_maximum_interval_steps=int(checkpoint["maximum_interval_steps"]),
+        checkpoint_maximum_interval_seconds=int(checkpoint["maximum_interval_seconds"]),
+        checkpoint_rolling_keep=int(checkpoint["rolling_keep"]),
+        checkpoint_milestone_interval_steps=int(checkpoint["milestone_interval_steps"]),
+        checkpoint_preserve_window_final=bool(checkpoint["preserve_window_final"]),
         run_seed=int(reproducibility["run_seed"]),
     )

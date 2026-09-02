@@ -35,6 +35,8 @@ from rainpulse_algo.training.generative_profile import (
 )
 from rainpulse_algo.training.generative_train import (
     GenerativeTrainError,
+    _prune_checkpoints,
+    _record_window_final,
     compare_generative_metrics,
 )
 from rainpulse_algo.training.profile import (
@@ -436,6 +438,7 @@ def test_generative_profile_matches_schema_and_published_contract() -> None:
     )
 
     assert profile.profile_version == "nowcastnet-mrms-generative-v1"
+    assert profile.evolution_profile_path == FOUNDATION_PROFILE_PATH.resolve()
     assert profile.input_frames == 9
     assert profile.target_frames == 20
     assert profile.context_frames == 4
@@ -448,6 +451,50 @@ def test_generative_profile_matches_schema_and_published_contract() -> None:
     assert profile.generator_learning_rate == 3e-5
     assert profile.discriminator_learning_rate == 3e-5
     assert profile.total_steps == 500000
+    assert profile.checkpoint_maximum_interval_steps == 1000
+    assert profile.checkpoint_maximum_interval_seconds == 300
+    assert profile.checkpoint_rolling_keep == 3
+    assert profile.checkpoint_milestone_interval_steps == 10000
+    assert profile.checkpoint_preserve_window_final is True
+
+
+def test_generative_checkpoint_retention_preserves_rolling_milestones_and_windows(
+    tmp_path: Path,
+) -> None:
+    checkpoint_dir = tmp_path / "checkpoints"
+    checkpoint_dir.mkdir()
+    for step in range(1000, 8000, 1000):
+        (checkpoint_dir / f"generative-step-{step:09d}.pt").write_bytes(
+            f"checkpoint-{step}".encode()
+        )
+    _record_window_final(
+        tmp_path,
+        {
+            "global_step": 2000,
+            "path": "checkpoints/generative-step-000002000.pt",
+            "sha256": "a" * 64,
+        },
+    )
+
+    result = _prune_checkpoints(
+        tmp_path,
+        latest={
+            "global_step": 7000,
+            "path": "checkpoints/generative-step-000007000.pt",
+            "sha256": "b" * 64,
+        },
+        rolling_keep=2,
+        milestone_interval_steps=3000,
+        preserve_window_final=True,
+    )
+
+    assert result == {"retained": 4, "deleted": 3}
+    assert {path.name for path in checkpoint_dir.glob("generative-step-*.pt")} == {
+        "generative-step-000002000.pt",
+        "generative-step-000003000.pt",
+        "generative-step-000006000.pt",
+        "generative-step-000007000.pt",
+    }
 
 
 def test_generative_profile_rejects_an_official_training_source_claim(

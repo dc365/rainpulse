@@ -36,11 +36,7 @@ class GenerativeTrainError(RuntimeError):
 
 def _read_metrics(path: Path) -> list[dict[str, Any]]:
     try:
-        rows = [
-            json.loads(line)
-            for line in path.read_text(encoding="utf-8").splitlines()
-            if line
-        ]
+        rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
     except (OSError, json.JSONDecodeError) as exc:
         raise GenerativeTrainError(f"cannot read generative metrics: {exc}") from exc
     if [int(row.get("global_step", -1)) for row in rows] != list(range(1, len(rows) + 1)):
@@ -75,8 +71,7 @@ def compare_generative_metrics(
     ):
         if (
             reference_row["global_step"] != resumed_row["global_step"]
-            or reference_row["batch_indices_sha256"]
-            != resumed_row["batch_indices_sha256"]
+            or reference_row["batch_indices_sha256"] != resumed_row["batch_indices_sha256"]
             or any(
                 not math.isclose(
                     float(reference_row[field]),
@@ -197,11 +192,9 @@ def _write_checkpoint(
             loaded.get("global_step") != global_step
             or loaded.get("profile_sha256") != state["profile_sha256"]
             or loaded.get("code_revision") != state["code_revision"]
-            or loaded.get("evolution_checkpoint_sha256")
-            != state["evolution_checkpoint_sha256"]
+            or loaded.get("evolution_checkpoint_sha256") != state["evolution_checkpoint_sha256"]
             or any(
-                _state_fingerprint(torch, loaded[f"{name}_dict"])
-                != state[f"{name}_sha256"]
+                _state_fingerprint(torch, loaded[f"{name}_dict"]) != state[f"{name}_sha256"]
                 for name in (
                     "evolution_state",
                     "generator_state",
@@ -233,6 +226,99 @@ def _write_checkpoint(
     }
     _atomic_json(output_dir / "LATEST.json", latest)
     return latest
+
+
+def _checkpoint_step(path: Path) -> int:
+    prefix = "generative-step-"
+    if not path.name.startswith(prefix) or path.suffix != ".pt":
+        raise GenerativeTrainError(f"unexpected generative checkpoint name: {path.name}")
+    try:
+        return int(path.stem.removeprefix(prefix))
+    except ValueError as exc:
+        raise GenerativeTrainError(f"unexpected generative checkpoint step: {path.name}") from exc
+
+
+def _window_final_paths(output_dir: Path) -> set[str]:
+    marker = output_dir / "window-finals.json"
+    if not marker.exists():
+        return set()
+    try:
+        payload = json.loads(marker.read_text(encoding="utf-8"))
+        entries = payload["checkpoints"]
+        if payload.get("schema_version") != "1.0" or not isinstance(entries, list):
+            raise ValueError("window final marker contract differs")
+        paths = {str(entry["path"]) for entry in entries}
+    except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise GenerativeTrainError(f"cannot read generative window finals: {exc}") from exc
+    for value in paths:
+        relative = Path(value)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise GenerativeTrainError("generative window final path is unsafe")
+    return paths
+
+
+def _record_window_final(output_dir: Path, latest: dict[str, Any]) -> None:
+    marker = output_dir / "window-finals.json"
+    existing: list[dict[str, Any]] = []
+    if marker.exists():
+        try:
+            payload = json.loads(marker.read_text(encoding="utf-8"))
+            if payload.get("schema_version") != "1.0":
+                raise ValueError("window final marker contract differs")
+            existing = list(payload["checkpoints"])
+        except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise GenerativeTrainError(f"cannot update generative window finals: {exc}") from exc
+    entry = {
+        "global_step": int(latest["global_step"]),
+        "path": str(latest["path"]),
+        "sha256": str(latest["sha256"]),
+    }
+    by_step = {int(item["global_step"]): item for item in existing}
+    by_step[entry["global_step"]] = entry
+    _atomic_json(
+        marker,
+        {
+            "schema_version": "1.0",
+            "checkpoints": [by_step[step] for step in sorted(by_step)],
+        },
+    )
+
+
+def _prune_checkpoints(
+    output_dir: Path,
+    *,
+    latest: dict[str, Any],
+    rolling_keep: int,
+    milestone_interval_steps: int,
+    preserve_window_final: bool,
+) -> dict[str, int]:
+    if rolling_keep < 1 or milestone_interval_steps < 1:
+        raise GenerativeTrainError("generative checkpoint retention is invalid")
+    checkpoint_dir = output_dir / "checkpoints"
+    checkpoints = sorted(
+        checkpoint_dir.glob("generative-step-*.pt"),
+        key=_checkpoint_step,
+    )
+    protected = {str(latest["path"])}
+    protected.update(
+        path.relative_to(output_dir).as_posix() for path in checkpoints[-rolling_keep:]
+    )
+    protected.update(
+        path.relative_to(output_dir).as_posix()
+        for path in checkpoints
+        if _checkpoint_step(path) % milestone_interval_steps == 0
+    )
+    if preserve_window_final:
+        protected.update(_window_final_paths(output_dir))
+    deleted = 0
+    for path in checkpoints:
+        if path.relative_to(output_dir).as_posix() not in protected:
+            path.unlink()
+            deleted += 1
+    return {
+        "retained": len(checkpoints) - deleted,
+        "deleted": deleted,
+    }
 
 
 def _latest_checkpoint(output_dir: Path) -> tuple[Path, dict[str, Any]]:
@@ -374,7 +460,11 @@ def run_generative_training(
     batch_size: int,
     precision: str,
     stop_after_steps: int,
-    checkpoint_every_steps: int,
+    checkpoint_every_steps: int | None,
+    checkpoint_every_seconds: int | None,
+    rolling_checkpoint_keep: int | None,
+    milestone_every_steps: int | None,
+    preserve_window_final: bool | None,
     resume: bool,
     stage_b_smoke: bool,
 ) -> dict[str, Any]:
@@ -387,7 +477,7 @@ def run_generative_training(
 
     profile = load_generative_training_profile(profile_path, repository_root=repository_root)
     evolution_profile = load_nowcastnet_training_run_profile(
-        repository_root / "configs/training/nowcastnet-mrms-run-v1.yaml",
+        profile.evolution_profile_path,
         repository_root=repository_root,
     )
     if evolution_profile.profile_sha256 != profile.evolution_profile_sha256:
@@ -400,8 +490,49 @@ def run_generative_training(
         raise GenerativeTrainError("generative precision must be fp32 or bf16")
     if stop_after_steps < 1 or stop_after_steps > profile.total_steps:
         raise GenerativeTrainError("generative stop step is invalid")
-    if checkpoint_every_steps < 1:
+    checkpoint_every_steps = (
+        profile.checkpoint_maximum_interval_steps
+        if checkpoint_every_steps is None
+        else checkpoint_every_steps
+    )
+    checkpoint_every_seconds = (
+        profile.checkpoint_maximum_interval_seconds
+        if checkpoint_every_seconds is None
+        else checkpoint_every_seconds
+    )
+    rolling_checkpoint_keep = (
+        profile.checkpoint_rolling_keep
+        if rolling_checkpoint_keep is None
+        else rolling_checkpoint_keep
+    )
+    milestone_every_steps = (
+        profile.checkpoint_milestone_interval_steps
+        if milestone_every_steps is None
+        else milestone_every_steps
+    )
+    preserve_window_final = (
+        profile.checkpoint_preserve_window_final
+        if preserve_window_final is None
+        else preserve_window_final
+    )
+    if (
+        min(
+            checkpoint_every_steps,
+            checkpoint_every_seconds,
+            rolling_checkpoint_keep,
+            milestone_every_steps,
+        )
+        < 1
+    ):
         raise GenerativeTrainError("generative checkpoint interval is invalid")
+    if not stage_b_smoke and (
+        checkpoint_every_steps != profile.checkpoint_maximum_interval_steps
+        or checkpoint_every_seconds != profile.checkpoint_maximum_interval_seconds
+        or rolling_checkpoint_keep != profile.checkpoint_rolling_keep
+        or milestone_every_steps != profile.checkpoint_milestone_interval_steps
+        or preserve_window_final != profile.checkpoint_preserve_window_final
+    ):
+        raise GenerativeTrainError("formal generative checkpoint policy differs")
 
     evolution_state, evolution_step, evolution_sha256 = _validate_evolution_checkpoint(
         torch,
@@ -432,6 +563,11 @@ def run_generative_training(
         "ensemble_members": profile.ensemble_members,
         "precision": precision,
         "stage_b_smoke": stage_b_smoke,
+        "checkpoint_every_steps": checkpoint_every_steps,
+        "checkpoint_every_seconds": checkpoint_every_seconds,
+        "rolling_checkpoint_keep": rolling_checkpoint_keep,
+        "milestone_every_steps": milestone_every_steps,
+        "preserve_window_final": preserve_window_final,
     }
     if resume:
         if not manifest_path.is_file() or not metrics_path.is_file():
@@ -518,6 +654,7 @@ def run_generative_training(
     stop_requested = False
     old_handlers: dict[int, Any] = {}
     if threading.current_thread() is threading.main_thread():
+
         def request_stop(_signum: int, _frame: Any) -> None:
             nonlocal stop_requested
             stop_requested = True
@@ -529,7 +666,42 @@ def run_generative_training(
     if device_name == "cuda":
         torch.cuda.reset_peak_memory_stats()
     invocation_started = time.perf_counter()
+    last_checkpoint_at = invocation_started
     latest: dict[str, Any] | None = None
+
+    def save_checkpoint() -> dict[str, Any]:
+        nonlocal last_checkpoint_at, latest
+        latest = _write_checkpoint(
+            torch,
+            output_dir=output_dir,
+            state=_checkpoint_state(
+                torch,
+                profile=profile,
+                code_revision=code_revision,
+                sample_index_sha256=evolution_profile.sample_index_sha256,
+                evolution_checkpoint_step=evolution_step,
+                evolution_checkpoint_sha256=evolution_sha256,
+                batch_size=batch_size,
+                precision=precision,
+                stage_b_smoke=stage_b_smoke,
+                global_step=global_step,
+                evolution=evolution,
+                generator=generator,
+                discriminator=discriminator,
+                generator_optimizer=generator_optimizer,
+                discriminator_optimizer=discriminator_optimizer,
+            ),
+        )
+        last_checkpoint_at = time.perf_counter()
+        _prune_checkpoints(
+            output_dir,
+            latest=latest,
+            rolling_keep=rolling_checkpoint_keep,
+            milestone_interval_steps=milestone_every_steps,
+            preserve_window_final=preserve_window_final,
+        )
+        return latest
+
     try:
         while global_step < stop_after_steps and not stop_requested:
             step_started = time.perf_counter()
@@ -540,17 +712,20 @@ def run_generative_training(
                 global_step=global_step,
             )
             samples = [dataset[index] for index in indices]
-            inputs = torch.from_numpy(
-                np.stack([sample.input_rate_mm_h for sample in samples])
-            ).to(device_name)
+            inputs = torch.from_numpy(np.stack([sample.input_rate_mm_h for sample in samples])).to(
+                device_name
+            )
             targets = torch.from_numpy(
                 np.stack([sample.target_rate_mm_h for sample in samples])
             ).to(device_name)
             autocast_enabled = device_name == "cuda" and precision == "bf16"
-            with torch.no_grad(), torch.autocast(
-                device_type=device_name,
-                dtype=torch.bfloat16 if precision == "bf16" else torch.float32,
-                enabled=autocast_enabled,
+            with (
+                torch.no_grad(),
+                torch.autocast(
+                    device_type=device_name,
+                    dtype=torch.bfloat16 if precision == "bf16" else torch.float32,
+                    enabled=autocast_enabled,
+                ),
             ):
                 intensity, motion = evolution(inputs)
                 evolution_prediction = rollout_evolution(inputs, intensity, motion)
@@ -588,12 +763,8 @@ def run_generative_training(
                 "discriminator_loss_total": float(
                     result.discriminator.total.detach().float().cpu()
                 ),
-                "discriminator_loss_real": float(
-                    result.discriminator.real.detach().float().cpu()
-                ),
-                "discriminator_loss_fake": float(
-                    result.discriminator.fake.detach().float().cpu()
-                ),
+                "discriminator_loss_real": float(result.discriminator.real.detach().float().cpu()),
+                "discriminator_loss_fake": float(result.discriminator.fake.detach().float().cpu()),
                 "generator_gradient_norm_before_clip": float(
                     result.generator_gradient_norm.float().cpu()
                 ),
@@ -601,44 +772,33 @@ def run_generative_training(
                     result.discriminator_gradient_norm.float().cpu()
                 ),
                 "generator_learning_rate": float(generator_optimizer.param_groups[0]["lr"]),
-                "discriminator_learning_rate": float(
-                    discriminator_optimizer.param_groups[0]["lr"]
-                ),
+                "discriminator_learning_rate": float(discriminator_optimizer.param_groups[0]["lr"]),
                 "duration_seconds": time.perf_counter() - step_started,
             }
             _append_metric(metrics_path, metric)
             if (
                 global_step % checkpoint_every_steps == 0
+                or time.perf_counter() - last_checkpoint_at >= checkpoint_every_seconds
                 or global_step == stop_after_steps
                 or stop_requested
             ):
-                latest = _write_checkpoint(
-                    torch,
-                    output_dir=output_dir,
-                    state=_checkpoint_state(
-                        torch,
-                        profile=profile,
-                        code_revision=code_revision,
-                        sample_index_sha256=evolution_profile.sample_index_sha256,
-                        evolution_checkpoint_step=evolution_step,
-                        evolution_checkpoint_sha256=evolution_sha256,
-                        batch_size=batch_size,
-                        precision=precision,
-                        stage_b_smoke=stage_b_smoke,
-                        global_step=global_step,
-                        evolution=evolution,
-                        generator=generator,
-                        discriminator=discriminator,
-                        generator_optimizer=generator_optimizer,
-                        discriminator_optimizer=discriminator_optimizer,
-                    ),
-                )
+                save_checkpoint()
+        if latest is None or int(latest["global_step"]) != global_step:
+            save_checkpoint()
     finally:
         for signum, handler in old_handlers.items():
             signal.signal(signum, handler)
 
     if latest is None:
         _, latest = _latest_checkpoint(output_dir)
+    _record_window_final(output_dir, latest)
+    retention = _prune_checkpoints(
+        output_dir,
+        latest=latest,
+        rolling_keep=rolling_checkpoint_keep,
+        milestone_interval_steps=milestone_every_steps,
+        preserve_window_final=preserve_window_final,
+    )
     gpu = torch.cuda.get_device_properties(0) if device_name == "cuda" else None
     report = {
         "schema_version": "1.0",
@@ -649,9 +809,7 @@ def run_generative_training(
         "sample_index_sha256": evolution_profile.sample_index_sha256,
         "evolution_checkpoint_step": evolution_step,
         "evolution_checkpoint_sha256": evolution_sha256,
-        "evolution_pretraining_complete": (
-            evolution_step == profile.completed_pretraining_step
-        ),
+        "evolution_pretraining_complete": (evolution_step == profile.completed_pretraining_step),
         "stage_b_smoke": stage_b_smoke,
         "global_step": global_step,
         "batch_size": batch_size,
@@ -674,6 +832,14 @@ def run_generative_training(
         "peak_reserved_memory_bytes": (
             int(torch.cuda.max_memory_reserved()) if device_name == "cuda" else 0
         ),
+        "checkpoint_policy": {
+            "maximum_interval_steps": checkpoint_every_steps,
+            "maximum_interval_seconds": checkpoint_every_seconds,
+            "rolling_keep": rolling_checkpoint_keep,
+            "milestone_interval_steps": milestone_every_steps,
+            "preserve_window_final": preserve_window_final,
+            **retention,
+        },
         "full_generative_training_eligible": (
             evolution_step == profile.completed_pretraining_step and not stage_b_smoke
         ),
@@ -753,7 +919,15 @@ def _build_parser() -> argparse.ArgumentParser:
     train.add_argument("--batch-size", type=int, default=16)
     train.add_argument("--precision", choices=("fp32", "bf16"), default="bf16")
     train.add_argument("--stop-after-steps", type=int, required=True)
-    train.add_argument("--checkpoint-every-steps", type=int, default=100)
+    train.add_argument("--checkpoint-every-steps", type=int)
+    train.add_argument("--checkpoint-every-seconds", type=int)
+    train.add_argument("--rolling-checkpoint-keep", type=int)
+    train.add_argument("--milestone-every-steps", type=int)
+    train.add_argument(
+        "--no-preserve-window-final",
+        action="store_true",
+        help="stage-B-only override that does not retain invocation-final checkpoints",
+    )
     train.add_argument("--resume", action="store_true")
     train.add_argument("--stage-b-smoke", action="store_true")
 
@@ -788,6 +962,10 @@ def main() -> int:
             precision=args.precision,
             stop_after_steps=args.stop_after_steps,
             checkpoint_every_steps=args.checkpoint_every_steps,
+            checkpoint_every_seconds=args.checkpoint_every_seconds,
+            rolling_checkpoint_keep=args.rolling_checkpoint_keep,
+            milestone_every_steps=args.milestone_every_steps,
+            preserve_window_final=(False if args.no_preserve_window_final else None),
             resume=args.resume,
             stage_b_smoke=args.stage_b_smoke,
         )
