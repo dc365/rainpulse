@@ -35,6 +35,7 @@ from .test_object_store import FakeMinio
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 QC_CONFIG = REPOSITORY_ROOT / "configs" / "qc" / "rp008-basic-v1.yaml"
 RP042_QC_CONFIG = REPOSITORY_ROOT / "configs" / "qc" / "rp042-fujian-evidence-v1.yaml"
+RP043_QC_CONFIG = REPOSITORY_ROOT / "configs" / "qc" / "rp043-fujian-radial-closure-v1.yaml"
 FLAG_CONFIG = REPOSITORY_ROOT / "configs" / "qc" / "flag-definitions.yaml"
 
 
@@ -209,6 +210,77 @@ def test_radial_interference_detects_two_thirds_high_long_range_ray(
     )
     assert np.nanmax(probability[:6, :]) == 0.0
     assert np.nanmax(probability[7:, :]) == 0.0
+
+
+def test_rp043_radial_fan_closure_fills_bounded_boundary_ray() -> None:
+    """A near-threshold ray between hard fan seeds must not remain as a hole."""
+    profile = load_qc_profile(RP043_QC_CONFIG, FLAG_CONFIG)
+    dbzh = np.full((24, 600), 5.0, dtype="float32")
+    dbzh[10, :] = np.linspace(46.0, 66.0, 600, dtype="float32")
+    dbzh[12, :] = np.linspace(46.0, 66.0, 600, dtype="float32")
+    # This boundary ray has strong range growth but misses the legacy 400-gate
+    # saturated run. Similar contaminated neighbours also suppress its local
+    # difference, matching the observed 10:25 and 10:45 CST holes.
+    dbzh[11, :] = np.linspace(30.0, 70.0, 600, dtype="float32")
+
+    detection = _detect_radial_interference(
+        dbzh,
+        np.isfinite(dbzh),
+        profile.radial_interference,
+        ranges_m=np.arange(600, dtype="float32") * 250.0,
+    )
+
+    assert np.all(
+        detection.probability[11]
+        >= profile.radial_interference.flag_probability
+    )
+    assert np.all(
+        detection.interference_type[11] == INTERFERENCE_TYPE_CODES["broad"]
+    )
+
+
+def test_rp043_multiscale_promotion_confirms_discontinuous_spike() -> None:
+    """Sparse longitudinal spikes require wider azimuth context for promotion."""
+    profile = load_qc_profile(RP043_QC_CONFIG, FLAG_CONFIG)
+    dbzh = np.full((100, 600), 5.0, dtype="float32")
+    dbzh[50, :] = np.nan
+    dbzh[50, :50] = 20.0
+    dbzh[50, 350:] = np.linspace(35.0, 65.0, 250, dtype="float32")
+
+    detection = _detect_radial_interference(
+        dbzh,
+        np.isfinite(dbzh),
+        profile.radial_interference,
+        ranges_m=np.arange(600, dtype="float32") * 250.0,
+    )
+
+    typed = detection.interference_type[50] != INTERFERENCE_TYPE_CODES["none"]
+    assert np.count_nonzero(typed) >= 100
+    assert np.all(
+        detection.probability[50, typed]
+        >= profile.radial_interference.flag_probability
+    )
+
+
+def test_rp043_does_not_expand_fan_closure_into_continuous_precipitation() -> None:
+    profile = load_qc_profile(RP043_QC_CONFIG, FLAG_CONFIG)
+    dbzh = np.full((24, 600), 5.0, dtype="float32")
+    # A spatially continuous rain band spans several rays but only part of the
+    # range axis. It has neither seeded fan boundaries nor far-range growth.
+    dbzh[8:16, 180:300] = 48.0
+
+    detection = _detect_radial_interference(
+        dbzh,
+        np.isfinite(dbzh),
+        profile.radial_interference,
+        ranges_m=np.arange(600, dtype="float32") * 250.0,
+    )
+
+    assert detection.flagged_ray_count == 0
+    assert not np.any(
+        np.nan_to_num(detection.probability[8:16], nan=0.0)
+        >= profile.radial_interference.flag_probability
+    )
 
 
 def test_radial_morphology_classifies_interrupted_and_short_range_segments(

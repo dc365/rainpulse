@@ -139,7 +139,57 @@
             "intermittent_minimum_segments": { "type": "integer", "minimum": 2 },
             "short_range_max_m": { "type": "number", "exclusiveMinimum": 0 },
             "reverse_minimum_drop_db": { "type": "number", "exclusiveMinimum": 0 },
-            "diagnostic_probability": { "$ref": "#/$defs/probability" }
+            "diagnostic_probability": { "$ref": "#/$defs/probability" },
+            "fan_closure": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "enabled",
+                "maximum_gap_rays",
+                "minimum_valid_gate_fraction",
+                "minimum_high_dbzh",
+                "minimum_high_gate_fraction",
+                "minimum_high_run",
+                "minimum_range_growth_db"
+              ],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "maximum_gap_rays": { "type": "integer", "minimum": 1 },
+                "minimum_valid_gate_fraction": { "$ref": "#/$defs/probability" },
+                "minimum_high_dbzh": { "type": "number" },
+                "minimum_high_gate_fraction": { "$ref": "#/$defs/probability" },
+                "minimum_high_run": { "type": "integer", "minimum": 2 },
+                "minimum_range_growth_db": { "type": "number", "exclusiveMinimum": 0 }
+              }
+            },
+            "multiscale_promotion": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "enabled",
+                "echo_threshold_dbzh",
+                "short_window_rays",
+                "long_window_rays",
+                "minimum_score_gate_fraction",
+                "minimum_edge_jump_gate_fraction",
+                "minimum_diagnostic_gates",
+                "minimum_high_dbzh",
+                "minimum_high_gates",
+                "minimum_range_growth_db"
+              ],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "echo_threshold_dbzh": { "type": "number" },
+                "short_window_rays": { "type": "integer", "minimum": 1 },
+                "long_window_rays": { "type": "integer", "minimum": 2 },
+                "minimum_score_gate_fraction": { "$ref": "#/$defs/probability" },
+                "minimum_edge_jump_gate_fraction": { "$ref": "#/$defs/probability" },
+                "minimum_diagnostic_gates": { "type": "integer", "minimum": 2 },
+                "minimum_high_dbzh": { "type": "number" },
+                "minimum_high_gates": { "type": "integer", "minimum": 2 },
+                "minimum_range_growth_db": { "type": "number", "exclusiveMinimum": 0 }
+              }
+            }
           }
         }
       }

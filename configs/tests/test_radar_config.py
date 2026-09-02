@@ -239,19 +239,39 @@ def test_rp042_qc_profile_enables_only_evidence_supported_by_current_data() -> N
     assert profile["sea_ap"]["coastline_asset_uri"] is None
 
 
-def test_rp042_realtime_shadow_versions_the_full_reprocessing_chain() -> None:
+def test_rp043_qc_profile_promotes_only_seeded_or_multiscale_radial_evidence() -> None:
+    schema = json.loads((CONFIG_ROOT / "schemas" / "radar-qc.schema.json").read_text())
+    profile = yaml.safe_load(
+        (CONFIG_ROOT / "qc" / "rp043-fujian-radial-closure-v1.yaml").read_text()
+    )
+
+    Draft202012Validator(schema).validate(profile)
+    morphology = profile["radial_interference"]["morphology"]
+    assert morphology["mode"] == "diagnostic_only"
+    assert morphology["fan_closure"]["enabled"] is True
+    assert morphology["fan_closure"]["maximum_gap_rays"] == 2
+    assert morphology["multiscale_promotion"]["enabled"] is True
+    assert (
+        morphology["multiscale_promotion"]["short_window_rays"]
+        < morphology["multiscale_promotion"]["long_window_rays"]
+    )
+    assert profile["dual_pol_fuzzy"]["mode"] == "diagnostic_only"
+    assert profile["vertical_consistency"]["mode"] == "diagnostic_only"
+
+
+def test_rp043_realtime_shadow_versions_the_full_reprocessing_chain() -> None:
     profiles = (
         (
             "schemas/radar-grid-profile.schema.json",
-            "gridding/rp042-hybrid-evidence-v1.yaml",
+            "gridding/rp043-hybrid-radial-closure-v1.yaml",
         ),
         (
             "schemas/radar-mosaic-profile.schema.json",
-            "mosaic/rp042-fujian-realtime-shadow-v1.yaml",
+            "mosaic/rp043-fujian-realtime-shadow-v1.yaml",
         ),
         (
             "schemas/nowcast-input-profile.schema.json",
-            "nowcast/rp042-realtime-shadow-5min-v1.yaml",
+            "nowcast/rp043-realtime-shadow-5min-v2.yaml",
         ),
     )
     for schema_name, profile_name in profiles:
@@ -262,6 +282,9 @@ def test_rp042_realtime_shadow_versions_the_full_reprocessing_chain() -> None:
     override = yaml.safe_load(
         (REPOSITORY_ROOT / "deploy" / "docker-compose.realtime-shadow.yaml").read_text()
     )["services"]
+    assert "rp043" in override["radar-qc-worker"]["environment"][
+        "RAINPULSE_RADAR_QC_CONFIG"
+    ]
     orchestrator = override["orchestrator"]["environment"]
     assert orchestrator["RAINPULSE_PIPELINE_QC_CONFIG"] == override[
         "radar-qc-worker"
