@@ -13,6 +13,7 @@ import yaml
 import zarr
 from jsonschema import Draft202012Validator
 
+from rainpulse_algo.training import generative_train as generative_train_module
 from rainpulse_algo.training.conformance import (
     materialize_conformance_arrays,
     select_conformance_windows,
@@ -50,15 +51,11 @@ from rainpulse_algo.training.runtime_report import (
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-PROFILE_PATH = (
-    REPOSITORY_ROOT / "configs" / "training" / "nowcastnet-mrms-run-v1.yaml"
-)
+PROFILE_PATH = REPOSITORY_ROOT / "configs" / "training" / "nowcastnet-mrms-run-v1.yaml"
 FOUNDATION_PROFILE_PATH = (
     REPOSITORY_ROOT / "configs" / "training" / "nowcastnet-mrms-foundation-v1.yaml"
 )
-SCHEMA_PATH = (
-    REPOSITORY_ROOT / "configs" / "schemas" / "nowcastnet-training-run.schema.json"
-)
+SCHEMA_PATH = REPOSITORY_ROOT / "configs" / "schemas" / "nowcastnet-training-run.schema.json"
 FOUNDATION_SCHEMA_PATH = (
     REPOSITORY_ROOT / "configs" / "schemas" / "nowcastnet-foundation-run.schema.json"
 )
@@ -96,9 +93,7 @@ FOUNDATION_EVOLUTION_COMPLETE_EVIDENCE_PATH = (
     / "evidence"
     / "nowcastnet-foundation-evolution-complete-v1.json"
 )
-NIGHTLY_RUNBOOK_PATH = (
-    REPOSITORY_ROOT / "docs" / "nowcastnet-training" / "RUNBOOK_NIGHTLY.md"
-)
+NIGHTLY_RUNBOOK_PATH = REPOSITORY_ROOT / "docs" / "nowcastnet-training" / "RUNBOOK_NIGHTLY.md"
 GENERATIVE_PROFILE_PATH = (
     REPOSITORY_ROOT / "configs" / "training" / "nowcastnet-mrms-generative-v1.yaml"
 )
@@ -139,10 +134,7 @@ def _write_fixture_dataset(root: Path) -> str:
             "window_id": "fixture-window",
         }
         samples.append(sample)
-    lines = [
-        json.dumps(sample, sort_keys=True, separators=(",", ":"))
-        for sample in samples
-    ]
+    lines = [json.dumps(sample, sort_keys=True, separators=(",", ":")) for sample in samples]
     sample_index = root / "samples.jsonl"
     sample_index.parent.mkdir(parents=True, exist_ok=True)
     sample_index.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -312,27 +304,19 @@ def test_formal_training_approval_preserves_identity_and_holdout_boundaries() ->
             "d6f2ccda872f7b5a6eaa74fb460859d24ff71b6766dcd52f4a7edae6f1a4a82d"
         ),
         "checkpoint_global_step": 2819,
-        "checkpoint_sha256": (
-            "328a295439abcd6b4356a01d1c7c8b537935bfd6de3b253ea7b4584d21cb47ab"
-        ),
+        "checkpoint_sha256": ("328a295439abcd6b4356a01d1c7c8b537935bfd6de3b253ea7b4584d21cb47ab"),
         "checkpoint_state_fingerprints_verified": True,
         "random_state_exact_in_rehearsal": True,
         "promoted_as_formal_start": True,
     }
-    assert evidence["preflight"]["initial_main_worktree_attempt"]["status"] == (
-        "rejected"
-    )
-    assert evidence["preflight"]["pinned_training_worktree"]["status"] == (
-        "passed"
-    )
+    assert evidence["preflight"]["initial_main_worktree_attempt"]["status"] == ("rejected")
+    assert evidence["preflight"]["pinned_training_worktree"]["status"] == ("passed")
     assert evidence["schedule"]["timezone"] == "Asia/Taipei"
     assert evidence["schedule"]["start_time"] == "20:00"
     assert evidence["schedule"]["stop_time"] == "07:45"
     assert evidence["schedule"]["kill_mode"] == "mixed"
     assert evidence["schedule"]["checkpoint_interval_seconds"] == 300
-    assert evidence["schedule"]["checkpoint_interval_source"] == (
-        "promoted_run_manifest"
-    )
+    assert evidence["schedule"]["checkpoint_interval_source"] == ("promoted_run_manifest")
     assert evidence["schedule"]["first_window_manual_continuation_gate"] is True
     assert evidence["schedule"]["automatic_second_window_approved"] is False
     assert evidence["decision"] == {
@@ -370,13 +354,9 @@ def test_first_formal_window_acceptance_keeps_second_window_closed() -> None:
     assert evidence["shared_services"]["qwen3_8_recovery"] == "passed"
     assert evidence["shared_services"]["qwen3_6_stopped"] is False
     assert evidence["scheduler_lifecycle"]["training_artifacts_affected"] is False
-    assert evidence["scheduler_lifecycle"]["corrected_finalizer_dry_run_status"] == (
-        "passed"
-    )
+    assert evidence["scheduler_lifecycle"]["corrected_finalizer_dry_run_status"] == ("passed")
     assert evidence["scheduler_lifecycle"]["start_timer_enabled"] is False
-    assert evidence["scheduler_lifecycle"]["second_window_start_permit_present"] is (
-        False
-    )
+    assert evidence["scheduler_lifecycle"]["second_window_start_permit_present"] is (False)
     assert evidence["decision"] == {
         "first_formal_window_accepted": True,
         "second_formal_window_approved": False,
@@ -456,6 +436,47 @@ def test_generative_profile_matches_schema_and_published_contract() -> None:
     assert profile.checkpoint_rolling_keep == 3
     assert profile.checkpoint_milestone_interval_steps == 10000
     assert profile.checkpoint_preserve_window_final is True
+
+
+def test_generative_training_uses_full_dataset_identity(monkeypatch: pytest.MonkeyPatch) -> None:
+    generative_profile = load_generative_training_profile(
+        GENERATIVE_PROFILE_PATH,
+        repository_root=REPOSITORY_ROOT,
+    )
+    evolution_profile = load_nowcastnet_training_run_profile(
+        FOUNDATION_PROFILE_PATH,
+        repository_root=REPOSITORY_ROOT,
+    )
+    captured: dict[str, object] = {}
+    sentinel = object()
+
+    def fake_dataset(root: Path, **kwargs: object) -> object:
+        captured["root"] = root
+        captured.update(kwargs)
+        return sentinel
+
+    monkeypatch.setattr(
+        generative_train_module,
+        "MRMSZarrTrainingDataset",
+        fake_dataset,
+    )
+
+    result = generative_train_module._open_generative_training_dataset(
+        Path("/data/full-samples-v1"),
+        profile=generative_profile,
+        evolution_profile=evolution_profile,
+    )
+
+    assert result is sentinel
+    assert captured["dataset_contract"] == "full_sample_v1"
+    assert captured["expected_sample_count"] == 100000
+    assert captured["expected_shard_count"] == 4000
+    assert captured["expected_dataset_version"] == "nowcastnet-mrms-full-samples-v1"
+    assert (
+        captured["expected_profile_sha256"] == evolution_profile.foundation.expected_profile_sha256
+    )
+    assert captured["expected_plan_id"] == evolution_profile.foundation.expected_plan_id
+    assert captured["require_validation_report"] is True
 
 
 def test_generative_checkpoint_retention_preserves_rolling_milestones_and_windows(

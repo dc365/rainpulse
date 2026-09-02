@@ -34,6 +34,32 @@ class GenerativeTrainError(RuntimeError):
     """Raised when continuous generative training or recovery is unsafe."""
 
 
+def _open_generative_training_dataset(
+    data_root: Path,
+    *,
+    profile: GenerativeTrainingProfile,
+    evolution_profile: Any,
+) -> MRMSZarrTrainingDataset:
+    """Open the dataset with the exact identity frozen by the evolution profile."""
+
+    track = evolution_profile.foundation
+    return MRMSZarrTrainingDataset(
+        data_root,
+        expected_sample_index_sha256=evolution_profile.sample_index_sha256,
+        expected_sample_count=track.expected_sample_count,
+        expected_crop_size=track.model_crop_size,
+        expected_shard_count=track.expected_shard_count,
+        dataset_contract=track.dataset_contract,
+        expected_dataset_version=track.expected_dataset_version,
+        expected_profile_sha256=track.expected_profile_sha256,
+        expected_plan_id=track.expected_plan_id,
+        require_validation_report=track.require_validation_report,
+        input_frames=profile.input_frames,
+        target_frames=profile.target_frames,
+        maximum_open_shards=64,
+    )
+
+
 def _read_metrics(path: Path) -> list[dict[str, Any]]:
     try:
         rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
@@ -541,14 +567,10 @@ def run_generative_training(
         generative_profile=profile,
         stage_b_smoke=stage_b_smoke,
     )
-    dataset = MRMSZarrTrainingDataset(
+    dataset = _open_generative_training_dataset(
         data_root,
-        expected_sample_index_sha256=evolution_profile.sample_index_sha256,
-        expected_sample_count=evolution_profile.foundation.expected_sample_count,
-        expected_crop_size=evolution_profile.foundation.model_crop_size,
-        input_frames=profile.input_frames,
-        target_frames=profile.target_frames,
-        maximum_open_shards=64,
+        profile=profile,
+        evolution_profile=evolution_profile,
     )
     code_revision = _code_revision(repository_root)
     metrics_path = output_dir / "metrics.jsonl"
@@ -557,6 +579,10 @@ def run_generative_training(
         "profile_sha256": profile.profile_sha256,
         "code_revision": code_revision,
         "sample_index_sha256": evolution_profile.sample_index_sha256,
+        "dataset_contract": evolution_profile.foundation.dataset_contract,
+        "dataset_version": evolution_profile.foundation.expected_dataset_version,
+        "dataset_profile_sha256": evolution_profile.foundation.expected_profile_sha256,
+        "dataset_plan_id": evolution_profile.foundation.expected_plan_id,
         "evolution_checkpoint_step": evolution_step,
         "evolution_checkpoint_sha256": evolution_sha256,
         "batch_size": batch_size,
