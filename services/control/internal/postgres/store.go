@@ -49,7 +49,7 @@ INSERT INTO forecast_runs (
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)`,
 		bundle.Run.ID, bundle.Run.IssueTime, bundle.Run.GridID,
 		bundle.Run.ConfigVersion, bundle.Run.Status, bundle.Run.RerunOf,
-		"RP-003 control-plane run", bundle.Run.CreatedAt)
+		bundle.Run.Reason, bundle.Run.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("insert forecast run: %w", err)
 	}
@@ -1557,7 +1557,7 @@ func completionRunStatus(jobType string) workflow.RunStatus {
 const runSelect = `
 SELECT run_id, issue_time, grid_id, config_version, status,
        CASE WHEN status = 'DEGRADED' THEN reason ELSE NULL END,
-       rerun_of, created_at, updated_at
+       rerun_of, COALESCE(reason, ''), created_at, updated_at
 FROM forecast_runs`
 
 type rowScanner interface {
@@ -1568,7 +1568,7 @@ func scanRun(row rowScanner) (workflow.Run, error) {
 	var run workflow.Run
 	if err := row.Scan(
 		&run.ID, &run.IssueTime, &run.GridID, &run.ConfigVersion, &run.Status,
-		&run.DegradedReason, &run.RerunOf, &run.CreatedAt, &run.UpdatedAt,
+		&run.DegradedReason, &run.RerunOf, &run.Reason, &run.CreatedAt, &run.UpdatedAt,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return workflow.Run{}, workflow.ErrNotFound
@@ -1576,6 +1576,21 @@ func scanRun(row rowScanner) (workflow.Run, error) {
 		return workflow.Run{}, fmt.Errorf("scan forecast run: %w", err)
 	}
 	return run, nil
+}
+
+func (store *Store) FindActiveRegeneration(
+	ctx context.Context,
+	sourceRunID uuid.UUID,
+	preset orchestration.RegenerationPreset,
+) (workflow.Run, error) {
+	prefix := "manual-regeneration/" + string(preset) + ":%"
+	row := store.pool.QueryRow(ctx, runSelect+`
+WHERE rerun_of = $1
+  AND reason LIKE $2
+  AND status NOT IN ('PUBLISHED', 'VERIFIED', 'DEGRADED', 'FAILED', 'SKIPPED')
+ORDER BY created_at DESC
+LIMIT 1`, sourceRunID, prefix)
+	return scanRun(row)
 }
 
 const jobSelect = `

@@ -5,12 +5,13 @@ import argparse
 import hashlib
 import io
 import json
+import shutil
 import tempfile
 import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from uuid import NAMESPACE_URL, UUID, uuid5
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 import zarr
 from minio import Minio
@@ -42,7 +43,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Backfill non-operational RP-039 STEPS products from committed NowcastInput."
     )
-    parser.add_argument("--catalog", type=Path, required=True)
+    parser.add_argument("--catalog", type=Path)
+    parser.add_argument("--input-uri", action="append", default=[])
+    parser.add_argument("--issue-time", action="append", default=[])
+    parser.add_argument("--force", action="store_true")
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--grid-config", type=Path, required=True)
     parser.add_argument("--lk-config", type=Path, required=True)
@@ -50,7 +54,8 @@ def main() -> None:
     parser.add_argument("--product-config", type=Path, required=True)
     arguments = parser.parse_args()
 
-    catalog = _load_catalog(arguments.catalog)
+    catalog = _load_catalog(arguments.catalog, arguments.input_uri)
+    requested_times = {_parse_time(value) for value in arguments.issue_time}
     grid = load_grid_config(arguments.grid_config)
     lk = load_pysteps_lk_profile(arguments.lk_config)
     steps = load_pysteps_steps_profile(arguments.steps_config)
@@ -65,15 +70,18 @@ def main() -> None:
         issue_time = datetime.fromisoformat(
             str(root.attrs["issue_time_utc"]).replace("Z", "+00:00")
         ).astimezone(UTC)
+        if requested_times and issue_time not in requested_times:
+            continue
         input_asset_ids = [UUID(value) for value in root.attrs["input_asset_ids"]]
-        run_id = uuid5(
-            NAMESPACE_URL,
-            f"rainpulse:rp039:steps:{steps.profile_version}:{input_uri}",
+        run_id = _regeneration_run_id(
+            profile_version=steps.profile_version,
+            input_uri=input_uri,
+            force=arguments.force,
         )
         model_job_id = uuid5(run_id, "model")
         product_job_id = uuid5(run_id, "products")
         destination = arguments.output_root.resolve() / str(run_id)
-        if (destination / "manifest.json").is_file():
+        if (destination / "manifest.json").is_file() and not arguments.force:
             reports.append(
                 {"run_id": str(run_id), "issue_time": issue_time.isoformat(), "reused": True}
             )
@@ -118,6 +126,7 @@ def main() -> None:
             grid=grid,
         )
         _write_bundle(arguments.output_root, run_id, bundle)
+        _prune_cycle_versions(arguments.output_root, run_id, bundle)
         reports.append(
             {
                 "run_id": str(run_id),
@@ -137,10 +146,16 @@ def main() -> None:
     print(json.dumps({"processed": len(reports), "runs": reports}, ensure_ascii=False))
 
 
-def _load_catalog(path: Path) -> list[str]:
-    raw = json.loads(path.read_text())
-    if not isinstance(raw, list):
-        raise ValueError("catalog must be a JSON array")
+def _load_catalog(path: Path | None, direct: list[str]) -> list[str]:
+    raw: list[Any] = []
+    if path is not None:
+        loaded = json.loads(path.read_text())
+        if not isinstance(loaded, list):
+            raise ValueError("catalog must be a JSON array")
+        raw.extend(loaded)
+    raw.extend(direct)
+    if not raw:
+        raise ValueError("either --catalog or --input-uri is required")
     uris: list[str] = []
     for item in raw:
         uri = item if isinstance(item, str) else item.get("input_uri") if isinstance(item, dict) else None
@@ -149,6 +164,15 @@ def _load_catalog(path: Path) -> list[str]:
         parse_s3_uri(uri)
         uris.append(uri)
     return list(dict.fromkeys(uris))
+
+
+def _regeneration_run_id(*, profile_version: str, input_uri: str, force: bool) -> UUID:
+    if force:
+        return uuid4()
+    return uuid5(
+        NAMESPACE_URL,
+        f"rainpulse:rp039:steps:{profile_version}:{input_uri}",
+    )
 
 
 def _open(objects: dict[str, bytes]) -> zarr.Group:
@@ -194,6 +218,14 @@ def _publish_artifact(
         len(marker),
         content_type="application/json",
     )
+    current_prefix = f"{prefix}/{data_prefix}/"
+    for item in client.list_objects(
+        bucket,
+        prefix=f"{prefix}/_objects/",
+        recursive=True,
+    ):
+        if not item.object_name.startswith(current_prefix):
+            client.remove_object(bucket, item.object_name)
 
 
 def _write_bundle(root: Path, run_id: UUID, objects: dict[str, bytes]) -> None:
@@ -213,6 +245,49 @@ def _write_bundle(root: Path, run_id: UUID, objects: dict[str, bytes]) -> None:
         # which intentionally runs under a different UID.
         staging.chmod(0o755)
         staging.rename(destination)
+
+
+def _prune_cycle_versions(
+    root: Path,
+    keep_run_id: UUID,
+    objects: dict[str, bytes],
+) -> None:
+    manifest = json.loads(objects["manifest.json"])
+    issue_time = manifest.get("issue_time")
+    grid_id = manifest.get("grid_id")
+    if not isinstance(issue_time, str) or not isinstance(grid_id, str):
+        raise ValueError("STEPS product manifest lacks cycle identity")
+    for entry in root.resolve().iterdir():
+        if not entry.is_dir() or entry.name == str(keep_run_id) or entry.name.startswith("."):
+            continue
+        manifest_path = entry / "manifest.json"
+        if not manifest_path.is_file():
+            continue
+        try:
+            candidate = json.loads(manifest_path.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        try:
+            candidate_id = UUID(entry.name)
+        except ValueError:
+            continue
+        if (
+            candidate_id != keep_run_id
+            and candidate.get("contract_name")
+            == "rainpulse.ensemble-application-product-bundle"
+            and candidate.get("bundle_id") == entry.name
+            and candidate.get("run_id") == entry.name
+            and candidate.get("issue_time") == issue_time
+            and candidate.get("grid_id") == grid_id
+        ):
+            shutil.rmtree(entry)
+
+
+def _parse_time(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.utcoffset() is None:
+        raise ValueError("issue time must include a UTC offset")
+    return parsed.astimezone(UTC)
 
 
 if __name__ == "__main__":

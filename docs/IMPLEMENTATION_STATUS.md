@@ -68,6 +68,7 @@ NowcastInput gate.
 | RP-040 | Fujian radial-interference QC convergence and selective historical reconstruction complete | A read-only replay of the production detector audited all 110 Z9591 volumes and selected 44 affected scans. Their QC, grids and 35 dependent four-radar analyses were rebuilt; all 28 affected forecast cycles now expose corrected QPE, 24-lead LK and 12-member STEPS evidence through the existing unified workspace. This remains engineering replay rather than an operational QC sign-off |
 | RP-042 | Existing-data multi-evidence QC and acceptance framework complete; production promotion gated | The 452 available Fujian volumes support diagnostic radial morphology, dual-polarisation and within-volume vertical evidence. A 110-volume Z9591 audit classified 2,893 evidence rays with zero processing errors while exact same-input comparison preserves RP-040 hard flags, low-quality gates and mean QI. Metrics fail closed when labels, gauges, coastline, temporal or neighbouring-radar context are absent |
 | RP-043 | Seeded radial-fan closure, immutable shadow replay and historical reconstruction complete | Bounded one- or two-ray closure and short/long azimuth evidence promote only already seeded or diagnosed radial interference. A zero-error 452-volume audit adds 43 hard rays on Z9591, one on Z9598 and none on Z9593/Z9599; all 123 analyses and 114 eligible LK, application-product and 12-member STEPS cycles were rebuilt from RP-043-only inputs on the 105 shadow workspace |
+| RP-044 | Bounded manual forecast regeneration foundation complete | One operator Make entry now regenerates the committed NowcastInput/LK/product chain, STEPS or public-weight NowcastNet with fixed presets, traceable `rerun_of`, duplicate-active rejection, historical lookback exemption and latest-cycle selection; STEPS/NowcastNet retain one successful file bundle per cycle |
 
 The old execution labels map to v1.1 by capability, not by their previous
 number: old contract work contributes to RP-002, old infrastructure is RP-003,
@@ -153,6 +154,19 @@ Superseded QC, grid, analysis, nowcast-input and product artifacts are removed;
 the MinIO bucket runs with versioning suspended and lifecycle cleanup for
 noncurrent derived objects. Immutable raw and normalized radar inputs remain
 available for reproducible reprocessing.
+
+RP-044 adds one bounded operator surface for forecast-algorithm iteration rather
+than separate ad-hoc commands. The existing authenticated rerun endpoint now
+accepts only fixed presets and a reason, reconstructs the exact committed
+NowcastInput lineage, writes a fresh `rerun_of` run and lets the long-lived
+planner/workers execute LK and products. Explicit reruns bypass the realtime
+lookback without opening historical automatic scheduling. The same `make
+regenerate` entry runs direct-input STEPS and selected-cycle public-weight
+NowcastNet backfills; successful file publication prunes older bundles for the
+same grid and issue time, while a failed replacement leaves the current product
+intact. The read-only workspace chooses the newest published run when control
+metadata contains multiple auditable attempts. Details are in
+`docs/RP044_统一算法数据手动重生成实施记录.md`.
 
 ## Completed engineering foundation
 

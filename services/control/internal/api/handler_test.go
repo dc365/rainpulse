@@ -202,12 +202,80 @@ func TestRerunReportsUnsupportedRealWorkflowAsConflict(t *testing.T) {
 		AdminToken: "test-admin-token",
 		Commands:   &fakeRunCommands{err: orchestration.ErrUnsupportedRerun},
 	})
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/runs/"+runID.String()+"/rerun", nil)
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/admin/runs/"+runID.String()+"/rerun",
+		strings.NewReader(`{"preset":"forecast_all","reason":"validate current algorithms"}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Authorization", "Bearer test-admin-token")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "unsupported_rerun") {
 		t.Fatalf("unsupported rerun: status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestRerunRejectsInvalidPresetBeforeDelegating(t *testing.T) {
+	runID := uuid.MustParse("f3641335-13a3-4f68-96c0-56a5e0e684d7")
+	commands := &fakeRunCommands{}
+	handler := api.NewHandler(api.Options{AdminToken: "test-admin-token", Commands: commands})
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/admin/runs/"+runID.String()+"/rerun",
+		strings.NewReader(`{"preset":"custom_python","reason":"arbitrary parameters"}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer test-admin-token")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_regeneration_preset") {
+		t.Fatalf("invalid preset: status=%d body=%s", response.Code, response.Body.String())
+	}
+	if commands.called {
+		t.Fatal("invalid regeneration request was delegated")
+	}
+}
+
+func TestRerunRejectsTrailingJSONBeforeDelegating(t *testing.T) {
+	runID := uuid.MustParse("f3641335-13a3-4f68-96c0-56a5e0e684d7")
+	commands := &fakeRunCommands{}
+	handler := api.NewHandler(api.Options{AdminToken: "test-admin-token", Commands: commands})
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/admin/runs/"+runID.String()+"/rerun",
+		strings.NewReader(`{"preset":"forecast_all","reason":"first request"}{}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer test-admin-token")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_regeneration_request") {
+		t.Fatalf("trailing JSON: status=%d body=%s", response.Code, response.Body.String())
+	}
+	if commands.called {
+		t.Fatal("request with trailing JSON was delegated")
+	}
+}
+
+func TestRerunReasonLimitCountsUnicodeCharacters(t *testing.T) {
+	runID := uuid.MustParse("f3641335-13a3-4f68-96c0-56a5e0e684d7")
+	commands := &fakeRunCommands{run: workflow.Run{
+		ID: uuid.New(), IssueTime: time.Now().UTC(), GridID: "grid", ConfigVersion: "config",
+		Status: workflow.RunPreprocessing, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}}
+	handler := api.NewHandler(api.Options{AdminToken: "test-admin-token", Commands: commands})
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/admin/runs/"+runID.String()+"/rerun",
+		strings.NewReader(`{"preset":"forecast_all","reason":"`+strings.Repeat("验", 240)+`"}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer test-admin-token")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusAccepted || !commands.called {
+		t.Fatalf("240-character reason: status=%d body=%s", response.Code, response.Body.String())
 	}
 }
 
@@ -533,8 +601,22 @@ func TestRunQueriesAndRerunUseControlPlane(t *testing.T) {
 	if !strings.Contains(jobs.Body.String(), `"status":"RUNNING"`) {
 		t.Fatalf("jobs response has wrong state: %s", jobs.Body.String())
 	}
-	rerun := assertStatus(http.MethodPost, "/api/v1/admin/runs/"+run.ID.String()+"/rerun", http.StatusAccepted)
-	if !strings.Contains(rerun.Body.String(), commands.run.ID.String()) || commands.source != run.ID {
+	target := "/api/v1/admin/runs/" + run.ID.String() + "/rerun"
+	request := httptest.NewRequest(
+		http.MethodPost,
+		target,
+		strings.NewReader(`{"preset":"products","reason":"regenerate comparison product"}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer test-admin-token")
+	rerun := httptest.NewRecorder()
+	handler.ServeHTTP(rerun, request)
+	if rerun.Code != http.StatusAccepted {
+		t.Fatalf("POST %s: got status %d; body=%s", target, rerun.Code, rerun.Body.String())
+	}
+	if !strings.Contains(rerun.Body.String(), commands.run.ID.String()) || commands.source != run.ID ||
+		commands.request.Preset != orchestration.RegenerationProducts ||
+		commands.request.Reason != "regenerate comparison product" {
 		t.Fatalf("rerun was not delegated correctly: %s", rerun.Body.String())
 	}
 }
@@ -1023,13 +1105,21 @@ func (store *fakeRunStore) ListJobs(_ context.Context, runID uuid.UUID) ([]workf
 }
 
 type fakeRunCommands struct {
-	run    workflow.Run
-	source uuid.UUID
-	err    error
+	run     workflow.Run
+	source  uuid.UUID
+	request orchestration.RegenerationRequest
+	called  bool
+	err     error
 }
 
-func (commands *fakeRunCommands) Rerun(_ context.Context, source uuid.UUID) (workflow.Run, error) {
+func (commands *fakeRunCommands) Rerun(
+	_ context.Context,
+	source uuid.UUID,
+	request orchestration.RegenerationRequest,
+) (workflow.Run, error) {
+	commands.called = true
 	commands.source = source
+	commands.request = request
 	return commands.run, commands.err
 }
 

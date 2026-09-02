@@ -7,10 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"path"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/alerting"
 	apiv1 "github.com/fonwee/rainpulse-nowcast/services/control/internal/api/generated"
@@ -34,7 +36,7 @@ type RunStore interface {
 }
 
 type RunCommands interface {
-	Rerun(context.Context, uuid.UUID) (workflow.Run, error)
+	Rerun(context.Context, uuid.UUID, orchestration.RegenerationRequest) (workflow.Run, error)
 }
 
 type ObservationStore interface {
@@ -794,7 +796,30 @@ func (service *server) RerunForecastRun(response http.ResponseWriter, request *h
 		writeServiceUnavailable(response)
 		return
 	}
-	run, err := service.commands.Rerun(request.Context(), runID)
+	var body apiv1.RegenerationRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(response, request.Body, 4096))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		writeError(response, http.StatusBadRequest, "invalid_regeneration_request", "request body must be valid regeneration JSON")
+		return
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		writeError(response, http.StatusBadRequest, "invalid_regeneration_request", "request body must contain one regeneration object")
+		return
+	}
+	if !body.Preset.Valid() {
+		writeError(response, http.StatusBadRequest, "invalid_regeneration_preset", "regeneration preset is not supported")
+		return
+	}
+	reason := strings.TrimSpace(body.Reason)
+	if count := utf8.RuneCountInString(reason); count < 3 || count > 240 {
+		writeError(response, http.StatusBadRequest, "invalid_regeneration_reason", "reason must contain 3 to 240 characters")
+		return
+	}
+	run, err := service.commands.Rerun(request.Context(), runID, orchestration.RegenerationRequest{
+		Preset: orchestration.RegenerationPreset(body.Preset),
+		Reason: reason,
+	})
 	if err != nil {
 		writeStoreError(response, err)
 		return
@@ -1537,6 +1562,7 @@ func toAPIRun(run workflow.Run) apiv1.ForecastRun {
 		ConfigVersion:  run.ConfigVersion,
 		Status:         apiv1.RunStatus(run.Status),
 		DegradedReason: run.DegradedReason,
+		RerunOf:        run.RerunOf,
 		CreatedAt:      run.CreatedAt.UTC(),
 		UpdatedAt:      run.UpdatedAt.UTC(),
 	}
@@ -2170,7 +2196,11 @@ func writeStoreError(response http.ResponseWriter, err error) {
 		return
 	}
 	if errors.Is(err, orchestration.ErrUnsupportedRerun) {
-		writeError(response, http.StatusConflict, "unsupported_rerun", "this run cannot be replayed through the legacy rerun endpoint")
+		writeError(response, http.StatusConflict, "unsupported_rerun", "the selected source run or preset cannot be regenerated from committed lineage")
+		return
+	}
+	if errors.Is(err, orchestration.ErrRegenerationActive) {
+		writeError(response, http.StatusConflict, "regeneration_active", "a matching regeneration is already running")
 		return
 	}
 	writeError(response, http.StatusInternalServerError, "internal_error", "control-plane operation failed")

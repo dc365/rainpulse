@@ -902,16 +902,24 @@ paths:
       tags: [admin]
       security:
         - adminBearer: []
-      summary: Create a new run using the selected run inputs and configuration
+      summary: Regenerate a selected run with one bounded workflow preset
       parameters:
         - $ref: "#/components/parameters/RunId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegenerationRequest"
       responses:
         "202":
-          description: Rerun accepted
+          description: Regeneration accepted as a traceable forecast run
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ForecastRun"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -1050,6 +1058,12 @@ components:
       schema:
         type: string
   responses:
+    BadRequest:
+      description: Request body or parameters are invalid
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
     NotFound:
       description: Resource not found
       content:
@@ -2225,12 +2239,36 @@ components:
         degraded_reason:
           type: string
           nullable: true
+        rerun_of:
+          type: string
+          format: uuid
+          nullable: true
         created_at:
           type: string
           format: date-time
         updated_at:
           type: string
           format: date-time
+    RegenerationPreset:
+      type: string
+      description: >-
+        A bounded operator preset. Downstream presets reuse the committed source
+        lineage and never accept free-form algorithm parameters.
+      enum:
+        - forecast_all
+        - pysteps_lk
+        - products
+    RegenerationRequest:
+      type: object
+      additionalProperties: false
+      required: [preset, reason]
+      properties:
+        preset:
+          $ref: "#/components/schemas/RegenerationPreset"
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 240
     ForecastRunPage:
       type: object
       additionalProperties: false

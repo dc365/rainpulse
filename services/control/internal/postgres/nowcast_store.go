@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/orchestration"
@@ -11,6 +12,110 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
+
+func (store *Store) GetNowcastInputRegeneration(
+	ctx context.Context,
+	sourceRunID uuid.UUID,
+) (orchestration.NowcastInputInput, error) {
+	var input orchestration.NowcastInputInput
+	var rawConfig json.RawMessage
+	var configSHA256 string
+	var storedMode string
+	err := store.pool.QueryRow(ctx, `
+SELECT f.issue_time, f.grid_id, n.preprocess_version, n.gate_config_version,
+       config.config, config.sha256,
+       COALESCE(request.request_payload->'payload'->>'execution_mode', '')
+FROM forecast_runs AS f
+JOIN nowcast_input_runs AS n ON n.run_id = f.run_id AND n.status = 'SUCCEEDED'
+JOIN jobs AS request ON request.job_id = n.job_id
+JOIN config_versions AS config ON config.config_version = n.gate_config_version
+WHERE f.run_id = $1
+ORDER BY n.updated_at DESC
+LIMIT 1`, sourceRunID).Scan(
+		&input.IssueTime, &input.GridID, &input.PreprocessVersion,
+		&input.GateConfigVersion, &rawConfig, &configSHA256, &storedMode,
+	)
+	if err == pgx.ErrNoRows {
+		return orchestration.NowcastInputInput{}, workflow.ErrNotFound
+	}
+	if err != nil {
+		return orchestration.NowcastInputInput{}, fmt.Errorf("load source NowcastInput regeneration: %w", err)
+	}
+	var profile struct {
+		ProfileVersion string `json:"profile_version"`
+		BuilderVersion string `json:"builder_version"`
+		ExecutionMode  string `json:"execution_mode"`
+		GridID         string `json:"grid_id"`
+		GridConfig     string `json:"grid_config_version"`
+		Sequence       struct {
+			MinimumFrames  int `json:"minimum_frames"`
+			MaximumFrames  int `json:"maximum_frames"`
+			TimestepMinute int `json:"timestep_minutes"`
+		} `json:"sequence"`
+		Gates struct {
+			MinimumCoverage float64 `json:"minimum_valid_coverage_ratio"`
+			MinimumQI       float64 `json:"minimum_mean_quality_index"`
+			RequireEligible bool    `json:"require_all_frames_operational_eligible"`
+		} `json:"gates"`
+	}
+	if err := json.Unmarshal(rawConfig, &profile); err != nil {
+		return orchestration.NowcastInputInput{}, fmt.Errorf("decode source NowcastInput configuration: %w", err)
+	}
+	if profile.ProfileVersion != input.GateConfigVersion ||
+		profile.BuilderVersion != input.PreprocessVersion || profile.GridID != input.GridID ||
+		profile.ExecutionMode != storedMode || profile.GridConfig == "" ||
+		profile.Sequence.MinimumFrames != 3 || profile.Sequence.MaximumFrames != 6 ||
+		profile.Sequence.TimestepMinute != 5 {
+		return orchestration.NowcastInputInput{}, fmt.Errorf("source NowcastInput configuration does not match committed lineage")
+	}
+	rows, err := store.pool.Query(ctx, `
+SELECT analysis.analysis_id, analysis.analysis_time, analysis.grid_id,
+       COALESCE(analysis.analysis_uri, ''), analysis.status,
+       analysis.degraded_reason IS NULL,
+       COALESCE(analysis.valid_coverage_ratio, 0),
+       COALESCE(analysis.mean_quality_index, 0)
+FROM nowcast_input_runs AS source
+JOIN nowcast_input_frames AS frame ON frame.job_id = source.job_id
+JOIN analysis_cycles AS analysis ON analysis.analysis_id = frame.analysis_id
+WHERE source.run_id = $1 AND source.status = 'SUCCEEDED'
+ORDER BY frame.frame_index`, sourceRunID)
+	if err != nil {
+		return orchestration.NowcastInputInput{}, fmt.Errorf("load source NowcastInput frames: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var candidate orchestration.NowcastInputCandidate
+		if err := rows.Scan(
+			&candidate.AnalysisID, &candidate.AnalysisTime, &candidate.GridID,
+			&candidate.AnalysisURI, &candidate.CurrentStatus,
+			&candidate.OperationalEligible, &candidate.ValidCoverageRatio,
+			&candidate.MeanQualityIndex,
+		); err != nil {
+			return orchestration.NowcastInputInput{}, fmt.Errorf("scan source NowcastInput frame: %w", err)
+		}
+		input.Candidates = append(input.Candidates, candidate)
+	}
+	if err := rows.Err(); err != nil {
+		return orchestration.NowcastInputInput{}, fmt.Errorf("iterate source NowcastInput frames: %w", err)
+	}
+	if len(input.Candidates) < 3 {
+		return orchestration.NowcastInputInput{}, fmt.Errorf("source NowcastInput has fewer than three committed frames")
+	}
+	if len(configSHA256) != 64 {
+		return orchestration.NowcastInputInput{}, fmt.Errorf("source NowcastInput configuration SHA-256 is invalid")
+	}
+	input.GridConfigVersion = profile.GridConfig
+	input.ExecutionMode = profile.ExecutionMode
+	input.RequireAllFramesOperationalEligible = profile.Gates.RequireEligible
+	input.MinimumFrames = profile.Sequence.MinimumFrames
+	input.MaximumFrames = profile.Sequence.MaximumFrames
+	input.Timestep = time.Duration(profile.Sequence.TimestepMinute) * time.Minute
+	input.MinimumValidCoverageRatio = profile.Gates.MinimumCoverage
+	input.MinimumMeanQualityIndex = profile.Gates.MinimumQI
+	input.Config = rawConfig
+	input.ConfigSHA256 = configSHA256
+	return input, nil
+}
 
 func applyNowcastInputCompletion(
 	ctx context.Context,
@@ -241,6 +346,9 @@ func (store *Store) CreateNowcastInputBundle(
 		return fmt.Errorf("begin NowcastInput transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err = lockActiveNowcastRegeneration(ctx, tx, bundle.Run); err != nil {
+		return err
+	}
 
 	if _, err = tx.Exec(ctx, `
 INSERT INTO config_versions (config_version, sha256, config, description, created_at)
@@ -265,11 +373,11 @@ ON CONFLICT (run_id) DO NOTHING`, bundle.Run.ID, bundle.Run.CreatedAt); err != n
 	}
 	if _, err = tx.Exec(ctx, `
 INSERT INTO forecast_runs (
-    run_id, issue_time, grid_id, config_version, status, reason, created_at, updated_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+    run_id, issue_time, grid_id, config_version, status, rerun_of, reason, created_at, updated_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
 ON CONFLICT (run_id) DO NOTHING`, bundle.Run.ID, bundle.Run.IssueTime,
 		bundle.Run.GridID, bundle.Run.ConfigVersion, bundle.Run.Status,
-		nowcastRunReason(bundle.ExecutionMode), bundle.Run.CreatedAt); err != nil {
+		bundle.Run.RerunOf, nowcastRunReason(bundle), bundle.Run.CreatedAt); err != nil {
 		return fmt.Errorf("insert RP-013 forecast run: %w", err)
 	}
 	if _, err = tx.Exec(ctx, `
@@ -335,8 +443,60 @@ ON CONFLICT (event_id) DO NOTHING`, bundle.Outbox.ID, bundle.Outbox.AggregateID,
 	return nil
 }
 
-func nowcastRunReason(executionMode string) string {
-	if executionMode == "historical_replay" {
+func lockActiveNowcastRegeneration(ctx context.Context, tx pgx.Tx, run workflow.Run) error {
+	if run.RerunOf == nil {
+		return nil
+	}
+	preset, ok := regenerationPresetFromReason(run.Reason)
+	if !ok {
+		return fmt.Errorf("manual regeneration reason does not contain a supported preset")
+	}
+	lockIdentity := run.RerunOf.String() + ":" + preset
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, lockIdentity); err != nil {
+		return fmt.Errorf("lock active NowcastInput regeneration: %w", err)
+	}
+	var active bool
+	if err := tx.QueryRow(ctx, `
+SELECT EXISTS (
+    SELECT 1
+    FROM forecast_runs
+    WHERE rerun_of = $1
+      AND run_id <> $2
+      AND reason LIKE $3
+      AND status NOT IN ('PUBLISHED', 'VERIFIED', 'DEGRADED', 'FAILED', 'SKIPPED')
+)`, *run.RerunOf, run.ID, "manual-regeneration/"+preset+":%").Scan(&active); err != nil {
+		return fmt.Errorf("check active NowcastInput regeneration: %w", err)
+	}
+	if active {
+		return orchestration.ErrRegenerationActive
+	}
+	return nil
+}
+
+func regenerationPresetFromReason(reason string) (string, bool) {
+	value, ok := strings.CutPrefix(reason, "manual-regeneration/")
+	if !ok {
+		return "", false
+	}
+	preset, _, ok := strings.Cut(value, ":")
+	if !ok {
+		return "", false
+	}
+	switch orchestration.RegenerationPreset(preset) {
+	case orchestration.RegenerationForecast,
+		orchestration.RegenerationPystepsLK,
+		orchestration.RegenerationProducts:
+		return preset, true
+	default:
+		return "", false
+	}
+}
+
+func nowcastRunReason(bundle workflow.NowcastInputBundle) string {
+	if bundle.Run.Reason != "" {
+		return bundle.Run.Reason
+	}
+	if bundle.ExecutionMode == "historical_replay" {
 		return "HISTORICAL_REPLAY engineering forecast"
 	}
 	return "RP-013 fixed-step NowcastInput"

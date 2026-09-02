@@ -693,7 +693,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create a new run using the selected run inputs and configuration */
+        /** Regenerate a selected run with one bounded workflow preset */
         post: operations["rerunForecastRun"];
         delete?: never;
         options?: never;
@@ -1221,10 +1221,21 @@ export interface components {
             config_version: string;
             status: components["schemas"]["RunStatus"];
             degraded_reason?: string | null;
+            /** Format: uuid */
+            rerun_of?: string | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        /**
+         * @description A bounded operator preset. Downstream presets reuse the committed source lineage and never accept free-form algorithm parameters.
+         * @enum {string}
+         */
+        RegenerationPreset: "forecast_all" | "pysteps_lk" | "products";
+        RegenerationRequest: {
+            preset: components["schemas"]["RegenerationPreset"];
+            reason: string;
         };
         ForecastRunPage: {
             items: components["schemas"]["ForecastRun"][];
@@ -1800,6 +1811,15 @@ export interface components {
         };
     };
     responses: {
+        /** @description Request body or parameters are invalid */
+        BadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
         /** @description Resource not found */
         NotFound: {
             headers: {
@@ -2803,9 +2823,13 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegenerationRequest"];
+            };
+        };
         responses: {
-            /** @description Rerun accepted */
+            /** @description Regeneration accepted as a traceable forecast run */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -2814,6 +2838,7 @@ export interface operations {
                     "application/json": components["schemas"]["ForecastRun"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
         };

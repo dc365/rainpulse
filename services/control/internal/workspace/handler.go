@@ -220,6 +220,7 @@ type forecastRun struct {
 	GridID        string `json:"grid_id"`
 	Status        string `json:"status"`
 	ExecutionMode string `json:"execution_mode"`
+	CreatedAt     string `json:"created_at"`
 }
 
 type analysisCyclePage struct {
@@ -567,6 +568,9 @@ func (handler *Handler) catalog(ctx context.Context) (map[string]*cycleAccumulat
 				continue
 			}
 			entry := accumulator(catalog, run.GridID, parsed, handler.now(), handler.executionMode)
+			if !preferForecast(entry.run, run) {
+				continue
+			}
 			copy := run
 			entry.run = &copy
 			entry.summary.RunID = run.RunID
@@ -635,6 +639,18 @@ func (handler *Handler) catalog(ctx context.Context) (map[string]*cycleAccumulat
 		}
 	}
 	return catalog, uniqueStrings(degraded)
+}
+
+func preferForecast(existing *forecastRun, candidate forecastRun) bool {
+	if existing == nil {
+		return true
+	}
+	candidateCreatedAt, candidateOK := normalizedTime(candidate.CreatedAt)
+	existingCreatedAt, existingOK := normalizedTime(existing.CreatedAt)
+	if candidateOK != existingOK {
+		return candidateOK
+	}
+	return candidateOK && candidateCreatedAt.After(existingCreatedAt)
 }
 
 func preferAnalysis(existing *analysisCycle, candidate analysisCycle) bool {

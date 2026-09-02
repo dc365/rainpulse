@@ -60,6 +60,83 @@ func TestCreateSimulationPersistsContractEventInOneBundle(t *testing.T) {
 	}
 }
 
+func TestRerunForecastCreatesFreshNowcastInputFromCommittedLineage(t *testing.T) {
+	issueTime := time.Date(2026, 8, 28, 2, 30, 0, 0, time.UTC)
+	sourceID := uuid.MustParse("f3641335-13a3-4f68-96c0-56a5e0e684d7")
+	regenerationID := uuid.MustParse("0894481f-c096-49af-8d32-e9c531a66772")
+	candidates := make([]NowcastInputCandidate, 0, 3)
+	for index := 0; index < 3; index++ {
+		analysisTime := issueTime.Add(time.Duration(index-2) * 5 * time.Minute)
+		candidates = append(candidates, NowcastInputCandidate{
+			AnalysisID:   uuid.NewSHA1(uuid.NameSpaceURL, []byte(analysisTime.String())),
+			AnalysisTime: analysisTime, GridID: "fujian-grid",
+			AnalysisURI:   "s3://rainpulse/analysis/" + analysisTime.Format("1504") + "/analysis.zarr",
+			CurrentStatus: workflow.AnalysisReady, OperationalEligible: false,
+			ValidCoverageRatio: 0.5, MeanQualityIndex: 0.4,
+		})
+	}
+	repository := &fakeRepository{
+		run:  workflow.Run{ID: sourceID, IssueTime: issueTime, GridID: "fujian-grid", ConfigVersion: "source-v1"},
+		jobs: []workflow.Job{{ID: uuid.New(), RunID: sourceID, JobType: NowcastInputJobType}},
+		regenerationInput: NowcastInputInput{
+			IssueTime: issueTime, GridID: "fujian-grid", GridConfigVersion: "grid-v1",
+			PreprocessVersion: "builder-v1", GateConfigVersion: "gate-v1",
+			ExecutionMode: "historical_replay", RequireAllFramesOperationalEligible: false,
+			MinimumFrames: 3, MaximumFrames: 6, Timestep: 5 * time.Minute,
+			MinimumValidCoverageRatio: 0.3, MinimumMeanQualityIndex: 0.1,
+			Candidates: candidates, Config: json.RawMessage(`{"profile_version":"gate-v1"}`),
+			ConfigSHA256: strings.Repeat("a", 64),
+		},
+	}
+	service := NewService(repository, Options{NewID: func() uuid.UUID { return regenerationID }})
+	run, err := service.Rerun(context.Background(), sourceID, RegenerationRequest{
+		Preset: RegenerationForecast,
+		Reason: "validate updated forecast algorithms",
+	})
+	if err != nil {
+		t.Fatalf("Rerun() error = %v", err)
+	}
+	if run.RerunOf == nil || *run.RerunOf != sourceID || run.ID == sourceID ||
+		run.Status != workflow.RunPreprocessing {
+		t.Fatalf("unexpected regeneration run: %#v", run)
+	}
+	if run.Reason != "manual-regeneration/forecast_all: validate updated forecast algorithms" ||
+		repository.nowcastInput.Run.ID != run.ID ||
+		repository.nowcastInput.Job.JobType != NowcastInputJobType {
+		t.Fatalf("regeneration lineage was not persisted: run=%#v bundle=%#v", run, repository.nowcastInput)
+	}
+}
+
+func TestRerunRejectsDuplicateActivePreset(t *testing.T) {
+	sourceID := uuid.New()
+	active := workflow.Run{ID: uuid.New(), RerunOf: &sourceID, Status: workflow.RunPreprocessing}
+	repository := &fakeRepository{
+		run: sourceIDRun(sourceID), jobs: []workflow.Job{{ID: uuid.New()}}, activeRegeneration: active,
+	}
+	service := NewService(repository, Options{})
+	run, err := service.Rerun(context.Background(), sourceID, RegenerationRequest{
+		Preset: RegenerationForecast, Reason: "duplicate operator request",
+	})
+	if !errors.Is(err, ErrRegenerationActive) || run.ID != active.ID {
+		t.Fatalf("duplicate regeneration = run %#v, err %v", run, err)
+	}
+}
+
+func TestRerunRejectsReasonOverUnicodeCharacterLimit(t *testing.T) {
+	service := NewService(&fakeRepository{}, Options{})
+	_, err := service.Rerun(context.Background(), uuid.New(), RegenerationRequest{
+		Preset: RegenerationForecast,
+		Reason: strings.Repeat("验", 241),
+	})
+	if err == nil || !strings.Contains(err.Error(), "invalid regeneration request") {
+		t.Fatalf("oversized Unicode reason error = %v", err)
+	}
+}
+
+func sourceIDRun(id uuid.UUID) workflow.Run {
+	return workflow.Run{ID: id, IssueTime: time.Date(2026, 8, 28, 2, 30, 0, 0, time.UTC), GridID: "grid", ConfigVersion: "config"}
+}
+
 func TestCreateRadarDecodeUsesStableIdentityAndRealWorkerSubject(t *testing.T) {
 	repository := &fakeRepository{}
 	now := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
@@ -805,6 +882,10 @@ type fakeRepository struct {
 	published            uuid.UUID
 	failed               uuid.UUID
 	appliedFailure       JobFailed
+	run                  workflow.Run
+	jobs                 []workflow.Job
+	regenerationInput    NowcastInputInput
+	activeRegeneration   workflow.Run
 }
 
 func (repository *fakeRepository) CreateNowcastInputBundle(
@@ -900,8 +981,32 @@ func (repository *fakeRepository) CreateBundle(_ context.Context, bundle workflo
 	return nil
 }
 
-func (repository *fakeRepository) GetRun(context.Context, uuid.UUID) (workflow.Run, error) {
+func (repository *fakeRepository) GetRun(_ context.Context, runID uuid.UUID) (workflow.Run, error) {
+	if repository.run.ID == runID {
+		return repository.run, nil
+	}
 	return workflow.Run{}, workflow.ErrNotFound
+}
+
+func (repository *fakeRepository) GetNowcastInputRegeneration(
+	context.Context,
+	uuid.UUID,
+) (NowcastInputInput, error) {
+	if repository.regenerationInput.IssueTime.IsZero() {
+		return NowcastInputInput{}, workflow.ErrNotFound
+	}
+	return repository.regenerationInput, nil
+}
+
+func (repository *fakeRepository) FindActiveRegeneration(
+	context.Context,
+	uuid.UUID,
+	RegenerationPreset,
+) (workflow.Run, error) {
+	if repository.activeRegeneration.ID == uuid.Nil {
+		return workflow.Run{}, workflow.ErrNotFound
+	}
+	return repository.activeRegeneration, nil
 }
 
 func (repository *fakeRepository) GetJob(context.Context, uuid.UUID) (workflow.Job, error) {
@@ -909,7 +1014,7 @@ func (repository *fakeRepository) GetJob(context.Context, uuid.UUID) (workflow.J
 }
 
 func (repository *fakeRepository) ListJobs(context.Context, uuid.UUID) ([]workflow.Job, error) {
-	return nil, nil
+	return repository.jobs, nil
 }
 
 func (repository *fakeRepository) ClaimOutbox(context.Context) (workflow.OutboxEvent, error) {

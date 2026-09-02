@@ -115,6 +115,8 @@ wait_for_state "$api_url/api/v1/runs/$run_id/jobs" status SUCCEEDED
 
 rerun=$(printf 'Authorization: Bearer %s\n' "$admin_token" | \
   curl --fail --silent --show-error --header @- --request POST \
+    --header 'Content-Type: application/json' \
+    --data-binary '{"preset":"forecast_all","reason":"control-plane smoke replay"}' \
     "$api_url/api/v1/admin/runs/$run_id/rerun")
 rerun_id=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["run_id"])' <<<"$rerun")
 if [[ "$rerun_id" == "$run_id" ]]; then

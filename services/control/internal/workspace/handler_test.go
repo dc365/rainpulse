@@ -116,6 +116,17 @@ func TestWorkspaceListCanExposeOnlyConfiguredAnalysisDateAndGrid(t *testing.T) {
 	}
 }
 
+func TestWorkspacePrefersLatestRegeneratedForecastForDuplicateCycle(t *testing.T) {
+	old := forecastRun{RunID: "source", CreatedAt: "2026-09-01T08:00:00Z"}
+	regenerated := forecastRun{RunID: "regenerated", CreatedAt: "2026-09-02T08:00:00Z"}
+	if !preferForecast(&old, regenerated) {
+		t.Fatal("newer regenerated forecast was not preferred")
+	}
+	if preferForecast(&regenerated, old) {
+		t.Fatal("older source forecast replaced the regenerated forecast")
+	}
+}
+
 func TestWorkspacePrefersLatestAnalysisForDuplicateHistoricalTimes(t *testing.T) {
 	core := http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		response.Header().Set("Content-Type", "application/json")

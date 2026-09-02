@@ -552,7 +552,7 @@ func (planner *pipelinePlanner) planForecasts(ctx context.Context) error {
 		if run.GridID != planner.settings.gridID {
 			continue
 		}
-		if planner.outsideLookback(run.IssueTime) {
+		if planner.outsideForecastLookback(run) {
 			continue
 		}
 		if _, exists := planner.plannedPysteps[run.ID]; exists {
@@ -576,7 +576,7 @@ func (planner *pipelinePlanner) planForecasts(ctx context.Context) error {
 		if run.GridID != planner.settings.gridID {
 			continue
 		}
-		if planner.outsideLookback(run.IssueTime) {
+		if planner.outsideForecastLookback(run) {
 			continue
 		}
 		if _, exists := planner.plannedProduct[run.ID]; exists {
@@ -625,6 +625,10 @@ func (planner *pipelinePlanner) planForecasts(ctx context.Context) error {
 func (planner *pipelinePlanner) outsideLookback(value time.Time) bool {
 	return planner.settings.lookback > 0 &&
 		time.Since(value.UTC()) > planner.settings.lookback
+}
+
+func (planner *pipelinePlanner) outsideForecastLookback(run workflow.Run) bool {
+	return run.RerunOf == nil && planner.outsideLookback(run.IssueTime)
 }
 
 func (planner *pipelinePlanner) outsideVerificationLookback(value time.Time) bool {

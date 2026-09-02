@@ -644,6 +644,27 @@ func (e RadarScanRunStatus) Valid() bool {
 	}
 }
 
+// Defines values for RegenerationPreset.
+const (
+	ForecastAll RegenerationPreset = "forecast_all"
+	Products    RegenerationPreset = "products"
+	PystepsLk   RegenerationPreset = "pysteps_lk"
+)
+
+// Valid indicates whether the value is a known member of the RegenerationPreset enum.
+func (e RegenerationPreset) Valid() bool {
+	switch e {
+	case ForecastAll:
+		return true
+	case Products:
+		return true
+	case PystepsLk:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RunStatus.
 const (
 	RunStatusBASELINEREADY   RunStatus = "BASELINE_READY"
@@ -1407,14 +1428,15 @@ type ForecastJob struct {
 
 // ForecastRun defines model for ForecastRun.
 type ForecastRun struct {
-	ConfigVersion  string             `json:"config_version"`
-	CreatedAt      time.Time          `json:"created_at"`
-	DegradedReason *string            `json:"degraded_reason,omitempty"`
-	GridId         string             `json:"grid_id"`
-	IssueTime      time.Time          `json:"issue_time"`
-	RunId          openapi_types.UUID `json:"run_id"`
-	Status         RunStatus          `json:"status"`
-	UpdatedAt      time.Time          `json:"updated_at"`
+	ConfigVersion  string              `json:"config_version"`
+	CreatedAt      time.Time           `json:"created_at"`
+	DegradedReason *string             `json:"degraded_reason,omitempty"`
+	GridId         string              `json:"grid_id"`
+	IssueTime      time.Time           `json:"issue_time"`
+	RerunOf        *openapi_types.UUID `json:"rerun_of,omitempty"`
+	RunId          openapi_types.UUID  `json:"run_id"`
+	Status         RunStatus           `json:"status"`
+	UpdatedAt      time.Time           `json:"updated_at"`
 }
 
 // ForecastRunPage defines model for ForecastRunPage.
@@ -1698,6 +1720,16 @@ type RadarStatusSummary struct {
 	ScanStatus                    *RadarScanRunStatus `json:"scan_status,omitempty"`
 }
 
+// RegenerationPreset A bounded operator preset. Downstream presets reuse the committed source lineage and never accept free-form algorithm parameters.
+type RegenerationPreset string
+
+// RegenerationRequest defines model for RegenerationRequest.
+type RegenerationRequest struct {
+	// Preset A bounded operator preset. Downstream presets reuse the committed source lineage and never accept free-form algorithm parameters.
+	Preset RegenerationPreset `json:"preset"`
+	Reason string             `json:"reason"`
+}
+
 // RunStatus defines model for RunStatus.
 type RunStatus string
 
@@ -1776,6 +1808,9 @@ type VerificationProfileVersion = string
 
 // VerificationRunId defines model for VerificationRunId.
 type VerificationRunId = string
+
+// BadRequest defines model for BadRequest.
+type BadRequest = ErrorResponse
 
 // Conflict defines model for Conflict.
 type Conflict = ErrorResponse
@@ -1873,6 +1908,9 @@ type GetVerificationSummaryParams struct {
 	RunId openapi_types.UUID `form:"run_id" json:"run_id"`
 }
 
+// RerunForecastRunJSONRequestBody defines body for RerunForecastRun for application/json ContentType.
+type RerunForecastRunJSONRequestBody = RegenerationRequest
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// DisableModel Disable a configured model
@@ -1881,7 +1919,7 @@ type ServerInterface interface {
 	// EnableModel Enable a configured model
 	// (POST /admin/models/{model_id}/enable)
 	EnableModel(w http.ResponseWriter, r *http.Request, modelId ModelId)
-	// RerunForecastRun Create a new run using the selected run inputs and configuration
+	// RerunForecastRun Regenerate a selected run with one bounded workflow preset
 	// (POST /admin/runs/{run_id}/rerun)
 	RerunForecastRun(w http.ResponseWriter, r *http.Request, runId RunId)
 	// GetAlertSnapshot Get the current Prometheus rule and Alertmanager delivery state
@@ -2022,7 +2060,7 @@ func (_ Unimplemented) EnableModel(w http.ResponseWriter, r *http.Request, model
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// RerunForecastRun Create a new run using the selected run inputs and configuration
+// RerunForecastRun Regenerate a selected run with one bounded workflow preset
 // (POST /admin/runs/{run_id}/rerun)
 func (_ Unimplemented) RerunForecastRun(w http.ResponseWriter, r *http.Request, runId RunId) {
 	w.WriteHeader(http.StatusNotImplemented)

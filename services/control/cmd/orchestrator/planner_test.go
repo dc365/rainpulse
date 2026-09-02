@@ -116,3 +116,15 @@ func TestClosestScanByRadarSelectsOneCandidatePerRadar(t *testing.T) {
 		t.Fatalf("unexpected mosaic candidates: %#v", selected)
 	}
 }
+
+func TestManualRegenerationBypassesRealtimeForecastLookback(t *testing.T) {
+	sourceID := uuid.New()
+	planner := &pipelinePlanner{settings: pipelineSettings{lookback: time.Hour}}
+	historical := time.Now().UTC().Add(-24 * time.Hour)
+	if !planner.outsideForecastLookback(workflow.Run{IssueTime: historical}) {
+		t.Fatal("ordinary historical run unexpectedly bypassed realtime lookback")
+	}
+	if planner.outsideForecastLookback(workflow.Run{IssueTime: historical, RerunOf: &sourceID}) {
+		t.Fatal("manual regeneration was blocked by realtime lookback")
+	}
+}

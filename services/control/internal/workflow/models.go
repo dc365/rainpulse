@@ -18,6 +18,7 @@ type Run struct {
 	Status         RunStatus
 	DegradedReason *string
 	RerunOf        *uuid.UUID
+	Reason         string
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }

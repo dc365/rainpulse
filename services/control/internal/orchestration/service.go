@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/workflow"
 	"github.com/google/uuid"
@@ -29,6 +30,8 @@ type Repository interface {
 	CreateForecastVerificationBundle(context.Context, workflow.ForecastVerificationBundle) error
 	CreateDomainSimulation(context.Context, workflow.DomainSimulation) error
 	GetRun(context.Context, uuid.UUID) (workflow.Run, error)
+	GetNowcastInputRegeneration(context.Context, uuid.UUID) (NowcastInputInput, error)
+	FindActiveRegeneration(context.Context, uuid.UUID, RegenerationPreset) (workflow.Run, error)
 	GetJob(context.Context, uuid.UUID) (workflow.Job, error)
 	ListJobs(context.Context, uuid.UUID) ([]workflow.Job, error)
 	ClaimOutbox(context.Context) (workflow.OutboxEvent, error)
@@ -165,6 +168,9 @@ type NowcastInputInput struct {
 	Candidates                          []NowcastInputCandidate
 	Config                              json.RawMessage
 	ConfigSHA256                        string
+	RerunOf                             *uuid.UUID
+	RegenerationID                      uuid.UUID
+	Reason                              string
 }
 
 type PystepsLKInput struct {
@@ -236,7 +242,23 @@ type Service struct {
 	newID      func() uuid.UUID
 }
 
-var ErrUnsupportedRerun = errors.New("forecast rerun is unsupported for this run type")
+type RegenerationPreset string
+
+const (
+	RegenerationForecast  RegenerationPreset = "forecast_all"
+	RegenerationPystepsLK RegenerationPreset = "pysteps_lk"
+	RegenerationProducts  RegenerationPreset = "products"
+)
+
+type RegenerationRequest struct {
+	Preset RegenerationPreset
+	Reason string
+}
+
+var (
+	ErrUnsupportedRerun   = errors.New("forecast rerun is unsupported for this run type or preset")
+	ErrRegenerationActive = errors.New("a matching regeneration is already active")
+)
 
 func NewService(repository Repository, options Options) *Service {
 	now := options.Now
@@ -868,13 +890,25 @@ func (service *Service) CreateNowcastInput(
 	}
 	now := service.now().UTC()
 	issueTime := input.IssueTime.UTC()
-	runID := stableID(
-		"nowcast-input-run",
-		input.GridID,
-		issueTime.Format(time.RFC3339),
-		input.PreprocessVersion,
-		input.GateConfigVersion,
-	)
+	var runID uuid.UUID
+	if input.RerunOf != nil {
+		if input.RegenerationID == uuid.Nil || input.Reason == "" {
+			return workflow.Run{}, workflow.Job{}, fmt.Errorf("manual regeneration identity and reason are required")
+		}
+		runID = stableID(
+			"nowcast-input-regeneration-run",
+			input.RerunOf.String(),
+			input.RegenerationID.String(),
+		)
+	} else {
+		runID = stableID(
+			"nowcast-input-run",
+			input.GridID,
+			issueTime.Format(time.RFC3339),
+			input.PreprocessVersion,
+			input.GateConfigVersion,
+		)
+	}
 	jobID := stableID("nowcast-input-job", runID.String())
 	traceID := stableID("nowcast-input-trace", runID.String())
 	eventID := stableID("nowcast-input-request", jobID.String())
@@ -914,6 +948,7 @@ func (service *Service) CreateNowcastInput(
 	run := workflow.Run{
 		ID: runID, IssueTime: issueTime, GridID: input.GridID,
 		ConfigVersion: input.GateConfigVersion, Status: workflow.RunPreprocessing,
+		RerunOf: input.RerunOf, Reason: input.Reason,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	job := workflow.Job{
@@ -1543,10 +1578,24 @@ func (service *Service) CreateThreeWorkflowSimulation(
 	return simulation, nil
 }
 
-func (service *Service) Rerun(ctx context.Context, sourceRunID uuid.UUID) (workflow.Run, error) {
+func (service *Service) Rerun(
+	ctx context.Context,
+	sourceRunID uuid.UUID,
+	request RegenerationRequest,
+) (workflow.Run, error) {
+	request.Reason = strings.TrimSpace(request.Reason)
+	count := utf8.RuneCountInString(request.Reason)
+	if !validRegenerationPreset(request.Preset) || count < 3 || count > 240 {
+		return workflow.Run{}, fmt.Errorf("invalid regeneration request")
+	}
 	source, err := service.repository.GetRun(ctx, sourceRunID)
 	if err != nil {
 		return workflow.Run{}, err
+	}
+	if active, activeErr := service.repository.FindActiveRegeneration(ctx, sourceRunID, request.Preset); activeErr == nil {
+		return active, ErrRegenerationActive
+	} else if !errors.Is(activeErr, workflow.ErrNotFound) {
+		return workflow.Run{}, activeErr
 	}
 	jobs, err := service.repository.ListJobs(ctx, sourceRunID)
 	if err != nil {
@@ -1555,29 +1604,52 @@ func (service *Service) Rerun(ctx context.Context, sourceRunID uuid.UUID) (workf
 	if len(jobs) == 0 {
 		return workflow.Run{}, fmt.Errorf("source run has no jobs")
 	}
-	if source.GridID != SimulationGrid || source.ConfigVersion != SimulationConfig ||
-		jobs[0].ModelID != SimulationModelID {
+	if source.GridID == SimulationGrid && source.ConfigVersion == SimulationConfig &&
+		jobs[0].ModelID == SimulationModelID {
+		if request.Preset != RegenerationForecast && request.Preset != RegenerationPystepsLK &&
+			request.Preset != RegenerationProducts {
+			return workflow.Run{}, ErrUnsupportedRerun
+		}
+		requested, decodeErr := decodeJobRequested(jobs[0].RequestPayload)
+		if decodeErr != nil {
+			return workflow.Run{}, fmt.Errorf("decode source job request: %w", decodeErr)
+		}
+		run, _, createErr := service.create(ctx, createSpec{
+			IssueTime: source.IssueTime, GridID: source.GridID,
+			ConfigVersion: source.ConfigVersion, ModelID: jobs[0].ModelID,
+			ModelVersion: jobs[0].ModelVersion, JobType: jobs[0].JobType,
+			InputURI: requested.Payload.InputURI, InputAssets: requested.Payload.InputAssets,
+			Parameters: requested.Payload.Parameters, RerunOf: &sourceRunID,
+			Reason: regenerationReason(request),
+		})
+		return run, createErr
+	}
+	if request.Preset != RegenerationForecast && request.Preset != RegenerationPystepsLK &&
+		request.Preset != RegenerationProducts {
 		return workflow.Run{}, ErrUnsupportedRerun
 	}
-
-	requested, err := decodeJobRequested(jobs[0].RequestPayload)
+	input, err := service.repository.GetNowcastInputRegeneration(ctx, sourceRunID)
 	if err != nil {
-		return workflow.Run{}, fmt.Errorf("decode source job request: %w", err)
+		return workflow.Run{}, err
 	}
-	run, _, err := service.create(ctx, createSpec{
-		IssueTime:     source.IssueTime,
-		GridID:        source.GridID,
-		ConfigVersion: source.ConfigVersion,
-		ModelID:       jobs[0].ModelID,
-		ModelVersion:  jobs[0].ModelVersion,
-		JobType:       jobs[0].JobType,
-		InputURI:      requested.Payload.InputURI,
-		InputAssets:   requested.Payload.InputAssets,
-		Parameters:    requested.Payload.Parameters,
-		RerunOf:       &sourceRunID,
-		Reason:        "manual rerun",
-	})
+	input.RerunOf = &sourceRunID
+	input.RegenerationID = service.newID()
+	input.Reason = regenerationReason(request)
+	run, _, err := service.CreateNowcastInput(ctx, input)
 	return run, err
+}
+
+func validRegenerationPreset(value RegenerationPreset) bool {
+	switch value {
+	case RegenerationForecast, RegenerationPystepsLK, RegenerationProducts:
+		return true
+	default:
+		return false
+	}
+}
+
+func regenerationReason(request RegenerationRequest) string {
+	return fmt.Sprintf("manual-regeneration/%s: %s", request.Preset, request.Reason)
 }
 
 func (service *Service) DispatchOnce(ctx context.Context, publisher Publisher) (bool, error) {
@@ -1739,6 +1811,7 @@ func (service *Service) create(ctx context.Context, spec createSpec) (workflow.R
 		ConfigVersion: spec.ConfigVersion,
 		Status:        workflow.RunBaselineRunning,
 		RerunOf:       spec.RerunOf,
+		Reason:        spec.Reason,
 		CreatedAt:     now,
 		UpdatedAt:     now,
 	}
