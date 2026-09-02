@@ -70,8 +70,13 @@ def main() -> None:
     parser.add_argument("--minimum-tile-size", type=int, default=64)
     parser.add_argument("--candidate-stride", type=int, default=8)
     parser.add_argument("--maximum-tiles", type=int, default=64)
+    parser.add_argument(
+        "--minimum-common-valid-coverage-ratio", type=float, default=0.70
+    )
     parser.add_argument("--issue-time", action="append", default=[])
     args = parser.parse_args()
+    if not 0 < args.minimum_common_valid_coverage_ratio <= 1:
+        raise ValueError("minimum common-valid coverage ratio must be in (0, 1]")
 
     target_date = datetime.strptime(args.date_utc, "%Y-%m-%d").date()
     grid = load_grid_config(args.grid_config)
@@ -191,6 +196,9 @@ def main() -> None:
             stitched,
             selection=selection,
             runtime_seconds=cycle["runtime_seconds"],
+            minimum_common_valid_coverage_ratio=(
+                args.minimum_common_valid_coverage_ratio
+            ),
         )
         report: dict[str, Any] = {
             "issue_time": cycle["issue_time"].isoformat(),
@@ -221,6 +229,7 @@ def main() -> None:
                 ],
                 runtime_seconds=cycle["runtime_seconds"],
                 runtime_info=cycle["runtime_info"],
+                publication_gate=gate,
             )
             write_bundle(args.output_root, bundle_id, bundle)
             prune_cycle_versions(
@@ -282,11 +291,15 @@ def stitched_gate(
     *,
     selection: NowcastNetTileSelection,
     runtime_seconds: float,
+    minimum_common_valid_coverage_ratio: float = 0.70,
 ) -> dict[str, Any]:
     primary_cell_count = selection.tiles[0].area
     coverage_gain = selection.covered_cell_count / primary_cell_count
     checks = {
-        "common_valid_coverage_ratio": selection.common_valid_coverage_ratio >= 0.70,
+        "common_valid_coverage_ratio": (
+            selection.common_valid_coverage_ratio
+            >= minimum_common_valid_coverage_ratio
+        ),
         "coverage_gain_over_primary": coverage_gain >= 1.20,
         "primary_consistency_mae_mm_h": (
             stitched.primary_consistency_mae_mm_h <= 1.0
@@ -304,7 +317,9 @@ def stitched_gate(
         "passed": all(checks.values()),
         "checks": checks,
         "thresholds": {
-            "minimum_common_valid_coverage_ratio": 0.70,
+            "minimum_common_valid_coverage_ratio": (
+                minimum_common_valid_coverage_ratio
+            ),
             "minimum_coverage_gain_over_primary": 1.20,
             "maximum_primary_consistency_mae_mm_h": 1.0,
             "maximum_primary_consistency_p95_mm_h": 5.0,
@@ -339,6 +354,7 @@ def build_bundle(
     clipped_negative_output_pixel_count: int,
     runtime_seconds: float,
     runtime_info: dict[str, object] | None,
+    publication_gate: dict[str, Any],
 ) -> tuple[str, dict[str, bytes]]:
     values = np.asarray(stitched.rain_rate_mm_h, dtype="float32")
     valid = np.asarray(stitched.valid_mask, dtype="uint8")
@@ -433,6 +449,7 @@ def build_bundle(
                 for index, tile in enumerate(selection.tiles)
             ],
         },
+        "publication_gate": publication_gate,
         "input_analysis": [
             {
                 "analysis_id": item.analysis_id,
