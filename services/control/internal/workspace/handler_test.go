@@ -7,7 +7,41 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	nowcastnetproductstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/nowcastnetproducts"
+	"github.com/google/uuid"
 )
+
+func TestWorkspaceAddsNativeCadenceNowcastNetShadowPanel(t *testing.T) {
+	issueTime := time.Date(2026, 8, 28, 8, 30, 0, 0, time.UTC)
+	bundleID := uuid.New()
+	bundle := nowcastnetproductstore.Bundle{
+		BundleID: bundleID, IssueTime: issueTime, ProfileVersion: "fujian-shadow-v1",
+		MemberCount: 4, CadenceMinutes: 10, LegendUnit: "mm/h",
+		Legend: []nowcastnetproductstore.LegendEntry{{Minimum: 0.1, Color: "#9dd9ff"}},
+		Frames: []nowcastnetproductstore.Frame{{
+			AssetID: "ensemble-mean-lead-010-png", MediaType: "image/png",
+			LeadMinutes: 10, ValidTime: issueTime.Add(10 * time.Minute), Unit: "mm/h",
+			SHA256: strings.Repeat("a", 64), CoverageRatio: 1, ValidCellCount: 64 * 128,
+			Bounds: [4]float64{117.995, 25.965, 119.275, 26.605},
+		}},
+	}
+	detail := cycleDetail{cycleSummary: cycleSummary{IssueTime: issueTime.Format(time.RFC3339)}}
+	new(Handler).addNowcastNetProduct(&detail, bundle)
+
+	if len(detail.Panels) != 1 || !detail.Capabilities.NowcastNet {
+		t.Fatalf("panels = %+v, capabilities = %+v", detail.Panels, detail.Capabilities)
+	}
+	panel := detail.Panels[0]
+	if panel.CadenceMinutes != 10 || panel.DisplayName != "NowcastNet（公开权重）" ||
+		panel.Frames[0].Bounds == nil || panel.Frames[0].LeadMinutes != 10 {
+		t.Fatalf("NowcastNet panel = %+v", panel)
+	}
+	wantURL := nowcastNetProductPrefix + "/" + bundleID.String() + "/assets/ensemble-mean-lead-010-png"
+	if panel.Frames[0].ImageURL != wantURL {
+		t.Fatalf("image URL = %q, want %q", panel.Frames[0].ImageURL, wantURL)
+	}
+}
 
 func TestWorkspaceListCollapsesAnalysisAndForecastIntoOneCycle(t *testing.T) {
 	core := fixtureCore(t)

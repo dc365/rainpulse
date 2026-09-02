@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	nowcastnetproductstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/nowcastnetproducts"
 )
 
 const (
@@ -21,6 +23,7 @@ const (
 	workspacePrefix          = "/api/v1/workspace/cycles"
 	ingestStatusPath         = "/api/v1/workspace/ingest-status"
 	nowcastNetStatusPath     = "/api/v1/workspace/nowcastnet-shadow-status"
+	nowcastNetProductPrefix  = "/api/v1/workspace/nowcastnet-products"
 	defaultGridID            = "fuzhou_118_123_25_27_0p01deg_v1"
 )
 
@@ -42,6 +45,7 @@ type Handler struct {
 	catalogNeedsAnalysis bool
 	ingestStatusURL      string
 	nowcastNetStatusURL  string
+	nowcastNetProducts   *nowcastnetproductstore.FileStore
 	httpClient           *http.Client
 }
 
@@ -55,7 +59,7 @@ func NewHandler(core http.Handler) http.Handler {
 	if _, err := time.Parse(time.DateOnly, catalogDateUTC); err != nil {
 		catalogDateUTC = ""
 	}
-	return &Handler{
+	handler := &Handler{
 		core: core, executionMode: mode,
 		catalogGridID:  strings.TrimSpace(os.Getenv("RAINPULSE_WORKSPACE_CYCLE_GRID_ID")),
 		catalogDateUTC: catalogDateUTC,
@@ -70,9 +74,17 @@ func NewHandler(core http.Handler) http.Handler {
 		httpClient: &http.Client{Timeout: 3 * time.Second},
 		now:        func() time.Time { return time.Now().UTC() },
 	}
+	if root := strings.TrimSpace(os.Getenv("RAINPULSE_NOWCASTNET_PRODUCT_ROOT")); root != "" {
+		handler.nowcastNetProducts = nowcastnetproductstore.NewFileStore(root)
+	}
+	return handler
 }
 
 func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request) {
+	if request.Method == http.MethodGet && strings.HasPrefix(request.URL.Path, nowcastNetProductPrefix+"/") {
+		handler.getNowcastNetProductAsset(response, request)
+		return
+	}
 	if request.Method == http.MethodGet && request.URL.Path == nowcastNetStatusPath {
 		handler.getNowcastNetStatus(response, request)
 		return
@@ -102,6 +114,7 @@ type cycleSummary struct {
 	AnalysisID      string            `json:"analysis_id,omitempty"`
 	RunID           string            `json:"run_id,omitempty"`
 	EnsembleID      string            `json:"ensemble_bundle_id,omitempty"`
+	NowcastNetID    string            `json:"nowcastnet_bundle_id,omitempty"`
 }
 
 type cycleCapabilities struct {
@@ -350,10 +363,11 @@ type ensembleAsset struct {
 }
 
 type cycleAccumulator struct {
-	summary  cycleSummary
-	run      *forecastRun
-	analysis *analysisCycle
-	ensemble *ensembleCycle
+	summary    cycleSummary
+	run        *forecastRun
+	analysis   *analysisCycle
+	ensemble   *ensembleCycle
+	nowcastnet *nowcastnetproductstore.Bundle
 }
 
 type nowcastNetShadowStatus struct {
@@ -522,6 +536,9 @@ func (handler *Handler) getCycle(response http.ResponseWriter, request *http.Req
 	if item.ensemble != nil {
 		handler.addEnsemble(request.Context(), &detail, *item.ensemble)
 	}
+	if item.nowcastnet != nil {
+		handler.addNowcastNetProduct(&detail, *item.nowcastnet)
+	}
 	ensureStablePanels(&detail)
 	handler.applyNowcastNetShadowStatus(request.Context(), &detail)
 	finalizeTimeline(&detail)
@@ -596,6 +613,25 @@ func (handler *Handler) catalog(ctx context.Context) (map[string]*cycleAccumulat
 			entry.ensemble = &copy
 			entry.summary.EnsembleID = ensemble.BundleID
 			entry.summary.Capabilities.Steps = true
+		}
+	}
+	if handler.nowcastNetProducts != nil {
+		bundles, err := handler.nowcastNetProducts.ListCycles(ctx)
+		if err != nil && !errors.Is(err, nowcastnetproductstore.ErrNotFound) {
+			degraded = append(degraded, "nowcastnet-products")
+		} else {
+			for index := range bundles {
+				bundle := bundles[index]
+				parsed := bundle.IssueTime.UTC()
+				entry := accumulator(catalog, bundle.GridID, parsed, handler.now(), handler.executionMode)
+				if entry.nowcastnet != nil && !bundle.CreatedAt.After(entry.nowcastnet.CreatedAt) {
+					continue
+				}
+				copy := bundle
+				entry.nowcastnet = &copy
+				entry.summary.NowcastNetID = bundle.BundleID.String()
+				entry.summary.Capabilities.NowcastNet = true
+			}
 		}
 	}
 	return catalog, uniqueStrings(degraded)
@@ -972,6 +1008,76 @@ func preferredEnsembleLayer(layers []ensembleLayer) *ensembleLayer {
 		}
 	}
 	return nil
+}
+
+func (handler *Handler) addNowcastNetProduct(
+	detail *cycleDetail,
+	bundle nowcastnetproductstore.Bundle,
+) {
+	panel := panelView{
+		PanelID: "nowcastnet", AlgorithmID: bundle.ProfileVersion,
+		DisplayName: "NowcastNet（公开权重）", Role: "forecast", Lifecycle: "shadow",
+		DataKind: "rain_rate", CadenceMinutes: bundle.CadenceMinutes, Status: "ready",
+		LegendUnit: bundle.LegendUnit, Frames: []frameView{},
+	}
+	for _, entry := range bundle.Legend {
+		value := entry.Minimum
+		panel.Legend = append(panel.Legend, legendEntry{Minimum: &value, Color: entry.Color})
+	}
+	for _, asset := range bundle.Frames {
+		bounds := asset.Bounds
+		coverage := asset.CoverageRatio
+		validCount := int(asset.ValidCellCount)
+		missingCount := int(asset.MissingCellCount)
+		panel.Frames = append(panel.Frames, frameView{
+			AssetID: asset.AssetID, ValidTime: asset.ValidTime.UTC().Format(time.RFC3339),
+			LeadMinutes: asset.LeadMinutes,
+			ImageURL: fmt.Sprintf(
+				"%s/%s/assets/%s",
+				nowcastNetProductPrefix, bundle.BundleID.String(), asset.AssetID,
+			),
+			MediaType: asset.MediaType, Unit: asset.Unit, SHA256: asset.SHA256,
+			CoverageRatio: &coverage, ValidCellCount: &validCount,
+			MissingCount: &missingCount, Bounds: &bounds,
+		})
+	}
+	if len(panel.Frames) == 0 {
+		return
+	}
+	sortFrames(panel.Frames)
+	upsertPanel(detail, panel)
+	detail.Capabilities.NowcastNet = true
+}
+
+func (handler *Handler) getNowcastNetProductAsset(
+	response http.ResponseWriter,
+	request *http.Request,
+) {
+	if handler.nowcastNetProducts == nil {
+		writeError(response, http.StatusNotFound, nowcastnetproductstore.ErrNotFound)
+		return
+	}
+	remainder := strings.TrimPrefix(request.URL.Path, nowcastNetProductPrefix+"/")
+	parts := strings.Split(remainder, "/")
+	if len(parts) != 3 || parts[1] != "assets" {
+		writeError(response, http.StatusNotFound, nowcastnetproductstore.ErrNotFound)
+		return
+	}
+	asset, err := handler.nowcastNetProducts.ReadAsset(request.Context(), parts[0], parts[2])
+	if err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, nowcastnetproductstore.ErrNotFound) {
+			status = http.StatusNotFound
+		}
+		writeError(response, status, err)
+		return
+	}
+	response.Header().Set("Content-Type", asset.MediaType)
+	response.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	response.Header().Set("ETag", fmt.Sprintf("%q", asset.SHA256))
+	response.Header().Set("X-Content-Type-Options", "nosniff")
+	response.WriteHeader(http.StatusOK)
+	_, _ = response.Write(asset.Data)
 }
 
 func ensureStablePanels(detail *cycleDetail) {
