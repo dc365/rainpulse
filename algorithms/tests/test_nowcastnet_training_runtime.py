@@ -87,6 +87,13 @@ FIRST_FORMAL_WINDOW_EVIDENCE_PATH = (
     / "evidence"
     / "nowcastnet-foundation-first-formal-window-v1.json"
 )
+FOUNDATION_EVOLUTION_COMPLETE_EVIDENCE_PATH = (
+    REPOSITORY_ROOT
+    / "configs"
+    / "training"
+    / "evidence"
+    / "nowcastnet-foundation-evolution-complete-v1.json"
+)
 NIGHTLY_RUNBOOK_PATH = (
     REPOSITORY_ROOT / "docs" / "nowcastnet-training" / "RUNBOOK_NIGHTLY.md"
 )
@@ -379,6 +386,44 @@ def test_first_formal_window_acceptance_keeps_second_window_closed() -> None:
     runbook = NIGHTLY_RUNBOOK_PATH.read_text()
     assert "一次性启动许可" in runbook
     assert "不能在 `ExecStopPost` 内控制 timer" in runbook
+
+
+def test_foundation_evolution_completion_keeps_generative_and_holdout_closed() -> None:
+    evidence = json.loads(FOUNDATION_EVOLUTION_COMPLETE_EVIDENCE_PATH.read_text())
+    window = evidence["second_formal_window"]
+
+    assert evidence["status"] == "passed"
+    assert evidence["identity"]["holdout_windows_processed"] == 0
+    assert window["start_step"] == 243046
+    assert window["end_step"] == 300000
+    assert window["completed_steps"] == 56954
+    assert window["stop_reason"] == "planned_training_complete"
+    assert window["checkpoint_state_exact_on_resume"] is True
+    assert window["random_state_exact_on_resume"] is True
+    assert evidence["metrics"]["total_rows"] == 300000
+    assert evidence["metrics"]["global_steps_contiguous"] is True
+    assert evidence["metrics"]["all_required_values_finite"] is True
+    assert evidence["output_checkpoint"]["global_step"] == 300000
+    assert evidence["output_checkpoint"]["hash_verified"] is True
+    assert evidence["output_checkpoint"]["state_fingerprints_verified"] is True
+    assert evidence["output_checkpoint"]["cpu_readback_verified"] is True
+    assert evidence["reports"]["nightly_status"] == "passed"
+    assert evidence["shared_services"]["qwen3_8_recovery"] == "passed"
+    assert evidence["shared_services"]["qwen3_6_stopped"] is False
+    assert evidence["shared_services"]["training_processes_remaining"] == 0
+    assert evidence["scheduler_lifecycle"]["start_timer_enabled"] is False
+    assert evidence["scheduler_lifecycle"]["stop_timer_enabled"] is False
+    assert evidence["scheduler_lifecycle"]["start_permit_present"] is False
+    assert evidence["decision"] == {
+        "foundation_evolution_training_complete": True,
+        "formal_generative_training_approved": False,
+        "independent_holdout_opened": False,
+        "next_gate": (
+            "approve_the_formal_generative_training_resource_protocol_and_"
+            "promote_the_foundation_checkpoint"
+        ),
+    }
+    assert evidence["operational_eligible"] is False
 
 
 def test_generative_profile_matches_schema_and_published_contract() -> None:

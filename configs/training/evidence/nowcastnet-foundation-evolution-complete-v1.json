@@ -1,0 +1,91 @@
+{
+  "schema_version": "1.0",
+  "status": "passed",
+  "measured_at": "2026-09-03T01:50:47+08:00",
+  "scope": "foundation_evolution_training_complete",
+  "identity": {
+    "training_code_revision": "4675567f5a682eb7d62ac178f2d72b1eec6a351d",
+    "profile_sha256": "874775edd697ee4771e1302e3d62c2054cac3f16d112b0ca14f13811bd0920e8",
+    "plan_id": "5ce3859f8f914c9cd55ea92a96a5dd860d46e297fff229472843d21e0bc26892",
+    "sample_index_sha256": "e758c938c929020c64e17ea827b05431f08b059c4033fcaa3b27a72ec1decddf",
+    "holdout_windows_processed": 0
+  },
+  "second_formal_window": {
+    "started_at": "2026-09-02T13:42:46.527663+00:00",
+    "finished_at": "2026-09-02T17:23:44.927482+00:00",
+    "status": "passed",
+    "start_step": 243046,
+    "end_step": 300000,
+    "completed_steps": 56954,
+    "duration_seconds": 13258.399819193408,
+    "steps_per_second": 4.295691846428634,
+    "stop_reason": "planned_training_complete",
+    "checkpoint_interval_steps": 5000,
+    "checkpoint_interval_seconds": 300,
+    "checkpoint_state_exact_on_resume": true,
+    "random_state_exact_on_resume": true,
+    "peak_allocated_memory_bytes": 7390514176,
+    "peak_reserved_memory_bytes": 8438939648
+  },
+  "metrics": {
+    "total_rows": 300000,
+    "second_window_rows": 56954,
+    "global_steps_contiguous": true,
+    "all_required_values_finite": true,
+    "metrics_sha256": "4a187009e46c5e2d4f8871620dd53c16c065bfde99baab25f59e4b782df3ef88",
+    "loss_total": {
+      "minimum": 17.47260093688965,
+      "maximum": 1126.531005859375,
+      "mean": 157.92227139077505,
+      "last": 166.70008850097656
+    }
+  },
+  "output_checkpoint": {
+    "global_step": 300000,
+    "sha256": "be791c9878e639fc63db3a23609ecb0d2351dfb90c7d533778469665a9032632",
+    "hash_verified": true,
+    "state_fingerprints_verified": true,
+    "cpu_readback_verified": true,
+    "acceptance_preflight_id": "72e4066effdb8b3c4873ac6b17891f1b4aae08525c6e094a2b286cb20d219be3",
+    "acceptance_preflight_sha256": "87cc6014b9ca72395c52e4cee3d103015631a5d08be570fc9f38df9d4251d9a1"
+  },
+  "reports": {
+    "preflight_sha256": "336d2309ed8c7f9b002c2b47af7feb5ab51acab30ab64aa7a9955eecf894bf71",
+    "latest_marker_sha256": "90658ff0c49e8cae2f50c3303847951ba1d45cfdf156cf574fc24e3c4bcab8d4",
+    "training_report_sha256": "73e45aefb4e16a1efd7bf6c3ec686c54ce60bcf29d536df7f8e6ab6883b8f2fc",
+    "nightly_report_sha256": "60cbb9b42b68754fa2c550be15ac13d87c5bcfbef8d89ebecc73c0496af4cdb4",
+    "nightly_status": "passed",
+    "preflight_identity_verified": true
+  },
+  "shared_services": {
+    "qwen3_8_stopped_for_training": true,
+    "qwen3_8_recovery": "passed",
+    "qwen3_8_managed_by_user_systemd": true,
+    "qwen3_6_stopped": false,
+    "qwen3_6_health_after_window": "passed",
+    "other_gpu_services_stopped": false,
+    "training_processes_remaining": 0
+  },
+  "scheduler_lifecycle": {
+    "training_service_state": "inactive_success",
+    "start_timer_enabled": false,
+    "stop_timer_enabled": false,
+    "start_permit_present": false,
+    "shared_service_recovery_status": "passed"
+  },
+  "storage": {
+    "checkpoint_count": 215,
+    "checkpoint_bytes": 22994372120,
+    "training_output_free_bytes": 281922088960,
+    "sample_storage_free_bytes": 622127874048,
+    "raw_data_mutated": false,
+    "samples_mutated": false
+  },
+  "decision": {
+    "foundation_evolution_training_complete": true,
+    "formal_generative_training_approved": false,
+    "independent_holdout_opened": false,
+    "next_gate": "approve_the_formal_generative_training_resource_protocol_and_promote_the_foundation_checkpoint"
+  },
+  "operational_eligible": false
+}
