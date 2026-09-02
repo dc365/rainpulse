@@ -1,0 +1,43 @@
+{
+  "schema_version": "1.0",
+  "status": "passed",
+  "measured_at": "2026-09-03T02:25:30.879601+08:00",
+  "scope": "promote_completed_foundation_evolution_checkpoint_as_generative_parent",
+  "identity": {
+    "training_code_revision": "4608cf2d3fceba7f51e9ed341cb2a29fb6e6bb8f",
+    "generative_profile_sha256": "e33cd36ad4c61cedfbb76dd9d52e821513f6916b6dc3fef68b0352a6bf071fdb",
+    "evolution_profile_sha256": "874775edd697ee4771e1302e3d62c2054cac3f16d112b0ca14f13811bd0920e8",
+    "plan_id": "5ce3859f8f914c9cd55ea92a96a5dd860d46e297fff229472843d21e0bc26892",
+    "sample_index_sha256": "e758c938c929020c64e17ea827b05431f08b059c4033fcaa3b27a72ec1decddf",
+    "sample_count": 100000,
+    "shard_count": 4000,
+    "holdout_windows_processed": 0
+  },
+  "parent_checkpoint": {
+    "global_step": 300000,
+    "sha256": "be791c9878e639fc63db3a23609ecb0d2351dfb90c7d533778469665a9032632",
+    "state_fingerprints_verified": true,
+    "random_state_verified": true,
+    "strict_model_import_verified": true
+  },
+  "preflight": {
+    "device": "cpu",
+    "status": "passed",
+    "report_sha256": "6ed4facf40eebb0ee1eca50ff303610c420eec5b6936c9dd24c4b045a4e4c6a6",
+    "repository_clean": true,
+    "dataset_probe_count": 64,
+    "dataset_probe_all_valid": true,
+    "dataset_probe_all_finite": true,
+    "data_output_separated": true,
+    "output_free_bytes": 281911279616,
+    "minimum_output_free_bytes": 100000000000
+  },
+  "decision": {
+    "foundation_checkpoint_promoted": true,
+    "generative_systemd_rehearsal_approved": true,
+    "formal_generative_training_approved": false,
+    "independent_holdout_opened": false,
+    "next_gate": "complete_full_parent_systemd_interruption_and_resume_rehearsal"
+  },
+  "operational_eligible": false
+}

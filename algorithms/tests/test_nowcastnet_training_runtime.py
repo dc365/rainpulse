@@ -100,6 +100,20 @@ GENERATIVE_PROFILE_PATH = (
 GENERATIVE_SCHEMA_PATH = (
     REPOSITORY_ROOT / "configs" / "schemas" / "nowcastnet-generative.schema.json"
 )
+GENERATIVE_PARENT_PROMOTION_EVIDENCE_PATH = (
+    REPOSITORY_ROOT
+    / "configs"
+    / "training"
+    / "evidence"
+    / "nowcastnet-generative-parent-promotion-v1.json"
+)
+GENERATIVE_FULL_PARENT_REHEARSAL_EVIDENCE_PATH = (
+    REPOSITORY_ROOT
+    / "configs"
+    / "training"
+    / "evidence"
+    / "nowcastnet-generative-full-parent-rehearsal-v1.json"
+)
 
 
 def _sha256(path: Path) -> str:
@@ -436,6 +450,48 @@ def test_generative_profile_matches_schema_and_published_contract() -> None:
     assert profile.checkpoint_rolling_keep == 3
     assert profile.checkpoint_milestone_interval_steps == 10000
     assert profile.checkpoint_preserve_window_final is True
+
+
+def test_generative_parent_promotion_and_rehearsal_keep_formal_training_closed() -> None:
+    promotion = json.loads(GENERATIVE_PARENT_PROMOTION_EVIDENCE_PATH.read_text())
+    rehearsal = json.loads(GENERATIVE_FULL_PARENT_REHEARSAL_EVIDENCE_PATH.read_text())
+
+    assert promotion["status"] == "passed"
+    assert promotion["identity"]["holdout_windows_processed"] == 0
+    assert promotion["parent_checkpoint"]["global_step"] == 300000
+    assert promotion["parent_checkpoint"]["state_fingerprints_verified"] is True
+    assert promotion["decision"]["formal_generative_training_approved"] is False
+
+    assert rehearsal["status"] == "passed"
+    assert rehearsal["identity"]["holdout_windows_processed"] == 0
+    assert [run["run_mode"] for run in rehearsal["validated_invocations"]] == [
+        "new",
+        "resume",
+    ]
+    assert rehearsal["validated_invocations"][0]["end_step"] == 293
+    assert rehearsal["validated_invocations"][1]["end_step"] == 1000
+    assert rehearsal["validated_invocations"][1]["checkpoint_state_exact_on_resume"] is True
+    assert rehearsal["validated_invocations"][1]["random_state_exact_on_resume"] is True
+    assert rehearsal["metrics"]["global_steps_contiguous"] is True
+    assert rehearsal["metrics"]["all_required_values_finite"] is True
+    assert rehearsal["output_checkpoint"]["cpu_readback_verified"] is True
+    assert rehearsal["checkpoint_retention"]["retained_steps"] == [293, 753, 905, 1000]
+    assert rehearsal["shared_services"]["qwen3_6_recovery"] == "passed"
+    assert rehearsal["shared_services"]["qwen3_8_recovery"] == "passed"
+    assert rehearsal["shared_services"]["vllm_stopped"] is False
+    assert rehearsal["scheduler_lifecycle"]["start_permit_present"] is False
+    assert rehearsal["decision"] == {
+        "full_parent_systemd_rehearsal_passed": True,
+        "trainer_full_parent_contract_eligible": True,
+        "formal_generative_training_approved": False,
+        "formal_generative_training_started": False,
+        "independent_holdout_opened": False,
+        "next_gate": ("review_and_approve_the_formal_500000_step_generative_nightly_schedule"),
+    }
+    assert rehearsal["operational_eligible"] is False
+    runbook = NIGHTLY_RUNBOOK_PATH.read_text()
+    assert "Qwen3.8 和 Qwen3.6" in runbook
+    assert "5 分钟或 1,000 步" in runbook
 
 
 def test_generative_training_uses_full_dataset_identity(monkeypatch: pytest.MonkeyPatch) -> None:

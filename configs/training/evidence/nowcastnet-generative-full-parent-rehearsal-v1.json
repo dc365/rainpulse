@@ -1,0 +1,161 @@
+{
+  "schema_version": "1.0",
+  "status": "passed",
+  "measured_at": "2026-09-03T03:09:39.942085+08:00",
+  "scope": "full_dataset_full_parent_generative_cuda_systemd_interruption_and_resume_rehearsal",
+  "identity": {
+    "training_code_revision": "3c7c9a1ec9249f54cd72a5ea3de9727e6c26e215",
+    "generative_profile_sha256": "e33cd36ad4c61cedfbb76dd9d52e821513f6916b6dc3fef68b0352a6bf071fdb",
+    "evolution_profile_sha256": "874775edd697ee4771e1302e3d62c2054cac3f16d112b0ca14f13811bd0920e8",
+    "parent_promotion_evidence_sha256": "a364191e9b23ec18ffa73cafccb419dbb9d79a5942f5f59e1d82c1a16702736f",
+    "parent_checkpoint_global_step": 300000,
+    "parent_checkpoint_sha256": "be791c9878e639fc63db3a23609ecb0d2351dfb90c7d533778469665a9032632",
+    "plan_id": "5ce3859f8f914c9cd55ea92a96a5dd860d46e297fff229472843d21e0bc26892",
+    "sample_index_sha256": "e758c938c929020c64e17ea827b05431f08b059c4033fcaa3b27a72ec1decddf",
+    "sample_count": 100000,
+    "shard_count": 4000,
+    "holdout_windows_processed": 0
+  },
+  "runtime": {
+    "device": "cuda",
+    "gpu_name": "NVIDIA RTX 6000D",
+    "gpu_total_memory_bytes": 89173131264,
+    "torch_version": "2.12.1+cu132",
+    "cuda_version": "13.2",
+    "batch_size": 16,
+    "precision": "bf16",
+    "ensemble_members": 4,
+    "minimum_cuda_free_memory_bytes_before_start": 75000000000,
+    "stop_signal": "SIGTERM",
+    "kill_mode": "mixed",
+    "timeout_stop_seconds": 300,
+    "checkpoint_interval_steps": 1000,
+    "checkpoint_interval_seconds": 300,
+    "checkpoint_rolling_keep": 3,
+    "checkpoint_milestone_interval_steps": 10000,
+    "preserve_window_final": true
+  },
+  "corrective_actions": [
+    {
+      "attempt": 1,
+      "code_revision": "4608cf2d3fceba7f51e9ed341cb2a29fb6e6bb8f",
+      "failure": "generative_training_loader_defaulted_to_the_pilot_report_instead_of_the_frozen_full_dataset_contract",
+      "cuda_preflight_passed": true,
+      "optimizer_steps_completed": 0,
+      "output_directory_created": false,
+      "resolution": "bind_the_generative_loader_and_run_manifest_to_the_full_dataset_identity",
+      "fixed_code_revision": "3c7c9a1ec9249f54cd72a5ea3de9727e6c26e215"
+    },
+    {
+      "attempt": 2,
+      "observation": "systemd_RuntimeMaxSec_records_a_timeout_result_even_when_the_training_process_handles_SIGTERM_saves_a_checkpoint_and_exits_zero",
+      "training_artifacts_valid": true,
+      "shared_services_recovered": true,
+      "resolution": "use_a_controlled_timeout_wrapper_with_preserved_child_exit_status_for_bounded_rehearsals"
+    }
+  ],
+  "validated_invocations": [
+    {
+      "run_mode": "new",
+      "preflight_report_sha256": "74e75feb0f65f407e8ed5e9ee4aed3cb0f0bacba12e77585fd6f63b1bc50aecb",
+      "start_step": 0,
+      "end_step": 293,
+      "completed_steps": 293,
+      "duration_seconds": 597.7054142635316,
+      "steps_per_second": 0.49020804062988577,
+      "stop_reason": "signal:SIGTERM",
+      "training_exit_status": 0,
+      "systemd_result": "timeout",
+      "output_checkpoint_sha256": "785b6f67da6148e94a93c5dd3036db6718675fcd3b6e42b349bc6a2f44671782",
+      "metrics_sha256": "0b9a11b428e95b35b77409f23e205a0e32e00c534c216da83fb8b85406542d88",
+      "peak_allocated_memory_bytes": 38711426560,
+      "peak_reserved_memory_bytes": 39514537984,
+      "checkpoint_cpu_readback_verified": true,
+      "checkpoint_state_fingerprints_verified": true,
+      "random_state_fingerprint_verified": true
+    },
+    {
+      "run_mode": "resume",
+      "preflight_report_sha256": "d7ea466d926b97bd05672043553b9967f87bb28974766223e79429facb0f23ca",
+      "start_step": 293,
+      "end_step": 1000,
+      "completed_steps": 707,
+      "duration_seconds": 1396.045494697988,
+      "steps_per_second": 0.5064304871761705,
+      "stop_reason": "planned_rehearsal_complete",
+      "training_exit_status": 0,
+      "systemd_result": "success",
+      "input_checkpoint_sha256": "785b6f67da6148e94a93c5dd3036db6718675fcd3b6e42b349bc6a2f44671782",
+      "output_checkpoint_sha256": "d4e09ce0b191f50ac94dc9057a304f5aab092279e4b50f6b353b32f6f5bcc476",
+      "checkpoint_state_exact_on_resume": true,
+      "random_state_exact_on_resume": true,
+      "peak_allocated_memory_bytes": 38705400320,
+      "peak_reserved_memory_bytes": 39785070592
+    }
+  ],
+  "metrics": {
+    "total_rows": 1000,
+    "global_steps_contiguous": true,
+    "all_required_values_finite": true,
+    "metrics_sha256": "aa575b9fae2e2b4f551dfbc34d0c969554d18dbe7b2415fdca2862b9d5ae054d",
+    "mean_step_duration_seconds": 1.9801338854692876,
+    "p95_step_duration_seconds": 2.3944366396404804,
+    "aggregate_invocation_duration_seconds": 1993.7509089615196,
+    "aggregate_steps_per_second": 0.5015671694519089,
+    "projected_500000_step_gpu_hours_at_rehearsal_rate": 276.90984846687775,
+    "projected_twelve_hour_windows": 23.075820705573147
+  },
+  "output_checkpoint": {
+    "global_step": 1000,
+    "sha256": "d4e09ce0b191f50ac94dc9057a304f5aab092279e4b50f6b353b32f6f5bcc476",
+    "size_bytes": 505585700,
+    "hash_verified": true,
+    "cpu_readback_verified": true,
+    "state_fingerprints_verified": true,
+    "random_state_fingerprint_verified": true
+  },
+  "checkpoint_retention": {
+    "retained_count": 4,
+    "retained_steps": [293, 753, 905, 1000],
+    "retained_bytes": 2022342800,
+    "window_final_steps": [293, 1000],
+    "latest_marker_sha256": "528c69809e33309a1b7942c953b673936c4ed436cdc49d6c80e9790a4350bd78",
+    "window_finals_sha256": "dbdcb8b3cbab9ff49a51802e8ef3371eaf4f46caa9f934e5be6f21a426fcb9d5",
+    "run_manifest_sha256": "8da0a6718cbdf9bd73606742cd389eb0d026409c088499e4588fbf813fa94a85",
+    "training_report_sha256": "b2443ae8e23d43f87712c11335c66f8fb83a35dccdd62cd2498a5eaa8cc7483f"
+  },
+  "shared_services": {
+    "qwen3_6_stopped_for_training": true,
+    "qwen3_8_stopped_for_training": true,
+    "qwen3_6_managed_by_user_systemd": true,
+    "qwen3_8_managed_by_user_systemd": true,
+    "qwen3_6_recovery": "passed",
+    "qwen3_8_recovery": "passed",
+    "vllm_stopped": false,
+    "other_gpu_services_stopped": false,
+    "training_processes_remaining": 0
+  },
+  "scheduler_lifecycle": {
+    "rehearsal_service_state": "inactive_success",
+    "rehearsal_service_enabled": false,
+    "start_permit_present": false,
+    "formal_training_timer_enabled": false
+  },
+  "storage": {
+    "training_output_free_bytes": 279495348224,
+    "sample_storage_free_bytes": 618334257152,
+    "samples_stored_only_on_nas": true,
+    "checkpoints_stored_only_on_local_training_storage": true,
+    "raw_data_mutated": false,
+    "samples_mutated": false
+  },
+  "decision": {
+    "full_parent_systemd_rehearsal_passed": true,
+    "trainer_full_parent_contract_eligible": true,
+    "formal_generative_training_approved": false,
+    "formal_generative_training_started": false,
+    "independent_holdout_opened": false,
+    "next_gate": "review_and_approve_the_formal_500000_step_generative_nightly_schedule"
+  },
+  "operational_eligible": false
+}
