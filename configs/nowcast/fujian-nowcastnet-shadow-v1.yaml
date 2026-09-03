@@ -6,6 +6,10 @@ grid_config_version: fuzhou-grid-0p01deg-v1
 
 protocol:
   input_frames: 9
+  # A new forecast may be issued every five minutes while the frozen parent
+  # still consumes nine observations spaced ten minutes apart. This increases
+  # update frequency without pretending that +5-minute leads are native output.
+  issue_cadence_minutes: 5
   timestep_minutes: 10
   output_lead_minutes: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
   missing_policy: reject_any_missing
