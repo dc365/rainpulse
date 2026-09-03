@@ -7,13 +7,13 @@ import (
 	"os"
 	"time"
 
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/bdpruntime"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/healthcheck"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/webgateway"
 )
 
 func main() {
-	address := environmentOrDefault("RAINPULSE_WEB_ADDR", ":8080")
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
 		if err := healthcheck.Run(environmentOrDefault("RAINPULSE_WEB_HEALTH_URL", "http://127.0.0.1:8080/healthz")); err != nil {
 			slog.Error("web gateway healthcheck failed", "error", err)
@@ -21,6 +21,11 @@ func main() {
 		}
 		return
 	}
+	if _, err := bdpruntime.Prepare(bdpruntime.ComponentWeb, false); err != nil {
+		slog.Error("initialize Ruiyun BDP runtime for web gateway", "error", err)
+		os.Exit(1)
+	}
+	address := environmentOrDefault("RAINPULSE_WEB_ADDR", ":8080")
 
 	handler, err := webgateway.NewHandler(webgateway.Options{
 		WebRoot:    environmentOrDefault("RAINPULSE_WEB_ROOT", "/srv/rainpulse-web"),

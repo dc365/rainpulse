@@ -64,3 +64,40 @@ func TestLoadManifestRejectsUnknownAndDuplicateSources(t *testing.T) {
 		})
 	}
 }
+
+func TestManifestWithSourceSettingsOverridesEverySource(t *testing.T) {
+	manifest := Manifest{
+		SchemaVersion:   "1.0",
+		ProfileVersion:  "test-v1",
+		ExecutionMode:   "realtime_shadow",
+		IntervalSeconds: 15,
+		StateDirectory:  "/tmp/rainpulse-ingest-state",
+		Sources: []ManifestSource{
+			{SourceID: "z9591-live", RadarID: "z9591", ConfigPath: "/configs/z9591.yaml", ArrivalRoot: "/legacy/one", MinAgeSeconds: 30, LookbackHours: 24},
+			{SourceID: "z9593-live", RadarID: "z9593", ConfigPath: "/configs/z9593.yaml", ArrivalRoot: "/legacy/two", MinAgeSeconds: 30, LookbackHours: 24},
+		},
+	}
+	overridden, err := manifest.WithSourceSettings(
+		"/data/Weather/RADA/RADA_L2_FMT/OBS_TEMP",
+		10,
+		45,
+		12,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, source := range overridden.Sources {
+		if source.ArrivalRoot != "/data/Weather/RADA/RADA_L2_FMT/OBS_TEMP" {
+			t.Fatalf("arrival root = %q", source.ArrivalRoot)
+		}
+		if source.MinAgeSeconds != 45 || source.LookbackHours != 12 {
+			t.Fatalf("source timing differs: %+v", source)
+		}
+	}
+	if overridden.IntervalSeconds != 10 {
+		t.Fatalf("scan interval = %d", overridden.IntervalSeconds)
+	}
+	if manifest.Sources[0].ArrivalRoot != "/legacy/one" {
+		t.Fatal("WithSourceSettings mutated the original manifest")
+	}
+}

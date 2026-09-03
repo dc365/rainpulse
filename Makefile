@@ -18,19 +18,23 @@ MINIO_MC_LDFLAGS := -s -w -X github.com/minio/mc/cmd.Version=$(MINIO_MC_BUILD_VE
 BUILD_REVISION ?= $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
 BUILD_VERSION ?= $(BUILD_REVISION)
 RAINPULSE_GO_LDFLAGS := -X github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo.Version=$(BUILD_VERSION) -X github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo.Revision=$(BUILD_REVISION)
+CONTROL_GO := bash scripts/go_control.sh
 
-.PHONY: bootstrap contracts-generate contracts-check test test-structure test-radar-config test-contracts test-infrastructure test-alerting test-operations test-control-plane test-worker-sdk test-radar-decoder test-radar-health test-radar-qc test-radar-grid test-radar-mosaic test-qpe test-diagnostics test-nowcast-input test-pysteps-lk test-pysteps-steps test-probability-calibration test-nowcastnet test-nowcastnet-training test-nowcastnet-pilot test-products test-ensemble-products test-ancillary test-grid test-mrms test-mrms-ensemble test-go test-python test-web lint build build-linux build-infrastructure-linux export-postgres-image export-python-image export-node-exporter-image build-worker-linux deploy-up dev-up dev-down smoke infrastructure-smoke control-plane-smoke worker-smoke radar-decode-smoke radar-health-smoke radar-qc-smoke radar-grid-smoke ancillary-plan ancillary-download ancillary-verify mrms-download mrms-verify mrms-training-audit mrms-pilot-plan mrms-pilot-run mrms-pilot-validate mrms-holdout-select mrms-conformance mrms-hindcast mrms-faults mrms-ensemble-conformance mrms-ensemble-hindcast mrms-ensemble-freeze-gate mrms-nowcastnet-conformance mrms-nowcastnet-hindcast mrms-nowcastnet-freeze-gate
+.PHONY: prepare-bdp-go bootstrap contracts-generate contracts-check test test-structure test-radar-config test-contracts test-infrastructure test-alerting test-operations test-control-plane test-worker-sdk test-radar-decoder test-radar-health test-radar-qc test-radar-grid test-radar-mosaic test-qpe test-diagnostics test-nowcast-input test-pysteps-lk test-pysteps-steps test-probability-calibration test-nowcastnet test-nowcastnet-training test-nowcastnet-pilot test-products test-ensemble-products test-ancillary test-grid test-mrms test-mrms-ensemble test-go test-python test-web lint build build-linux build-infrastructure-linux export-postgres-image export-python-image export-node-exporter-image build-worker-linux deploy-up dev-up dev-down smoke infrastructure-smoke control-plane-smoke worker-smoke radar-decode-smoke radar-health-smoke radar-qc-smoke radar-grid-smoke ancillary-plan ancillary-download ancillary-verify mrms-download mrms-verify mrms-training-audit mrms-pilot-plan mrms-pilot-run mrms-pilot-validate mrms-holdout-select mrms-conformance mrms-hindcast mrms-faults mrms-ensemble-conformance mrms-ensemble-hindcast mrms-ensemble-freeze-gate mrms-nowcastnet-conformance mrms-nowcastnet-hindcast mrms-nowcastnet-freeze-gate
 .PHONY: test-nowcastnet-full-samples mrms-full-sample-plan mrms-full-sample-run mrms-full-sample-validate
 .PHONY: test-regeneration regenerate
 
-bootstrap:
+prepare-bdp-go:
+	@$(CONTROL_GO) --prepare
+
+bootstrap: prepare-bdp-go
 	@command -v rg >/dev/null || { echo "ripgrep is required" >&2; exit 1; }
 	@command -v go >/dev/null || { echo "go is required" >&2; exit 1; }
 	@command -v pnpm >/dev/null || { echo "pnpm is required" >&2; exit 1; }
 	@command -v uv >/dev/null || { echo "uv is required" >&2; exit 1; }
 	pnpm install --frozen-lockfile
 	uv sync --project algorithms --dev
-	go list -C services/control -buildvcs=false -deps ./... >/dev/null
+	$(CONTROL_GO) list -buildvcs=false -deps ./... >/dev/null
 
 contracts-generate:
 	bash scripts/generate_contracts.sh
@@ -141,8 +145,8 @@ test-mrms:
 test-mrms-ensemble:
 	uv run --project algorithms pytest algorithms/tests/test_mrms_holdout.py algorithms/tests/test_mrms_ensemble_profile.py algorithms/tests/test_mrms_ensemble_gate.py algorithms/tests/test_mrms_ensemble_hindcast.py algorithms/tests/test_probabilistic_verification.py
 
-test-go:
-	go test ./services/control/...
+test-go: prepare-bdp-go
+	$(CONTROL_GO) test ./...
 
 test-python:
 	uv run --project algorithms pytest algorithms/tests
@@ -150,20 +154,21 @@ test-python:
 test-web:
 	pnpm --filter @rainpulse/web test
 
-lint:
+lint: prepare-bdp-go
 	@test -z "$$(gofmt -l services/control)" || { gofmt -l services/control; exit 1; }
-	go vet ./services/control/...
+	$(CONTROL_GO) vet ./...
 	ruff check algorithms
 	ruff check configs/tests
 	ruff check contracts/tests
 	pnpm --filter @rainpulse/web lint
 	$(MAKE) contracts-check
 
-build:
+build: prepare-bdp-go
 	mkdir -p .build/python
-	go build -buildvcs=false -trimpath -ldflags="$(RAINPULSE_GO_LDFLAGS)" -o .build/rainpulse-api ./services/control/cmd/api
-	go build -buildvcs=false -trimpath -ldflags="$(RAINPULSE_GO_LDFLAGS)" -o .build/rainpulse-web ./services/control/cmd/web
-	go build -buildvcs=false -trimpath -ldflags="$(RAINPULSE_GO_LDFLAGS)" -o .build/rainpulse-orchestrator ./services/control/cmd/orchestrator
+	$(CONTROL_GO) build -buildvcs=false -trimpath -ldflags="$(RAINPULSE_GO_LDFLAGS)" -o $(CURDIR)/.build/rainpulse-api ./cmd/api
+	$(CONTROL_GO) build -buildvcs=false -trimpath -ldflags="$(RAINPULSE_GO_LDFLAGS)" -o $(CURDIR)/.build/rainpulse-web ./cmd/web
+	$(CONTROL_GO) build -buildvcs=false -trimpath -ldflags="$(RAINPULSE_GO_LDFLAGS)" -o $(CURDIR)/.build/rainpulse-orchestrator ./cmd/orchestrator
+	$(CONTROL_GO) build -buildvcs=false -trimpath -ldflags="$(RAINPULSE_GO_LDFLAGS)" -o $(CURDIR)/.build/rainpulse-ingest ./cmd/ingest
 	uv build --project algorithms --out-dir .build/python
 	pnpm --filter @rainpulse/web build
 
@@ -175,7 +180,7 @@ regenerate:
 	REGEN_REASON="$(REGEN_REASON)" \
 	bash scripts/regenerate_forecasts.sh
 
-build-infrastructure-linux:
+build-infrastructure-linux: prepare-bdp-go
 	mkdir -p .build/linux-amd64
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOBIN= go install -trimpath -ldflags="-s -w" github.com/nats-io/nats-server/v2@$(NATS_VERSION)
 	cp "$$(go env GOPATH)/bin/linux_amd64/nats-server" .build/linux-amd64/nats-server
@@ -183,13 +188,14 @@ build-infrastructure-linux:
 	cp "$$(go env GOPATH)/bin/linux_amd64/minio" .build/linux-amd64/minio
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOBIN= go install -trimpath -ldflags="$(MINIO_MC_LDFLAGS)" github.com/minio/mc@$(MINIO_MC_VERSION)
 	cp "$$(go env GOPATH)/bin/linux_amd64/mc" .build/linux-amd64/mc
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags="-s -w" -o .build/linux-amd64/rainpulse-healthcheck ./services/control/cmd/healthcheck
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(CONTROL_GO) build -buildvcs=false -trimpath -ldflags="-s -w" -o $(CURDIR)/.build/linux-amd64/rainpulse-healthcheck ./cmd/healthcheck
 
 build-linux: build-infrastructure-linux
 	mkdir -p .build/linux-amd64
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags="-s -w $(RAINPULSE_GO_LDFLAGS)" -o .build/linux-amd64/rainpulse-api ./services/control/cmd/api
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags="-s -w $(RAINPULSE_GO_LDFLAGS)" -o .build/linux-amd64/rainpulse-web ./services/control/cmd/web
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags="-s -w $(RAINPULSE_GO_LDFLAGS)" -o .build/linux-amd64/rainpulse-orchestrator ./services/control/cmd/orchestrator
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 RAINPULSE_REQUIRE_BDP_SOURCE=1 $(CONTROL_GO) build -buildvcs=false -trimpath -ldflags="-s -w $(RAINPULSE_GO_LDFLAGS)" -o $(CURDIR)/.build/linux-amd64/rainpulse-api ./cmd/api
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 RAINPULSE_REQUIRE_BDP_SOURCE=1 $(CONTROL_GO) build -buildvcs=false -trimpath -ldflags="-s -w $(RAINPULSE_GO_LDFLAGS)" -o $(CURDIR)/.build/linux-amd64/rainpulse-web ./cmd/web
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 RAINPULSE_REQUIRE_BDP_SOURCE=1 $(CONTROL_GO) build -buildvcs=false -trimpath -ldflags="-s -w $(RAINPULSE_GO_LDFLAGS)" -o $(CURDIR)/.build/linux-amd64/rainpulse-orchestrator ./cmd/orchestrator
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 RAINPULSE_REQUIRE_BDP_SOURCE=1 $(CONTROL_GO) build -buildvcs=false -trimpath -ldflags="-s -w $(RAINPULSE_GO_LDFLAGS)" -o $(CURDIR)/.build/linux-amd64/rainpulse-ingest ./cmd/ingest
 	pnpm --filter @rainpulse/web build
 
 export-postgres-image:

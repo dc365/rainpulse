@@ -65,6 +65,8 @@ services:
       orchestrator:
         condition: service_healthy
     environment:
+      RAINPULSE_BDP_MODE: "${RAINPULSE_BDP_MODE:-prefer}"
+      RAINPULSE_BDP_CONFIG_CODE: "${RAINPULSE_BDP_CONFIG_CODE:-bdp-dp-rada-rainpulse}"
       RAINPULSE_DATABASE_HOST: postgres
       RAINPULSE_DATABASE_NAME: rainpulse
       RAINPULSE_DATABASE_USER: rainpulse
@@ -77,6 +79,7 @@ services:
       RAINPULSE_INGEST_HEALTH_ADDR: :8092
       TZ: UTC
     volumes:
+      - "${RAINPULSE_BDP_CONF_HOST_ROOT:-../runtime/bdp-conf}:/ruiyun-bdp/conf:ro"
       - ../configs:/opt/rainpulse/configs:ro
       - /data/Weather/RADA/RADA_L2_FMT/OBS_TEMP:/data/Weather/RADA/RADA_L2_FMT/OBS_TEMP:ro
       - radar-ingest-state:/var/lib/rainpulse/ingest

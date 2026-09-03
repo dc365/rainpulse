@@ -171,6 +171,8 @@ services:
       minio-worker-policy:
         condition: service_completed_successfully
     environment:
+      RAINPULSE_BDP_MODE: "${RAINPULSE_BDP_MODE:-prefer}"
+      RAINPULSE_BDP_CONFIG_CODE: "${RAINPULSE_BDP_CONFIG_CODE:-bdp-dp-rada-rainpulse}"
       RAINPULSE_DATABASE_HOST: postgres
       RAINPULSE_DATABASE_NAME: rainpulse
       RAINPULSE_DATABASE_USER: rainpulse
@@ -200,9 +202,13 @@ services:
       RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG: /opt/rainpulse/configs/nowcast/rp040-historical-replay-v3.yaml
       TZ: UTC
     volumes:
+      - "${RAINPULSE_BDP_CONF_HOST_ROOT:-../runtime/bdp-conf}:/ruiyun-bdp/conf:ro"
       - ../configs:/opt/rainpulse/configs:ro
       - /data/Weather/RADA/FMT_L2_Z959X_SBD:/data/Weather/RADA/FMT_L2_Z959X_SBD:ro
       - /data/Weather/RADA/RADA_L2_FMT/OBS_TEMP:/data/Weather/RADA/RADA_L2_FMT/OBS_TEMP:ro
+    tmpfs:
+      - /ruiyun-bdp/temp:uid=65532,gid=65532,mode=0755
+      - /ruiyun-bdp/log:uid=65532,gid=65532,mode=0755
     healthcheck:
       test: ["CMD", "/rainpulse-healthcheck", "http://127.0.0.1:8090/healthz"]
       interval: 5s
@@ -660,6 +666,8 @@ services:
       forecast-verification-worker:
         condition: service_healthy
     environment:
+      RAINPULSE_BDP_MODE: "${RAINPULSE_BDP_MODE:-prefer}"
+      RAINPULSE_BDP_CONFIG_CODE: "${RAINPULSE_BDP_CONFIG_CODE:-bdp-dp-rada-rainpulse}"
       RAINPULSE_HTTP_ADDR: ":8080"
       RAINPULSE_VERSION: "${RAINPULSE_VERSION:-}"
       RAINPULSE_PROMETHEUS_URL: http://prometheus:9090
@@ -680,6 +688,7 @@ services:
       RAINPULSE_ADMIN_TOKEN: "${RAINPULSE_ADMIN_TOKEN:-}"
       TZ: UTC
     volumes:
+      - "${RAINPULSE_BDP_CONF_HOST_ROOT:-../runtime/bdp-conf}:/ruiyun-bdp/conf:ro"
       - "${RAINPULSE_ALGORITHM_VERIFICATION_HOST_ROOT:-../runtime/reports/mrms}:/var/lib/rainpulse/algorithm-verification:ro"
       - "${RAINPULSE_ENSEMBLE_PRODUCT_HOST_ROOT:-../runtime/products/ensemble}:/var/lib/rainpulse/ensemble-products:ro"
       - "${RAINPULSE_NOWCASTNET_PRODUCT_HOST_ROOT:-../runtime/products/nowcastnet}:/var/lib/rainpulse/nowcastnet-products:ro"
@@ -700,10 +709,14 @@ services:
       api:
         condition: service_healthy
     environment:
+      RAINPULSE_BDP_MODE: "${RAINPULSE_BDP_MODE:-prefer}"
+      RAINPULSE_BDP_CONFIG_CODE: "${RAINPULSE_BDP_CONFIG_CODE:-bdp-dp-rada-rainpulse}"
       RAINPULSE_API_BASE_URL: "http://api:8080"
       RAINPULSE_ADMIN_TOKEN: "${RAINPULSE_ADMIN_TOKEN:-}"
       RAINPULSE_WEB_ADDR: ":8080"
       RAINPULSE_WEB_ROOT: "/srv/rainpulse-web"
+    volumes:
+      - "${RAINPULSE_BDP_CONF_HOST_ROOT:-../runtime/bdp-conf}:/ruiyun-bdp/conf:ro"
     ports:
       - "${RAINPULSE_BIND_ADDRESS:-0.0.0.0}:${RAINPULSE_WEB_PORT:-4173}:8080"
     healthcheck:

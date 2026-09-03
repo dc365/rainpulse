@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/bdpruntime"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/messaging"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/operationalmetrics"
@@ -36,6 +37,35 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	command := "serve"
+	if len(os.Args) > 1 {
+		command = os.Args[1]
+	}
+	platformRuntime, err := bdpruntime.Prepare(bdpruntime.ComponentOrchestrator, true)
+	if err != nil {
+		slog.Error("initialize Ruiyun BDP runtime for RainPulse orchestrator", "error", err)
+		os.Exit(1)
+	}
+	if platformRuntime.PlatformAvailable {
+		radarSource, sourceErr := bdpruntime.ResolveOriginalFileSource(
+			platformRuntime.Config.RadarInput.DataCode,
+			platformRuntime.Config.RadarInput.SourceIndex,
+		)
+		if sourceErr != nil {
+			if platformRuntime.Required() {
+				slog.Error("resolve radar input from Ruiyun BDP metadata", "error", sourceErr)
+				os.Exit(1)
+			}
+			slog.Warn("Ruiyun BDP radar metadata unavailable; retaining deployment radar root", "error", sourceErr)
+		} else if err := os.Setenv("RAINPULSE_RADAR_INGEST_ROOT", radarSource.Root); err != nil {
+			slog.Error("apply Ruiyun BDP radar input root", "error", err)
+			os.Exit(1)
+		} else {
+			slog.Info("Ruiyun BDP radar input resolved", "data_code", radarSource.DataCode,
+				"source_index", radarSource.SourceIndex, "root", radarSource.Root)
+		}
+	}
+
 	pool, store, bus, service, err := dependencies(ctx)
 	if err != nil {
 		slog.Error("initialize RainPulse orchestrator", "error", err)
@@ -44,10 +74,6 @@ func main() {
 	defer pool.Close()
 	defer bus.Close()
 
-	command := "serve"
-	if len(os.Args) > 1 {
-		command = os.Args[1]
-	}
 	switch command {
 	case "serve":
 		if err := serve(ctx, store, bus, service); err != nil && !errors.Is(err, context.Canceled) {

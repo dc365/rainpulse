@@ -53,6 +53,31 @@ func (manifest Manifest) StatePath(source ManifestSource) string {
 	return filepath.Join(manifest.StateDirectory, source.SourceID+".json")
 }
 
+// WithSourceSettings applies the data root and scanner timing managed by the
+// Ruiyun BDP ProgramConfig to every radar source.
+func (manifest Manifest) WithSourceSettings(
+	root string,
+	intervalSeconds int,
+	minimumFileAgeSeconds int,
+	lookbackHours int,
+) (Manifest, error) {
+	root = filepath.Clean(strings.TrimSpace(root))
+	if !filepath.IsAbs(root) {
+		return Manifest{}, fmt.Errorf("radar ingest arrival root must be absolute")
+	}
+	manifest.IntervalSeconds = intervalSeconds
+	manifest.Sources = append([]ManifestSource(nil), manifest.Sources...)
+	for index := range manifest.Sources {
+		manifest.Sources[index].ArrivalRoot = root
+		manifest.Sources[index].MinAgeSeconds = minimumFileAgeSeconds
+		manifest.Sources[index].LookbackHours = lookbackHours
+	}
+	if err := manifest.Validate(); err != nil {
+		return Manifest{}, err
+	}
+	return manifest, nil
+}
+
 // LoadManifest expands environment placeholders, resolves relative paths from
 // the manifest directory, and rejects ambiguous or duplicate source entries.
 func LoadManifest(path string) (Manifest, error) {

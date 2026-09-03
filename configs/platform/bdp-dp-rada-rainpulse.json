@@ -1,0 +1,66 @@
+{
+  "schema_version": "1.0",
+  "radar_input": {
+    "data_code": "RADA_L2_FMT",
+    "source_index": 0,
+    "scan_interval_seconds": 15,
+    "minimum_file_age_seconds": 30,
+    "lookback_hours": 24
+  },
+  "environment": {
+    "common": {
+      "RAINPULSE_OBJECT_STORE_ENDPOINT": "http://minio:9000",
+      "RAINPULSE_OBJECT_STORE_BUCKET": "rainpulse"
+    },
+    "api": {
+      "RAINPULSE_HTTP_ADDR": ":8080",
+      "RAINPULSE_PROMETHEUS_URL": "http://prometheus:9090",
+      "RAINPULSE_ALERTMANAGER_URL": "http://alertmanager:9093",
+      "RAINPULSE_ALGORITHM_VERIFICATION_ROOT": "/var/lib/rainpulse/algorithm-verification",
+      "RAINPULSE_ENSEMBLE_PRODUCT_ROOT": "/var/lib/rainpulse/ensemble-products",
+      "RAINPULSE_NOWCASTNET_PRODUCT_ROOT": "/var/lib/rainpulse/nowcastnet-products",
+      "RAINPULSE_WORKSPACE_EXECUTION_MODE": "realtime_shadow",
+      "RAINPULSE_WORKSPACE_CYCLE_GRID_ID": "fuzhou_118_123_25_27_0p01deg_v1",
+      "RAINPULSE_WORKSPACE_CYCLE_DATE_UTC": "2026-08-28",
+      "RAINPULSE_WORKSPACE_REQUIRE_ANALYSIS": "true",
+      "RAINPULSE_INGEST_STATUS_URL": "http://radar-ingest:8092/status",
+      "RAINPULSE_NOWCASTNET_SHADOW_STATUS_URL": "http://nowcastnet-shadow-probe:8094/status",
+      "RAINPULSE_WORKSPACE_CACHE_ENABLED": "true",
+      "RAINPULSE_WORKSPACE_CATALOG_CACHE_TTL": "5s",
+      "RAINPULSE_WORKSPACE_CYCLE_CACHE_TTL": "15s",
+      "RAINPULSE_WORKSPACE_CACHE_STALE_IF_ERROR": "2m",
+      "RAINPULSE_WORKSPACE_CACHE_MAX_ENTRIES": "256"
+    },
+    "web": {
+      "RAINPULSE_WEB_ADDR": ":8080",
+      "RAINPULSE_WEB_ROOT": "/srv/rainpulse-web",
+      "RAINPULSE_API_BASE_URL": "http://api:8080"
+    },
+    "orchestrator": {
+      "RAINPULSE_ORCHESTRATOR_HEALTH_ADDR": ":8090",
+      "RAINPULSE_RADAR_INGEST_ENABLED": "false",
+      "RAINPULSE_PIPELINE_ENABLED": "true",
+      "RAINPULSE_PIPELINE_MODE": "realtime_shadow",
+      "RAINPULSE_PIPELINE_RADAR_IDS": "z9591,z9593,z9598,z9599",
+      "RAINPULSE_PIPELINE_INTERVAL": "2s",
+      "RAINPULSE_PIPELINE_LOOKBACK": "2h",
+      "RAINPULSE_PIPELINE_MOSAIC_DELAY": "30s",
+      "RAINPULSE_PIPELINE_MOSAIC_MAX_WAIT": "4m",
+      "RAINPULSE_PIPELINE_FORECAST_ENABLED": "true",
+      "RAINPULSE_PIPELINE_REQUIRE_ALL_RADARS": "false",
+      "RAINPULSE_PIPELINE_QC_CONFIG": "/opt/rainpulse/configs/qc/rp043-fujian-radial-closure-v1.yaml",
+      "RAINPULSE_PIPELINE_GRID_CONFIG": "/opt/rainpulse/configs/gridding/rp043-hybrid-radial-closure-v1.yaml",
+      "RAINPULSE_PIPELINE_MOSAIC_CONFIG": "/opt/rainpulse/configs/mosaic/rp043-fujian-realtime-shadow-v1.yaml",
+      "RAINPULSE_PIPELINE_QPE_CONFIG": "/opt/rainpulse/configs/qpe/rp011-basic-zr-v1.yaml",
+      "RAINPULSE_PIPELINE_DIAGNOSTIC_CONFIG": "/opt/rainpulse/configs/diagnostics/rp012-operational-diagnostics-v2.yaml",
+      "RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG": "/opt/rainpulse/configs/nowcast/rp043-realtime-shadow-5min-v2.yaml",
+      "RAINPULSE_PIPELINE_PYSTEPS_CONFIG": "/opt/rainpulse/configs/nowcast/rp016-pysteps-lk-v1.yaml",
+      "RAINPULSE_PIPELINE_PRODUCT_CONFIG": "/opt/rainpulse/configs/products/rp015-application-products-v1.yaml",
+      "RAINPULSE_PIPELINE_VERIFICATION_CONFIG": "/opt/rainpulse/configs/verification/rp031-operational-deterministic-v1.yaml"
+    },
+    "ingest": {
+      "RAINPULSE_RADAR_INGEST_MANIFEST": "/opt/rainpulse/configs/ingest/fujian-realtime-shadow-v1.json",
+      "RAINPULSE_INGEST_HEALTH_ADDR": ":8092"
+    }
+  }
+}

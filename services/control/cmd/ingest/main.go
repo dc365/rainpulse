@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/bdpruntime"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/orchestration"
 	postgresstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/postgres"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/radaringest"
@@ -69,6 +70,11 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	platformRuntime, err := bdpruntime.Prepare(bdpruntime.ComponentIngest, false)
+	if err != nil {
+		slog.Error("initialize Ruiyun BDP runtime for radar ingest", "error", err)
+		os.Exit(1)
+	}
 	manifestPath := strings.TrimSpace(os.Getenv("RAINPULSE_RADAR_INGEST_MANIFEST"))
 	if manifestPath == "" {
 		slog.Error("RAINPULSE_RADAR_INGEST_MANIFEST is required")
@@ -78,6 +84,32 @@ func main() {
 	if err != nil {
 		slog.Error("load radar ingest manifest", "error", err)
 		os.Exit(1)
+	}
+	if platformRuntime.PlatformAvailable {
+		radarSource, sourceErr := bdpruntime.ResolveOriginalFileSource(
+			platformRuntime.Config.RadarInput.DataCode,
+			platformRuntime.Config.RadarInput.SourceIndex,
+		)
+		if sourceErr != nil {
+			if platformRuntime.Required() {
+				slog.Error("resolve radar ingest root from Ruiyun BDP metadata", "error", sourceErr)
+				os.Exit(1)
+			}
+			slog.Warn("Ruiyun BDP radar metadata unavailable; retaining manifest arrival root", "error", sourceErr)
+		} else {
+			manifest, err = manifest.WithSourceSettings(
+				radarSource.Root,
+				platformRuntime.Config.RadarInput.ScanIntervalSeconds,
+				platformRuntime.Config.RadarInput.MinimumFileAgeSeconds,
+				platformRuntime.Config.RadarInput.LookbackHours,
+			)
+			if err != nil {
+				slog.Error("apply Ruiyun BDP radar ingest root", "error", err)
+				os.Exit(1)
+			}
+			slog.Info("Ruiyun BDP radar ingest root resolved", "data_code", radarSource.DataCode,
+				"source_index", radarSource.SourceIndex, "root", radarSource.Root)
+		}
 	}
 	pool, service, err := dependencies(ctx)
 	if err != nil {

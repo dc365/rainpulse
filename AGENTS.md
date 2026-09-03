@@ -3,6 +3,9 @@
 ## Project scope
 
 - This repository is the only active workspace for RainPulse short-term precipitation nowcasting work.
+- At the start of a new session, read `PROJECT_MEMORY.md` for the current branch,
+  deployment, feature and handoff state. Keep it concise and update it only when
+  those facts materially change. Never put credentials or private source data in it.
 - Treat `docs/RainPulse_技术架构与实施方案_含雷达质控_v1.1.md` as the implementation and acceptance baseline.
 - Product-goal and regional-QC reference materials are private local inputs. They must not be committed.
 - `docs/RainPulse_技术架构与实施方案.md` is the superseded v1.0 history only.

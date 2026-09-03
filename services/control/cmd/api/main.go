@@ -10,6 +10,7 @@ import (
 
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/alerting"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/api"
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/bdpruntime"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo"
 	ensembleproductstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/ensembleproducts"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/healthcheck"
@@ -23,7 +24,6 @@ import (
 )
 
 func main() {
-	address := environmentOrDefault("RAINPULSE_HTTP_ADDR", ":8080")
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
 		if err := healthcheck.RunJSONStatus(environmentOrDefault("RAINPULSE_API_HEALTH_URL", "http://127.0.0.1:8080/api/v1/system/status"), "ready"); err != nil {
 			slog.Error("control API healthcheck failed", "error", err)
@@ -31,6 +31,11 @@ func main() {
 		}
 		return
 	}
+	if _, err := bdpruntime.Prepare(bdpruntime.ComponentAPI, false); err != nil {
+		slog.Error("initialize Ruiyun BDP runtime for control API", "error", err)
+		os.Exit(1)
+	}
+	address := environmentOrDefault("RAINPULSE_HTTP_ADDR", ":8080")
 
 	version := os.Getenv("RAINPULSE_VERSION")
 	if version == "" {
