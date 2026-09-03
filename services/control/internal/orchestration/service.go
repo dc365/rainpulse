@@ -63,6 +63,8 @@ type RadarQCInput struct {
 	RadarID               string
 	RadarConfigVersion    string
 	NormalizedURI         string
+	TemporalContext       []RadarQCContextInput
+	CrossRadarContext     []RadarQCContextInput
 	CurrentStatus         workflow.RadarScanStatus
 	Health                workflow.RadarHealthState
 	QCProfile             string
@@ -417,8 +419,11 @@ func (service *Service) CreateRadarQC(
 		TraceID:       traceID,
 		Payload: RadarQCRequestedPayload{
 			ScanID: input.ScanID, RadarID: input.RadarID,
-			InputURI: input.NormalizedURI, OutputPrefix: outputPrefix,
-			RadarConfig: input.RadarConfigVersion, QCProfile: input.QCProfile,
+			InputURI:          input.NormalizedURI,
+			TemporalContext:   input.TemporalContext,
+			CrossRadarContext: input.CrossRadarContext,
+			OutputPrefix:      outputPrefix,
+			RadarConfig:       input.RadarConfigVersion, QCProfile: input.QCProfile,
 			QCPipelineVersion:     input.QCPipelineVersion,
 			FlagDefinitionVersion: input.FlagDefinitionVersion,
 		},
@@ -473,6 +478,17 @@ func validateRadarQCInput(input RadarQCInput) error {
 	parsed, err := url.ParseRequestURI(input.NormalizedURI)
 	if err != nil || parsed.Scheme != "s3" {
 		return fmt.Errorf("radar QC input must be an s3 URI")
+	}
+	for _, group := range [][]RadarQCContextInput{input.TemporalContext, input.CrossRadarContext} {
+		if len(group) > 3 {
+			return fmt.Errorf("radar QC context cannot exceed three volumes per evidence source")
+		}
+		for _, contextInput := range group {
+			contextURI, contextErr := url.ParseRequestURI(contextInput.InputURI)
+			if contextInput.RadarID == "" || contextErr != nil || contextURI.Scheme != "s3" {
+				return fmt.Errorf("radar QC context must contain a radar ID and s3 URI")
+			}
+		}
 	}
 	return nil
 }

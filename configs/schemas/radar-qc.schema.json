@@ -154,12 +154,80 @@
               ],
               "properties": {
                 "enabled": { "type": "boolean" },
+                "extent_gap_enabled": { "type": "boolean" },
                 "maximum_gap_rays": { "type": "integer", "minimum": 1 },
                 "minimum_valid_gate_fraction": { "$ref": "#/$defs/probability" },
                 "minimum_high_dbzh": { "type": "number" },
                 "minimum_high_gate_fraction": { "$ref": "#/$defs/probability" },
                 "minimum_high_run": { "type": "integer", "minimum": 2 },
-                "minimum_range_growth_db": { "type": "number", "exclusiveMinimum": 0 }
+                "minimum_range_growth_db": { "type": "number", "exclusiveMinimum": 0 },
+                "minimum_gap_valid_gate_fraction": { "$ref": "#/$defs/probability" },
+                "minimum_gap_consecutive_gates": { "type": "integer", "minimum": 2 },
+                "minimum_gap_range_extent_fraction": { "$ref": "#/$defs/probability" },
+                "minimum_gap_boundary_extent_ratio": { "$ref": "#/$defs/probability" },
+                "minimum_seed_fraction": { "$ref": "#/$defs/probability" }
+              }
+            },
+            "radial_extent_promotion": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "enabled",
+                "minimum_valid_gate_fraction",
+                "diagnostic_minimum_valid_gate_fraction",
+                "minimum_consecutive_gates",
+                "minimum_range_extent_fraction",
+                "minimum_range_growth_db",
+                "minimum_analysis_range_m",
+                "maximum_power_iqr_db",
+                "minimum_group_rays",
+                "maximum_group_rays",
+                "maximum_group_gap_rays",
+                "maximum_hard_seed_distance_rays",
+                "maximum_higher_elevation_extent_fraction"
+              ],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "minimum_valid_gate_fraction": { "$ref": "#/$defs/probability" },
+                "diagnostic_minimum_valid_gate_fraction": { "$ref": "#/$defs/probability" },
+                "minimum_consecutive_gates": { "type": "integer", "minimum": 2 },
+                "minimum_range_extent_fraction": { "$ref": "#/$defs/probability" },
+                "minimum_range_growth_db": { "type": "number", "exclusiveMinimum": 0 },
+                "minimum_analysis_range_m": { "type": "number", "exclusiveMinimum": 0 },
+                "maximum_power_iqr_db": { "type": "number", "exclusiveMinimum": 0 },
+                "minimum_group_rays": { "type": "integer", "minimum": 2 },
+                "maximum_group_rays": { "type": "integer", "minimum": 2 },
+                "maximum_group_gap_rays": { "type": "integer", "minimum": 0 },
+                "maximum_hard_seed_distance_rays": { "type": "integer", "minimum": 1 },
+                "maximum_higher_elevation_extent_fraction": { "$ref": "#/$defs/probability" }
+              }
+            },
+            "context_fusion": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "enabled",
+                "minimum_independent_evidence",
+                "minimum_temporal_context_scans",
+                "maximum_temporal_context_scans",
+                "temporal_persistence_threshold",
+                "cross_radar_max_time_offset_seconds",
+                "cross_radar_echo_threshold_dbzh",
+                "minimum_cross_radar_overlap_gates",
+                "cross_radar_promotion_max_consistency",
+                "cross_radar_veto_min_consistency"
+              ],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "minimum_independent_evidence": { "type": "integer", "minimum": 2, "maximum": 4 },
+                "minimum_temporal_context_scans": { "type": "integer", "minimum": 2, "maximum": 3 },
+                "maximum_temporal_context_scans": { "type": "integer", "minimum": 2, "maximum": 3 },
+                "temporal_persistence_threshold": { "$ref": "#/$defs/probability" },
+                "cross_radar_max_time_offset_seconds": { "type": "integer", "minimum": 1 },
+                "cross_radar_echo_threshold_dbzh": { "type": "number" },
+                "minimum_cross_radar_overlap_gates": { "type": "integer", "minimum": 1 },
+                "cross_radar_promotion_max_consistency": { "$ref": "#/$defs/probability" },
+                "cross_radar_veto_min_consistency": { "$ref": "#/$defs/probability" }
               }
             },
             "multiscale_promotion": {

@@ -195,6 +195,12 @@ func TestCreateRadarQCUsesNormalizedInputAndStableIdentity(t *testing.T) {
 		RunID:   uuid.MustParse("10000000-0000-4000-8000-000000000002"),
 		RadarID: "z9598", RadarConfigVersion: "z9598-fmt-v1",
 		NormalizedURI: "s3://rainpulse/radar/normalized/z9598/scan/volume.zarr",
+		TemporalContext: []RadarQCContextInput{
+			{RadarID: "z9598", InputURI: "s3://rainpulse/radar/normalized/z9598/previous/volume.zarr"},
+		},
+		CrossRadarContext: []RadarQCContextInput{
+			{RadarID: "z9593", InputURI: "s3://rainpulse/radar/normalized/z9593/aligned/volume.zarr"},
+		},
 		CurrentStatus: workflow.RadarScanNormalized,
 		Health:        workflow.RadarHealthDegraded,
 		QCProfile:     "rp008-basic-v1", QCPipelineVersion: "rp008-basic-1.0.4",
@@ -222,7 +228,10 @@ func TestCreateRadarQCUsesNormalizedInputAndStableIdentity(t *testing.T) {
 		t.Fatalf("decode radar QC request: %v", err)
 	}
 	if requested.Payload.ScanID != input.ScanID || requested.Payload.InputURI != input.NormalizedURI ||
-		requested.Payload.QCProfile != input.QCProfile {
+		requested.Payload.QCProfile != input.QCProfile || len(requested.Payload.TemporalContext) != 1 ||
+		requested.Payload.TemporalContext[0].InputURI != input.TemporalContext[0].InputURI ||
+		len(requested.Payload.CrossRadarContext) != 1 ||
+		requested.Payload.CrossRadarContext[0].RadarID != "z9593" {
 		t.Fatalf("unexpected radar QC request: %#v", requested)
 	}
 	if requested.Payload.OutputPrefix != "s3://rainpulse/radar/qc/z9598/"+input.ScanID.String()+"/rp008-basic-1.0.4/" {

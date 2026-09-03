@@ -47,6 +47,18 @@ class RadarDecodeRequested(DomainRequest):
     payload: RadarDecodePayload
 
 
+class RadarQCContextInput(ContractModel):
+    radar_id: str = Field(min_length=1)
+    input_uri: str
+
+    @field_validator("input_uri")
+    @classmethod
+    def validate_input_uri(cls, value: str) -> str:
+        if urlparse(value).scheme != "s3":
+            raise ValueError("radar QC context input must be an s3 URI")
+        return value
+
+
 class RadarQCPayload(ObjectTaskPayload):
     scan_id: UUID
     radar_id: str = Field(min_length=1)
@@ -54,6 +66,8 @@ class RadarQCPayload(ObjectTaskPayload):
     qc_profile: str = Field(min_length=1)
     qc_pipeline_version: str = Field(min_length=1)
     flag_definition_version: str = Field(min_length=1)
+    temporal_context: list[RadarQCContextInput] = Field(default_factory=list, max_length=3)
+    cross_radar_context: list[RadarQCContextInput] = Field(default_factory=list, max_length=3)
 
 
 class RadarQCRequested(DomainRequest):

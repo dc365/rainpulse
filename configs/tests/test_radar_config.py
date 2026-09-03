@@ -259,7 +259,23 @@ def test_rp043_qc_profile_promotes_only_seeded_or_multiscale_radial_evidence() -
     assert profile["vertical_consistency"]["mode"] == "diagnostic_only"
 
 
-def test_rp043_realtime_shadow_versions_the_full_reprocessing_chain() -> None:
+def test_rp047_qc_profile_requires_context_fusion_for_weak_candidates() -> None:
+    schema = json.loads((CONFIG_ROOT / "schemas" / "radar-qc.schema.json").read_text())
+    profile = yaml.safe_load(
+        (CONFIG_ROOT / "qc" / "rp047-fujian-radial-evidence-v1.yaml").read_text()
+    )
+
+    Draft202012Validator(schema).validate(profile)
+    morphology = profile["radial_interference"]["morphology"]
+    fusion = morphology["context_fusion"]
+    assert morphology["mode"] == "quality_index"
+    assert fusion["minimum_independent_evidence"] == 2
+    assert fusion["minimum_temporal_context_scans"] == 2
+    assert fusion["maximum_temporal_context_scans"] == 3
+    assert fusion["cross_radar_max_time_offset_seconds"] == 300
+
+
+def test_rp047_realtime_shadow_versions_the_full_reprocessing_chain() -> None:
     profiles = (
         (
             "schemas/radar-grid-profile.schema.json",
@@ -282,7 +298,7 @@ def test_rp043_realtime_shadow_versions_the_full_reprocessing_chain() -> None:
     override = yaml.safe_load(
         (REPOSITORY_ROOT / "deploy" / "docker-compose.realtime-shadow.yaml").read_text()
     )["services"]
-    assert "rp043" in override["radar-qc-worker"]["environment"][
+    assert "rp047" in override["radar-qc-worker"]["environment"][
         "RAINPULSE_RADAR_QC_CONFIG"
     ]
     orchestrator = override["orchestrator"]["environment"]

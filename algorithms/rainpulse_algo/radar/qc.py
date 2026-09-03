@@ -82,12 +82,49 @@ class VerticalConsistencyConfig:
 @dataclass(frozen=True)
 class RadialFanClosureConfig:
     enabled: bool
+    extent_gap_enabled: bool
     maximum_gap_rays: int
     minimum_valid_gate_fraction: float
     minimum_high_dbzh: float
     minimum_high_gate_fraction: float
     minimum_high_run: int
     minimum_range_growth_db: float
+    minimum_gap_valid_gate_fraction: float
+    minimum_gap_consecutive_gates: int
+    minimum_gap_range_extent_fraction: float
+    minimum_gap_boundary_extent_ratio: float
+    minimum_seed_fraction: float
+
+
+@dataclass(frozen=True)
+class RadialExtentPromotionConfig:
+    enabled: bool
+    minimum_valid_gate_fraction: float
+    diagnostic_minimum_valid_gate_fraction: float
+    minimum_consecutive_gates: int
+    minimum_range_extent_fraction: float
+    minimum_range_growth_db: float
+    minimum_analysis_range_m: float
+    maximum_power_iqr_db: float
+    minimum_group_rays: int
+    maximum_group_rays: int
+    maximum_group_gap_rays: int
+    maximum_hard_seed_distance_rays: int
+    maximum_higher_elevation_extent_fraction: float
+
+
+@dataclass(frozen=True)
+class RadialContextFusionConfig:
+    enabled: bool
+    minimum_independent_evidence: int
+    minimum_temporal_context_scans: int
+    maximum_temporal_context_scans: int
+    temporal_persistence_threshold: float
+    cross_radar_max_time_offset_seconds: int
+    cross_radar_echo_threshold_dbzh: float
+    minimum_cross_radar_overlap_gates: int
+    cross_radar_promotion_max_consistency: float
+    cross_radar_veto_min_consistency: float
 
 
 @dataclass(frozen=True)
@@ -115,6 +152,8 @@ class RadialMorphologyConfig:
     reverse_minimum_drop_db: float
     diagnostic_probability: float
     fan_closure: RadialFanClosureConfig
+    radial_extent_promotion: RadialExtentPromotionConfig
+    context_fusion: RadialContextFusionConfig
     multiscale_promotion: RadialMultiscalePromotionConfig
 
 
@@ -190,6 +229,9 @@ class RadialInterferenceDetection:
     flagged_ray_count: int
     type_ray_counts: dict[str, int]
     type_gate_counts: dict[str, int]
+    weak_candidate_ray_count: int
+    context_promoted_ray_count: int
+    cross_radar_vetoed_ray_count: int
 
 
 @dataclass(frozen=True)
@@ -278,6 +320,8 @@ def load_qc_profile(path: str | Path, flag_path: str | Path) -> BasicQCProfile:
     radial = value["radial_interference"]
     morphology = radial.get("morphology") or {}
     fan_closure = morphology.get("fan_closure") or {}
+    radial_extent = morphology.get("radial_extent_promotion") or {}
+    context_fusion = morphology.get("context_fusion") or {}
     multiscale = morphology.get("multiscale_promotion") or {}
     clutter = value["static_ground_clutter"]
     sea_ap = value["sea_ap"]
@@ -301,13 +345,9 @@ def load_qc_profile(path: str | Path, flag_path: str | Path) -> BasicQCProfile:
         dual_pol_fuzzy=DualPolFuzzyConfig(
             enabled=bool(dual_pol.get("enabled", False)),
             mode=dual_pol.get("mode", "diagnostic_only"),
-            zdr_plausible_range_db=_pair(
-                dual_pol.get("zdr_plausible_range_db", [-2.0, 5.0])
-            ),
+            zdr_plausible_range_db=_pair(dual_pol.get("zdr_plausible_range_db", [-2.0, 5.0])),
             zdr_transition_db=float(dual_pol.get("zdr_transition_db", 2.0)),
-            phidp_step_range_deg=_pair(
-                dual_pol.get("phidp_step_range_deg", [3.0, 30.0])
-            ),
+            phidp_step_range_deg=_pair(dual_pol.get("phidp_step_range_deg", [3.0, 30.0])),
             weights={
                 name: float(weight)
                 for name, weight in (
@@ -333,49 +373,112 @@ def load_qc_profile(path: str | Path, flag_path: str | Path) -> BasicQCProfile:
                 enabled=bool(morphology.get("enabled", False)),
                 mode=morphology.get("mode", "diagnostic_only"),
                 candidate_difference_db=float(
-                    morphology.get(
-                        "candidate_difference_db", radial["neighbour_difference_db"]
-                    )
+                    morphology.get("candidate_difference_db", radial["neighbour_difference_db"])
                 ),
-                minimum_segment_gates=int(
-                    morphology.get("minimum_segment_gates", 12)
-                ),
+                minimum_segment_gates=int(morphology.get("minimum_segment_gates", 12)),
                 intermittent_minimum_segments=int(
                     morphology.get("intermittent_minimum_segments", 3)
                 ),
-                short_range_max_m=float(
-                    morphology.get("short_range_max_m", 60_000.0)
-                ),
-                reverse_minimum_drop_db=float(
-                    morphology.get("reverse_minimum_drop_db", 12.0)
-                ),
-                diagnostic_probability=float(
-                    morphology.get("diagnostic_probability", 0.65)
-                ),
+                short_range_max_m=float(morphology.get("short_range_max_m", 60_000.0)),
+                reverse_minimum_drop_db=float(morphology.get("reverse_minimum_drop_db", 12.0)),
+                diagnostic_probability=float(morphology.get("diagnostic_probability", 0.65)),
                 fan_closure=RadialFanClosureConfig(
                     enabled=bool(fan_closure.get("enabled", False)),
+                    extent_gap_enabled=bool(fan_closure.get("extent_gap_enabled", False)),
                     maximum_gap_rays=int(fan_closure.get("maximum_gap_rays", 2)),
                     minimum_valid_gate_fraction=float(
                         fan_closure.get("minimum_valid_gate_fraction", 0.90)
                     ),
-                    minimum_high_dbzh=float(
-                        fan_closure.get("minimum_high_dbzh", 45.0)
-                    ),
+                    minimum_high_dbzh=float(fan_closure.get("minimum_high_dbzh", 45.0)),
                     minimum_high_gate_fraction=float(
                         fan_closure.get("minimum_high_gate_fraction", 0.50)
                     ),
-                    minimum_high_run=int(
-                        fan_closure.get("minimum_high_run", 120)
+                    minimum_high_run=int(fan_closure.get("minimum_high_run", 120)),
+                    minimum_range_growth_db=float(fan_closure.get("minimum_range_growth_db", 20.0)),
+                    minimum_gap_valid_gate_fraction=float(
+                        fan_closure.get(
+                            "minimum_gap_valid_gate_fraction",
+                            fan_closure.get("minimum_valid_gate_fraction", 0.90),
+                        )
+                    ),
+                    minimum_gap_consecutive_gates=int(
+                        fan_closure.get("minimum_gap_consecutive_gates", 400)
+                    ),
+                    minimum_gap_range_extent_fraction=float(
+                        fan_closure.get("minimum_gap_range_extent_fraction", 0.95)
+                    ),
+                    minimum_gap_boundary_extent_ratio=float(
+                        fan_closure.get("minimum_gap_boundary_extent_ratio", 1.0)
+                    ),
+                    minimum_seed_fraction=float(fan_closure.get("minimum_seed_fraction", 0.30)),
+                ),
+                radial_extent_promotion=RadialExtentPromotionConfig(
+                    enabled=bool(radial_extent.get("enabled", False)),
+                    minimum_valid_gate_fraction=float(
+                        radial_extent.get("minimum_valid_gate_fraction", 0.55)
+                    ),
+                    diagnostic_minimum_valid_gate_fraction=float(
+                        radial_extent.get(
+                            "diagnostic_minimum_valid_gate_fraction",
+                            radial_extent.get("minimum_valid_gate_fraction", 0.55),
+                        )
+                    ),
+                    minimum_consecutive_gates=int(
+                        radial_extent.get("minimum_consecutive_gates", 350)
+                    ),
+                    minimum_range_extent_fraction=float(
+                        radial_extent.get("minimum_range_extent_fraction", 0.95)
                     ),
                     minimum_range_growth_db=float(
-                        fan_closure.get("minimum_range_growth_db", 20.0)
+                        radial_extent.get("minimum_range_growth_db", 12.0)
+                    ),
+                    minimum_analysis_range_m=float(
+                        radial_extent.get("minimum_analysis_range_m", 50_000.0)
+                    ),
+                    maximum_power_iqr_db=float(radial_extent.get("maximum_power_iqr_db", 5.0)),
+                    minimum_group_rays=int(radial_extent.get("minimum_group_rays", 2)),
+                    maximum_group_rays=int(radial_extent.get("maximum_group_rays", 8)),
+                    maximum_group_gap_rays=int(radial_extent.get("maximum_group_gap_rays", 0)),
+                    maximum_hard_seed_distance_rays=int(
+                        radial_extent.get("maximum_hard_seed_distance_rays", 8)
+                    ),
+                    maximum_higher_elevation_extent_fraction=float(
+                        radial_extent.get("maximum_higher_elevation_extent_fraction", 0.40)
+                    ),
+                ),
+                context_fusion=RadialContextFusionConfig(
+                    enabled=bool(context_fusion.get("enabled", False)),
+                    minimum_independent_evidence=int(
+                        context_fusion.get("minimum_independent_evidence", 2)
+                    ),
+                    minimum_temporal_context_scans=int(
+                        context_fusion.get("minimum_temporal_context_scans", 2)
+                    ),
+                    maximum_temporal_context_scans=int(
+                        context_fusion.get("maximum_temporal_context_scans", 3)
+                    ),
+                    temporal_persistence_threshold=float(
+                        context_fusion.get("temporal_persistence_threshold", 0.66)
+                    ),
+                    cross_radar_max_time_offset_seconds=int(
+                        context_fusion.get("cross_radar_max_time_offset_seconds", 300)
+                    ),
+                    cross_radar_echo_threshold_dbzh=float(
+                        context_fusion.get("cross_radar_echo_threshold_dbzh", 10.0)
+                    ),
+                    minimum_cross_radar_overlap_gates=int(
+                        context_fusion.get("minimum_cross_radar_overlap_gates", 80)
+                    ),
+                    cross_radar_promotion_max_consistency=float(
+                        context_fusion.get("cross_radar_promotion_max_consistency", 0.20)
+                    ),
+                    cross_radar_veto_min_consistency=float(
+                        context_fusion.get("cross_radar_veto_min_consistency", 0.70)
                     ),
                 ),
                 multiscale_promotion=RadialMultiscalePromotionConfig(
                     enabled=bool(multiscale.get("enabled", False)),
-                    echo_threshold_dbzh=float(
-                        multiscale.get("echo_threshold_dbzh", 30.0)
-                    ),
+                    echo_threshold_dbzh=float(multiscale.get("echo_threshold_dbzh", 30.0)),
                     short_window_rays=int(multiscale.get("short_window_rays", 4)),
                     long_window_rays=int(multiscale.get("long_window_rays", 40)),
                     minimum_score_gate_fraction=float(
@@ -384,18 +487,10 @@ def load_qc_profile(path: str | Path, flag_path: str | Path) -> BasicQCProfile:
                     minimum_edge_jump_gate_fraction=float(
                         multiscale.get("minimum_edge_jump_gate_fraction", 0.10)
                     ),
-                    minimum_diagnostic_gates=int(
-                        multiscale.get("minimum_diagnostic_gates", 100)
-                    ),
-                    minimum_high_dbzh=float(
-                        multiscale.get("minimum_high_dbzh", 45.0)
-                    ),
-                    minimum_high_gates=int(
-                        multiscale.get("minimum_high_gates", 100)
-                    ),
-                    minimum_range_growth_db=float(
-                        multiscale.get("minimum_range_growth_db", 12.0)
-                    ),
+                    minimum_diagnostic_gates=int(multiscale.get("minimum_diagnostic_gates", 100)),
+                    minimum_high_dbzh=float(multiscale.get("minimum_high_dbzh", 45.0)),
+                    minimum_high_gates=int(multiscale.get("minimum_high_gates", 100)),
+                    minimum_range_growth_db=float(multiscale.get("minimum_range_growth_db", 12.0)),
                 ),
             ),
         ),
@@ -427,6 +522,7 @@ def apply_basic_qc(
     profile: BasicQCProfile,
     *,
     ancillary_maps: dict[str, dict[str, np.ndarray]] | None = None,
+    radial_context: dict[str, dict[str, np.ndarray]] | None = None,
     created_at: datetime | None = None,
 ) -> QCResult:
     if "health/summary.json" not in normalized_objects:
@@ -447,10 +543,14 @@ def apply_basic_qc(
         raise QCInputError("radar health identity differs from normalized volume")
 
     vertical_probabilities = _volume_vertical_consistency(root, profile)
+    higher_elevation_extents = _volume_higher_elevation_radial_extents(root, profile)
     sweeps: list[QCSweep] = []
     radial_ray_count = 0
     radial_gate_count = 0
     radial_area_km2 = 0.0
+    radial_weak_candidate_ray_count = 0
+    radial_context_promoted_ray_count = 0
+    radial_cross_radar_vetoed_ray_count = 0
     type_ray_counts = {name: 0 for name in INTERFERENCE_TYPE_CODES if name != "none"}
     type_gate_counts = {name: 0 for name in INTERFERENCE_TYPE_CODES if name != "none"}
     missing_count = 0
@@ -509,19 +609,19 @@ def apply_basic_qc(
             flags[low_snr] |= profile.flag_masks["LOW_SNR"]
 
         ranges = group["range"][:]
-        p_vertical = vertical_probabilities.get(
-            name, np.full(dbzh.shape, np.nan, dtype="float32")
-        )
+        p_vertical = vertical_probabilities.get(name, np.full(dbzh.shape, np.nan, dtype="float32"))
+        sweep_radial_context = (radial_context or {}).get(name, {})
         detection = _detect_radial_interference(
             dbzh,
             valid,
             profile.radial_interference,
             ranges_m=ranges,
             vertical_consistency=(
-                p_vertical
-                if profile.vertical_consistency.mode == "radial_evidence"
-                else None
+                p_vertical if profile.vertical_consistency.mode == "radial_evidence" else None
             ),
+            higher_elevation_extent_fraction=higher_elevation_extents.get(name),
+            temporal_persistence=sweep_radial_context.get("temporal_persistence"),
+            cross_radar_consistency=sweep_radial_context.get("cross_radar_consistency"),
         )
         p_radial = detection.probability
         radial_flags = valid & (p_radial >= profile.radial_interference.flag_probability)
@@ -533,6 +633,9 @@ def apply_basic_qc(
             ranges,
             group["azimuth"][:],
         )
+        radial_weak_candidate_ray_count += detection.weak_candidate_ray_count
+        radial_context_promoted_ray_count += detection.context_promoted_ray_count
+        radial_cross_radar_vetoed_ray_count += detection.cross_radar_vetoed_ray_count
         for type_name in type_ray_counts:
             type_ray_counts[type_name] += detection.type_ray_counts[type_name]
             type_gate_counts[type_name] += detection.type_gate_counts[type_name]
@@ -600,10 +703,7 @@ def apply_basic_qc(
         low_quality = valid & (
             (quality < profile.quality_index.low_quality_threshold)
             | low_snr
-            | (
-                operational_radial
-                >= profile.radial_interference.low_quality_probability
-            )
+            | (operational_radial >= profile.radial_interference.low_quality_probability)
         )
         flags[low_quality] |= profile.flag_masks["LOW_QUALITY"]
         dbzh_qc = dbzh.copy()
@@ -642,12 +742,8 @@ def apply_basic_qc(
         valid_count += int(np.count_nonzero(valid))
         no_rain_count += int(np.count_nonzero(no_rain))
 
-    dual_pol_available = any(
-        np.any(np.isfinite(sweep.p_meteo_dual_pol)) for sweep in sweeps
-    )
-    vertical_available = any(
-        np.any(np.isfinite(sweep.p_vertical_consistency)) for sweep in sweeps
-    )
+    dual_pol_available = any(np.any(np.isfinite(sweep.p_meteo_dual_pol)) for sweep in sweeps)
+    vertical_available = any(np.any(np.isfinite(sweep.p_vertical_consistency)) for sweep in sweeps)
     modules = _module_records(
         profile,
         clutter_available=clutter_available,
@@ -655,6 +751,9 @@ def apply_basic_qc(
         dual_pol_available=dual_pol_available,
         vertical_available=vertical_available,
         radial_ray_count=radial_ray_count,
+        radial_weak_candidate_ray_count=radial_weak_candidate_ray_count,
+        radial_context_promoted_ray_count=radial_context_promoted_ray_count,
+        radial_cross_radar_vetoed_ray_count=radial_cross_radar_vetoed_ray_count,
         type_ray_counts=type_ray_counts,
         ground_count=ground_count,
         sea_count=sea_count,
@@ -680,6 +779,9 @@ def apply_basic_qc(
         "radial_interference_ray_count": radial_ray_count,
         "radial_interference_gate_count": radial_gate_count,
         "radial_interference_area_km2": round(radial_area_km2, 6),
+        "radial_weak_candidate_ray_count": radial_weak_candidate_ray_count,
+        "radial_context_promoted_ray_count": radial_context_promoted_ray_count,
+        "radial_cross_radar_vetoed_ray_count": radial_cross_radar_vetoed_ray_count,
         "interference_type_ray_counts": type_ray_counts,
         "interference_type_gate_counts": type_gate_counts,
         "ground_clutter_gate_count": ground_count,
@@ -721,17 +823,13 @@ def audit_long_range_saturated_radials(
             valid = np.isfinite(dbzh) & (dbzh >= lower) & (dbzh <= upper)
             azimuth = group["azimuth"][:] if "azimuth" in group else None
             for ray_index in range(dbzh.shape[0]):
-                evidence = _long_range_saturated_radial_evidence(
-                    dbzh[ray_index], valid[ray_index]
-                )
+                evidence = _long_range_saturated_radial_evidence(dbzh[ray_index], valid[ray_index])
                 if evidence is None:
                     continue
                 rays.append(
                     {
                         "ray_index": ray_index,
-                        "azimuth_deg": (
-                            float(azimuth[ray_index]) if azimuth is not None else None
-                        ),
+                        "azimuth_deg": (float(azimuth[ray_index]) if azimuth is not None else None),
                         **evidence.value(),
                     }
                 )
@@ -889,8 +987,7 @@ def _vertical_consistency_probabilities(
     maximum_range_m: float,
 ) -> tuple[np.ndarray, ...]:
     results = [
-        np.full(np.asarray(sweep["dbzh"]).shape, np.nan, dtype="float32")
-        for sweep in sweeps
+        np.full(np.asarray(sweep["dbzh"]).shape, np.nan, dtype="float32") for sweep in sweeps
     ]
     for low_index, low in enumerate(sweeps):
         higher = [
@@ -926,6 +1023,58 @@ def _vertical_consistency_probabilities(
     return tuple(results)
 
 
+def _volume_higher_elevation_radial_extents(
+    root: zarr.Group,
+    profile: BasicQCProfile,
+) -> dict[str, np.ndarray]:
+    if not profile.radial_interference.morphology.radial_extent_promotion.enabled:
+        return {}
+    inputs: list[dict[str, Any]] = []
+    names: list[str] = []
+    for sweep_number in root["sweep_number"][:]:
+        name = f"sweep_{int(sweep_number):03d}"
+        group = root[name]
+        if "DBZH" not in group:
+            continue
+        inputs.append(
+            {
+                "dbzh": group["DBZH"][:].astype("float32", copy=False),
+                "azimuth": group["azimuth"][:],
+                "range": group["range"][:],
+                "elevation": float(np.nanmedian(group["elevation"][:])),
+            }
+        )
+        names.append(name)
+    values = _higher_elevation_radial_extent_fractions(tuple(inputs))
+    return dict(zip(names, values, strict=True))
+
+
+def _higher_elevation_radial_extent_fractions(
+    sweeps: tuple[dict[str, Any], ...],
+) -> tuple[np.ndarray, ...]:
+    """Map the next reflectivity elevation's radial echo extent to each ray."""
+    results = [
+        np.full(np.asarray(sweep["dbzh"]).shape[0], np.nan, dtype="float32") for sweep in sweeps
+    ]
+    for low_index, low in enumerate(sweeps):
+        higher = [
+            item for item in sweeps if float(item["elevation"]) > float(low["elevation"]) + 0.2
+        ]
+        if not higher:
+            continue
+        high = min(higher, key=lambda item: float(item["elevation"]))
+        high_extent = _radial_range_extent_fractions(
+            np.isfinite(np.asarray(high["dbzh"])),
+            np.asarray(high["range"], dtype="float64"),
+        )
+        ray_index = _nearest_azimuth_indices(
+            np.asarray(low["azimuth"], dtype="float64"),
+            np.asarray(high["azimuth"], dtype="float64"),
+        )
+        results[low_index] = high_extent[ray_index].astype("float32")
+    return tuple(results)
+
+
 def _radial_probability(
     dbzh: np.ndarray,
     valid: np.ndarray,
@@ -935,6 +1084,22 @@ def _radial_probability(
     return detection.probability, detection.flagged_ray_count
 
 
+def _validated_optional_ray_evidence(
+    values: np.ndarray | None,
+    ray_count: int,
+    name: str,
+) -> np.ndarray | None:
+    if values is None:
+        return None
+    result = np.asarray(values, dtype="float32")
+    if result.shape != (ray_count,):
+        raise QCInputError(f"{name} differs from radial ray shape")
+    finite = np.isfinite(result)
+    if np.any(finite & ((result < 0.0) | (result > 1.0))):
+        raise QCInputError(f"{name} is outside [0, 1]")
+    return result
+
+
 def _detect_radial_interference(
     dbzh: np.ndarray,
     valid: np.ndarray,
@@ -942,6 +1107,9 @@ def _detect_radial_interference(
     *,
     ranges_m: np.ndarray | None = None,
     vertical_consistency: np.ndarray | None = None,
+    higher_elevation_extent_fraction: np.ndarray | None = None,
+    temporal_persistence: np.ndarray | None = None,
+    cross_radar_consistency: np.ndarray | None = None,
 ) -> RadialInterferenceDetection:
     probabilities = np.zeros(dbzh.shape, dtype="float32")
     probabilities[~valid] = np.nan
@@ -955,6 +1123,9 @@ def _detect_radial_interference(
             0,
             type_ray_counts,
             type_gate_counts,
+            0,
+            0,
+            0,
         )
     ranges = (
         np.asarray(ranges_m, dtype="float64")
@@ -965,6 +1136,23 @@ def _detect_radial_interference(
         raise QCInputError("radial interference range coordinate differs from gate shape")
     if vertical_consistency is not None and vertical_consistency.shape != dbzh.shape:
         raise QCInputError("vertical consistency differs from radial gate shape")
+    if higher_elevation_extent_fraction is not None and higher_elevation_extent_fraction.shape != (
+        dbzh.shape[0],
+    ):
+        raise QCInputError("higher-elevation extent differs from radial ray shape")
+    temporal_persistence = _validated_optional_ray_evidence(
+        temporal_persistence,
+        dbzh.shape[0],
+        "temporal persistence",
+    )
+    cross_radar_consistency = _validated_optional_ray_evidence(
+        cross_radar_consistency,
+        dbzh.shape[0],
+        "cross-radar consistency",
+    )
+    weak_candidate_rays = np.zeros(dbzh.shape[0], dtype=bool)
+    context_promoted_rays = np.zeros(dbzh.shape[0], dtype=bool)
+    cross_radar_vetoed_rays = np.zeros(dbzh.shape[0], dtype=bool)
 
     for ray_index in range(dbzh.shape[0]):
         ray_valid = valid[ray_index]
@@ -984,9 +1172,7 @@ def _detect_radial_interference(
             np.mean(ray_valid) >= config.minimum_valid_gate_fraction
             and _longest_run(ray_valid) >= config.minimum_consecutive_gates
             and np.any(overlap)
-            and float(
-                np.median(np.abs(dbzh[ray_index, overlap] - baseline[overlap]))
-            )
+            and float(np.median(np.abs(dbzh[ray_index, overlap] - baseline[overlap])))
             >= config.neighbour_difference_db
         )
         if legacy_detected and not config.morphology.enabled:
@@ -1041,15 +1227,46 @@ def _detect_radial_interference(
             type_name = "short_range"
         else:
             type_name = "narrow"
-        probability = (
-            config.flag_probability
-            if legacy_detected
-            else config.morphology.diagnostic_probability
-        )
+        probability = config.flag_probability
+        vertical_evidence = False
         if vertical_consistency is not None:
             support = vertical_consistency[ray_index, evidence]
             finite_support = support[np.isfinite(support)]
             if finite_support.size and float(np.median(finite_support)) <= 0.2:
+                vertical_evidence = True
+        if not legacy_detected:
+            weak_candidate_rays[ray_index] = True
+            probability = config.morphology.diagnostic_probability
+            if config.morphology.context_fusion.enabled:
+                context = config.morphology.context_fusion
+                evidence_count = 1 + int(vertical_evidence)
+                if (
+                    temporal_persistence is not None
+                    and np.isfinite(temporal_persistence[ray_index])
+                    and temporal_persistence[ray_index] >= context.temporal_persistence_threshold
+                ):
+                    evidence_count += 1
+                consistency = (
+                    float(cross_radar_consistency[ray_index])
+                    if cross_radar_consistency is not None
+                    else np.nan
+                )
+                cross_radar_veto = (
+                    np.isfinite(consistency)
+                    and consistency >= context.cross_radar_veto_min_consistency
+                )
+                if cross_radar_veto:
+                    cross_radar_vetoed_rays[ray_index] = True
+                else:
+                    if (
+                        np.isfinite(consistency)
+                        and consistency <= context.cross_radar_promotion_max_consistency
+                    ):
+                        evidence_count += 1
+                    if evidence_count >= context.minimum_independent_evidence:
+                        probability = config.flag_probability
+                        context_promoted_rays[ray_index] = True
+            elif vertical_evidence:
                 probability = config.flag_probability
         _record_radial_type(
             probabilities,
@@ -1060,10 +1277,30 @@ def _detect_radial_interference(
             probability,
         )
 
+    if config.morphology.radial_extent_promotion.enabled:
+        (
+            extent_candidates,
+            extent_promoted,
+            extent_vetoed,
+        ) = _promote_radial_extent_evidence(
+            dbzh,
+            valid,
+            ranges,
+            probabilities,
+            interference_type,
+            config,
+            higher_elevation_extent_fraction,
+            temporal_persistence,
+            cross_radar_consistency,
+        )
+        weak_candidate_rays |= extent_candidates
+        context_promoted_rays |= extent_promoted
+        cross_radar_vetoed_rays |= extent_vetoed
     if config.morphology.fan_closure.enabled:
         _close_seeded_radial_fans(
             dbzh,
             valid,
+            ranges,
             probabilities,
             interference_type,
             config,
@@ -1097,12 +1334,16 @@ def _detect_radial_interference(
         flagged_ray_count,
         type_ray_counts,
         type_gate_counts,
+        int(np.count_nonzero(weak_candidate_rays)),
+        int(np.count_nonzero(context_promoted_rays)),
+        int(np.count_nonzero(cross_radar_vetoed_rays)),
     )
 
 
 def _close_seeded_radial_fans(
     dbzh: np.ndarray,
     valid: np.ndarray,
+    ranges_m: np.ndarray,
     probabilities: np.ndarray,
     interference_type: np.ndarray,
     config: RadialInterferenceConfig,
@@ -1115,38 +1356,67 @@ def _close_seeded_radial_fans(
     )
     if np.count_nonzero(hard_rays) < 2:
         return
-    bounded = _bounded_circular_gaps(hard_rays, closure.maximum_gap_rays)
-    for ray_index in np.flatnonzero(bounded):
-        ray_valid = valid[ray_index]
-        if not _has_radial_fan_boundary_signature(
-            dbzh[ray_index],
-            ray_valid,
-            closure,
-        ):
+    for gap in _bounded_circular_gap_groups(hard_rays, closure.maximum_gap_rays):
+        seed_fraction = 2.0 / (len(gap) + 2.0)
+        if seed_fraction < closure.minimum_seed_fraction:
             continue
-        _record_radial_type(
-            probabilities,
-            interference_type,
-            int(ray_index),
-            ray_valid,
-            "broad",
-            config.flag_probability,
+        left_boundary = int((int(gap[0]) - 1) % hard_rays.size)
+        right_boundary = int((int(gap[-1]) + 1) % hard_rays.size)
+        boundary_extent = min(
+            _radial_range_extent_fraction(valid[left_boundary], ranges_m),
+            _radial_range_extent_fraction(valid[right_boundary], ranges_m),
         )
+        for ray_index in gap:
+            ray_valid = valid[ray_index]
+            boundary_signature = _has_radial_fan_boundary_signature(
+                dbzh[ray_index],
+                ray_valid,
+                closure,
+            )
+            extent_signature = closure.extent_gap_enabled and _has_radial_gap_extent_signature(
+                dbzh[ray_index],
+                ray_valid,
+                ranges_m,
+                closure,
+                boundary_extent,
+            )
+            if not boundary_signature and not extent_signature:
+                continue
+            _record_radial_type(
+                probabilities,
+                interference_type,
+                int(ray_index),
+                ray_valid,
+                "broad",
+                config.flag_probability,
+            )
 
 
 def _bounded_circular_gaps(hard_rays: np.ndarray, maximum_gap_rays: int) -> np.ndarray:
     bounded = np.zeros(hard_rays.shape, dtype=bool)
+    for gap in _bounded_circular_gap_groups(hard_rays, maximum_gap_rays):
+        bounded[gap] = True
+    return bounded
+
+
+def _bounded_circular_gap_groups(
+    hard_rays: np.ndarray,
+    maximum_gap_rays: int,
+) -> tuple[np.ndarray, ...]:
     ray_count = hard_rays.size
     if ray_count == 0 or maximum_gap_rays <= 0:
-        return bounded
+        return ()
+    groups: list[np.ndarray] = []
     for start in np.flatnonzero(hard_rays):
-        for gap_size in range(1, maximum_gap_rays + 1):
-            interior = [int((start + offset) % ray_count) for offset in range(1, gap_size + 1)]
-            end = int((start + gap_size + 1) % ray_count)
-            if hard_rays[end] and not np.any(hard_rays[interior]):
-                bounded[interior] = True
+        interior: list[int] = []
+        for offset in range(1, maximum_gap_rays + 2):
+            ray_index = int((start + offset) % ray_count)
+            if hard_rays[ray_index]:
+                if interior:
+                    groups.append(np.asarray(interior, dtype="int64"))
                 break
-    return bounded
+            interior.append(ray_index)
+    return tuple(groups)
 
 
 def _has_radial_fan_boundary_signature(
@@ -1168,6 +1438,174 @@ def _has_radial_fan_boundary_signature(
     return growth is not None and growth >= config.minimum_range_growth_db
 
 
+def _has_radial_gap_extent_signature(
+    values: np.ndarray,
+    valid: np.ndarray,
+    ranges_m: np.ndarray,
+    config: RadialFanClosureConfig,
+    boundary_extent_fraction: float,
+) -> bool:
+    if float(np.mean(valid)) < config.minimum_gap_valid_gate_fraction:
+        return False
+    if _longest_run(valid) < config.minimum_gap_consecutive_gates:
+        return False
+    extent = _radial_range_extent_fraction(valid, ranges_m)
+    required_extent = min(
+        config.minimum_gap_range_extent_fraction,
+        boundary_extent_fraction * config.minimum_gap_boundary_extent_ratio,
+    )
+    if extent < required_extent:
+        return False
+    growth = _valid_support_growth(values, valid)
+    return growth is not None and growth >= config.minimum_range_growth_db
+
+
+def _promote_radial_extent_evidence(
+    dbzh: np.ndarray,
+    valid: np.ndarray,
+    ranges_m: np.ndarray,
+    probabilities: np.ndarray,
+    interference_type: np.ndarray,
+    config: RadialInterferenceConfig,
+    higher_elevation_extent_fraction: np.ndarray | None,
+    temporal_persistence: np.ndarray | None,
+    cross_radar_consistency: np.ndarray | None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Fuse independent context without letting weak geometry hard-flag alone."""
+    promotion = config.morphology.radial_extent_promotion
+    fusion = config.morphology.context_fusion
+    ray_count = dbzh.shape[0]
+    higher_extent_by_ray = (
+        np.asarray(higher_elevation_extent_fraction, dtype="float32")
+        if higher_elevation_extent_fraction is not None
+        else np.full(ray_count, np.nan, dtype="float32")
+    )
+    temporal_by_ray = (
+        temporal_persistence
+        if temporal_persistence is not None
+        else np.full(ray_count, np.nan, dtype="float32")
+    )
+    cross_radar_by_ray = (
+        cross_radar_consistency
+        if cross_radar_consistency is not None
+        else np.full(ray_count, np.nan, dtype="float32")
+    )
+    hard_rays = np.any(
+        np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability,
+        axis=1,
+    )
+    diagnostic_rays = np.any(
+        (np.nan_to_num(probabilities, nan=0.0) >= config.morphology.diagnostic_probability)
+        & (np.nan_to_num(probabilities, nan=0.0) < config.flag_probability),
+        axis=1,
+    )
+    candidates = np.zeros(dbzh.shape[0], dtype=bool)
+    strong_geometry = np.zeros(dbzh.shape[0], dtype=bool)
+    vertical_evidence = np.zeros(dbzh.shape[0], dtype=bool)
+    for ray_index in range(dbzh.shape[0]):
+        if hard_rays[ray_index]:
+            continue
+        ray_valid = valid[ray_index]
+        higher_extent = float(higher_extent_by_ray[ray_index])
+        vertical_evidence[ray_index] = (
+            np.isfinite(higher_extent)
+            and higher_extent <= promotion.maximum_higher_elevation_extent_fraction
+        )
+        fan_context = diagnostic_rays[ray_index] and _has_circular_neighbour(
+            hard_rays,
+            ray_index,
+            promotion.maximum_hard_seed_distance_rays,
+        )
+        minimum_valid_fraction = (
+            promotion.diagnostic_minimum_valid_gate_fraction
+            if fan_context
+            else promotion.minimum_valid_gate_fraction
+        )
+        if float(np.mean(ray_valid)) < minimum_valid_fraction:
+            continue
+        if _longest_run(ray_valid) < promotion.minimum_consecutive_gates:
+            continue
+        if (
+            _radial_range_extent_fraction(ray_valid, ranges_m)
+            < promotion.minimum_range_extent_fraction
+        ):
+            continue
+        growth = _near_to_far_growth(dbzh[ray_index], ray_valid)
+        if growth is None or growth < promotion.minimum_range_growth_db:
+            continue
+        power_iqr = _range_corrected_power_iqr(
+            dbzh[ray_index],
+            ray_valid,
+            ranges_m,
+            promotion.minimum_analysis_range_m,
+        )
+        if power_iqr is None or power_iqr > promotion.maximum_power_iqr_db:
+            continue
+        candidates[ray_index] = True
+        strong_geometry[ray_index] = fan_context
+
+    accepted_candidates = np.zeros(ray_count, dtype=bool)
+    context_promoted = np.zeros(ray_count, dtype=bool)
+    cross_radar_vetoed = np.zeros(ray_count, dtype=bool)
+    for group in _circular_true_groups(
+        candidates,
+        maximum_gap_rays=promotion.maximum_group_gap_rays,
+    ):
+        if not promotion.minimum_group_rays <= len(group) <= promotion.maximum_group_rays:
+            continue
+        for ray_index in group:
+            ray_index = int(ray_index)
+            accepted_candidates[ray_index] = True
+            _record_radial_type(
+                probabilities,
+                interference_type,
+                ray_index,
+                valid[ray_index],
+                "narrow",
+                config.morphology.diagnostic_probability,
+            )
+            if strong_geometry[ray_index]:
+                should_promote = True
+            elif not fusion.enabled:
+                should_promote = bool(vertical_evidence[ray_index])
+            else:
+                evidence_count = 1 + int(vertical_evidence[ray_index])
+                persistence = float(temporal_by_ray[ray_index])
+                if (
+                    np.isfinite(persistence)
+                    and persistence >= fusion.temporal_persistence_threshold
+                ):
+                    evidence_count += 1
+                consistency = float(cross_radar_by_ray[ray_index])
+                cross_radar_veto = (
+                    np.isfinite(consistency)
+                    and consistency >= fusion.cross_radar_veto_min_consistency
+                )
+                if cross_radar_veto:
+                    cross_radar_vetoed[ray_index] = True
+                    should_promote = False
+                else:
+                    if (
+                        np.isfinite(consistency)
+                        and consistency <= fusion.cross_radar_promotion_max_consistency
+                    ):
+                        evidence_count += 1
+                    should_promote = evidence_count >= fusion.minimum_independent_evidence
+                if should_promote:
+                    context_promoted[ray_index] = True
+            if not should_promote:
+                continue
+            _record_radial_type(
+                probabilities,
+                interference_type,
+                ray_index,
+                valid[ray_index],
+                "narrow",
+                config.flag_probability,
+            )
+    return accepted_candidates, context_promoted, cross_radar_vetoed
+
+
 def _promote_multiscale_radial_evidence(
     dbzh: np.ndarray,
     valid: np.ndarray,
@@ -1178,11 +1616,8 @@ def _promote_multiscale_radial_evidence(
     """Confirm sparse longitudinal spikes with short/long azimuth context."""
     promotion = config.morphology.multiscale_promotion
     diagnostic = (
-        np.nan_to_num(probabilities, nan=0.0)
-        >= config.morphology.diagnostic_probability
-    ) & (
-        np.nan_to_num(probabilities, nan=0.0) < config.flag_probability
-    )
+        np.nan_to_num(probabilities, nan=0.0) >= config.morphology.diagnostic_probability
+    ) & (np.nan_to_num(probabilities, nan=0.0) < config.flag_probability)
     diagnostic_counts = np.count_nonzero(diagnostic, axis=1)
     if not np.any(diagnostic_counts >= promotion.minimum_diagnostic_gates):
         return
@@ -1202,16 +1637,12 @@ def _promote_multiscale_radial_evidence(
     minimum_edge_jump = promotion.minimum_edge_jump_gate_fraction * gate_count
     minimum_score = promotion.minimum_score_gate_fraction * gate_count
 
-    for ray_index in np.flatnonzero(
-        diagnostic_counts >= promotion.minimum_diagnostic_gates
-    ):
+    for ray_index in np.flatnonzero(diagnostic_counts >= promotion.minimum_diagnostic_gates):
         if edge_jump[ray_index] < minimum_edge_jump:
             continue
         if scale_score[ray_index] < minimum_score:
             continue
-        high = valid[ray_index] & (
-            dbzh[ray_index] >= promotion.minimum_high_dbzh
-        )
+        high = valid[ray_index] & (dbzh[ray_index] >= promotion.minimum_high_dbzh)
         if np.count_nonzero(high) < promotion.minimum_high_gates:
             continue
         growth = _near_to_far_growth(dbzh[ray_index], valid[ray_index])
@@ -1236,6 +1667,78 @@ def _circular_window_mean(values: np.ndarray, radius: int) -> np.ndarray:
     return total / (2 * radius + 1)
 
 
+def _circular_true_groups(
+    values: np.ndarray,
+    *,
+    maximum_gap_rays: int = 0,
+) -> tuple[np.ndarray, ...]:
+    indices = np.flatnonzero(values)
+    if indices.size == 0:
+        return ()
+    split_points = np.flatnonzero(np.diff(indices) > maximum_gap_rays + 1) + 1
+    groups = [item for item in np.split(indices, split_points) if item.size]
+    if len(groups) > 1 and int(groups[0][0] + values.size - groups[-1][-1] - 1) <= maximum_gap_rays:
+        groups[0] = np.concatenate((groups[-1], groups[0]))
+        groups.pop()
+    return tuple(item.astype("int64", copy=False) for item in groups)
+
+
+def _has_circular_neighbour(
+    values: np.ndarray,
+    ray_index: int,
+    maximum_distance_rays: int,
+) -> bool:
+    for distance in range(1, maximum_distance_rays + 1):
+        if values[(ray_index - distance) % values.size]:
+            return True
+        if values[(ray_index + distance) % values.size]:
+            return True
+    return False
+
+
+def _radial_range_extent_fractions(
+    valid: np.ndarray,
+    ranges_m: np.ndarray,
+) -> np.ndarray:
+    if valid.ndim != 2 or ranges_m.shape != (valid.shape[1],):
+        raise QCInputError("radial extent geometry differs from gate shape")
+    maximum_range = float(np.nanmax(ranges_m)) if ranges_m.size else 0.0
+    result = np.zeros(valid.shape[0], dtype="float32")
+    if not np.isfinite(maximum_range) or maximum_range <= 0:
+        return result
+    for ray_index in range(valid.shape[0]):
+        result[ray_index] = _radial_range_extent_fraction(valid[ray_index], ranges_m)
+    return result
+
+
+def _radial_range_extent_fraction(
+    valid: np.ndarray,
+    ranges_m: np.ndarray,
+) -> float:
+    indices = np.flatnonzero(valid)
+    if indices.size == 0 or ranges_m.size == 0:
+        return 0.0
+    maximum_range = float(np.nanmax(ranges_m))
+    if not np.isfinite(maximum_range) or maximum_range <= 0:
+        return 0.0
+    return float(ranges_m[int(indices[-1])] / maximum_range)
+
+
+def _range_corrected_power_iqr(
+    values: np.ndarray,
+    valid: np.ndarray,
+    ranges_m: np.ndarray,
+    minimum_range_m: float,
+) -> float | None:
+    evidence = valid & np.isfinite(ranges_m) & (ranges_m >= minimum_range_m)
+    if np.count_nonzero(evidence) < 2:
+        return None
+    ranges_km = np.maximum(ranges_m[evidence] / 1_000.0, 1e-3)
+    power_proxy = values[evidence] - 20.0 * np.log10(ranges_km)
+    lower, upper = np.percentile(power_proxy, [25.0, 75.0])
+    return float(upper - lower)
+
+
 def _interference_type_name(types: np.ndarray, mask: np.ndarray) -> str:
     codes, counts = np.unique(types[mask], return_counts=True)
     if codes.size == 0:
@@ -1255,9 +1758,7 @@ def _record_radial_type(
     type_name: str,
     probability: float,
 ) -> None:
-    replace = mask & (
-        np.nan_to_num(probabilities[ray_index], nan=-1.0) < probability
-    )
+    replace = mask & (np.nan_to_num(probabilities[ray_index], nan=-1.0) < probability)
     probabilities[ray_index, replace] = probability
     interference_type[ray_index, replace] = INTERFERENCE_TYPE_CODES[type_name]
 
@@ -1274,12 +1775,8 @@ def _neighbour_baseline(dbzh: np.ndarray, ray_index: int) -> np.ndarray:
     baseline = np.full(dbzh.shape[1], np.nan, dtype="float32")
     both = previous_finite & next_finite
     baseline[both] = (previous_values[both] + next_values[both]) / 2.0
-    baseline[previous_finite & ~next_finite] = previous_values[
-        previous_finite & ~next_finite
-    ]
-    baseline[next_finite & ~previous_finite] = next_values[
-        next_finite & ~previous_finite
-    ]
+    baseline[previous_finite & ~next_finite] = previous_values[previous_finite & ~next_finite]
+    baseline[next_finite & ~previous_finite] = next_values[next_finite & ~previous_finite]
     return baseline
 
 
@@ -1311,10 +1808,16 @@ def _near_to_far_growth(values: np.ndarray, valid: np.ndarray) -> float | None:
     return float(np.median(far) - np.median(near))
 
 
+def _valid_support_growth(values: np.ndarray, valid: np.ndarray) -> float | None:
+    supported = values[valid]
+    if supported.size < 2:
+        return None
+    quartile = max(supported.size // 4, 1)
+    return float(np.median(supported[-quartile:]) - np.median(supported[:quartile]))
+
+
 def _rising_membership(values: np.ndarray, bounds: tuple[float, float]) -> np.ndarray:
-    return np.clip((values - bounds[0]) / (bounds[1] - bounds[0]), 0.0, 1.0).astype(
-        "float32"
-    )
+    return np.clip((values - bounds[0]) / (bounds[1] - bounds[0]), 0.0, 1.0).astype("float32")
 
 
 def _trapezoid_membership(
@@ -1339,12 +1842,74 @@ def _minimum_circular_neighbour_step(values: np.ndarray, *, period: float) -> np
     return np.fmin(before, after).astype("float32")
 
 
+def _temporal_radial_persistence(
+    azimuth: np.ndarray,
+    context_scans: tuple[tuple[np.ndarray, np.ndarray], ...],
+    *,
+    minimum_context_scans: int,
+    maximum_context_scans: int,
+) -> np.ndarray:
+    """Return same-azimuth candidate persistence across ordered nearby scans."""
+    source_azimuth = np.asarray(azimuth, dtype="float64")
+    if source_azimuth.ndim != 1:
+        raise QCInputError("temporal context source azimuth must be one-dimensional")
+    if minimum_context_scans < 1 or maximum_context_scans < minimum_context_scans:
+        raise QCInputError("invalid temporal context scan limits")
+    selected = context_scans[:maximum_context_scans]
+    if len(selected) < minimum_context_scans:
+        return np.full(source_azimuth.shape, np.nan, dtype="float32")
+    aligned: list[np.ndarray] = []
+    for context_azimuth, context_candidates in selected:
+        target_azimuth = np.asarray(context_azimuth, dtype="float64")
+        candidates = np.asarray(context_candidates, dtype=bool)
+        if target_azimuth.ndim != 1 or candidates.shape != target_azimuth.shape:
+            raise QCInputError("temporal context candidates differ from their azimuth shape")
+        indices = _nearest_azimuth_indices(source_azimuth, target_azimuth)
+        aligned.append(candidates[indices])
+    return np.mean(np.stack(aligned, axis=0), axis=0, dtype="float64").astype("float32")
+
+
+def _cross_radar_consistency_by_ray(
+    dbzh: np.ndarray,
+    valid: np.ndarray,
+    reprojected_neighbour_dbzh: tuple[np.ndarray, ...],
+    *,
+    echo_threshold_dbzh: float,
+    minimum_overlap_gates: int,
+) -> np.ndarray:
+    """Measure neighbour support only where another radar overlaps current echo."""
+    current = np.asarray(dbzh, dtype="float32")
+    current_valid = np.asarray(valid, dtype=bool)
+    if current.ndim != 2 or current_valid.shape != current.shape:
+        raise QCInputError("cross-radar current field differs from its valid mask")
+    result = np.full(current.shape[0], np.nan, dtype="float32")
+    if not reprojected_neighbour_dbzh:
+        return result
+    neighbours = []
+    for field in reprojected_neighbour_dbzh:
+        neighbour = np.asarray(field, dtype="float32")
+        if neighbour.shape != current.shape:
+            raise QCInputError("reprojected neighbour differs from current radar gate shape")
+        neighbours.append(neighbour)
+    stack = np.stack(neighbours, axis=0)
+    neighbour_observed = np.any(np.isfinite(stack), axis=0)
+    neighbour_echo = np.any(np.isfinite(stack) & (stack >= echo_threshold_dbzh), axis=0)
+    current_echo = current_valid & np.isfinite(current) & (current >= echo_threshold_dbzh)
+    for ray_index in range(current.shape[0]):
+        overlap = current_echo[ray_index] & neighbour_observed[ray_index]
+        overlap_count = int(np.count_nonzero(overlap))
+        if overlap_count < minimum_overlap_gates:
+            continue
+        result[ray_index] = np.count_nonzero(
+            overlap & neighbour_echo[ray_index]
+        ) / overlap_count
+    return result
+
+
 def _nearest_azimuth_indices(source: np.ndarray, target: np.ndarray) -> np.ndarray:
     if target.size == 0:
         raise QCInputError("vertical comparison target has no azimuths")
-    difference = np.abs(
-        (source[:, None] - target[None, :] + 180.0) % 360.0 - 180.0
-    )
+    difference = np.abs((source[:, None] - target[None, :] + 180.0) % 360.0 - 180.0)
     return np.argmin(difference, axis=1)
 
 
@@ -1421,15 +1986,16 @@ def _module_records(
     dual_pol_available: bool,
     vertical_available: bool,
     radial_ray_count: int,
+    radial_weak_candidate_ray_count: int,
+    radial_context_promoted_ray_count: int,
+    radial_cross_radar_vetoed_ray_count: int,
     type_ray_counts: dict[str, int],
     ground_count: int,
     sea_count: int,
     ap_count: int,
 ) -> tuple[QCModuleRecord, ...]:
     return (
-        QCModuleRecord(
-            "health_gate", profile.pipeline_version, "applied", (), (), None, {}
-        ),
+        QCModuleRecord("health_gate", profile.pipeline_version, "applied", (), (), None, {}),
         QCModuleRecord(
             "missing_and_echo_state",
             profile.pipeline_version,
@@ -1445,11 +2011,7 @@ def _module_records(
             "applied" if dual_pol_available else "skipped",
             ("DBZH", "RHOHV", "ZDR", "PHIDP", "SNR"),
             ("P_METEO_DUAL_POL",),
-            (
-                None
-                if dual_pol_available
-                else "dual_pol_fuzzy_disabled_or_fields_unavailable"
-            ),
+            (None if dual_pol_available else "dual_pol_fuzzy_disabled_or_fields_unavailable"),
             {"diagnostic_only": float(profile.dual_pol_fuzzy.mode == "diagnostic_only")},
         ),
         QCModuleRecord(
@@ -1463,11 +2025,7 @@ def _module_records(
                 if vertical_available
                 else "vertical_consistency_disabled_or_higher_sweep_unavailable"
             ),
-            {
-                "diagnostic_only": float(
-                    profile.vertical_consistency.mode == "diagnostic_only"
-                )
-            },
+            {"diagnostic_only": float(profile.vertical_consistency.mode == "diagnostic_only")},
         ),
         QCModuleRecord(
             "radial_interference",
@@ -1483,15 +2041,21 @@ def _module_records(
             None,
             {
                 "flagged_ray_count": float(radial_ray_count),
-                **{
-                    f"{name}_ray_count": float(count)
-                    for name, count in type_ray_counts.items()
-                },
+                "weak_candidate_ray_count": float(radial_weak_candidate_ray_count),
+                "context_promoted_ray_count": float(radial_context_promoted_ray_count),
+                "cross_radar_vetoed_ray_count": float(radial_cross_radar_vetoed_ray_count),
+                **{f"{name}_ray_count": float(count) for name, count in type_ray_counts.items()},
                 "morphology_diagnostic_only": float(
                     profile.radial_interference.morphology.mode == "diagnostic_only"
                 ),
                 "fan_closure_enabled": float(
                     profile.radial_interference.morphology.fan_closure.enabled
+                ),
+                "radial_extent_promotion_enabled": float(
+                    profile.radial_interference.morphology.radial_extent_promotion.enabled
+                ),
+                "context_fusion_enabled": float(
+                    profile.radial_interference.morphology.context_fusion.enabled
                 ),
                 "multiscale_promotion_enabled": float(
                     profile.radial_interference.morphology.multiscale_promotion.enabled
@@ -1584,6 +2148,64 @@ def _validate_profile(profile: BasicQCProfile) -> None:
         raise QCConfigError("invalid radial fan-closure high-gate fraction")
     if closure.minimum_range_growth_db <= 0:
         raise QCConfigError("invalid radial fan-closure range growth")
+    if closure.minimum_gap_consecutive_gates < 2:
+        raise QCConfigError("invalid radial fan-closure gap length")
+    for value in (
+        closure.minimum_gap_valid_gate_fraction,
+        closure.minimum_gap_range_extent_fraction,
+        closure.minimum_gap_boundary_extent_ratio,
+        closure.minimum_seed_fraction,
+    ):
+        if not 0 <= value <= 1:
+            raise QCConfigError("invalid radial fan-closure gap fraction")
+    extent = morphology.radial_extent_promotion
+    if extent.minimum_consecutive_gates < 2:
+        raise QCConfigError("invalid radial extent-promotion gate count")
+    if extent.minimum_group_rays < 2:
+        raise QCConfigError("invalid radial extent-promotion group minimum")
+    if extent.maximum_group_rays < extent.minimum_group_rays:
+        raise QCConfigError("invalid radial extent-promotion group maximum")
+    if extent.maximum_group_gap_rays < 0:
+        raise QCConfigError("invalid radial extent-promotion group gap")
+    if extent.maximum_hard_seed_distance_rays < 1:
+        raise QCConfigError("invalid radial extent-promotion seed distance")
+    for value in (
+        extent.minimum_valid_gate_fraction,
+        extent.diagnostic_minimum_valid_gate_fraction,
+        extent.minimum_range_extent_fraction,
+        extent.maximum_higher_elevation_extent_fraction,
+    ):
+        if not 0 <= value <= 1:
+            raise QCConfigError("invalid radial extent-promotion fraction")
+    if (
+        extent.minimum_range_growth_db <= 0
+        or extent.minimum_analysis_range_m <= 0
+        or extent.maximum_power_iqr_db <= 0
+    ):
+        raise QCConfigError("invalid radial extent-promotion physical limit")
+    context = morphology.context_fusion
+    if not 2 <= context.minimum_independent_evidence <= 4:
+        raise QCConfigError("radial context fusion requires two to four independent evidence types")
+    if not 2 <= context.minimum_temporal_context_scans <= 3:
+        raise QCConfigError("radial temporal context minimum must be two or three scans")
+    if not context.minimum_temporal_context_scans <= context.maximum_temporal_context_scans <= 3:
+        raise QCConfigError("radial temporal context maximum must follow its minimum")
+    for value in (
+        context.temporal_persistence_threshold,
+        context.cross_radar_promotion_max_consistency,
+        context.cross_radar_veto_min_consistency,
+    ):
+        if not 0 <= value <= 1:
+            raise QCConfigError("invalid radial context fusion probability")
+    if (
+        context.cross_radar_promotion_max_consistency
+        >= context.cross_radar_veto_min_consistency
+    ):
+        raise QCConfigError("cross-radar promotion threshold must be below veto threshold")
+    if context.minimum_cross_radar_overlap_gates <= 0:
+        raise QCConfigError("cross-radar overlap gate count must be positive")
+    if context.cross_radar_max_time_offset_seconds <= 0:
+        raise QCConfigError("cross-radar maximum time offset must be positive")
     multiscale = morphology.multiscale_promotion
     if (
         multiscale.short_window_rays <= 0

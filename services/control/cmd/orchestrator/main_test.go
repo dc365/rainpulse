@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/orchestration"
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/workflow"
+	"github.com/google/uuid"
 )
 
 func TestRequestedSubjectCoversEveryRequestEvent(t *testing.T) {
@@ -123,5 +125,35 @@ func TestDiscoverRadarBatchInputsSelectsOnlyRegularCAPFMTVolumes(t *testing.T) {
 		if strings.Contains(input.inputPath, "DPCTEST") {
 			t.Fatalf("DPCTEST input was not excluded: %s", input.inputPath)
 		}
+	}
+}
+
+func TestRadarQCContextSelectsNearbyTimeAndOneCrossRadarVolume(t *testing.T) {
+	issueTime := time.Date(2026, 8, 28, 2, 30, 0, 0, time.UTC)
+	uri := func(value string) *string { return &value }
+	target := workflow.RadarScan{
+		ID: uuid.New(), RadarID: "z9591", VolumeEndTime: issueTime,
+	}
+	candidates := []workflow.RadarScan{
+		{ID: uuid.New(), RadarID: "z9591", VolumeEndTime: issueTime.Add(-5 * time.Minute), NormalizedURI: uri("s3://rainpulse/z9591/02500")},
+		{ID: uuid.New(), RadarID: "z9591", VolumeEndTime: issueTime.Add(-10 * time.Minute), NormalizedURI: uri("s3://rainpulse/z9591/02450")},
+		{ID: uuid.New(), RadarID: "z9591", VolumeEndTime: issueTime.Add(-15 * time.Minute), NormalizedURI: uri("s3://rainpulse/z9591/02445")},
+		{ID: uuid.New(), RadarID: "z9593", VolumeEndTime: issueTime.Add(-20 * time.Second), NormalizedURI: uri("s3://rainpulse/z9593/02500")},
+		{ID: uuid.New(), RadarID: "z9593", VolumeEndTime: issueTime.Add(-2 * time.Minute), NormalizedURI: uri("s3://rainpulse/z9593/02480")},
+		{ID: uuid.New(), RadarID: "z9598", VolumeEndTime: issueTime.Add(4 * time.Minute), NormalizedURI: uri("s3://rainpulse/z9598/02540")},
+		{ID: uuid.New(), RadarID: "z9599", VolumeEndTime: issueTime.Add(6 * time.Minute), NormalizedURI: uri("s3://rainpulse/z9599/02560")},
+	}
+
+	temporal, crossRadar := radarQCContextFromScans(target, candidates, qcContextFusionConfiguration{
+		Enabled: true, MaximumTemporalContextScans: 2, CrossRadarMaximumTimeOffsetSecs: 300,
+	})
+
+	if len(temporal) != 2 || temporal[0].InputURI != "s3://rainpulse/z9591/02500" ||
+		temporal[1].InputURI != "s3://rainpulse/z9591/02450" {
+		t.Fatalf("unexpected temporal context: %#v", temporal)
+	}
+	if len(crossRadar) != 2 || crossRadar[0].RadarID != "z9593" ||
+		crossRadar[0].InputURI != "s3://rainpulse/z9593/02500" || crossRadar[1].RadarID != "z9598" {
+		t.Fatalf("unexpected cross-radar context: %#v", crossRadar)
 	}
 }

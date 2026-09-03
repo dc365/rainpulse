@@ -255,6 +255,11 @@ type qcConfiguration struct {
 	ProfileVersion        string `yaml:"profile_version"`
 	PipelineVersion       string `yaml:"pipeline_version"`
 	FlagDefinitionVersion string `yaml:"flag_definition_version"`
+	RadialInterference    struct {
+		Morphology struct {
+			ContextFusion qcContextFusionConfiguration `yaml:"context_fusion"`
+		} `yaml:"morphology"`
+	} `yaml:"radial_interference"`
 }
 
 type gridConfiguration struct {
@@ -741,10 +746,21 @@ func createRadarQC(
 	if err != nil {
 		return workflow.RadarScan{}, workflow.Job{}, err
 	}
+	temporalContext, crossRadarContext, err := selectRadarQCContext(
+		ctx,
+		store,
+		scan,
+		config.RadialInterference.Morphology.ContextFusion,
+	)
+	if err != nil {
+		return workflow.RadarScan{}, workflow.Job{}, err
+	}
 	job, err := service.CreateRadarQC(ctx, orchestration.RadarQCInput{
 		ScanID: scan.ID, RunID: scan.RunID, RadarID: scan.RadarID,
 		RadarConfigVersion:    scan.RadarConfigVersion,
 		NormalizedURI:         *scan.NormalizedURI,
+		TemporalContext:       temporalContext,
+		CrossRadarContext:     crossRadarContext,
 		CurrentStatus:         scan.Status,
 		Health:                health.Health,
 		QCProfile:             config.ProfileVersion,
@@ -758,6 +774,100 @@ func createRadarQC(
 		return workflow.RadarScan{}, workflow.Job{}, err
 	}
 	return scan, job, nil
+}
+
+type qcContextFusionConfiguration struct {
+	Enabled                         bool `yaml:"enabled"`
+	MaximumTemporalContextScans     int  `yaml:"maximum_temporal_context_scans"`
+	CrossRadarMaximumTimeOffsetSecs int  `yaml:"cross_radar_max_time_offset_seconds"`
+}
+
+func selectRadarQCContext(
+	ctx context.Context,
+	store *postgresstore.Store,
+	scan workflow.RadarScan,
+	config qcContextFusionConfiguration,
+) ([]orchestration.RadarQCContextInput, []orchestration.RadarQCContextInput, error) {
+	if !config.Enabled {
+		return nil, nil, nil
+	}
+	candidates, err := store.ListRadarScans(ctx, 1_000, nil, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list radar scans for QC context: %w", err)
+	}
+	temporal, crossRadar := radarQCContextFromScans(scan, candidates, config)
+	return temporal, crossRadar, nil
+}
+
+func radarQCContextFromScans(
+	scan workflow.RadarScan,
+	candidates []workflow.RadarScan,
+	config qcContextFusionConfiguration,
+) ([]orchestration.RadarQCContextInput, []orchestration.RadarQCContextInput) {
+	if !config.Enabled {
+		return nil, nil
+	}
+	maximumTemporal := config.MaximumTemporalContextScans
+	if maximumTemporal <= 0 || maximumTemporal > 3 {
+		maximumTemporal = 3
+	}
+	maximumCrossOffset := time.Duration(config.CrossRadarMaximumTimeOffsetSecs) * time.Second
+	if maximumCrossOffset <= 0 {
+		maximumCrossOffset = 5 * time.Minute
+	}
+	temporalCandidates := make([]workflow.RadarScan, 0, maximumTemporal)
+	crossByRadar := make(map[string]workflow.RadarScan)
+	for _, candidate := range candidates {
+		if candidate.ID == scan.ID || candidate.NormalizedURI == nil || *candidate.NormalizedURI == "" {
+			continue
+		}
+		if candidate.RadarID == scan.RadarID {
+			temporalCandidates = append(temporalCandidates, candidate)
+			continue
+		}
+		offset := absoluteDuration(candidate.VolumeEndTime.Sub(scan.VolumeEndTime))
+		if offset > maximumCrossOffset {
+			continue
+		}
+		current, exists := crossByRadar[candidate.RadarID]
+		if !exists || offset < absoluteDuration(current.VolumeEndTime.Sub(scan.VolumeEndTime)) ||
+			(offset == absoluteDuration(current.VolumeEndTime.Sub(scan.VolumeEndTime)) && candidate.ID.String() < current.ID.String()) {
+			crossByRadar[candidate.RadarID] = candidate
+		}
+	}
+	sort.Slice(temporalCandidates, func(left, right int) bool {
+		leftOffset := absoluteDuration(temporalCandidates[left].VolumeEndTime.Sub(scan.VolumeEndTime))
+		rightOffset := absoluteDuration(temporalCandidates[right].VolumeEndTime.Sub(scan.VolumeEndTime))
+		if leftOffset == rightOffset {
+			return temporalCandidates[left].ID.String() < temporalCandidates[right].ID.String()
+		}
+		return leftOffset < rightOffset
+	})
+	if len(temporalCandidates) > maximumTemporal {
+		temporalCandidates = temporalCandidates[:maximumTemporal]
+	}
+	temporal := make([]orchestration.RadarQCContextInput, 0, len(temporalCandidates))
+	for _, candidate := range temporalCandidates {
+		temporal = append(temporal, orchestration.RadarQCContextInput{
+			RadarID: candidate.RadarID, InputURI: *candidate.NormalizedURI,
+		})
+	}
+	radarIDs := make([]string, 0, len(crossByRadar))
+	for radarID := range crossByRadar {
+		radarIDs = append(radarIDs, radarID)
+	}
+	sort.Strings(radarIDs)
+	if len(radarIDs) > 3 {
+		radarIDs = radarIDs[:3]
+	}
+	crossRadar := make([]orchestration.RadarQCContextInput, 0, len(radarIDs))
+	for _, radarID := range radarIDs {
+		candidate := crossByRadar[radarID]
+		crossRadar = append(crossRadar, orchestration.RadarQCContextInput{
+			RadarID: candidate.RadarID, InputURI: *candidate.NormalizedURI,
+		})
+	}
+	return temporal, crossRadar
 }
 
 func radarGrid(

@@ -21,11 +21,32 @@
         "scan_id": { "type": "string", "format": "uuid" },
         "radar_id": { "type": "string", "minLength": 1 },
         "input_uri": { "type": "string", "format": "uri" },
+        "temporal_context": {
+          "type": "array",
+          "maxItems": 3,
+          "items": { "$ref": "#/$defs/context_input" }
+        },
+        "cross_radar_context": {
+          "type": "array",
+          "maxItems": 3,
+          "items": { "$ref": "#/$defs/context_input" }
+        },
         "output_prefix": { "type": "string", "format": "uri" },
         "radar_config_version": { "type": "string", "minLength": 1 },
         "qc_profile": { "type": "string", "minLength": 1 },
         "qc_pipeline_version": { "type": "string", "minLength": 1 },
         "flag_definition_version": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "$defs": {
+    "context_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["radar_id", "input_uri"],
+      "properties": {
+        "radar_id": { "type": "string", "minLength": 1 },
+        "input_uri": { "type": "string", "format": "uri" }
       }
     }
   }

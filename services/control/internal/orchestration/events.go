@@ -131,14 +131,24 @@ type RadarQCRequested struct {
 }
 
 type RadarQCRequestedPayload struct {
-	ScanID                uuid.UUID `json:"scan_id"`
-	RadarID               string    `json:"radar_id"`
-	InputURI              string    `json:"input_uri"`
-	OutputPrefix          string    `json:"output_prefix"`
-	RadarConfig           string    `json:"radar_config_version"`
-	QCProfile             string    `json:"qc_profile"`
-	QCPipelineVersion     string    `json:"qc_pipeline_version"`
-	FlagDefinitionVersion string    `json:"flag_definition_version"`
+	ScanID                uuid.UUID             `json:"scan_id"`
+	RadarID               string                `json:"radar_id"`
+	InputURI              string                `json:"input_uri"`
+	TemporalContext       []RadarQCContextInput `json:"temporal_context,omitempty"`
+	CrossRadarContext     []RadarQCContextInput `json:"cross_radar_context,omitempty"`
+	OutputPrefix          string                `json:"output_prefix"`
+	RadarConfig           string                `json:"radar_config_version"`
+	QCProfile             string                `json:"qc_profile"`
+	QCPipelineVersion     string                `json:"qc_pipeline_version"`
+	FlagDefinitionVersion string                `json:"flag_definition_version"`
+}
+
+// RadarQCContextInput identifies an immutable normalized volume selected by
+// the control plane for time or neighbouring-radar evidence.  The worker
+// validates each artifact before use and treats unavailable context as absent.
+type RadarQCContextInput struct {
+	RadarID  string `json:"radar_id"`
+	InputURI string `json:"input_uri"`
 }
 
 type RadarGridRequested struct {
