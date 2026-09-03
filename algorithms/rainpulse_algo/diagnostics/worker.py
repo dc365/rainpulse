@@ -14,6 +14,7 @@ from rainpulse_algo.worker.object_store import (
 )
 from rainpulse_algo.worker.runtime import WorkerResult
 
+from .point_index import attach_analysis_point_index
 from .profile import DiagnosticConfigError, DiagnosticProfile, load_diagnostic_profile
 from .renderer import build_diagnostic_bundle, validate_diagnostic_bundle
 
@@ -46,6 +47,7 @@ def _execute_analysis_diagnostics(
         profile=profile,
         flag_definitions=flag_definitions,
     )
+    objects = attach_analysis_point_index(objects, analysis_objects)
     validation = validate_diagnostic_bundle(objects)
     manifest = validation["manifest"]
     return WorkerResult(
@@ -57,6 +59,7 @@ def _execute_analysis_diagnostics(
             "layer_count": float(validation["layer_count"]),
             "grid_layer_count": float(validation["grid_layer_count"]),
             "radar_count": float(validation["radar_count"]),
+            "point_query_count": 1.0,
         },
     )
 

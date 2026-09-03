@@ -64,10 +64,15 @@ func main() {
 		"RAINPULSE_ALGORITHM_VERIFICATION_ROOT",
 		"/var/lib/rainpulse/algorithm-verification",
 	))
-	ensembleProducts := ensembleproductstore.NewFileStore(environmentOrDefault(
+	ensembleRoot := environmentOrDefault(
 		"RAINPULSE_ENSEMBLE_PRODUCT_ROOT",
 		"/var/lib/rainpulse/ensemble-products",
-	))
+	)
+	nowcastNetRoot := environmentOrDefault(
+		"RAINPULSE_NOWCASTNET_PRODUCT_ROOT",
+		"/var/lib/rainpulse/nowcastnet-products",
+	)
+	ensembleProducts := ensembleproductstore.NewFileStore(ensembleRoot)
 	alertReader, err := alerting.NewClient(
 		environmentOrDefault("RAINPULSE_PROMETHEUS_URL", "http://prometheus:9090"),
 		environmentOrDefault("RAINPULSE_ALERTMANAGER_URL", "http://alertmanager:9093"),
@@ -78,9 +83,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	adminToken := os.Getenv("RAINPULSE_ADMIN_TOKEN")
 	coreHandler := api.NewHandler(api.Options{
 		Version:              version,
-		AdminToken:           os.Getenv("RAINPULSE_ADMIN_TOKEN"),
+		AdminToken:           adminToken,
 		Runs:                 store,
 		Observations:         store,
 		Commands:             commands,
@@ -95,8 +101,12 @@ func main() {
 		OperationalIssues:    store,
 	})
 	server := &http.Server{
-		Addr:              address,
-		Handler:           workspace.NewCachedHandler(coreHandler),
+		Addr: address,
+		Handler: workspace.NewRuntimeHandler(coreHandler, workspace.RuntimeOptions{
+			Store: store, ProjectionStore: store, Objects: diagnosticLayers,
+			EnsembleRoot: ensembleRoot, NowcastNetRoot: nowcastNetRoot,
+			AdminToken: adminToken,
+		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      0,
