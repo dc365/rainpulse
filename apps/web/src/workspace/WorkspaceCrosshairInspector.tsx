@@ -30,6 +30,8 @@ export function WorkspaceCrosshairInspector() {
       const detail = (event as CustomEvent<MapProbeDetail>).detail
       if (!detail) return
       setProbe(detail)
+      setSample(null)
+      setStatus(detail.assetUrl ? 'idle' : 'unavailable')
       shell?.style.setProperty('--rp-crosshair-x', `${detail.xRatio * 100}%`)
       shell?.style.setProperty('--rp-crosshair-y', `${detail.yRatio * 100}%`)
       shell?.setAttribute('data-crosshair-visible', 'true')
@@ -50,11 +52,8 @@ export function WorkspaceCrosshairInspector() {
   }, [])
 
   useEffect(() => {
-    if (!probe?.assetUrl) {
-      setSample(null)
-      setStatus(probe ? 'unavailable' : 'idle')
-      return
-    }
+    if (!probe?.assetUrl) return
+
     const current = ++sequence.current
     const controller = new AbortController()
     const timer = window.setTimeout(() => {
