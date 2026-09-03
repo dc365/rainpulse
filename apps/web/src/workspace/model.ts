@@ -17,6 +17,7 @@ export type CycleSummary = {
   analysis_id?: string
   run_id?: string
   ensemble_bundle_id?: string
+  nowcastnet_bundle_id?: string
 }
 
 export type CycleList = {
@@ -162,7 +163,9 @@ export function panelsForPreset(
     .map((panelID) => panelByID(detail, panelID))
     .filter((panel): panel is WorkspacePanel => panel != null)
   if (selected.length >= 2) return selected.slice(0, 4)
-  return detail.panels.filter((panel) => panel.role === 'qc' || panel.panel_id === 'qpe').slice(0, 4)
+  return detail.panels
+    .filter((panel) => panel.role === 'qc' || panel.panel_id === 'qpe')
+    .slice(0, 4)
 }
 
 export function frameAt(panel: WorkspacePanel, validTime: string | null) {

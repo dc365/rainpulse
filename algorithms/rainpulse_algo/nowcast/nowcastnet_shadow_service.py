@@ -4,6 +4,7 @@ import json
 import os
 import signal
 import threading
+from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -17,6 +18,7 @@ import numpy as np
 
 from .nowcastnet_shadow import (
     NowcastNetShadowProfile,
+    cadence_aligned,
     load_nowcastnet_shadow_profile,
     prepare_shadow_input,
     required_frame_times,
@@ -48,6 +50,8 @@ class ShadowProbeStatus:
     frame_count: int
     common_valid_ratio: float
     roi: dict[str, int]
+    issue_cadence_minutes: int
+    input_timestep_minutes: int
     inference_enabled: bool
     spatial_shape_validated: bool
     product_publication_enabled: bool = False
@@ -55,6 +59,44 @@ class ShadowProbeStatus:
 
 
 FrameLoader = Callable[[AnalysisReference], tuple[np.ndarray, np.ndarray]]
+
+
+class AnalysisFrameCache:
+    """Bounded immutable frame cache shared across consecutive probe cycles."""
+
+    def __init__(self, maximum_entries: int = 32) -> None:
+        if maximum_entries < 1:
+            raise ValueError("analysis frame cache size must be positive")
+        self._maximum_entries = maximum_entries
+        self._values: OrderedDict[
+            tuple[str, str], tuple[np.ndarray, np.ndarray]
+        ] = OrderedDict()
+
+    def load(
+        self,
+        reference: AnalysisReference,
+        loader: FrameLoader,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        key = (reference.analysis_id, reference.analysis_uri)
+        existing = self._values.get(key)
+        if existing is not None:
+            self._values.move_to_end(key)
+            return existing
+        rate, valid = loader(reference)
+        rate_value = np.ascontiguousarray(rate, dtype="float32")
+        valid_value = np.ascontiguousarray(valid, dtype="uint8")
+        rate_value.setflags(write=False)
+        valid_value.setflags(write=False)
+        value = (rate_value, valid_value)
+        self._values[key] = value
+        self._values.move_to_end(key)
+        while len(self._values) > self._maximum_entries:
+            self._values.popitem(last=False)
+        return value
+
+    @property
+    def size(self) -> int:
+        return len(self._values)
 
 
 class StatusStore:
@@ -71,7 +113,11 @@ class StatusStore:
             return self._value
 
 
-def parse_analysis_catalog(payload: Any, *, grid_id: str) -> list[AnalysisReference]:
+def parse_analysis_catalog(
+    payload: Any,
+    *,
+    grid_id: str,
+) -> list[AnalysisReference]:
     if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
         raise ShadowProbeError("analysis catalog payload is invalid")
     references: list[AnalysisReference] = []
@@ -113,9 +159,10 @@ def select_latest_complete_sequence(
         (
             item.analysis_time
             for item in references
-            if item.analysis_time.second == 0
-            and item.analysis_time.microsecond == 0
-            and item.analysis_time.minute % profile.timestep_minutes == 0
+            if cadence_aligned(
+                item.analysis_time,
+                profile.issue_cadence_minutes,
+            )
         ),
         reverse=True,
     )
@@ -124,6 +171,7 @@ def select_latest_complete_sequence(
             issue_time,
             input_frames=profile.input_frames,
             timestep_minutes=profile.timestep_minutes,
+            issue_cadence_minutes=profile.issue_cadence_minutes,
         )
         if all(value in by_time for value in required):
             return issue_time, [by_time[value] for value in required]
@@ -138,13 +186,22 @@ def probe_sequence(
     checked_at: datetime | None = None,
 ) -> ShadowProbeStatus:
     now = (checked_at or datetime.now(UTC)).astimezone(UTC)
-    issue_time, selected = select_latest_complete_sequence(references, profile=profile)
+    issue_time, selected = select_latest_complete_sequence(
+        references,
+        profile=profile,
+    )
     if issue_time is None:
-        return _status(profile, now, status="waiting", reason="no_analysis_cycle")
+        return _status(
+            profile,
+            now,
+            status="waiting",
+            reason="no_analysis_cycle",
+        )
     required = required_frame_times(
         issue_time,
         input_frames=profile.input_frames,
         timestep_minutes=profile.timestep_minutes,
+        issue_cadence_minutes=profile.issue_cadence_minutes,
     )
     if not selected:
         return _status(
@@ -163,7 +220,9 @@ def probe_sequence(
         rates.append(np.asarray(rate, dtype="float32"))
         masks.append(np.asarray(valid, dtype="uint8"))
     shape = rates[0].shape
-    if any(rate.shape != shape for rate in rates) or any(mask.shape != shape for mask in masks):
+    if any(rate.shape != shape for rate in rates) or any(
+        mask.shape != shape for mask in masks
+    ):
         return _status(
             profile,
             now,
@@ -201,7 +260,9 @@ def load_analysis_frame(
     import zarr
     from zarr.storage import MemoryStore
 
-    from rainpulse_algo.radar.analysis_zarr import validate_radar_analysis_zarr_store
+    from rainpulse_algo.radar.analysis_zarr import (
+        validate_radar_analysis_zarr_store,
+    )
 
     objects = reader.load(reference.analysis_uri)
     validate_radar_analysis_zarr_store(objects)
@@ -209,7 +270,9 @@ def load_analysis_frame(
     store.update({key: bytes(value) for key, value in objects.items()})
     root = zarr.open_group(store=store, mode="r")
     if root.attrs.get("analysis_id") != reference.analysis_id:
-        raise ShadowProbeError("RadarAnalysis identity differs from the catalog")
+        raise ShadowProbeError(
+            "RadarAnalysis identity differs from the catalog"
+        )
     if root.attrs.get("grid_id") != reference.grid_id:
         raise ShadowProbeError("RadarAnalysis grid differs from the catalog")
     if _parse_time(root.attrs.get("analysis_time")) != reference.analysis_time:
@@ -226,7 +289,9 @@ def fetch_catalog(url: str, *, timeout_seconds: float = 5.0) -> Any:
         # The URL comes from a deployment-only internal service setting.
         with urlopen(request, timeout=timeout_seconds) as response:
             if response.status != 200:
-                raise ShadowProbeError(f"analysis catalog returned HTTP {response.status}")
+                raise ShadowProbeError(
+                    f"analysis catalog returned HTTP {response.status}"
+                )
             return json.load(response)
     except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
         raise ShadowProbeError(f"cannot read analysis catalog: {exc}") from exc
@@ -246,15 +311,29 @@ def run_probe_loop(
     )
 
     reader = ArtifactObjectReader(minio_client_from_environment())
+    cache_size = int(
+        os.getenv("RAINPULSE_NOWCASTNET_SHADOW_FRAME_CACHE_SIZE", "32")
+    )
+    if cache_size < profile.input_frames or cache_size > 512:
+        raise ShadowProbeError(
+            "shadow frame cache size must be between input frame count and 512"
+        )
+    frame_cache = AnalysisFrameCache(cache_size)
     while not stop_event.is_set():
         checked_at = datetime.now(UTC)
         try:
             catalog = fetch_catalog(catalog_url)
-            references = parse_analysis_catalog(catalog, grid_id=profile.grid_id)
+            references = parse_analysis_catalog(
+                catalog,
+                grid_id=profile.grid_id,
+            )
             status = probe_sequence(
                 references,
                 profile=profile,
-                loader=lambda reference: load_analysis_frame(reader, reference),
+                loader=lambda reference: frame_cache.load(
+                    reference,
+                    lambda item: load_analysis_frame(reader, item),
+                ),
                 checked_at=checked_at,
             )
         except Exception as exc:  # noqa: BLE001 - normalize the service boundary
@@ -268,13 +347,19 @@ def run_probe_loop(
         stop_event.wait(interval_seconds)
 
 
-def serve_status(store: StatusStore, address: tuple[str, int]) -> ThreadingHTTPServer:
+def serve_status(
+    store: StatusStore,
+    address: tuple[str, int],
+) -> ThreadingHTTPServer:
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802 - stdlib hook
             if self.path not in {"/healthz", "/status"}:
                 self.send_error(404)
                 return
-            payload = json.dumps(asdict(store.value()), separators=(",", ":")).encode()
+            payload = json.dumps(
+                asdict(store.value()),
+                separators=(",", ":"),
+            ).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(payload)))
@@ -297,12 +382,26 @@ def main() -> None:
         "RAINPULSE_ANALYSIS_CATALOG_URL",
         "http://api:8080/api/v1/analysis-cycles?status=ANALYSIS_READY&limit=200",
     )
-    interval = float(os.getenv("RAINPULSE_NOWCASTNET_SHADOW_INTERVAL_SECONDS", "30"))
+    interval = float(
+        os.getenv("RAINPULSE_NOWCASTNET_SHADOW_INTERVAL_SECONDS", "30")
+    )
     if interval < 5 or interval > 300:
-        raise ShadowProbeError("shadow probe interval must be between 5 and 300 seconds")
-    host = os.getenv("RAINPULSE_NOWCASTNET_SHADOW_STATUS_HOST", "0.0.0.0")
-    port = int(os.getenv("RAINPULSE_NOWCASTNET_SHADOW_STATUS_PORT", "8094"))
-    initial = _status(profile, datetime.now(UTC), status="starting", reason=None)
+        raise ShadowProbeError(
+            "shadow probe interval must be between 5 and 300 seconds"
+        )
+    host = os.getenv(
+        "RAINPULSE_NOWCASTNET_SHADOW_STATUS_HOST",
+        "0.0.0.0",
+    )
+    port = int(
+        os.getenv("RAINPULSE_NOWCASTNET_SHADOW_STATUS_PORT", "8094")
+    )
+    initial = _status(
+        profile,
+        datetime.now(UTC),
+        status="starting",
+        reason=None,
+    )
     store = StatusStore(initial)
     server = serve_status(store, (host, port))
     stop_event = threading.Event()
@@ -344,8 +443,14 @@ def _status(
         profile_version=profile.profile_version,
         grid_id=profile.grid_id,
         grid_config_version=profile.grid_config_version,
-        issue_time=issue_time.astimezone(UTC).isoformat() if issue_time else None,
-        required_frame_times=tuple(value.astimezone(UTC).isoformat() for value in required),
+        issue_time=(
+            issue_time.astimezone(UTC).isoformat()
+            if issue_time
+            else None
+        ),
+        required_frame_times=tuple(
+            value.astimezone(UTC).isoformat() for value in required
+        ),
         frame_count=frame_count,
         common_valid_ratio=common_valid_ratio,
         roi={
@@ -354,8 +459,12 @@ def _status(
             "height": roi.height,
             "width": roi.width,
         },
+        issue_cadence_minutes=profile.issue_cadence_minutes,
+        input_timestep_minutes=profile.timestep_minutes,
         inference_enabled=profile.activation.inference_enabled,
-        spatial_shape_validated=profile.activation.spatial_shape_validated,
+        spatial_shape_validated=(
+            profile.activation.spatial_shape_validated
+        ),
     )
 
 

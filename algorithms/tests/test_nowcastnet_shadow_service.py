@@ -10,6 +10,7 @@ from rainpulse_algo.nowcast.nowcastnet_shadow import (
     ShadowActivation,
 )
 from rainpulse_algo.nowcast.nowcastnet_shadow_service import (
+    AnalysisFrameCache,
     AnalysisReference,
     parse_analysis_catalog,
     probe_sequence,
@@ -24,6 +25,7 @@ def profile() -> NowcastNetShadowProfile:
         grid_id="fuzhou_118_123_25_27_0p01deg_v1",
         grid_config_version="fuzhou-grid-0p01deg-v1",
         input_frames=9,
+        issue_cadence_minutes=5,
         timestep_minutes=10,
         output_lead_minutes=tuple(range(10, 121, 10)),
         missing_policy="reject_any_missing",
@@ -39,8 +41,12 @@ def profile() -> NowcastNetShadowProfile:
     )
 
 
-def references(*, missing_minutes: set[int] | None = None) -> list[AnalysisReference]:
-    issue = datetime(2026, 9, 1, 2, 0, tzinfo=UTC)
+def references(
+    *,
+    issue: datetime | None = None,
+    missing_minutes: set[int] | None = None,
+) -> list[AnalysisReference]:
+    issue = issue or datetime(2026, 9, 1, 2, 0, tzinfo=UTC)
     missing = missing_minutes or set()
     result = []
     for offset in range(0, 85, 5):
@@ -59,10 +65,37 @@ def references(*, missing_minutes: set[int] | None = None) -> list[AnalysisRefer
 
 
 def test_selects_latest_nine_exact_ten_minute_frames() -> None:
-    issue, selected = select_latest_complete_sequence(references(), profile=profile())
+    issue, selected = select_latest_complete_sequence(
+        references(),
+        profile=profile(),
+    )
     assert issue == datetime(2026, 9, 1, 2, 0, tzinfo=UTC)
     assert len(selected) == 9
-    assert [item.analysis_time.minute for item in selected] == [40, 50, 0, 10, 20, 30, 40, 50, 0]
+    assert [item.analysis_time.minute for item in selected] == [
+        40,
+        50,
+        0,
+        10,
+        20,
+        30,
+        40,
+        50,
+        0,
+    ]
+
+
+def test_selects_five_minute_issue_without_changing_input_stride() -> None:
+    expected = datetime(2026, 9, 1, 2, 5, tzinfo=UTC)
+    issue, selected = select_latest_complete_sequence(
+        references(issue=expected),
+        profile=profile(),
+    )
+    assert issue == expected
+    assert selected[-1].analysis_time == expected
+    assert all(
+        right.analysis_time - left.analysis_time == timedelta(minutes=10)
+        for left, right in zip(selected[:-1], selected[1:], strict=True)
+    )
 
 
 def test_missing_required_frame_stays_ineligible() -> None:
@@ -93,6 +126,36 @@ def test_complete_input_reports_shape_validation_gate() -> None:
     assert status.reason == "spatial_shape_not_validated"
     assert status.frame_count == 9
     assert status.common_valid_ratio == 1
+    assert status.issue_cadence_minutes == 5
+    assert status.input_timestep_minutes == 10
+
+
+def test_frame_cache_reuses_unchanged_analysis_and_evicts_oldest() -> None:
+    calls: list[str] = []
+    cache = AnalysisFrameCache(maximum_entries=2)
+    items = references()[:3]
+
+    def loader(reference: AnalysisReference) -> tuple[np.ndarray, np.ndarray]:
+        calls.append(reference.analysis_id)
+        return (
+            np.ones((2, 3), dtype="float32"),
+            np.ones((2, 3), dtype="uint8"),
+        )
+
+    first = cache.load(items[0], loader)
+    repeated = cache.load(items[0], loader)
+    assert first is repeated
+    assert calls == [items[0].analysis_id]
+    cache.load(items[1], loader)
+    cache.load(items[2], loader)
+    assert cache.size == 2
+    cache.load(items[0], loader)
+    assert calls == [
+        items[0].analysis_id,
+        items[1].analysis_id,
+        items[2].analysis_id,
+        items[0].analysis_id,
+    ]
 
 
 def test_catalog_rejects_other_grids_and_duplicate_times() -> None:
@@ -119,6 +182,7 @@ def test_catalog_rejects_other_grids_and_duplicate_times() -> None:
         ]
     }
     parsed = parse_analysis_catalog(
-        payload, grid_id="fuzhou_118_123_25_27_0p01deg_v1"
+        payload,
+        grid_id="fuzhou_118_123_25_27_0p01deg_v1",
     )
     assert [item.analysis_id for item in parsed] == ["a"]

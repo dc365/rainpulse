@@ -96,7 +96,7 @@ func main() {
 	})
 	server := &http.Server{
 		Addr:              address,
-		Handler:           workspace.NewHandler(coreHandler),
+		Handler:           workspace.NewCachedHandler(coreHandler),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      0,

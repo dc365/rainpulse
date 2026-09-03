@@ -8,6 +8,7 @@ issue_time=${REGEN_ISSUE_TIME:-}
 input_uri=${REGEN_INPUT_URI:-}
 reason=${REGEN_REASON:-manual algorithm validation}
 api_url=${REGEN_API_URL:-http://127.0.0.1:8080/api/v1}
+keep_versions=${RAINPULSE_DERIVED_PRODUCT_KEEP_VERSIONS:-2}
 
 usage() {
   printf '%s\n' \
@@ -15,7 +16,8 @@ usage() {
     '  primary presets require REGEN_RUN_ID and RAINPULSE_ADMIN_TOKEN' \
     '  pysteps-steps requires REGEN_INPUT_URI and REGEN_ISSUE_TIME' \
     '  nowcastnet requires REGEN_ISSUE_TIME' \
-    '  forecast-all requires all of the above'
+    '  forecast-all requires all of the above' \
+    '  file products retain current + previous by default; override with RAINPULSE_DERIVED_PRODUCT_KEEP_VERSIONS'
 }
 
 require_value() {
@@ -86,36 +88,46 @@ PY
 run_steps() {
   require_value REGEN_INPUT_URI "$input_uri"
   require_value REGEN_ISSUE_TIME "$issue_time"
+  local output_root=${REGEN_STEPS_OUTPUT_ROOT:-runtime/products/ensemble}
   (
     cd "$repository_root"
-    uv run --project algorithms python scripts/backfill_historical_steps.py \
-      --input-uri "$input_uri" \
-      --issue-time "$issue_time" \
-      --force \
-      --output-root "${REGEN_STEPS_OUTPUT_ROOT:-runtime/products/ensemble}" \
-      --grid-config "${REGEN_GRID_CONFIG:-configs/grids/fuzhou-0p01deg-v1.yaml}" \
-      --lk-config "${REGEN_LK_CONFIG:-configs/nowcast/rp016-pysteps-lk-v1.yaml}" \
-      --steps-config "${REGEN_STEPS_CONFIG:-configs/nowcast/rp022-pysteps-steps-v1.yaml}" \
-      --product-config "${REGEN_ENSEMBLE_PRODUCT_CONFIG:-configs/products/rp023-ensemble-application-products-v1.yaml}"
+    python3 scripts/run_retained_product_generator.py \
+      --output-root "$output_root" \
+      --keep-versions "$keep_versions" \
+      -- \
+      uv run --project algorithms python scripts/backfill_historical_steps.py \
+        --input-uri "$input_uri" \
+        --issue-time "$issue_time" \
+        --force \
+        --output-root '{staging_root}' \
+        --grid-config "${REGEN_GRID_CONFIG:-configs/grids/fuzhou-0p01deg-v1.yaml}" \
+        --lk-config "${REGEN_LK_CONFIG:-configs/nowcast/rp016-pysteps-lk-v1.yaml}" \
+        --steps-config "${REGEN_STEPS_CONFIG:-configs/nowcast/rp022-pysteps-steps-v1.yaml}" \
+        --product-config "${REGEN_ENSEMBLE_PRODUCT_CONFIG:-configs/products/rp023-ensemble-application-products-v1.yaml}"
   )
 }
 
 run_nowcastnet() {
   require_value REGEN_ISSUE_TIME "$issue_time"
   local python_binary=${REGEN_NOWCASTNET_PYTHON:-$repository_root/runtime/nowcastnet/venv/bin/python}
+  local output_root=${REGEN_NOWCASTNET_OUTPUT_ROOT:-$repository_root/runtime/products/nowcastnet}
   if [[ ! -x "$python_binary" ]]; then
     printf 'NowcastNet Python is not executable: %s\n' "$python_binary" >&2
     exit 2
   fi
-  "$python_binary" "$repository_root/scripts/backfill_fujian_nowcastnet_shadow.py" \
-    --catalog-url "${REGEN_ANALYSIS_CATALOG_URL:-http://127.0.0.1:8080/api/v1/analysis-cycles?status=ANALYSIS_READY&limit=200}" \
-    --output-root "${REGEN_NOWCASTNET_OUTPUT_ROOT:-$repository_root/runtime/products/nowcastnet}" \
-    --grid-config "${REGEN_GRID_CONFIG:-$repository_root/configs/grids/fuzhou-0p01deg-v1.yaml}" \
-    --model-config "${REGEN_NOWCASTNET_CONFIG:-$repository_root/configs/nowcast/rp026-nowcastnet-offline-v1.yaml}" \
-    --product-config "${REGEN_PRODUCT_CONFIG:-$repository_root/configs/products/rp015-application-products-v1.yaml}" \
-    --capsule-root "${REGEN_NOWCASTNET_CAPSULE_ROOT:-/opt/rainpulse/nowcastnet/official-v1}" \
-    --device "${REGEN_NOWCASTNET_DEVICE:-cuda:0}" \
-    --issue-time "$issue_time"
+  "$python_binary" "$repository_root/scripts/run_retained_product_generator.py" \
+    --output-root "$output_root" \
+    --keep-versions "$keep_versions" \
+    -- \
+    "$python_binary" "$repository_root/scripts/backfill_fujian_nowcastnet_shadow_5min.py" \
+      --catalog-url "${REGEN_ANALYSIS_CATALOG_URL:-http://127.0.0.1:8080/api/v1/analysis-cycles?status=ANALYSIS_READY&limit=200}" \
+      --output-root '{staging_root}' \
+      --grid-config "${REGEN_GRID_CONFIG:-$repository_root/configs/grids/fuzhou-0p01deg-v1.yaml}" \
+      --model-config "${REGEN_NOWCASTNET_CONFIG:-$repository_root/configs/nowcast/rp026-nowcastnet-offline-v1.yaml}" \
+      --product-config "${REGEN_PRODUCT_CONFIG:-$repository_root/configs/products/rp015-application-products-v1.yaml}" \
+      --capsule-root "${REGEN_NOWCASTNET_CAPSULE_ROOT:-/opt/rainpulse/nowcastnet/official-v1}" \
+      --device "${REGEN_NOWCASTNET_DEVICE:-cuda:0}" \
+      --issue-time "$issue_time"
 }
 
 case "$preset" in
