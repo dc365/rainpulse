@@ -114,6 +114,13 @@ GENERATIVE_FULL_PARENT_REHEARSAL_EVIDENCE_PATH = (
     / "evidence"
     / "nowcastnet-generative-full-parent-rehearsal-v1.json"
 )
+GENERATIVE_FORMAL_APPROVAL_EVIDENCE_PATH = (
+    REPOSITORY_ROOT
+    / "configs"
+    / "training"
+    / "evidence"
+    / "nowcastnet-generative-formal-training-approval-v1.json"
+)
 
 
 def _sha256(path: Path) -> str:
@@ -492,6 +499,35 @@ def test_generative_parent_promotion_and_rehearsal_keep_formal_training_closed()
     runbook = NIGHTLY_RUNBOOK_PATH.read_text()
     assert "Qwen3.8 和 Qwen3.6" in runbook
     assert "5 分钟或 1,000 步" in runbook
+
+
+def test_generative_formal_approval_starts_only_the_first_window() -> None:
+    evidence = json.loads(GENERATIVE_FORMAL_APPROVAL_EVIDENCE_PATH.read_text())
+
+    assert evidence["status"] == "passed"
+    assert evidence["identity"]["holdout_windows_processed"] == 0
+    assert evidence["promotion"]["checkpoint_global_step"] == 1000
+    assert evidence["promotion"]["checkpoint_cpu_readback_verified"] is True
+    assert evidence["promotion"]["checkpoint_state_fingerprints_verified"] is True
+    assert evidence["durable_runtime"]["training_artifacts_outside_deployment_tree"] is True
+    assert evidence["durable_runtime"]["parent_checkpoint_hash_verified_after_copy"] is True
+    assert evidence["resource_protocol"]["qwen3_6_managed_by_user_systemd"] is True
+    assert evidence["resource_protocol"]["qwen3_8_managed_by_user_systemd"] is True
+    assert evidence["resource_protocol"]["vllm_stopped"] is False
+    assert evidence["preflight"]["status"] == "passed"
+    assert evidence["schedule"]["window_id"] == "window-0001"
+    assert evidence["schedule"]["stop_timer_enabled"] is True
+    assert evidence["schedule"]["automatic_next_window_start_enabled"] is False
+    assert evidence["schedule"]["hourly_monitoring_enabled"] is True
+    assert evidence["decision"] == {
+        "rehearsal_checkpoint_promoted": True,
+        "formal_generative_training_approved": True,
+        "formal_generative_training_started": True,
+        "automatic_second_window_approved": False,
+        "independent_holdout_opened": False,
+        "next_gate": ("validate_window_0001_and_approve_a_new_one_time_permit_for_window_0002"),
+    }
+    assert evidence["operational_eligible"] is False
 
 
 def test_generative_training_uses_full_dataset_identity(monkeypatch: pytest.MonkeyPatch) -> None:

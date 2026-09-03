@@ -1,0 +1,103 @@
+{
+  "schema_version": "1.0",
+  "status": "passed",
+  "measured_at": "2026-09-03T23:39:28+08:00",
+  "scope": "approve_and_start_the_first_formal_generative_training_window",
+  "identity": {
+    "training_code_revision": "3c7c9a1ec9249f54cd72a5ea3de9727e6c26e215",
+    "generative_profile_sha256": "e33cd36ad4c61cedfbb76dd9d52e821513f6916b6dc3fef68b0352a6bf071fdb",
+    "evolution_profile_sha256": "874775edd697ee4771e1302e3d62c2054cac3f16d112b0ca14f13811bd0920e8",
+    "parent_checkpoint_global_step": 300000,
+    "parent_checkpoint_sha256": "be791c9878e639fc63db3a23609ecb0d2351dfb90c7d533778469665a9032632",
+    "plan_id": "5ce3859f8f914c9cd55ea92a96a5dd860d46e297fff229472843d21e0bc26892",
+    "sample_index_sha256": "e758c938c929020c64e17ea827b05431f08b059c4033fcaa3b27a72ec1decddf",
+    "sample_count": 100000,
+    "shard_count": 4000,
+    "holdout_windows_processed": 0
+  },
+  "promotion": {
+    "rehearsal_evidence_sha256": "db91806aa6ca214d201621f17d817ff487c2f351f42fb2ef9df4908acc933987",
+    "checkpoint_global_step": 1000,
+    "checkpoint_sha256": "d4e09ce0b191f50ac94dc9057a304f5aab092279e4b50f6b353b32f6f5bcc476",
+    "checkpoint_cpu_readback_verified": true,
+    "checkpoint_state_fingerprints_verified": true,
+    "random_state_fingerprint_verified": true,
+    "promoted_as_formal_start": true
+  },
+  "durable_runtime": {
+    "training_artifacts_outside_deployment_tree": true,
+    "training_environment_outside_deployment_tree": true,
+    "pinned_source_outside_deployment_tree": true,
+    "source_checkpoint_copy_retained": true,
+    "copied_file_count": 245,
+    "copied_artifact_bytes_human": "24G",
+    "free_bytes_after_runtime_relocation": 247462797312,
+    "parent_checkpoint_hash_verified_after_copy": true,
+    "generative_checkpoint_hash_verified_after_copy": true,
+    "metrics_hash_verified_after_copy": true,
+    "run_manifest_hash_verified_after_copy": true,
+    "training_report_hash_verified_after_copy": true
+  },
+  "resource_protocol": {
+    "device": "cuda",
+    "gpu_name": "NVIDIA RTX 6000D",
+    "batch_size": 16,
+    "precision": "bf16",
+    "ensemble_members": 4,
+    "minimum_cuda_free_memory_bytes_before_start": 75000000000,
+    "preflight_cuda_free_memory_bytes": 86552608768,
+    "qwen3_6_stopped_for_training": true,
+    "qwen3_8_stopped_for_training": true,
+    "qwen3_6_managed_by_user_systemd": true,
+    "qwen3_8_managed_by_user_systemd": true,
+    "qwen3_8_existing_runtime_parameters_preserved_during_reconciliation": true,
+    "vllm_stopped": false,
+    "other_gpu_services_stopped": false
+  },
+  "preflight": {
+    "status": "passed",
+    "report_sha256": "83e93eb5b55e8b0938be8836fccbd6252e163ac954e6713170dcf58b1d329377",
+    "consumed_permit_sha256": "f825dc2ae62664b4ad280a76b6c7dd8709db7058f5645cfe4cf76989dc253c8d",
+    "repository_clean": true,
+    "dataset_probe_count": 64,
+    "dataset_probe_all_valid": true,
+    "dataset_probe_all_finite": true,
+    "data_output_separated": true,
+    "output_free_bytes": 247461064704,
+    "minimum_output_free_bytes": 100000000000
+  },
+  "schedule": {
+    "timezone": "Asia/Taipei",
+    "window_id": "window-0001",
+    "started_at": "2026-09-03T15:38:47+00:00",
+    "planned_stop_local_time": "07:45",
+    "stop_timer_enabled": true,
+    "automatic_next_window_start_enabled": false,
+    "per_window_one_time_permit_required": true,
+    "checkpoint_interval_steps": 1000,
+    "checkpoint_interval_seconds": 300,
+    "checkpoint_rolling_keep": 3,
+    "checkpoint_milestone_interval_steps": 10000,
+    "preserve_window_final": true,
+    "hourly_monitoring_enabled": true
+  },
+  "initial_runtime_observation": {
+    "service_state": "active_running",
+    "resume_start_step": 1000,
+    "observed_global_step": 1018,
+    "new_metric_rows": 18,
+    "latest_metric_values_finite": true,
+    "gpu_memory_used_mib": 40632,
+    "gpu_memory_free_mib": 44411,
+    "training_process_count": 1
+  },
+  "decision": {
+    "rehearsal_checkpoint_promoted": true,
+    "formal_generative_training_approved": true,
+    "formal_generative_training_started": true,
+    "automatic_second_window_approved": false,
+    "independent_holdout_opened": false,
+    "next_gate": "validate_window_0001_and_approve_a_new_one_time_permit_for_window_0002"
+  },
+  "operational_eligible": false
+}
