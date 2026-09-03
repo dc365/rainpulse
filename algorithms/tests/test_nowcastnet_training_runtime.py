@@ -121,6 +121,13 @@ GENERATIVE_FORMAL_APPROVAL_EVIDENCE_PATH = (
     / "evidence"
     / "nowcastnet-generative-formal-training-approval-v1.json"
 )
+GENERATIVE_FIRST_FORMAL_WINDOW_EVIDENCE_PATH = (
+    REPOSITORY_ROOT
+    / "configs"
+    / "training"
+    / "evidence"
+    / "nowcastnet-generative-first-formal-window-v1.json"
+)
 
 
 def _sha256(path: Path) -> str:
@@ -526,6 +533,55 @@ def test_generative_formal_approval_starts_only_the_first_window() -> None:
         "automatic_second_window_approved": False,
         "independent_holdout_opened": False,
         "next_gate": ("validate_window_0001_and_approve_a_new_one_time_permit_for_window_0002"),
+    }
+    assert evidence["operational_eligible"] is False
+
+
+def test_generative_first_formal_window_acceptance_keeps_second_window_closed() -> None:
+    evidence = json.loads(GENERATIVE_FIRST_FORMAL_WINDOW_EVIDENCE_PATH.read_text())
+    window = evidence["window"]
+
+    assert evidence["status"] == "passed"
+    assert evidence["identity"]["holdout_windows_processed"] == 0
+    assert window["start_step"] == 1000
+    assert window["end_step"] == 14725
+    assert window["completed_steps"] == 13725
+    assert window["target_step"] == 500000
+    assert window["checkpoint_interval_seconds"] == 300
+    assert window["checkpoint_state_exact_on_resume"] is True
+    assert window["random_state_exact_on_resume"] is True
+    assert evidence["metrics"]["total_rows"] == 14725
+    assert evidence["metrics"]["invocation_rows"] == 13725
+    assert evidence["metrics"]["global_steps_contiguous"] is True
+    assert evidence["metrics"]["all_required_values_finite"] is True
+    assert evidence["output_checkpoint"]["global_step"] == 14725
+    assert evidence["output_checkpoint"]["hash_verified"] is True
+    assert evidence["output_checkpoint"]["cpu_readback_verified"] is True
+    assert evidence["output_checkpoint"]["state_fingerprints_verified"] is True
+    assert evidence["output_checkpoint"]["random_state_fingerprint_verified"] is True
+    assert evidence["output_checkpoint"]["retained_steps"] == [
+        293,
+        1000,
+        10000,
+        14498,
+        14662,
+        14725,
+    ]
+    assert evidence["reports"]["window_report_status"] == "stopped"
+    assert evidence["shared_services"]["qwen3_6_recovery"].startswith("passed")
+    assert evidence["shared_services"]["qwen3_8_recovery"] == "passed"
+    assert evidence["shared_services"]["vllm_stopped"] is False
+    assert evidence["shared_services"]["training_processes_remaining"] == 0
+    assert evidence["scheduler_lifecycle"]["stop_timer_disabled_after_acceptance"] is True
+    assert evidence["scheduler_lifecycle"]["automatic_next_window_start_enabled"] is False
+    assert evidence["scheduler_lifecycle"]["second_window_start_permit_present"] is False
+    assert evidence["storage"]["sample_storage_rebuild_gate_500gb_currently_met"] is False
+    assert evidence["decision"] == {
+        "first_formal_generative_window_accepted": True,
+        "second_formal_generative_window_approved": False,
+        "independent_holdout_opened": False,
+        "generative_training_complete": False,
+        "next_gate": "review_window_0001_and_approve_a_new_one_time_permit_for_window_0002",
     }
     assert evidence["operational_eligible"] is False
 

@@ -1,0 +1,101 @@
+{
+  "schema_version": "1.0",
+  "status": "passed",
+  "measured_at": "2026-09-03T23:50:00+00:00",
+  "scope": "generative_first_formal_nightly_window_acceptance",
+  "identity": {
+    "training_code_revision": "3c7c9a1ec9249f54cd72a5ea3de9727e6c26e215",
+    "generative_profile_sha256": "e33cd36ad4c61cedfbb76dd9d52e821513f6916b6dc3fef68b0352a6bf071fdb",
+    "evolution_profile_sha256": "874775edd697ee4771e1302e3d62c2054cac3f16d112b0ca14f13811bd0920e8",
+    "parent_checkpoint_global_step": 300000,
+    "parent_checkpoint_sha256": "be791c9878e639fc63db3a23609ecb0d2351dfb90c7d533778469665a9032632",
+    "plan_id": "5ce3859f8f914c9cd55ea92a96a5dd860d46e297fff229472843d21e0bc26892",
+    "sample_index_sha256": "e758c938c929020c64e17ea827b05431f08b059c4033fcaa3b27a72ec1decddf",
+    "sample_count": 100000,
+    "shard_count": 4000,
+    "holdout_windows_processed": 0
+  },
+  "window": {
+    "window_id": "window-0001",
+    "start_step": 1000,
+    "end_step": 14725,
+    "completed_steps": 13725,
+    "target_step": 500000,
+    "remaining_steps": 485275,
+    "started_at": "2026-09-03T15:38:47+00:00",
+    "finished_at": "2026-09-03T23:45:02.282167+00:00",
+    "duration_seconds": 29165.508532864973,
+    "stop_reason": "signal:SIGTERM",
+    "checkpoint_interval_steps": 1000,
+    "checkpoint_interval_seconds": 300,
+    "checkpoint_state_exact_on_resume": true,
+    "random_state_exact_on_resume": true,
+    "peak_allocated_memory_bytes": 38706679296,
+    "peak_reserved_memory_bytes": 39785070592
+  },
+  "metrics": {
+    "total_rows": 14725,
+    "invocation_rows": 13725,
+    "global_steps_contiguous": true,
+    "all_required_values_finite": true,
+    "metrics_sha256": "d21fdc863cfdf6ffd2d0ccca956eaed0bad5e4882e5640a175551577faf3d857",
+    "generator_loss_total": {
+      "minimum": 53.142520904541016,
+      "maximum": 697.3453979492188,
+      "mean": 230.8054867172889,
+      "last": 176.76455688476562
+    }
+  },
+  "output_checkpoint": {
+    "global_step": 14725,
+    "sha256": "089f3dba54ad96db95117b12e5b2a5e56ad758485c4f83c00a526cd580de3639",
+    "hash_verified": true,
+    "cpu_readback_verified": true,
+    "schema_version": "rainpulse.nowcastnet-generative-checkpoint/2.0",
+    "state_fingerprints_verified": true,
+    "random_state_fingerprint_verified": true,
+    "retained_steps": [293, 1000, 10000, 14498, 14662, 14725]
+  },
+  "reports": {
+    "preflight_sha256": "83e93eb5b55e8b0938be8836fccbd6252e163ac954e6713170dcf58b1d329377",
+    "consumed_permit_sha256": "f825dc2ae62664b4ad280a76b6c7dd8709db7058f5645cfe4cf76989dc253c8d",
+    "latest_marker_sha256": "5120b0fcc4730d7d3b06273de710eb5d971f9fcc135940036eb5434fa0517920",
+    "training_report_sha256": "7846ed6037ecac5716673c17c7ee833338e5bef0da91f4251ac783ae98bfcd3f",
+    "window_finals_sha256": "03405dc283062e31972a309530590a61a8fdb639fb15a6254cc5879dcc539562",
+    "window_report_sha256": "7846ed6037ecac5716673c17c7ee833338e5bef0da91f4251ac783ae98bfcd3f",
+    "window_report_status": "stopped",
+    "preflight_identity_verified": true
+  },
+  "shared_services": {
+    "qwen3_6_stopped_for_training": true,
+    "qwen3_8_stopped_for_training": true,
+    "qwen3_6_recovery": "passed_after_retired_working_directory_repair",
+    "qwen3_8_recovery": "passed",
+    "vllm_stopped": false,
+    "other_gpu_services_stopped": false,
+    "training_processes_remaining": 0
+  },
+  "scheduler_lifecycle": {
+    "stop_timer_disabled_after_acceptance": true,
+    "automatic_next_window_start_enabled": false,
+    "second_window_start_permit_present": false,
+    "training_service_state_after_acceptance": "inactive_success"
+  },
+  "storage": {
+    "checkpoint_count": 6,
+    "checkpoint_bytes": 3033514200,
+    "training_output_free_bytes": 242940022784,
+    "sample_storage_free_bytes": 490647715840,
+    "sample_storage_rebuild_gate_500gb_currently_met": false,
+    "raw_data_mutated": false,
+    "samples_mutated": false
+  },
+  "decision": {
+    "first_formal_generative_window_accepted": true,
+    "second_formal_generative_window_approved": false,
+    "independent_holdout_opened": false,
+    "generative_training_complete": false,
+    "next_gate": "review_window_0001_and_approve_a_new_one_time_permit_for_window_0002"
+  },
+  "operational_eligible": false
+}
