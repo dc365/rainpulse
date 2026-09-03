@@ -1,0 +1,127 @@
+.workspace-map-panel { position: relative; }
+
+.workspace-shell[data-crosshair-visible="true"] .workspace-map-panel::before,
+.workspace-shell[data-crosshair-visible="true"] .workspace-map-panel::after {
+  content: "";
+  position: absolute;
+  z-index: 14;
+  pointer-events: none;
+  background: rgba(10, 78, 69, .72);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .55);
+}
+
+.workspace-shell[data-crosshair-visible="true"] .workspace-map-panel::before {
+  left: var(--rp-crosshair-x, 50%);
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.workspace-shell[data-crosshair-visible="true"] .workspace-map-panel::after {
+  top: var(--rp-crosshair-y, 50%);
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+.workspace-exact-probe {
+  position: fixed;
+  z-index: 90;
+  right: 18px;
+  bottom: 126px;
+  min-width: 250px;
+  max-width: min(340px, calc(100vw - 28px));
+  border: 1px solid rgba(27, 85, 76, .28);
+  border-radius: 8px;
+  background: rgba(250, 253, 252, .94);
+  box-shadow: 0 12px 32px rgba(17, 61, 54, .18);
+  backdrop-filter: blur(10px);
+  color: #183d37;
+  padding: 9px 11px;
+  pointer-events: none;
+}
+
+.workspace-exact-probe header,
+.workspace-exact-probe div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.workspace-exact-probe header {
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid rgba(27, 85, 76, .12);
+}
+
+.workspace-exact-probe div { flex-wrap: wrap; }
+.workspace-exact-probe div strong { font: 750 18px/1.1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.workspace-exact-probe small,
+.workspace-exact-probe span { font-size: 11px; color: #52716c; }
+
+.workspace-live-bridge {
+  position: fixed;
+  z-index: 92;
+  right: 10px;
+  top: 10px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #a9b8b5;
+  box-shadow: 0 0 0 2px rgba(255,255,255,.8);
+}
+.workspace-live-bridge[data-connected="true"] { background: #2a9d77; }
+
+.runtime-pipeline-panel {
+  margin: 0 18px 20px;
+  border: 1px solid rgba(29, 82, 74, .18);
+  border-radius: 12px;
+  background: #fbfdfc;
+  padding: 14px;
+  color: #183d37;
+}
+.runtime-pipeline-panel > header,
+.runtime-pipeline-panel > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.runtime-pipeline-panel > header span { font-size: 10px; text-transform: uppercase; letter-spacing: .12em; color: #65817c; }
+.runtime-pipeline-panel > header h2 { margin: 2px 0 0; font-size: 16px; }
+.runtime-pipeline-panel > header small { color: #65817c; }
+.runtime-pipeline-dag {
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+  padding: 14px 2px;
+}
+.runtime-pipeline-stage-wrap { display: flex; align-items: center; flex: 0 0 auto; }
+.runtime-pipeline-edge { width: 18px; height: 1px; background: #9ab1ad; position: relative; }
+.runtime-pipeline-edge::after { content: ""; position: absolute; right: -1px; top: -3px; border-left: 5px solid #9ab1ad; border-top: 3px solid transparent; border-bottom: 3px solid transparent; }
+.runtime-pipeline-stage-wrap article {
+  width: 118px;
+  min-height: 72px;
+  border: 1px solid #c8d7d4;
+  border-radius: 8px;
+  background: white;
+  padding: 8px;
+  display: grid;
+  gap: 3px;
+}
+.runtime-pipeline-stage-wrap article[data-status="succeeded"] { border-color: #77b99d; background: #f4fbf7; }
+.runtime-pipeline-stage-wrap article[data-status="running"] { border-color: #d6a84a; background: #fffaf0; }
+.runtime-pipeline-stage-wrap article[data-status="failed"] { border-color: #c86961; background: #fff5f4; }
+.runtime-pipeline-stage-wrap article[data-status="skipped"] { opacity: .62; }
+.runtime-pipeline-stage-wrap article span { font-size: 9px; color: #65817c; }
+.runtime-pipeline-stage-wrap article strong { font-size: 12px; }
+.runtime-pipeline-stage-wrap article small { font-size: 10px; color: #58736e; }
+.runtime-pipeline-panel > footer { border-top: 1px solid #e0e9e7; padding-top: 10px; font-size: 12px; }
+.runtime-pipeline-panel button { border: 1px solid #b85e56; color: #8d3d37; background: #fff7f6; border-radius: 6px; padding: 6px 10px; }
+.runtime-pipeline-error { color: #a4433b; }
+
+@media (max-width: 760px) {
+  .workspace-exact-probe { right: 8px; bottom: 116px; min-width: 220px; }
+  .runtime-pipeline-panel { margin: 0 8px 14px; }
+}

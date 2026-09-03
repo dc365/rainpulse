@@ -44,9 +44,9 @@ func NewHandler(options Options) (http.Handler, error) {
 			response.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			response.WriteHeader(http.StatusOK)
 			_, _ = response.Write([]byte("ok\n"))
-		case isForecastRegenerationRequest(request):
+		case isAdministrativeMutation(request):
 			if options.AdminToken == "" {
-				http.Error(response, "manual regeneration is unavailable", http.StatusServiceUnavailable)
+				http.Error(response, "administrative mutation is unavailable", http.StatusServiceUnavailable)
 				return
 			}
 			request.Header.Set("Authorization", "Bearer "+options.AdminToken)
@@ -59,6 +59,10 @@ func NewHandler(options Options) (http.Handler, error) {
 			serveSPA(options.WebRoot, response, request)
 		}
 	}), nil
+}
+
+func isAdministrativeMutation(request *http.Request) bool {
+	return isForecastRegenerationRequest(request) || isRegenerationCancellation(request)
 }
 
 func isForecastRegenerationRequest(request *http.Request) bool {
@@ -75,6 +79,23 @@ func isForecastRegenerationRequest(request *http.Request) bool {
 		return false
 	}
 	_, err := uuid.Parse(runID)
+	return err == nil
+}
+
+func isRegenerationCancellation(request *http.Request) bool {
+	if request.Method != http.MethodPost {
+		return false
+	}
+	const prefix = "/api/v1/admin/regenerations/"
+	const suffix = "/cancel"
+	if !strings.HasPrefix(request.URL.Path, prefix) || !strings.HasSuffix(request.URL.Path, suffix) {
+		return false
+	}
+	requestID := strings.TrimSuffix(strings.TrimPrefix(request.URL.Path, prefix), suffix)
+	if strings.Contains(requestID, "/") {
+		return false
+	}
+	_, err := uuid.Parse(requestID)
 	return err == nil
 }
 
