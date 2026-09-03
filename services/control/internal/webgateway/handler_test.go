@@ -83,14 +83,14 @@ func TestPublicGatewayOnlyProxiesBoundedForecastRegeneration(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		upstreamCalls++
 		if request.URL.Path != "/api/v1/admin/runs/0b390d5f-33e7-4ed8-aab9-8568063dc18c/rerun" ||
-			request.Header.Get("Authorization") != "Bearer operator-secret" {
+			request.Header.Get("Authorization") != "Bearer server-operator-secret" {
 			t.Fatalf("unexpected proxied request: path=%q authorization=%q", request.URL.Path, request.Header.Get("Authorization"))
 		}
 		response.WriteHeader(http.StatusAccepted)
 	}))
 	t.Cleanup(upstream.Close)
 	handler, err := webgateway.NewHandler(webgateway.Options{
-		WebRoot: webRoot, APIBaseURL: upstream.URL,
+		WebRoot: webRoot, APIBaseURL: upstream.URL, AdminToken: "server-operator-secret",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -100,7 +100,7 @@ func TestPublicGatewayOnlyProxiesBoundedForecastRegeneration(t *testing.T) {
 		"/api/v1/admin/runs/0b390d5f-33e7-4ed8-aab9-8568063dc18c/rerun",
 		strings.NewReader(`{"preset":"pysteps_lk","reason":"operator validation"}`),
 	)
-	allowed.Header.Set("Authorization", "Bearer operator-secret")
+	allowed.Header.Set("Authorization", "Bearer browser-supplied-token")
 	allowedResponse := httptest.NewRecorder()
 	handler.ServeHTTP(allowedResponse, allowed)
 	if allowedResponse.Code != http.StatusAccepted || upstreamCalls != 1 {
@@ -117,5 +117,30 @@ func TestPublicGatewayOnlyProxiesBoundedForecastRegeneration(t *testing.T) {
 		if response.Code != http.StatusNotFound || upstreamCalls != 1 {
 			t.Fatalf("target=%q response=%d upstream_calls=%d", target, response.Code, upstreamCalls)
 		}
+	}
+}
+
+func TestPublicGatewayRejectsRegenerationWhenServerTokenIsMissing(t *testing.T) {
+	webRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(webRoot, "index.html"), []byte("ok"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	upstreamCalled := false
+	upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		upstreamCalled = true
+	}))
+	t.Cleanup(upstream.Close)
+	handler, err := webgateway.NewHandler(webgateway.Options{WebRoot: webRoot, APIBaseURL: upstream.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/admin/runs/0b390d5f-33e7-4ed8-aab9-8568063dc18c/rerun",
+		nil,
+	))
+	if response.Code != http.StatusServiceUnavailable || upstreamCalled {
+		t.Fatalf("response=%d upstream_called=%t", response.Code, upstreamCalled)
 	}
 }

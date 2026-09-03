@@ -56,3 +56,39 @@ type CreateBundle struct {
 	Job    Job
 	Outbox OutboxEvent
 }
+
+type PipelineRegenerationStatus string
+
+const (
+	PipelineRegenerationPending        PipelineRegenerationStatus = "PENDING"
+	PipelineRegenerationQCRunning      PipelineRegenerationStatus = "QC_RUNNING"
+	PipelineRegenerationGridRunning    PipelineRegenerationStatus = "GRID_RUNNING"
+	PipelineRegenerationMosaicRunning  PipelineRegenerationStatus = "MOSAIC_RUNNING"
+	PipelineRegenerationQPERunning     PipelineRegenerationStatus = "QPE_RUNNING"
+	PipelineRegenerationNowcastRunning PipelineRegenerationStatus = "NOWCAST_RUNNING"
+	PipelineRegenerationSucceeded      PipelineRegenerationStatus = "SUCCEEDED"
+	PipelineRegenerationFailed         PipelineRegenerationStatus = "FAILED"
+)
+
+type PipelineRegenerationFrame struct {
+	FrameIndex            int
+	SourceAnalysisID      uuid.UUID
+	AnalysisTime          time.Time
+	RegeneratedAnalysisID *uuid.UUID
+	Scans                 []RadarScan
+}
+
+type PipelineRegeneration struct {
+	RequestID uuid.UUID
+	SourceRun uuid.UUID
+	TargetRun uuid.UUID
+	IssueTime time.Time
+	GridID    string
+	Preset    string
+	Reason    string
+	Status    PipelineRegenerationStatus
+	Error     *string
+	Frames    []PipelineRegenerationFrame
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}

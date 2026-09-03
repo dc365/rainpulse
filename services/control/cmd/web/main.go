@@ -25,6 +25,7 @@ func main() {
 	handler, err := webgateway.NewHandler(webgateway.Options{
 		WebRoot:    environmentOrDefault("RAINPULSE_WEB_ROOT", "/srv/rainpulse-web"),
 		APIBaseURL: environmentOrDefault("RAINPULSE_API_BASE_URL", "http://api:8080"),
+		AdminToken: os.Getenv("RAINPULSE_ADMIN_TOKEN"),
 	})
 	if err != nil {
 		slog.Error("configure RainPulse web gateway", "error", err)

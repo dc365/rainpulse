@@ -375,7 +375,15 @@ ON CONFLICT (run_id) DO NOTHING`, bundle.Run.ID, bundle.Run.CreatedAt); err != n
 INSERT INTO forecast_runs (
     run_id, issue_time, grid_id, config_version, status, rerun_of, reason, created_at, updated_at
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
-ON CONFLICT (run_id) DO NOTHING`, bundle.Run.ID, bundle.Run.IssueTime,
+ON CONFLICT (run_id) DO UPDATE SET
+    config_version = EXCLUDED.config_version,
+    status = EXCLUDED.status,
+    updated_at = EXCLUDED.updated_at
+WHERE forecast_runs.status = 'WAITING'
+  AND forecast_runs.issue_time = EXCLUDED.issue_time
+  AND forecast_runs.grid_id = EXCLUDED.grid_id
+  AND forecast_runs.rerun_of = EXCLUDED.rerun_of
+  AND forecast_runs.reason = EXCLUDED.reason`, bundle.Run.ID, bundle.Run.IssueTime,
 		bundle.Run.GridID, bundle.Run.ConfigVersion, bundle.Run.Status,
 		bundle.Run.RerunOf, nowcastRunReason(bundle), bundle.Run.CreatedAt); err != nil {
 		return fmt.Errorf("insert RP-013 forecast run: %w", err)

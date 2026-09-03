@@ -175,7 +175,7 @@ const regenerationPresets: Array<{
   label: string
   route: string
 }> = [
-  { value: 'forecast_all', label: '主链路全部', route: '输入 → LK → 产品' },
+  { value: 'forecast_all', label: '主链路全部', route: '质控 → QPE → LK → 产品' },
   { value: 'pysteps_lk', label: 'pySTEPS-LK', route: '输入 → 光流外推 → 产品' },
   { value: 'products', label: '应用产品', route: '安全重走依赖 → 产品' },
 ]
@@ -193,7 +193,6 @@ function RegenerationPanel({ cycles }: { cycles: CycleSummary[] }) {
   const [cycleID, setCycleID] = useState('')
   const [preset, setPreset] = useState<RegenerationPreset>('forecast_all')
   const [reason, setReason] = useState('验证更新后的算法配置')
-  const [token, setToken] = useState('')
   const [confirming, setConfirming] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -205,7 +204,7 @@ function RegenerationPanel({ cycles }: { cycles: CycleSummary[] }) {
   const selectedCycle = runnableCycles.find((cycle) => cycle.cycle_id === effectiveCycleID)
   const selectedPreset = regenerationPresets.find((option) => option.value === preset) ?? regenerationPresets[0]
   const reasonLength = Array.from(reason.trim()).length
-  const ready = Boolean(selectedCycle?.run_id && token && reasonLength >= 3 && reasonLength <= 240)
+  const ready = Boolean(selectedCycle?.run_id && reasonLength >= 3 && reasonLength <= 240)
 
   const resetDecision = () => {
     setConfirming(false)
@@ -216,7 +215,7 @@ function RegenerationPanel({ cycles }: { cycles: CycleSummary[] }) {
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     if (!ready || !selectedCycle?.run_id) {
-      setError('请选择可重算周期，并填写管理令牌和 3～240 字的原因。')
+      setError('请选择可重算周期，并填写 3～240 字的原因。')
       setConfirming(false)
       return
     }
@@ -230,10 +229,7 @@ function RegenerationPanel({ cycles }: { cycles: CycleSummary[] }) {
     try {
       const response = await fetch(`/api/v1/admin/runs/${encodeURIComponent(selectedCycle.run_id)}/rerun`, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ preset, reason: reason.trim() }),
       })
       const payload = await response.json() as RegenerationResult
@@ -241,7 +237,6 @@ function RegenerationPanel({ cycles }: { cycles: CycleSummary[] }) {
         throw new Error(regenerationError(payload, response.status))
       }
       setResult(payload)
-      setToken('')
       setConfirming(false)
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : '重算请求提交失败')
@@ -275,6 +270,16 @@ function RegenerationPanel({ cycles }: { cycles: CycleSummary[] }) {
               ))}
             </select>
           </label>
+          <label>
+            <span>重算原因 <small>{reasonLength}/240</small></span>
+            <input
+              aria-label="重算原因"
+              value={reason}
+              onChange={(event) => { setReason(event.target.value); resetDecision() }}
+              maxLength={240}
+              disabled={submitting}
+            />
+          </label>
           <fieldset className="admin-regeneration-presets">
             <legend>重算范围</legend>
             {regenerationPresets.map((option) => (
@@ -290,28 +295,6 @@ function RegenerationPanel({ cycles }: { cycles: CycleSummary[] }) {
               </button>
             ))}
           </fieldset>
-          <label>
-            <span>重算原因 <small>{reasonLength}/240</small></span>
-            <input
-              aria-label="重算原因"
-              value={reason}
-              onChange={(event) => { setReason(event.target.value); resetDecision() }}
-              maxLength={240}
-              disabled={submitting}
-            />
-          </label>
-          <label>
-            <span>管理令牌 <small>仅本次请求使用，不保存</small></span>
-            <input
-              aria-label="管理令牌"
-              type="password"
-              value={token}
-              onChange={(event) => { setToken(event.target.value); resetDecision() }}
-              autoComplete="off"
-              spellCheck={false}
-              disabled={submitting}
-            />
-          </label>
         </div>
 
         <aside className="admin-regeneration-trace" aria-live="polite">
@@ -342,7 +325,7 @@ function RegenerationPanel({ cycles }: { cycles: CycleSummary[] }) {
         </aside>
       </form>
       <footer className="admin-regeneration-note">
-        当前界面覆盖控制面主链路；pySTEPS-STEPS 与 NowcastNet 离线产物仍沿用服务器受控入口。
+        “主链路全部”从参与输入序列的雷达质控开始重建；pySTEPS-STEPS 与 NowcastNet 离线产物仍沿用服务器受控入口。
       </footer>
     </section>
   )
@@ -350,7 +333,6 @@ function RegenerationPanel({ cycles }: { cycles: CycleSummary[] }) {
 
 function regenerationError(payload: RegenerationResult, status: number) {
   const labels: Record<string, string> = {
-    invalid_token: '管理令牌无效。',
     regeneration_active: '该周期与预设已有重算任务正在执行。',
     unsupported_rerun: '所选周期缺少可复用的已提交输入谱系。',
     invalid_regeneration_reason: '重算原因必须为 3～240 个字符。',

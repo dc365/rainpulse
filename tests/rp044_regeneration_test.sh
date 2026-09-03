@@ -6,6 +6,8 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
 required_files=(
+  deploy/postgres/migrations/0016_manual_regeneration.sql
+  deploy/postgres/migrations/0017_full_pipeline_regeneration.sql
   scripts/regenerate_forecasts.sh
   scripts/backfill_historical_steps.py
   algorithms/tests/test_manual_regeneration.py
@@ -26,6 +28,16 @@ rg --quiet 'manual-regeneration/' services/control/internal/orchestration/servic
 rg --quiet 'outsideForecastLookback' services/control/cmd/orchestrator/planner.go
 rg --quiet -- '--force' scripts/backfill_historical_steps.py
 rg --quiet 'prune_cycle_versions' scripts/backfill_fujian_nowcastnet_shadow.py
+rg --quiet 'DROP CONSTRAINT IF EXISTS nowcast_input_runs_issue_time_grid_id_preprocess_version_ga_key' \
+  deploy/postgres/migrations/0016_manual_regeneration.sql
+rg --quiet 'CREATE INDEX nowcast_input_runs_lineage_idx' \
+  deploy/postgres/migrations/0016_manual_regeneration.sql
+rg --quiet 'CREATE TABLE pipeline_regeneration_requests' \
+  deploy/postgres/migrations/0017_full_pipeline_regeneration.sql
+rg --quiet "'QC_RUNNING'.*'GRID_RUNNING'.*'MOSAIC_RUNNING'" \
+  deploy/postgres/migrations/0017_full_pipeline_regeneration.sql
+rg --quiet 'regeneration_request_id' \
+  deploy/postgres/migrations/0017_full_pipeline_regeneration.sql
 
 if REGEN_PRESET=unsupported bash scripts/regenerate_forecasts.sh >/dev/null 2>&1; then
   printf 'unsupported regeneration preset unexpectedly succeeded\n' >&2

@@ -701,6 +701,7 @@ services:
         condition: service_healthy
     environment:
       RAINPULSE_API_BASE_URL: "http://api:8080"
+      RAINPULSE_ADMIN_TOKEN: "${RAINPULSE_ADMIN_TOKEN:-}"
       RAINPULSE_WEB_ADDR: ":8080"
       RAINPULSE_WEB_ROOT: "/srv/rainpulse-web"
     ports:

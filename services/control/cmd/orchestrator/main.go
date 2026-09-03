@@ -666,37 +666,54 @@ func radarQC(
 	rawScanID string,
 	configPath string,
 ) error {
+	scan, job, err := createRadarQC(ctx, store, service, rawScanID, configPath, uuid.Nil)
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(os.Stdout).Encode(map[string]string{
+		"scan_id": scan.ID.String(), "run_id": scan.RunID.String(), "job_id": job.ID.String(),
+	})
+}
+
+func createRadarQC(
+	ctx context.Context,
+	store *postgresstore.Store,
+	service *orchestration.Service,
+	rawScanID string,
+	configPath string,
+	regenerationID uuid.UUID,
+) (workflow.RadarScan, workflow.Job, error) {
 	scanID, err := uuid.Parse(rawScanID)
 	if err != nil {
-		return fmt.Errorf("parse radar scan UUID: %w", err)
+		return workflow.RadarScan{}, workflow.Job{}, fmt.Errorf("parse radar scan UUID: %w", err)
 	}
 	configBytes, err := os.ReadFile(configPath)
 	if err != nil {
-		return fmt.Errorf("read radar QC configuration: %w", err)
+		return workflow.RadarScan{}, workflow.Job{}, fmt.Errorf("read radar QC configuration: %w", err)
 	}
 	var config qcConfiguration
 	if err := yaml.Unmarshal(configBytes, &config); err != nil {
-		return fmt.Errorf("decode radar QC configuration: %w", err)
+		return workflow.RadarScan{}, workflow.Job{}, fmt.Errorf("decode radar QC configuration: %w", err)
 	}
 	var configValue map[string]any
 	if err := yaml.Unmarshal(configBytes, &configValue); err != nil {
-		return fmt.Errorf("normalize radar QC configuration: %w", err)
+		return workflow.RadarScan{}, workflow.Job{}, fmt.Errorf("normalize radar QC configuration: %w", err)
 	}
 	configJSON, err := json.Marshal(configValue)
 	if err != nil {
-		return fmt.Errorf("encode radar QC configuration: %w", err)
+		return workflow.RadarScan{}, workflow.Job{}, fmt.Errorf("encode radar QC configuration: %w", err)
 	}
 	configHash := sha256.Sum256(configBytes)
 	scan, err := store.GetRadarScan(ctx, scanID)
 	if err != nil {
-		return err
+		return workflow.RadarScan{}, workflow.Job{}, err
 	}
 	if scan.NormalizedURI == nil {
-		return fmt.Errorf("radar scan has no normalized volume")
+		return workflow.RadarScan{}, workflow.Job{}, fmt.Errorf("radar scan has no normalized volume")
 	}
 	health, err := store.GetRadarHealthMetrics(ctx, scanID)
 	if err != nil {
-		return err
+		return workflow.RadarScan{}, workflow.Job{}, err
 	}
 	job, err := service.CreateRadarQC(ctx, orchestration.RadarQCInput{
 		ScanID: scan.ID, RunID: scan.RunID, RadarID: scan.RadarID,
@@ -709,13 +726,12 @@ func radarQC(
 		FlagDefinitionVersion: config.FlagDefinitionVersion,
 		QCConfig:              configJSON,
 		QCConfigSHA256:        fmt.Sprintf("%x", configHash),
+		RegenerationID:        regenerationID,
 	})
 	if err != nil {
-		return err
+		return workflow.RadarScan{}, workflow.Job{}, err
 	}
-	return json.NewEncoder(os.Stdout).Encode(map[string]string{
-		"scan_id": scan.ID.String(), "run_id": scan.RunID.String(), "job_id": job.ID.String(),
-	})
+	return scan, job, nil
 }
 
 func radarGrid(
@@ -725,33 +741,50 @@ func radarGrid(
 	rawScanID string,
 	configPath string,
 ) error {
+	scan, job, err := createRadarGrid(ctx, store, service, rawScanID, configPath, uuid.Nil)
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(os.Stdout).Encode(map[string]string{
+		"scan_id": scan.ID.String(), "run_id": scan.RunID.String(), "job_id": job.ID.String(),
+	})
+}
+
+func createRadarGrid(
+	ctx context.Context,
+	store *postgresstore.Store,
+	service *orchestration.Service,
+	rawScanID string,
+	configPath string,
+	regenerationID uuid.UUID,
+) (workflow.RadarScan, workflow.Job, error) {
 	scanID, err := uuid.Parse(rawScanID)
 	if err != nil {
-		return fmt.Errorf("parse radar scan UUID: %w", err)
+		return workflow.RadarScan{}, workflow.Job{}, fmt.Errorf("parse radar scan UUID: %w", err)
 	}
 	configBytes, err := os.ReadFile(configPath)
 	if err != nil {
-		return fmt.Errorf("read radar grid configuration: %w", err)
+		return workflow.RadarScan{}, workflow.Job{}, fmt.Errorf("read radar grid configuration: %w", err)
 	}
 	var config gridConfiguration
 	if err := yaml.Unmarshal(configBytes, &config); err != nil {
-		return fmt.Errorf("decode radar grid configuration: %w", err)
+		return workflow.RadarScan{}, workflow.Job{}, fmt.Errorf("decode radar grid configuration: %w", err)
 	}
 	var configValue map[string]any
 	if err := yaml.Unmarshal(configBytes, &configValue); err != nil {
-		return fmt.Errorf("normalize radar grid configuration: %w", err)
+		return workflow.RadarScan{}, workflow.Job{}, fmt.Errorf("normalize radar grid configuration: %w", err)
 	}
 	configJSON, err := json.Marshal(configValue)
 	if err != nil {
-		return fmt.Errorf("encode radar grid configuration: %w", err)
+		return workflow.RadarScan{}, workflow.Job{}, fmt.Errorf("encode radar grid configuration: %w", err)
 	}
 	configHash := sha256.Sum256(configBytes)
 	scan, err := store.GetRadarScan(ctx, scanID)
 	if err != nil {
-		return err
+		return workflow.RadarScan{}, workflow.Job{}, err
 	}
 	if scan.QCURI == nil {
-		return fmt.Errorf("radar scan has no QC volume")
+		return workflow.RadarScan{}, workflow.Job{}, fmt.Errorf("radar scan has no QC volume")
 	}
 	job, err := service.CreateRadarGrid(ctx, orchestration.RadarGridInput{
 		ScanID: scan.ID, RunID: scan.RunID, RadarID: scan.RadarID,
@@ -760,13 +793,12 @@ func radarGrid(
 		GridProfileVersion: config.ProfileVersion,
 		HybridScanVersion:  config.AlgorithmVersion,
 		GridConfig:         configJSON, GridConfigSHA256: fmt.Sprintf("%x", configHash),
+		RegenerationID: regenerationID,
 	})
 	if err != nil {
-		return err
+		return workflow.RadarScan{}, workflow.Job{}, err
 	}
-	return json.NewEncoder(os.Stdout).Encode(map[string]string{
-		"scan_id": scan.ID.String(), "run_id": scan.RunID.String(), "job_id": job.ID.String(),
-	})
+	return scan, job, nil
 }
 
 func analysisMosaic(
@@ -777,46 +809,68 @@ func analysisMosaic(
 	configPath string,
 	rawScanIDs []string,
 ) error {
+	analysis, job, err := createAnalysisMosaic(
+		ctx, store, service, rawAnalysisTime, configPath, rawScanIDs, uuid.Nil,
+	)
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(os.Stdout).Encode(map[string]string{
+		"analysis_id": analysis.ID.String(),
+		"run_id":      analysis.RunID.String(),
+		"job_id":      job.ID.String(),
+	})
+}
+
+func createAnalysisMosaic(
+	ctx context.Context,
+	store *postgresstore.Store,
+	service *orchestration.Service,
+	rawAnalysisTime string,
+	configPath string,
+	rawScanIDs []string,
+	regenerationID uuid.UUID,
+) (workflow.AnalysisCycle, workflow.Job, error) {
 	analysisTime, err := time.Parse(time.RFC3339Nano, rawAnalysisTime)
 	if err != nil {
-		return fmt.Errorf("parse analysis time: %w", err)
+		return workflow.AnalysisCycle{}, workflow.Job{}, fmt.Errorf("parse analysis time: %w", err)
 	}
 	configBytes, err := os.ReadFile(configPath)
 	if err != nil {
-		return fmt.Errorf("read radar mosaic configuration: %w", err)
+		return workflow.AnalysisCycle{}, workflow.Job{}, fmt.Errorf("read radar mosaic configuration: %w", err)
 	}
 	var config mosaicConfiguration
 	if err := yaml.Unmarshal(configBytes, &config); err != nil {
-		return fmt.Errorf("decode radar mosaic configuration: %w", err)
+		return workflow.AnalysisCycle{}, workflow.Job{}, fmt.Errorf("decode radar mosaic configuration: %w", err)
 	}
 	var configValue map[string]any
 	if err := yaml.Unmarshal(configBytes, &configValue); err != nil {
-		return fmt.Errorf("normalize radar mosaic configuration: %w", err)
+		return workflow.AnalysisCycle{}, workflow.Job{}, fmt.Errorf("normalize radar mosaic configuration: %w", err)
 	}
 	configJSON, err := json.Marshal(configValue)
 	if err != nil {
-		return fmt.Errorf("encode radar mosaic configuration: %w", err)
+		return workflow.AnalysisCycle{}, workflow.Job{}, fmt.Errorf("encode radar mosaic configuration: %w", err)
 	}
 	candidates := make([]orchestration.AnalysisMosaicCandidate, 0, len(rawScanIDs))
 	for _, rawScanID := range rawScanIDs {
 		scanID, err := uuid.Parse(rawScanID)
 		if err != nil {
-			return fmt.Errorf("parse radar scan UUID %q: %w", rawScanID, err)
+			return workflow.AnalysisCycle{}, workflow.Job{}, fmt.Errorf("parse radar scan UUID %q: %w", rawScanID, err)
 		}
 		scan, err := store.GetRadarScan(ctx, scanID)
 		if err != nil {
-			return err
+			return workflow.AnalysisCycle{}, workflow.Job{}, err
 		}
 		if scan.GridURI == nil {
-			return fmt.Errorf("radar scan %s has no committed RadarGrid", scan.ID)
+			return workflow.AnalysisCycle{}, workflow.Job{}, fmt.Errorf("radar scan %s has no committed RadarGrid", scan.ID)
 		}
 		gridMetrics, err := store.GetRadarGridMetrics(ctx, scanID)
 		if err != nil {
-			return err
+			return workflow.AnalysisCycle{}, workflow.Job{}, err
 		}
 		if gridMetrics.GridID != config.GridID ||
 			gridMetrics.GridConfigVersion != config.GridConfigVersion {
-			return fmt.Errorf("radar scan %s uses a different target grid", scan.ID)
+			return workflow.AnalysisCycle{}, workflow.Job{}, fmt.Errorf("radar scan %s uses a different target grid", scan.ID)
 		}
 		candidates = append(candidates, orchestration.AnalysisMosaicCandidate{
 			RadarID: scan.RadarID, ScanID: scan.ID, GridURI: *scan.GridURI,
@@ -838,7 +892,24 @@ func analysisMosaic(
 		ExpectedRadarIDs:    config.Alignment.ExpectedRadarIDs,
 		Candidates:          candidates, MosaicConfig: configJSON,
 		MosaicConfigSHA256: fmt.Sprintf("%x", configHash),
+		RegenerationID:     regenerationID,
 	})
+	if err != nil {
+		return workflow.AnalysisCycle{}, workflow.Job{}, err
+	}
+	return analysis, job, nil
+}
+
+func analysisQPE(
+	ctx context.Context,
+	store *postgresstore.Store,
+	service *orchestration.Service,
+	rawAnalysisID string,
+	configPath string,
+) error {
+	analysis, job, err := createAnalysisQPE(
+		ctx, store, service, rawAnalysisID, configPath, uuid.Nil,
+	)
 	if err != nil {
 		return err
 	}
@@ -849,47 +920,48 @@ func analysisMosaic(
 	})
 }
 
-func analysisQPE(
+func createAnalysisQPE(
 	ctx context.Context,
 	store *postgresstore.Store,
 	service *orchestration.Service,
 	rawAnalysisID string,
 	configPath string,
-) error {
+	regenerationID uuid.UUID,
+) (workflow.AnalysisCycle, workflow.Job, error) {
 	analysisID, err := uuid.Parse(rawAnalysisID)
 	if err != nil {
-		return fmt.Errorf("parse analysis UUID: %w", err)
+		return workflow.AnalysisCycle{}, workflow.Job{}, fmt.Errorf("parse analysis UUID: %w", err)
 	}
 	analysis, err := store.GetAnalysisCycle(ctx, analysisID)
 	if err != nil {
-		return err
+		return workflow.AnalysisCycle{}, workflow.Job{}, err
 	}
 	if analysis.MosaicURI == nil {
-		return fmt.Errorf("analysis %s has no committed RadarMosaic", analysis.ID)
+		return workflow.AnalysisCycle{}, workflow.Job{}, fmt.Errorf("analysis %s has no committed RadarMosaic", analysis.ID)
 	}
 	mosaicMetrics, err := store.GetAnalysisMosaicMetrics(ctx, analysisID)
 	if err != nil {
-		return err
+		return workflow.AnalysisCycle{}, workflow.Job{}, err
 	}
 	configBytes, err := os.ReadFile(configPath)
 	if err != nil {
-		return fmt.Errorf("read QPE configuration: %w", err)
+		return workflow.AnalysisCycle{}, workflow.Job{}, fmt.Errorf("read QPE configuration: %w", err)
 	}
 	var config qpeConfiguration
 	if err := yaml.Unmarshal(configBytes, &config); err != nil {
-		return fmt.Errorf("decode QPE configuration: %w", err)
+		return workflow.AnalysisCycle{}, workflow.Job{}, fmt.Errorf("decode QPE configuration: %w", err)
 	}
 	if config.GridID != analysis.GridID ||
 		config.GridConfigVersion != mosaicMetrics.GridConfigVersion {
-		return fmt.Errorf("QPE configuration uses a different target grid")
+		return workflow.AnalysisCycle{}, workflow.Job{}, fmt.Errorf("QPE configuration uses a different target grid")
 	}
 	var configValue map[string]any
 	if err := yaml.Unmarshal(configBytes, &configValue); err != nil {
-		return fmt.Errorf("normalize QPE configuration: %w", err)
+		return workflow.AnalysisCycle{}, workflow.Job{}, fmt.Errorf("normalize QPE configuration: %w", err)
 	}
 	configJSON, err := json.Marshal(configValue)
 	if err != nil {
-		return fmt.Errorf("encode QPE configuration: %w", err)
+		return workflow.AnalysisCycle{}, workflow.Job{}, fmt.Errorf("encode QPE configuration: %w", err)
 	}
 	configHash := sha256.Sum256(configBytes)
 	job, err := service.CreateAnalysisQPE(ctx, orchestration.AnalysisQPEInput{
@@ -903,7 +975,24 @@ func analysisQPE(
 		QPEConfigVersion:    config.ProfileVersion,
 		QPEAlgorithmVersion: config.AlgorithmVersion,
 		QPEConfig:           configJSON, QPEConfigSHA256: fmt.Sprintf("%x", configHash),
+		RegenerationID: regenerationID,
 	})
+	if err != nil {
+		return workflow.AnalysisCycle{}, workflow.Job{}, err
+	}
+	return analysis, job, nil
+}
+
+func analysisDiagnostics(
+	ctx context.Context,
+	store *postgresstore.Store,
+	service *orchestration.Service,
+	rawAnalysisID string,
+	configPath string,
+) error {
+	analysis, job, err := createAnalysisDiagnostics(
+		ctx, store, service, rawAnalysisID, configPath, uuid.Nil,
+	)
 	if err != nil {
 		return err
 	}
@@ -914,23 +1003,24 @@ func analysisQPE(
 	})
 }
 
-func analysisDiagnostics(
+func createAnalysisDiagnostics(
 	ctx context.Context,
 	store *postgresstore.Store,
 	service *orchestration.Service,
 	rawAnalysisID string,
 	configPath string,
-) error {
+	regenerationID uuid.UUID,
+) (workflow.AnalysisCycle, workflow.Job, error) {
 	analysisID, err := uuid.Parse(rawAnalysisID)
 	if err != nil {
-		return fmt.Errorf("parse analysis UUID: %w", err)
+		return workflow.AnalysisCycle{}, workflow.Job{}, fmt.Errorf("parse analysis UUID: %w", err)
 	}
 	analysis, err := store.GetAnalysisCycle(ctx, analysisID)
 	if err != nil {
-		return err
+		return workflow.AnalysisCycle{}, workflow.Job{}, err
 	}
 	if analysis.AnalysisURI == nil {
-		return fmt.Errorf("analysis %s has no committed RadarAnalysis", analysis.ID)
+		return workflow.AnalysisCycle{}, workflow.Job{}, fmt.Errorf("analysis %s has no committed RadarAnalysis", analysis.ID)
 	}
 	inputs := make([]workflow.AnalysisDiagnosticRadarInput, 0, len(analysis.Radars))
 	for _, radar := range analysis.Radars {
@@ -939,10 +1029,10 @@ func analysisDiagnostics(
 		}
 		scan, scanErr := store.GetRadarScan(ctx, *radar.ScanID)
 		if scanErr != nil {
-			return scanErr
+			return workflow.AnalysisCycle{}, workflow.Job{}, scanErr
 		}
 		if scan.RadarID != radar.RadarID || scan.QCURI == nil {
-			return fmt.Errorf("analysis contributor %s has no exact QCRadarVolume", radar.RadarID)
+			return workflow.AnalysisCycle{}, workflow.Job{}, fmt.Errorf("analysis contributor %s has no exact QCRadarVolume", radar.RadarID)
 		}
 		inputs = append(inputs, workflow.AnalysisDiagnosticRadarInput{
 			RadarID: radar.RadarID,
@@ -951,23 +1041,23 @@ func analysisDiagnostics(
 		})
 	}
 	if len(inputs) == 0 {
-		return fmt.Errorf("analysis %s has no participating QC radar inputs", analysis.ID)
+		return workflow.AnalysisCycle{}, workflow.Job{}, fmt.Errorf("analysis %s has no participating QC radar inputs", analysis.ID)
 	}
 	configBytes, err := os.ReadFile(configPath)
 	if err != nil {
-		return fmt.Errorf("read diagnostic configuration: %w", err)
+		return workflow.AnalysisCycle{}, workflow.Job{}, fmt.Errorf("read diagnostic configuration: %w", err)
 	}
 	var config diagnosticConfiguration
 	if err := yaml.Unmarshal(configBytes, &config); err != nil {
-		return fmt.Errorf("decode diagnostic configuration: %w", err)
+		return workflow.AnalysisCycle{}, workflow.Job{}, fmt.Errorf("decode diagnostic configuration: %w", err)
 	}
 	var configValue map[string]any
 	if err := yaml.Unmarshal(configBytes, &configValue); err != nil {
-		return fmt.Errorf("normalize diagnostic configuration: %w", err)
+		return workflow.AnalysisCycle{}, workflow.Job{}, fmt.Errorf("normalize diagnostic configuration: %w", err)
 	}
 	configJSON, err := json.Marshal(configValue)
 	if err != nil {
-		return fmt.Errorf("encode diagnostic configuration: %w", err)
+		return workflow.AnalysisCycle{}, workflow.Job{}, fmt.Errorf("encode diagnostic configuration: %w", err)
 	}
 	configHash := sha256.Sum256(configBytes)
 	job, err := service.CreateAnalysisDiagnostics(ctx, orchestration.AnalysisDiagnosticsInput{
@@ -983,15 +1073,12 @@ func analysisDiagnostics(
 		DiagnosticConfigVersion: config.ProfileVersion,
 		RendererVersion:         config.RendererVersion,
 		FlagDefinitionVersion:   config.FlagDefinitionVersion,
+		RegenerationID:          regenerationID,
 	})
 	if err != nil {
-		return err
+		return workflow.AnalysisCycle{}, workflow.Job{}, err
 	}
-	return json.NewEncoder(os.Stdout).Encode(map[string]string{
-		"analysis_id": analysis.ID.String(),
-		"run_id":      analysis.RunID.String(),
-		"job_id":      job.ID.String(),
-	})
+	return analysis, job, nil
 }
 
 func nowcastInput(
@@ -1052,6 +1139,68 @@ func nowcastInput(
 	return json.NewEncoder(os.Stdout).Encode(map[string]any{
 		"run_id": run.ID.String(), "job_id": job.ID.String(),
 		"issue_time": run.IssueTime, "candidate_count": len(candidates),
+	})
+}
+
+func createRegeneratedNowcastInput(
+	ctx context.Context,
+	service *orchestration.Service,
+	request workflow.PipelineRegeneration,
+	analyses []workflow.AnalysisCycle,
+	configPath string,
+) (workflow.Run, workflow.Job, error) {
+	configBytes, err := os.ReadFile(configPath)
+	if err != nil {
+		return workflow.Run{}, workflow.Job{}, fmt.Errorf("read regenerated NowcastInput configuration: %w", err)
+	}
+	var config nowcastInputConfiguration
+	if err := yaml.Unmarshal(configBytes, &config); err != nil {
+		return workflow.Run{}, workflow.Job{}, fmt.Errorf("decode regenerated NowcastInput configuration: %w", err)
+	}
+	if config.Sequence.Selection != "latest_contiguous" || config.GridID != request.GridID {
+		return workflow.Run{}, workflow.Job{}, fmt.Errorf("regenerated NowcastInput configuration differs from request lineage")
+	}
+	var configValue map[string]any
+	if err := yaml.Unmarshal(configBytes, &configValue); err != nil {
+		return workflow.Run{}, workflow.Job{}, fmt.Errorf("normalize regenerated NowcastInput configuration: %w", err)
+	}
+	configJSON, err := json.Marshal(configValue)
+	if err != nil {
+		return workflow.Run{}, workflow.Job{}, fmt.Errorf("encode regenerated NowcastInput configuration: %w", err)
+	}
+	candidates := make([]orchestration.NowcastInputCandidate, 0, len(analyses))
+	for _, analysis := range analyses {
+		if analysis.Status != workflow.AnalysisReady || analysis.AnalysisURI == nil ||
+			analysis.ValidCoverageRatio == nil || analysis.MeanQualityIndex == nil {
+			return workflow.Run{}, workflow.Job{}, fmt.Errorf("regenerated analysis %s is not ready for NowcastInput", analysis.ID)
+		}
+		candidates = append(candidates, orchestration.NowcastInputCandidate{
+			AnalysisID: analysis.ID, AnalysisTime: analysis.AnalysisTime,
+			GridID: analysis.GridID, AnalysisURI: *analysis.AnalysisURI,
+			CurrentStatus: analysis.Status, OperationalEligible: analysis.DegradedReason == nil,
+			ValidCoverageRatio: *analysis.ValidCoverageRatio,
+			MeanQualityIndex:   *analysis.MeanQualityIndex,
+		})
+	}
+	configHash := sha256.Sum256(configBytes)
+	return service.CreateNowcastInput(ctx, orchestration.NowcastInputInput{
+		IssueTime: request.IssueTime, GridID: config.GridID,
+		GridConfigVersion:                   config.GridConfigVersion,
+		PreprocessVersion:                   config.BuilderVersion,
+		GateConfigVersion:                   config.ProfileVersion,
+		ExecutionMode:                       executionModeOrOperational(config.ExecutionMode),
+		RequireAllFramesOperationalEligible: config.Gates.RequireAllFramesOperationalEligible,
+		MinimumFrames:                       config.Sequence.MinimumFrames,
+		MaximumFrames:                       config.Sequence.MaximumFrames,
+		Timestep:                            time.Duration(config.Sequence.TimestepMinutes) * time.Minute,
+		MinimumValidCoverageRatio:           config.Gates.MinimumValidCoverageRatio,
+		MinimumMeanQualityIndex:             config.Gates.MinimumMeanQualityIndex,
+		Candidates:                          candidates,
+		Config:                              configJSON,
+		ConfigSHA256:                        fmt.Sprintf("%x", configHash),
+		RerunOf:                             &request.SourceRun,
+		RegenerationID:                      request.RequestID,
+		Reason:                              request.Reason,
 	})
 }
 

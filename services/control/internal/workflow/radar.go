@@ -181,43 +181,47 @@ type RadarDecodeBundle struct {
 }
 
 type RadarQCBundle struct {
-	ScanID       uuid.UUID
-	Status       RadarScanStatus
-	Config       json.RawMessage
-	ConfigSHA256 string
-	Job          Job
-	Outbox       OutboxEvent
+	ScanID                uuid.UUID
+	RegenerationRequestID *uuid.UUID
+	Status                RadarScanStatus
+	Config                json.RawMessage
+	ConfigSHA256          string
+	Job                   Job
+	Outbox                OutboxEvent
 }
 
 type RadarGridBundle struct {
-	ScanID       uuid.UUID
-	Status       RadarScanStatus
-	Config       json.RawMessage
-	ConfigSHA256 string
-	Job          Job
-	Outbox       OutboxEvent
+	ScanID                uuid.UUID
+	RegenerationRequestID *uuid.UUID
+	Status                RadarScanStatus
+	Config                json.RawMessage
+	ConfigSHA256          string
+	Job                   Job
+	Outbox                OutboxEvent
 }
 
 type AnalysisMosaicBundle struct {
-	Analysis         AnalysisCycle
-	AlgorithmVersion string
-	Config           json.RawMessage
-	ConfigSHA256     string
-	Job              Job
-	Outbox           OutboxEvent
+	Analysis              AnalysisCycle
+	RegenerationRequestID *uuid.UUID
+	AlgorithmVersion      string
+	Config                json.RawMessage
+	ConfigSHA256          string
+	Job                   Job
+	Outbox                OutboxEvent
 }
 
 type AnalysisQPEBundle struct {
-	AnalysisID       uuid.UUID
-	RunID            uuid.UUID
-	CurrentStatus    AnalysisStatus
-	MosaicURI        string
-	ConfigVersion    string
-	AlgorithmVersion string
-	Config           json.RawMessage
-	ConfigSHA256     string
-	Job              Job
-	Outbox           OutboxEvent
+	AnalysisID            uuid.UUID
+	RunID                 uuid.UUID
+	RegenerationRequestID *uuid.UUID
+	CurrentStatus         AnalysisStatus
+	MosaicURI             string
+	ConfigVersion         string
+	AlgorithmVersion      string
+	Config                json.RawMessage
+	ConfigSHA256          string
+	Job                   Job
+	Outbox                OutboxEvent
 }
 
 type AnalysisDiagnosticRadarInput struct {
@@ -227,16 +231,17 @@ type AnalysisDiagnosticRadarInput struct {
 }
 
 type AnalysisDiagnosticsBundle struct {
-	AnalysisID      uuid.UUID
-	RunID           uuid.UUID
-	AnalysisURI     string
-	ConfigVersion   string
-	RendererVersion string
-	Config          json.RawMessage
-	ConfigSHA256    string
-	RadarInputs     []AnalysisDiagnosticRadarInput
-	Job             Job
-	Outbox          OutboxEvent
+	AnalysisID            uuid.UUID
+	RunID                 uuid.UUID
+	RegenerationRequestID *uuid.UUID
+	AnalysisURI           string
+	ConfigVersion         string
+	RendererVersion       string
+	Config                json.RawMessage
+	ConfigSHA256          string
+	RadarInputs           []AnalysisDiagnosticRadarInput
+	Job                   Job
+	Outbox                OutboxEvent
 }
 
 type NowcastInputFrame struct {

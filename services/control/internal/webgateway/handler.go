@@ -15,6 +15,7 @@ import (
 type Options struct {
 	WebRoot    string
 	APIBaseURL string
+	AdminToken string
 }
 
 func NewHandler(options Options) (http.Handler, error) {
@@ -44,6 +45,11 @@ func NewHandler(options Options) (http.Handler, error) {
 			response.WriteHeader(http.StatusOK)
 			_, _ = response.Write([]byte("ok\n"))
 		case isForecastRegenerationRequest(request):
+			if options.AdminToken == "" {
+				http.Error(response, "manual regeneration is unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			request.Header.Set("Authorization", "Bearer "+options.AdminToken)
 			proxy.ServeHTTP(response, request)
 		case strings.HasPrefix(request.URL.Path, "/api/v1/admin/"):
 			http.NotFound(response, request)

@@ -128,3 +128,22 @@ func TestManualRegenerationBypassesRealtimeForecastLookback(t *testing.T) {
 		t.Fatal("manual regeneration was blocked by realtime lookback")
 	}
 }
+
+func TestDistinctRegenerationScansDeduplicatesSharedInputFrames(t *testing.T) {
+	shared := workflow.RadarScan{ID: uuid.New(), RadarID: "z9591"}
+	other := workflow.RadarScan{ID: uuid.New(), RadarID: "z9598"}
+	items := distinctRegenerationScans([]workflow.PipelineRegenerationFrame{
+		{FrameIndex: 0, Scans: []workflow.RadarScan{shared}},
+		{FrameIndex: 1, Scans: []workflow.RadarScan{shared, other}},
+	})
+	if len(items) != 2 {
+		t.Fatalf("distinct regeneration scans = %#v", items)
+	}
+	seen := map[uuid.UUID]bool{}
+	for _, item := range items {
+		seen[item.ID] = true
+	}
+	if !seen[shared.ID] || !seen[other.ID] {
+		t.Fatalf("distinct regeneration scans lost source lineage: %#v", items)
+	}
+}

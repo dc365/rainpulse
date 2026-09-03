@@ -12,7 +12,7 @@ afterEach(() => {
 })
 
 describe('AdminWorkspace regeneration control', () => {
-  it('requires confirmation and sends the operator token only with the bounded rerun request', async () => {
+  it('requires confirmation and sends the bounded rerun request without browser credentials', async () => {
     let regenerationRequest: RequestInit | undefined
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input)
@@ -48,7 +48,7 @@ describe('AdminWorkspace regeneration control', () => {
     render(<AdminWorkspace />)
 
     expect(await screen.findByRole('heading', { name: '数据重算' })).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('管理令牌'), { target: { value: 'operator-secret' } })
+    expect(screen.getByText('质控 → QPE → LK → 产品')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '准备重算' }))
 
     expect(screen.getByText('确认提交这次重算？')).toBeTruthy()
@@ -61,13 +61,12 @@ describe('AdminWorkspace regeneration control', () => {
       const request = fetchMock.mock.calls.find(([input]) => String(input).includes('/api/v1/admin/runs/'))
       expect(request).toBeTruthy()
       expect(String(request?.[0])).toBe(`/api/v1/admin/runs/${sourceRunID}/rerun`)
-      expect(new Headers(regenerationRequest?.headers).get('Authorization')).toBe('Bearer operator-secret')
+      expect(new Headers(regenerationRequest?.headers).get('Authorization')).toBeNull()
       expect(JSON.parse(String(regenerationRequest?.body))).toEqual({
         preset: 'forecast_all',
         reason: '验证更新后的算法配置',
       })
     })
-    expect(screen.getByLabelText('管理令牌')).toHaveProperty('value', '')
   })
 })
 

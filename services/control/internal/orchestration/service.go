@@ -31,6 +31,7 @@ type Repository interface {
 	CreateDomainSimulation(context.Context, workflow.DomainSimulation) error
 	GetRun(context.Context, uuid.UUID) (workflow.Run, error)
 	GetNowcastInputRegeneration(context.Context, uuid.UUID) (NowcastInputInput, error)
+	CreateFullPipelineRegeneration(context.Context, workflow.PipelineRegeneration, workflow.Run) error
 	FindActiveRegeneration(context.Context, uuid.UUID, RegenerationPreset) (workflow.Run, error)
 	GetJob(context.Context, uuid.UUID) (workflow.Job, error)
 	ListJobs(context.Context, uuid.UUID) ([]workflow.Job, error)
@@ -69,6 +70,7 @@ type RadarQCInput struct {
 	FlagDefinitionVersion string
 	QCConfig              json.RawMessage
 	QCConfigSHA256        string
+	RegenerationID        uuid.UUID
 }
 
 type RadarGridInput struct {
@@ -83,6 +85,7 @@ type RadarGridInput struct {
 	HybridScanVersion  string
 	GridConfig         json.RawMessage
 	GridConfigSHA256   string
+	RegenerationID     uuid.UUID
 }
 
 type AnalysisMosaicCandidate struct {
@@ -107,6 +110,7 @@ type AnalysisMosaicInput struct {
 	Candidates             []AnalysisMosaicCandidate
 	MosaicConfig           json.RawMessage
 	MosaicConfigSHA256     string
+	RegenerationID         uuid.UUID
 }
 
 type AnalysisQPEInput struct {
@@ -124,6 +128,7 @@ type AnalysisQPEInput struct {
 	QPEAlgorithmVersion    string
 	QPEConfig              json.RawMessage
 	QPEConfigSHA256        string
+	RegenerationID         uuid.UUID
 }
 
 type AnalysisDiagnosticsInput struct {
@@ -139,6 +144,7 @@ type AnalysisDiagnosticsInput struct {
 	DiagnosticConfigVersion string
 	RendererVersion         string
 	FlagDefinitionVersion   string
+	RegenerationID          uuid.UUID
 }
 
 type NowcastInputCandidate struct {
@@ -385,8 +391,12 @@ func (service *Service) CreateRadarQC(
 		return workflow.Job{}, err
 	}
 	now := service.now().UTC()
-	jobID := stableID("radar-qc-job", input.RunID.String(), input.QCPipelineVersion)
-	traceID := stableID("radar-qc-trace", input.RunID.String(), input.QCPipelineVersion)
+	identity := []string{input.RunID.String(), input.QCPipelineVersion}
+	if input.RegenerationID != uuid.Nil {
+		identity = append(identity, input.RegenerationID.String())
+	}
+	jobID := stableID(append([]string{"radar-qc-job"}, identity...)...)
+	traceID := stableID(append([]string{"radar-qc-trace"}, identity...)...)
 	eventID := stableID("radar-qc-request", jobID.String())
 	outputPrefix := fmt.Sprintf(
 		"s3://rainpulse/radar/qc/%s/%s/%s/",
@@ -394,6 +404,9 @@ func (service *Service) CreateRadarQC(
 		input.ScanID,
 		url.PathEscape(input.QCPipelineVersion),
 	)
+	if input.RegenerationID != uuid.Nil {
+		outputPrefix += "regenerations/" + input.RegenerationID.String() + "/"
+	}
 	request := RadarQCRequested{
 		SchemaVersion: SchemaVersion,
 		EventID:       eventID,
@@ -420,11 +433,12 @@ func (service *Service) CreateRadarQC(
 		RequestPayload: payload, CreatedAt: now,
 	}
 	bundle := workflow.RadarQCBundle{
-		ScanID:       input.ScanID,
-		Status:       input.CurrentStatus,
-		Config:       input.QCConfig,
-		ConfigSHA256: input.QCConfigSHA256,
-		Job:          job,
+		ScanID:                input.ScanID,
+		RegenerationRequestID: optionalUUID(input.RegenerationID),
+		Status:                input.CurrentStatus,
+		Config:                input.QCConfig,
+		ConfigSHA256:          input.QCConfigSHA256,
+		Job:                   job,
 		Outbox: workflow.OutboxEvent{
 			ID: eventID, AggregateID: jobID.String(), EventType: RadarQCRequestedEventType,
 			Subject: RadarQCRequestedSubject, Payload: payload,
@@ -471,8 +485,12 @@ func (service *Service) CreateRadarGrid(
 		return workflow.Job{}, err
 	}
 	now := service.now().UTC()
-	jobID := stableID("radar-grid-job", input.RunID.String(), input.HybridScanVersion)
-	traceID := stableID("radar-grid-trace", input.RunID.String(), input.HybridScanVersion)
+	identity := []string{input.RunID.String(), input.HybridScanVersion}
+	if input.RegenerationID != uuid.Nil {
+		identity = append(identity, input.RegenerationID.String())
+	}
+	jobID := stableID(append([]string{"radar-grid-job"}, identity...)...)
+	traceID := stableID(append([]string{"radar-grid-trace"}, identity...)...)
 	eventID := stableID("radar-grid-request", jobID.String())
 	outputPrefix := fmt.Sprintf(
 		"s3://rainpulse/radar/grid/%s/%s/%s/",
@@ -480,6 +498,9 @@ func (service *Service) CreateRadarGrid(
 		input.ScanID,
 		url.PathEscape(input.HybridScanVersion),
 	)
+	if input.RegenerationID != uuid.Nil {
+		outputPrefix += "regenerations/" + input.RegenerationID.String() + "/"
+	}
 	request := RadarGridRequested{
 		SchemaVersion: SchemaVersion,
 		EventID:       eventID,
@@ -505,9 +526,9 @@ func (service *Service) CreateRadarGrid(
 		RequestPayload: payload, CreatedAt: now,
 	}
 	bundle := workflow.RadarGridBundle{
-		ScanID: input.ScanID, Status: input.CurrentStatus,
-		Config: input.GridConfig, ConfigSHA256: input.GridConfigSHA256,
-		Job: job,
+		ScanID: input.ScanID, RegenerationRequestID: optionalUUID(input.RegenerationID),
+		Status: input.CurrentStatus, Config: input.GridConfig,
+		ConfigSHA256: input.GridConfigSHA256, Job: job,
 		Outbox: workflow.OutboxEvent{
 			ID: eventID, AggregateID: jobID.String(), EventType: RadarGridRequestedEventType,
 			Subject: RadarGridRequestedSubject, Payload: payload,
@@ -561,6 +582,9 @@ func (service *Service) CreateAnalysisMosaic(
 	identity := []string{
 		analysisTime.Format(time.RFC3339), input.GridID, input.GridConfigVersion,
 		input.MosaicConfigVersion, input.MosaicAlgorithmVersion,
+	}
+	if input.RegenerationID != uuid.Nil {
+		identity = append(identity, input.RegenerationID.String())
 	}
 	analysisID := stableID(append([]string{"analysis"}, identity...)...)
 	runID := stableID(append([]string{"analysis-run"}, identity...)...)
@@ -616,9 +640,10 @@ func (service *Service) CreateAnalysisMosaic(
 		CreatedAt: now, UpdatedAt: now,
 	}
 	bundle := workflow.AnalysisMosaicBundle{
-		Analysis: analysis, AlgorithmVersion: input.MosaicAlgorithmVersion,
-		Config:       input.MosaicConfig,
-		ConfigSHA256: input.MosaicConfigSHA256, Job: job,
+		Analysis: analysis, RegenerationRequestID: optionalUUID(input.RegenerationID),
+		AlgorithmVersion: input.MosaicAlgorithmVersion,
+		Config:           input.MosaicConfig,
+		ConfigSHA256:     input.MosaicConfigSHA256, Job: job,
 		Outbox: workflow.OutboxEvent{
 			ID: eventID, AggregateID: jobID.String(),
 			EventType: AnalysisMosaicRequestedEventType,
@@ -684,8 +709,12 @@ func (service *Service) CreateAnalysisQPE(
 		return workflow.Job{}, err
 	}
 	now := service.now().UTC()
-	jobID := stableID("analysis-qpe-job", input.RunID.String(), input.QPEAlgorithmVersion)
-	traceID := stableID("analysis-qpe-trace", input.RunID.String(), input.QPEAlgorithmVersion)
+	identity := []string{input.RunID.String(), input.QPEAlgorithmVersion}
+	if input.RegenerationID != uuid.Nil {
+		identity = append(identity, input.RegenerationID.String())
+	}
+	jobID := stableID(append([]string{"analysis-qpe-job"}, identity...)...)
+	traceID := stableID(append([]string{"analysis-qpe-trace"}, identity...)...)
 	eventID := stableID("analysis-qpe-request", jobID.String())
 	outputPrefix := fmt.Sprintf(
 		"s3://rainpulse/analysis/%s/%s/%s/%s/",
@@ -724,7 +753,8 @@ func (service *Service) CreateAnalysisQPE(
 	}
 	bundle := workflow.AnalysisQPEBundle{
 		AnalysisID: input.AnalysisID, RunID: input.RunID,
-		CurrentStatus: input.CurrentStatus, MosaicURI: input.MosaicURI,
+		RegenerationRequestID: optionalUUID(input.RegenerationID),
+		CurrentStatus:         input.CurrentStatus, MosaicURI: input.MosaicURI,
 		ConfigVersion:    input.QPEConfigVersion,
 		AlgorithmVersion: input.QPEAlgorithmVersion,
 		Config:           input.QPEConfig, ConfigSHA256: input.QPEConfigSHA256,
@@ -775,11 +805,11 @@ func (service *Service) CreateAnalysisDiagnostics(
 		return workflow.Job{}, err
 	}
 	now := service.now().UTC()
-	jobID := stableID(
-		"analysis-diagnostics-job",
-		input.RunID.String(),
-		input.RendererVersion,
-	)
+	identity := []string{input.RunID.String(), input.RendererVersion}
+	if input.RegenerationID != uuid.Nil {
+		identity = append(identity, input.RegenerationID.String())
+	}
+	jobID := stableID(append([]string{"analysis-diagnostics-job"}, identity...)...)
 	traceID := stableID("analysis-diagnostics-trace", jobID.String())
 	eventID := stableID("analysis-diagnostics-request", jobID.String())
 	outputPrefix := fmt.Sprintf(
@@ -820,13 +850,14 @@ func (service *Service) CreateAnalysisDiagnostics(
 	}
 	bundle := workflow.AnalysisDiagnosticsBundle{
 		AnalysisID: input.AnalysisID, RunID: input.RunID,
-		AnalysisURI:     input.AnalysisURI,
-		ConfigVersion:   input.DiagnosticConfigVersion,
-		RendererVersion: input.RendererVersion,
-		Config:          input.DiagnosticConfig,
-		ConfigSHA256:    input.DiagnosticConfigSHA256,
-		RadarInputs:     input.RadarInputs,
-		Job:             job,
+		RegenerationRequestID: optionalUUID(input.RegenerationID),
+		AnalysisURI:           input.AnalysisURI,
+		ConfigVersion:         input.DiagnosticConfigVersion,
+		RendererVersion:       input.RendererVersion,
+		Config:                input.DiagnosticConfig,
+		ConfigSHA256:          input.DiagnosticConfigSHA256,
+		RadarInputs:           input.RadarInputs,
+		Job:                   job,
 		Outbox: workflow.OutboxEvent{
 			ID: eventID, AggregateID: jobID.String(),
 			EventType: AnalysisDiagnosticsRequestedEventType,
@@ -1491,6 +1522,13 @@ func stableID(parts ...string) uuid.UUID {
 	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("rainpulse:"+strings.Join(parts, ":")))
 }
 
+func optionalUUID(value uuid.UUID) *uuid.UUID {
+	if value == uuid.Nil {
+		return nil
+	}
+	return &value
+}
+
 func (service *Service) CreateSimulation(ctx context.Context, issueTime time.Time) (workflow.Run, workflow.Job, error) {
 	return service.createSimulation(ctx, issueTime, nil, "forecast workflow simulation")
 }
@@ -1631,6 +1669,32 @@ func (service *Service) Rerun(
 	input, err := service.repository.GetNowcastInputRegeneration(ctx, sourceRunID)
 	if err != nil {
 		return workflow.Run{}, err
+	}
+	if request.Preset == RegenerationForecast {
+		requestID := service.newID()
+		now := service.now().UTC()
+		reason := regenerationReason(request)
+		target := workflow.Run{
+			ID: stableID(
+				"nowcast-input-regeneration-run",
+				sourceRunID.String(),
+				requestID.String(),
+			),
+			IssueTime: input.IssueTime, GridID: input.GridID,
+			ConfigVersion: input.GateConfigVersion, Status: workflow.RunWaiting,
+			RerunOf: &sourceRunID, Reason: reason, CreatedAt: now, UpdatedAt: now,
+		}
+		pipeline := workflow.PipelineRegeneration{
+			RequestID: requestID, SourceRun: sourceRunID, TargetRun: target.ID,
+			IssueTime: input.IssueTime, GridID: input.GridID,
+			Preset: string(request.Preset), Reason: reason,
+			Status:    workflow.PipelineRegenerationPending,
+			CreatedAt: now, UpdatedAt: now,
+		}
+		if err := service.repository.CreateFullPipelineRegeneration(ctx, pipeline, target); err != nil {
+			return workflow.Run{}, err
+		}
+		return target, nil
 	}
 	input.RerunOf = &sourceRunID
 	input.RegenerationID = service.newID()

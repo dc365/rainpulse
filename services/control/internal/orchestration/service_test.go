@@ -97,13 +97,14 @@ func TestRerunForecastCreatesFreshNowcastInputFromCommittedLineage(t *testing.T)
 		t.Fatalf("Rerun() error = %v", err)
 	}
 	if run.RerunOf == nil || *run.RerunOf != sourceID || run.ID == sourceID ||
-		run.Status != workflow.RunPreprocessing {
+		run.Status != workflow.RunWaiting {
 		t.Fatalf("unexpected regeneration run: %#v", run)
 	}
 	if run.Reason != "manual-regeneration/forecast_all: validate updated forecast algorithms" ||
-		repository.nowcastInput.Run.ID != run.ID ||
-		repository.nowcastInput.Job.JobType != NowcastInputJobType {
-		t.Fatalf("regeneration lineage was not persisted: run=%#v bundle=%#v", run, repository.nowcastInput)
+		repository.fullRegeneration.TargetRun != run.ID ||
+		repository.fullRegeneration.Status != workflow.PipelineRegenerationPending ||
+		repository.regenerationTarget.ID != run.ID {
+		t.Fatalf("full regeneration lineage was not persisted: run=%#v request=%#v", run, repository.fullRegeneration)
 	}
 }
 
@@ -233,6 +234,23 @@ func TestCreateRadarQCUsesNormalizedInputAndStableIdentity(t *testing.T) {
 	}
 	if second.ID != job.ID || repository.radarQC.Outbox.ID != first.Outbox.ID {
 		t.Fatal("radar QC workflow identifiers are not deterministic")
+	}
+	regenerationID := uuid.MustParse("9e2d9705-b9fc-4099-90e3-0a2154fe0a28")
+	regeneratedInput := input
+	regeneratedInput.CurrentStatus = workflow.RadarScanGridReady
+	regeneratedInput.RegenerationID = regenerationID
+	regenerated, err := service.CreateRadarQC(context.Background(), regeneratedInput)
+	if err != nil {
+		t.Fatalf("regenerated CreateRadarQC() error = %v", err)
+	}
+	var regeneratedRequest RadarQCRequested
+	if err := json.Unmarshal(repository.radarQC.Outbox.Payload, &regeneratedRequest); err != nil {
+		t.Fatalf("decode regenerated radar QC request: %v", err)
+	}
+	if regenerated.ID == job.ID || repository.radarQC.RegenerationRequestID == nil ||
+		*repository.radarQC.RegenerationRequestID != regenerationID ||
+		!strings.HasSuffix(regeneratedRequest.Payload.OutputPrefix, "/regenerations/"+regenerationID.String()+"/") {
+		t.Fatalf("manual QC regeneration identity was not isolated: job=%#v request=%#v", regenerated, regeneratedRequest)
 	}
 
 	input.Health = workflow.RadarHealthUnavailable
@@ -886,6 +904,18 @@ type fakeRepository struct {
 	jobs                 []workflow.Job
 	regenerationInput    NowcastInputInput
 	activeRegeneration   workflow.Run
+	fullRegeneration     workflow.PipelineRegeneration
+	regenerationTarget   workflow.Run
+}
+
+func (repository *fakeRepository) CreateFullPipelineRegeneration(
+	_ context.Context,
+	request workflow.PipelineRegeneration,
+	target workflow.Run,
+) error {
+	repository.fullRegeneration = request
+	repository.regenerationTarget = target
+	return nil
 }
 
 func (repository *fakeRepository) CreateNowcastInputBundle(

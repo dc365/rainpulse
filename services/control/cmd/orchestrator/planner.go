@@ -287,6 +287,9 @@ func (planner *pipelinePlanner) Run(ctx context.Context) {
 }
 
 func (planner *pipelinePlanner) PlanOnce(ctx context.Context) error {
+	if err := planner.planPipelineRegenerations(ctx); err != nil {
+		return err
+	}
 	if err := planner.planRadarStage(ctx, workflow.RadarScanNormalized); err != nil {
 		return err
 	}

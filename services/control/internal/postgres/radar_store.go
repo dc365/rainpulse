@@ -208,12 +208,12 @@ ON CONFLICT (config_version) DO NOTHING`,
 INSERT INTO jobs (
     job_id, run_id, trace_id, job_type, model_id, model_version,
     config_version, status, max_attempts, scheduled_at, created_at, updated_at,
-    request_payload
-) VALUES ($1, $2, $3, $4, NULL, NULL, $5, $6, 3, $7, $7, $7, $8)
+    request_payload, regeneration_request_id
+) VALUES ($1, $2, $3, $4, NULL, NULL, $5, $6, 3, $7, $7, $7, $8, $9)
 ON CONFLICT (job_id) DO NOTHING`,
 		bundle.Job.ID, bundle.Job.RunID, bundle.Job.TraceID, bundle.Job.JobType,
 		bundle.Job.ConfigVersion, bundle.Job.Status, bundle.Job.CreatedAt,
-		bundle.Job.RequestPayload)
+		bundle.Job.RequestPayload, bundle.RegenerationRequestID)
 	if err != nil {
 		return fmt.Errorf("insert radar QC job: %w", err)
 	}
@@ -305,12 +305,12 @@ ON CONFLICT (config_version) DO NOTHING`,
 INSERT INTO jobs (
     job_id, run_id, trace_id, job_type, model_id, model_version,
     config_version, status, max_attempts, scheduled_at, created_at, updated_at,
-    request_payload
-) VALUES ($1, $2, $3, $4, NULL, NULL, $5, $6, 3, $7, $7, $7, $8)
+    request_payload, regeneration_request_id
+) VALUES ($1, $2, $3, $4, NULL, NULL, $5, $6, 3, $7, $7, $7, $8, $9)
 ON CONFLICT (job_id) DO NOTHING`,
 		bundle.Job.ID, bundle.Job.RunID, bundle.Job.TraceID, bundle.Job.JobType,
 		bundle.Job.ConfigVersion, bundle.Job.Status, bundle.Job.CreatedAt,
-		bundle.Job.RequestPayload)
+		bundle.Job.RequestPayload, bundle.RegenerationRequestID)
 	if err != nil {
 		return fmt.Errorf("insert radar grid job: %w", err)
 	}
@@ -429,12 +429,12 @@ ON CONFLICT (analysis_id, radar_id) DO NOTHING`,
 INSERT INTO jobs (
     job_id, run_id, trace_id, job_type, model_id, model_version,
     config_version, status, max_attempts, scheduled_at, created_at, updated_at,
-    request_payload
-) VALUES ($1, $2, $3, $4, NULL, NULL, $5, $6, 3, $7, $7, $7, $8)
+    request_payload, regeneration_request_id
+) VALUES ($1, $2, $3, $4, NULL, NULL, $5, $6, 3, $7, $7, $7, $8, $9)
 ON CONFLICT (job_id) DO NOTHING`,
 		bundle.Job.ID, bundle.Job.RunID, bundle.Job.TraceID, bundle.Job.JobType,
 		bundle.Job.ConfigVersion, bundle.Job.Status, bundle.Job.CreatedAt,
-		bundle.Job.RequestPayload); err != nil {
+		bundle.Job.RequestPayload, bundle.RegenerationRequestID); err != nil {
 		return fmt.Errorf("insert analysis mosaic job: %w", err)
 	}
 	if _, err = tx.Exec(ctx, `
@@ -525,12 +525,12 @@ WHERE job_id = $1 AND analysis_id = $2 AND qpe_config_version = $3
 INSERT INTO jobs (
     job_id, run_id, trace_id, job_type, model_id, model_version,
     config_version, status, max_attempts, scheduled_at, created_at, updated_at,
-    request_payload
-) VALUES ($1, $2, $3, $4, NULL, NULL, $5, $6, 3, $7, $7, $7, $8)
+    request_payload, regeneration_request_id
+) VALUES ($1, $2, $3, $4, NULL, NULL, $5, $6, 3, $7, $7, $7, $8, $9)
 ON CONFLICT (job_id) DO NOTHING`,
 		bundle.Job.ID, bundle.Job.RunID, bundle.Job.TraceID, bundle.Job.JobType,
 		bundle.Job.ConfigVersion, bundle.Job.Status, bundle.Job.CreatedAt,
-		bundle.Job.RequestPayload); err != nil {
+		bundle.Job.RequestPayload, bundle.RegenerationRequestID); err != nil {
 		return fmt.Errorf("insert analysis QPE job: %w", err)
 	}
 	if _, err = tx.Exec(ctx, `
@@ -650,12 +650,12 @@ WHERE analysis_id = $1 AND state = $2`,
 INSERT INTO jobs (
     job_id, run_id, trace_id, job_type, model_id, model_version,
     config_version, status, max_attempts, scheduled_at, created_at, updated_at,
-    request_payload
-) VALUES ($1, $2, $3, $4, NULL, NULL, $5, $6, 3, $7, $7, $7, $8)
+    request_payload, regeneration_request_id
+) VALUES ($1, $2, $3, $4, NULL, NULL, $5, $6, 3, $7, $7, $7, $8, $9)
 ON CONFLICT (job_id) DO NOTHING`,
 		bundle.Job.ID, bundle.Job.RunID, bundle.Job.TraceID, bundle.Job.JobType,
 		bundle.Job.ConfigVersion, bundle.Job.Status, bundle.Job.CreatedAt,
-		bundle.Job.RequestPayload); err != nil {
+		bundle.Job.RequestPayload, bundle.RegenerationRequestID); err != nil {
 		return fmt.Errorf("insert analysis diagnostic job: %w", err)
 	}
 	if _, err = tx.Exec(ctx, `

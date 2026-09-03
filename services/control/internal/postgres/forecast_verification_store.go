@@ -44,17 +44,24 @@ WHERE f.run_id = $1`, runID).Scan(
 	}
 
 	rows, err := store.pool.Query(ctx, `
-SELECT cycle.analysis_id, cycle.analysis_time, qpe.analysis_uri, qpe.analysis_sha256
-FROM analysis_cycles AS cycle
-JOIN qpe_runs AS qpe ON qpe.analysis_id = cycle.analysis_id
-WHERE cycle.grid_id = $1
-  AND cycle.status = 'ANALYSIS_READY'
-  AND qpe.status = 'SUCCEEDED'
-  AND qpe.analysis_uri IS NOT NULL
-  AND qpe.analysis_sha256 IS NOT NULL
-  AND cycle.analysis_time > $2
-  AND cycle.analysis_time <= $2 + INTERVAL '120 minutes'
-ORDER BY cycle.analysis_time`, input.GridID, input.IssueTime)
+SELECT analysis_id, analysis_time, analysis_uri, analysis_sha256
+FROM (
+    SELECT DISTINCT ON (cycle.analysis_time)
+           cycle.analysis_id, cycle.analysis_time,
+           qpe.analysis_uri, qpe.analysis_sha256,
+           cycle.created_at
+    FROM analysis_cycles AS cycle
+    JOIN qpe_runs AS qpe ON qpe.analysis_id = cycle.analysis_id
+    WHERE cycle.grid_id = $1
+      AND cycle.status = 'ANALYSIS_READY'
+      AND qpe.status = 'SUCCEEDED'
+      AND qpe.analysis_uri IS NOT NULL
+      AND qpe.analysis_sha256 IS NOT NULL
+      AND cycle.analysis_time > $2
+      AND cycle.analysis_time <= $2 + INTERVAL '120 minutes'
+    ORDER BY cycle.analysis_time, cycle.created_at DESC
+) AS preferred
+ORDER BY analysis_time`, input.GridID, input.IssueTime)
 	if err != nil {
 		return orchestration.ForecastVerificationInput{}, fmt.Errorf(
 			"list forecast-verification truth: %w", err,
