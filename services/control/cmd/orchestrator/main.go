@@ -791,7 +791,10 @@ func selectRadarQCContext(
 	if !config.Enabled {
 		return nil, nil, nil
 	}
-	candidates, err := store.ListRadarScans(ctx, 1_000, nil, nil)
+	// ListRadarScans is deliberately bounded by the store contract (200).  This
+	// is enough to select the nearest three temporal scans and one scan per
+	// neighbouring radar without making regeneration fail before QC is queued.
+	candidates, err := store.ListRadarScans(ctx, 200, nil, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("list radar scans for QC context: %w", err)
 	}
