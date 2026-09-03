@@ -13,17 +13,17 @@ import {
 import { radarDisplayExtent, radarSiteFor } from '../radarSites'
 import { focusedPanelFromSearch, workspaceLayoutSearch } from './layoutState'
 import {
-	analysisCycleAt,
-	availabilityAt,
+  analysisCycleAt,
+  availabilityAt,
   formatCycleTime,
   formatValidTime,
   frameAt,
   leadLabel,
-	panelsForPreset,
-	qcFlagLabel,
+  panelsForPreset,
+  qcFlagLabel,
   radarIDs,
-	reasonLabel,
-	timelineForPreset,
+  reasonLabel,
+  timelineForPreset,
   type CycleList,
   type CycleSummary,
   type WorkspaceCycleDetail,
@@ -41,7 +41,7 @@ export function MainWorkspace() {
   const [cycles, setCycles] = useState<CycleSummary[]>([])
   const [selectedCycleID, setSelectedCycleID] = useState<string>('')
   const [followLatest, setFollowLatest] = useState(true)
-  const [catalogRevision, setCatalogRevision] = useState(0)
+  const [catalogRevision, setCatalogRevision] = useState('')
   const [detail, setDetail] = useState<WorkspaceCycleDetail | null>(null)
   const [preset, setPreset] = useState<WorkspacePreset>('forecast')
   const [selectedRadarID, setSelectedRadarID] = useState<string | null>(null)
@@ -76,7 +76,7 @@ export function MainWorkspace() {
             if (followLatest || !payload.items.some((item) => item.cycle_id === current)) return latest
             return current
           })
-          setCatalogRevision((value) => value + 1)
+          setCatalogRevision(catalogIdentity(payload.items))
           setError(payload.degraded_sources?.length
             ? `部分目录降级：${payload.degraded_sources.join('、')}`
             : null)
@@ -88,10 +88,10 @@ export function MainWorkspace() {
         })
     }
     loadCatalog()
-    const timer = window.setInterval(loadCatalog, 30_000)
+    const timer = followLatest ? window.setInterval(loadCatalog, 30_000) : null
     return () => {
       controller.abort()
-      window.clearInterval(timer)
+      if (timer != null) window.clearInterval(timer)
     }
   }, [followLatest])
 
@@ -104,11 +104,9 @@ export function MainWorkspace() {
     )
       .then((payload) => {
         setDetail(payload)
-        setSelectedTime((current) => preset === 'qc'
-          ? payload.issue_time
-          : current && payload.timeline.includes(current)
-            ? current
-            : payload.issue_time)
+        setSelectedTime((current) => current && payload.timeline.includes(current)
+          ? current
+          : payload.issue_time)
         const radars = radarIDs(payload)
         setSelectedRadarID((current) => current && radars.includes(current) ? current : radars[0] ?? null)
         setLayerErrors({})
@@ -116,15 +114,15 @@ export function MainWorkspace() {
       })
       .catch((requestError: unknown) => {
         if (!isAbortError(requestError)) {
-          setDetail(null)
-          setError(requestError instanceof Error ? requestError.message : '读取工作台失败')
+          const message = requestError instanceof Error ? requestError.message : '读取工作台失败'
+          setError(`更新失败，保留当前结果：${message}`)
         }
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false)
       })
     return () => controller.abort()
-  }, [catalogRevision, preset, selectedCycleID])
+  }, [catalogRevision, selectedCycleID])
 
   const panels = useMemo(
     () => detail ? panelsForPreset(detail, preset, selectedRadarID) : [],
@@ -350,7 +348,7 @@ export function MainWorkspace() {
                     key={panel.panel_id}
                     onClick={() => focusPanel(panel.panel_id)}
                   >
-                    <span><strong>{panel.display_name}</strong><small>{roleLabel(panel)}</small></span>
+                    <span><strong>{panelDisplayName(panel)}</strong><small>{roleLabel(panel)}</small></span>
                     <i aria-hidden="true">{focusedPanelID === panel.panel_id ? '✓' : ''}</i>
                   </button>
                 ))}
@@ -373,8 +371,9 @@ export function MainWorkspace() {
             type="button"
             className={showRasterValues ? 'active' : ''}
             aria-pressed={showRasterValues}
+            title="当前读取渲染色阶；真实格点值接口将在下一阶段接入"
             onClick={() => setShowRasterValues((value) => !value)}
-          >点值</button>
+          >色阶值</button>
           <label><span>雨层 {Math.round(rasterOpacity * 100)}%</span><input aria-label="雨层透明度" type="range" min="0.55" max="1" step="0.05" value={rasterOpacity} onChange={(event) => setRasterOpacity(Number(event.target.value))} /></label>
         </div>
         {detail ? <QualityStrip detail={detail} /> : null}
@@ -392,13 +391,13 @@ export function MainWorkspace() {
               setMobilePanelID(panel.panel_id)
               if (focusedPanelID) setFocusedPanelID(panel.panel_id)
             }}
-          >{panel.display_name}</button>
+          >{panelDisplayName(panel)}</button>
         ))}
       </section>
 
       <section
         className={`workspace-map-grid panels-${Math.min(4, Math.max(1, panels.length))}${focusedPanel ? ' layout-focus' : ''}`}
-        aria-label={focusedPanel ? `${focusedPanel.display_name}单图` : '同步地图对比'}
+        aria-label={focusedPanel ? `${panelDisplayName(focusedPanel)}单图` : '同步地图对比'}
       >
         {panels.map((panel) => (
           <MapPanel
@@ -478,6 +477,7 @@ function MapPanel({
   onShowComparison: () => void
 }) {
   const frame = frameAt(panel, selectedTime)
+  const displayName = panelDisplayName(panel)
   const radarSite = panel.data_kind === 'reflectivity' ? radarSiteFor(panel.radar_id) : undefined
   const analysisRadar = radarSite
     ? detail?.radars.find((radar) => radar.radar_id.toLowerCase() === radarSite.radarID)
@@ -528,9 +528,9 @@ function MapPanel({
     <article className={`workspace-map-panel${mobileActive ? ' mobile-active' : ''}${focused ? ' focus-selected' : ''}${focusMode && !focused ? ' focus-suppressed' : ''}`}>
       <div
         className="workspace-map-caption"
-        aria-label={`${panel.display_name}，${roleLabel(panel)}，${lifecycle}，${frameContext}`}
+        aria-label={`${displayName}，${roleLabel(panel)}，${lifecycle}，${frameContext}`}
       >
-        <strong>{panel.display_name}</strong>
+        <strong>{displayName}</strong>
         <span>{roleLabel(panel)}</span>
         <b>{lifecycle}</b>
         <small>{frameContext}</small>
@@ -538,8 +538,8 @@ function MapPanel({
       <button
         type="button"
         className="workspace-map-focus"
-        aria-label={focused ? '返回四图' : `单图查看 ${panel.display_name}`}
-        title={focused ? '返回四图（Esc）' : `单图查看 ${panel.display_name}`}
+        aria-label={focused ? '返回四图' : `单图查看 ${displayName}`}
+        title={focused ? '返回四图（Esc）' : `单图查看 ${displayName}`}
         onClick={focused ? onShowComparison : onFocus}
       >
         <span aria-hidden="true">{focused ? '▦' : '□'}</span>
@@ -548,17 +548,17 @@ function MapPanel({
       <RasterGISMap
         className="workspace-comparison-map"
         imageUrl={frame?.image_url}
-        imageDescription={`${panel.display_name} ${formatValidTime(frame?.valid_time ?? selectedTime)}`}
+        imageDescription={`${displayName} ${formatValidTime(frame?.valid_time ?? selectedTime)}`}
         imageExtent={imageExtent}
         fitExtent={fitExtent}
         validTimeLabel={formatValidTime(frame?.valid_time ?? selectedTime)}
         contextLabel={frame ? leadLabel(detail?.issue_time ?? frame.valid_time, frame.valid_time) : '无原生帧'}
-        productLabel={panel.display_name}
+        productLabel={displayName}
         legend={legend}
         legendMode={panel.legend_unit ? 'scale' : 'categorical'}
         legendUnit={panel.legend_unit ?? frame?.unit ?? ''}
         footerNote={panel.data_kind === 'probability_exceedance' ? '透明：缺测 / 低于 1%' : '透明：缺测 / 无覆盖'}
-        mapLabel={`${panel.display_name}同步地图，EPSG:4326`}
+        mapLabel={`${displayName}同步地图，EPSG:4326`}
         resetViewLabel="复位同步地图范围"
         emptyStateHint={unavailable}
         loading={loading}
@@ -726,7 +726,7 @@ export function SharedTimeline({
       <div className="workspace-timeline-availability" aria-label="算法帧可用性">
         <span className="workspace-timeline-current"><i />当前时效</span>
         {panels.map((panel) => (
-          <span key={panel.panel_id}><i data-ready={availabilityAt(panel, selectedTime ?? issueTime)} />{panel.display_name}</span>
+          <span key={panel.panel_id}><i data-ready={availabilityAt(panel, selectedTime ?? issueTime)} />{panelDisplayName(panel)}</span>
         ))}
         <small>← → 键逐帧查看</small>
       </div>
@@ -737,11 +737,11 @@ export function SharedTimeline({
 function QualityStrip({ detail }: { detail: WorkspaceCycleDetail }) {
   const participating = detail.radars.filter((radar) => radar.state === 'PARTICIPATING').length
   return (
-    <div className="quality-strip" aria-label="当前周期质量">
-      <span><small>雷达</small><strong>{participating}/{detail.radars.length || 0}</strong></span>
-      <span><small>覆盖</small><strong>{percent(detail.quality.coverage_ratio)}</strong></span>
-      <span><small>平均 QI</small><strong>{number(detail.quality.mean_quality_index)}</strong></span>
-      <span><small>最大雨强</small><strong>{rate(detail.quality.maximum_rate_mm_h)}</strong></span>
+    <div className="quality-strip" aria-label="T0 输入质量">
+      <span><small>T0雷达</small><strong>{participating}/{detail.radars.length || 0}</strong></span>
+      <span><small>T0覆盖</small><strong>{percent(detail.quality.coverage_ratio)}</strong></span>
+      <span><small>T0 QI</small><strong>{number(detail.quality.mean_quality_index)}</strong></span>
+      <span><small>T0最大</small><strong>{rate(detail.quality.maximum_rate_mm_h)}</strong></span>
     </div>
   )
 }
@@ -762,12 +762,32 @@ function roleLabel(panel: WorkspacePanel) {
   return '短临预报'
 }
 
+function panelDisplayName(panel: WorkspacePanel) {
+  if (panel.panel_id === 'steps') {
+    return panel.data_kind === 'probability_exceedance' ? 'STEPS 概率' : 'STEPS P50'
+  }
+  if (panel.panel_id.startsWith('dbzh_qc:')) {
+    return `${panel.radar_id?.toUpperCase() ?? ''} 质控后反射率`.trim()
+  }
+  return panel.display_name
+}
+
 function panelShortLabel(panel: WorkspacePanel) {
   if (panel.algorithm_id === 'radar') return 'QPE'
   if (panel.algorithm_id === 'pysteps-lk') return 'LK'
   if (panel.algorithm_id === 'pysteps-steps') return 'STEPS'
   if (panel.algorithm_id === 'nowcastnet') return 'NowcastNet'
-  return panel.display_name
+  return panelDisplayName(panel)
+}
+
+function catalogIdentity(items: CycleSummary[]) {
+  return items.map((cycle) => [
+    cycle.cycle_id,
+    cycle.analysis_id ?? '',
+    cycle.run_id ?? '',
+    cycle.ensemble_bundle_id ?? '',
+    cycle.nowcastnet_bundle_id ?? '',
+  ].join(':')).join('|')
 }
 
 function compactLegendLabel(label: string, unit?: string | null) {
