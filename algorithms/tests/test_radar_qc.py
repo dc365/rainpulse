@@ -477,6 +477,56 @@ def test_rp047_removes_only_far_fragments_beside_a_confirmed_fan() -> None:
     assert np.all(detection.probability[10, :350] < profile.radial_interference.flag_probability)
 
 
+def test_rp047_removes_seeded_stable_segment_that_crosses_far_range_boundary() -> None:
+    """A stable transmitter segment must not escape because it starts before 200 km."""
+    profile = load_qc_profile(RP047_QC_CONFIG, FLAG_CONFIG)
+    ranges = (np.arange(1_000, dtype="float32") + 1.0) * 250.0
+    dbzh = np.full((24, 1_000), np.nan, dtype="float32")
+    transmitter = 20.0 * np.log10(ranges / 1_000.0) + 20.0
+    dbzh[11:14] = transmitter
+    # Mirrors the residual 08:40 ray: the coherent segment begins around
+    # 90 km, crosses 200 km, and is too sparse for the open-edge detector.
+    dbzh[10, 360:900] = transmitter[360:900]
+    dbzh[10, 900:960] = 20.0
+
+    detection = _detect_radial_interference(
+        dbzh,
+        np.isfinite(dbzh),
+        profile.radial_interference,
+        ranges_m=ranges,
+    )
+
+    ray_valid = np.isfinite(dbzh[10])
+    assert np.all(
+        detection.probability[10, ray_valid] >= profile.radial_interference.flag_probability
+    )
+
+
+def test_rp047_keeps_seeded_but_power_unstable_high_segment() -> None:
+    """Fan adjacency alone must not turn an unstable rain-like segment into hard QC."""
+    profile = load_qc_profile(RP047_QC_CONFIG, FLAG_CONFIG)
+    ranges = (np.arange(1_000, dtype="float32") + 1.0) * 250.0
+    dbzh = np.full((24, 1_000), np.nan, dtype="float32")
+    transmitter = 20.0 * np.log10(ranges / 1_000.0) + 20.0
+    dbzh[11:14] = transmitter
+    dbzh[10, 360:900] = np.tile(
+        np.array([45.0, 65.0], dtype="float32"),
+        270,
+    )
+
+    detection = _detect_radial_interference(
+        dbzh,
+        np.isfinite(dbzh),
+        profile.radial_interference,
+        ranges_m=ranges,
+    )
+
+    assert np.all(
+        detection.probability[10, 360:900]
+        < profile.radial_interference.flag_probability
+    )
+
+
 def test_rp047_sparse_saturated_detector_rejects_unstable_power() -> None:
     gate_count = 920
     values = np.full(gate_count, np.nan, dtype="float32")
@@ -1077,7 +1127,7 @@ def test_qc_worker_records_selected_temporal_and_cross_radar_context(
                 "output_prefix": "s3://rainpulse/radar/qc/z9598/current/rp047/",
                 "radar_config_version": "z9598-test-v1",
                 "qc_profile": "rp047-fujian-radial-evidence-v1",
-                "qc_pipeline_version": "rp047-fujian-radial-evidence-1.4.0",
+                "qc_pipeline_version": "rp047-fujian-radial-evidence-1.5.0",
                 "flag_definition_version": "qc-flags-v1",
                 "temporal_context": [
                     {"radar_id": "z9598", "input_uri": f"s3://rainpulse/{temporal_a_prefix}"},

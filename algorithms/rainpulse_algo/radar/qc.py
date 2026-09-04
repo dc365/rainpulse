@@ -1582,16 +1582,57 @@ def _complete_seeded_radial_residuals(
         return
     hard = np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability
     seeded_neighbour = np.roll(hard, 1, axis=0) | np.roll(hard, -1, axis=0)
+
+    # A confirmed fan can hide its open boundary from the first-pass neighbour
+    # contrast: the contaminated neighbour becomes part of the baseline.  A
+    # long, range-corrected-power-stable high core beside that fan is strong
+    # transmitter geometry, so reject the complete observed ray, including
+    # weaker pieces of the same radial track.
+    for ray_index in range(dbzh.shape[0]):
+        seeded_high = (
+            valid[ray_index]
+            & ~hard[ray_index]
+            & seeded_neighbour[ray_index]
+            & (ranges_m >= promotion.minimum_analysis_range_m)
+            & (dbzh[ray_index] >= closure.minimum_high_dbzh)
+        )
+        for start, end in _true_segments(seeded_high, closure.minimum_high_run):
+            if (
+                ranges_m[start] >= closure.minimum_far_segment_start_m
+                or ranges_m[end - 1] < closure.minimum_far_segment_start_m
+            ):
+                continue
+            segment = np.zeros(seeded_high.shape, dtype=bool)
+            segment[start:end] = True
+            power_iqr = _range_corrected_power_iqr(
+                dbzh[ray_index],
+                segment,
+                ranges_m,
+                promotion.minimum_analysis_range_m,
+            )
+            if power_iqr is None or power_iqr > promotion.maximum_power_iqr_db:
+                continue
+            _record_radial_type(
+                probabilities,
+                interference_type,
+                ray_index,
+                valid[ray_index],
+                "broad",
+                config.flag_probability,
+            )
+            break
+
+    hard = np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability
+    seeded_neighbour = np.roll(hard, 1, axis=0) | np.roll(hard, -1, axis=0)
     for ray_index in range(dbzh.shape[0]):
         candidate = (
             valid[ray_index]
             & ~hard[ray_index]
             & seeded_neighbour[ray_index]
+            & (ranges_m >= closure.minimum_far_segment_start_m)
             & (dbzh[ray_index] >= closure.minimum_high_dbzh)
         )
         for start, end in _true_segments(candidate, closure.minimum_far_segment_gates):
-            if ranges_m[start] < closure.minimum_far_segment_start_m:
-                continue
             segment = np.zeros(candidate.shape, dtype=bool)
             segment[start:end] = True
             power_iqr = _range_corrected_power_iqr(

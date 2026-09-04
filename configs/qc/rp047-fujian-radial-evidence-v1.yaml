@@ -1,6 +1,6 @@
 schema_version: "1.0"
 profile_version: rp047-fujian-radial-evidence-v1
-pipeline_version: rp047-fujian-radial-evidence-1.4.0
+pipeline_version: rp047-fujian-radial-evidence-1.5.0
 flag_definition_version: qc-flags-v1
 
 health_gate:
@@ -56,9 +56,9 @@ radial_interference:
       # remains a long, high-occupancy, range-corrected-power-stable signal.
       edge_extension_enabled: true
       # Finish a sparse ray once most of its observed gates are already hard
-      # interference, and inherit only stable far fragments from an adjacent
-      # confirmed fan. This targets broken transmitter tails without erasing
-      # the near-range precipitation that can share their boundary ray.
+      # interference. A long stable high core beside a confirmed fan promotes
+      # its complete radial track; shorter inherited fragments remain limited
+      # to far range. This covers transmitter rays that cross the far boundary.
       residual_completion_enabled: true
       far_segment_extension_enabled: true
       maximum_gap_rays: 4

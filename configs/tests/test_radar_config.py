@@ -280,7 +280,7 @@ def test_rp047_qc_profile_requires_context_fusion_for_weak_candidates() -> None:
     assert morphology["fan_closure"]["residual_completion_enabled"] is True
     assert morphology["fan_closure"]["far_segment_extension_enabled"] is True
     assert morphology["fan_closure"]["minimum_far_segment_start_m"] == 200000.0
-    assert profile["pipeline_version"] == "rp047-fujian-radial-evidence-1.4.0"
+    assert profile["pipeline_version"] == "rp047-fujian-radial-evidence-1.5.0"
 
 
 def test_rp047_realtime_shadow_versions_the_full_reprocessing_chain() -> None:
