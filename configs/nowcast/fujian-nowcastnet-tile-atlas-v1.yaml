@@ -1,0 +1,25 @@
+schema_version: "1.0"
+atlas_version: fujian-nowcastnet-tile-atlas-v1
+grid:
+  grid_id: fuzhou_118_123_25_27_0p01deg_v1
+  grid_config_version: fuzhou-grid-0p01deg-v1
+  height: 201
+  width: 501
+policy:
+  spatial_multiple: 32
+  missing_policy: reject_any_missing
+  trusted_overlap_blending: raised-edge-v1
+  operational_eligible: false
+tiles:
+  - {tile_id: north-west-0, input: {y_start: 0, x_start: 0, height: 128, width: 128}, trusted: {y_start: 0, y_end: 96, x_start: 0, x_end: 96}}
+  - {tile_id: north-west-1, input: {y_start: 0, x_start: 64, height: 128, width: 128}, trusted: {y_start: 0, y_end: 96, x_start: 32, x_end: 128}}
+  - {tile_id: north-centre-0, input: {y_start: 0, x_start: 160, height: 128, width: 128}, trusted: {y_start: 0, y_end: 96, x_start: 32, x_end: 128}}
+  - {tile_id: north-centre-1, input: {y_start: 0, x_start: 256, height: 128, width: 128}, trusted: {y_start: 0, y_end: 96, x_start: 32, x_end: 128}}
+  - {tile_id: north-east-0, input: {y_start: 0, x_start: 352, height: 128, width: 128}, trusted: {y_start: 0, y_end: 96, x_start: 32, x_end: 128}}
+  - {tile_id: north-east-1, input: {y_start: 0, x_start: 373, height: 128, width: 128}, trusted: {y_start: 0, y_end: 96, x_start: 107, x_end: 128}}
+  - {tile_id: south-west-0, input: {y_start: 73, x_start: 0, height: 128, width: 128}, trusted: {y_start: 23, y_end: 128, x_start: 0, x_end: 96}}
+  - {tile_id: south-west-1, input: {y_start: 73, x_start: 64, height: 128, width: 128}, trusted: {y_start: 23, y_end: 128, x_start: 32, x_end: 128}}
+  - {tile_id: south-centre-0, input: {y_start: 73, x_start: 160, height: 128, width: 128}, trusted: {y_start: 23, y_end: 128, x_start: 32, x_end: 128}}
+  - {tile_id: south-centre-1, input: {y_start: 73, x_start: 256, height: 128, width: 128}, trusted: {y_start: 23, y_end: 128, x_start: 32, x_end: 128}}
+  - {tile_id: south-east-0, input: {y_start: 73, x_start: 352, height: 128, width: 128}, trusted: {y_start: 23, y_end: 128, x_start: 32, x_end: 128}}
+  - {tile_id: south-east-1, input: {y_start: 73, x_start: 373, height: 128, width: 128}, trusted: {y_start: 23, y_end: 128, x_start: 107, x_end: 128}}

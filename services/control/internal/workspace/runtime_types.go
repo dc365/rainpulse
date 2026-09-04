@@ -48,6 +48,20 @@ type RuntimeObjectReader interface {
 	ReadRange(context.Context, string, int64, int64) ([]byte, int64, string, error)
 }
 
+type NowcastNetAlgorithmRun struct {
+	AlgorithmRunID uuid.UUID
+	RunID          uuid.UUID
+	JobID          uuid.UUID
+	IssueTime      time.Time
+	GridID         string
+	OutputURI      string
+	CompletedAt    time.Time
+}
+
+type NowcastNetAlgorithmRunStore interface {
+	ListCompletedNowcastNetAlgorithmRuns(context.Context, int) ([]NowcastNetAlgorithmRun, error)
+}
+
 type PipelineStage struct {
 	StageID       string     `json:"stage_id"`
 	Stage         string     `json:"stage"`

@@ -208,22 +208,41 @@ class OfficialNowcastNetBackend:
         member_count: int,
         random_seed: int,
     ) -> np.ndarray:
+        values = self.infer_batch(
+            np.asarray(model_frames, dtype="float32")[np.newaxis, ...],
+            member_count,
+            random_seed,
+        )
+        return values[:, 0]
+
+    def infer_batch(
+        self,
+        batch_model_frames: np.ndarray,
+        member_count: int,
+        random_seed: int,
+    ) -> np.ndarray:
+        """Run same-shaped tiles in one native batch when the capsule permits it.
+
+        The member loop remains outside the batch dimension so the established
+        per-member seed schedule is unchanged.  Returned dimensions are
+        ``member x tile x lead x y x x``.
+        """
         protocol = self.profile.protocol
-        frames = np.asarray(model_frames, dtype="float32")
+        frames = np.asarray(batch_model_frames, dtype="float32")
         expected = (
             protocol.input_frames,
             protocol.input_height,
             protocol.input_width,
             protocol.input_channels,
         )
-        if frames.shape != expected:
+        if frames.ndim != 5 or frames.shape[1:] != expected or frames.shape[0] < 1:
             raise OfficialNowcastNetBackendError(
-                f"official model input must be {expected}, got {frames.shape}"
+                f"official model batch input must be batch x {expected}, got {frames.shape}"
             )
         if not np.all(np.isfinite(frames)):
             raise OfficialNowcastNetBackendError("official model input contains non-finite values")
         seeds = member_seeds(random_seed, member_count)
-        tensor = self._torch.from_numpy(frames[np.newaxis, ...]).to(self.device)
+        tensor = self._torch.from_numpy(frames).to(self.device)
         members: list[np.ndarray] = []
         try:
             self._restore_recurrent_state()
@@ -233,7 +252,7 @@ class OfficialNowcastNetBackend:
                     if self.device.startswith("cuda:"):
                         self._torch.cuda.manual_seed_all(seed)
                     output = self._network(tensor)
-                    values = output[0, ..., 0].detach().to("cpu").numpy().astype(
+                    values = output[..., 0].detach().to("cpu").numpy().astype(
                         "float32", copy=False
                     )
                     members.append(values)

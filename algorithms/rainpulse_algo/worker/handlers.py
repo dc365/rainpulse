@@ -15,6 +15,7 @@ from .domain_contracts import (
     ForecastVerificationRequested,
     NowcastInputRequested,
     NowcastNetOfflineRequested,
+    NowcastNetShadowRequested,
     ProductBuildRequested,
     PystepsLKRequested,
     RadarDecodeRequested,
@@ -68,6 +69,12 @@ def _execute_nowcastnet_offline(request: NowcastNetOfflineRequested) -> WorkerRe
     from rainpulse_algo.nowcast.nowcastnet_worker import execute_nowcastnet_offline
 
     return execute_nowcastnet_offline(request)
+
+
+def _execute_nowcastnet_shadow(request: NowcastNetShadowRequested) -> WorkerResult:
+    from rainpulse_algo.nowcast.nowcastnet_shadow_worker import execute_nowcastnet_shadow
+
+    return execute_nowcastnet_shadow(request)
 
 
 def _execute_product_build(request: ProductBuildRequested) -> WorkerResult:
@@ -245,6 +252,18 @@ HANDLERS = {
         executor=_execute_nowcastnet_offline,
         asset_type="nowcastnet_offline_output",
         artifact_name="nowcastnet-output.zarr",
+        ack_wait_seconds=1800,
+        max_deliveries=1,
+    ),
+    "nowcastnet-shadow": TaskHandler(
+        profile="nowcastnet-shadow",
+        subject="rainpulse.jobs.requested.nowcastnet_shadow",
+        consumer="rainpulse-nowcastnet-shadow-v2",
+        request_model=NowcastNetShadowRequested,
+        executor=_execute_nowcastnet_shadow,
+        asset_type="nowcastnet_shadow_product_bundle",
+        artifact_name="nowcastnet-shadow-products",
+        media_type="application/vnd.rainpulse.nowcastnet-shadow-product-bundle+json",
         ack_wait_seconds=1800,
         max_deliveries=1,
     ),

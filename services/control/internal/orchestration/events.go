@@ -50,6 +50,11 @@ const (
 	PystepsLKModelID                       = "pysteps-lk"
 	PystepsLKModelVersion                  = "pysteps-lk-1.1.0"
 	PystepsLKConfidenceKind                = "technical_forecast_quality_index_not_calibrated_probability"
+	NowcastNetShadowRequestedEventType     = "forecast.nowcastnet_shadow.requested.v1"
+	NowcastNetShadowRequestedSubject       = "rainpulse.jobs.requested.nowcastnet_shadow"
+	NowcastNetShadowJobType                = "model.nowcastnet_shadow"
+	NowcastNetShadowModelID                = "nowcastnet"
+	NowcastNetShadowModelVersion           = "official-codeocean-v1-cc0"
 	ForecastBaselineReadyEventType         = "forecast.baseline.ready.v1"
 	ForecastBaselineReadySubject           = "rainpulse.jobs.lifecycle.forecast_baseline_ready"
 	ProductBuildRequestedEventType         = "product.build.requested.v1"
@@ -319,6 +324,44 @@ type PystepsLKRequestedPayload struct {
 	ConfigVersion           string      `json:"config_version"`
 	ForecastContractVersion string      `json:"forecast_contract_version"`
 	BaselineModels          []string    `json:"baseline_models"`
+}
+
+// NowcastNetShadowRequested is intentionally separate from the baseline
+// pySTEPS request: it consumes nine exact analysis artifacts directly and may
+// fail without changing the forecast run lifecycle.
+type NowcastNetShadowRequested struct {
+	SchemaVersion string                           `json:"schema_version"`
+	EventID       uuid.UUID                        `json:"event_id"`
+	EventType     string                           `json:"event_type"`
+	OccurredAt    time.Time                        `json:"occurred_at"`
+	RunID         uuid.UUID                        `json:"run_id"`
+	JobID         uuid.UUID                        `json:"job_id"`
+	TraceID       uuid.UUID                        `json:"trace_id"`
+	Payload       NowcastNetShadowRequestedPayload `json:"payload"`
+}
+
+type NowcastNetShadowAnalysisFrame struct {
+	AnalysisID   uuid.UUID `json:"analysis_id"`
+	AnalysisTime time.Time `json:"analysis_time"`
+	AnalysisURI  string    `json:"analysis_uri"`
+}
+
+type NowcastNetShadowRequestedPayload struct {
+	AlgorithmRunID              uuid.UUID                       `json:"algorithm_run_id"`
+	OutputPrefix                string                          `json:"output_prefix"`
+	IssueTime                   time.Time                       `json:"issue_time"`
+	GridID                      string                          `json:"grid_id"`
+	InputFrames                 []NowcastNetShadowAnalysisFrame `json:"input_frames"`
+	ModelID                     string                          `json:"model_id"`
+	ModelVersion                string                          `json:"model_version"`
+	ConfigVersion               string                          `json:"config_version"`
+	SourceModelConfigVersion    string                          `json:"source_model_config_version"`
+	TileAtlasVersion            string                          `json:"tile_atlas_version"`
+	IssueCadenceMinutes         int                             `json:"issue_cadence_minutes"`
+	InputTimestepMinutes        int                             `json:"input_timestep_minutes"`
+	NativeOutputTimestepMinutes int                             `json:"native_output_timestep_minutes"`
+	ProductTimestepMinutes      int                             `json:"product_timestep_minutes"`
+	RandomSeed                  int                             `json:"random_seed"`
 }
 
 type ForecastBaselineReady struct {

@@ -2,6 +2,8 @@ package objectstore
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -58,11 +60,12 @@ func (reader *Reader) Read(
 		strings.HasPrefix(clean, "/") {
 		return nil, "", fmt.Errorf("diagnostic layer path is invalid")
 	}
-	objectName := strings.Trim(parsed.Path, "/") + "/" + clean
+	prefix := strings.Trim(parsed.Path, "/")
+	objectName := prefix + "/" + clean
 	info, err := reader.client.StatObject(ctx, parsed.Host, objectName, minio.StatObjectOptions{})
 	if err != nil {
 		if isNotFound(err) {
-			return nil, "", ErrNotFound
+			return reader.readAtomicArtifactObject(ctx, parsed.Host, prefix, clean)
 		}
 		return nil, "", fmt.Errorf("stat diagnostic layer: %w", err)
 	}
@@ -82,6 +85,91 @@ func (reader *Reader) Read(
 		return nil, "", fmt.Errorf("diagnostic layer exceeds the API size limit")
 	}
 	return data, strings.Trim(info.ETag, "\""), nil
+}
+
+// readAtomicArtifactObject follows the immutable _SUCCESS marker written by
+// Python workers. Direct-object artifacts remain supported above for older
+// data, while formal NATS products never need a writable host directory.
+func (reader *Reader) readAtomicArtifactObject(
+	ctx context.Context,
+	bucket string,
+	prefix string,
+	relativePath string,
+) ([]byte, string, error) {
+	markerName := prefix + "/_SUCCESS.json"
+	markerInfo, err := reader.client.StatObject(ctx, bucket, markerName, minio.StatObjectOptions{})
+	if err != nil {
+		if isNotFound(err) {
+			return nil, "", ErrNotFound
+		}
+		return nil, "", fmt.Errorf("stat artifact marker: %w", err)
+	}
+	if markerInfo.Size < 2 || markerInfo.Size > maximumDiagnosticLayerBytes {
+		return nil, "", fmt.Errorf("artifact marker exceeds the API size limit")
+	}
+	markerObject, err := reader.client.GetObject(ctx, bucket, markerName, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, "", fmt.Errorf("open artifact marker: %w", err)
+	}
+	markerData, readErr := io.ReadAll(io.LimitReader(markerObject, maximumDiagnosticLayerBytes+1))
+	closeErr := markerObject.Close()
+	if readErr != nil {
+		return nil, "", fmt.Errorf("read artifact marker: %w", readErr)
+	}
+	if closeErr != nil || len(markerData) > maximumDiagnosticLayerBytes {
+		return nil, "", fmt.Errorf("artifact marker is invalid")
+	}
+	var marker struct {
+		DataPrefix string `json:"data_prefix"`
+		Objects    []struct {
+			Key       string `json:"key"`
+			SHA256    string `json:"sha256"`
+			SizeBytes int64  `json:"size_bytes"`
+		} `json:"objects"`
+	}
+	if err := json.Unmarshal(markerData, &marker); err != nil {
+		return nil, "", fmt.Errorf("decode artifact marker: %w", err)
+	}
+	dataPrefix := strings.Trim(marker.DataPrefix, "/")
+	if dataPrefix == "" || path.Clean(dataPrefix) != dataPrefix || strings.HasPrefix(dataPrefix, "../") {
+		return nil, "", fmt.Errorf("artifact marker data prefix is invalid")
+	}
+	var expectedSHA string
+	var expectedSize int64 = -1
+	for _, item := range marker.Objects {
+		if item.Key == relativePath {
+			expectedSHA, expectedSize = item.SHA256, item.SizeBytes
+			break
+		}
+	}
+	if expectedSize < 0 {
+		return nil, "", ErrNotFound
+	}
+	if expectedSize > maximumDiagnosticLayerBytes || len(expectedSHA) != 64 {
+		return nil, "", fmt.Errorf("artifact marker object is invalid")
+	}
+	objectName := prefix + "/" + dataPrefix + "/" + relativePath
+	info, err := reader.client.StatObject(ctx, bucket, objectName, minio.StatObjectOptions{})
+	if err != nil {
+		if isNotFound(err) {
+			return nil, "", ErrNotFound
+		}
+		return nil, "", fmt.Errorf("stat atomic artifact object: %w", err)
+	}
+	if info.Size != expectedSize {
+		return nil, "", fmt.Errorf("atomic artifact object size differs")
+	}
+	object, err := reader.client.GetObject(ctx, bucket, objectName, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, "", fmt.Errorf("open atomic artifact object: %w", err)
+	}
+	defer object.Close()
+	data, err := io.ReadAll(io.LimitReader(object, expectedSize+1))
+	if err != nil || int64(len(data)) != expectedSize ||
+		fmt.Sprintf("%x", sha256.Sum256(data)) != expectedSHA {
+		return nil, "", fmt.Errorf("atomic artifact object integrity differs")
+	}
+	return data, expectedSHA, nil
 }
 
 func (reader *Reader) ReadObject(

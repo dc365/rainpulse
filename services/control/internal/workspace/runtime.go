@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	nowcastnetproductstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/nowcastnetproducts"
 	"github.com/google/uuid"
 )
 
@@ -33,14 +34,15 @@ type RuntimeOptions struct {
 }
 
 type runtimeHandler struct {
-	next           http.Handler
-	workspace      http.Handler
-	store          RuntimeStore
-	objects        RuntimeObjectReader
-	ensembleRoot   string
-	nowcastNetRoot string
-	adminToken     string
-	now            func() time.Time
+	next               http.Handler
+	workspace          http.Handler
+	store              RuntimeStore
+	objects            RuntimeObjectReader
+	nowcastNetProducts nowcastNetProductStore
+	ensembleRoot       string
+	nowcastNetRoot     string
+	adminToken         string
+	now                func() time.Time
 }
 
 // NewRuntimeHandler composes the browser projection, PostgreSQL materialized
@@ -48,7 +50,15 @@ type runtimeHandler struct {
 // The existing domain API remains authoritative and is still reachable through
 // the wrapped core handler.
 func NewRuntimeHandler(core http.Handler, options RuntimeOptions) http.Handler {
-	projection := NewHandler(core)
+	var legacyNowcastNet nowcastNetProductStore
+	if options.NowcastNetRoot != "" {
+		legacyNowcastNet = nowcastnetproductstore.NewFileStore(options.NowcastNetRoot)
+	}
+	var formalNowcastNet nowcastNetProductStore
+	if runs, ok := options.Store.(NowcastNetAlgorithmRunStore); ok {
+		formalNowcastNet = newFormalNowcastNetProductStore(runs, options.Objects)
+	}
+	projection := newHandler(core, newCombinedNowcastNetProductStore(formalNowcastNet, legacyNowcastNet))
 	projected := http.Handler(projection)
 	if options.ProjectionStore != nil && environmentBool(
 		"RAINPULSE_WORKSPACE_PERSISTENT_PROJECTION_ENABLED",
@@ -80,9 +90,10 @@ func NewRuntimeHandler(core http.Handler, options RuntimeOptions) http.Handler {
 	return &runtimeHandler{
 		next: projected, workspace: projected,
 		store: options.Store, objects: options.Objects,
-		ensembleRoot:   strings.TrimSpace(options.EnsembleRoot),
-		nowcastNetRoot: strings.TrimSpace(options.NowcastNetRoot),
-		adminToken:     options.AdminToken, now: now,
+		nowcastNetProducts: newCombinedNowcastNetProductStore(formalNowcastNet, legacyNowcastNet),
+		ensembleRoot:       strings.TrimSpace(options.EnsembleRoot),
+		nowcastNetRoot:     strings.TrimSpace(options.NowcastNetRoot),
+		adminToken:         options.AdminToken, now: now,
 	}
 }
 

@@ -300,6 +300,22 @@ type PystepsLKBundle struct {
 	Outbox          OutboxEvent
 }
 
+type NowcastNetShadowBundle struct {
+	AlgorithmRunID uuid.UUID
+	Run            Run
+	InputFrames    []NowcastNetShadowInputFrame
+	Config         json.RawMessage
+	ConfigSHA256   string
+	Job            Job
+	Outbox         OutboxEvent
+}
+
+type NowcastNetShadowInputFrame struct {
+	AnalysisID   uuid.UUID
+	AnalysisTime time.Time
+	AnalysisURI  string
+}
+
 type PystepsLKMetrics struct {
 	SchemaVersion                   string      `json:"schema_version"`
 	RunID                           uuid.UUID   `json:"run_id"`

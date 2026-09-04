@@ -26,6 +26,7 @@ func TestRequestedSubjectCoversEveryRequestEvent(t *testing.T) {
 		{orchestration.AnalysisDiagnosticsRequestedEventType, orchestration.AnalysisDiagnosticsRequestedSubject},
 		{orchestration.NowcastInputRequestedEventType, orchestration.NowcastInputRequestedSubject},
 		{orchestration.PystepsLKRequestedEventType, orchestration.PystepsLKRequestedSubject},
+		{orchestration.NowcastNetShadowRequestedEventType, orchestration.NowcastNetShadowRequestedSubject},
 		{orchestration.ProductBuildRequestedEventType, orchestration.ProductBuildRequestedSubject},
 	}
 	for _, test := range tests {

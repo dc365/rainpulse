@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -11,6 +12,7 @@ from jsonschema import Draft202012Validator
 from rainpulse_algo.nowcast.nowcastnet_adapter import (
     NowcastNetInputError,
     prepare_nowcastnet_input,
+    run_nowcastnet_batch_fields,
     run_nowcastnet_fields,
     validate_nowcastnet_backend_output,
 )
@@ -126,6 +128,39 @@ def test_ready_adapter_runs_an_injected_backend_without_becoming_operational(pro
     assert result.clipped_negative_output_pixel_count == 1
     assert result.operational_eligible is False
     assert result.random_seed == 20260830
+
+
+def test_batch_adapter_preserves_tile_axis_and_clipping(profile) -> None:
+    configured = replace(
+        profile,
+        protocol=replace(profile.protocol, input_height=32, input_width=32),
+    )
+    rate = np.ones((2, 9, 32, 32), dtype="float32")
+    rate[1, 0, 0, 0] = 200.0
+    valid = np.ones_like(rate, dtype="uint8")
+
+    class Backend:
+        def infer_batch(self, fields: np.ndarray, members: int, seed: int) -> np.ndarray:
+            assert fields.shape == (2, 9, 32, 32, 2)
+            assert members == 4
+            assert seed == 42
+            return np.broadcast_to(
+                fields[np.newaxis, :, np.newaxis, -1, ..., 0],
+                (members, 2, configured.protocol.output_frames, 32, 32),
+            ).copy()
+
+    result = run_nowcastnet_batch_fields(
+        rate,
+        valid,
+        profile=configured,
+        backend=Backend(),
+        random_seed=42,
+    )
+
+    assert result.rain_rate_mm_h.shape == (4, 2, 20, 32, 32)
+    assert np.all(result.valid_mask == 1)
+    assert result.clipped_input_pixel_count == 1
+    assert result.clipped_negative_output_pixel_count == 0
 
 
 def test_official_artifact_hash_and_member_seed_schedule(tmp_path: Path) -> None:

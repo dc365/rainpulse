@@ -771,6 +771,56 @@ func TestCreatePystepsLKSchedulesOnlyCommittedInputReadyRun(t *testing.T) {
 	}
 }
 
+func TestCreateNowcastNetShadowSchedulesIndependentAlgorithmRun(t *testing.T) {
+	repository := &fakeRepository{}
+	issueTime := time.Date(2026, 8, 28, 2, 25, 0, 0, time.UTC)
+	service := NewService(repository, Options{Now: func() time.Time { return issueTime.Add(time.Minute) }})
+	frames := make([]workflow.NowcastNetShadowInputFrame, 9)
+	for index := range frames {
+		frames[index] = workflow.NowcastNetShadowInputFrame{
+			AnalysisID:   uuid.NewSHA1(uuid.NameSpaceURL, []byte(fmt.Sprintf("analysis-%d", index))),
+			AnalysisTime: issueTime.Add(time.Duration(-80+index*10) * time.Minute),
+			AnalysisURI:  fmt.Sprintf("s3://rainpulse/analysis/%02d.zarr", index),
+		}
+	}
+	input := NowcastNetShadowInput{
+		RunID:     uuid.MustParse("d0300000-0000-4000-8000-000000000001"),
+		IssueTime: issueTime, GridID: "fuzhou_118_123_25_27_0p01deg_v1",
+		CurrentStatus: workflow.RunInputReady, InputFrames: frames,
+		ModelID: NowcastNetShadowModelID, ModelVersion: NowcastNetShadowModelVersion,
+		ConfigVersion:            "fujian-nowcastnet-shadow-v2",
+		SourceModelConfigVersion: "rp026-nowcastnet-offline-v1",
+		TileAtlasVersion:         "fujian-nowcastnet-tile-atlas-v1",
+		Config:                   json.RawMessage(`{"profile_version":"fujian-nowcastnet-shadow-v2"}`),
+		ConfigSHA256:             strings.Repeat("a", 64),
+	}
+	job, err := service.CreateNowcastNetShadow(context.Background(), input)
+	if err != nil {
+		t.Fatalf("CreateNowcastNetShadow() error = %v", err)
+	}
+	if job.JobType != NowcastNetShadowJobType || repository.nowcastNetShadow.Run.Status != workflow.RunInputReady {
+		t.Fatalf("shadow run changed the baseline lifecycle: job=%#v bundle=%#v", job, repository.nowcastNetShadow)
+	}
+	var requested NowcastNetShadowRequested
+	if err := json.Unmarshal(repository.nowcastNetShadow.Outbox.Payload, &requested); err != nil {
+		t.Fatalf("decode NowcastNet shadow request: %v", err)
+	}
+	if requested.EventType != NowcastNetShadowRequestedEventType ||
+		repository.nowcastNetShadow.Outbox.Subject != NowcastNetShadowRequestedSubject ||
+		requested.Payload.AlgorithmRunID == uuid.Nil || len(requested.Payload.InputFrames) != 9 ||
+		requested.Payload.ProductTimestepMinutes != 5 || requested.Payload.NativeOutputTimestepMinutes != 10 {
+		t.Fatalf("unexpected NowcastNet shadow request: %#v", requested)
+	}
+	second, err := service.CreateNowcastNetShadow(context.Background(), input)
+	if err != nil || second.ID != job.ID {
+		t.Fatalf("NowcastNet shadow identifiers are not deterministic: %v", err)
+	}
+	input.InputFrames[3].AnalysisTime = input.InputFrames[3].AnalysisTime.Add(time.Minute)
+	if _, err := service.CreateNowcastNetShadow(context.Background(), input); err == nil {
+		t.Fatal("NowcastNet shadow accepted a non-exact analysis frame")
+	}
+}
+
 func TestCreateProductBuildSchedulesThreeProductsFromCommittedBaseline(t *testing.T) {
 	repository := &fakeRepository{}
 	now := time.Date(2026, 8, 25, 12, 10, 2, 0, time.UTC)
@@ -902,6 +952,7 @@ type fakeRepository struct {
 	analysisDiagnostics  workflow.AnalysisDiagnosticsBundle
 	nowcastInput         workflow.NowcastInputBundle
 	pystepsLK            workflow.PystepsLKBundle
+	nowcastNetShadow     workflow.NowcastNetShadowBundle
 	productBuild         workflow.ProductBuildBundle
 	forecastVerification workflow.ForecastVerificationBundle
 	domain               workflow.DomainSimulation
@@ -940,6 +991,14 @@ func (repository *fakeRepository) CreatePystepsLKBundle(
 	bundle workflow.PystepsLKBundle,
 ) error {
 	repository.pystepsLK = bundle
+	return nil
+}
+
+func (repository *fakeRepository) CreateNowcastNetShadowBundle(
+	_ context.Context,
+	bundle workflow.NowcastNetShadowBundle,
+) error {
+	repository.nowcastNetShadow = bundle
 	return nil
 }
 

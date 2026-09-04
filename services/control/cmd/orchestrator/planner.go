@@ -31,6 +31,7 @@ type pipelineSettings struct {
 	diagnosticConfig          string
 	nowcastConfig             string
 	pystepsConfig             string
+	nowcastNetShadowConfig    string
 	productConfig             string
 	verificationConfig        string
 	gridID                    string
@@ -39,6 +40,7 @@ type pipelineSettings struct {
 	minimumFrames             int
 	maximumFrames             int
 	forecastEnabled           bool
+	nowcastNetShadowEnabled   bool
 	requireAllRadars          bool
 }
 
@@ -53,6 +55,7 @@ type pipelinePlanner struct {
 	plannedDiagnostic   map[uuid.UUID]struct{}
 	plannedNowcast      map[time.Time]struct{}
 	plannedPysteps      map[uuid.UUID]struct{}
+	plannedNowcastNet   map[uuid.UUID]struct{}
 	plannedProduct      map[uuid.UUID]struct{}
 	plannedVerification map[uuid.UUID]struct{}
 }
@@ -101,6 +104,12 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse RAINPULSE_PIPELINE_FORECAST_ENABLED: %w", err)
 	}
+	nowcastNetShadowEnabled, err := strconv.ParseBool(
+		environmentOrDefault("RAINPULSE_PIPELINE_NOWCASTNET_SHADOW_ENABLED", "false"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("parse RAINPULSE_PIPELINE_NOWCASTNET_SHADOW_ENABLED: %w", err)
+	}
 	requireAllRadars, err := strconv.ParseBool(
 		environmentOrDefault("RAINPULSE_PIPELINE_REQUIRE_ALL_RADARS", "false"),
 	)
@@ -130,13 +139,15 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 		diagnosticConfig:          environmentOrDefault("RAINPULSE_PIPELINE_DIAGNOSTIC_CONFIG", "/opt/rainpulse/configs/diagnostics/rp012-operational-diagnostics-v1.yaml"),
 		nowcastConfig:             environmentOrDefault("RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG", "/opt/rainpulse/configs/nowcast/rp013-fixed-5min-v1.1.yaml"),
 		pystepsConfig:             environmentOrDefault("RAINPULSE_PIPELINE_PYSTEPS_CONFIG", "/opt/rainpulse/configs/nowcast/rp016-pysteps-lk-v1.yaml"),
+		nowcastNetShadowConfig:    environmentOrDefault("RAINPULSE_PIPELINE_NOWCASTNET_SHADOW_CONFIG", "/opt/rainpulse/configs/nowcast/fujian-nowcastnet-shadow-v2.yaml"),
 		productConfig:             environmentOrDefault("RAINPULSE_PIPELINE_PRODUCT_CONFIG", "/opt/rainpulse/configs/products/rp015-application-products-v1.yaml"),
 		verificationConfig:        environmentOrDefault("RAINPULSE_PIPELINE_VERIFICATION_CONFIG", "/opt/rainpulse/configs/verification/rp031-operational-deterministic-v1.yaml"),
 		forecastEnabled:           forecastEnabled,
+		nowcastNetShadowEnabled:   nowcastNetShadowEnabled,
 		requireAllRadars:          requireAllRadars,
 		minimumMosaicContributors: 1,
 	}
-	for _, path := range []string{
+	paths := []string{
 		settings.qcConfig,
 		settings.gridConfig,
 		settings.mosaicConfig,
@@ -146,7 +157,11 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 		settings.pystepsConfig,
 		settings.productConfig,
 		settings.verificationConfig,
-	} {
+	}
+	if settings.nowcastNetShadowEnabled {
+		paths = append(paths, settings.nowcastNetShadowConfig)
+	}
+	for _, path := range paths {
 		if info, statErr := os.Stat(path); statErr != nil || !info.Mode().IsRegular() {
 			return nil, fmt.Errorf("pipeline config must be a readable regular file: %s", path)
 		}
@@ -158,9 +173,10 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 	var diagnostic diagnosticConfiguration
 	var nowcast nowcastInputConfiguration
 	var pysteps pystepsLKConfiguration
+	var nowcastNetShadow nowcastNetShadowConfiguration
 	var product productConfiguration
 	var verification forecastVerificationConfiguration
-	for _, item := range []struct {
+	items := []struct {
 		label  string
 		path   string
 		target any
@@ -174,7 +190,15 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 		{"pySTEPS-LK", settings.pystepsConfig, &pysteps},
 		{"product", settings.productConfig, &product},
 		{"verification", settings.verificationConfig, &verification},
-	} {
+	}
+	if settings.nowcastNetShadowEnabled {
+		items = append(items, struct {
+			label  string
+			path   string
+			target any
+		}{"NowcastNet shadow", settings.nowcastNetShadowConfig, &nowcastNetShadow})
+	}
+	for _, item := range items {
 		configBytes, readErr := os.ReadFile(item.path)
 		if readErr != nil {
 			return nil, fmt.Errorf("read pipeline %s config: %w", item.label, readErr)
@@ -210,6 +234,19 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 	if pysteps.Extrapolation.LeadCount != 24 ||
 		pysteps.Extrapolation.LeadStepMinutes != 5 {
 		return nil, fmt.Errorf("pipeline pySTEPS-LK config must publish 24 five-minute leads")
+	}
+	if settings.nowcastNetShadowEnabled &&
+		(nowcastNetShadow.ProfileVersion != "fujian-nowcastnet-shadow-v2" ||
+			nowcastNetShadow.SourceModelProfile != "rp026-nowcastnet-offline-v1" ||
+			nowcastNetShadow.GridID != nowcast.GridID ||
+			nowcastNetShadow.GridConfigVersion != nowcast.GridConfigVersion ||
+			nowcastNetShadow.TileAtlasVersion != "fujian-nowcastnet-tile-atlas-v1" ||
+			nowcastNetShadow.Protocol.InputFrames != 9 ||
+			nowcastNetShadow.Protocol.IssueCadenceMinutes != 5 ||
+			nowcastNetShadow.Protocol.InputTimestepMinutes != 10 ||
+			nowcastNetShadow.Protocol.NativeOutputTimestepMinutes != 10 ||
+			nowcastNetShadow.Protocol.ProductTimestepMinutes != 5) {
+		return nil, fmt.Errorf("pipeline NowcastNet shadow config has an incompatible lineage or cadence")
 	}
 	if err := validateForecastVerificationConfiguration(verification); err != nil {
 		return nil, err
@@ -266,7 +303,8 @@ func newPipelinePlanner(
 		plannedQC: make(map[uuid.UUID]struct{}), plannedGrid: make(map[uuid.UUID]struct{}),
 		plannedMosaic: make(map[time.Time]struct{}), plannedQPE: make(map[uuid.UUID]struct{}),
 		plannedDiagnostic: make(map[uuid.UUID]struct{}), plannedNowcast: make(map[time.Time]struct{}),
-		plannedPysteps: make(map[uuid.UUID]struct{}), plannedProduct: make(map[uuid.UUID]struct{}),
+		plannedPysteps: make(map[uuid.UUID]struct{}), plannedNowcastNet: make(map[uuid.UUID]struct{}),
+		plannedProduct:      make(map[uuid.UUID]struct{}),
 		plannedVerification: make(map[uuid.UUID]struct{}),
 	}
 }
@@ -557,6 +595,17 @@ func (planner *pipelinePlanner) planForecasts(ctx context.Context) error {
 		}
 		if planner.outsideForecastLookback(run) {
 			continue
+		}
+		if planner.settings.nowcastNetShadowEnabled {
+			if _, exists := planner.plannedNowcastNet[run.ID]; !exists {
+				if err := nowcastNetShadow(
+					ctx, planner.store, planner.service, run.ID.String(), planner.settings.nowcastNetShadowConfig,
+				); err != nil {
+					slog.Debug("plan NowcastNet shadow", "run_id", run.ID, "error", err)
+				} else {
+					planner.plannedNowcastNet[run.ID] = struct{}{}
+				}
+			}
 		}
 		if _, exists := planner.plannedPysteps[run.ID]; exists {
 			continue

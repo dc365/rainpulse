@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -52,12 +53,18 @@ type Frame struct {
 	ValidCellCount   int64      `json:"valid_cell_count"`
 	MissingCellCount int64      `json:"missing_cell_count"`
 	Bounds           [4]float64 `json:"pixel_edge_bounds"`
+	FrameKind        string     `json:"frame_kind,omitempty"`
+	Derivation       string     `json:"derivation,omitempty"`
+	SourceLeads      []int      `json:"source_leads,omitempty"`
 }
 
 type Bundle struct {
 	ContractName        string        `json:"contract_name"`
 	ContractVersion     string        `json:"contract_version"`
 	BundleID            uuid.UUID     `json:"bundle_id"`
+	RunID               uuid.UUID     `json:"run_id,omitempty"`
+	JobID               uuid.UUID     `json:"job_id,omitempty"`
+	AlgorithmRunID      uuid.UUID     `json:"algorithm_run_id,omitempty"`
 	IssueTime           time.Time     `json:"issue_time"`
 	GridID              string        `json:"grid_id"`
 	GridConfigVersion   string        `json:"grid_config_version"`
@@ -174,6 +181,35 @@ func (store *FileStore) ReadAsset(ctx context.Context, bundleID, assetID string)
 	return AssetContent{Data: data, MediaType: selected.MediaType, SHA256: digest}, nil
 }
 
+func (store *FileStore) ReadObject(
+	ctx context.Context,
+	bundleID string,
+	objectPath string,
+) ([]byte, string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, "", err
+	}
+	if !validUUID(bundleID) || !validObjectPath(objectPath) {
+		return nil, "", ErrNotFound
+	}
+	path, err := safeAssetPath(store.root, bundleID, objectPath)
+	if err != nil {
+		return nil, "", err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, "", fileError(err)
+	}
+	if !info.Mode().IsRegular() || info.Size() < 0 || info.Size() > maximumAssetBytes {
+		return nil, "", fmt.Errorf("%w: object size differs", ErrInvalidBundle)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, "", fileError(err)
+	}
+	return data, fmt.Sprintf("%x", sha256.Sum256(data)), nil
+}
+
 func (store *FileStore) readBundle(bundleID string) (Bundle, error) {
 	if !validUUID(bundleID) {
 		return Bundle{}, ErrNotFound
@@ -190,11 +226,17 @@ func (store *FileStore) readBundle(bundleID string) (Bundle, error) {
 	if err != nil {
 		return Bundle{}, fileError(err)
 	}
+	return DecodeBundle(data)
+}
+
+// DecodeBundle validates an immutable bundle from either the legacy file
+// mirror or the authoritative atomic object-store artifact.
+func DecodeBundle(data []byte) (Bundle, error) {
 	var bundle Bundle
 	if err := json.Unmarshal(data, &bundle); err != nil {
 		return Bundle{}, fmt.Errorf("%w: decode manifest", ErrInvalidBundle)
 	}
-	if err := validateBundle(bundle, bundleID); err != nil {
+	if err := validateBundle(bundle, bundle.BundleID.String()); err != nil {
 		return Bundle{}, err
 	}
 	return bundle, nil
@@ -202,13 +244,17 @@ func (store *FileStore) readBundle(bundleID string) (Bundle, error) {
 
 func validateBundle(bundle Bundle, directoryID string) error {
 	if bundle.ContractName != "rainpulse.nowcastnet-shadow-product-bundle" ||
-		(bundle.ContractVersion != "1.0" && bundle.ContractVersion != "1.1") ||
+		(bundle.ContractVersion != "1.0" && bundle.ContractVersion != "1.1" && bundle.ContractVersion != "1.2") ||
 		bundle.BundleID.String() != directoryID ||
 		bundle.IssueTime.IsZero() || bundle.GridID == "" || bundle.ModelID != "nowcastnet" ||
 		bundle.ModelVersion == "" || bundle.ProfileVersion == "" || bundle.MemberCount != 4 ||
-		bundle.CadenceMinutes != 10 || bundle.Lifecycle != "shadow" || bundle.OperationalEligible ||
-		bundle.LegendUnit != "mm/h" || len(bundle.Legend) < 2 || len(bundle.Frames) != 12 || bundle.CreatedAt.IsZero() {
+		bundle.Lifecycle != "shadow" || bundle.OperationalEligible ||
+		bundle.LegendUnit != "mm/h" || len(bundle.Legend) < 2 || bundle.CreatedAt.IsZero() {
 		return fmt.Errorf("%w: manifest identity differs", ErrInvalidBundle)
+	}
+	if (bundle.ContractVersion != "1.2" && (bundle.CadenceMinutes != 10 || len(bundle.Frames) != 12)) ||
+		(bundle.ContractVersion == "1.2" && (bundle.CadenceMinutes != 5 || len(bundle.Frames) != 24)) {
+		return fmt.Errorf("%w: manifest cadence differs", ErrInvalidBundle)
 	}
 	width, height := rasterDimensions(bundle)
 	if bundle.ContractVersion == "1.0" {
@@ -222,7 +268,7 @@ func validateBundle(bundle Bundle, directoryID string) error {
 	paths := make(map[string]bool, len(bundle.Frames))
 	cellCount := int64(width) * int64(height)
 	for index, frame := range bundle.Frames {
-		expectedLead := (index + 1) * 10
+		expectedLead := (index + 1) * bundle.CadenceMinutes
 		if frame.AssetID == "" || !validSegment(frame.AssetID) || assets[frame.AssetID] ||
 			!validObjectPath(frame.ObjectPath) || paths[frame.ObjectPath] || frame.MediaType != "image/png" ||
 			!validSHA(frame.SHA256) || frame.SizeBytes < 8 || frame.SizeBytes > maximumAssetBytes ||
@@ -237,11 +283,27 @@ func validateBundle(bundle Bundle, directoryID string) error {
 			}
 		} else {
 			expectedCoverage := float64(frame.ValidCellCount) / float64(cellCount)
-			if frame.ValidCellCount < 1 || frame.MissingCellCount < 0 ||
+			minimumValidCells := int64(1)
+			if bundle.ContractVersion == "1.2" {
+				minimumValidCells = 0
+			}
+			if frame.ValidCellCount < minimumValidCells || frame.MissingCellCount < 0 ||
 				frame.ValidCellCount+frame.MissingCellCount != cellCount ||
 				math.Abs(frame.CoverageRatio-expectedCoverage) > 1e-9 ||
 				!sameBounds(frame.Bounds, bundle.Bounds) {
 				return fmt.Errorf("%w: full-grid coverage differs", ErrInvalidBundle)
+			}
+		}
+		if bundle.ContractVersion == "1.2" {
+			if expectedLead%10 == 0 {
+				if frame.FrameKind != "native" || frame.Derivation != "" ||
+					!slices.Equal(frame.SourceLeads, []int{expectedLead}) {
+					return fmt.Errorf("%w: native frame lineage differs", ErrInvalidBundle)
+				}
+			} else if frame.FrameKind != "derived" ||
+				frame.Derivation != "bidirectional-dense-optical-flow-advection-v1" ||
+				!slices.Equal(frame.SourceLeads, []int{expectedLead - 5, expectedLead + 5}) {
+				return fmt.Errorf("%w: derived frame lineage differs", ErrInvalidBundle)
 			}
 		}
 		assets[frame.AssetID] = true

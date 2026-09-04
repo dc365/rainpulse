@@ -45,12 +45,20 @@ type Handler struct {
 	catalogNeedsAnalysis bool
 	ingestStatusURL      string
 	nowcastNetStatusURL  string
-	nowcastNetProducts   *nowcastnetproductstore.FileStore
+	nowcastNetProducts   nowcastNetProductStore
 	httpClient           *http.Client
 }
 
 // NewHandler wraps the existing control API with the unified workspace routes.
 func NewHandler(core http.Handler) http.Handler {
+	var products nowcastNetProductStore
+	if root := strings.TrimSpace(os.Getenv("RAINPULSE_NOWCASTNET_PRODUCT_ROOT")); root != "" {
+		products = nowcastnetproductstore.NewFileStore(root)
+	}
+	return newHandler(core, products)
+}
+
+func newHandler(core http.Handler, products nowcastNetProductStore) http.Handler {
 	mode := strings.TrimSpace(os.Getenv("RAINPULSE_WORKSPACE_EXECUTION_MODE"))
 	if mode != "realtime_shadow" && mode != "operational" {
 		mode = ""
@@ -74,9 +82,7 @@ func NewHandler(core http.Handler) http.Handler {
 		httpClient: &http.Client{Timeout: 3 * time.Second},
 		now:        func() time.Time { return time.Now().UTC() },
 	}
-	if root := strings.TrimSpace(os.Getenv("RAINPULSE_NOWCASTNET_PRODUCT_ROOT")); root != "" {
-		handler.nowcastNetProducts = nowcastnetproductstore.NewFileStore(root)
-	}
+	handler.nowcastNetProducts = products
 	return handler
 }
 
@@ -170,6 +176,9 @@ type frameView struct {
 	ValidCellCount *int        `json:"valid_cell_count,omitempty"`
 	MissingCount   *int        `json:"missing_cell_count,omitempty"`
 	Bounds         *[4]float64 `json:"bounds,omitempty"`
+	FrameKind      string      `json:"frame_kind,omitempty"`
+	Derivation     string      `json:"derivation,omitempty"`
+	SourceLeads    []int       `json:"source_leads,omitempty"`
 }
 
 type panelView struct {
@@ -1054,7 +1063,8 @@ func (handler *Handler) addNowcastNetProduct(
 			),
 			MediaType: asset.MediaType, Unit: asset.Unit, SHA256: asset.SHA256,
 			CoverageRatio: &coverage, ValidCellCount: &validCount,
-			MissingCount: &missingCount, Bounds: &bounds,
+			MissingCount: &missingCount, Bounds: &bounds, FrameKind: asset.FrameKind,
+			Derivation: asset.Derivation, SourceLeads: asset.SourceLeads,
 		})
 	}
 	if len(panel.Frames) == 0 {

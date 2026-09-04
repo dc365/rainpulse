@@ -400,6 +400,13 @@ WHERE job_id = $1`, event.JobID, event.Payload.StartedAt, event.Payload.Finished
 			}
 			break
 		}
+		if jobType == orchestration.NowcastNetShadowJobType && modelID != nil &&
+			*modelID == orchestration.NowcastNetShadowModelID {
+			if err := applyNowcastNetShadowCompletion(ctx, tx, event); err != nil {
+				return false, err
+			}
+			break
+		}
 		if jobType == orchestration.ProductBuildJobType && modelID != nil &&
 			*modelID == orchestration.PystepsLKModelID {
 			if err := applyProductBuildCompletion(ctx, tx, event); err != nil {
@@ -541,6 +548,15 @@ WHERE job_id = $1`, event.JobID, event.Payload.StartedAt, event.Payload.Finished
 
 	switch runType {
 	case workflow.WorkflowForecastRun:
+		// The public-weight NowcastNet task is shadow-only.  Its failure is
+		// recorded on algorithm_runs and must never fail the baseline forecast.
+		if jobType == orchestration.NowcastNetShadowJobType && modelID != nil &&
+			*modelID == orchestration.NowcastNetShadowModelID {
+			if err := applyNowcastNetShadowFailure(ctx, tx, event); err != nil {
+				return false, err
+			}
+			break
+		}
 		var currentStatus workflow.RunStatus
 		if err := tx.QueryRow(ctx, `SELECT status FROM forecast_runs WHERE run_id = $1 FOR UPDATE`, runID).Scan(&currentStatus); err != nil {
 			return false, fmt.Errorf("lock failed run: %w", err)

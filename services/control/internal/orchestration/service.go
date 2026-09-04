@@ -26,6 +26,7 @@ type Repository interface {
 	CreateAnalysisDiagnosticsBundle(context.Context, workflow.AnalysisDiagnosticsBundle) error
 	CreateNowcastInputBundle(context.Context, workflow.NowcastInputBundle) error
 	CreatePystepsLKBundle(context.Context, workflow.PystepsLKBundle) error
+	CreateNowcastNetShadowBundle(context.Context, workflow.NowcastNetShadowBundle) error
 	CreateProductBuildBundle(context.Context, workflow.ProductBuildBundle) error
 	CreateForecastVerificationBundle(context.Context, workflow.ForecastVerificationBundle) error
 	CreateDomainSimulation(context.Context, workflow.DomainSimulation) error
@@ -196,6 +197,21 @@ type PystepsLKInput struct {
 	BaselineModels          []string
 	Config                  json.RawMessage
 	ConfigSHA256            string
+}
+
+type NowcastNetShadowInput struct {
+	RunID                    uuid.UUID
+	IssueTime                time.Time
+	GridID                   string
+	CurrentStatus            workflow.RunStatus
+	InputFrames              []workflow.NowcastNetShadowInputFrame
+	ModelID                  string
+	ModelVersion             string
+	ConfigVersion            string
+	SourceModelConfigVersion string
+	TileAtlasVersion         string
+	Config                   json.RawMessage
+	ConfigSHA256             string
 }
 
 type ProductBuildInput struct {
@@ -1137,6 +1153,101 @@ func validatePystepsLKInput(input PystepsLKInput) error {
 	if len(input.Config) == 0 || !json.Valid(input.Config) ||
 		!sha256Pattern.MatchString(input.ConfigSHA256) {
 		return fmt.Errorf("pySTEPS-LK configuration and SHA-256 are required")
+	}
+	return nil
+}
+
+func (service *Service) CreateNowcastNetShadow(
+	ctx context.Context,
+	input NowcastNetShadowInput,
+) (workflow.Job, error) {
+	if err := validateNowcastNetShadowInput(input); err != nil {
+		return workflow.Job{}, err
+	}
+	now := service.now().UTC()
+	issueTime := input.IssueTime.UTC()
+	jobID := stableID("nowcastnet-shadow-job", input.RunID.String(), input.ModelVersion, input.ConfigVersion)
+	traceID := stableID("nowcastnet-shadow-trace", input.RunID.String())
+	eventID := stableID("nowcastnet-shadow-request", jobID.String())
+	algorithmRunID := stableID("nowcastnet-shadow-algorithm-run", jobID.String())
+	outputPrefix := fmt.Sprintf(
+		"s3://rainpulse/products/%s/%s/%s/%s/",
+		input.RunID, url.PathEscape(input.ModelID), url.PathEscape(input.ModelVersion),
+		url.PathEscape(input.ConfigVersion),
+	)
+	frames := make([]NowcastNetShadowAnalysisFrame, len(input.InputFrames))
+	for index, frame := range input.InputFrames {
+		frames[index] = NowcastNetShadowAnalysisFrame{
+			AnalysisID: frame.AnalysisID, AnalysisTime: frame.AnalysisTime.UTC(), AnalysisURI: frame.AnalysisURI,
+		}
+	}
+	request := NowcastNetShadowRequested{
+		SchemaVersion: SchemaVersion, EventID: eventID, EventType: NowcastNetShadowRequestedEventType,
+		OccurredAt: now, RunID: input.RunID, JobID: jobID, TraceID: traceID,
+		Payload: NowcastNetShadowRequestedPayload{
+			AlgorithmRunID: algorithmRunID, OutputPrefix: outputPrefix, IssueTime: issueTime, GridID: input.GridID,
+			InputFrames: frames, ModelID: input.ModelID, ModelVersion: input.ModelVersion,
+			ConfigVersion: input.ConfigVersion, SourceModelConfigVersion: input.SourceModelConfigVersion,
+			TileAtlasVersion: input.TileAtlasVersion, IssueCadenceMinutes: 5,
+			InputTimestepMinutes: 10, NativeOutputTimestepMinutes: 10,
+			ProductTimestepMinutes: 5, RandomSeed: 20260828,
+		},
+	}
+	payload, err := json.Marshal(request)
+	if err != nil {
+		return workflow.Job{}, fmt.Errorf("encode NowcastNet shadow request: %w", err)
+	}
+	job := workflow.Job{
+		ID: jobID, RunID: input.RunID, TraceID: traceID, JobType: NowcastNetShadowJobType,
+		ModelID: input.ModelID, ModelVersion: input.ModelVersion, ConfigVersion: input.ConfigVersion,
+		Status: workflow.JobPending, Attempt: 1, RequestPayload: payload, CreatedAt: now,
+	}
+	bundle := workflow.NowcastNetShadowBundle{
+		AlgorithmRunID: algorithmRunID,
+		Run: workflow.Run{ID: input.RunID, IssueTime: issueTime, GridID: input.GridID,
+			Status: input.CurrentStatus, UpdatedAt: now},
+		InputFrames: input.InputFrames, Config: input.Config, ConfigSHA256: input.ConfigSHA256, Job: job,
+		Outbox: workflow.OutboxEvent{ID: eventID, AggregateID: jobID.String(),
+			EventType: NowcastNetShadowRequestedEventType, Subject: NowcastNetShadowRequestedSubject, Payload: payload},
+	}
+	if err := service.repository.CreateNowcastNetShadowBundle(ctx, bundle); err != nil {
+		return workflow.Job{}, err
+	}
+	return job, nil
+}
+
+func validateNowcastNetShadowInput(input NowcastNetShadowInput) error {
+	if input.RunID == uuid.Nil || input.IssueTime.IsZero() || input.GridID == "" ||
+		input.CurrentStatus != workflow.RunInputReady {
+		return fmt.Errorf("NowcastNet shadow requires an INPUT_READY forecast run")
+	}
+	if !input.IssueTime.UTC().Equal(input.IssueTime.UTC().Truncate(5 * time.Minute)) {
+		return fmt.Errorf("NowcastNet shadow issue time must be on a five-minute UTC boundary")
+	}
+	if input.ModelID != NowcastNetShadowModelID || input.ModelVersion != NowcastNetShadowModelVersion ||
+		input.ConfigVersion != "fujian-nowcastnet-shadow-v2" ||
+		input.SourceModelConfigVersion != "rp026-nowcastnet-offline-v1" ||
+		input.TileAtlasVersion != "fujian-nowcastnet-tile-atlas-v1" {
+		return fmt.Errorf("NowcastNet shadow identity differs from the active profile")
+	}
+	if len(input.Config) == 0 || !json.Valid(input.Config) || !sha256Pattern.MatchString(input.ConfigSHA256) {
+		return fmt.Errorf("NowcastNet shadow configuration and SHA-256 are required")
+	}
+	if len(input.InputFrames) != 9 {
+		return fmt.Errorf("NowcastNet shadow requires exactly nine direct analysis frames")
+	}
+	seen := make(map[uuid.UUID]struct{}, len(input.InputFrames))
+	for index, frame := range input.InputFrames {
+		parsed, err := url.ParseRequestURI(frame.AnalysisURI)
+		expected := input.IssueTime.UTC().Add(time.Duration(-80+index*10) * time.Minute)
+		if frame.AnalysisID == uuid.Nil || err != nil || parsed.Scheme != "s3" ||
+			!frame.AnalysisTime.UTC().Equal(expected) {
+			return fmt.Errorf("NowcastNet shadow input frame %d is not the required T%+d analysis", index, -80+index*10)
+		}
+		if _, exists := seen[frame.AnalysisID]; exists {
+			return fmt.Errorf("NowcastNet shadow analysis IDs must be unique")
+		}
+		seen[frame.AnalysisID] = struct{}{}
 	}
 	return nil
 }

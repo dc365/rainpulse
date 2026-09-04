@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 from urllib.parse import urlparse
 from uuid import UUID
@@ -309,6 +309,67 @@ class NowcastNetOfflinePayload(ObjectTaskPayload):
 class NowcastNetOfflineRequested(DomainRequest):
     event_type: Literal["forecast.nowcastnet_offline.requested.v1"]
     payload: NowcastNetOfflinePayload
+
+
+class NowcastNetShadowInput(ContractModel):
+    """One immutable RadarAnalysis selected by the control-plane coordinator."""
+
+    analysis_id: UUID
+    analysis_time: datetime
+    analysis_uri: str
+
+    @field_validator("analysis_uri")
+    @classmethod
+    def validate_analysis_uri(cls, value: str) -> str:
+        if urlparse(value).scheme != "s3":
+            raise ValueError("NowcastNet shadow analysis URI must use s3")
+        return value
+
+
+class NowcastNetShadowPayload(ContractModel):
+    output_prefix: str
+    algorithm_run_id: UUID
+    issue_time: datetime
+    grid_id: str = Field(min_length=1)
+    input_frames: list[NowcastNetShadowInput] = Field(min_length=9, max_length=9)
+    model_id: Literal["nowcastnet"]
+    model_version: Literal["official-codeocean-v1-cc0"]
+    config_version: Literal["fujian-nowcastnet-shadow-v2"]
+    source_model_config_version: Literal["rp026-nowcastnet-offline-v1"]
+    tile_atlas_version: Literal["fujian-nowcastnet-tile-atlas-v1"]
+    issue_cadence_minutes: Literal[5]
+    input_timestep_minutes: Literal[10]
+    native_output_timestep_minutes: Literal[10]
+    product_timestep_minutes: Literal[5]
+    random_seed: int = Field(ge=0, le=2**32 - 1)
+
+    @field_validator("output_prefix")
+    @classmethod
+    def validate_output_prefix(cls, value: str) -> str:
+        if urlparse(value).scheme != "s3":
+            raise ValueError("NowcastNet shadow output prefix must use s3")
+        return value
+
+    @model_validator(mode="after")
+    def validate_frame_sequence(self) -> NowcastNetShadowPayload:
+        issue_time = self.issue_time.astimezone(UTC)
+        if issue_time.second or issue_time.microsecond or issue_time.minute % 5:
+            raise ValueError("NowcastNet shadow issue time must be on a five-minute UTC boundary")
+        expected = [
+            issue_time - timedelta(minutes=80 - index * 10) for index in range(9)
+        ]
+        actual = [item.analysis_time.astimezone(UTC) for item in self.input_frames]
+        if actual != expected:
+            raise ValueError("NowcastNet shadow inputs must be nine exact ten-minute frames")
+        identities = [item.analysis_id for item in self.input_frames]
+        if len(set(identities)) != len(identities):
+            raise ValueError("NowcastNet shadow analysis IDs must be unique")
+        return self
+
+
+class NowcastNetShadowRequested(DomainRequest):
+    event_type: Literal["forecast.nowcastnet_shadow.requested.v1"]
+    payload: NowcastNetShadowPayload
 
 
 class ProductIDs(ContractModel):

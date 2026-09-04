@@ -121,6 +121,41 @@ WHERE job_id = $1 AND status = 'SUCCEEDED'`, jobID).Scan(
 	return result, nil
 }
 
+func (store *Store) ListCompletedNowcastNetAlgorithmRuns(
+	ctx context.Context,
+	limit int,
+) ([]workspace.NowcastNetAlgorithmRun, error) {
+	if limit < 1 || limit > 500 {
+		return nil, fmt.Errorf("NowcastNet algorithm run limit is invalid")
+	}
+	rows, err := store.pool.Query(ctx, `
+SELECT ar.algorithm_run_id, ar.run_id, ar.job_id, f.issue_time, f.grid_id,
+       ar.output_uri, ar.completed_at
+FROM algorithm_runs AS ar
+JOIN forecast_runs AS f ON f.run_id = ar.run_id
+WHERE ar.algorithm_id = 'nowcastnet' AND ar.status = 'completed'
+  AND ar.output_uri IS NOT NULL AND ar.completed_at IS NOT NULL
+ORDER BY ar.completed_at DESC
+LIMIT $1`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list completed NowcastNet algorithm runs: %w", err)
+	}
+	defer rows.Close()
+	values := make([]workspace.NowcastNetAlgorithmRun, 0)
+	for rows.Next() {
+		var value workspace.NowcastNetAlgorithmRun
+		if err := rows.Scan(&value.AlgorithmRunID, &value.RunID, &value.JobID, &value.IssueTime,
+			&value.GridID, &value.OutputURI, &value.CompletedAt); err != nil {
+			return nil, fmt.Errorf("scan completed NowcastNet algorithm run: %w", err)
+		}
+		values = append(values, value)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate completed NowcastNet algorithm runs: %w", err)
+	}
+	return values, nil
+}
+
 func (store *Store) WorkspacePipelineSnapshot(
 	ctx context.Context,
 	gridID string,

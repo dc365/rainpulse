@@ -73,12 +73,48 @@ func (handler *runtimeHandler) sampleAsset(
 		)
 	}
 	if match := nowcastNetAssetPattern.FindStringSubmatch(parsed.Path); match != nil {
-		return handler.sampleFileProduct(
-			assetURL, handler.nowcastNetRoot, match[1], match[2], nowcastPointQueryID,
-			longitude, latitude, "nowcastnet",
+		return handler.sampleNowcastNetProduct(
+			ctx, assetURL, match[1], match[2], longitude, latitude,
 		)
 	}
 	return ExactSample{}, errUnsupportedSample
+}
+
+func (handler *runtimeHandler) sampleNowcastNetProduct(
+	ctx context.Context,
+	assetURL string,
+	bundleID string,
+	assetID string,
+	longitude float64,
+	latitude float64,
+) (ExactSample, error) {
+	if handler.nowcastNetProducts == nil {
+		return ExactSample{}, errSampleNotFound
+	}
+	if _, err := uuid.Parse(bundleID); err != nil || filepath.Base(bundleID) != bundleID {
+		return ExactSample{}, fmt.Errorf("%w: bundle identity is invalid", errInvalidSample)
+	}
+	manifestData, _, err := handler.nowcastNetProducts.ReadObject(ctx, bundleID, "manifest.json")
+	if err != nil {
+		return ExactSample{}, fmt.Errorf("%w: read NowcastNet manifest: %v", errSampleNotFound, err)
+	}
+	metadata, err := pointQueryFromManifest(manifestData, nowcastPointQueryID)
+	if err != nil {
+		return ExactSample{}, err
+	}
+	leadMinutes, ok := leadFromAssetID(assetID)
+	if !ok {
+		return ExactSample{}, fmt.Errorf("%w: asset lead cannot be determined", errInvalidSample)
+	}
+	leadIndex := indexOfInt(metadata.LeadMinutes, leadMinutes)
+	if leadIndex < 0 {
+		return ExactSample{}, fmt.Errorf("%w: asset lead is absent from point query", errInvalidSample)
+	}
+	data, _, err := handler.nowcastNetProducts.ReadObject(ctx, bundleID, metadata.ObjectPath)
+	if err != nil {
+		return ExactSample{}, fmt.Errorf("%w: read NowcastNet point query: %v", errSampleNotFound, err)
+	}
+	return samplePointBytes(assetURL, data, metadata, longitude, latitude, leadIndex, "nowcastnet")
 }
 
 func (handler *runtimeHandler) sampleDiagnostic(

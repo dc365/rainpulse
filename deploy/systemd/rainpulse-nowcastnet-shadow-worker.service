@@ -1,0 +1,25 @@
+[Unit]
+Description=RainPulse Fujian NowcastNet public-weight shadow GPU worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=yons
+Group=yons
+WorkingDirectory=/home/yons/hwapp/ruiyun-bdp/bdp-dp/bdp-dp-rada/bdp-dp-rada-rainpulse
+Environment="PYTHONPATH=/home/yons/hwapp/ruiyun-bdp/bdp-dp/bdp-dp-rada/bdp-dp-rada-rainpulse/algorithms:/home/yons/hwapp/ruiyun-bdp/bdp-dp/bdp-dp-rada/bdp-dp-rada-rainpulse/.build/worker-site-packages"
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=RAINPULSE_WORKER_ID=fujian-nowcastnet-shadow-gpu0
+Environment=RAINPULSE_WORKER_HEALTH_ADDR=127.0.0.1:8097
+Environment=RAINPULSE_NOWCASTNET_DEVICE=cuda:0
+ExecStart=/home/yons/hwapp/ruiyun-bdp/bdp-dp/bdp-dp-rada/bdp-dp-rada-rainpulse/scripts/run_nowcastnet_shadow_worker.sh
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=60
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

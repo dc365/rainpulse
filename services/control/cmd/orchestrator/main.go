@@ -199,6 +199,15 @@ func main() {
 			slog.Error("create pySTEPS-LK workflow", "error", err)
 			os.Exit(1)
 		}
+	case "nowcastnet-shadow":
+		if len(os.Args) != 4 {
+			slog.Error("nowcastnet-shadow requires a forecast run UUID and shadow config YAML")
+			os.Exit(2)
+		}
+		if err := nowcastNetShadow(ctx, store, service, os.Args[2], os.Args[3]); err != nil {
+			slog.Error("create NowcastNet shadow workflow", "error", err)
+			os.Exit(1)
+		}
 	case "product-build":
 		if len(os.Args) != 4 {
 			slog.Error("product-build requires a forecast run UUID and product config YAML")
@@ -327,6 +336,21 @@ type pystepsLKConfiguration struct {
 		LeadStepMinutes int      `yaml:"lead_step_minutes"`
 		Baselines       []string `yaml:"baselines"`
 	} `yaml:"extrapolation"`
+}
+
+type nowcastNetShadowConfiguration struct {
+	ProfileVersion     string `yaml:"profile_version"`
+	SourceModelProfile string `yaml:"source_model_profile"`
+	GridID             string `yaml:"grid_id"`
+	GridConfigVersion  string `yaml:"grid_config_version"`
+	TileAtlasVersion   string `yaml:"tile_atlas_version"`
+	Protocol           struct {
+		InputFrames                 int `yaml:"input_frames"`
+		IssueCadenceMinutes         int `yaml:"issue_cadence_minutes"`
+		InputTimestepMinutes        int `yaml:"input_timestep_minutes"`
+		NativeOutputTimestepMinutes int `yaml:"native_output_timestep_minutes"`
+		ProductTimestepMinutes      int `yaml:"product_timestep_minutes"`
+	} `yaml:"protocol"`
 }
 
 type productConfiguration struct {
@@ -1399,6 +1423,68 @@ func pystepsLK(
 	})
 }
 
+func nowcastNetShadow(
+	ctx context.Context,
+	store *postgresstore.Store,
+	service *orchestration.Service,
+	rawRunID string,
+	configPath string,
+) error {
+	runID, err := uuid.Parse(rawRunID)
+	if err != nil {
+		return fmt.Errorf("parse NowcastNet shadow run UUID: %w", err)
+	}
+	configBytes, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("read NowcastNet shadow configuration: %w", err)
+	}
+	var config nowcastNetShadowConfiguration
+	if err := yaml.Unmarshal(configBytes, &config); err != nil {
+		return fmt.Errorf("decode NowcastNet shadow configuration: %w", err)
+	}
+	if config.ProfileVersion != "fujian-nowcastnet-shadow-v2" ||
+		config.SourceModelProfile != "rp026-nowcastnet-offline-v1" ||
+		config.GridID == "" || config.GridConfigVersion == "" ||
+		config.TileAtlasVersion != "fujian-nowcastnet-tile-atlas-v1" ||
+		config.Protocol.InputFrames != 9 || config.Protocol.IssueCadenceMinutes != 5 ||
+		config.Protocol.InputTimestepMinutes != 10 ||
+		config.Protocol.NativeOutputTimestepMinutes != 10 ||
+		config.Protocol.ProductTimestepMinutes != 5 {
+		return fmt.Errorf("NowcastNet shadow configuration differs from the active profile")
+	}
+	var configValue map[string]any
+	if err := yaml.Unmarshal(configBytes, &configValue); err != nil {
+		return fmt.Errorf("normalize NowcastNet shadow configuration: %w", err)
+	}
+	configJSON, err := json.Marshal(configValue)
+	if err != nil {
+		return fmt.Errorf("encode NowcastNet shadow configuration: %w", err)
+	}
+	input, err := store.GetNowcastNetShadowInput(ctx, runID)
+	if err != nil {
+		return err
+	}
+	if input.GridID != config.GridID {
+		return fmt.Errorf("NowcastNet shadow grid differs from the forecast run")
+	}
+	configHash := sha256.Sum256(configBytes)
+	input.ModelID = orchestration.NowcastNetShadowModelID
+	input.ModelVersion = orchestration.NowcastNetShadowModelVersion
+	input.ConfigVersion = config.ProfileVersion
+	input.SourceModelConfigVersion = config.SourceModelProfile
+	input.TileAtlasVersion = config.TileAtlasVersion
+	input.Config = configJSON
+	input.ConfigSHA256 = fmt.Sprintf("%x", configHash)
+	job, err := service.CreateNowcastNetShadow(ctx, input)
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(os.Stdout).Encode(map[string]any{
+		"run_id": input.RunID.String(), "job_id": job.ID.String(), "issue_time": input.IssueTime,
+		"input_analysis_count": len(input.InputFrames), "lifecycle": "shadow",
+	})
+}
+
 func productBuild(
 	ctx context.Context,
 	store *postgresstore.Store,
@@ -1819,6 +1905,8 @@ func requestedSubject(eventType string) (string, error) {
 		return orchestration.NowcastInputRequestedSubject, nil
 	case orchestration.PystepsLKRequestedEventType:
 		return orchestration.PystepsLKRequestedSubject, nil
+	case orchestration.NowcastNetShadowRequestedEventType:
+		return orchestration.NowcastNetShadowRequestedSubject, nil
 	case orchestration.ProductBuildRequestedEventType:
 		return orchestration.ProductBuildRequestedSubject, nil
 	default:

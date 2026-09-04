@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +11,7 @@ from rainpulse_algo.worker.contracts import JobCompleted
 from rainpulse_algo.worker.domain_contracts import (
     NowcastInputRequested,
     NowcastNetOfflineRequested,
+    NowcastNetShadowRequested,
     PystepsLKRequested,
 )
 from rainpulse_algo.worker.handlers import HANDLERS, handler_for_profile
@@ -161,3 +163,52 @@ def test_nowcastnet_offline_contract_is_isolated_and_single_delivery() -> None:
     assert handler.subject == "rainpulse.jobs.requested.nowcastnet_offline"
     assert handler.max_deliveries == 1
     assert handler.artifact_name == "nowcastnet-output.zarr"
+
+
+def test_nowcastnet_shadow_contract_freezes_five_minute_product_semantics() -> None:
+    issue_time = datetime(2026, 8, 28, 2, 25, tzinfo=UTC)
+    value = {
+        "schema_version": "1.0",
+        "event_id": "a0000000-0000-4000-8000-000000000001",
+        "event_type": "forecast.nowcastnet_shadow.requested.v1",
+        "occurred_at": issue_time.isoformat(),
+        "run_id": "a0000000-0000-4000-8000-000000000002",
+        "job_id": "a0000000-0000-4000-8000-000000000003",
+        "trace_id": "a0000000-0000-4000-8000-000000000004",
+        "payload": {
+            "algorithm_run_id": "a0000000-0000-4000-8000-000000000005",
+            "output_prefix": "s3://rainpulse/products/run/nowcastnet/public/shadow/",
+            "issue_time": issue_time.isoformat(),
+            "grid_id": "fuzhou_118_123_25_27_0p01deg_v1",
+            "input_frames": [
+                {
+                    "analysis_id": f"a0000000-0000-4000-8000-{index + 10:012d}",
+                    "analysis_time": (issue_time - timedelta(minutes=80 - index * 10)).isoformat(),
+                    "analysis_uri": f"s3://rainpulse/analysis/{index}.zarr",
+                }
+                for index in range(9)
+            ],
+            "model_id": "nowcastnet",
+            "model_version": "official-codeocean-v1-cc0",
+            "config_version": "fujian-nowcastnet-shadow-v2",
+            "source_model_config_version": "rp026-nowcastnet-offline-v1",
+            "tile_atlas_version": "fujian-nowcastnet-tile-atlas-v1",
+            "issue_cadence_minutes": 5,
+            "input_timestep_minutes": 10,
+            "native_output_timestep_minutes": 10,
+            "product_timestep_minutes": 5,
+            "random_seed": 20260828,
+        },
+    }
+
+    request = NowcastNetShadowRequested.model_validate(value)
+    handler = handler_for_profile("nowcastnet-shadow")
+
+    assert request.payload.algorithm_run_id
+    assert handler.subject == "rainpulse.jobs.requested.nowcastnet_shadow"
+    assert handler.artifact_name == "nowcastnet-shadow-products"
+    assert handler.max_deliveries == 1
+
+    value["payload"]["input_frames"][2]["analysis_time"] = issue_time.isoformat()
+    with pytest.raises(ValidationError):
+        NowcastNetShadowRequested.model_validate(value)

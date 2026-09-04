@@ -25,6 +25,10 @@ services:
       RAINPULSE_PIPELINE_MOSAIC_DELAY: 30s
       RAINPULSE_PIPELINE_MOSAIC_MAX_WAIT: 4m
       RAINPULSE_PIPELINE_FORECAST_ENABLED: "true"
+      # Disabled until the separately installed GPU shadow worker has passed
+      # a coverage preflight. Enabling it cannot alter baseline pySTEPS runs.
+      RAINPULSE_PIPELINE_NOWCASTNET_SHADOW_ENABLED: "${RAINPULSE_PIPELINE_NOWCASTNET_SHADOW_ENABLED:-false}"
+      RAINPULSE_PIPELINE_NOWCASTNET_SHADOW_CONFIG: /opt/rainpulse/configs/nowcast/fujian-nowcastnet-shadow-v2.yaml
       RAINPULSE_PIPELINE_REQUIRE_ALL_RADARS: "false"
       RAINPULSE_PIPELINE_QC_CONFIG: /opt/rainpulse/configs/qc/rp047-fujian-radial-evidence-v1.yaml
       RAINPULSE_PIPELINE_GRID_CONFIG: /opt/rainpulse/configs/gridding/rp043-hybrid-radial-closure-v1.yaml
