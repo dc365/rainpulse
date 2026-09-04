@@ -14,7 +14,7 @@ export RAINPULSE_NOWCASTNET_CONFIG="${RAINPULSE_NOWCASTNET_CONFIG:-$repository_r
 export RAINPULSE_NOWCASTNET_TILE_ATLAS_CONFIG="${RAINPULSE_NOWCASTNET_TILE_ATLAS_CONFIG:-$repository_root/configs/nowcast/fujian-nowcastnet-tile-atlas-v1.yaml}"
 export RAINPULSE_GRID_CONFIG="${RAINPULSE_GRID_CONFIG:-$repository_root/configs/grids/fuzhou-0p01deg-v1.yaml}"
 export RAINPULSE_NOWCASTNET_PRODUCT_CONFIG="${RAINPULSE_NOWCASTNET_PRODUCT_CONFIG:-$repository_root/configs/products/rp015-application-products-v1.yaml}"
-export RAINPULSE_NOWCASTNET_CAPSULE_ROOT="${RAINPULSE_NOWCASTNET_CAPSULE_ROOT:-/opt/rainpulse/nowcastnet/official-v1}"
+export RAINPULSE_NOWCASTNET_CAPSULE_ROOT="${RAINPULSE_NOWCASTNET_CAPSULE_ROOT:-$repository_root/runtime/nowcastnet/official-v1}"
 export RAINPULSE_NOWCASTNET_DEVICE="${RAINPULSE_NOWCASTNET_DEVICE:-cuda:0}"
 
 exec "$script_dir/run_nowcastnet_offline_worker.sh"
