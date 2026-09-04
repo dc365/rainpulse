@@ -17,14 +17,16 @@ from .qc_metrics import polar_mask_area_km2
 # radar's range correction and can occupy a contiguous fan of neighbouring
 # rays.  Immediate-neighbour differencing cannot see the interior of that fan.
 # These deliberately conservative limits describe the Z9591 long-range
-# saturation signature: hundreds of consecutive gates, most of a full ray
-# above convective reflectivity, and a pronounced increase towards far range.
-_SATURATED_RADIAL_MINIMUM_VALID_FRACTION = 0.80
+# saturation signature: hundreds of consecutive high gates, pronounced
+# far-range growth, and stable range-corrected transmitter power. Sparse rays
+# are accepted because real volumes can contain gaps before the saturated tail.
+_SATURATED_RADIAL_MINIMUM_VALID_FRACTION = 0.40
 _SATURATED_RADIAL_MINIMUM_HIGH_DBZH = 45.0
 _SATURATED_RADIAL_MINIMUM_HIGH_FRACTION = 0.60
-_SATURATED_RADIAL_MINIMUM_HIGH_RUN = 400
+_SATURATED_RADIAL_MINIMUM_HIGH_RUN = 350
 _SATURATED_RADIAL_MINIMUM_RANGE_GROWTH_DB = 12.0
-_SATURATED_RADIAL_SIGNATURE_VERSION = "long-range-saturated-radial-v2"
+_SATURATED_RADIAL_MAXIMUM_POWER_IQR_DB = 6.0
+_SATURATED_RADIAL_SIGNATURE_VERSION = "long-range-saturated-radial-v3"
 
 INTERFERENCE_TYPE_CODES = {
     "none": 0,
@@ -89,6 +91,7 @@ class RadialFanClosureConfig:
     minimum_valid_gate_fraction: float
     minimum_high_dbzh: float
     minimum_high_gate_fraction: float
+    minimum_edge_high_gate_fraction: float
     minimum_high_run: int
     minimum_range_growth_db: float
     minimum_gap_valid_gate_fraction: float
@@ -216,6 +219,7 @@ class SaturatedRadialEvidence:
     high_gate_fraction: float
     longest_high_run: int
     range_growth_db: float
+    range_corrected_power_iqr_db: float
     peak_dbzh: float
 
     def value(self) -> dict[str, float | int]:
@@ -223,6 +227,7 @@ class SaturatedRadialEvidence:
             "high_gate_fraction": self.high_gate_fraction,
             "longest_high_run": self.longest_high_run,
             "range_growth_db": self.range_growth_db,
+            "range_corrected_power_iqr_db": self.range_corrected_power_iqr_db,
             "peak_dbzh": self.peak_dbzh,
         }
 
@@ -401,6 +406,12 @@ def load_qc_profile(path: str | Path, flag_path: str | Path) -> BasicQCProfile:
                     minimum_high_dbzh=float(fan_closure.get("minimum_high_dbzh", 45.0)),
                     minimum_high_gate_fraction=float(
                         fan_closure.get("minimum_high_gate_fraction", 0.50)
+                    ),
+                    minimum_edge_high_gate_fraction=float(
+                        fan_closure.get(
+                            "minimum_edge_high_gate_fraction",
+                            fan_closure.get("minimum_high_gate_fraction", 0.50),
+                        )
                     ),
                     minimum_high_run=int(fan_closure.get("minimum_high_run", 120)),
                     minimum_range_growth_db=float(fan_closure.get("minimum_range_growth_db", 20.0)),
@@ -870,6 +881,9 @@ def audit_long_range_saturated_radials(
             "minimum_high_gate_fraction": _SATURATED_RADIAL_MINIMUM_HIGH_FRACTION,
             "minimum_high_run": _SATURATED_RADIAL_MINIMUM_HIGH_RUN,
             "minimum_range_growth_db": _SATURATED_RADIAL_MINIMUM_RANGE_GROWTH_DB,
+            "maximum_range_corrected_power_iqr_db": (
+                _SATURATED_RADIAL_MAXIMUM_POWER_IQR_DB
+            ),
         },
         "saturated_ray_count": total,
         "sweeps": sweep_results,
@@ -1510,7 +1524,7 @@ def _has_radial_fan_edge_signature(
     high = valid & (values >= closure.minimum_high_dbzh)
     if valid_count == 0:
         return False
-    if float(np.count_nonzero(high) / valid_count) < closure.minimum_high_gate_fraction:
+    if float(np.count_nonzero(high) / valid_count) < closure.minimum_edge_high_gate_fraction:
         return False
     if _longest_run(high) < closure.minimum_high_run:
         return False
@@ -2059,10 +2073,15 @@ def _long_range_saturated_radial_evidence(
     range_growth = float(np.median(far_values) - np.median(near_values))
     if range_growth < _SATURATED_RADIAL_MINIMUM_RANGE_GROWTH_DB:
         return None
+    gate_index = np.arange(1, dbzh.shape[0] + 1, dtype="float64")
+    power_iqr = _range_corrected_power_iqr(dbzh, valid, gate_index, 0.0)
+    if power_iqr is None or power_iqr > _SATURATED_RADIAL_MAXIMUM_POWER_IQR_DB:
+        return None
     return SaturatedRadialEvidence(
         high_gate_fraction=high_fraction,
         longest_high_run=high_run,
         range_growth_db=range_growth,
+        range_corrected_power_iqr_db=power_iqr,
         peak_dbzh=float(np.max(dbzh[valid])),
     )
 
@@ -2268,6 +2287,7 @@ def _validate_profile(profile: BasicQCProfile) -> None:
         closure.minimum_gap_valid_gate_fraction,
         closure.minimum_gap_range_extent_fraction,
         closure.minimum_gap_boundary_extent_ratio,
+        closure.minimum_edge_high_gate_fraction,
         closure.minimum_edge_valid_gate_fraction,
         closure.minimum_edge_range_extent_fraction,
         closure.minimum_edge_boundary_extent_ratio,

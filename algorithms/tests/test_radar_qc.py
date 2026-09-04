@@ -19,6 +19,7 @@ from rainpulse_algo.radar.qc import (
     _detect_radial_interference,
     _dual_pol_meteorological_probability,
     _higher_elevation_radial_extent_fractions,
+    _long_range_saturated_radial_evidence,
     _radial_probability,
     _temporal_radial_persistence,
     _vertical_consistency_probabilities,
@@ -355,6 +356,82 @@ def test_rp047_extends_confirmed_fan_into_open_truncated_edge() -> None:
     assert np.all(
         detection.interference_type[13, tail_valid] == INTERFERENCE_TYPE_CODES["broad"]
     )
+
+
+def test_rp047_hard_flags_sparse_full_range_saturated_ray() -> None:
+    """The observed 15:30 ray is sparse but retains a stable transmitter signature."""
+    gate_count = 920
+    gate_index = np.arange(1, gate_count + 1, dtype="float32")
+    values = np.full(gate_count, np.nan, dtype="float32")
+    observed = np.r_[np.arange(20), np.arange(gate_count - 375, gate_count)]
+    values[observed] = 20.0 * np.log10(gate_index[observed]) - 10.0
+
+    evidence = _long_range_saturated_radial_evidence(values, np.isfinite(values))
+
+    assert evidence is not None
+    assert evidence.longest_high_run >= 350
+    assert evidence.high_gate_fraction >= 0.60
+
+
+def test_rp047_closes_severely_truncated_hole_inside_confirmed_fan() -> None:
+    """The observed 08:40 interior ray reaches 54% of full-range fan boundaries."""
+    profile = load_qc_profile(RP047_QC_CONFIG, FLAG_CONFIG)
+    ranges = (np.arange(1_000, dtype="float32") + 1.0) * 250.0
+    dbzh = np.full((24, 1_000), np.nan, dtype="float32")
+    dbzh[:, :120] = 18.0
+    dbzh[10, :] = np.linspace(46.0, 66.0, 1_000, dtype="float32")
+    dbzh[12, :] = np.linspace(46.0, 66.0, 1_000, dtype="float32")
+    dbzh[11, :540] = 20.0 * np.log10(ranges[:540] / 1_000.0) + 10.0
+
+    detection = _detect_radial_interference(
+        dbzh,
+        np.isfinite(dbzh),
+        profile.radial_interference,
+        ranges_m=ranges,
+    )
+
+    ray_valid = np.isfinite(dbzh[11])
+    assert np.all(
+        detection.probability[11, ray_valid]
+        >= profile.radial_interference.flag_probability
+    )
+
+
+def test_rp047_extends_fan_into_sparse_truncated_open_edge() -> None:
+    """The observed 08:40 open edge has 60% support and 34% high gates."""
+    profile = load_qc_profile(RP047_QC_CONFIG, FLAG_CONFIG)
+    ranges = (np.arange(600, dtype="float32") + 1.0) * 250.0
+    dbzh = np.full((24, 600), np.nan, dtype="float32")
+    dbzh[:, :120] = 18.0
+    dbzh[10:13, :] = np.linspace(46.0, 66.0, 600, dtype="float32")
+    dbzh[13, :360] = 20.0 * np.log10(ranges[:360] / 1_000.0) + 10.0
+
+    detection = _detect_radial_interference(
+        dbzh,
+        np.isfinite(dbzh),
+        profile.radial_interference,
+        ranges_m=ranges,
+    )
+
+    ray_valid = np.isfinite(dbzh[13])
+    assert np.all(
+        detection.probability[13, ray_valid]
+        >= profile.radial_interference.flag_probability
+    )
+
+
+def test_rp047_sparse_saturated_detector_rejects_unstable_power() -> None:
+    gate_count = 920
+    values = np.full(gate_count, np.nan, dtype="float32")
+    values[:20] = 20.0
+    values[-375:] = np.tile(
+        np.array([46.0, 62.0], dtype="float32"),
+        188,
+    )[:375]
+
+    evidence = _long_range_saturated_radial_evidence(values, np.isfinite(values))
+
+    assert evidence is None
 
 
 def test_rp047_does_not_promote_broad_long_range_precipitation() -> None:
@@ -943,7 +1020,7 @@ def test_qc_worker_records_selected_temporal_and_cross_radar_context(
                 "output_prefix": "s3://rainpulse/radar/qc/z9598/current/rp047/",
                 "radar_config_version": "z9598-test-v1",
                 "qc_profile": "rp047-fujian-radial-evidence-v1",
-                "qc_pipeline_version": "rp047-fujian-radial-evidence-1.2.0",
+                "qc_pipeline_version": "rp047-fujian-radial-evidence-1.3.0",
                 "flag_definition_version": "qc-flags-v1",
                 "temporal_context": [
                     {"radar_id": "z9598", "input_uri": f"s3://rainpulse/{temporal_a_prefix}"},

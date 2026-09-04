@@ -275,6 +275,9 @@ def test_rp047_qc_profile_requires_context_fusion_for_weak_candidates() -> None:
     assert fusion["cross_radar_max_time_offset_seconds"] == 300
     assert morphology["fan_closure"]["edge_extension_enabled"] is True
     assert morphology["fan_closure"]["maximum_edge_rays"] == 2
+    assert morphology["fan_closure"]["minimum_gap_boundary_extent_ratio"] == 0.50
+    assert morphology["fan_closure"]["minimum_edge_high_gate_fraction"] == 0.30
+    assert profile["pipeline_version"] == "rp047-fujian-radial-evidence-1.3.0"
 
 
 def test_rp047_realtime_shadow_versions_the_full_reprocessing_chain() -> None:

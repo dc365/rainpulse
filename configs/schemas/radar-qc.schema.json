@@ -161,6 +161,7 @@
                 "minimum_valid_gate_fraction": { "$ref": "#/$defs/probability" },
                 "minimum_high_dbzh": { "type": "number" },
                 "minimum_high_gate_fraction": { "$ref": "#/$defs/probability" },
+                "minimum_edge_high_gate_fraction": { "$ref": "#/$defs/probability" },
                 "minimum_high_run": { "type": "integer", "minimum": 2 },
                 "minimum_range_growth_db": { "type": "number", "exclusiveMinimum": 0 },
                 "minimum_gap_valid_gate_fraction": { "$ref": "#/$defs/probability" },
