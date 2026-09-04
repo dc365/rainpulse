@@ -155,7 +155,9 @@
               "properties": {
                 "enabled": { "type": "boolean" },
                 "extent_gap_enabled": { "type": "boolean" },
+                "edge_extension_enabled": { "type": "boolean" },
                 "maximum_gap_rays": { "type": "integer", "minimum": 1 },
+                "maximum_edge_rays": { "type": "integer", "minimum": 1 },
                 "minimum_valid_gate_fraction": { "$ref": "#/$defs/probability" },
                 "minimum_high_dbzh": { "type": "number" },
                 "minimum_high_gate_fraction": { "$ref": "#/$defs/probability" },
@@ -165,6 +167,9 @@
                 "minimum_gap_consecutive_gates": { "type": "integer", "minimum": 2 },
                 "minimum_gap_range_extent_fraction": { "$ref": "#/$defs/probability" },
                 "minimum_gap_boundary_extent_ratio": { "$ref": "#/$defs/probability" },
+                "minimum_edge_valid_gate_fraction": { "$ref": "#/$defs/probability" },
+                "minimum_edge_range_extent_fraction": { "$ref": "#/$defs/probability" },
+                "minimum_edge_boundary_extent_ratio": { "$ref": "#/$defs/probability" },
                 "minimum_seed_fraction": { "$ref": "#/$defs/probability" }
               }
             },

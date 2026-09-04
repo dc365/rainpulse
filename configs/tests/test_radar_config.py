@@ -273,6 +273,8 @@ def test_rp047_qc_profile_requires_context_fusion_for_weak_candidates() -> None:
     assert fusion["minimum_temporal_context_scans"] == 2
     assert fusion["maximum_temporal_context_scans"] == 3
     assert fusion["cross_radar_max_time_offset_seconds"] == 300
+    assert morphology["fan_closure"]["edge_extension_enabled"] is True
+    assert morphology["fan_closure"]["maximum_edge_rays"] == 2
 
 
 def test_rp047_realtime_shadow_versions_the_full_reprocessing_chain() -> None:

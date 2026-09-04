@@ -83,7 +83,9 @@ class VerticalConsistencyConfig:
 class RadialFanClosureConfig:
     enabled: bool
     extent_gap_enabled: bool
+    edge_extension_enabled: bool
     maximum_gap_rays: int
+    maximum_edge_rays: int
     minimum_valid_gate_fraction: float
     minimum_high_dbzh: float
     minimum_high_gate_fraction: float
@@ -93,6 +95,9 @@ class RadialFanClosureConfig:
     minimum_gap_consecutive_gates: int
     minimum_gap_range_extent_fraction: float
     minimum_gap_boundary_extent_ratio: float
+    minimum_edge_valid_gate_fraction: float
+    minimum_edge_range_extent_fraction: float
+    minimum_edge_boundary_extent_ratio: float
     minimum_seed_fraction: float
 
 
@@ -385,7 +390,11 @@ def load_qc_profile(path: str | Path, flag_path: str | Path) -> BasicQCProfile:
                 fan_closure=RadialFanClosureConfig(
                     enabled=bool(fan_closure.get("enabled", False)),
                     extent_gap_enabled=bool(fan_closure.get("extent_gap_enabled", False)),
+                    edge_extension_enabled=bool(
+                        fan_closure.get("edge_extension_enabled", False)
+                    ),
                     maximum_gap_rays=int(fan_closure.get("maximum_gap_rays", 2)),
+                    maximum_edge_rays=int(fan_closure.get("maximum_edge_rays", 1)),
                     minimum_valid_gate_fraction=float(
                         fan_closure.get("minimum_valid_gate_fraction", 0.90)
                     ),
@@ -409,6 +418,15 @@ def load_qc_profile(path: str | Path, flag_path: str | Path) -> BasicQCProfile:
                     ),
                     minimum_gap_boundary_extent_ratio=float(
                         fan_closure.get("minimum_gap_boundary_extent_ratio", 1.0)
+                    ),
+                    minimum_edge_valid_gate_fraction=float(
+                        fan_closure.get("minimum_edge_valid_gate_fraction", 0.65)
+                    ),
+                    minimum_edge_range_extent_fraction=float(
+                        fan_closure.get("minimum_edge_range_extent_fraction", 0.75)
+                    ),
+                    minimum_edge_boundary_extent_ratio=float(
+                        fan_closure.get("minimum_edge_boundary_extent_ratio", 0.75)
                     ),
                     minimum_seed_fraction=float(fan_closure.get("minimum_seed_fraction", 0.30)),
                 ),
@@ -1305,6 +1323,15 @@ def _detect_radial_interference(
             interference_type,
             config,
         )
+        if config.morphology.fan_closure.edge_extension_enabled:
+            _extend_seeded_radial_fan_edges(
+                dbzh,
+                valid,
+                ranges,
+                probabilities,
+                interference_type,
+                config,
+            )
     if config.morphology.multiscale_promotion.enabled:
         _promote_multiscale_radial_evidence(
             dbzh,
@@ -1417,6 +1444,86 @@ def _bounded_circular_gap_groups(
                 break
             interior.append(ray_index)
     return tuple(groups)
+
+
+def _extend_seeded_radial_fan_edges(
+    dbzh: np.ndarray,
+    valid: np.ndarray,
+    ranges_m: np.ndarray,
+    probabilities: np.ndarray,
+    interference_type: np.ndarray,
+    config: RadialInterferenceConfig,
+) -> None:
+    """Extend a confirmed fan across a short, truncated open boundary."""
+    closure = config.morphology.fan_closure
+    hard_rays = np.any(
+        np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability,
+        axis=1,
+    )
+    if not np.any(hard_rays):
+        return
+    for group in _circular_true_groups(hard_rays):
+        boundaries = ((int(group[0]), -1), (int(group[-1]), 1))
+        for boundary, direction in boundaries:
+            boundary_extent = _radial_range_extent_fraction(valid[boundary], ranges_m)
+            for distance in range(1, closure.maximum_edge_rays + 1):
+                ray_index = (boundary + direction * distance) % hard_rays.size
+                if hard_rays[ray_index] or not _has_radial_fan_edge_signature(
+                    dbzh[ray_index],
+                    valid[ray_index],
+                    ranges_m,
+                    closure,
+                    config.morphology.radial_extent_promotion,
+                    boundary_extent,
+                ):
+                    break
+                _record_radial_type(
+                    probabilities,
+                    interference_type,
+                    int(ray_index),
+                    valid[ray_index],
+                    "broad",
+                    config.flag_probability,
+                )
+                hard_rays[ray_index] = True
+
+
+def _has_radial_fan_edge_signature(
+    values: np.ndarray,
+    valid: np.ndarray,
+    ranges_m: np.ndarray,
+    closure: RadialFanClosureConfig,
+    promotion: RadialExtentPromotionConfig,
+    boundary_extent_fraction: float,
+) -> bool:
+    if float(np.mean(valid)) < closure.minimum_edge_valid_gate_fraction:
+        return False
+    if _longest_run(valid) < closure.minimum_gap_consecutive_gates:
+        return False
+    required_extent = max(
+        closure.minimum_edge_range_extent_fraction,
+        boundary_extent_fraction * closure.minimum_edge_boundary_extent_ratio,
+    )
+    if _radial_range_extent_fraction(valid, ranges_m) < required_extent:
+        return False
+    valid_count = int(np.count_nonzero(valid))
+    high = valid & (values >= closure.minimum_high_dbzh)
+    if valid_count == 0:
+        return False
+    if float(np.count_nonzero(high) / valid_count) < closure.minimum_high_gate_fraction:
+        return False
+    if _longest_run(high) < closure.minimum_high_run:
+        return False
+    growth = _valid_support_growth(values, valid)
+    if growth is None or growth < closure.minimum_range_growth_db:
+        return False
+    power_iqr = _range_corrected_power_iqr(
+        values,
+        valid,
+        ranges_m,
+        promotion.minimum_analysis_range_m,
+    )
+    return power_iqr is not None and power_iqr <= promotion.maximum_power_iqr_db
 
 
 def _has_radial_fan_boundary_signature(
@@ -2051,6 +2158,9 @@ def _module_records(
                 "fan_closure_enabled": float(
                     profile.radial_interference.morphology.fan_closure.enabled
                 ),
+                "fan_edge_extension_enabled": float(
+                    profile.radial_interference.morphology.fan_closure.edge_extension_enabled
+                ),
                 "radial_extent_promotion_enabled": float(
                     profile.radial_interference.morphology.radial_extent_promotion.enabled
                 ),
@@ -2140,7 +2250,11 @@ def _validate_profile(profile: BasicQCProfile) -> None:
     if not 0 <= morphology.diagnostic_probability <= 1:
         raise QCConfigError("invalid radial diagnostic probability")
     closure = morphology.fan_closure
-    if closure.maximum_gap_rays <= 0 or closure.minimum_high_run < 2:
+    if (
+        closure.maximum_gap_rays <= 0
+        or closure.maximum_edge_rays <= 0
+        or closure.minimum_high_run < 2
+    ):
         raise QCConfigError("invalid radial fan-closure dimensions")
     if not 0 <= closure.minimum_valid_gate_fraction <= 1:
         raise QCConfigError("invalid radial fan-closure valid fraction")
@@ -2154,6 +2268,9 @@ def _validate_profile(profile: BasicQCProfile) -> None:
         closure.minimum_gap_valid_gate_fraction,
         closure.minimum_gap_range_extent_fraction,
         closure.minimum_gap_boundary_extent_ratio,
+        closure.minimum_edge_valid_gate_fraction,
+        closure.minimum_edge_range_extent_fraction,
+        closure.minimum_edge_boundary_extent_ratio,
         closure.minimum_seed_fraction,
     ):
         if not 0 <= value <= 1:

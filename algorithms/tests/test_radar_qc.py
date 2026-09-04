@@ -327,6 +327,36 @@ def test_rp047_closes_four_ray_hole_inside_confirmed_fan() -> None:
         )
 
 
+def test_rp047_extends_confirmed_fan_into_open_truncated_edge() -> None:
+    """A 14:25-like open fan edge is strong geometry, not a weak candidate."""
+    profile = load_qc_profile(RP047_QC_CONFIG, FLAG_CONFIG)
+    ranges = (np.arange(600, dtype="float32") + 1.0) * 250.0
+    dbzh = np.full((24, 600), np.nan, dtype="float32")
+    dbzh[:, :120] = 18.0
+    dbzh[10:13, :] = np.linspace(46.0, 66.0, 600, dtype="float32")
+    # The contaminated tail reaches only 80% of the nominal range.  Its fixed
+    # far quartile is therefore incomplete, but the observed support remains
+    # a long, high-occupancy, range-growing radial next to the hard fan.
+    dbzh[13, :480] = np.linspace(35.0, 58.0, 480, dtype="float32")
+
+    detection = _detect_radial_interference(
+        dbzh,
+        np.isfinite(dbzh),
+        profile.radial_interference,
+        ranges_m=ranges,
+        cross_radar_consistency=np.ones(24, dtype="float32"),
+    )
+
+    tail_valid = np.isfinite(dbzh[13])
+    assert np.all(
+        detection.probability[13, tail_valid]
+        >= profile.radial_interference.flag_probability
+    )
+    assert np.all(
+        detection.interference_type[13, tail_valid] == INTERFERENCE_TYPE_CODES["broad"]
+    )
+
+
 def test_rp047_does_not_promote_broad_long_range_precipitation() -> None:
     profile = load_qc_profile(RP047_QC_CONFIG, FLAG_CONFIG)
     ranges = (np.arange(600, dtype="float32") + 1.0) * 250.0
@@ -913,7 +943,7 @@ def test_qc_worker_records_selected_temporal_and_cross_radar_context(
                 "output_prefix": "s3://rainpulse/radar/qc/z9598/current/rp047/",
                 "radar_config_version": "z9598-test-v1",
                 "qc_profile": "rp047-fujian-radial-evidence-v1",
-                "qc_pipeline_version": "rp047-fujian-radial-evidence-1.1.0",
+                "qc_pipeline_version": "rp047-fujian-radial-evidence-1.2.0",
                 "flag_definition_version": "qc-flags-v1",
                 "temporal_context": [
                     {"radar_id": "z9598", "input_uri": f"s3://rainpulse/{temporal_a_prefix}"},

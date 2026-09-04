@@ -1,6 +1,6 @@
 schema_version: "1.0"
 profile_version: rp047-fujian-radial-evidence-v1
-pipeline_version: rp047-fujian-radial-evidence-1.1.0
+pipeline_version: rp047-fujian-radial-evidence-1.2.0
 flag_definition_version: qc-flags-v1
 
 health_gate:
@@ -52,7 +52,11 @@ radial_interference:
     fan_closure:
       enabled: true
       extent_gap_enabled: true
+      # Extend only one or two open fan-edge rays when their observed support
+      # remains a long, high-occupancy, range-corrected-power-stable signal.
+      edge_extension_enabled: true
       maximum_gap_rays: 4
+      maximum_edge_rays: 2
       minimum_valid_gate_fraction: 0.90
       minimum_high_dbzh: 45.0
       minimum_high_gate_fraction: 0.50
@@ -62,6 +66,9 @@ radial_interference:
       minimum_gap_consecutive_gates: 350
       minimum_gap_range_extent_fraction: 0.95
       minimum_gap_boundary_extent_ratio: 0.95
+      minimum_edge_valid_gate_fraction: 0.65
+      minimum_edge_range_extent_fraction: 0.75
+      minimum_edge_boundary_extent_ratio: 0.75
       minimum_seed_fraction: 0.30
     # Promote a weak adjacent radial group only when its range-corrected power
     # is stable and the next reflectivity elevation does not support the echo.
