@@ -1,6 +1,6 @@
 schema_version: "1.0"
 profile_version: rp047-fujian-radial-evidence-v1
-pipeline_version: rp047-fujian-radial-evidence-1.3.0
+pipeline_version: rp047-fujian-radial-evidence-1.4.0
 flag_definition_version: qc-flags-v1
 
 health_gate:
@@ -55,6 +55,12 @@ radial_interference:
       # Extend only one or two open fan-edge rays when their observed support
       # remains a long, high-occupancy, range-corrected-power-stable signal.
       edge_extension_enabled: true
+      # Finish a sparse ray once most of its observed gates are already hard
+      # interference, and inherit only stable far fragments from an adjacent
+      # confirmed fan. This targets broken transmitter tails without erasing
+      # the near-range precipitation that can share their boundary ray.
+      residual_completion_enabled: true
+      far_segment_extension_enabled: true
       maximum_gap_rays: 4
       maximum_edge_rays: 2
       minimum_valid_gate_fraction: 0.90
@@ -71,6 +77,10 @@ radial_interference:
       minimum_edge_boundary_extent_ratio: 0.55
       minimum_edge_high_gate_fraction: 0.30
       minimum_seed_fraction: 0.30
+      minimum_seeded_hard_gate_fraction: 0.50
+      minimum_seeded_hard_gates: 100
+      minimum_far_segment_start_m: 200000.0
+      minimum_far_segment_gates: 24
     # Promote a weak adjacent radial group only when its range-corrected power
     # is stable and the next reflectivity elevation does not support the echo.
     radial_extent_promotion:

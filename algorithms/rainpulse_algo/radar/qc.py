@@ -86,6 +86,8 @@ class RadialFanClosureConfig:
     enabled: bool
     extent_gap_enabled: bool
     edge_extension_enabled: bool
+    residual_completion_enabled: bool
+    far_segment_extension_enabled: bool
     maximum_gap_rays: int
     maximum_edge_rays: int
     minimum_valid_gate_fraction: float
@@ -102,6 +104,10 @@ class RadialFanClosureConfig:
     minimum_edge_range_extent_fraction: float
     minimum_edge_boundary_extent_ratio: float
     minimum_seed_fraction: float
+    minimum_seeded_hard_gate_fraction: float
+    minimum_seeded_hard_gates: int
+    minimum_far_segment_start_m: float
+    minimum_far_segment_gates: int
 
 
 @dataclass(frozen=True)
@@ -398,6 +404,12 @@ def load_qc_profile(path: str | Path, flag_path: str | Path) -> BasicQCProfile:
                     edge_extension_enabled=bool(
                         fan_closure.get("edge_extension_enabled", False)
                     ),
+                    residual_completion_enabled=bool(
+                        fan_closure.get("residual_completion_enabled", False)
+                    ),
+                    far_segment_extension_enabled=bool(
+                        fan_closure.get("far_segment_extension_enabled", False)
+                    ),
                     maximum_gap_rays=int(fan_closure.get("maximum_gap_rays", 2)),
                     maximum_edge_rays=int(fan_closure.get("maximum_edge_rays", 1)),
                     minimum_valid_gate_fraction=float(
@@ -440,6 +452,18 @@ def load_qc_profile(path: str | Path, flag_path: str | Path) -> BasicQCProfile:
                         fan_closure.get("minimum_edge_boundary_extent_ratio", 0.75)
                     ),
                     minimum_seed_fraction=float(fan_closure.get("minimum_seed_fraction", 0.30)),
+                    minimum_seeded_hard_gate_fraction=float(
+                        fan_closure.get("minimum_seeded_hard_gate_fraction", 0.50)
+                    ),
+                    minimum_seeded_hard_gates=int(
+                        fan_closure.get("minimum_seeded_hard_gates", 100)
+                    ),
+                    minimum_far_segment_start_m=float(
+                        fan_closure.get("minimum_far_segment_start_m", 200_000.0)
+                    ),
+                    minimum_far_segment_gates=int(
+                        fan_closure.get("minimum_far_segment_gates", 24)
+                    ),
                 ),
                 radial_extent_promotion=RadialExtentPromotionConfig(
                     enabled=bool(radial_extent.get("enabled", False)),
@@ -1354,6 +1378,15 @@ def _detect_radial_interference(
             interference_type,
             config,
         )
+    if config.morphology.fan_closure.residual_completion_enabled:
+        _complete_seeded_radial_residuals(
+            dbzh,
+            valid,
+            ranges,
+            probabilities,
+            interference_type,
+            config,
+        )
 
     flagged_ray_count = int(
         np.count_nonzero(
@@ -1500,6 +1533,83 @@ def _extend_seeded_radial_fan_edges(
                     config.flag_probability,
                 )
                 hard_rays[ray_index] = True
+
+
+def _complete_seeded_radial_residuals(
+    dbzh: np.ndarray,
+    valid: np.ndarray,
+    ranges_m: np.ndarray,
+    probabilities: np.ndarray,
+    interference_type: np.ndarray,
+    config: RadialInterferenceConfig,
+) -> None:
+    """Close holes on confirmed rays and remove only seeded far fragments."""
+    closure = config.morphology.fan_closure
+    promotion = config.morphology.radial_extent_promotion
+    hard = np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability
+    if not np.any(hard):
+        return
+
+    for ray_index in range(dbzh.shape[0]):
+        ray_valid = valid[ray_index]
+        valid_count = int(np.count_nonzero(ray_valid))
+        hard_count = int(np.count_nonzero(hard[ray_index] & ray_valid))
+        if valid_count == 0 or hard_count < closure.minimum_seeded_hard_gates:
+            continue
+        if hard_count / valid_count < closure.minimum_seeded_hard_gate_fraction:
+            continue
+        growth = _near_to_far_growth(dbzh[ray_index], ray_valid)
+        if growth is None or growth < closure.minimum_range_growth_db:
+            continue
+        power_iqr = _range_corrected_power_iqr(
+            dbzh[ray_index],
+            ray_valid,
+            ranges_m,
+            promotion.minimum_analysis_range_m,
+        )
+        if power_iqr is None or power_iqr > promotion.maximum_power_iqr_db:
+            continue
+        _record_radial_type(
+            probabilities,
+            interference_type,
+            ray_index,
+            ray_valid,
+            "broad",
+            config.flag_probability,
+        )
+
+    if not closure.far_segment_extension_enabled:
+        return
+    hard = np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability
+    seeded_neighbour = np.roll(hard, 1, axis=0) | np.roll(hard, -1, axis=0)
+    for ray_index in range(dbzh.shape[0]):
+        candidate = (
+            valid[ray_index]
+            & ~hard[ray_index]
+            & seeded_neighbour[ray_index]
+            & (dbzh[ray_index] >= closure.minimum_high_dbzh)
+        )
+        for start, end in _true_segments(candidate, closure.minimum_far_segment_gates):
+            if ranges_m[start] < closure.minimum_far_segment_start_m:
+                continue
+            segment = np.zeros(candidate.shape, dtype=bool)
+            segment[start:end] = True
+            power_iqr = _range_corrected_power_iqr(
+                dbzh[ray_index],
+                segment,
+                ranges_m,
+                closure.minimum_far_segment_start_m,
+            )
+            if power_iqr is None or power_iqr > promotion.maximum_power_iqr_db:
+                continue
+            _record_radial_type(
+                probabilities,
+                interference_type,
+                ray_index,
+                segment,
+                "broad",
+                config.flag_probability,
+            )
 
 
 def _has_radial_fan_edge_signature(

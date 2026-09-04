@@ -156,6 +156,8 @@
                 "enabled": { "type": "boolean" },
                 "extent_gap_enabled": { "type": "boolean" },
                 "edge_extension_enabled": { "type": "boolean" },
+                "residual_completion_enabled": { "type": "boolean" },
+                "far_segment_extension_enabled": { "type": "boolean" },
                 "maximum_gap_rays": { "type": "integer", "minimum": 1 },
                 "maximum_edge_rays": { "type": "integer", "minimum": 1 },
                 "minimum_valid_gate_fraction": { "$ref": "#/$defs/probability" },
@@ -171,7 +173,11 @@
                 "minimum_edge_valid_gate_fraction": { "$ref": "#/$defs/probability" },
                 "minimum_edge_range_extent_fraction": { "$ref": "#/$defs/probability" },
                 "minimum_edge_boundary_extent_ratio": { "$ref": "#/$defs/probability" },
-                "minimum_seed_fraction": { "$ref": "#/$defs/probability" }
+                "minimum_seed_fraction": { "$ref": "#/$defs/probability" },
+                "minimum_seeded_hard_gate_fraction": { "$ref": "#/$defs/probability" },
+                "minimum_seeded_hard_gates": { "type": "integer", "minimum": 2 },
+                "minimum_far_segment_start_m": { "type": "number", "exclusiveMinimum": 0 },
+                "minimum_far_segment_gates": { "type": "integer", "minimum": 2 }
               }
             },
             "radial_extent_promotion": {
