@@ -1,0 +1,81 @@
+{
+  "schema_version": "1.0",
+  "status": "passed",
+  "measured_at": "2026-09-04T12:23:31.157726+00:00",
+  "scope": "approve_and_start_the_second_formal_generative_training_window",
+  "identity": {
+    "training_code_revision": "3c7c9a1ec9249f54cd72a5ea3de9727e6c26e215",
+    "generative_profile_sha256": "e33cd36ad4c61cedfbb76dd9d52e821513f6916b6dc3fef68b0352a6bf071fdb",
+    "evolution_profile_sha256": "874775edd697ee4771e1302e3d62c2054cac3f16d112b0ca14f13811bd0920e8",
+    "parent_checkpoint_global_step": 300000,
+    "parent_checkpoint_sha256": "be791c9878e639fc63db3a23609ecb0d2351dfb90c7d533778469665a9032632",
+    "plan_id": "5ce3859f8f914c9cd55ea92a96a5dd860d46e297fff229472843d21e0bc26892",
+    "sample_index_sha256": "e758c938c929020c64e17ea827b05431f08b059c4033fcaa3b27a72ec1decddf",
+    "sample_count": 100000,
+    "shard_count": 4000,
+    "holdout_windows_processed": 0
+  },
+  "resume_checkpoint": {
+    "global_step": 14725,
+    "sha256": "089f3dba54ad96db95117b12e5b2a5e56ad758485c4f83c00a526cd580de3639",
+    "accepted_window": "window-0001",
+    "promoted_as_window_0002_start": true
+  },
+  "preflight": {
+    "status": "passed",
+    "report_sha256": "efa2830ed388e8363a137a4937ade50bc300476f6e3d0c305b4e25c7ca1b770e",
+    "repository_clean": true,
+    "dataset_probe_count": 64,
+    "dataset_probe_all_valid": true,
+    "dataset_probe_all_finite": true,
+    "data_output_separated": true,
+    "output_free_bytes": 232156618752,
+    "minimum_output_free_bytes": 100000000000,
+    "device": "cpu"
+  },
+  "resource_protocol": {
+    "device": "cuda",
+    "gpu_name": "NVIDIA RTX 6000D",
+    "batch_size": 16,
+    "precision": "bf16",
+    "ensemble_members": 4,
+    "minimum_cuda_free_memory_bytes_before_start": 75000000000,
+    "qwen3_6_stopped_for_training": true,
+    "qwen3_8_stopped_for_training": true,
+    "vllm_stopped": false,
+    "other_gpu_services_stopped": false
+  },
+  "schedule": {
+    "timezone": "Asia/Taipei",
+    "window_id": "window-0002",
+    "approved_at": "2026-09-04T12:23:31.157726+00:00",
+    "started_inside_permitted_window": true,
+    "planned_stop_local_time": "07:45",
+    "stop_timer_enabled": true,
+    "automatic_next_window_start_enabled": false,
+    "per_window_one_time_permit_required": true,
+    "checkpoint_interval_steps": 1000,
+    "checkpoint_interval_seconds": 300,
+    "checkpoint_rolling_keep": 3,
+    "checkpoint_milestone_interval_steps": 10000,
+    "preserve_window_final": true,
+    "hourly_monitoring_enabled": true
+  },
+  "initial_runtime_observation": {
+    "service_state": "active_running",
+    "resume_start_step": 14725,
+    "observed_global_step": 14743,
+    "new_metric_rows": 18,
+    "latest_metric_values_finite": true,
+    "training_process_count": 1
+  },
+  "decision": {
+    "window_0001_checkpoint_promoted": true,
+    "second_formal_generative_window_approved": true,
+    "second_formal_generative_window_started": true,
+    "automatic_third_window_approved": false,
+    "independent_holdout_opened": false,
+    "next_gate": "validate_window_0002_before_approving_a_new_one_time_permit_for_window_0003"
+  },
+  "operational_eligible": false
+}

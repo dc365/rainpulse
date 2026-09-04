@@ -128,6 +128,13 @@ GENERATIVE_FIRST_FORMAL_WINDOW_EVIDENCE_PATH = (
     / "evidence"
     / "nowcastnet-generative-first-formal-window-v1.json"
 )
+GENERATIVE_SECOND_FORMAL_WINDOW_APPROVAL_EVIDENCE_PATH = (
+    REPOSITORY_ROOT
+    / "configs"
+    / "training"
+    / "evidence"
+    / "nowcastnet-generative-second-formal-window-approval-v1.json"
+)
 
 
 def _sha256(path: Path) -> str:
@@ -582,6 +589,42 @@ def test_generative_first_formal_window_acceptance_keeps_second_window_closed() 
         "independent_holdout_opened": False,
         "generative_training_complete": False,
         "next_gate": "review_window_0001_and_approve_a_new_one_time_permit_for_window_0002",
+    }
+    assert evidence["operational_eligible"] is False
+
+
+def test_generative_second_formal_window_uses_only_the_accepted_checkpoint() -> None:
+    evidence = json.loads(GENERATIVE_SECOND_FORMAL_WINDOW_APPROVAL_EVIDENCE_PATH.read_text())
+
+    assert evidence["status"] == "passed"
+    assert evidence["identity"]["holdout_windows_processed"] == 0
+    assert evidence["resume_checkpoint"] == {
+        "global_step": 14725,
+        "sha256": "089f3dba54ad96db95117b12e5b2a5e56ad758485c4f83c00a526cd580de3639",
+        "accepted_window": "window-0001",
+        "promoted_as_window_0002_start": True,
+    }
+    assert evidence["preflight"]["status"] == "passed"
+    assert evidence["preflight"]["repository_clean"] is True
+    assert evidence["preflight"]["dataset_probe_count"] == 64
+    assert evidence["preflight"]["dataset_probe_all_valid"] is True
+    assert evidence["preflight"]["dataset_probe_all_finite"] is True
+    assert evidence["resource_protocol"]["qwen3_6_stopped_for_training"] is True
+    assert evidence["resource_protocol"]["qwen3_8_stopped_for_training"] is True
+    assert evidence["resource_protocol"]["vllm_stopped"] is False
+    assert evidence["schedule"]["window_id"] == "window-0002"
+    assert evidence["schedule"]["stop_timer_enabled"] is True
+    assert evidence["schedule"]["automatic_next_window_start_enabled"] is False
+    assert evidence["schedule"]["hourly_monitoring_enabled"] is True
+    assert evidence["initial_runtime_observation"]["observed_global_step"] == 14743
+    assert evidence["initial_runtime_observation"]["latest_metric_values_finite"] is True
+    assert evidence["decision"] == {
+        "window_0001_checkpoint_promoted": True,
+        "second_formal_generative_window_approved": True,
+        "second_formal_generative_window_started": True,
+        "automatic_third_window_approved": False,
+        "independent_holdout_opened": False,
+        "next_gate": "validate_window_0002_before_approving_a_new_one_time_permit_for_window_0003",
     }
     assert evidence["operational_eligible"] is False
 

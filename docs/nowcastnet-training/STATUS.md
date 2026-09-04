@@ -4,11 +4,11 @@
 
 方案版本：`TRAINING_PLAN_v1.0`
 
-总体状态：`formal_generative_window_0001_accepted`
+总体状态：`formal_generative_window_0002_running`
 
-当前阶段：阶段 C、生成阶段 500,000 步正式训练的首个夜间窗口已验收；当前 checkpoint 为第 14,725 步
+当前阶段：阶段 C、生成阶段 500,000 步正式训练的第二个夜间窗口正在从第 14,725 步继续训练
 
-下一动作：人工复核 `window-0001` 验收证据后，才可签发绑定第 14,725 步 checkpoint 的第二窗口一次性许可；当前没有许可、没有启停 timer，也不得启动第二窗口
+下一动作：每小时监控 `window-0002`，07:45 优雅停止后验收 checkpoint、累计指标和共享服务恢复；验收前不批准第三窗口
 
 ## 1. 阶段看板
 
@@ -94,7 +94,8 @@
 - 首窗于 2026-09-03 23:38（Asia/Taipei）启动；运行至第 14,725 步后于 07:45 收到 SIGTERM 并优雅结束。累计 14,725 行指标全量扫描连续且有限，指标 SHA-256 为 `d21fdc86…d857`，窗口新增 13,725 步。
 - 首窗最终 checkpoint 为 `089f3dba…3639`（第 14,725 步）；CPU 回读、五类状态指纹与随机状态指纹均通过，保留第 293、1,000、10,000、14,498、14,662、14,725 步共 6 个 checkpoint。
 - Qwen3.6/Qwen3.8 均在窗口结束后恢复健康，VLLM 全程未停止，没有遗留训练进程。Qwen3.6 首次恢复发现已迁移的工作目录，已在服务器侧 user systemd 配置修复后复验通过；训练制品不受影响。
-- `window-0001` 的停止 timer 已在验收后关闭；第二窗口没有一次性许可，自动启动保持关闭。当前 NAS 样本卷可用约 490.65 GB，低于“重建完整库”500 GB 门槛；既有冻结样本未变化，当前只读训练不受影响，但再次物化或扩容前必须先恢复该余量。
+- `window-0001` 的停止 timer 在验收后关闭，之后经人工批准重新签发了绑定第 14,725 步 checkpoint 的 `window-0002` 一次性许可。第二窗于许可时段内启动，07:45 停止 timer 已启用；双 Qwen 按资源协议暂停，VLLM 保持运行，第三窗口未批准。
+- 第二窗口启动前的 CPU preflight 重新核验固定代码、父权重、100,000 个样本、64 个随机回读、数据/输出隔离与输出盘余量，全部通过；初始观测已从第 14,725 步前进至第 14,743 步，指标有限。当前 NAS 样本卷可用约 420.20 GB，低于“重建完整库”500 GB 门槛；既有冻结样本未变化，当前只读训练不受影响，但再次物化或扩容前必须先恢复该余量。
 
 ## 3. 数据准备执行清单
 
@@ -188,3 +189,4 @@
 | 2026-09-03 | 生成阶段全父权重 systemd 中断恢复演练 | `3c7c9a1` | evidence `nowcastnet-generative-full-parent-rehearsal-v1.json`；checkpoint `d4e09ce0…cc476`；metrics `aa575b9f…054d` | 从 0 到 293 步后 SIGTERM，再由新进程精确恢复到 1,000 步；指标连续有限、最终 checkpoint CPU 回读和状态指纹通过，双 Qwen 恢复、VLLM 未停；500,000 步正式训练仍未批准 |
 | 2026-09-03 | 生成阶段正式训练批准与首窗启动 | `3c7c9a1` | evidence `nowcastnet-generative-formal-training-approval-v1.json`；input checkpoint `d4e09ce0…cc476`；preflight `83e93eb5…9377` | 训练制品迁出部署树并复验；首窗从第 1,000 步启动，07:45 自动停止、每小时监控；双 Qwen 按批准暂停、VLLM 未停，第二窗未批准，独立留出为 0 |
 | 2026-09-04 | 生成阶段首个正式训练窗口验收 | 本批次 `main` | evidence `nowcastnet-generative-first-formal-window-v1.json`；checkpoint `089f3dba…3639`；metrics `d21fdc86…d857` | 从第 1,000 步到第 14,725 步优雅停止；累计指标连续有限，checkpoint CPU 回读、五类状态和随机状态指纹均通过；双 Qwen 已恢复、VLLM 未停、timer 与第二窗口许可均关闭；独立留出仍为 0 |
+| 2026-09-04 | 生成阶段第二个正式训练窗口批准与启动 | 本批次 `main` | evidence `nowcastnet-generative-second-formal-window-approval-v1.json`；input checkpoint `089f3dba…3639`；CPU preflight `efa2830e…770e` | 64 个样本随机回读和父权重、代码、数据/输出隔离及输出容量复验通过；从第 14,725 步开始第二窗，双 Qwen 按资源协议暂停、VLLM 未停；07:45 自动停止、每小时监控，第三窗未批准，独立留出为 0 |
