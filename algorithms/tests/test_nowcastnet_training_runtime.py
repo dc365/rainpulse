@@ -142,6 +142,13 @@ GENERATIVE_SECOND_FORMAL_WINDOW_EVIDENCE_PATH = (
     / "evidence"
     / "nowcastnet-generative-second-formal-window-v1.json"
 )
+GENERATIVE_WEEKEND_CONTINUATION_EVIDENCE_PATH = (
+    REPOSITORY_ROOT
+    / "configs"
+    / "training"
+    / "evidence"
+    / "nowcastnet-generative-weekend-continuation-v1.json"
+)
 
 
 def _sha256(path: Path) -> str:
@@ -673,6 +680,40 @@ def test_generative_second_formal_window_acceptance_keeps_third_window_closed() 
         "independent_holdout_opened": False,
         "generative_training_complete": False,
         "next_gate": "review_window_0002_and_approve_a_new_one_time_permit_for_window_0003",
+    }
+    assert evidence["operational_eligible"] is False
+
+
+def test_weekend_continuation_keeps_weekday_daytime_and_holdout_closed() -> None:
+    evidence = json.loads(GENERATIVE_WEEKEND_CONTINUATION_EVIDENCE_PATH.read_text())
+
+    assert evidence["status"] == "passed"
+    assert evidence["identity"]["holdout_windows_processed"] == 0
+    assert evidence["input_checkpoint"]["global_step"] == 35184
+    assert evidence["preflight"]["status"] == "passed"
+    assert evidence["preflight"]["dataset_probe_count"] == 64
+    assert evidence["failed_start_attempt"]["training_steps_created"] == 0
+    assert evidence["failed_start_attempt"]["checkpoint_or_metrics_changed"] is False
+    assert evidence["failed_start_attempt"]["recovery"] == "passed"
+    runtime_change = evidence["controlled_runtime_change"]
+    assert runtime_change["weekend_daytime_start_authorized"] is True
+    assert runtime_change["weekday_daytime_start_authorized"] is False
+    assert runtime_change["weekday_daytime_rejection_and_weekend_allowance_tested"] is True
+    assert runtime_change["training_unit_timeout_start_seconds"] == 300
+    assert runtime_change["automatic_following_window_start_enabled"] is False
+    running = evidence["running_window"]
+    assert running["window_id"] == "window-0004"
+    assert running["resume_start_step"] == 35184
+    assert running["observed_global_step"] == 35191
+    assert running["latest_metric_values_finite"] is True
+    assert running["resource_protocol"]["qwen3_6_stopped_for_training"] is True
+    assert running["resource_protocol"]["qwen3_8_stopped_for_training"] is True
+    assert running["resource_protocol"]["vllm_stopped"] is False
+    assert evidence["decision"] == {
+        "weekend_continuation_approved": True,
+        "weekend_continuation_started": True,
+        "independent_holdout_opened": False,
+        "next_gate": "validate_the_weekend_window_before_any_subsequent_one_time_permit",
     }
     assert evidence["operational_eligible"] is False
 

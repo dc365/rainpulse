@@ -1,0 +1,78 @@
+{
+  "schema_version": "1.0",
+  "status": "passed",
+  "measured_at": "2026-09-05T04:11:08+00:00",
+  "scope": "explicit_weekend_daytime_generative_training_continuation",
+  "identity": {
+    "training_code_revision": "3c7c9a1ec9249f54cd72a5ea3de9727e6c26e215",
+    "generative_profile_sha256": "e33cd36ad4c61cedfbb76dd9d52e821513f6916b6dc3fef68b0352a6bf071fdb",
+    "evolution_profile_sha256": "874775edd697ee4771e1302e3d62c2054cac3f16d112b0ca14f13811bd0920e8",
+    "parent_checkpoint_global_step": 300000,
+    "parent_checkpoint_sha256": "be791c9878e639fc63db3a23609ecb0d2351dfb90c7d533778469665a9032632",
+    "plan_id": "5ce3859f8f914c9cd55ea92a96a5dd860d46e297fff229472843d21e0bc26892",
+    "sample_index_sha256": "e758c938c929020c64e17ea827b05431f08b059c4033fcaa3b27a72ec1decddf",
+    "holdout_windows_processed": 0
+  },
+  "input_checkpoint": {
+    "global_step": 35184,
+    "sha256": "64378356c41a285c6fd6c4e4947dc2b5e2fd73afccdb51060fd190ac062af935",
+    "accepted_window": "window-0002"
+  },
+  "preflight": {
+    "status": "passed",
+    "report_sha256": "5ac9e1bb1e79e250bf508b2fcd9f075692537819305d7b066dc94325a0894825",
+    "repository_clean": true,
+    "dataset_probe_count": 64,
+    "dataset_probe_all_valid": true,
+    "dataset_probe_all_finite": true,
+    "data_output_separated": true,
+    "output_free_bytes": 194973773824,
+    "minimum_output_free_bytes": 100000000000
+  },
+  "failed_start_attempt": {
+    "window_id": "window-0003",
+    "checkpoint_global_step": 35184,
+    "training_steps_created": 0,
+    "checkpoint_or_metrics_changed": false,
+    "failure_stage": "shared_service_switch_start_pre",
+    "root_cause": "the training unit default start timeout was shorter than the shared Qwen stop timeout",
+    "recovery": "passed",
+    "qwen3_6_health_after_failure": "passed",
+    "qwen3_8_health_after_failure": "passed"
+  },
+  "controlled_runtime_change": {
+    "weekend_daytime_start_authorized": true,
+    "weekday_daytime_start_authorized": false,
+    "formal_guard_previous_sha256": "63dc44a0332e7397215f7cce45d0391102927039019c9a117f60641d0743e0f6",
+    "formal_guard_weekend_only_sha256": "adcb78e5990c5322446d99a1a07acd6601c99694888ab11a60c1a66603f2f066",
+    "weekday_daytime_rejection_and_weekend_allowance_tested": true,
+    "training_unit_timeout_start_seconds": 300,
+    "training_unit_timeout_stop_seconds": 600,
+    "one_shot_stop_local_time": "2026-09-07T07:45:00+08:00",
+    "automatic_following_window_start_enabled": false
+  },
+  "running_window": {
+    "window_id": "window-0004",
+    "approved_at": "2026-09-05T04:10:00+00:00",
+    "resume_start_step": 35184,
+    "observed_global_step": 35191,
+    "new_metric_rows": 7,
+    "latest_metric_values_finite": true,
+    "resource_protocol": {
+      "qwen3_6_stopped_for_training": true,
+      "qwen3_8_stopped_for_training": true,
+      "vllm_stopped": false,
+      "other_gpu_services_stopped": false,
+      "batch_size": 16,
+      "precision": "bf16",
+      "ensemble_members": 4
+    }
+  },
+  "decision": {
+    "weekend_continuation_approved": true,
+    "weekend_continuation_started": true,
+    "independent_holdout_opened": false,
+    "next_gate": "validate_the_weekend_window_before_any_subsequent_one_time_permit"
+  },
+  "operational_eligible": false
+}
