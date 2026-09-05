@@ -106,3 +106,26 @@ func TestFormalNowcastNetProductStoreReadsAuthoritativeArtifact(t *testing.T) {
 		t.Fatalf("formal asset = %#v, error = %v", asset, err)
 	}
 }
+
+func TestNewestNowcastNetBundleWinsRegardlessOfQueryOrder(t *testing.T) {
+	issueTime := time.Date(2026, 8, 28, 9, 5, 0, 0, time.UTC)
+	oldBundle := nowcastnetproducts.Bundle{
+		BundleID: uuid.New(), GridID: "fuzhou-grid", IssueTime: issueTime,
+		CreatedAt: issueTime.Add(time.Minute),
+	}
+	newBundle := nowcastnetproducts.Bundle{
+		BundleID: uuid.New(), GridID: "fuzhou-grid", IssueTime: issueTime,
+		CreatedAt: issueTime.Add(2 * time.Minute),
+	}
+
+	for _, bundles := range [][]nowcastnetproducts.Bundle{
+		{newBundle, oldBundle},
+		{oldBundle, newBundle},
+	} {
+		selected := newestNowcastNetBundlesByCycle(bundles)
+		key := "fuzhou-grid/" + issueTime.Format(time.RFC3339)
+		if selected[key].BundleID != newBundle.BundleID {
+			t.Fatalf("selected bundle = %s, want newest %s", selected[key].BundleID, newBundle.BundleID)
+		}
+	}
+}

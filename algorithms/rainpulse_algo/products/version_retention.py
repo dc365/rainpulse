@@ -109,7 +109,7 @@ def scan_product_versions(
 def plan_product_retention(
     root: str | Path,
     *,
-    keep_versions: int = 2,
+    keep_versions: int = 1,
     allowed_contracts: Iterable[str] = SUPPORTED_DERIVED_PRODUCT_CONTRACTS,
 ) -> RetentionPlan:
     if keep_versions < 1 or keep_versions > 10:

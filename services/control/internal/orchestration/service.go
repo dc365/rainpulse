@@ -204,6 +204,7 @@ type NowcastNetShadowInput struct {
 	IssueTime                time.Time
 	GridID                   string
 	CurrentStatus            workflow.RunStatus
+	HistoricalRegeneration   bool
 	InputFrames              []workflow.NowcastNetShadowInputFrame
 	ModelID                  string
 	ModelVersion             string
@@ -1218,7 +1219,8 @@ func (service *Service) CreateNowcastNetShadow(
 
 func validateNowcastNetShadowInput(input NowcastNetShadowInput) error {
 	if input.RunID == uuid.Nil || input.IssueTime.IsZero() || input.GridID == "" ||
-		input.CurrentStatus != workflow.RunInputReady {
+		(input.CurrentStatus != workflow.RunInputReady &&
+			!(input.HistoricalRegeneration && input.CurrentStatus == workflow.RunPublished)) {
 		return fmt.Errorf("NowcastNet shadow requires an INPUT_READY forecast run")
 	}
 	if !input.IssueTime.UTC().Equal(input.IssueTime.UTC().Truncate(5 * time.Minute)) {
@@ -1234,7 +1236,10 @@ func validateNowcastNetShadowInput(input NowcastNetShadowInput) error {
 		return fmt.Errorf("NowcastNet shadow configuration and SHA-256 are required")
 	}
 	if len(input.InputFrames) != 9 {
-		return fmt.Errorf("NowcastNet shadow requires exactly nine direct analysis frames")
+		return fmt.Errorf(
+			"NowcastNet shadow requires exactly nine direct analysis frames, got %d",
+			len(input.InputFrames),
+		)
 	}
 	seen := make(map[uuid.UUID]struct{}, len(input.InputFrames))
 	for index, frame := range input.InputFrames {

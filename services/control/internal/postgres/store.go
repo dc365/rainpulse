@@ -349,6 +349,17 @@ WHERE j.job_id = $1 FOR UPDATE OF j`, event.JobID).
 	if runID != event.RunID || traceID != event.TraceID {
 		return false, fmt.Errorf("%w: completion trace identifiers do not match", orchestration.ErrInvalidEvent)
 	}
+	// A regeneration cancellation can mark a job as SKIPPED after its worker has
+	// already started.  Its terminal result is then stale, but still has to be
+	// acknowledged so it cannot block the shared result consumer.  Keep the
+	// cancellation authoritative: record the inbox event and make no job/run
+	// state changes.
+	if jobStatus == workflow.JobSkipped {
+		if err := tx.Commit(ctx); err != nil {
+			return false, fmt.Errorf("commit skipped completion acknowledgement: %w", err)
+		}
+		return true, nil
+	}
 	if !workflow.CanTransitionJob(jobStatus, workflow.JobSucceeded) {
 		return false, fmt.Errorf("%w: cannot transition job from %s", orchestration.ErrInvalidEvent, jobStatus)
 	}
@@ -506,6 +517,15 @@ WHERE j.job_id = $1 FOR UPDATE OF j`, event.JobID).
 	}
 	if runID != event.RunID || traceID != event.TraceID {
 		return false, fmt.Errorf("%w: failure trace identifiers do not match", orchestration.ErrInvalidEvent)
+	}
+	// See the matching completion path above.  A cancellation wins over a late
+	// worker failure, while the event must still be acknowledged by the result
+	// consumer.
+	if jobStatus == workflow.JobSkipped {
+		if err := tx.Commit(ctx); err != nil {
+			return false, fmt.Errorf("commit skipped failure acknowledgement: %w", err)
+		}
+		return true, nil
 	}
 	if !workflow.CanTransitionJob(jobStatus, workflow.JobFailed) {
 		return false, fmt.Errorf("%w: cannot transition job from %s", orchestration.ErrInvalidEvent, jobStatus)

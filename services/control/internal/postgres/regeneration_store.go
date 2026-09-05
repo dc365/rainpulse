@@ -251,6 +251,44 @@ WHERE request_id = $1 AND frame_index = $2
 	return nil
 }
 
+// ReplacePipelineRegenerationFrameScans refreshes the scan lineage for one
+// regeneration frame before QC is replayed.  A regeneration must not inherit
+// a stale contributor list: radar volumes arrive on their own clock and the
+// closest usable volume can change when the alignment window is evaluated
+// again with the current grid-ready inventory.
+func (store *Store) ReplacePipelineRegenerationFrameScans(
+	ctx context.Context,
+	requestID uuid.UUID,
+	frameIndex int,
+	scans []workflow.RadarScan,
+) error {
+	if len(scans) == 0 {
+		return fmt.Errorf("regeneration frame %d has no selected radar scans", frameIndex)
+	}
+	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin replace regeneration frame scans: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `
+DELETE FROM pipeline_regeneration_frame_scans
+WHERE request_id = $1 AND frame_index = $2`, requestID, frameIndex); err != nil {
+		return fmt.Errorf("clear regeneration frame scans: %w", err)
+	}
+	for _, scan := range scans {
+		if _, err := tx.Exec(ctx, `
+INSERT INTO pipeline_regeneration_frame_scans (
+    request_id, frame_index, radar_id, scan_id
+) VALUES ($1, $2, $3, $4)`, requestID, frameIndex, scan.RadarID, scan.ID); err != nil {
+			return fmt.Errorf("insert regeneration frame scan %s: %w", scan.ID, err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit regeneration frame scans: %w", err)
+	}
+	return nil
+}
+
 func (store *Store) ListPipelineRegenerationJobs(
 	ctx context.Context,
 	requestID uuid.UUID,

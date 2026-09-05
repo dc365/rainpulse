@@ -617,6 +617,18 @@ WHERE job_id = $1 AND analysis_id = $2 AND diagnostic_config_version = $3
 		return fmt.Errorf("verify existing diagnostic run: %w", err)
 	}
 
+	// A failed renderer attempt must not permanently reserve the immutable
+	// analysis/config/version identity. Keep the failed job audit row, but
+	// release its diagnostic identity so a regeneration can publish a fresh
+	// job and overwrite the same versioned output prefix.
+	if _, err = tx.Exec(ctx, `
+DELETE FROM diagnostic_runs
+WHERE analysis_id = $1 AND diagnostic_config_version = $2
+  AND renderer_version = $3 AND status = 'FAILED'`,
+		bundle.AnalysisID, bundle.ConfigVersion, bundle.RendererVersion); err != nil {
+		return fmt.Errorf("release failed diagnostic run: %w", err)
+	}
+
 	for _, radar := range bundle.RadarInputs {
 		var state workflow.AnalysisRadarState
 		var storedRadarID, storedQCURI string

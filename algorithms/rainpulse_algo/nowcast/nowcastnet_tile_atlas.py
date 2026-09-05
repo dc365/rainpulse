@@ -74,6 +74,8 @@ class AtlasPreparation:
     eligible: tuple[PreparedTile, ...]
     rejected: tuple[tuple[str, str], ...]
     trusted_coverage_ratio: float
+    publication_mask: np.ndarray
+    filled_missing_cell_count: int
 
 
 def load_tile_atlas(path: str | Path) -> TileAtlas:
@@ -170,20 +172,23 @@ def prepare_atlas_tiles(
         raise TileAtlasError("Tile Atlas valid rate is invalid")
 
     eligible: list[PreparedTile] = []
-    rejected: list[tuple[str, str]] = []
     trusted_support = np.zeros(atlas.grid_shape, dtype=bool)
+    filled_missing_cell_count = 0
     for tile in atlas.tiles:
         ys = slice(tile.y_start, tile.y_end)
         xs = slice(tile.x_start, tile.x_end)
         tile_valid = valid[:, ys, xs]
-        if not np.all(tile_valid == 1):
-            rejected.append((tile.tile_id, "input_window_has_missing_cells"))
-            continue
+        # The frozen parent adapter still rejects missing model inputs.  Give
+        # every fixed tile a finite, conservative dry context while retaining
+        # the real latest-QPE support separately for publication.  This avoids
+        # dropping a whole 128x128 tile because one historical cell is absent.
+        tile_rate = np.where(tile_valid == 1, rate[:, ys, xs], 0.0)
+        filled_missing_cell_count += int(np.count_nonzero(tile_valid == 0))
         eligible.append(
             PreparedTile(
                 tile=tile,
-                rain_rate_mm_h=np.ascontiguousarray(rate[:, ys, xs], dtype="float32"),
-                valid_mask=np.ascontiguousarray(tile_valid, dtype="uint8"),
+                rain_rate_mm_h=np.ascontiguousarray(tile_rate, dtype="float32"),
+                valid_mask=np.ones(tile_valid.shape, dtype="uint8"),
             )
         )
         trusted = tile.global_trusted
@@ -193,8 +198,10 @@ def prepare_atlas_tiles(
         ] = True
     return AtlasPreparation(
         eligible=tuple(eligible),
-        rejected=tuple(rejected),
+        rejected=(),
         trusted_coverage_ratio=float(np.mean(trusted_support)),
+        publication_mask=np.ascontiguousarray(valid[-1], dtype="uint8"),
+        filled_missing_cell_count=filled_missing_cell_count,
     )
 
 

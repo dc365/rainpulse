@@ -27,7 +27,7 @@ def _atlas() -> TileAtlas:
     )
 
 
-def test_atlas_rejects_missing_tile_and_preserves_transparent_support() -> None:
+def test_atlas_fills_missing_context_and_preserves_latest_support() -> None:
     atlas = _atlas()
     validate_tile_atlas(atlas)
     rate = np.ones((9, 64, 64), dtype="float32")
@@ -37,9 +37,13 @@ def test_atlas_rejects_missing_tile_and_preserves_transparent_support() -> None:
 
     prepared = prepare_atlas_tiles(rate, valid, atlas)
 
-    assert [item.tile.tile_id for item in prepared.eligible] == ["west"]
-    assert prepared.rejected == (("east", "input_window_has_missing_cells"),)
-    assert prepared.trusted_coverage_ratio == 0.5
+    assert [item.tile.tile_id for item in prepared.eligible] == ["west", "east"]
+    assert prepared.rejected == ()
+    assert prepared.trusted_coverage_ratio == 1.0
+    assert np.all(prepared.eligible[1].rain_rate_mm_h[:, :, 1] == 0.0)
+    assert np.all(prepared.eligible[1].valid_mask == 1)
+    assert np.all(prepared.publication_mask[:, 33] == 0)
+    assert np.all(prepared.publication_mask[:, 34:] == 1)
 
 
 def test_stitch_uses_only_trusted_centres() -> None:

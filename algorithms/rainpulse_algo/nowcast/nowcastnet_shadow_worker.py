@@ -373,6 +373,14 @@ def run_fixed_tile_atlas(
                     )
                 )
     stitched, stitched_valid = stitch_member_tiles(tile_forecasts, output_shape=runtime.grid.shape)
+    publish = np.broadcast_to(
+        preparation.publication_mask[np.newaxis, np.newaxis, ...],
+        stitched_valid.shape,
+    )
+    stitched_valid = (stitched_valid.astype(bool) & publish.astype(bool)).astype(
+        "uint8", copy=False
+    )
+    stitched = np.where(stitched_valid == 1, stitched, np.nan).astype("float32", copy=False)
     summary: dict[str, Any] = {
         "eligible_tile_count": len(preparation.eligible),
         "rejected_tile_count": len(preparation.rejected),
@@ -381,6 +389,9 @@ def run_fixed_tile_atlas(
             for tile_id, reason in preparation.rejected
         ],
         "trusted_coverage_ratio": preparation.trusted_coverage_ratio,
+        "publication_coverage_ratio": float(np.mean(preparation.publication_mask)),
+        "filled_missing_cell_count": preparation.filled_missing_cell_count,
+        "missing_context_policy": "dry-fill-preserve-latest-qpe-support-v1",
         "batch_sizes": batch_sizes,
         "batch_fallback_count": fallback_count,
         "batch_mode": "native_batch_with_serial_fallback",

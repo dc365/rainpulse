@@ -127,6 +127,49 @@ func TestWorkspacePrefersLatestRegeneratedForecastForDuplicateCycle(t *testing.T
 	}
 }
 
+func TestWorkspaceCatalogReadsEveryForecastRunPage(t *testing.T) {
+	const cursor = "2026-08-28T10:00:00Z"
+	core := http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.URL.Path == "/api/v1/runs" && request.URL.Query().Get("status") == "PUBLISHED" && request.URL.Query().Get("cursor") == "":
+			writeFixture(response, `{"items":[{"run_id":"run-newer","issue_time":"2026-08-28T10:00:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","status":"PUBLISHED"}],"next_cursor":"2026-08-28T10:00:00Z"}`)
+		case request.URL.Path == "/api/v1/runs" && request.URL.Query().Get("status") == "PUBLISHED" && request.URL.Query().Get("cursor") == cursor:
+			writeFixture(response, `{"items":[{"run_id":"run-older","issue_time":"2026-08-28T09:55:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","status":"PUBLISHED"}]}`)
+		case request.URL.Path == "/api/v1/runs":
+			writeFixture(response, `{"items":[]}`)
+		case request.URL.Path == "/api/v1/analysis-cycles":
+			writeFixture(response, `{"items":[{"analysis_id":"analysis-newer","analysis_time":"2026-08-28T10:00:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/newer.zarr"},{"analysis_id":"analysis-older","analysis_time":"2026-08-28T09:55:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/older.zarr"}]}`)
+		case request.URL.Path == "/api/v1/ensemble-products/cycles":
+			writeFixture(response, `[]`)
+		default:
+			http.Error(response, "fixture route not found", http.StatusNotFound)
+		}
+	})
+	handler := &Handler{core: core, now: func() time.Time {
+		return time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	}}
+
+	request := httptest.NewRequest(http.MethodGet, workspacePrefix+"?limit=200", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var payload cycleList
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Items) != 2 {
+		t.Fatalf("items = %+v", payload.Items)
+	}
+	for _, item := range payload.Items {
+		if !item.Capabilities.LK || item.RunID == "" {
+			t.Fatalf("paged forecast missing from catalog: %+v", item)
+		}
+	}
+}
+
 func TestWorkspacePrefersLatestAnalysisForDuplicateHistoricalTimes(t *testing.T) {
 	core := http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		response.Header().Set("Content-Type", "application/json")
@@ -576,4 +619,126 @@ func TestWorkspaceAddsFutureRadarAnalysesAsVerificationTruth(t *testing.T) {
 	if len(qpe.Frames) != 2 || qpe.Frames[1].ValidTime != "2026-09-01T01:05:00Z" {
 		t.Fatalf("QPE truth frames = %+v", qpe.Frames)
 	}
+}
+
+func TestWorkspaceUsesClearlyLabelledReferenceScanForMissingRadar(t *testing.T) {
+	base := fixtureCore(t)
+	core := http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "application/json")
+		switch request.URL.Path {
+		case "/api/v1/analysis-cycles":
+			writeFixture(response, `{"items":[
+{"analysis_id":"analysis-missing","analysis_time":"2026-09-01T01:00:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/a.zarr","radars":[{"radar_id":"z9591","state":"MISSING"}]},
+{"analysis_id":"analysis-reference","analysis_time":"2026-09-01T01:05:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/b.zarr","radars":[{"radar_id":"z9591","state":"PARTICIPATING","scan_id":"scan-reference","time_offset_seconds":-180}]}
+]}`)
+		case "/api/v1/analysis-cycles/analysis-missing":
+			writeFixture(response, `{"analysis_id":"analysis-missing","analysis_time":"2026-09-01T01:00:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","radars":[{"radar_id":"z9591","state":"MISSING"}]}`)
+		case "/api/v1/analysis-cycles/analysis-missing/qpe-summary":
+			writeFixture(response, `{}`)
+		case "/api/v1/analysis-cycles/analysis-missing/diagnostics":
+			writeFixture(response, `{"analysis_time":"2026-09-01T01:00:00Z","layers":[{"layer_id":"qpe","scope":"grid","field":"RATE_QPE","image_url":"/qpe.png"}]}`)
+		case "/api/v1/analysis-cycles/analysis-reference/diagnostics":
+			writeFixture(response, `{"analysis_time":"2026-09-01T01:05:00Z","layers":[
+{"layer_id":"raw-reference","scope":"polar","field":"DBZH_RAW","radar_id":"z9591","scan_id":"scan-reference","image_url":"/raw-reference.png","unit":"dBZ"},
+{"layer_id":"qc-reference","scope":"polar","field":"DBZH_QC","radar_id":"z9591","scan_id":"scan-reference","image_url":"/qc-reference.png","unit":"dBZ"}
+]}`)
+		default:
+			base.ServeHTTP(response, request)
+		}
+	})
+	handler := &Handler{core: core, now: func() time.Time {
+		return time.Date(2026, 9, 1, 1, 10, 0, 0, time.UTC)
+	}}
+	issue := time.Date(2026, 9, 1, 1, 0, 0, 0, time.UTC)
+	request := httptest.NewRequest(http.MethodGet, workspacePrefix+"/"+encodeCycleID(defaultGridID, issue), nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var payload cycleDetail
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	panel := payload.Panels[panelIndex(payload.Panels, "dbzh_raw:z9591")]
+	if panel.Lifecycle != "reference" || len(panel.Frames) != 1 || !panel.Frames[0].ReferenceObservation ||
+		panel.Frames[0].ObservationTime != "2026-09-01T01:02:00Z" || panel.Frames[0].ObservationOffsetSeconds == nil || *panel.Frames[0].ObservationOffsetSeconds != 120 {
+		t.Fatalf("reference radar panel = %+v", panel)
+	}
+}
+
+func TestWorkspaceFallsBackWhenLatestAnalysisHasNoDiagnostics(t *testing.T) {
+	const issueTime = "2026-09-01T01:00:00Z"
+	core := http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.URL.Path == "/api/v1/runs":
+			writeFixture(response, `{"items":[]}`)
+		case request.URL.Path == "/api/v1/analysis-cycles":
+			writeFixture(response, `{"items":[
+{"analysis_id":"analysis-incomplete","analysis_time":"2026-09-01T01:00:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","created_at":"2026-09-03T00:00:00Z","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/incomplete.zarr"},
+{"analysis_id":"analysis-complete","analysis_time":"2026-09-01T01:00:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","created_at":"2026-09-02T00:00:00Z","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/complete.zarr"},
+{"analysis_id":"analysis-future-incomplete","analysis_time":"2026-09-01T01:05:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","created_at":"2026-09-03T00:00:00Z","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/future-incomplete.zarr"},
+{"analysis_id":"analysis-future-complete","analysis_time":"2026-09-01T01:05:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","created_at":"2026-09-02T00:00:00Z","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/future-complete.zarr"}
+]}`)
+		case request.URL.Path == "/api/v1/ensemble-products/cycles":
+			writeFixture(response, `[]`)
+		case request.URL.Path == "/api/v1/analysis-cycles/analysis-incomplete":
+			writeFixture(response, `{"analysis_id":"analysis-incomplete","analysis_time":"2026-09-01T01:00:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1"}`)
+		case request.URL.Path == "/api/v1/analysis-cycles/analysis-incomplete/qpe-summary":
+			writeFixture(response, `{"analysis_id":"analysis-incomplete","analysis_time":"2026-09-01T01:00:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1"}`)
+		case request.URL.Path == "/api/v1/analysis-cycles/analysis-incomplete/diagnostics":
+			http.Error(response, "diagnostics unavailable", http.StatusNotFound)
+		case request.URL.Path == "/api/v1/analysis-cycles/analysis-complete":
+			writeFixture(response, `{"analysis_id":"analysis-complete","analysis_time":"2026-09-01T01:00:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1"}`)
+		case request.URL.Path == "/api/v1/analysis-cycles/analysis-complete/qpe-summary":
+			writeFixture(response, `{"analysis_id":"analysis-complete","analysis_time":"2026-09-01T01:00:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","valid_coverage_ratio":0.5}`)
+		case request.URL.Path == "/api/v1/analysis-cycles/analysis-complete/diagnostics":
+			writeFixture(response, `{"analysis_time":"2026-09-01T01:00:00Z","layers":[{"layer_id":"qpe","scope":"grid","field":"RATE_QPE","image_url":"/qpe.png","unit":"mm/h","bounds":[117.995,24.995,123.005,27.005]}]}`)
+		case request.URL.Path == "/api/v1/analysis-cycles/analysis-future-incomplete/diagnostics":
+			http.Error(response, "diagnostics unavailable", http.StatusNotFound)
+		case request.URL.Path == "/api/v1/analysis-cycles/analysis-future-complete/diagnostics":
+			writeFixture(response, `{"analysis_time":"2026-09-01T01:05:00Z","layers":[{"layer_id":"qpe-future","scope":"grid","field":"RATE_QPE","image_url":"/qpe-future.png","unit":"mm/h","bounds":[117.995,24.995,123.005,27.005]}]}`)
+		default:
+			http.Error(response, "fixture route not found", http.StatusNotFound)
+		}
+	})
+	handler := &Handler{core: core, now: func() time.Time {
+		return time.Date(2026, 9, 3, 1, 0, 0, 0, time.UTC)
+	}}
+	request := httptest.NewRequest(http.MethodGet, workspacePrefix+"/"+encodeCycleID(defaultGridID, mustTime(t, issueTime)), nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var payload cycleDetail
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	qpeIndex := panelIndex(payload.Panels, "qpe")
+	if payload.AnalysisID != "analysis-complete" || qpeIndex < 0 || len(payload.Panels[qpeIndex].Frames) != 2 || payload.Panels[qpeIndex].Frames[0].LeadMinutes != 0 || payload.Panels[qpeIndex].Frames[1].LeadMinutes != 5 {
+		t.Fatalf("analysis = %q, panels = %+v", payload.AnalysisID, payload.Panels)
+	}
+	if !containsString(payload.Warnings, "analysis-fallback") {
+		t.Fatalf("warnings = %+v", payload.Warnings)
+	}
+}
+
+func mustTime(t *testing.T, value string) time.Time {
+	t.Helper()
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return parsed
+}
+
+func containsString(values []string, wanted string) bool {
+	for _, value := range values {
+		if value == wanted {
+			return true
+		}
+	}
+	return false
 }

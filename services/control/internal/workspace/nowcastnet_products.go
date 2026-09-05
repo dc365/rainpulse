@@ -151,12 +151,11 @@ func (store combinedNowcastNetProductStore) ListCycles(ctx context.Context) ([]n
 	if err != nil && err != nowcastnetproducts.ErrNotFound {
 		return nil, err
 	}
-	byCycle := make(map[string]nowcastnetproducts.Bundle, len(formal)+len(legacy))
-	for _, bundle := range legacy {
-		byCycle[bundle.GridID+"/"+bundle.IssueTime.UTC().Format(time.RFC3339)] = bundle
-	}
-	for _, bundle := range formal {
-		byCycle[bundle.GridID+"/"+bundle.IssueTime.UTC().Format(time.RFC3339)] = bundle
+	byCycle := newestNowcastNetBundlesByCycle(legacy)
+	// Formal NATS products are authoritative over legacy file products, while
+	// repeated formal runs at the same valid time must select the newest bundle.
+	for key, bundle := range newestNowcastNetBundlesByCycle(formal) {
+		byCycle[key] = bundle
 	}
 	values := make([]nowcastnetproducts.Bundle, 0, len(byCycle))
 	for _, bundle := range byCycle {
@@ -164,6 +163,20 @@ func (store combinedNowcastNetProductStore) ListCycles(ctx context.Context) ([]n
 	}
 	sort.Slice(values, func(left, right int) bool { return values[left].CreatedAt.After(values[right].CreatedAt) })
 	return values, nil
+}
+
+func newestNowcastNetBundlesByCycle(
+	bundles []nowcastnetproducts.Bundle,
+) map[string]nowcastnetproducts.Bundle {
+	values := make(map[string]nowcastnetproducts.Bundle, len(bundles))
+	for _, bundle := range bundles {
+		key := bundle.GridID + "/" + bundle.IssueTime.UTC().Format(time.RFC3339)
+		current, exists := values[key]
+		if !exists || bundle.CreatedAt.After(current.CreatedAt) {
+			values[key] = bundle
+		}
+	}
+	return values
 }
 
 func (store combinedNowcastNetProductStore) ReadAsset(ctx context.Context, bundleID string, assetID string) (nowcastnetproducts.AssetContent, error) {

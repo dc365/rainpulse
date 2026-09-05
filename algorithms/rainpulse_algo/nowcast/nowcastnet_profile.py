@@ -242,7 +242,9 @@ def _validate_profile(profile: NowcastNetProfile) -> None:
         raise NowcastNetConfigError("weights URI requires a SHA-256")
     if profile.artifact.weights_uri:
         expected_weights_path = Path(
-            "/opt/rainpulse/nowcastnet/official-v1/data/checkpoints/mrms_model.ckpt"
+            "/home/yons/hwapp/ruiyun-bdp/bdp-dp/bdp-dp-rada/"
+            "bdp-dp-rada-rainpulse/runtime/nowcastnet/official-v1/"
+            "data/checkpoints/mrms_model.ckpt"
         )
         if profile.weights_path() != expected_weights_path:
             raise NowcastNetConfigError(

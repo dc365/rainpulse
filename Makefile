@@ -20,7 +20,7 @@ BUILD_VERSION ?= $(BUILD_REVISION)
 RAINPULSE_GO_LDFLAGS := -X github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo.Version=$(BUILD_VERSION) -X github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo.Revision=$(BUILD_REVISION)
 CONTROL_GO := bash scripts/go_control.sh
 
-.PHONY: prepare-bdp-go bootstrap contracts-generate contracts-check test test-structure test-radar-config test-contracts test-infrastructure test-alerting test-operations test-control-plane test-worker-sdk test-radar-decoder test-radar-health test-radar-qc test-radar-grid test-radar-mosaic test-qpe test-diagnostics test-nowcast-input test-pysteps-lk test-pysteps-steps test-probability-calibration test-nowcastnet test-nowcastnet-training test-nowcastnet-pilot test-products test-ensemble-products test-ancillary test-grid test-mrms test-mrms-ensemble test-go test-python test-web lint build build-linux build-infrastructure-linux export-postgres-image export-python-image export-node-exporter-image build-worker-linux deploy-up dev-up dev-down smoke infrastructure-smoke control-plane-smoke worker-smoke radar-decode-smoke radar-health-smoke radar-qc-smoke radar-grid-smoke ancillary-plan ancillary-download ancillary-verify mrms-download mrms-verify mrms-training-audit mrms-pilot-plan mrms-pilot-run mrms-pilot-validate mrms-holdout-select mrms-conformance mrms-hindcast mrms-faults mrms-ensemble-conformance mrms-ensemble-hindcast mrms-ensemble-freeze-gate mrms-nowcastnet-conformance mrms-nowcastnet-hindcast mrms-nowcastnet-freeze-gate
+.PHONY: prepare-bdp-go bootstrap contracts-generate contracts-check test test-structure test-radar-config test-contracts test-infrastructure test-alerting test-operations test-airgap-deploy test-control-plane test-worker-sdk test-radar-decoder test-radar-health test-radar-qc test-radar-grid test-radar-mosaic test-qpe test-diagnostics test-nowcast-input test-pysteps-lk test-pysteps-steps test-probability-calibration test-nowcastnet test-nowcastnet-training test-nowcastnet-pilot test-products test-ensemble-products test-ancillary test-grid test-mrms test-mrms-ensemble test-go test-python test-web lint build build-linux build-infrastructure-linux export-postgres-image export-python-image export-node-exporter-image build-worker-linux deploy-up dev-up dev-down smoke infrastructure-smoke control-plane-smoke worker-smoke radar-decode-smoke radar-health-smoke radar-qc-smoke radar-grid-smoke ancillary-plan ancillary-download ancillary-verify mrms-download mrms-verify mrms-training-audit mrms-pilot-plan mrms-pilot-run mrms-pilot-validate mrms-holdout-select mrms-conformance mrms-hindcast mrms-faults mrms-ensemble-conformance mrms-ensemble-hindcast mrms-ensemble-freeze-gate mrms-nowcastnet-conformance mrms-nowcastnet-hindcast mrms-nowcastnet-freeze-gate
 .PHONY: test-nowcastnet-full-samples mrms-full-sample-plan mrms-full-sample-run mrms-full-sample-validate
 .PHONY: test-regeneration regenerate
 
@@ -42,7 +42,7 @@ contracts-generate:
 contracts-check:
 	bash scripts/check_generated_contracts.sh
 
-test: test-structure test-radar-config test-contracts test-infrastructure test-alerting test-operations test-regeneration test-control-plane test-worker-sdk test-radar-decoder test-radar-health test-radar-qc test-radar-grid test-radar-mosaic test-qpe test-diagnostics test-nowcast-input test-pysteps-lk test-pysteps-steps test-probability-calibration test-nowcastnet test-products test-ensemble-products test-ancillary test-grid test-mrms-ensemble test-go test-python test-web
+test: test-structure test-radar-config test-contracts test-infrastructure test-alerting test-operations test-airgap-deploy test-regeneration test-control-plane test-worker-sdk test-radar-decoder test-radar-health test-radar-qc test-radar-grid test-radar-mosaic test-qpe test-diagnostics test-nowcast-input test-pysteps-lk test-pysteps-steps test-probability-calibration test-nowcastnet test-products test-ensemble-products test-ancillary test-grid test-mrms-ensemble test-go test-python test-web
 
 test-structure:
 	bash tests/rp000_structure_test.sh
@@ -63,6 +63,9 @@ test-alerting:
 
 test-operations:
 	bash tests/rp030_operations_test.sh
+
+test-airgap-deploy:
+	bash tests/rp048_airgap_deploy_test.sh
 
 test-regeneration:
 	bash tests/rp044_regeneration_test.sh

@@ -53,7 +53,7 @@
           "pattern": "^[a-f0-9]{64}$"
         },
         "weights_uri": {
-          "const": "file:///opt/rainpulse/nowcastnet/official-v1/data/checkpoints/mrms_model.ckpt"
+          "const": "file:///home/yons/hwapp/ruiyun-bdp/bdp-dp/bdp-dp-rada/bdp-dp-rada-rainpulse/runtime/nowcastnet/official-v1/data/checkpoints/mrms_model.ckpt"
         },
         "weights_sha256": {
           "oneOf": [

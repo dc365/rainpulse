@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
 	analysisCycleAt,
+	displayFrameAt,
 	frameAt,
 	panelsForPreset,
 	qcFlagLabel,
@@ -49,6 +50,23 @@ describe('workspace model', () => {
     const panel = detail.panels.find((item) => item.panel_id === 'nowcastnet')!
     expect(frameAt(panel, '2026-09-01T01:05:00Z')).toBeNull()
     expect(frameAt(panel, '2026-09-01T01:10:00Z')?.asset_id).toBe('nc10')
+  })
+
+  it('uses the QPE analysis field as the T0 baseline for every forecast panel', () => {
+    const qpe = detail.panels.find((item) => item.panel_id === 'qpe')!
+    for (const panelID of ['lk', 'steps', 'nowcastnet']) {
+      const panel = detail.panels.find((item) => item.panel_id === panelID)!
+      const selection = displayFrameAt(detail, panel, detail.issue_time)
+
+      expect(selection.frame?.asset_id).toBe(qpe.frames[0].asset_id)
+      expect(selection.usesAnalysisBaseline).toBe(true)
+    }
+
+    const lk = detail.panels.find((item) => item.panel_id === 'lk')!
+    expect(displayFrameAt(detail, lk, detail.timeline[1])).toEqual({
+      frame: lk.frames[0],
+      usesAnalysisBaseline: false,
+    })
   })
 
   it('selects raw and QC evidence for one radar', () => {

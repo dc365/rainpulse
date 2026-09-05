@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import warnings
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -58,6 +59,8 @@ def build_ensemble_forecast_output_zarr_store(
         "input_uri": input_uri,
         "input_asset_ids": [str(value) for value in input_asset_ids],
         "member_count": member_count,
+        "output_support_policy": profile.support.output_support_policy,
+        "minimum_valid_members": profile.support.minimum_valid_members,
         "lead_count": 24,
         "lead_step_minutes": 5,
         "random_seed": result.random_seed,
@@ -105,6 +108,7 @@ def build_ensemble_forecast_output_zarr_store(
             "ensemble_fallback_reason": result.ensemble_fallback_reason,
             "input_missing_policy": profile.support.input_missing_policy,
             "output_support_policy": profile.support.output_support_policy,
+            "minimum_valid_members": profile.support.minimum_valid_members,
             "probability_calibration_status": (
                 profile.probability_products.calibration_status
             ),
@@ -246,8 +250,31 @@ def validate_ensemble_forecast_output_zarr_store(
         raise PystepsStepsInputError("ensemble output support is not binary")
     if np.any(~np.isin(member_valid_raw, (0, 1))):
         raise PystepsStepsInputError("ensemble member support is not binary")
-    if not np.array_equal(output_valid, np.all(member_valid, axis=0)):
-        raise PystepsStepsInputError("common ensemble support differs from member intersection")
+    output_support_policy = root.attrs.get("output_support_policy")
+    minimum_valid_members = root.attrs.get("minimum_valid_members")
+    if output_support_policy == "deterministic_support_intersect_all_members_finite":
+        if minimum_valid_members is not None:
+            raise PystepsStepsInputError(
+                "all-member ensemble support cannot define a minimum member count"
+            )
+        expected_output_valid = np.all(member_valid, axis=0)
+    elif output_support_policy == "deterministic_support_minimum_members_finite":
+        if (
+            not isinstance(minimum_valid_members, int)
+            or not 2 <= minimum_valid_members <= len(members)
+        ):
+            raise PystepsStepsInputError(
+                "minimum-member ensemble support has an invalid member count"
+            )
+        expected_output_valid = (
+            np.count_nonzero(member_valid, axis=0) >= minimum_valid_members
+        )
+    else:
+        raise PystepsStepsInputError("ensemble output support policy is invalid")
+    if not np.array_equal(output_valid, expected_output_valid):
+        raise PystepsStepsInputError(
+            "ensemble output support differs from the configured member policy"
+        )
     rates = root["rain_rate"][:]
     if np.any(~np.isnan(rates[~member_valid])):
         raise PystepsStepsInputError("invalid ensemble cells are not NaN")
@@ -268,14 +295,26 @@ def validate_ensemble_forecast_output_zarr_store(
     for threshold in thresholds:
         name = _probability_name(threshold)
         values = root[name][:]
-        expected_values = np.mean(rates > threshold, axis=0)
+        valid_count = np.count_nonzero(member_valid, axis=0)
+        exceedance_count = np.count_nonzero(
+            member_valid & (rates > threshold), axis=0
+        )
+        expected_values = np.divide(
+            exceedance_count,
+            valid_count,
+            out=np.zeros(valid_count.shape, dtype="float32"),
+            where=valid_count > 0,
+        )
         if not _masked_allclose(values, expected_values, output_valid):
             raise PystepsStepsInputError(f"ensemble probability {name} differs from members")
     for quantile in quantiles:
         name = _quantile_name(quantile)
         values = root[name][:]
-        safe_rates = np.where(member_valid, rates, 0.0)
-        expected_values = np.quantile(safe_rates, quantile, axis=0)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            expected_values = np.nanquantile(
+                np.where(member_valid, rates, np.nan), quantile, axis=0
+            )
         if not _masked_allclose(values, expected_values, output_valid):
             raise PystepsStepsInputError(f"ensemble quantile {name} differs from members")
 
@@ -288,11 +327,6 @@ def validate_ensemble_forecast_output_zarr_store(
         "dry_floor_working_copy_preserve_deterministic_support",
     }:
         raise PystepsStepsInputError("ensemble input missing policy is invalid")
-    if (
-        root.attrs.get("output_support_policy")
-        != "deterministic_support_intersect_all_members_finite"
-    ):
-        raise PystepsStepsInputError("ensemble output support policy is invalid")
     if (
         root.attrs.get("probability_calibration_status")
         != "raw_ensemble_relative_frequency_uncalibrated"

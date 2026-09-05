@@ -44,6 +44,9 @@ RP039_V3_PROFILE_PATH = (
 RP039_V4_PROFILE_PATH = (
     REPOSITORY_ROOT / "configs" / "nowcast" / "rp039-pysteps-steps-history-v4.yaml"
 )
+RP049_PROFILE_PATH = (
+    REPOSITORY_ROOT / "configs" / "nowcast" / "rp049-pysteps-steps-history-v5.yaml"
+)
 SCHEMA_PATH = REPOSITORY_ROOT / "configs" / "schemas" / "pysteps-steps-profile.schema.json"
 PRODUCT_PROFILE_PATH = (
     REPOSITORY_ROOT / "configs" / "products" / "rp022-ensemble-products-v1.yaml"
@@ -137,6 +140,11 @@ def test_profile_conforms_to_schema_and_freezes_probability_semantics() -> None:
     Draft202012Validator(schema).validate(rp039_v4_raw)
     rp039_v4 = load_pysteps_steps_profile(RP039_V4_PROFILE_PATH)
     assert rp039_v4.ensemble.precipitation_noise_method == "parametric"
+    rp049_raw = yaml.safe_load(RP049_PROFILE_PATH.read_text())
+    Draft202012Validator(schema).validate(rp049_raw)
+    rp049 = load_pysteps_steps_profile(RP049_PROFILE_PATH)
+    assert rp049.support.output_support_policy.endswith("minimum_members_finite")
+    assert rp049.support.minimum_valid_members == 9
 
 
 def test_probability_product_profile_matches_the_model_profile_and_stays_offline() -> None:
@@ -312,6 +320,56 @@ def test_historical_missing_policy_runs_frozen_backend_on_partial_radar_domain()
 
     assert result.rain_rate.shape == (2, 24, 64, 64)
     assert np.all(np.isnan(result.rain_rate[result.member_valid_mask == 0]))
+
+
+def test_minimum_member_support_keeps_probabilistic_products_inside_deterministic_domain() -> None:
+    def member_dropout_backend(_precip, _velocity, timesteps, **kwargs):
+        values = np.full(
+            (kwargs["n_ens_members"], timesteps, 64, 64),
+            10.0,
+            dtype="float32",
+        )
+        # Three perturbed members leave this otherwise valid deterministic cell.
+        values[-3:, :, 30, 30] = np.nan
+        return values
+
+    configured = replace(
+        steps_profile(),
+        support=StepsSupportConfig(
+            "reject_any_missing",
+            "deterministic_support_minimum_members_finite",
+            9,
+        ),
+    )
+    result = run_pysteps_steps_fields(
+        steps_fields(),
+        profile=configured,
+        lk_profile=lk_profile(),
+        grid=tiny_grid(),
+        backend=member_dropout_backend,
+    )
+
+    assert result.member_valid_mask[:, 0, 30, 30].sum() == 9
+    assert result.output_valid_mask[0, 30, 30] == 1
+    assert result.probability_exceedance[5.0][0, 30, 30] == pytest.approx(1.0)
+    assert result.quantiles[0.5][0, 30, 30] == pytest.approx(10.0)
+    objects = build_ensemble_forecast_output_zarr_store(
+        result,
+        run_id=UUID("9a000000-0000-4000-8000-000000000003"),
+        job_id=UUID("9a000000-0000-4000-8000-000000000004"),
+        issue_time=ISSUE_TIME,
+        input_uri="s3://rainpulse/nowcast-input/rp049/input.zarr",
+        input_asset_ids=INPUT_ASSET_IDS,
+        profile=configured,
+        grid=tiny_grid(),
+        runtime_ms=321,
+    )
+    validation = validate_ensemble_forecast_output_zarr_store(objects)
+    all_member_coverage = np.mean(
+        np.all(result.member_valid_mask[:, 0] == 1, axis=0)
+    )
+    assert validation["first_lead_valid_coverage_ratio"] > all_member_coverage
+
 
 def test_wraps_backend_failure_for_independent_lk_fallback_orchestration() -> None:
     def failing_backend(*_args, **_kwargs):

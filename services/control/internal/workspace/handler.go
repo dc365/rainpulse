@@ -165,20 +165,23 @@ type legendEntry struct {
 }
 
 type frameView struct {
-	AssetID        string      `json:"asset_id"`
-	ValidTime      string      `json:"valid_time"`
-	LeadMinutes    int         `json:"lead_time_minutes"`
-	ImageURL       string      `json:"image_url"`
-	MediaType      string      `json:"media_type"`
-	Unit           string      `json:"unit,omitempty"`
-	SHA256         string      `json:"sha256,omitempty"`
-	CoverageRatio  *float64    `json:"coverage_ratio,omitempty"`
-	ValidCellCount *int        `json:"valid_cell_count,omitempty"`
-	MissingCount   *int        `json:"missing_cell_count,omitempty"`
-	Bounds         *[4]float64 `json:"bounds,omitempty"`
-	FrameKind      string      `json:"frame_kind,omitempty"`
-	Derivation     string      `json:"derivation,omitempty"`
-	SourceLeads    []int       `json:"source_leads,omitempty"`
+	AssetID                  string      `json:"asset_id"`
+	ValidTime                string      `json:"valid_time"`
+	LeadMinutes              int         `json:"lead_time_minutes"`
+	ImageURL                 string      `json:"image_url"`
+	MediaType                string      `json:"media_type"`
+	Unit                     string      `json:"unit,omitempty"`
+	SHA256                   string      `json:"sha256,omitempty"`
+	CoverageRatio            *float64    `json:"coverage_ratio,omitempty"`
+	ValidCellCount           *int        `json:"valid_cell_count,omitempty"`
+	MissingCount             *int        `json:"missing_cell_count,omitempty"`
+	Bounds                   *[4]float64 `json:"bounds,omitempty"`
+	FrameKind                string      `json:"frame_kind,omitempty"`
+	Derivation               string      `json:"derivation,omitempty"`
+	SourceLeads              []int       `json:"source_leads,omitempty"`
+	ObservationTime          string      `json:"observation_time,omitempty"`
+	ObservationOffsetSeconds *int        `json:"observation_offset_seconds,omitempty"`
+	ReferenceObservation     bool        `json:"reference_observation,omitempty"`
 }
 
 type panelView struct {
@@ -220,7 +223,8 @@ type analysisTrace struct {
 }
 
 type forecastRunPage struct {
-	Items []forecastRun `json:"items"`
+	Items      []forecastRun `json:"items"`
+	NextCursor *string       `json:"next_cursor,omitempty"`
 }
 
 type forecastRun struct {
@@ -279,6 +283,7 @@ type diagnosticLayer struct {
 	Scope    string             `json:"scope"`
 	Field    string             `json:"field"`
 	RadarID  string             `json:"radar_id"`
+	ScanID   string             `json:"scan_id"`
 	Title    string             `json:"title"`
 	ImageURL string             `json:"image_url"`
 	Unit     *string            `json:"unit"`
@@ -376,6 +381,7 @@ type cycleAccumulator struct {
 	summary    cycleSummary
 	run        *forecastRun
 	analysis   *analysisCycle
+	analyses   []analysisCycle
 	ensemble   *ensembleCycle
 	nowcastnet *nowcastnetproductstore.Bundle
 }
@@ -531,13 +537,32 @@ func (handler *Handler) getCycle(response http.ResponseWriter, request *http.Req
 		detail.Grid.RasterBounds = [4]float64{}
 	}
 
-	if item.analysis != nil {
-		handler.addAnalysis(request.Context(), &detail, *item.analysis)
+	var selectedAnalysis *analysisCycle
+	for index, candidate := range analysisCandidates(item) {
+		attempt := detail
+		attempt.Warnings = append([]string(nil), detail.Warnings...)
+		if !handler.addAnalysis(request.Context(), &attempt, candidate) {
+			if index == len(item.analyses)-1 {
+				detail = attempt
+			}
+			continue
+		}
+		detail = attempt
+		selected := candidate
+		selectedAnalysis = &selected
+		detail.AnalysisID = candidate.AnalysisID
+		if item.analysis != nil && candidate.AnalysisID != item.analysis.AnalysisID {
+			detail.Warnings = append(detail.Warnings, "analysis-fallback")
+		}
+		break
+	}
+	if selectedAnalysis != nil {
+		handler.addRadarReferencePanels(request.Context(), &detail, catalog, *selectedAnalysis)
 		handler.addObservedTimeline(
 			request.Context(),
 			&detail,
 			catalog,
-			*item.analysis,
+			*selectedAnalysis,
 		)
 	}
 	if item.run != nil {
@@ -555,38 +580,157 @@ func (handler *Handler) getCycle(response http.ResponseWriter, request *http.Req
 	writeJSON(response, http.StatusOK, detail)
 }
 
+// addRadarReferencePanels keeps the five-minute analysis clock honest while
+// still giving an operator the nearest real radar evidence when that radar was
+// not a contributor to the mosaic.  It reuses an immutable diagnostic layer
+// for the exact scan from a neighbouring analysis; it never interpolates an
+// image or inserts the reference scan into the selected QPE lineage.
+func (handler *Handler) addRadarReferencePanels(
+	ctx context.Context,
+	detail *cycleDetail,
+	catalog map[string]*cycleAccumulator,
+	selected analysisCycle,
+) {
+	analysisTime, ok := normalizedTime(selected.AnalysisTime)
+	if !ok {
+		return
+	}
+	for _, radar := range detail.Radars {
+		if radar.State == "PARTICIPATING" || radar.RadarID == "" {
+			continue
+		}
+		if panelIndex(detail.Panels, "dbzh_raw:"+strings.ToLower(radar.RadarID)) >= 0 {
+			continue
+		}
+		reference, found := nearestRadarDiagnosticReference(catalog, selected.GridID, radar.RadarID, analysisTime)
+		if !found {
+			continue
+		}
+		var diagnostics diagnosticBundle
+		path := "/api/v1/analysis-cycles/" + url.PathEscape(reference.analysis.AnalysisID) + "/diagnostics"
+		if err := handler.readCore(ctx, path, &diagnostics); err != nil {
+			continue
+		}
+		for _, layer := range diagnostics.Layers {
+			if layer.Scope != "polar" || !strings.EqualFold(layer.RadarID, radar.RadarID) ||
+				(layer.ScanID != "" && layer.ScanID != reference.scanID) {
+				continue
+			}
+			panel, accepted := diagnosticPanel(layer, reference.observationTime.Format(time.RFC3339))
+			if !accepted {
+				continue
+			}
+			offset := int(reference.observationTime.Sub(analysisTime).Round(time.Second).Seconds())
+			panel.Lifecycle = "reference"
+			panel.Frames[0].ObservationTime = reference.observationTime.Format(time.RFC3339)
+			panel.Frames[0].ObservationOffsetSeconds = &offset
+			panel.Frames[0].ReferenceObservation = true
+			upsertPanel(detail, panel)
+		}
+	}
+}
+
+type radarDiagnosticReference struct {
+	analysis        analysisCycle
+	scanID          string
+	observationTime time.Time
+}
+
+func nearestRadarDiagnosticReference(
+	catalog map[string]*cycleAccumulator,
+	gridID string,
+	radarID string,
+	analysisTime time.Time,
+) (radarDiagnosticReference, bool) {
+	const maximumOffset = 5 * time.Minute
+	var best radarDiagnosticReference
+	for _, item := range catalog {
+		if item.analysis == nil || item.analysis.GridID != gridID {
+			continue
+		}
+		candidateTime, valid := normalizedTime(item.analysis.AnalysisTime)
+		if !valid {
+			continue
+		}
+		for _, radar := range item.analysis.Radars {
+			if radar.State != "PARTICIPATING" || radar.ScanID == nil ||
+				!strings.EqualFold(radar.RadarID, radarID) {
+				continue
+			}
+			offset := time.Duration(0)
+			if radar.TimeOffsetSeconds != nil {
+				offset = time.Duration(*radar.TimeOffsetSeconds) * time.Second
+			}
+			observed := candidateTime.Add(offset)
+			if absTimeDuration(observed.Sub(analysisTime)) > maximumOffset {
+				continue
+			}
+			candidate := radarDiagnosticReference{analysis: *item.analysis, scanID: *radar.ScanID, observationTime: observed}
+			if best.scanID == "" || absTimeDuration(candidate.observationTime.Sub(analysisTime)) < absTimeDuration(best.observationTime.Sub(analysisTime)) ||
+				(absTimeDuration(candidate.observationTime.Sub(analysisTime)) == absTimeDuration(best.observationTime.Sub(analysisTime)) && candidate.scanID < best.scanID) {
+				best = candidate
+			}
+		}
+	}
+	return best, best.scanID != ""
+}
+
+func absTimeDuration(value time.Duration) time.Duration {
+	if value < 0 {
+		return -value
+	}
+	return value
+}
+
 func (handler *Handler) catalog(ctx context.Context) (map[string]*cycleAccumulator, []string) {
 	catalog := make(map[string]*cycleAccumulator)
 	degraded := make([]string, 0)
 	seenRuns := make(map[string]struct{})
 	for _, status := range []string{"PUBLISHED", "VERIFYING", "VERIFIED"} {
-		var page forecastRunPage
-		path := "/api/v1/runs?status=" + url.QueryEscape(status) + "&limit=100"
-		if err := handler.readCore(ctx, path, &page); err != nil {
-			degraded = append(degraded, "runs:"+strings.ToLower(status))
-			continue
-		}
-		for index := range page.Items {
-			run := page.Items[index]
-			if _, duplicate := seenRuns[run.RunID]; duplicate {
-				continue
+		cursor := ""
+		seenCursors := make(map[string]struct{})
+		for {
+			path := "/api/v1/runs?status=" + url.QueryEscape(status) + "&limit=100"
+			if cursor != "" {
+				path += "&cursor=" + url.QueryEscape(cursor)
 			}
-			seenRuns[run.RunID] = struct{}{}
-			parsed, ok := normalizedTime(run.IssueTime)
-			if !ok || run.GridID == "" {
-				continue
+			var page forecastRunPage
+			if err := handler.readCore(ctx, path, &page); err != nil {
+				degraded = append(degraded, "runs:"+strings.ToLower(status))
+				break
 			}
-			entry := accumulator(catalog, run.GridID, parsed, handler.now(), handler.executionMode)
-			if !preferForecast(entry.run, run) {
-				continue
+			for index := range page.Items {
+				run := page.Items[index]
+				if _, duplicate := seenRuns[run.RunID]; duplicate {
+					continue
+				}
+				seenRuns[run.RunID] = struct{}{}
+				parsed, ok := normalizedTime(run.IssueTime)
+				if !ok || run.GridID == "" {
+					continue
+				}
+				entry := accumulator(catalog, run.GridID, parsed, handler.now(), handler.executionMode)
+				if !preferForecast(entry.run, run) {
+					continue
+				}
+				copy := run
+				entry.run = &copy
+				entry.summary.RunID = run.RunID
+				entry.summary.Capabilities.LK = true
+				if handler.executionMode == "" && run.ExecutionMode != "" {
+					entry.summary.ExecutionMode = run.ExecutionMode
+				}
 			}
-			copy := run
-			entry.run = &copy
-			entry.summary.RunID = run.RunID
-			entry.summary.Capabilities.LK = true
-			if handler.executionMode == "" && run.ExecutionMode != "" {
-				entry.summary.ExecutionMode = run.ExecutionMode
+			if page.NextCursor == nil || strings.TrimSpace(*page.NextCursor) == "" {
+				break
 			}
+			next := strings.TrimSpace(*page.NextCursor)
+			if _, repeated := seenCursors[next]; repeated {
+				degraded = append(degraded, "runs:"+strings.ToLower(status)+":cursor")
+				break
+			}
+			seenCursors[next] = struct{}{}
+			cursor = next
 		}
 	}
 
@@ -601,6 +745,7 @@ func (handler *Handler) catalog(ctx context.Context) (map[string]*cycleAccumulat
 				continue
 			}
 			entry := accumulator(catalog, analysis.GridID, parsed, handler.now(), handler.executionMode)
+			entry.analyses = append(entry.analyses, analysis)
 			if !preferAnalysis(entry.analysis, analysis) {
 				continue
 			}
@@ -648,6 +793,17 @@ func (handler *Handler) catalog(ctx context.Context) (map[string]*cycleAccumulat
 		}
 	}
 	return catalog, uniqueStrings(degraded)
+}
+
+func analysisCandidates(item *cycleAccumulator) []analysisCycle {
+	if item == nil || len(item.analyses) == 0 {
+		return nil
+	}
+	candidates := append([]analysisCycle(nil), item.analyses...)
+	sort.SliceStable(candidates, func(left, right int) bool {
+		return preferAnalysis(&candidates[right], candidates[left])
+	})
+	return candidates
 }
 
 func preferForecast(existing *forecastRun, candidate forecastRun) bool {
@@ -708,16 +864,35 @@ func handlerExecutionMode(now time.Time, issueTime time.Time, configured string)
 	return "historical"
 }
 
-func (handler *Handler) addAnalysis(ctx context.Context, detail *cycleDetail, summary analysisCycle) {
+func (handler *Handler) addAnalysis(ctx context.Context, detail *cycleDetail, summary analysisCycle) bool {
 	var full analysisCycle
 	if err := handler.readCore(ctx, "/api/v1/analysis-cycles/"+url.PathEscape(summary.AnalysisID), &full); err != nil {
 		detail.Warnings = append(detail.Warnings, "analysis-detail")
 		full = summary
 	}
+
+	var qpe qpeSummary
+	if err := handler.readCore(ctx, "/api/v1/analysis-cycles/"+url.PathEscape(summary.AnalysisID)+"/qpe-summary", &qpe); err != nil {
+		detail.Warnings = append(detail.Warnings, "qpe-summary")
+	} else if !qpeLineageMatches(full, qpe) {
+		detail.Warnings = append(detail.Warnings, "qpe-lineage")
+		return false
+	}
+
+	var diagnostics diagnosticBundle
+	if err := handler.readCore(ctx, "/api/v1/analysis-cycles/"+url.PathEscape(summary.AnalysisID)+"/diagnostics", &diagnostics); err != nil {
+		detail.Warnings = append(detail.Warnings, "analysis-diagnostics")
+		return false
+	}
+
 	detail.AnalysisTrace = &analysisTrace{
-		AnalysisID:            full.AnalysisID,
-		AnalysisConfigVersion: full.ConfigVersion,
-		AnalysisCreatedAt:     full.CreatedAt,
+		AnalysisID:             full.AnalysisID,
+		AnalysisConfigVersion:  full.ConfigVersion,
+		AnalysisCreatedAt:      full.CreatedAt,
+		MosaicConfigVersion:    qpe.MosaicConfigVersion,
+		MosaicAlgorithmVersion: qpe.MosaicAlgorithmVersion,
+		InputMosaicURI:         qpe.InputMosaicURI,
+		QPEConfigVersion:       qpe.QPEConfigVersion,
 	}
 	for _, radar := range full.Radars {
 		item := radarView{RadarID: radar.RadarID, State: radar.State,
@@ -728,28 +903,10 @@ func (handler *Handler) addAnalysis(ctx context.Context, detail *cycleDetail, su
 		detail.Radars = append(detail.Radars, item)
 	}
 	sort.Slice(detail.Radars, func(i, j int) bool { return detail.Radars[i].RadarID < detail.Radars[j].RadarID })
-
-	var qpe qpeSummary
-	if err := handler.readCore(ctx, "/api/v1/analysis-cycles/"+url.PathEscape(summary.AnalysisID)+"/qpe-summary", &qpe); err != nil {
-		detail.Warnings = append(detail.Warnings, "qpe-summary")
-	} else {
-		detail.AnalysisTrace.MosaicConfigVersion = qpe.MosaicConfigVersion
-		detail.AnalysisTrace.MosaicAlgorithmVersion = qpe.MosaicAlgorithmVersion
-		detail.AnalysisTrace.InputMosaicURI = qpe.InputMosaicURI
-		detail.AnalysisTrace.QPEConfigVersion = qpe.QPEConfigVersion
-		if !qpeLineageMatches(full, qpe) {
-			detail.Warnings = append(detail.Warnings, "qpe-lineage")
-			return
-		}
+	if qpe.AnalysisID != "" || qpe.CoverageRatio != nil {
 		detail.Quality = qualitySummary{CoverageRatio: qpe.CoverageRatio,
 			MeanQualityIndex: qpe.MeanQualityIndex, MaximumRateMMH: qpe.MaximumRateMMH,
 			P95RateMMH: qpe.P95RateMMH}
-	}
-
-	var diagnostics diagnosticBundle
-	if err := handler.readCore(ctx, "/api/v1/analysis-cycles/"+url.PathEscape(summary.AnalysisID)+"/diagnostics", &diagnostics); err != nil {
-		detail.Warnings = append(detail.Warnings, "analysis-diagnostics")
-		return
 	}
 	for _, layer := range diagnostics.Layers {
 		panel, ok := diagnosticPanel(layer, summary.AnalysisTime)
@@ -763,6 +920,7 @@ func (handler *Handler) addAnalysis(ctx context.Context, detail *cycleDetail, su
 			}
 		}
 	}
+	return true
 }
 
 func qpeLineageMatches(analysis analysisCycle, qpe qpeSummary) bool {
@@ -799,39 +957,44 @@ func (handler *Handler) addObservedTimeline(
 	}
 	type candidate struct {
 		time     time.Time
-		analysis analysisCycle
+		analyses []analysisCycle
 	}
 	candidates := make([]candidate, 0, 24)
 	for _, entry := range catalog {
-		if entry.analysis == nil || entry.analysis.AnalysisID == selected.AnalysisID ||
-			entry.analysis.GridID != selected.GridID {
+		if entry.analysis == nil || entry.analysis.GridID != selected.GridID {
 			continue
 		}
 		validTime, valid := normalizedTime(entry.analysis.AnalysisTime)
 		if !valid || !validTime.After(issueTime) || validTime.After(issueTime.Add(2*time.Hour)) {
 			continue
 		}
-		candidates = append(candidates, candidate{time: validTime, analysis: *entry.analysis})
+		candidates = append(candidates, candidate{time: validTime, analyses: analysisCandidates(entry)})
 	}
 	sort.Slice(candidates, func(left, right int) bool {
 		return candidates[left].time.Before(candidates[right].time)
 	})
 	for _, item := range candidates {
-		var diagnostics diagnosticBundle
-		path := "/api/v1/analysis-cycles/" + url.PathEscape(item.analysis.AnalysisID) + "/diagnostics"
-		if err := handler.readCore(ctx, path, &diagnostics); err != nil {
-			continue
-		}
-		for _, layer := range diagnostics.Layers {
-			if layer.Scope != "grid" || layer.Field != "RATE_QPE" {
+		for _, analysis := range item.analyses {
+			if analysis.AnalysisID == selected.AnalysisID {
 				continue
 			}
-			panel, accepted := diagnosticPanel(layer, item.analysis.AnalysisTime)
-			if !accepted {
+			var diagnostics diagnosticBundle
+			path := "/api/v1/analysis-cycles/" + url.PathEscape(analysis.AnalysisID) + "/diagnostics"
+			if err := handler.readCore(ctx, path, &diagnostics); err != nil {
+				continue
+			}
+			for _, layer := range diagnostics.Layers {
+				if layer.Scope != "grid" || layer.Field != "RATE_QPE" {
+					continue
+				}
+				panel, accepted := diagnosticPanel(layer, analysis.AnalysisTime)
+				if !accepted {
+					break
+				}
+				panel.Frames[0].LeadMinutes = int(item.time.Sub(issueTime) / time.Minute)
+				mergePanelFrame(detail, panel)
 				break
 			}
-			panel.Frames[0].LeadMinutes = int(item.time.Sub(issueTime) / time.Minute)
-			mergePanelFrame(detail, panel)
 			break
 		}
 	}

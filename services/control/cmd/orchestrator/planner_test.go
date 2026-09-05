@@ -117,6 +117,26 @@ func TestClosestScanByRadarSelectsOneCandidatePerRadar(t *testing.T) {
 	}
 }
 
+func TestClosestReadyMosaicScansUsesCurrentWindowInsteadOfPriorLineage(t *testing.T) {
+	analysisTime := time.Date(2026, 8, 28, 2, 35, 0, 0, time.UTC)
+	nearestZ9591 := uuid.New()
+	planner := &pipelinePlanner{settings: pipelineSettings{
+		radarIDs:            map[string]struct{}{"z9591": {}, "z9593": {}},
+		maximumMosaicOffset: 5 * time.Minute,
+	}}
+	selected := planner.closestReadyMosaicScans([]workflow.RadarScan{
+		{ID: uuid.New(), RadarID: "z9591", Status: workflow.RadarScanGridReady, VolumeEndTime: analysisTime.Add(-4 * time.Minute)},
+		{ID: nearestZ9591, RadarID: "z9591", Status: workflow.RadarScanGridReady, VolumeEndTime: analysisTime.Add(153 * time.Second)},
+		{ID: uuid.New(), RadarID: "z9593", Status: workflow.RadarScanGridReady, VolumeEndTime: analysisTime.Add(-90 * time.Second)},
+		{ID: uuid.New(), RadarID: "z9598", Status: workflow.RadarScanGridReady, VolumeEndTime: analysisTime.Add(-30 * time.Second)},
+		{ID: uuid.New(), RadarID: "z9591", Status: workflow.RadarScanQCReady, VolumeEndTime: analysisTime.Add(time.Minute)},
+	}, analysisTime)
+
+	if len(selected) != 2 || selected[0].ID != nearestZ9591 || selected[1].RadarID != "z9593" {
+		t.Fatalf("selected current grid-ready candidates = %#v", selected)
+	}
+}
+
 func TestManualRegenerationBypassesRealtimeForecastLookback(t *testing.T) {
 	sourceID := uuid.New()
 	planner := &pipelinePlanner{settings: pipelineSettings{lookback: time.Hour}}
@@ -145,5 +165,26 @@ func TestDistinctRegenerationScansDeduplicatesSharedInputFrames(t *testing.T) {
 	}
 	if !seen[shared.ID] || !seen[other.ID] {
 		t.Fatalf("distinct regeneration scans lost source lineage: %#v", items)
+	}
+}
+
+func TestClosestRegenerationMosaicScansAcceptsRestartableStates(t *testing.T) {
+	analysisTime := time.Date(2026, time.August, 28, 0, 10, 0, 0, time.UTC)
+	planner := &pipelinePlanner{settings: pipelineSettings{
+		radarIDs:            map[string]struct{}{"z9591": {}, "z9593": {}},
+		maximumMosaicOffset: 5 * time.Minute,
+	}}
+	selected := planner.closestRegenerationMosaicScans([]workflow.RadarScan{
+		{ID: uuid.New(), RadarID: "z9591", Status: workflow.RadarScanQCReady, VolumeEndTime: analysisTime.Add(-time.Minute)},
+		{ID: uuid.New(), RadarID: "z9593", Status: workflow.RadarScanNormalized, VolumeEndTime: analysisTime.Add(time.Minute)},
+		{ID: uuid.New(), RadarID: "z9598", Status: workflow.RadarScanGridReady, VolumeEndTime: analysisTime},
+	}, analysisTime)
+	if len(selected) != 2 {
+		t.Fatalf("restartable regeneration scans = %#v", selected)
+	}
+	for _, scan := range selected {
+		if scan.RadarID != "z9591" && scan.RadarID != "z9593" {
+			t.Fatalf("unexpected radar selected: %#v", scan)
+		}
 	}
 }

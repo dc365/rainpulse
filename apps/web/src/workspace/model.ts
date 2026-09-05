@@ -45,6 +45,9 @@ export type WorkspaceFrame = {
   valid_cell_count?: number
   missing_cell_count?: number
   bounds?: [number, number, number, number]
+  observation_time?: string
+  observation_offset_seconds?: number
+  reference_observation?: boolean
 }
 
 export type WorkspacePanel = {
@@ -52,7 +55,7 @@ export type WorkspacePanel = {
   algorithm_id: string
   display_name: string
   role: 'observation' | 'forecast' | 'qc' | 'diagnostic'
-  lifecycle: 'analysis' | 'shadow' | 'offline' | 'operational'
+  lifecycle: 'analysis' | 'reference' | 'shadow' | 'offline' | 'operational'
   data_kind: string
   cadence_minutes: number
   status: 'ready' | 'unavailable' | 'running' | 'failed'
@@ -171,7 +174,33 @@ export function panelsForPreset(
 export function frameAt(panel: WorkspacePanel, validTime: string | null) {
   if (!validTime) return panel.frames[0] ?? null
   const target = Date.parse(validTime)
-  return panel.frames.find((frame) => Date.parse(frame.valid_time) === target) ?? null
+  return panel.frames.find((frame) => Date.parse(frame.valid_time) === target)
+    ?? panel.frames.find((frame) => frame.reference_observation === true)
+    ?? null
+}
+
+export function displayFrameAt(
+  detail: WorkspaceCycleDetail,
+  panel: WorkspacePanel,
+  validTime: string | null,
+) {
+  const frame = frameAt(panel, validTime)
+  if (frame) return { frame, usesAnalysisBaseline: false }
+
+  const atIssueTime = validTime != null
+    && Date.parse(validTime) === Date.parse(detail.issue_time)
+  if (panel.role !== 'forecast' || !atIssueTime) {
+    return { frame: null, usesAnalysisBaseline: false }
+  }
+
+  const qpePanel = panelByID(detail, 'qpe')
+  const analysisFrame = qpePanel?.frames.find(
+    (candidate) => Date.parse(candidate.valid_time) === Date.parse(detail.issue_time),
+  ) ?? null
+  return {
+    frame: analysisFrame,
+    usesAnalysisBaseline: analysisFrame != null,
+  }
 }
 
 export function availabilityAt(panel: WorkspacePanel, validTime: string) {

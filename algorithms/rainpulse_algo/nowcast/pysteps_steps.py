@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import warnings
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from importlib import import_module
@@ -187,16 +188,16 @@ def run_pysteps_steps_fields(
     deterministic_valid = np.asarray(deterministic.output_valid_mask) == 1
     member_valid = np.broadcast_to(deterministic_valid, members.shape) & np.isfinite(members)
     members[~member_valid] = np.nan
-    output_valid = np.all(member_valid, axis=0)
+    output_valid = _output_support(member_valid, profile)
     if np.any(~np.isfinite(members[member_valid])):
         raise PystepsStepsInputError("STEPS ensemble is invalid inside member support")
 
     probability_exceedance = {
-        threshold: _probability(members, output_valid, threshold)
+        threshold: _probability(members, member_valid, output_valid, threshold)
         for threshold in profile.probability_products.rain_rate_thresholds_mm_h
     }
     quantiles = {
-        quantile: _quantile(members, output_valid, quantile)
+        quantile: _quantile(members, member_valid, output_valid, quantile)
         for quantile in profile.probability_products.quantiles
     }
     return PystepsStepsResult(
@@ -286,23 +287,54 @@ def _load_steps_backend() -> StepsBackend:
     return _pysteps_function("nowcasts.steps", "forecast")
 
 
+def _output_support(
+    member_valid: np.ndarray,
+    profile: PystepsStepsProfile,
+) -> np.ndarray:
+    policy = profile.support.output_support_policy
+    if policy == "deterministic_support_intersect_all_members_finite":
+        return np.all(member_valid, axis=0)
+    if policy == "deterministic_support_minimum_members_finite":
+        minimum = profile.support.minimum_valid_members
+        if minimum is None:
+            raise PystepsStepsInputError(
+                "minimum-member STEPS support requires a member threshold"
+            )
+        return np.count_nonzero(member_valid, axis=0) >= minimum
+    raise PystepsStepsInputError("unsupported STEPS output support policy")
+
+
 def _probability(
     members: np.ndarray,
+    member_valid: np.ndarray,
     output_valid: np.ndarray,
     threshold: float,
 ) -> np.ndarray:
-    values = np.mean(members > threshold, axis=0, dtype="float32")
-    values = values.astype("float32")
+    valid_count = np.count_nonzero(member_valid, axis=0)
+    exceedance_count = np.count_nonzero(
+        member_valid & (members > threshold), axis=0
+    )
+    values = np.divide(
+        exceedance_count,
+        valid_count,
+        out=np.zeros(valid_count.shape, dtype="float32"),
+        where=valid_count > 0,
+    )
     values[~output_valid] = np.nan
     return values
 
 
 def _quantile(
     members: np.ndarray,
+    member_valid: np.ndarray,
     output_valid: np.ndarray,
     quantile: float,
 ) -> np.ndarray:
-    values = np.quantile(members, quantile, axis=0).astype("float32")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        values = np.nanquantile(
+            np.where(member_valid, members, np.nan), quantile, axis=0
+        ).astype("float32")
     values[~output_valid] = np.nan
     return values
 

@@ -204,10 +204,20 @@ class Worker:
             )
             if existing is not None:
                 self._validate_existing(existing, request)
-                await self._publish_result(jetstream, existing)
+                # A manual replay can occur long after the broker's duplicate
+                # window while retaining the same domain completion event ID.
+                # Let the durable inbox make this idempotent instead of letting
+                # broker-level de-duplication hide a completion that was never
+                # committed by the control plane.
+                await self._publish_result(jetstream, existing, replay=True)
                 if not await self._ack_terminal_result(message, context):
                     return
-                log_event("info", "job.idempotent_replay", **context)
+                log_event(
+                    "info",
+                    "job.idempotent_replay",
+                    result_event_id=str(existing.event_id),
+                    **context,
+                )
                 return
 
             raw_result = await asyncio.to_thread(self._handler.executor, request)
@@ -238,6 +248,7 @@ class Worker:
                 "job.completed",
                 duration_ms=authoritative_completion.payload.runtime_ms,
                 publication_reused=bool(getattr(published, "reused", False)),
+                result_event_id=str(authoritative_completion.event_id),
                 **context,
             )
         except Exception as error:  # noqa: BLE001 - classified before delivery handling
@@ -250,6 +261,7 @@ class Worker:
                     "job.retry_scheduled",
                     error_code="TRANSIENT_WORKER_ERROR",
                     exception=type(error).__name__,
+                    error_message=str(error)[:512],
                     retry_delay_seconds=delay,
                     max_deliveries=self._handler.max_deliveries,
                     **context,
@@ -284,6 +296,9 @@ class Worker:
                 "job.failed",
                 duration_ms=failure.payload.runtime_ms,
                 error_code=failure.payload.error_code,
+                exception=type(error).__name__,
+                error_message=str(error)[:512],
+                result_event_id=str(failure.event_id),
                 **context,
             )
 
@@ -317,14 +332,21 @@ class Worker:
                 )
                 return
 
-    async def _publish_result(self, jetstream: Any, event: JobCompleted | JobFailed) -> None:
+    async def _publish_result(
+        self,
+        jetstream: Any,
+        event: JobCompleted | JobFailed,
+        *,
+        replay: bool = False,
+    ) -> None:
         subject = (
             JOB_COMPLETED_SUBJECT if isinstance(event, JobCompleted) else JOB_FAILED_SUBJECT
         )
+        headers = {} if replay else {"Nats-Msg-Id": str(event.event_id)}
         await jetstream.publish(
             subject,
             event.model_dump_json().encode(),
-            headers={"Nats-Msg-Id": str(event.event_id)},
+            headers=headers,
         )
 
     def _build_completion(

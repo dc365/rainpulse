@@ -15,6 +15,7 @@ import { focusedPanelFromSearch, workspaceLayoutSearch } from './layoutState'
 import {
   analysisCycleAt,
   availabilityAt,
+  displayFrameAt,
   formatCycleTime,
   formatValidTime,
   frameAt,
@@ -426,6 +427,7 @@ export function MainWorkspace() {
 
       {detail ? (
         <SharedTimeline
+          detail={detail}
           issueTime={detail.issue_time}
           values={timelineValues}
           panels={panels}
@@ -476,7 +478,9 @@ function MapPanel({
   onFocus: () => void
   onShowComparison: () => void
 }) {
-  const frame = frameAt(panel, selectedTime)
+  const { frame, usesAnalysisBaseline } = detail
+    ? displayFrameAt(detail, panel, selectedTime)
+    : { frame: frameAt(panel, selectedTime), usesAnalysisBaseline: false }
   const displayName = panelDisplayName(panel)
   const radarSite = panel.data_kind === 'reflectivity' ? radarSiteFor(panel.radar_id) : undefined
   const analysisRadar = radarSite
@@ -507,17 +511,23 @@ function MapPanel({
     minimum: entry.minimum,
     sourceLabel: isQCFlagsPanel ? entry.label ?? undefined : undefined,
   }))
-  const unavailable = panel.status !== 'ready'
+  const unavailable = !usesAnalysisBaseline && panel.status !== 'ready'
     ? reasonLabel(panel.unavailable_reason)
     : frame == null ? '当前算法无原生该有效时刻，未进行插值。' : undefined
   const lifecycle = panel.lifecycle === 'shadow'
     ? '影子'
     : panel.lifecycle === 'offline'
       ? '离线'
+      : panel.lifecycle === 'reference'
+        ? '参考'
       : panel.lifecycle === 'analysis'
         ? '分析'
         : '业务'
-  const frameContext = frame
+  const frameContext = usesAnalysisBaseline
+    ? 'T0 分析场'
+    : frame?.reference_observation && frame.observation_time
+    ? `参考体扫 ${formatValidTime(frame.observation_time)}（${formatObservationOffset(frame.observation_offset_seconds)}，未参与本时次拼图）`
+    : frame
     ? leadLabel(detail?.issue_time ?? frame.valid_time, frame.valid_time)
     : `每 ${panel.cadence_minutes} 分钟`
   const handleLayerError = useCallback(
@@ -548,11 +558,11 @@ function MapPanel({
       <RasterGISMap
         className="workspace-comparison-map"
         imageUrl={frame?.image_url}
-        imageDescription={`${displayName} ${formatValidTime(frame?.valid_time ?? selectedTime)}`}
+        imageDescription={`${displayName} ${usesAnalysisBaseline ? 'T0 共用雷达 QPE 分析场' : formatValidTime(frame?.valid_time ?? selectedTime)}`}
         imageExtent={imageExtent}
         fitExtent={fitExtent}
         validTimeLabel={formatValidTime(frame?.valid_time ?? selectedTime)}
-        contextLabel={frame ? leadLabel(detail?.issue_time ?? frame.valid_time, frame.valid_time) : '无原生帧'}
+        contextLabel={frameContext}
         productLabel={displayName}
         legend={legend}
         legendMode={panel.legend_unit ? 'scale' : 'categorical'}
@@ -579,6 +589,12 @@ function MapPanel({
   )
 }
 
+function formatObservationOffset(value?: number) {
+  if (value == null) return '真实观测'
+  const sign = value > 0 ? '+' : ''
+  return `${sign}${value} 秒`
+}
+
 // Exported for the state-identity regression guard next to the workspace tests.
 // eslint-disable-next-line react-refresh/only-export-components
 export function updateLayerErrorState(
@@ -591,6 +607,7 @@ export function updateLayerErrorState(
 }
 
 export function SharedTimeline({
+  detail,
   issueTime,
   values,
   panels,
@@ -599,6 +616,7 @@ export function SharedTimeline({
   onTogglePlaying,
   onSelect,
 }: {
+  detail?: WorkspaceCycleDetail
   issueTime: string
   values: string[]
   panels: WorkspacePanel[]
@@ -614,6 +632,9 @@ export function SharedTimeline({
   const intervalMinutes = values.length > 1
     ? Math.max(1, Math.round((Date.parse(values[1]) - Date.parse(values[0])) / 60_000))
     : 0
+  const isDisplayAvailable = (panel: WorkspacePanel, value: string) => (
+    detail ? displayFrameAt(detail, panel, value).frame != null : availabilityAt(panel, value)
+  )
 
   useEffect(() => {
     const rail = railRef.current
@@ -708,14 +729,14 @@ export function SharedTimeline({
               onClick={() => onSelect(value)}
               aria-current={active ? 'step' : undefined}
               aria-label={`${leadLabel(issueTime, value)}，${formatValidTime(value)}`}
-              title={`${formatValidTime(value)} · ${panels.filter((panel) => availabilityAt(panel, value)).length}/${panels.length} 面板可用`}
+              title={`${formatValidTime(value)} · ${panels.filter((panel) => isDisplayAvailable(panel, value)).length}/${panels.length} 面板可用`}
               data-major={major}
             >
               <i className="workspace-timeline-node" aria-hidden="true" />
               <span className="workspace-timeline-lead">{leadMinutes === 0 ? 'T0' : `${leadMinutes > 0 ? '+' : ''}${leadMinutes}`}</span>
               <span className="workspace-timeline-lanes" aria-hidden="true">
                 {panels.map((panel) => (
-                  <i key={panel.panel_id} data-ready={availabilityAt(panel, value)} />
+                  <i key={panel.panel_id} data-ready={isDisplayAvailable(panel, value)} />
                 ))}
               </span>
             </button>
@@ -723,10 +744,10 @@ export function SharedTimeline({
         })}
       </div>
 
-      <div className="workspace-timeline-availability" aria-label="算法帧可用性">
+      <div className="workspace-timeline-availability" aria-label="图层可用性">
         <span className="workspace-timeline-current"><i />当前时效</span>
         {panels.map((panel) => (
-          <span key={panel.panel_id}><i data-ready={availabilityAt(panel, selectedTime ?? issueTime)} />{panelDisplayName(panel)}</span>
+          <span key={panel.panel_id}><i data-ready={isDisplayAvailable(panel, selectedTime ?? issueTime)} />{panelDisplayName(panel)}</span>
         ))}
         <small>← → 键逐帧查看</small>
       </div>

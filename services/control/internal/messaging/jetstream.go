@@ -115,12 +115,17 @@ func (stream *JetStream) ConsumeResults(ctx context.Context, handler func(contex
 			return fmt.Errorf("fetch result event: %w", err)
 		}
 		for _, message := range messages {
-			_, handleErr := handler(ctx, message.Data)
+			applied, handleErr := handler(ctx, message.Data)
 			if handleErr != nil {
 				slog.Warn(
 					"RainPulse result event rejected",
 					"subject", message.Subject,
 					"error", handleErr,
+				)
+			} else if !applied {
+				slog.Info(
+					"RainPulse result event already recorded",
+					"subject", message.Subject,
 				)
 			}
 			switch {

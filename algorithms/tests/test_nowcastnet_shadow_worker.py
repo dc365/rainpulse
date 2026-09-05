@@ -110,6 +110,39 @@ def test_fixed_atlas_uses_one_same_shape_batch() -> None:
     assert summary["batch_fallback_count"] == 0
 
 
+def test_fixed_atlas_keeps_full_inference_extent_but_masks_to_latest_qpe() -> None:
+    runtime = _runtime()
+    rates = np.ones((9, 64, 64), dtype="float32")
+    valid = np.ones_like(rates, dtype="uint8")
+    valid[:, :, 33] = 0
+    rates[:, :, 33] = np.nan
+
+    class Backend:
+        def infer_batch(self, fields: np.ndarray, members: int, _seed: int) -> np.ndarray:
+            assert np.all(np.isfinite(fields))
+            assert np.all(fields[..., 1] == 1)
+            return np.broadcast_to(
+                fields[np.newaxis, :, np.newaxis, -1, ..., 0],
+                (members, 2, 20, 64, 32),
+            ).copy()
+
+    result, output_valid, summary = run_fixed_tile_atlas(
+        rates,
+        valid,
+        runtime=runtime,
+        backend_factory=lambda _profile: Backend(),
+        random_seed=17,
+    )
+
+    assert summary["eligible_tile_count"] == 2
+    assert summary["rejected_tile_count"] == 0
+    assert summary["publication_coverage_ratio"] == 63 / 64
+    assert summary["missing_context_policy"] == "dry-fill-preserve-latest-qpe-support-v1"
+    assert np.all(output_valid[:, :, :, 33] == 0)
+    assert np.all(np.isnan(result[:, :, :, 33]))
+    assert np.all(output_valid[:, :, :, 34:] == 1)
+
+
 def test_fixed_atlas_falls_back_to_serial_when_batch_is_unavailable() -> None:
     runtime = _runtime()
     rates = np.ones((9, 64, 64), dtype="float32")

@@ -41,6 +41,7 @@ class StepsEnsembleConfig:
 class StepsSupportConfig:
     input_missing_policy: str
     output_support_policy: str
+    minimum_valid_members: int | None = None
 
 
 @dataclass(frozen=True)
@@ -118,6 +119,11 @@ def load_pysteps_steps_profile(path: str | Path) -> PystepsStepsProfile:
             support=StepsSupportConfig(
                 input_missing_policy=str(support["input_missing_policy"]),
                 output_support_policy=str(support["output_support_policy"]),
+                minimum_valid_members=(
+                    int(support["minimum_valid_members"])
+                    if support.get("minimum_valid_members") is not None
+                    else None
+                ),
             ),
             probability_products=StepsProbabilityConfig(
                 event_operator=str(probability["event_operator"]),
@@ -184,13 +190,28 @@ def _validate(profile: PystepsStepsProfile) -> None:
         raise PystepsStepsConfigError("unsupported STEPS mask method")
     if ensemble.domain not in {"spatial", "spectral"}:
         raise PystepsStepsConfigError("unsupported STEPS compute domain")
-    if profile.support.output_support_policy != (
-        "deterministic_support_intersect_all_members_finite"
-    ) or profile.support.input_missing_policy not in {
+    if profile.support.input_missing_policy not in {
         "reject_any_missing",
         "dry_floor_working_copy_preserve_deterministic_support",
     }:
         raise PystepsStepsConfigError("RP-022 support policy differs from the frozen gate")
+    if profile.support.output_support_policy == (
+        "deterministic_support_intersect_all_members_finite"
+    ):
+        if profile.support.minimum_valid_members is not None:
+            raise PystepsStepsConfigError(
+                "all-member support policy cannot define a minimum member count"
+            )
+    elif profile.support.output_support_policy == (
+        "deterministic_support_minimum_members_finite"
+    ):
+        minimum = profile.support.minimum_valid_members
+        if minimum is None or not 2 <= minimum <= ensemble.member_count:
+            raise PystepsStepsConfigError(
+                "minimum-member support policy requires a valid member count"
+            )
+    else:
+        raise PystepsStepsConfigError("unsupported STEPS output support policy")
     probability = profile.probability_products
     if probability.event_operator != "greater_than":
         raise PystepsStepsConfigError("probability event operator must be greater_than")

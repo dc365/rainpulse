@@ -20,9 +20,9 @@ func (store *Store) GetNowcastNetShadowInput(
 	var input orchestration.NowcastNetShadowInput
 	input.RunID = runID
 	if err := store.pool.QueryRow(ctx, `
-SELECT issue_time, grid_id, status
+SELECT issue_time, grid_id, status, rerun_of IS NOT NULL
 FROM forecast_runs
-WHERE run_id = $1`, runID).Scan(&input.IssueTime, &input.GridID, &input.CurrentStatus); err != nil {
+WHERE run_id = $1`, runID).Scan(&input.IssueTime, &input.GridID, &input.CurrentStatus, &input.HistoricalRegeneration); err != nil {
 		if err == pgx.ErrNoRows {
 			return orchestration.NowcastNetShadowInput{}, workflow.ErrNotFound
 		}
@@ -30,14 +30,7 @@ WHERE run_id = $1`, runID).Scan(&input.IssueTime, &input.GridID, &input.CurrentS
 	}
 
 	expectedTimes := nowcastNetShadowInputTimes(input.IssueTime)
-	rows, err := store.pool.Query(ctx, `
-SELECT analysis_id, analysis_time, analysis_uri
-FROM analysis_cycles
-WHERE grid_id = $1
-  AND status = 'ANALYSIS_READY'
-  AND analysis_time = ANY($2::timestamptz[])
-  AND analysis_uri IS NOT NULL
-ORDER BY analysis_time`, input.GridID, expectedTimes)
+	rows, err := store.pool.Query(ctx, nowcastNetShadowAnalysisFramesQuery, input.GridID, expectedTimes)
 	if err != nil {
 		return orchestration.NowcastNetShadowInput{}, fmt.Errorf("load NowcastNet shadow analysis frames: %w", err)
 	}
@@ -54,6 +47,23 @@ ORDER BY analysis_time`, input.GridID, expectedTimes)
 	}
 	return input, nil
 }
+
+// A full historical rerun creates a newer analysis lineage at the same valid
+// times as the retained source lineage.  NowcastNet needs one frame per time,
+// so prefer the newest completed analysis rather than returning both versions.
+const nowcastNetShadowAnalysisFramesQuery = `
+SELECT analysis_id, analysis_time, analysis_uri
+FROM (
+    SELECT DISTINCT ON (analysis_time)
+           analysis_id, analysis_time, analysis_uri, created_at
+    FROM analysis_cycles
+    WHERE grid_id = $1
+      AND status = 'ANALYSIS_READY'
+      AND analysis_time = ANY($2::timestamptz[])
+      AND analysis_uri IS NOT NULL
+    ORDER BY analysis_time, created_at DESC
+) AS preferred
+ORDER BY analysis_time`
 
 func nowcastNetShadowInputTimes(issueTime time.Time) []time.Time {
 	issueTime = issueTime.UTC()
@@ -116,12 +126,15 @@ SELECT config_version FROM model_versions WHERE model_id = $1 AND model_version 
 	var currentStatus workflow.RunStatus
 	var issueTime time.Time
 	var gridID string
+	var historicalRegeneration bool
 	if err = tx.QueryRow(ctx, `
-SELECT status, issue_time, grid_id
-FROM forecast_runs WHERE run_id = $1 FOR UPDATE`, bundle.Run.ID).Scan(&currentStatus, &issueTime, &gridID); err != nil {
+SELECT status, issue_time, grid_id, rerun_of IS NOT NULL
+FROM forecast_runs WHERE run_id = $1 FOR UPDATE`, bundle.Run.ID).Scan(&currentStatus, &issueTime, &gridID, &historicalRegeneration); err != nil {
 		return fmt.Errorf("lock NowcastNet shadow forecast run: %w", err)
 	}
-	if currentStatus != workflow.RunInputReady || !issueTime.Equal(bundle.Run.IssueTime) || gridID != bundle.Run.GridID {
+	if (currentStatus != workflow.RunInputReady &&
+		!(historicalRegeneration && currentStatus == workflow.RunPublished)) ||
+		!issueTime.Equal(bundle.Run.IssueTime) || gridID != bundle.Run.GridID {
 		return fmt.Errorf("NowcastNet shadow requires the committed INPUT_READY forecast run")
 	}
 	if len(bundle.InputFrames) != 9 {

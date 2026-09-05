@@ -709,6 +709,53 @@ func closestScanByRadar(scans []workflow.RadarScan, analysisTime time.Time) []wo
 	return result
 }
 
+func (planner *pipelinePlanner) closestReadyMosaicScans(
+	scans []workflow.RadarScan,
+	analysisTime time.Time,
+) []workflow.RadarScan {
+	candidates := make([]workflow.RadarScan, 0, len(scans))
+	for _, scan := range scans {
+		if scan.Status != workflow.RadarScanGridReady {
+			continue
+		}
+		if _, allowed := planner.settings.radarIDs[strings.ToLower(scan.RadarID)]; !allowed {
+			continue
+		}
+		if absoluteDuration(scan.VolumeEndTime.UTC().Sub(analysisTime.UTC())) >
+			planner.settings.maximumMosaicOffset {
+			continue
+		}
+		candidates = append(candidates, scan)
+	}
+	return closestScanByRadar(candidates, analysisTime)
+}
+
+// closestRegenerationMosaicScans selects source volumes that can enter a new
+// QC -> grid -> mosaic chain.  In particular, QC_READY is valid here: it is a
+// normal intermediate state after an interrupted historical regeneration.
+func (planner *pipelinePlanner) closestRegenerationMosaicScans(
+	scans []workflow.RadarScan,
+	analysisTime time.Time,
+) []workflow.RadarScan {
+	candidates := make([]workflow.RadarScan, 0, len(scans))
+	for _, scan := range scans {
+		switch scan.Status {
+		case workflow.RadarScanNormalized, workflow.RadarScanQCReady, workflow.RadarScanGridReady:
+		default:
+			continue
+		}
+		if _, allowed := planner.settings.radarIDs[strings.ToLower(scan.RadarID)]; !allowed {
+			continue
+		}
+		if absoluteDuration(scan.VolumeEndTime.UTC().Sub(analysisTime.UTC())) >
+			planner.settings.maximumMosaicOffset {
+			continue
+		}
+		candidates = append(candidates, scan)
+	}
+	return closestScanByRadar(candidates, analysisTime)
+}
+
 func absoluteDuration(value time.Duration) time.Duration {
 	if value < 0 {
 		return -value

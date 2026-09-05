@@ -95,9 +95,29 @@
           ]
         },
         "output_support_policy": {
-          "const": "deterministic_support_intersect_all_members_finite"
+          "enum": [
+            "deterministic_support_intersect_all_members_finite",
+            "deterministic_support_minimum_members_finite"
+          ]
+        },
+        "minimum_valid_members": {
+          "type": "integer",
+          "minimum": 2
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "output_support_policy": {
+                "const": "deterministic_support_minimum_members_finite"
+              }
+            }
+          },
+          "then": { "required": ["minimum_valid_members"] },
+          "else": { "not": { "required": ["minimum_valid_members"] } }
+        }
+      ]
     },
     "probability_products": {
       "type": "object",

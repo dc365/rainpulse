@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -15,6 +16,18 @@ func TestNowcastNetShadowInputTimesSelectsNineExactTenMinuteFrames(t *testing.T)
 		want := issue.UTC().Add(time.Duration(-80+10*index) * time.Minute)
 		if !value.Equal(want) {
 			t.Fatalf("input frame %d = %s, want %s", index, value, want)
+		}
+	}
+}
+
+func TestNowcastNetShadowInputPrefersNewestAnalysisPerValidTime(t *testing.T) {
+	for _, fragment := range []string{
+		"DISTINCT ON (analysis_time)",
+		"ORDER BY analysis_time, created_at DESC",
+		"ORDER BY analysis_time",
+	} {
+		if !strings.Contains(nowcastNetShadowAnalysisFramesQuery, fragment) {
+			t.Fatalf("NowcastNet input query does not contain %q", fragment)
 		}
 	}
 }

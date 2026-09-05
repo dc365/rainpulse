@@ -8,7 +8,15 @@ issue_time=${REGEN_ISSUE_TIME:-}
 input_uri=${REGEN_INPUT_URI:-}
 reason=${REGEN_REASON:-manual algorithm validation}
 api_url=${REGEN_API_URL:-http://127.0.0.1:8080/api/v1}
-keep_versions=${RAINPULSE_DERIVED_PRODUCT_KEEP_VERSIONS:-2}
+keep_versions=${RAINPULSE_DERIVED_PRODUCT_KEEP_VERSIONS:-1}
+
+# Compose deployments keep the object-store credentials under the MinIO names,
+# while the offline historical generators use the worker's provider-neutral
+# names.  Normalize them here so a manual rerun follows the same object-store
+# contract as the workers without requiring a second secret configuration.
+export RAINPULSE_OBJECT_STORE_ENDPOINT=${RAINPULSE_OBJECT_STORE_ENDPOINT:-http://127.0.0.1:${RAINPULSE_MINIO_PORT:-9000}}
+export RAINPULSE_OBJECT_STORE_ACCESS_KEY=${RAINPULSE_OBJECT_STORE_ACCESS_KEY:-${RAINPULSE_MINIO_WORKER_ACCESS_KEY:-}}
+export RAINPULSE_OBJECT_STORE_SECRET_KEY=${RAINPULSE_OBJECT_STORE_SECRET_KEY:-${RAINPULSE_MINIO_WORKER_SECRET_KEY:-}}
 
 usage() {
   printf '%s\n' \
@@ -17,7 +25,7 @@ usage() {
     '  pysteps-steps requires REGEN_INPUT_URI and REGEN_ISSUE_TIME' \
     '  nowcastnet requires REGEN_ISSUE_TIME' \
     '  forecast-all requires all of the above' \
-    '  file products retain current + previous by default; override with RAINPULSE_DERIVED_PRODUCT_KEEP_VERSIONS'
+    '  file products retain one newest version by default; override with RAINPULSE_DERIVED_PRODUCT_KEEP_VERSIONS'
 }
 
 require_value() {
@@ -102,7 +110,7 @@ run_steps() {
         --output-root '{staging_root}' \
         --grid-config "${REGEN_GRID_CONFIG:-configs/grids/fuzhou-0p01deg-v1.yaml}" \
         --lk-config "${REGEN_LK_CONFIG:-configs/nowcast/rp016-pysteps-lk-v1.yaml}" \
-        --steps-config "${REGEN_STEPS_CONFIG:-configs/nowcast/rp022-pysteps-steps-v1.yaml}" \
+        --steps-config "${REGEN_STEPS_CONFIG:-configs/nowcast/rp049-pysteps-steps-history-v5.yaml}" \
         --product-config "${REGEN_ENSEMBLE_PRODUCT_CONFIG:-configs/products/rp023-ensemble-application-products-v1.yaml}"
   )
 }
@@ -125,7 +133,7 @@ run_nowcastnet() {
       --grid-config "${REGEN_GRID_CONFIG:-$repository_root/configs/grids/fuzhou-0p01deg-v1.yaml}" \
       --model-config "${REGEN_NOWCASTNET_CONFIG:-$repository_root/configs/nowcast/rp026-nowcastnet-offline-v1.yaml}" \
       --product-config "${REGEN_PRODUCT_CONFIG:-$repository_root/configs/products/rp015-application-products-v1.yaml}" \
-      --capsule-root "${REGEN_NOWCASTNET_CAPSULE_ROOT:-/opt/rainpulse/nowcastnet/official-v1}" \
+      --capsule-root "${REGEN_NOWCASTNET_CAPSULE_ROOT:-$repository_root/runtime/nowcastnet/official-v1}" \
       --device "${REGEN_NOWCASTNET_DEVICE:-cuda:0}" \
       --issue-time "$issue_time"
 }

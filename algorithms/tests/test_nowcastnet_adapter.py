@@ -53,7 +53,7 @@ def test_profile_schema_and_offline_only_boundary(profile) -> None:
     assert profile.offline_readiness_blockers() == ()
     profile.require_offline_ready()
     assert profile.weights_path() == Path(
-        "/opt/rainpulse/nowcastnet/official-v1/data/checkpoints/mrms_model.ckpt"
+        "/home/yons/hwapp/ruiyun-bdp/bdp-dp/bdp-dp-rada/bdp-dp-rada-rainpulse/runtime/nowcastnet/official-v1/data/checkpoints/mrms_model.ckpt"
     )
     assert profile.activation.realtime_shadow_enabled is False
     assert profile.activation.product_publication_enabled is False

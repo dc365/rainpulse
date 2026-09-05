@@ -40,7 +40,7 @@ def main() -> int:
         )
     )
     parser.add_argument("--output-root", type=Path, required=True)
-    parser.add_argument("--keep-versions", type=int, default=2)
+    parser.add_argument("--keep-versions", type=int, default=1)
     parser.add_argument("--dry-run-retention", action="store_true")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()

@@ -32,6 +32,7 @@ fi
 rg --quiet 'run_retained_product_generator.py' scripts/regenerate_forecasts.sh
 rg --quiet 'RAINPULSE_DERIVED_PRODUCT_KEEP_VERSIONS' scripts/regenerate_forecasts.sh
 rg --quiet 'backfill_fujian_nowcastnet_shadow_5min.py' scripts/regenerate_forecasts.sh
+rg --quiet 'rp049-pysteps-steps-history-v5.yaml' scripts/regenerate_forecasts.sh
 rg --quiet -- "--output-root '\{staging_root\}'" scripts/regenerate_forecasts.sh
 rg --quiet '^    RegenerationRequest:' contracts/openapi.yaml
 rg --quiet 'manual-regeneration/' services/control/internal/orchestration/service.go

@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 
-def test_wrapper_promotes_only_success_and_keeps_two_versions(tmp_path: Path) -> None:
+def test_wrapper_promotes_only_success_and_keeps_one_version_by_default(tmp_path: Path) -> None:
     repository_root = Path(__file__).resolve().parents[2]
     wrapper = repository_root / "scripts/run_retained_product_generator.py"
     generator = tmp_path / "generator.py"
@@ -50,8 +50,6 @@ path.mkdir(parents=True)
                 str(wrapper),
                 "--output-root",
                 str(output_root),
-                "--keep-versions",
-                "2",
                 "--",
                 sys.executable,
                 str(generator),
@@ -65,14 +63,14 @@ path.mkdir(parents=True)
             text=True,
         )
         report = json.loads(completed.stdout.strip().splitlines()[-1])
-        assert report["keep_versions"] == 2
+        assert report["keep_versions"] == 1
 
     bundles = [
         path
         for path in output_root.iterdir()
         if path.is_dir() and not path.name.startswith(".")
     ]
-    assert len(bundles) == 2
+    assert len(bundles) == 1
     assert all((path / "manifest.json").is_file() for path in bundles)
 
 

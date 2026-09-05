@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/orchestration"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/workflow"
@@ -58,7 +59,11 @@ func (planner *pipelinePlanner) startRegeneratedQC(
 	ctx context.Context,
 	request workflow.PipelineRegeneration,
 ) error {
-	for _, scan := range distinctRegenerationScans(request.Frames) {
+	frames, err := planner.refreshRegenerationFrameScans(ctx, request)
+	if err != nil {
+		return err
+	}
+	for _, scan := range distinctRegenerationScans(frames) {
 		if _, _, err := createRadarQC(
 			ctx, planner.store, planner.service, scan.ID.String(),
 			planner.settings.qcConfig, request.RequestID,
@@ -70,6 +75,61 @@ func (planner *pipelinePlanner) startRegeneratedQC(
 		ctx, request.RequestID, request.Status,
 		workflow.PipelineRegenerationQCRunning, nil,
 	)
+}
+
+// refreshRegenerationFrameScans intentionally re-selects inputs from the
+// current GRID_READY inventory instead of replaying the contributors copied
+// from the source analysis.  The latter freezes a historical missing-radar
+// decision and prevents a now-available real volume from joining a rerun.
+func (planner *pipelinePlanner) refreshRegenerationFrameScans(
+	ctx context.Context,
+	request workflow.PipelineRegeneration,
+) ([]workflow.PipelineRegenerationFrame, error) {
+	ready, err := planner.listRegenerationRadarScans(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list grid-ready scans for regeneration: %w", err)
+	}
+	frames := append([]workflow.PipelineRegenerationFrame(nil), request.Frames...)
+	for index := range frames {
+		selected := planner.closestRegenerationMosaicScans(ready, frames[index].AnalysisTime)
+		if len(selected) < planner.settings.minimumMosaicContributors {
+			return nil, fmt.Errorf(
+				"regeneration frame %s has %d contributors, requires %d",
+				frames[index].AnalysisTime.Format(time.RFC3339), len(selected),
+				planner.settings.minimumMosaicContributors,
+			)
+		}
+		if err := planner.store.ReplacePipelineRegenerationFrameScans(
+			ctx, request.RequestID, frames[index].FrameIndex, selected,
+		); err != nil {
+			return nil, err
+		}
+		frames[index].Scans = selected
+	}
+	return frames, nil
+}
+
+// listRegenerationRadarScans includes every state from which the full-chain
+// regeneration can safely restart QC.  A previously interrupted regeneration
+// leaves its scans in QC_READY, not RADAR_GRID_READY; restricting the retry to
+// the latter silently drops otherwise reusable historical volumes.
+func (planner *pipelinePlanner) listRegenerationRadarScans(
+	ctx context.Context,
+) ([]workflow.RadarScan, error) {
+	states := []workflow.RadarScanStatus{
+		workflow.RadarScanNormalized,
+		workflow.RadarScanQCReady,
+		workflow.RadarScanGridReady,
+	}
+	items := make([]workflow.RadarScan, 0)
+	for _, state := range states {
+		page, err := planner.listRadarScans(ctx, state)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, page...)
+	}
+	return items, nil
 }
 
 func (planner *pipelinePlanner) advanceRegeneratedQC(
