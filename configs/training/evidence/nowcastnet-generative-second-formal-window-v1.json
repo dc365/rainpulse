@@ -1,0 +1,101 @@
+{
+  "schema_version": "1.0",
+  "status": "passed",
+  "measured_at": "2026-09-05T00:38:06+00:00",
+  "scope": "generative_second_formal_nightly_window_acceptance",
+  "identity": {
+    "training_code_revision": "3c7c9a1ec9249f54cd72a5ea3de9727e6c26e215",
+    "generative_profile_sha256": "e33cd36ad4c61cedfbb76dd9d52e821513f6916b6dc3fef68b0352a6bf071fdb",
+    "evolution_profile_sha256": "874775edd697ee4771e1302e3d62c2054cac3f16d112b0ca14f13811bd0920e8",
+    "parent_checkpoint_global_step": 300000,
+    "parent_checkpoint_sha256": "be791c9878e639fc63db3a23609ecb0d2351dfb90c7d533778469665a9032632",
+    "plan_id": "5ce3859f8f914c9cd55ea92a96a5dd860d46e297fff229472843d21e0bc26892",
+    "sample_index_sha256": "e758c938c929020c64e17ea827b05431f08b059c4033fcaa3b27a72ec1decddf",
+    "sample_count": 100000,
+    "shard_count": 4000,
+    "holdout_windows_processed": 0
+  },
+  "window": {
+    "window_id": "window-0002",
+    "start_step": 14725,
+    "end_step": 35184,
+    "completed_steps": 20459,
+    "target_step": 500000,
+    "remaining_steps": 464816,
+    "started_at": "2026-09-04T12:23:31.157726+00:00",
+    "finished_at": "2026-09-04T23:45:03.016350+00:00",
+    "duration_seconds": 40883.30436342675,
+    "stop_reason": "signal:SIGTERM",
+    "checkpoint_interval_steps": 1000,
+    "checkpoint_interval_seconds": 300,
+    "checkpoint_state_exact_on_resume": true,
+    "random_state_exact_on_resume": true,
+    "peak_allocated_memory_bytes": 38706679296,
+    "peak_reserved_memory_bytes": 39785070592
+  },
+  "metrics": {
+    "total_rows": 35184,
+    "invocation_rows": 20459,
+    "global_steps_contiguous": true,
+    "all_required_values_finite": true,
+    "metrics_sha256": "c3c1302b9fbfeec586ed9b27a48d5b3175cf99353559269a558e162bfe76fbfc",
+    "generator_loss_total": {
+      "minimum": 51.849403381347656,
+      "maximum": 818.0104370117188,
+      "mean": 233.16883372425653,
+      "last": 362.1537170410156
+    }
+  },
+  "output_checkpoint": {
+    "global_step": 35184,
+    "sha256": "64378356c41a285c6fd6c4e4947dc2b5e2fd73afccdb51060fd190ac062af935",
+    "hash_verified": true,
+    "cpu_readback_verified": true,
+    "schema_version": "rainpulse.nowcastnet-generative-checkpoint/2.0",
+    "state_fingerprints_verified": true,
+    "random_state_fingerprint_verified": true,
+    "retained_steps": [293, 1000, 10000, 14725, 20000, 30000, 35000, 35174, 35184]
+  },
+  "reports": {
+    "preflight_sha256": "efa2830ed388e8363a137a4937ade50bc300476f6e3d0c305b4e25c7ca1b770e",
+    "consumed_permit_sha256": "d4dd9b174626b6d9df4ad4ee3b109c47afaa1aeb075ef137e3f36b6acd7c592a",
+    "latest_marker_sha256": "9e4bfdec7b9fd8857c3ca94a10371434954ca18ddcd91c70f9337babcc65e0e2",
+    "training_report_sha256": "8426abd46e562961cc68eb4e580f409b9da7b1e177bc8964d935a109848b59e0",
+    "window_finals_sha256": "abe8ec9a61bf8688b4438851274a6a594dbf51f17c511cab9ae57949547d9ba2",
+    "window_report_sha256": "8426abd46e562961cc68eb4e580f409b9da7b1e177bc8964d935a109848b59e0",
+    "window_report_status": "stopped",
+    "preflight_identity_verified": true
+  },
+  "shared_services": {
+    "qwen3_6_stopped_for_training": true,
+    "qwen3_8_stopped_for_training": true,
+    "qwen3_6_recovery": "passed",
+    "qwen3_8_recovery": "passed",
+    "vllm_stopped": false,
+    "other_gpu_services_stopped": false,
+    "training_processes_remaining": 0
+  },
+  "scheduler_lifecycle": {
+    "stop_timer_disabled_after_acceptance": true,
+    "automatic_next_window_start_enabled": false,
+    "third_window_start_permit_present": false,
+    "training_service_state_after_acceptance": "inactive_success"
+  },
+  "storage": {
+    "checkpoint_count": 9,
+    "checkpoint_bytes": 4550271300,
+    "training_output_free_bytes": 198887260160,
+    "sample_storage_free_bytes": 362309877760,
+    "sample_storage_rebuild_gate_500gb_currently_met": false,
+    "raw_data_mutated": false,
+    "samples_mutated": false
+  },
+  "decision": {
+    "second_formal_generative_window_accepted": true,
+    "third_formal_generative_window_approved": false,
+    "independent_holdout_opened": false,
+    "generative_training_complete": false,
+    "next_gate": "review_window_0002_and_approve_a_new_one_time_permit_for_window_0003"
+  },
+  "operational_eligible": false
+}
