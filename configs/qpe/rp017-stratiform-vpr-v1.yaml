@@ -1,0 +1,48 @@
+schema_version: "1.0"
+profile_version: rp017-stratiform-vpr-v1
+algorithm_version: stratiform-vpr-qpe-1.0.1
+radar_analysis_contract_version: "1.2"
+mosaic_contract_version: "1.0"
+flag_definition_version: qc-flags-v1
+
+grid_id: fuzhou_118_123_25_27_0p01deg_v1
+grid_config_version: fuzhou-grid-0p01deg-v1
+
+qpe:
+  input_field: DBZH_QC
+  relation: power_law_z_r
+  coefficient_a: 200.0
+  exponent_b: 1.6
+  no_rain_below_dbz: 10.0
+  maximum_rate_mm_h: 300.0
+  overflow_policy: cap_and_report
+
+gauge_adjustment:
+  enabled: false
+  method: none
+  observation_qc_version: null
+
+vpr_correction:
+  enabled: true
+  method: stratiform_piecewise_linear
+  precipitation_type_field: PRECIP_TYPE
+  stratiform_code: 1
+  convective_code: 2
+  melting_layer_bottom_field: MELTING_LAYER_BOTTOM_HEIGHT
+  melting_layer_top_field: MELTING_LAYER_TOP_HEIGHT
+  beam_height_field: BEAM_HEIGHT
+  corrected_reflectivity_field: DBZH_VPR_CORRECTED
+  correction_field: VPR_CORRECTION_DB
+  uncertainty_field: VPR_UNCERTAINTY_DB
+  applied_mask_field: VPR_APPLIED_MASK
+  stratiform_mask_field: VPR_STRATIFORM_MASK
+  overshoot_mask_field: VPR_OVERSHOOT_MASK
+  max_bright_band_reduction_db: 6.0
+  above_melting_layer_correction_db_per_km: 4.0
+  maximum_positive_correction_db: 6.0
+  extrapolation_limit_m: 1500.0
+  base_uncertainty_db: 0.5
+  uncertainty_growth_db_per_km: 1.0
+  maximum_uncertainty_db: 3.0
+  overshoot_policy: mark_missing
+  write_bright_band_flag: true

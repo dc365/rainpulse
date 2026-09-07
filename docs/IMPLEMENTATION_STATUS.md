@@ -1,6 +1,6 @@
 # RainPulse implementation status
 
-Updated: 2026-09-02
+Updated: 2026-09-08
 
 ## Active baseline
 
@@ -22,6 +22,16 @@ RawRadarAsset
 
 No real nowcast may bypass polar QC, mosaic/QPE quality gates, or the fixed-step
 NowcastInput gate.
+
+## 2026-09-08 雷达质控优化 A/B/C 状态
+
+The handoff-plan A/B/C implementation status and the C3 fixed shadow replay
+evidence are summarized in
+`docs/雷达质控优化_A_B_C阶段状态与C3证据_20260908.md`.
+The current C3 delivery adds a default-off explicit-input stratiform VPR-QPE
+path via `configs/qpe/rp017-stratiform-vpr-v1.yaml`; RP-011 remains the default
+behavior until a shadow deployment explicitly mounts the new profile and QC flag
+definitions.
 
 ## v1.1 task status
 

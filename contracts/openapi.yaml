@@ -157,6 +157,25 @@ paths:
           in: query
           schema:
             $ref: "#/components/schemas/RadarScanRunStatus"
+        - name: start_time
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: end_time
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: snapshot_time
+          in: query
+          schema:
+            type: string
+            format: date-time
       responses:
         "200":
           description: Radar scan workflow page
@@ -1802,6 +1821,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/RadarScan"
+        next_cursor:
+          type: string
+        snapshot_time:
+          type: string
+          format: date-time
     AnalysisRadar:
       type: object
       additionalProperties: false

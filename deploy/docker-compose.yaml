@@ -185,7 +185,7 @@ services:
       RAINPULSE_ORCHESTRATOR_HEALTH_ADDR: ":8090"
       RAINPULSE_RADAR_INGEST_ENABLED: "${RAINPULSE_RADAR_INGEST_ENABLED:-false}"
       RAINPULSE_RADAR_INGEST_CONFIG: "${RAINPULSE_RADAR_INGEST_CONFIG:-/opt/rainpulse/configs/radars/z9598.yaml}"
-      RAINPULSE_RADAR_INGEST_ROOT: "${RAINPULSE_RADAR_INGEST_ROOT:-/data/Weather/RADA/FMT_L2_Z959X_SBD}"
+      RAINPULSE_RADAR_INGEST_ROOT: "${RAINPULSE_RADAR_DATA_ROOT:-/data/Weather/RADA/RADA_L2_FMT/OBS_TEMP}"
       RAINPULSE_RADAR_INGEST_INTERVAL: "${RAINPULSE_RADAR_INGEST_INTERVAL:-15s}"
       RAINPULSE_RADAR_INGEST_MIN_AGE: "${RAINPULSE_RADAR_INGEST_MIN_AGE:-30s}"
       RAINPULSE_RADAR_INGEST_LOOKBACK: "${RAINPULSE_RADAR_INGEST_LOOKBACK:-24h}"
@@ -204,8 +204,12 @@ services:
     volumes:
       - "${RAINPULSE_BDP_CONF_HOST_ROOT:-../runtime/bdp-conf}:/ruiyun-bdp/conf:ro"
       - ../configs:/opt/rainpulse/configs:ro
-      - /data/Weather/RADA/FMT_L2_Z959X_SBD:/data/Weather/RADA/FMT_L2_Z959X_SBD:ro
-      - /data/Weather/RADA/RADA_L2_FMT/OBS_TEMP:/data/Weather/RADA/RADA_L2_FMT/OBS_TEMP:ro
+      - type: bind
+        source: "${RAINPULSE_RADAR_DATA_ROOT:-/data/Weather/RADA/RADA_L2_FMT/OBS_TEMP}"
+        target: "${RAINPULSE_RADAR_DATA_ROOT:-/data/Weather/RADA/RADA_L2_FMT/OBS_TEMP}"
+        read_only: true
+        bind:
+          create_host_path: false
     tmpfs:
       - /ruiyun-bdp/temp:uid=65532,gid=65532,mode=0755
       - /ruiyun-bdp/log:uid=65532,gid=65532,mode=0755

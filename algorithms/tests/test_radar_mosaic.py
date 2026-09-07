@@ -215,6 +215,8 @@ def test_selects_clear_best_qi_and_blends_similar_qi_in_linear_z() -> None:
     assert result.fields["DBZH_QC"][0, 0] != pytest.approx(15.0)
     assert result.fields["SOURCE_RADAR"][0, 0] == 65535
     assert result.fields["CONTRIBUTOR_COUNT"][0, 0] == 2
+    assert np.isnan(result.fields["QI_ATTENUATION"][0, 0])
+    assert np.isnan(result.fields["QI_CALIBRATION"][0, 0])
     assert result.fields["DBZH_QC"][0, 1] == pytest.approx(10.0)
     assert result.fields["SOURCE_RADAR"][0, 1] == 1
     assert result.fields["VALID_MASK"][1, 1] == 0

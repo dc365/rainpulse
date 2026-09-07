@@ -1,0 +1,284 @@
+{
+  "schema_version": "1.0",
+  "manifest_version": "rp017-vpr-shadow-replay-v1",
+  "description": "Fixed synthetic replay cases for explicit-input stratiform VPR QPE shadow validation.",
+  "qpe_profile_version": "rp017-stratiform-vpr-v1",
+  "qpe_algorithm_version": "stratiform-vpr-qpe-1.0.1",
+  "flag_definition_version": "qc-flags-v1",
+  "cases": [
+    {
+      "case_id": "stratiform_vpr_and_far_range_overshoot",
+      "description": "Applies bright-band reduction, above-melting enhancement, convective passthrough, and marks far-range overshoot missing.",
+      "analysis_id": "75000000-0000-4000-8000-000000000001",
+      "asset_id": "77000000-0000-4000-8000-000000000022",
+      "input": {
+        "lat": [
+          25.0
+        ],
+        "lon": [
+          118.0,
+          118.01,
+          118.02,
+          118.03,
+          118.04
+        ],
+        "DBZH_QC": [
+          [
+            30.0,
+            30.0,
+            30.0,
+            30.0,
+            30.0
+          ]
+        ],
+        "BEAM_HEIGHT": [
+          [
+            1200.0,
+            2000.0,
+            3000.0,
+            3000.0,
+            4300.0
+          ]
+        ],
+        "PRECIP_TYPE": [
+          [
+            1,
+            1,
+            1,
+            2,
+            1
+          ]
+        ],
+        "MELTING_LAYER_BOTTOM_HEIGHT": [
+          [
+            1500.0,
+            1500.0,
+            1500.0,
+            1500.0,
+            1500.0
+          ]
+        ],
+        "MELTING_LAYER_TOP_HEIGHT": [
+          [
+            2500.0,
+            2500.0,
+            2500.0,
+            2500.0,
+            2500.0
+          ]
+        ],
+        "VALID_MASK": [
+          [
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        ]
+      },
+      "expected": {
+        "qpe_reflectivity_field": "DBZH_VPR_CORRECTED",
+        "DBZH_VPR_CORRECTED": [
+          [
+            30.0,
+            24.0,
+            32.0,
+            30.0,
+            null
+          ]
+        ],
+        "VPR_APPLIED_MASK": [
+          [
+            0,
+            1,
+            1,
+            0,
+            0
+          ]
+        ],
+        "VPR_STRATIFORM_MASK": [
+          [
+            1,
+            1,
+            1,
+            0,
+            1
+          ]
+        ],
+        "VPR_OVERSHOOT_MASK": [
+          [
+            0,
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "VALID_MASK": [
+          [
+            1,
+            1,
+            1,
+            1,
+            0
+          ]
+        ],
+        "QC_FLAGS": [
+          [
+            0,
+            8704,
+            8192,
+            0,
+            4096
+          ]
+        ],
+        "summary": {
+          "input_field": "DBZH_VPR_CORRECTED",
+          "vpr_corrected_cell_count": 2,
+          "vpr_bright_band_cell_count": 1,
+          "vpr_overshoot_missing_cell_count": 1
+        },
+        "validation": {
+          "valid_cell_count": 4,
+          "missing_cell_count": 1
+        },
+        "rate_expectations": {
+          "nan_indices": [
+            [
+              0,
+              4
+            ]
+          ],
+          "less_than": [
+            [
+              [
+                0,
+                1
+              ],
+              [
+                0,
+                0
+              ]
+            ]
+          ],
+          "greater_than": [
+            [
+              [
+                0,
+                2
+              ],
+              [
+                0,
+                0
+              ]
+            ]
+          ],
+          "equal_to": [
+            [
+              [
+                0,
+                3
+              ],
+              [
+                0,
+                0
+              ]
+            ]
+          ]
+        },
+        "DBZH_VPR_INPUT": [
+          [
+            30.0,
+            30.0,
+            30.0,
+            30.0,
+            30.0
+          ]
+        ],
+        "DBZH_QC": [
+          [
+            30.0,
+            30.0,
+            30.0,
+            30.0,
+            null
+          ]
+        ],
+        "LOW_QUALITY_MASK": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ]
+      }
+    },
+    {
+      "case_id": "missing_explicit_precipitation_type",
+      "description": "Fails closed when the upstream mosaic omits explicit precipitation type.",
+      "analysis_id": "75000000-0000-4000-8000-000000000001",
+      "asset_id": "77000000-0000-4000-8000-000000000021",
+      "input": {
+        "lat": [
+          25.0
+        ],
+        "lon": [
+          118.0,
+          118.01,
+          118.02,
+          118.03,
+          118.04
+        ],
+        "DBZH_QC": [
+          [
+            30.0,
+            30.0,
+            30.0,
+            30.0,
+            30.0
+          ]
+        ],
+        "BEAM_HEIGHT": [
+          [
+            1200.0,
+            2000.0,
+            3000.0,
+            3000.0,
+            4300.0
+          ]
+        ],
+        "MELTING_LAYER_BOTTOM_HEIGHT": [
+          [
+            1500.0,
+            1500.0,
+            1500.0,
+            1500.0,
+            1500.0
+          ]
+        ],
+        "MELTING_LAYER_TOP_HEIGHT": [
+          [
+            2500.0,
+            2500.0,
+            2500.0,
+            2500.0,
+            2500.0
+          ]
+        ],
+        "VALID_MASK": [
+          [
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        ]
+      },
+      "expected_error_substring": "PRECIP_TYPE"
+    }
+  ]
+}

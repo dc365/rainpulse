@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/schemas/radar-qc-promotion-profile.schema.json",
+  "title": "RainPulse radar QC promotion profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_version",
+    "bootstrap_samples",
+    "random_seed",
+    "minimum_independent_processes_per_category",
+    "strong_echo_dbzh_threshold",
+    "gates"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "profile_version": { "const": "fujian-qc-promotion-v1" },
+    "bootstrap_samples": { "const": 2000 },
+    "random_seed": { "type": "integer", "minimum": 0 },
+    "minimum_independent_processes_per_category": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "strong_echo_dbzh_threshold": {
+      "type": "number",
+      "minimum": 0
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "anomaly_precision_lower_bound",
+        "anomaly_recall_lower_bound",
+        "meteorological_retention_lower_bound",
+        "qpe_rmse_ratio_upper_bound"
+      ],
+      "properties": {
+        "anomaly_precision_lower_bound": { "type": "number" },
+        "anomaly_recall_lower_bound": { "type": "number" },
+        "meteorological_retention_lower_bound": { "type": "number" },
+        "qpe_rmse_ratio_upper_bound": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    }
+  }
+}

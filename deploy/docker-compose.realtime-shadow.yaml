@@ -30,15 +30,18 @@ services:
       RAINPULSE_PIPELINE_NOWCASTNET_SHADOW_ENABLED: "${RAINPULSE_PIPELINE_NOWCASTNET_SHADOW_ENABLED:-false}"
       RAINPULSE_PIPELINE_NOWCASTNET_SHADOW_CONFIG: /opt/rainpulse/configs/nowcast/fujian-nowcastnet-shadow-v2.yaml
       RAINPULSE_PIPELINE_REQUIRE_ALL_RADARS: "false"
-      RAINPULSE_PIPELINE_QC_CONFIG: /opt/rainpulse/configs/qc/rp047-fujian-radial-evidence-v1.yaml
+      RAINPULSE_PIPELINE_QC_CONFIG: /opt/rainpulse/configs/qc/fujian-qc-evidence-v2.yaml
       RAINPULSE_PIPELINE_GRID_CONFIG: /opt/rainpulse/configs/gridding/rp043-hybrid-radial-closure-v1.yaml
       RAINPULSE_PIPELINE_MOSAIC_CONFIG: /opt/rainpulse/configs/mosaic/rp043-fujian-realtime-shadow-v1.yaml
+      RAINPULSE_PIPELINE_QPE_CONFIG: "${RAINPULSE_PIPELINE_QPE_CONFIG:-/opt/rainpulse/configs/qpe/rp011-basic-zr-v1.yaml}"
       RAINPULSE_PIPELINE_DIAGNOSTIC_CONFIG: /opt/rainpulse/configs/diagnostics/rp012-operational-diagnostics-v2.yaml
       RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG: /opt/rainpulse/configs/nowcast/rp043-realtime-shadow-5min-v2.yaml
 
   radar-qc-worker:
     environment:
-      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/rp047-fujian-radial-evidence-v1.yaml
+      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/fujian-qc-evidence-v2.yaml
+      RAINPULSE_RADAR_PHASE_PROCESSING_PROFILE: "${RAINPULSE_RADAR_PHASE_PROCESSING_PROFILE:-}"
+      RAINPULSE_RADAR_ATTENUATION_PROFILE: "${RAINPULSE_RADAR_ATTENUATION_PROFILE:-}"
 
   radar-grid-worker:
     environment:
@@ -47,6 +50,11 @@ services:
   radar-mosaic-worker:
     environment:
       RAINPULSE_RADAR_MOSAIC_CONFIG: /opt/rainpulse/configs/mosaic/rp043-fujian-realtime-shadow-v1.yaml
+
+  analysis-qpe-worker:
+    environment:
+      RAINPULSE_QPE_CONFIG: "${RAINPULSE_QPE_CONFIG:-/opt/rainpulse/configs/qpe/rp011-basic-zr-v1.yaml}"
+      RAINPULSE_QC_FLAG_DEFINITIONS: "${RAINPULSE_QC_FLAG_DEFINITIONS:-}"
 
   analysis-diagnostics-worker:
     environment:
@@ -85,7 +93,12 @@ services:
     volumes:
       - "${RAINPULSE_BDP_CONF_HOST_ROOT:-../runtime/bdp-conf}:/ruiyun-bdp/conf:ro"
       - ../configs:/opt/rainpulse/configs:ro
-      - /data/Weather/RADA/RADA_L2_FMT/OBS_TEMP:/data/Weather/RADA/RADA_L2_FMT/OBS_TEMP:ro
+      - type: bind
+        source: "${RAINPULSE_RADAR_DATA_ROOT:-/data/Weather/RADA/RADA_L2_FMT/OBS_TEMP}"
+        target: "${RAINPULSE_RADAR_DATA_ROOT:-/data/Weather/RADA/RADA_L2_FMT/OBS_TEMP}"
+        read_only: true
+        bind:
+          create_host_path: false
       - radar-ingest-state:/var/lib/rainpulse/ingest
     healthcheck:
       test: ["CMD", "/rainpulse-healthcheck", "http://127.0.0.1:8092/healthz"]

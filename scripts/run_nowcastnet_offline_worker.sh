@@ -40,4 +40,9 @@ export RAINPULSE_OBJECT_STORE_ACCESS_KEY="$RAINPULSE_MINIO_WORKER_ACCESS_KEY"
 export RAINPULSE_OBJECT_STORE_SECRET_KEY="$RAINPULSE_MINIO_WORKER_SECRET_KEY"
 export RAINPULSE_MAX_INPUT_ARTIFACT_BYTES="${RAINPULSE_MAX_INPUT_ARTIFACT_BYTES:-2147483648}"
 
+# Host paths follow this checkout; /opt/rainpulse is reserved for Docker images.
+export PYTHONPATH="$repository_root/algorithms:$repository_root/.build/worker-site-packages${PYTHONPATH:+:$PYTHONPATH}"
+export RAINPULSE_NOWCASTNET_CONFIG="${RAINPULSE_NOWCASTNET_CONFIG:-$repository_root/configs/nowcast/rp026-nowcastnet-offline-v1.yaml}"
+export RAINPULSE_NOWCASTNET_CAPSULE_ROOT="${RAINPULSE_NOWCASTNET_CAPSULE_ROOT:-$repository_root/runtime/nowcastnet/official-v1}"
+
 exec "$repository_root/runtime/nowcastnet/venv/bin/python" -m rainpulse_algo.worker

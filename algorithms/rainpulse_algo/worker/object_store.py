@@ -4,7 +4,9 @@ import hashlib
 import io
 import json
 import os
-from collections.abc import Mapping
+import time
+from collections.abc import Callable, Mapping
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Any
@@ -17,6 +19,7 @@ from minio.error import S3Error
 from .contracts import JobCompleted
 
 MAX_ARTIFACT_MARKER_BYTES = 16 * 1024 * 1024
+DEFAULT_OBJECT_STORE_MAX_WORKERS = 4
 
 
 def minio_client_from_environment() -> Minio:
@@ -39,6 +42,9 @@ class PublishedObject:
     marker_key: str
     completion: JobCompleted
     reused: bool = False
+    object_count: int = 0
+    upload_ms: float = 0.0
+    marker_commit_ms: float = 0.0
 
 
 def parse_s3_uri(uri: str) -> tuple[str, str]:
@@ -62,8 +68,9 @@ def parse_s3_uri(uri: str) -> tuple[str, str]:
 class AtomicObjectPublisher:
     """Publishes immutable content and claims the stable marker exactly once."""
 
-    def __init__(self, client: Minio) -> None:
+    def __init__(self, client: Minio, max_workers: int | None = None) -> None:
         self._client = client
+        self._max_workers = _resolve_max_workers(max_workers)
 
     def load_completion(
         self,
@@ -120,21 +127,13 @@ class AtomicObjectPublisher:
                 )
             }
         )
-        manifest: list[dict[str, Any]] = []
-
-        for relative_key, value in payloads.items():
-            data_key = f"{prefix}/{artifact_name}/{data_prefix}/{relative_key}"
-            self._put_bytes(bucket, data_key, value, _content_type(relative_key))
-            published = self._client.stat_object(bucket, data_key)
-            if published.size != len(value):
-                raise RuntimeError("published object size validation failed")
-            manifest.append(
-                {
-                    "key": relative_key,
-                    "sha256": hashlib.sha256(value).hexdigest(),
-                    "size_bytes": len(value),
-                }
-            )
+        upload_started = time.perf_counter()
+        manifest = _bounded_parallel_map(
+            list(payloads.items()),
+            worker_count=self._max_workers,
+            worker=self._publish_manifest_entry(bucket, prefix, artifact_name, data_prefix),
+        )
+        upload_ms = _elapsed_ms(upload_started)
 
         marker = json.dumps(
             {
@@ -148,9 +147,11 @@ class AtomicObjectPublisher:
             separators=(",", ":"),
             sort_keys=True,
         ).encode()
+        marker_started = time.perf_counter()
         try:
             self._put_marker_if_absent(bucket, marker_key, marker)
         except S3Error as error:
+            marker_commit_ms = _elapsed_ms(marker_started)
             if error.code not in {"ConditionalRequestConflict", "PreconditionFailed"}:
                 raise
             existing = self._load_marker(bucket, marker_key)
@@ -166,7 +167,11 @@ class AtomicObjectPublisher:
                 marker_key=marker_key,
                 completion=existing_completion,
                 reused=True,
+                object_count=_marker_object_count(existing),
+                upload_ms=upload_ms,
+                marker_commit_ms=marker_commit_ms,
             )
+        marker_commit_ms = _elapsed_ms(marker_started)
 
         return PublishedObject(
             asset_uri=f"s3://{bucket}/{prefix}/{artifact_name}",
@@ -174,7 +179,32 @@ class AtomicObjectPublisher:
             size_bytes=total_size,
             marker_key=marker_key,
             completion=committed_completion,
+            object_count=len(manifest),
+            upload_ms=upload_ms,
+            marker_commit_ms=marker_commit_ms,
         )
+
+    def _publish_manifest_entry(
+        self,
+        bucket: str,
+        prefix: str,
+        artifact_name: str,
+        data_prefix: str,
+    ) -> Callable[[tuple[str, bytes]], dict[str, Any]]:
+        def publish_one(item: tuple[str, bytes]) -> dict[str, Any]:
+            relative_key, value = item
+            data_key = f"{prefix}/{artifact_name}/{data_prefix}/{relative_key}"
+            self._put_bytes(bucket, data_key, value, _content_type(relative_key))
+            published = self._client.stat_object(bucket, data_key)
+            if published.size != len(value):
+                raise RuntimeError("published object size validation failed")
+            return {
+                "key": relative_key,
+                "sha256": hashlib.sha256(value).hexdigest(),
+                "size_bytes": len(value),
+            }
+
+        return publish_one
 
     def _put_marker_if_absent(self, bucket: str, key: str, data: bytes) -> Any:
         return self._client._put_object(  # noqa: SLF001 - MinIO exposes no public conditional PUT
@@ -215,7 +245,12 @@ class AtomicObjectPublisher:
 class ArtifactObjectReader:
     """Loads and verifies an atomically published multi-object artifact."""
 
-    def __init__(self, client: Minio, max_size_bytes: int | None = None) -> None:
+    def __init__(
+        self,
+        client: Minio,
+        max_size_bytes: int | None = None,
+        max_workers: int | None = None,
+    ) -> None:
         self._client = client
         if max_size_bytes is None:
             max_size_bytes = int(
@@ -224,6 +259,7 @@ class ArtifactObjectReader:
         if max_size_bytes <= 0:
             raise ValueError("artifact input byte limit must be positive")
         self._max_size_bytes = max_size_bytes
+        self._max_workers = _resolve_max_workers(max_workers)
 
     def load(self, artifact_uri: str) -> dict[str, bytes]:
         bucket, prefix = parse_s3_uri(artifact_uri)
@@ -265,7 +301,7 @@ class ArtifactObjectReader:
             raise RuntimeError("published artifact marker has inconsistent size metadata")
         if declared_size > self._max_size_bytes:
             raise RuntimeError("published artifact exceeds the configured input byte limit")
-        objects: dict[str, bytes] = {}
+        load_requests: list[dict[str, Any]] = []
         seen_keys: set[str] = set()
         for item in manifest:
             relative_key = item.get("key")
@@ -279,20 +315,43 @@ class ArtifactObjectReader:
             if key in seen_keys:
                 raise RuntimeError(f"published artifact manifest repeats object {key}")
             seen_keys.add(key)
-            object_prefix = f"{prefix}/{normalized_prefix}" if normalized_prefix else prefix
+            load_requests.append(
+                {
+                    "key": key,
+                    "size_bytes": item["size_bytes"],
+                    "sha256": item.get("sha256"),
+                }
+            )
+        object_prefix = f"{prefix}/{normalized_prefix}" if normalized_prefix else prefix
+        loaded_pairs = _bounded_parallel_map(
+            load_requests,
+            worker_count=self._max_workers,
+            worker=self._load_manifest_entry(bucket, object_prefix),
+        )
+        objects = {key: value for key, value in loaded_pairs}
+        if artifact_sha256(objects) != marker.get("sha256"):
+            raise RuntimeError("published artifact bundle checksum differs")
+        return objects
+
+    def _load_manifest_entry(
+        self,
+        bucket: str,
+        object_prefix: str,
+    ) -> Callable[[dict[str, Any]], tuple[str, bytes]]:
+        def load_one(item: dict[str, Any]) -> tuple[str, bytes]:
+            key = str(item["key"])
             value = self._get_bytes(
                 bucket,
                 f"{object_prefix}/{key}",
-                max_bytes=item["size_bytes"],
+                max_bytes=int(item["size_bytes"]),
             )
             if len(value) != item.get("size_bytes"):
                 raise RuntimeError(f"published artifact size differs for {key}")
             if hashlib.sha256(value).hexdigest() != item.get("sha256"):
                 raise RuntimeError(f"published artifact checksum differs for {key}")
-            objects[key] = value
-        if artifact_sha256(objects) != marker.get("sha256"):
-            raise RuntimeError("published artifact bundle checksum differs")
-        return objects
+            return key, value
+
+        return load_one
 
     def _get_bytes(self, bucket: str, key: str, max_bytes: int | None = None) -> bytes:
         response = self._client.get_object(bucket, key)
@@ -370,3 +429,62 @@ def _required_environment(name: str) -> str:
     if not value:
         raise ValueError(f"{name} is required")
     return value
+
+
+def _resolve_max_workers(max_workers: int | None) -> int:
+    if max_workers is None:
+        max_workers = int(
+            os.getenv(
+                "RAINPULSE_OBJECT_STORE_MAX_WORKERS",
+                str(DEFAULT_OBJECT_STORE_MAX_WORKERS),
+            )
+        )
+    if max_workers <= 0:
+        raise ValueError("object store worker count must be positive")
+    return max_workers
+
+
+def _bounded_parallel_map(
+    items: list[Any],
+    *,
+    worker_count: int,
+    worker: Callable[[Any], Any],
+) -> list[Any]:
+    if len(items) <= 1 or worker_count == 1:
+        return [worker(item) for item in items]
+
+    results: list[Any] = [None] * len(items)
+    next_index = 0
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        pending: dict[Future[Any], int] = {}
+
+        def submit_next() -> bool:
+            nonlocal next_index
+            if next_index >= len(items):
+                return False
+            future = executor.submit(worker, items[next_index])
+            pending[future] = next_index
+            next_index += 1
+            return True
+
+        for _ in range(min(worker_count, len(items))):
+            submit_next()
+
+        while pending:
+            done, _ = wait(tuple(pending), return_when=FIRST_COMPLETED)
+            for future in done:
+                index = pending.pop(future)
+                results[index] = future.result()
+                submit_next()
+    return results
+
+
+def _elapsed_ms(started_at: float) -> float:
+    return round((time.perf_counter() - started_at) * 1000, 3)
+
+
+def _marker_object_count(marker: dict[str, Any]) -> int:
+    objects = marker.get("objects")
+    if not isinstance(objects, list):
+        return 0
+    return len(objects)

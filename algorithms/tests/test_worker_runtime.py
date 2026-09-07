@@ -3,6 +3,7 @@ import time
 from types import SimpleNamespace
 from typing import Any
 
+import rainpulse_algo.worker.runtime as runtime_module
 from rainpulse_algo.worker.contracts import JobCompleted, JobFailed, JobRequested
 from rainpulse_algo.worker.runtime import TaskHandler, Worker, WorkerConfig, WorkerResult
 from rainpulse_algo.worker.simulation import execute
@@ -50,9 +51,17 @@ class FakePublisher:
     def load_completion(self, _: str, _artifact_name: str) -> JobCompleted | None:
         return self.existing
 
-    def publish(self, **values: Any) -> None:
+    def publish(self, **values: Any) -> SimpleNamespace:
         self.publish_count += 1
         self.existing = values["completion"]
+        return SimpleNamespace(
+            completion=values["completion"],
+            reused=False,
+            size_bytes=values["completion"].payload.assets[0].size_bytes,
+            object_count=1,
+            upload_ms=6.5,
+            marker_commit_ms=0.75,
+        )
 
 
 def make_message(
@@ -130,6 +139,105 @@ def test_failure_event_is_published_then_message_is_acked() -> None:
         failure = JobFailed.model_validate_json(jetstream.events[0][1])
         assert failure.payload.error_code == "SIMULATED_FAILURE"
         assert failure.payload.details["retry_exhausted"] is False
+
+    asyncio.run(scenario())
+
+
+def test_success_logs_stage_observability(monkeypatch: Any) -> None:
+    events: list[tuple[str, str, dict[str, Any]]] = []
+    monkeypatch.setattr(
+        runtime_module,
+        "log_event",
+        lambda level, event, **fields: events.append((level, event, fields)),
+    )
+
+    def execute_with_observability(_: JobRequested) -> WorkerResult:
+        return WorkerResult(
+            data=b"done",
+            observability={
+                "input_read_ms": 1.25,
+                "context_ms": 2.5,
+                "qc_core_ms": 3.75,
+                "serialize_validate_ms": 4.5,
+                "input_bytes": 128,
+                "output_bytes": 4,
+                "object_count": 1,
+                "context_age_seconds": 120.0,
+                "cache_hit": 2,
+                "cache_miss": 1,
+                "rss_bytes": 4096,
+            },
+        )
+
+    async def scenario() -> None:
+        worker = Worker(
+            WorkerConfig("nats://test", "127.0.0.1", 8091, "test-worker"),
+            FakePublisher(),  # type: ignore[arg-type]
+            handler=make_handler(execute_with_observability),
+        )
+        message = make_message()
+        await worker.process_message(message, FakeJetStream())
+
+        completed = next(fields for _, event, fields in events if event == "job.completed")
+        assert completed["input_read_ms"] == 1.25
+        assert completed["context_ms"] == 2.5
+        assert completed["qc_core_ms"] == 3.75
+        assert completed["serialize_validate_ms"] == 4.5
+        assert completed["upload_ms"] == 6.5
+        assert completed["marker_commit_ms"] == 0.75
+        assert completed["input_bytes"] == 128
+        assert completed["output_bytes"] == 4
+        assert completed["object_count"] == 1
+        assert completed["context_age_seconds"] == 120.0
+        assert completed["cache_hit"] == 2
+        assert completed["cache_miss"] == 1
+        assert completed["rss_bytes"] == 4096
+        assert completed["event_publish_ms"] >= 0
+        assert completed["end_to_end_ms"] >= completed["event_publish_ms"]
+
+    asyncio.run(scenario())
+
+
+def test_failure_logs_stage_observability_and_stage_name(monkeypatch: Any) -> None:
+    events: list[tuple[str, str, dict[str, Any]]] = []
+    monkeypatch.setattr(
+        runtime_module,
+        "log_event",
+        lambda level, event, **fields: events.append((level, event, fields)),
+    )
+
+    class ObservedFailure(RuntimeError):
+        def __init__(self) -> None:
+            super().__init__("context artifact unavailable")
+            self.stage = "context"
+            self.observability = {
+                "input_read_ms": 2.0,
+                "context_ms": 1.0,
+                "cache_hit": 0,
+                "cache_miss": 1,
+                "rss_bytes": 2048,
+            }
+
+    def fail_with_observability(_: JobRequested) -> WorkerResult:
+        raise ObservedFailure()
+
+    async def scenario() -> None:
+        worker = Worker(
+            WorkerConfig("nats://test", "127.0.0.1", 8091, "test-worker"),
+            FakePublisher(),  # type: ignore[arg-type]
+            handler=make_handler(fail_with_observability),
+        )
+        message = make_message(delivery_attempt=3)
+        await worker.process_message(message, FakeJetStream())
+
+        failed = next(fields for _, event, fields in events if event == "job.failed")
+        assert failed["failure_stage"] == "context"
+        assert failed["input_read_ms"] == 2.0
+        assert failed["context_ms"] == 1.0
+        assert failed["cache_hit"] == 0
+        assert failed["cache_miss"] == 1
+        assert failed["rss_bytes"] == 2048
+        assert failed["end_to_end_ms"] >= 0
 
     asyncio.run(scenario())
 

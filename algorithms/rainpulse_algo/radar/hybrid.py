@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from types import MappingProxyType
 from typing import Any
 
 import numpy as np
@@ -16,11 +19,17 @@ from .blockage import (
     PolarBlockage,
     TerrainSampler,
     calculate_polar_blockage,
+    freeze_grid_polar_mapping,
+    freeze_polar_blockage,
+    grid_polar_mapping_size_bytes,
     map_grid_to_polar,
+    polar_blockage_size_bytes,
     required_gate_by_ray,
 )
 from .config import RadarDecoderConfig
+from .dem import DEFAULT_DEM_CACHE_BUDGET_BYTES, SharedDEMCache, default_dem_cache
 from .grid_profile import RadarGridProfile
+from .runtime_cache import ByteBudgetLRUCache, CacheLookup
 
 
 class RadarGridInputError(ValueError):
@@ -58,7 +67,26 @@ class RadarGridResult:
     operational_eligible: bool
     operational_reasons: tuple[str, ...]
     vertical_datum_status: str
+    cache_stats: dict[str, int]
     created_at: datetime
+
+
+DEFAULT_CANDIDATE_CACHE_BUDGET_BYTES = 64 * 1024 * 1024
+DEFAULT_GEOMETRY_CACHE_BUDGET_BYTES = 128 * 1024 * 1024
+
+
+@dataclass(frozen=True)
+class HybridScanCaches:
+    candidate: ByteBudgetLRUCache[Mapping[str, np.ndarray]]
+    geometry: ByteBudgetLRUCache[GridPolarMapping]
+    dem: SharedDEMCache
+
+
+_DEFAULT_HYBRID_SCAN_CACHES = HybridScanCaches(
+    candidate=ByteBudgetLRUCache(DEFAULT_CANDIDATE_CACHE_BUDGET_BYTES),
+    geometry=ByteBudgetLRUCache(DEFAULT_GEOMETRY_CACHE_BUDGET_BYTES),
+    dem=default_dem_cache(),
+)
 
 
 def build_hybrid_scan(
@@ -70,6 +98,7 @@ def build_hybrid_scan(
     terrain: TerrainSampler,
     flag_masks: Mapping[str, np.uint32],
     expected_scan_id: str | None = None,
+    caches: HybridScanCaches | None = None,
     created_at: datetime | None = None,
 ) -> RadarGridResult:
     store = MemoryStore()
@@ -92,6 +121,11 @@ def build_hybrid_scan(
     polar_diagnostics: list[PolarSweepDiagnostic] = []
     selection_counts: dict[str, int] = {}
     skipped_sweeps: dict[str, str] = {}
+    cache_stats = _empty_cache_stats()
+    cache_bundle = caches or default_hybrid_scan_caches()
+    artifact_digest = _qc_artifact_digest(qc_objects)
+    profile_digest = _hybrid_profile_digest(profile, flag_masks)
+    terrain_identity = _terrain_cache_identity(terrain)
 
     sweep_names = [f"sweep_{int(item):03d}" for item in root["sweep_number"][:]]
     sweep_names.sort(key=lambda name: (float(root[name].attrs["nominal_elevation_deg"]), name))
@@ -102,28 +136,42 @@ def build_hybrid_scan(
         if not np.any(valid_source & np.isfinite(dbzh)):
             skipped_sweeps[name] = "no_finite_valid_dbzh"
             continue
-        mapping = map_grid_to_polar(
-            longitude,
-            latitude,
+        mapping_key = _mapping_cache_key(
+            artifact_digest=artifact_digest,
+            sweep_name=name,
+            grid=grid,
             radar_longitude_deg=float(radar_config.site["longitude_deg"]),
             radar_latitude_deg=float(radar_config.site["latitude_deg"]),
-            sweep_azimuth_deg=group["azimuth"][:],
-            sweep_range_m=group["range"][:],
-            config=profile.polar_mapping,
+            profile=profile,
         )
+        mapping_lookup = cache_bundle.geometry.get_or_compute(
+            mapping_key,
+            factory=lambda group=group: map_grid_to_polar(
+                longitude,
+                latitude,
+                radar_longitude_deg=float(radar_config.site["longitude_deg"]),
+                radar_latitude_deg=float(radar_config.site["latitude_deg"]),
+                sweep_azimuth_deg=group["azimuth"][:],
+                sweep_range_m=group["range"][:],
+                config=profile.polar_mapping,
+            ),
+            size_of=grid_polar_mapping_size_bytes,
+            freeze=freeze_grid_polar_mapping,
+        )
+        _record_cache_lookup(cache_stats, "geometry", mapping_lookup)
+        mapping = mapping_lookup.value
         required = required_gate_by_ray(mapping, dbzh.shape[0])
-        polar = calculate_polar_blockage(
-            azimuth_deg=group["azimuth"][:],
-            elevation_deg=group["elevation"][:],
-            range_m=group["range"][:],
-            required_max_gate=required,
-            radar_longitude_deg=float(radar_config.site["longitude_deg"]),
-            radar_latitude_deg=float(radar_config.site["latitude_deg"]),
-            antenna_altitude_m=float(antenna_altitude),
-            vertical_beam_width_deg=float(beam_width),
-            beam_config=profile.beam_geometry,
-            blockage_config=profile.blockage,
+        polar = _cached_polar_blockage(
+            group=group,
+            required=required,
+            radar_config=radar_config,
+            profile=profile,
             terrain=terrain,
+            terrain_identity=terrain_identity,
+            artifact_digest=artifact_digest,
+            sweep_name=name,
+            cache=cache_bundle.dem,
+            cache_stats=cache_stats,
         )
         polar_diagnostics.append(
             PolarSweepDiagnostic(
@@ -136,7 +184,20 @@ def build_hybrid_scan(
                 blockage=polar,
             )
         )
-        candidate = _candidate_fields(group, mapping, polar, profile, flag_masks)
+        candidate = _cached_candidate_fields(
+            artifact_digest=artifact_digest,
+            sweep_name=name,
+            profile_digest=profile_digest,
+            geometry_key=mapping_key,
+            blockage_enabled=terrain_identity is not None,
+            group=group,
+            mapping=mapping,
+            polar=polar,
+            profile=profile,
+            flag_masks=flag_masks,
+            cache=cache_bundle.candidate,
+            cache_stats=cache_stats,
+        )
         severe_blockage_seen |= candidate["severe_blockage"]
         choose = ~selected & candidate["usable"]
         if not np.any(choose):
@@ -215,8 +276,253 @@ def build_hybrid_scan(
         operational_eligible=not operational_reasons,
         operational_reasons=operational_reasons,
         vertical_datum_status=vertical_status,
+        cache_stats=dict(cache_stats),
         created_at=created_at or datetime.now(UTC),
     )
+
+
+def create_hybrid_scan_caches(
+    *,
+    candidate_budget_bytes: int = DEFAULT_CANDIDATE_CACHE_BUDGET_BYTES,
+    geometry_budget_bytes: int = DEFAULT_GEOMETRY_CACHE_BUDGET_BYTES,
+    dem_budget_bytes: int = DEFAULT_DEM_CACHE_BUDGET_BYTES,
+) -> HybridScanCaches:
+    return HybridScanCaches(
+        candidate=ByteBudgetLRUCache(candidate_budget_bytes),
+        geometry=ByteBudgetLRUCache(geometry_budget_bytes),
+        dem=SharedDEMCache(dem_budget_bytes),
+    )
+
+
+def default_hybrid_scan_caches() -> HybridScanCaches:
+    return _DEFAULT_HYBRID_SCAN_CACHES
+
+
+def _cached_polar_blockage(
+    *,
+    group: zarr.Group,
+    required: np.ndarray,
+    radar_config: RadarDecoderConfig,
+    profile: RadarGridProfile,
+    terrain: TerrainSampler,
+    terrain_identity: str | None,
+    artifact_digest: str,
+    sweep_name: str,
+    cache: SharedDEMCache,
+    cache_stats: dict[str, int],
+) -> PolarBlockage:
+    if terrain_identity is None:
+        return calculate_polar_blockage(
+            azimuth_deg=group["azimuth"][:],
+            elevation_deg=group["elevation"][:],
+            range_m=group["range"][:],
+            required_max_gate=required,
+            radar_longitude_deg=float(radar_config.site["longitude_deg"]),
+            radar_latitude_deg=float(radar_config.site["latitude_deg"]),
+            antenna_altitude_m=float(radar_config.site["antenna_altitude_m"]),
+            vertical_beam_width_deg=float(radar_config.hardware["beam_width_vertical_deg"]),
+            beam_config=profile.beam_geometry,
+            blockage_config=profile.blockage,
+            terrain=terrain,
+        )
+    key = _polar_blockage_cache_key(
+        artifact_digest=artifact_digest,
+        sweep_name=sweep_name,
+        terrain_identity=terrain_identity,
+        required=required,
+        radar_config=radar_config,
+        profile=profile,
+    )
+    lookup = cache.get_or_compute(
+        key,
+        factory=lambda: calculate_polar_blockage(
+            azimuth_deg=group["azimuth"][:],
+            elevation_deg=group["elevation"][:],
+            range_m=group["range"][:],
+            required_max_gate=required,
+            radar_longitude_deg=float(radar_config.site["longitude_deg"]),
+            radar_latitude_deg=float(radar_config.site["latitude_deg"]),
+            antenna_altitude_m=float(radar_config.site["antenna_altitude_m"]),
+            vertical_beam_width_deg=float(radar_config.hardware["beam_width_vertical_deg"]),
+            beam_config=profile.beam_geometry,
+            blockage_config=profile.blockage,
+            terrain=terrain,
+        ),
+        size_of=polar_blockage_size_bytes,
+        freeze=freeze_polar_blockage,
+    )
+    _record_cache_lookup(cache_stats, "dem", lookup)
+    return lookup.value
+
+
+def _cached_candidate_fields(
+    *,
+    artifact_digest: str,
+    sweep_name: str,
+    profile_digest: str,
+    geometry_key: str,
+    blockage_enabled: bool,
+    group: zarr.Group,
+    mapping: GridPolarMapping,
+    polar: PolarBlockage,
+    profile: RadarGridProfile,
+    flag_masks: Mapping[str, np.uint32],
+    cache: ByteBudgetLRUCache[Mapping[str, np.ndarray]],
+    cache_stats: dict[str, int],
+) -> Mapping[str, np.ndarray]:
+    if not blockage_enabled:
+        return _candidate_fields(group, mapping, polar, profile, flag_masks)
+    key = (
+        f"candidate|{artifact_digest}|{sweep_name}|{profile_digest}|"
+        f"{hashlib.sha256(geometry_key.encode()).hexdigest()}"
+    )
+    lookup = cache.get_or_compute(
+        key,
+        factory=lambda: _candidate_fields(group, mapping, polar, profile, flag_masks),
+        size_of=_candidate_fields_size_bytes,
+        freeze=_freeze_candidate_fields,
+    )
+    _record_cache_lookup(cache_stats, "candidate", lookup)
+    return lookup.value
+
+
+def _mapping_cache_key(
+    *,
+    artifact_digest: str,
+    sweep_name: str,
+    grid: RegularLatLonGrid,
+    radar_longitude_deg: float,
+    radar_latitude_deg: float,
+    profile: RadarGridProfile,
+) -> str:
+    payload = {
+        "artifact_digest": artifact_digest,
+        "grid_coordinate_sha256": grid.coordinate_sha256,
+        "mapping": {
+            "maximum_azimuth_offset_deg": profile.polar_mapping.maximum_azimuth_offset_deg,
+            "maximum_range_offset_gate_fraction": (
+                profile.polar_mapping.maximum_range_offset_gate_fraction
+            ),
+        },
+        "radar_latitude_deg": radar_latitude_deg,
+        "radar_longitude_deg": radar_longitude_deg,
+        "sweep_name": sweep_name,
+    }
+    return "geometry|" + hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def _polar_blockage_cache_key(
+    *,
+    artifact_digest: str,
+    sweep_name: str,
+    terrain_identity: str,
+    required: np.ndarray,
+    radar_config: RadarDecoderConfig,
+    profile: RadarGridProfile,
+) -> str:
+    digest = hashlib.sha256()
+    digest.update(artifact_digest.encode("utf-8"))
+    digest.update(sweep_name.encode("utf-8"))
+    digest.update(terrain_identity.encode("utf-8"))
+    digest.update(np.asarray(required, dtype="<i4").tobytes())
+    digest.update(str(radar_config.site["longitude_deg"]).encode("utf-8"))
+    digest.update(str(radar_config.site["latitude_deg"]).encode("utf-8"))
+    digest.update(str(radar_config.site["antenna_altitude_m"]).encode("utf-8"))
+    digest.update(str(radar_config.hardware["beam_width_vertical_deg"]).encode("utf-8"))
+    digest.update(str(profile.beam_geometry.effective_earth_radius_factor).encode("utf-8"))
+    digest.update(str(profile.beam_geometry.earth_radius_m).encode("utf-8"))
+    digest.update(str(profile.blockage.flag_fraction).encode("utf-8"))
+    digest.update(str(profile.blockage.maximum_usable_fraction).encode("utf-8"))
+    return "dem-blockage|" + digest.hexdigest()
+
+
+def _terrain_cache_identity(terrain: TerrainSampler) -> str | None:
+    identity = getattr(terrain, "cache_identity", None)
+    if identity is None:
+        return None
+    return str(identity)
+
+
+def _candidate_fields_size_bytes(candidate: Mapping[str, np.ndarray]) -> int:
+    total = 0
+    for value in candidate.values():
+        total += int(np.asarray(value).nbytes)
+    return total
+
+
+def _freeze_candidate_fields(candidate: Mapping[str, np.ndarray]) -> Mapping[str, np.ndarray]:
+    frozen: dict[str, np.ndarray] = {}
+    for key, value in candidate.items():
+        array = np.asarray(value)
+        array.setflags(write=False)
+        frozen[key] = array
+    return MappingProxyType(frozen)
+
+
+def _record_cache_lookup(
+    cache_stats: dict[str, int],
+    name: str,
+    lookup: CacheLookup[Any],
+) -> None:
+    metric = "hit" if lookup.hit else "miss"
+    cache_stats[f"{name}_{metric}"] += 1
+
+
+def _empty_cache_stats() -> dict[str, int]:
+    return {
+        "candidate_hit": 0,
+        "candidate_miss": 0,
+        "geometry_hit": 0,
+        "geometry_miss": 0,
+        "dem_hit": 0,
+        "dem_miss": 0,
+    }
+
+
+def _qc_artifact_digest(objects: Mapping[str, bytes]) -> str:
+    digest = hashlib.sha256()
+    for key, value in sorted(objects.items()):
+        encoded = key.encode("utf-8")
+        digest.update(len(encoded).to_bytes(4, "big"))
+        digest.update(encoded)
+        digest.update(len(value).to_bytes(8, "big"))
+        digest.update(hashlib.sha256(value).digest())
+    return digest.hexdigest()
+
+
+def _hybrid_profile_digest(
+    profile: RadarGridProfile,
+    flag_masks: Mapping[str, np.uint32],
+) -> str:
+    payload = {
+        "algorithm_version": profile.algorithm_version,
+        "ancillary_config_version": profile.ancillary_config_version,
+        "beam_geometry": {
+            "earth_radius_m": profile.beam_geometry.earth_radius_m,
+            "effective_earth_radius_factor": (
+                profile.beam_geometry.effective_earth_radius_factor
+            ),
+        },
+        "blockage": {
+            "flag_fraction": profile.blockage.flag_fraction,
+            "maximum_usable_fraction": profile.blockage.maximum_usable_fraction,
+        },
+        "flags": {key: int(value) for key, value in sorted(flag_masks.items())},
+        "hybrid_scan": {
+            "beam_height_quality_scale_m": profile.hybrid_scan.beam_height_quality_scale_m,
+            "low_quality_threshold": profile.hybrid_scan.low_quality_threshold,
+            "maximum_beam_height_agl_m": profile.hybrid_scan.maximum_beam_height_agl_m,
+            "minimum_source_quality_index": (
+                profile.hybrid_scan.minimum_source_quality_index
+            ),
+            "reject_flags": list(profile.hybrid_scan.reject_flags),
+        },
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
 
 
 def _validate_inputs(

@@ -20,9 +20,10 @@ BUILD_VERSION ?= $(BUILD_REVISION)
 RAINPULSE_GO_LDFLAGS := -X github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo.Version=$(BUILD_VERSION) -X github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo.Revision=$(BUILD_REVISION)
 CONTROL_GO := bash scripts/go_control.sh
 
-.PHONY: prepare-bdp-go bootstrap contracts-generate contracts-check test test-structure test-radar-config test-contracts test-infrastructure test-alerting test-operations test-airgap-deploy test-control-plane test-worker-sdk test-radar-decoder test-radar-health test-radar-qc test-radar-grid test-radar-mosaic test-qpe test-diagnostics test-nowcast-input test-pysteps-lk test-pysteps-steps test-probability-calibration test-nowcastnet test-nowcastnet-training test-nowcastnet-pilot test-products test-ensemble-products test-ancillary test-grid test-mrms test-mrms-ensemble test-go test-python test-web lint build build-linux build-infrastructure-linux export-postgres-image export-python-image export-node-exporter-image build-worker-linux deploy-up dev-up dev-down smoke infrastructure-smoke control-plane-smoke worker-smoke radar-decode-smoke radar-health-smoke radar-qc-smoke radar-grid-smoke ancillary-plan ancillary-download ancillary-verify mrms-download mrms-verify mrms-training-audit mrms-pilot-plan mrms-pilot-run mrms-pilot-validate mrms-holdout-select mrms-conformance mrms-hindcast mrms-faults mrms-ensemble-conformance mrms-ensemble-hindcast mrms-ensemble-freeze-gate mrms-nowcastnet-conformance mrms-nowcastnet-hindcast mrms-nowcastnet-freeze-gate
+.PHONY: prepare-bdp-go bootstrap contracts-generate contracts-check test test-structure test-radar-config test-contracts test-infrastructure test-alerting test-operations test-airgap-deploy test-control-plane test-worker-sdk test-radar-decoder test-radar-health test-radar-qc test-radar-grid test-radar-mosaic test-qpe test-diagnostics test-nowcast-input test-pysteps-lk test-pysteps-steps test-probability-calibration test-nowcastnet test-nowcastnet-training test-nowcastnet-pilot test-products test-ensemble-products test-ancillary test-grid test-mrms test-mrms-ensemble test-go test-python test-web lint build build-linux build-infrastructure-linux export-postgres-image export-python-image export-node-exporter-image build-worker-linux deploy-up dev-up dev-down smoke infrastructure-smoke control-plane-smoke worker-smoke radar-decode-smoke radar-health-smoke radar-qc-smoke radar-grid-smoke ancillary-plan ancillary-download ancillary-verify mrms-download mrms-verify mrms-training-audit mrms-pilot-plan mrms-pilot-run mrms-pilot-validate mrms-holdout-select mrms-conformance mrms-hindcast mrms-faults mrms-ensemble-conformance mrms-ensemble-hindcast mrms-ensemble-freeze-gate mrms-nowcastnet-conformance mrms-nowcastnet-hindcast mrms-nowcastnet-freeze-gate benchmark-radar-qc
 .PHONY: test-nowcastnet-full-samples mrms-full-sample-plan mrms-full-sample-run mrms-full-sample-validate
 .PHONY: test-regeneration regenerate
+.PHONY: test-radar-qc-b3
 
 prepare-bdp-go:
 	@$(CONTROL_GO) --prepare
@@ -85,6 +86,10 @@ test-radar-health:
 
 test-radar-qc:
 	bash tests/rp008_radar_qc_test.sh
+	uv run --project algorithms pytest algorithms/tests/test_radar_qc.py algorithms/tests/test_radar_qc_texture.py algorithms/tests/test_radar_qc_metrics.py algorithms/tests/test_radar_qc_decision.py algorithms/tests/test_radar_qc_geometry.py algorithms/tests/test_radar_qc_b3.py algorithms/tests/test_radar_qc_b3_cli.py algorithms/tests/test_radar_phase_processing.py algorithms/tests/test_radar_attenuation.py algorithms/tests/test_radial_audit.py algorithms/tests/test_attenuation_audit.py algorithms/tests/test_relative_bias_audit.py algorithms/tests/test_calibration.py algorithms/tests/test_calibration_audit.py algorithms/tests/test_worker_runtime.py algorithms/tests/test_object_store.py algorithms/tests/test_benchmark_radar_qc.py
+
+test-radar-qc-b3:
+	uv run --project algorithms pytest algorithms/tests/test_radar_qc_b3.py algorithms/tests/test_radar_qc_b3_cli.py
 
 test-radar-grid:
 	bash tests/rp009_radar_grid_test.sh
@@ -96,7 +101,8 @@ test-radar-mosaic:
 
 test-qpe:
 	bash tests/rp011_qpe_test.sh
-	uv run --project algorithms pytest algorithms/tests/test_qpe.py
+	bash tests/rp017_vpr_qpe_test.sh
+	uv run --project algorithms pytest algorithms/tests/test_qpe.py algorithms/tests/test_vpr_shadow_replay.py
 
 test-diagnostics:
 	bash tests/rp012_diagnostics_test.sh
@@ -153,6 +159,11 @@ test-go: prepare-bdp-go
 
 test-python:
 	uv run --project algorithms pytest algorithms/tests
+
+BENCHMARK_RADAR_QC_ARGS ?=
+
+benchmark-radar-qc:
+	uv run --project algorithms python scripts/benchmark_radar_qc.py $(BENCHMARK_RADAR_QC_ARGS)
 
 test-web:
 	pnpm --filter @rainpulse/web test

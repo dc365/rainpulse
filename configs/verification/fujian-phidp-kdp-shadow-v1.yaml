@@ -1,0 +1,31 @@
+schema_version: "1.0"
+profile_version: fujian-phidp-kdp-shadow-v1
+artifact_contract_version: "1.0"
+source_normalized_radar_volume_contract_version: "1.0"
+phase_field_name: PHIDP
+phase_wrap_period_degrees: 360.0
+
+segmentation:
+  minimum_valid_run_gates: 9
+  maximum_missing_run_gates: 0
+
+system_phase:
+  source_mode: estimate_from_first_valid_gates
+  first_gate_count: 5
+  minimum_gate_count: 5
+  allow_override_input: true
+
+fitting:
+  method: robust_local_linear
+  window_half_width_km: 3.0
+  minimum_window_gates: 5
+  maximum_window_gates: 25
+  minimum_segment_gates: 9
+  robust_weighting: tukey_biweight
+  tukey_tuning_constant: 4.685
+  maximum_iterations: 3
+
+activation:
+  shadow_processing_enabled: true
+  worker_integration_enabled: false
+  required_gate: phidp_metadata_and_representative_real_cases_required

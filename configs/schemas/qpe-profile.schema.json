@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rainpulse.local/configs/schemas/qpe-profile.schema.json",
-  "title": "RainPulse RP-011 basic QPE profile",
+  "title": "RainPulse QPE profile",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "profile_version", "algorithm_version", "radar_analysis_contract_version", "mosaic_contract_version", "flag_definition_version", "grid_id", "grid_config_version", "qpe", "gauge_adjustment"],
@@ -37,9 +37,64 @@
         "method": { "const": "none" },
         "observation_qc_version": { "type": "null" }
       }
+    },
+    "vpr_correction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "method",
+        "precipitation_type_field",
+        "stratiform_code",
+        "convective_code",
+        "melting_layer_bottom_field",
+        "melting_layer_top_field",
+        "beam_height_field",
+        "corrected_reflectivity_field",
+        "correction_field",
+        "uncertainty_field",
+        "applied_mask_field",
+        "stratiform_mask_field",
+        "overshoot_mask_field",
+        "max_bright_band_reduction_db",
+        "above_melting_layer_correction_db_per_km",
+        "maximum_positive_correction_db",
+        "extrapolation_limit_m",
+        "base_uncertainty_db",
+        "uncertainty_growth_db_per_km",
+        "maximum_uncertainty_db",
+        "overshoot_policy",
+        "write_bright_band_flag"
+      ],
+      "properties": {
+        "enabled": { "const": true },
+        "method": { "const": "stratiform_piecewise_linear" },
+        "precipitation_type_field": { "$ref": "#/$defs/field_name" },
+        "stratiform_code": { "type": "integer", "minimum": 1, "maximum": 254 },
+        "convective_code": { "type": "integer", "minimum": 1, "maximum": 254 },
+        "melting_layer_bottom_field": { "$ref": "#/$defs/field_name" },
+        "melting_layer_top_field": { "$ref": "#/$defs/field_name" },
+        "beam_height_field": { "const": "BEAM_HEIGHT" },
+        "corrected_reflectivity_field": { "$ref": "#/$defs/field_name" },
+        "correction_field": { "$ref": "#/$defs/field_name" },
+        "uncertainty_field": { "$ref": "#/$defs/field_name" },
+        "applied_mask_field": { "$ref": "#/$defs/field_name" },
+        "stratiform_mask_field": { "$ref": "#/$defs/field_name" },
+        "overshoot_mask_field": { "$ref": "#/$defs/field_name" },
+        "max_bright_band_reduction_db": { "type": "number", "exclusiveMinimum": 0, "maximum": 30 },
+        "above_melting_layer_correction_db_per_km": { "type": "number", "exclusiveMinimum": 0, "maximum": 20 },
+        "maximum_positive_correction_db": { "type": "number", "exclusiveMinimum": 0, "maximum": 30 },
+        "extrapolation_limit_m": { "type": "number", "exclusiveMinimum": 0, "maximum": 10000 },
+        "base_uncertainty_db": { "type": "number", "minimum": 0, "maximum": 20 },
+        "uncertainty_growth_db_per_km": { "type": "number", "minimum": 0, "maximum": 20 },
+        "maximum_uncertainty_db": { "type": "number", "exclusiveMinimum": 0, "maximum": 30 },
+        "overshoot_policy": { "const": "mark_missing" },
+        "write_bright_band_flag": { "type": "boolean" }
+      }
     }
   },
   "$defs": {
-    "identifier": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$" }
+    "identifier": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$" },
+    "field_name": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{2,63}$" }
   }
 }

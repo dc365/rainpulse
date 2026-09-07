@@ -941,6 +941,120 @@ func (store *Store) ListRadarScans(
 	return store.ListRadarScansPage(ctx, limit, 0, radarID, status)
 }
 
+func (store *Store) ListRadarQCContextCandidates(
+	ctx context.Context,
+	scanID uuid.UUID,
+	radarID string,
+	volumeEndTime time.Time,
+	sameRadarWindow time.Duration,
+	crossRadarWindow time.Duration,
+	allowFutureTemporal bool,
+) ([]workflow.RadarScan, error) {
+	if volumeEndTime.IsZero() {
+		return nil, fmt.Errorf("radar QC context volume_end_time is required")
+	}
+	sameRadarStart := volumeEndTime.Add(-sameRadarWindow)
+	sameRadarEnd := volumeEndTime
+	if allowFutureTemporal {
+		sameRadarEnd = volumeEndTime.Add(sameRadarWindow)
+	}
+	crossRadarStart := volumeEndTime.Add(-crossRadarWindow)
+	crossRadarEnd := volumeEndTime
+	if allowFutureTemporal {
+		crossRadarEnd = volumeEndTime.Add(crossRadarWindow)
+	}
+	rows, err := store.pool.Query(ctx, radarScanSelect+`
+WHERE s.scan_id <> $1
+  AND COALESCE(r.normalized_uri, '') <> ''
+  AND (
+        (LOWER(s.radar_id) = LOWER($2) AND s.volume_end_time >= $3 AND s.volume_end_time <= $4 AND ($7 OR s.volume_end_time < $4))
+        OR
+        (LOWER(s.radar_id) <> LOWER($2) AND s.volume_end_time >= $5 AND s.volume_end_time <= $6)
+      )
+ORDER BY s.volume_end_time DESC, s.scan_id DESC`, scanID, radarID, sameRadarStart, sameRadarEnd, crossRadarStart, crossRadarEnd, allowFutureTemporal)
+	if err != nil {
+		return nil, fmt.Errorf("list radar QC context candidates: %w", err)
+	}
+	defer rows.Close()
+
+	scans := make([]workflow.RadarScan, 0)
+	for rows.Next() {
+		scan, err := scanRadarScan(rows)
+		if err != nil {
+			return nil, err
+		}
+		scans = append(scans, scan)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate radar QC context candidates: %w", err)
+	}
+	return scans, nil
+}
+
+func (store *Store) ListRadarScansByQuery(
+	ctx context.Context,
+	query workflow.RadarScanListQuery,
+) (workflow.RadarScanListPage, error) {
+	if err := validatePageLimit(query.Limit); err != nil {
+		return workflow.RadarScanListPage{}, err
+	}
+	if query.SnapshotTime.IsZero() {
+		return workflow.RadarScanListPage{}, fmt.Errorf("radar scan snapshot_time is required")
+	}
+	if query.StartTime != nil && query.EndTime != nil && !query.StartTime.Before(*query.EndTime) {
+		return workflow.RadarScanListPage{}, fmt.Errorf("radar scan start_time must be earlier than end_time")
+	}
+	radarValue := ""
+	if query.RadarID != nil {
+		radarValue = *query.RadarID
+	}
+	statusValue := ""
+	if query.Status != nil {
+		statusValue = string(*query.Status)
+	}
+	var cursorTime *time.Time
+	var cursorScanID *uuid.UUID
+	if query.Cursor != nil {
+		cursorTime = &query.Cursor.VolumeEndTime
+		cursorScanID = &query.Cursor.ScanID
+	}
+	rows, err := store.pool.Query(ctx, radarScanSelect+`
+WHERE ($1 = '' OR s.radar_id = $1)
+  AND ($2 = '' OR r.status = $2)
+  AND ($3::timestamptz IS NULL OR s.volume_end_time >= $3)
+  AND ($4::timestamptz IS NULL OR s.volume_end_time < $4)
+  AND r.created_at <= $5
+  AND ($6::timestamptz IS NULL OR (s.volume_end_time, s.scan_id) < ($6, $7::uuid))
+ORDER BY s.volume_end_time DESC, s.scan_id DESC
+LIMIT $8`, radarValue, statusValue, query.StartTime, query.EndTime, query.SnapshotTime, cursorTime, cursorScanID, query.Limit+1)
+	if err != nil {
+		return workflow.RadarScanListPage{}, fmt.Errorf("list radar scans by query: %w", err)
+	}
+	defer rows.Close()
+
+	scans := make([]workflow.RadarScan, 0, query.Limit+1)
+	for rows.Next() {
+		scan, err := scanRadarScan(rows)
+		if err != nil {
+			return workflow.RadarScanListPage{}, err
+		}
+		scans = append(scans, scan)
+	}
+	if err := rows.Err(); err != nil {
+		return workflow.RadarScanListPage{}, fmt.Errorf("iterate radar scans by query: %w", err)
+	}
+	page := workflow.RadarScanListPage{SnapshotTime: query.SnapshotTime}
+	if len(scans) > query.Limit {
+		page.NextCursor = &workflow.RadarScanListCursor{
+			VolumeEndTime: scans[query.Limit-1].VolumeEndTime,
+			ScanID:        scans[query.Limit-1].ID,
+		}
+		scans = scans[:query.Limit]
+	}
+	page.Items = scans
+	return page, nil
+}
+
 func (store *Store) ListRadarScansPage(
 	ctx context.Context,
 	limit int,

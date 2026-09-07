@@ -31,6 +31,52 @@ class PolarBlockage:
     support_mask: np.ndarray
 
 
+def freeze_grid_polar_mapping(mapping: GridPolarMapping) -> GridPolarMapping:
+    return GridPolarMapping(
+        ray_index=_readonly_array(mapping.ray_index),
+        gate_index=_readonly_array(mapping.gate_index),
+        supported=_readonly_array(mapping.supported),
+        azimuth_deg=_readonly_array(mapping.azimuth_deg),
+        distance_m=_readonly_array(mapping.distance_m),
+    )
+
+
+def freeze_polar_blockage(blockage: PolarBlockage) -> PolarBlockage:
+    return PolarBlockage(
+        partial=_readonly_array(blockage.partial),
+        cumulative=_readonly_array(blockage.cumulative),
+        beam_height_m=_readonly_array(blockage.beam_height_m),
+        terrain_height_m=_readonly_array(blockage.terrain_height_m),
+        support_mask=_readonly_array(blockage.support_mask),
+    )
+
+
+def grid_polar_mapping_size_bytes(mapping: GridPolarMapping) -> int:
+    return sum(
+        int(array.nbytes)
+        for array in (
+            mapping.ray_index,
+            mapping.gate_index,
+            mapping.supported,
+            mapping.azimuth_deg,
+            mapping.distance_m,
+        )
+    )
+
+
+def polar_blockage_size_bytes(blockage: PolarBlockage) -> int:
+    return sum(
+        int(array.nbytes)
+        for array in (
+            blockage.partial,
+            blockage.cumulative,
+            blockage.beam_height_m,
+            blockage.terrain_height_m,
+            blockage.support_mask,
+        )
+    )
+
+
 def beam_centre_height_m(
     range_m: np.ndarray,
     elevation_deg: np.ndarray,
@@ -245,3 +291,9 @@ def calculate_polar_blockage(
         terrain_height_m=terrain_output,
         support_mask=support_output,
     )
+
+
+def _readonly_array(values: np.ndarray) -> np.ndarray:
+    array = np.asarray(values)
+    array.setflags(write=False)
+    return array

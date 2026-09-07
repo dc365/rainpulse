@@ -26,6 +26,15 @@ service or worker code.
 - `radars/radar-inventory-template.yaml` records unknown values explicitly and
   cannot become operational until it satisfies all `ready` requirements.
 - `qc/flag-definitions.yaml` freezes the uint32 QC flag bit assignments.
+- `schemas/radar-phase-processing-profile.schema.json`,
+  `schemas/radar-attenuation-profile.schema.json`, and
+  `schemas/radar-relative-bias-profile.schema.json` freeze the offline-only C2
+  shadow evidence surfaces; `schemas/radar-calibration-profile.schema.json`,
+  `schemas/radar-calibration-reference-manifest.schema.json`, and
+  `schemas/radar-attenuation-coefficient-table.schema.json` extend that frozen
+  boundary to disjoint calibration references and versioned coefficient tables.
+  The checked-in Fujian profiles remain non-operational and must not designate
+  calibration truth.
 - `qc/profiles/` will hold versioned coastal, mountain, and strong-weather
   parameters after representative data and thresholds are verified.
 
@@ -38,3 +47,13 @@ with `make ancillary-plan`, `make ancillary-download`, and
 `make ancillary-verify`. The runtime manifest records every planned DEM tile,
 source-side ocean absence, file SHA-256, coastline archive identity and final
 geospatial acceptance result.
+
+The 2026-09-08 review fixes use QC pipeline `fujian-qc-evidence-2.0.1` and
+VPR algorithm `stratiform-vpr-qpe-1.0.1`; profile file names remain unchanged.
+Old generated artifacts are not rewritten. Replay manifests must freeze input
+content hashes before evidence can be reused. See the replay data contract.
+
+Run `make test-radar-qc-b3` for the executable B3 builder regressions and
+`python scripts/radar_qc_b3.py --help` for label/clutter/promotion commands.
+The attenuation environment schema records explicit, integrity-checked inputs;
+missing temperature or blockage must not be replaced with invented values.

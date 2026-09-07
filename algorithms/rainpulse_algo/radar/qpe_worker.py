@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
 
+import numpy as np
+import yaml
 import zarr
 from minio import Minio
 from zarr.storage import MemoryStore
@@ -34,6 +36,7 @@ def _execute_analysis_qpe(
     client: Minio,
 ) -> WorkerResult:
     profile = load_qpe_profile(_required_file("RAINPULSE_QPE_CONFIG"))
+    flag_masks = _load_flag_masks_for_profile(profile)
     grid = load_grid_config(_required_file("RAINPULSE_GRID_CONFIG"))
     _validate_request_versions(request, profile, grid.grid_id, grid.config_version)
     reader = ArtifactObjectReader(client)
@@ -51,6 +54,7 @@ def _execute_analysis_qpe(
             "job_id": str(request.job_id),
             "trace_id": str(request.trace_id),
         },
+        flag_masks=flag_masks,
     )
     validation = validate_radar_analysis_zarr_store(objects)
     summary = json.loads(objects["qpe/summary.json"])
@@ -119,6 +123,32 @@ def _required_file(name: str) -> Path:
     if not path.is_file():
         raise QPEInputError(f"{name} must identify a file")
     return path
+
+
+def _load_flag_masks_for_profile(
+    profile: QPEProfile,
+) -> dict[str, np.uint32] | None:
+    if profile.vpr_correction is None:
+        return None
+    value = os.getenv("RAINPULSE_QC_FLAG_DEFINITIONS")
+    if not value:
+        raise QPEInputError(
+            "RAINPULSE_QC_FLAG_DEFINITIONS is required when VPR correction is enabled"
+        )
+    path = Path(value).resolve(strict=True)
+    if not path.is_file():
+        raise QPEInputError("RAINPULSE_QC_FLAG_DEFINITIONS must identify a file")
+    return _load_flag_masks(path)
+
+
+def _load_flag_masks(path: Path) -> dict[str, np.uint32]:
+    value = yaml.safe_load(path.read_text())
+    if value.get("storage_dtype") != "uint32":
+        raise QPEInputError("QC flag storage dtype must be uint32")
+    return {
+        str(item["name"]): np.uint32(item["mask"])
+        for item in value.get("flags", [])
+    }
 
 
 def _validate_mosaic_request_identity(

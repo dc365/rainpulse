@@ -1,0 +1,22 @@
+schema_version: "1.0"
+profile_version: fujian-radar-relative-bias-shadow-v1
+artifact_contract_version: "1.0"
+source_normalized_radar_volume_contract_version: "1.0"
+radar_band: S
+comparison_field_name: DBZH
+
+thresholds:
+  minimum_dbzh: 10.0
+  maximum_time_offset_seconds: 300
+  maximum_blockage_fraction: 0.30
+  maximum_height_difference_m: 500.0
+  minimum_comparable_gate_count: 80
+  minimum_independent_processes: 3
+
+bootstrap_samples: 2048
+random_seed: 20260907
+
+activation:
+  worker_integration_enabled: false
+  truth_designation_enabled: false
+  required_gate: independent_absolute_reference_and_process_grouped_overlap_evidence_required

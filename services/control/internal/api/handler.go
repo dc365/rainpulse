@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -54,6 +55,10 @@ type ObservationStore interface {
 	GetDiagnosticLayer(context.Context, uuid.UUID, string) (string, string, error)
 	ListAnalysisCycles(context.Context, int, *workflow.AnalysisStatus) ([]workflow.AnalysisCycle, error)
 	GetAnalysisCycle(context.Context, uuid.UUID) (workflow.AnalysisCycle, error)
+}
+
+type RadarScanPageStore interface {
+	ListRadarScansByQuery(context.Context, workflow.RadarScanListQuery) (workflow.RadarScanListPage, error)
 }
 
 type DiagnosticLayerReader interface {
@@ -913,6 +918,42 @@ func (service *server) ListRadarScans(
 		value := workflow.RadarScanStatus(*params.Status)
 		status = &value
 	}
+	if wantsSnapshotRadarScanPage(params) {
+		pageStore, ok := service.observations.(RadarScanPageStore)
+		if !ok {
+			writeServiceUnavailable(response)
+			return
+		}
+		page, err := radarScanSnapshotPage(request.Context(), pageStore, limit, params, status)
+		if err != nil {
+			var invalidCursor *invalidRadarScanCursorError
+			if errors.As(err, &invalidCursor) {
+				writeError(response, http.StatusBadRequest, "invalid_cursor", invalidCursor.Error())
+				return
+			}
+			if errors.Is(err, errInvalidRadarScanTimeRange) {
+				writeError(response, http.StatusBadRequest, "invalid_time_range", err.Error())
+				return
+			}
+			writeStoreError(response, err)
+			return
+		}
+		items := make([]apiv1.RadarScan, 0, len(page.Items))
+		for _, scan := range page.Items {
+			items = append(items, toAPIRadarScan(scan))
+		}
+		payload := apiv1.RadarScanPage{Items: items, SnapshotTime: &page.SnapshotTime}
+		if page.NextCursor != nil {
+			cursor, err := encodeRadarScanCursor(*page.NextCursor, page.SnapshotTime, radarScanFilterHash(params.RadarId, status, params.StartTime, params.EndTime))
+			if err != nil {
+				writeError(response, http.StatusInternalServerError, "cursor_encoding_failed", "unable to encode radar scan cursor")
+				return
+			}
+			payload.NextCursor = &cursor
+		}
+		writeJSON(response, http.StatusOK, payload)
+		return
+	}
 	scans, err := service.observations.ListRadarScans(
 		request.Context(), limit, params.RadarId, status,
 	)
@@ -925,6 +966,143 @@ func (service *server) ListRadarScans(
 		items = append(items, toAPIRadarScan(scan))
 	}
 	writeJSON(response, http.StatusOK, apiv1.RadarScanPage{Items: items})
+}
+
+var errInvalidRadarScanTimeRange = errors.New("start_time must be earlier than end_time")
+
+type invalidRadarScanCursorError struct {
+	message string
+}
+
+func (err *invalidRadarScanCursorError) Error() string {
+	return err.message
+}
+
+type radarScanCursorEnvelope struct {
+	Version       int    `json:"v"`
+	VolumeEndTime string `json:"volume_end_time"`
+	ScanID        string `json:"scan_id"`
+	SnapshotTime  string `json:"snapshot_time"`
+	FilterHash    string `json:"filter_hash"`
+}
+
+func wantsSnapshotRadarScanPage(params apiv1.ListRadarScansParams) bool {
+	return params.StartTime != nil || params.EndTime != nil || params.Cursor != nil || params.SnapshotTime != nil
+}
+
+func radarScanSnapshotPage(
+	ctx context.Context,
+	store RadarScanPageStore,
+	limit int,
+	params apiv1.ListRadarScansParams,
+	status *workflow.RadarScanStatus,
+) (workflow.RadarScanListPage, error) {
+	if params.StartTime != nil && params.EndTime != nil && !params.StartTime.Before(*params.EndTime) {
+		return workflow.RadarScanListPage{}, errInvalidRadarScanTimeRange
+	}
+	filterHash := radarScanFilterHash(params.RadarId, status, params.StartTime, params.EndTime)
+	snapshotTime := time.Now().UTC()
+	var cursor *workflow.RadarScanListCursor
+	if params.Cursor != nil {
+		decodedCursor, cursorSnapshot, cursorFilterHash, err := decodeRadarScanCursor(*params.Cursor)
+		if err != nil {
+			return workflow.RadarScanListPage{}, err
+		}
+		if cursorFilterHash != filterHash {
+			return workflow.RadarScanListPage{}, &invalidRadarScanCursorError{message: "cursor does not match current radar scan filters"}
+		}
+		cursor = &decodedCursor
+		snapshotTime = cursorSnapshot
+		if params.SnapshotTime != nil && !params.SnapshotTime.UTC().Equal(cursorSnapshot) {
+			return workflow.RadarScanListPage{}, &invalidRadarScanCursorError{message: "cursor snapshot_time differs from the request"}
+		}
+	}
+	if params.SnapshotTime != nil {
+		snapshotTime = params.SnapshotTime.UTC()
+	}
+	return store.ListRadarScansByQuery(ctx, workflow.RadarScanListQuery{
+		Limit:        limit,
+		RadarID:      params.RadarId,
+		Status:       status,
+		StartTime:    params.StartTime,
+		EndTime:      params.EndTime,
+		SnapshotTime: snapshotTime,
+		Cursor:       cursor,
+	})
+}
+
+func radarScanFilterHash(
+	radarID *string,
+	status *workflow.RadarScanStatus,
+	startTime *time.Time,
+	endTime *time.Time,
+) string {
+	payload := struct {
+		RadarID   string `json:"radar_id,omitempty"`
+		Status    string `json:"status,omitempty"`
+		StartTime string `json:"start_time,omitempty"`
+		EndTime   string `json:"end_time,omitempty"`
+	}{}
+	if radarID != nil {
+		payload.RadarID = *radarID
+	}
+	if status != nil {
+		payload.Status = string(*status)
+	}
+	if startTime != nil {
+		payload.StartTime = startTime.UTC().Format(time.RFC3339Nano)
+	}
+	if endTime != nil {
+		payload.EndTime = endTime.UTC().Format(time.RFC3339Nano)
+	}
+	data, _ := json.Marshal(payload)
+	sum := sha256.Sum256(data)
+	return fmt.Sprintf("%x", sum)
+}
+
+func encodeRadarScanCursor(
+	cursor workflow.RadarScanListCursor,
+	snapshotTime time.Time,
+	filterHash string,
+) (string, error) {
+	payload, err := json.Marshal(radarScanCursorEnvelope{
+		Version:       1,
+		VolumeEndTime: cursor.VolumeEndTime.UTC().Format(time.RFC3339Nano),
+		ScanID:        cursor.ScanID.String(),
+		SnapshotTime:  snapshotTime.UTC().Format(time.RFC3339Nano),
+		FilterHash:    filterHash,
+	})
+	if err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(payload), nil
+}
+
+func decodeRadarScanCursor(raw string) (workflow.RadarScanListCursor, time.Time, string, error) {
+	data, err := base64.RawURLEncoding.DecodeString(raw)
+	if err != nil {
+		return workflow.RadarScanListCursor{}, time.Time{}, "", &invalidRadarScanCursorError{message: "cursor must be a valid encoded radar scan cursor"}
+	}
+	var payload radarScanCursorEnvelope
+	if err := json.Unmarshal(data, &payload); err != nil || payload.Version != 1 || payload.FilterHash == "" {
+		return workflow.RadarScanListCursor{}, time.Time{}, "", &invalidRadarScanCursorError{message: "cursor payload is invalid"}
+	}
+	volumeEndTime, err := time.Parse(time.RFC3339Nano, payload.VolumeEndTime)
+	if err != nil {
+		return workflow.RadarScanListCursor{}, time.Time{}, "", &invalidRadarScanCursorError{message: "cursor volume_end_time is invalid"}
+	}
+	scanID, err := uuid.Parse(payload.ScanID)
+	if err != nil {
+		return workflow.RadarScanListCursor{}, time.Time{}, "", &invalidRadarScanCursorError{message: "cursor scan_id is invalid"}
+	}
+	snapshotTime, err := time.Parse(time.RFC3339Nano, payload.SnapshotTime)
+	if err != nil {
+		return workflow.RadarScanListCursor{}, time.Time{}, "", &invalidRadarScanCursorError{message: "cursor snapshot_time is invalid"}
+	}
+	return workflow.RadarScanListCursor{
+		VolumeEndTime: volumeEndTime.UTC(),
+		ScanID:        scanID,
+	}, snapshotTime.UTC(), payload.FilterHash, nil
 }
 
 func (service *server) GetRadarScan(

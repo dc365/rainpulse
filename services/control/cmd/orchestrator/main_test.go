@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,37 @@ import (
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/workflow"
 	"github.com/google/uuid"
 )
+
+type fakeRadarQCContextStore struct {
+	candidates          []workflow.RadarScan
+	err                 error
+	called              bool
+	scanID              uuid.UUID
+	radarID             string
+	volumeEndTime       time.Time
+	sameRadarWindow     time.Duration
+	crossRadarWindow    time.Duration
+	allowFutureTemporal bool
+}
+
+func (store *fakeRadarQCContextStore) ListRadarQCContextCandidates(
+	_ context.Context,
+	scanID uuid.UUID,
+	radarID string,
+	volumeEndTime time.Time,
+	sameRadarWindow time.Duration,
+	crossRadarWindow time.Duration,
+	allowFutureTemporal bool,
+) ([]workflow.RadarScan, error) {
+	store.called = true
+	store.scanID = scanID
+	store.radarID = radarID
+	store.volumeEndTime = volumeEndTime
+	store.sameRadarWindow = sameRadarWindow
+	store.crossRadarWindow = crossRadarWindow
+	store.allowFutureTemporal = allowFutureTemporal
+	return store.candidates, store.err
+}
 
 func TestRequestedSubjectCoversEveryRequestEvent(t *testing.T) {
 	tests := []struct {
@@ -153,8 +185,111 @@ func TestRadarQCContextSelectsNearbyTimeAndOneCrossRadarVolume(t *testing.T) {
 		temporal[1].InputURI != "s3://rainpulse/z9591/02450" {
 		t.Fatalf("unexpected temporal context: %#v", temporal)
 	}
-	if len(crossRadar) != 2 || crossRadar[0].RadarID != "z9593" ||
-		crossRadar[0].InputURI != "s3://rainpulse/z9593/02500" || crossRadar[1].RadarID != "z9598" {
+	if len(crossRadar) != 1 || crossRadar[0].RadarID != "z9593" ||
+		crossRadar[0].InputURI != "s3://rainpulse/z9593/02500" {
 		t.Fatalf("unexpected cross-radar context: %#v", crossRadar)
+	}
+}
+
+func TestRadarQCContextRejectsFutureSameRadarAndDuplicateURI(t *testing.T) {
+	issueTime := time.Date(2026, 8, 28, 2, 30, 0, 0, time.UTC)
+	uri := func(value string) *string { return &value }
+	target := workflow.RadarScan{
+		ID: uuid.New(), RadarID: "Z9591", VolumeEndTime: issueTime,
+	}
+	candidates := []workflow.RadarScan{
+		{ID: uuid.New(), RadarID: "z9591", VolumeEndTime: issueTime.Add(2 * time.Minute), NormalizedURI: uri("s3://rainpulse/z9591/future")},
+		{ID: uuid.New(), RadarID: "z9591", VolumeEndTime: issueTime.Add(-(15*time.Minute + time.Second)), NormalizedURI: uri("s3://rainpulse/z9591/reject-901")},
+		{ID: uuid.New(), RadarID: "z9591", VolumeEndTime: issueTime.Add(-15 * time.Minute), NormalizedURI: uri("s3://rainpulse/z9591/accept-900")},
+		{ID: uuid.New(), RadarID: "z9591", VolumeEndTime: issueTime.Add(-10 * time.Minute), NormalizedURI: uri("s3://rainpulse/shared")},
+		{ID: uuid.New(), RadarID: "Z9591", VolumeEndTime: issueTime.Add(-5 * time.Minute), NormalizedURI: uri("s3://rainpulse/shared")},
+	}
+
+	temporal, crossRadar := radarQCContextFromScans(target, candidates, qcContextFusionConfiguration{
+		Enabled: true, MaximumTemporalContextScans: 3, TemporalMaxTimeOffsetSecs: 900,
+	})
+
+	if len(crossRadar) != 0 {
+		t.Fatalf("unexpected cross-radar context: %#v", crossRadar)
+	}
+	if len(temporal) != 2 {
+		t.Fatalf("unexpected temporal context size: %#v", temporal)
+	}
+	if temporal[0].InputURI != "s3://rainpulse/shared" || temporal[1].InputURI != "s3://rainpulse/z9591/accept-900" {
+		t.Fatalf("unexpected temporal selection: %#v", temporal)
+	}
+}
+
+func TestRadarQCContextSymmetricOfflineOrdersPastBeforeFutureOnTie(t *testing.T) {
+	issueTime := time.Date(2026, 8, 28, 2, 30, 0, 0, time.UTC)
+	uri := func(value string) *string { return &value }
+	pastID := uuid.MustParse("10000000-0000-4000-8000-0000000000ff")
+	futureID := uuid.MustParse("10000000-0000-4000-8000-000000000001")
+	target := workflow.RadarScan{ID: uuid.New(), RadarID: "z9591", VolumeEndTime: issueTime}
+	candidates := []workflow.RadarScan{
+		{ID: futureID, RadarID: "z9591", VolumeEndTime: issueTime.Add(5 * time.Minute), NormalizedURI: uri("s3://rainpulse/z9591/future")},
+		{ID: pastID, RadarID: "z9591", VolumeEndTime: issueTime.Add(-5 * time.Minute), NormalizedURI: uri("s3://rainpulse/z9591/past")},
+	}
+
+	temporal, crossRadar := radarQCContextFromScans(target, candidates, qcContextFusionConfiguration{
+		Enabled: true, MaximumTemporalContextScans: 2, TemporalMaxTimeOffsetSecs: 900,
+		TemporalSelectionMode: "symmetric_offline",
+	})
+
+	if len(crossRadar) != 0 {
+		t.Fatalf("unexpected cross-radar context: %#v", crossRadar)
+	}
+	if len(temporal) != 2 || temporal[0].InputURI != "s3://rainpulse/z9591/past" || temporal[1].InputURI != "s3://rainpulse/z9591/future" {
+		t.Fatalf("unexpected symmetric temporal ordering: %#v", temporal)
+	}
+}
+
+func TestSelectRadarQCContextUsesWindowedStoreQuery(t *testing.T) {
+	issueTime := time.Date(2026, 8, 28, 2, 30, 0, 0, time.UTC)
+	uri := func(value string) *string { return &value }
+	target := workflow.RadarScan{
+		ID:      uuid.MustParse("10000000-0000-4000-8000-000000000100"),
+		RadarID: "z9591", VolumeEndTime: issueTime,
+	}
+	store := &fakeRadarQCContextStore{candidates: []workflow.RadarScan{
+		{ID: uuid.New(), RadarID: "z9591", VolumeEndTime: issueTime.Add(-5 * time.Minute), NormalizedURI: uri("s3://rainpulse/z9591/02500")},
+		{ID: uuid.New(), RadarID: "z9593", VolumeEndTime: issueTime.Add(-20 * time.Second), NormalizedURI: uri("s3://rainpulse/z9593/02500")},
+	}}
+
+	temporal, crossRadar, err := selectRadarQCContext(context.Background(), store, target, qcContextFusionConfiguration{
+		Enabled: true, MaximumTemporalContextScans: 1,
+	})
+	if err != nil {
+		t.Fatalf("selectRadarQCContext error = %v", err)
+	}
+	if !store.called {
+		t.Fatal("expected windowed QC context store query")
+	}
+	if store.scanID != target.ID || store.radarID != target.RadarID || !store.volumeEndTime.Equal(issueTime) {
+		t.Fatalf("unexpected query identity: %#v", store)
+	}
+	if store.sameRadarWindow != 15*time.Minute || store.crossRadarWindow != 5*time.Minute || store.allowFutureTemporal {
+		t.Fatalf("unexpected query windows: %#v", store)
+	}
+	if len(temporal) != 1 || temporal[0].InputURI != "s3://rainpulse/z9591/02500" {
+		t.Fatalf("unexpected temporal context: %#v", temporal)
+	}
+	if len(crossRadar) != 1 || crossRadar[0].InputURI != "s3://rainpulse/z9593/02500" {
+		t.Fatalf("unexpected cross-radar context: %#v", crossRadar)
+	}
+}
+
+func TestRadarQCContextPastOnlyRejectsFutureNeighbourAndSameInstant(t *testing.T) {
+	now := time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC)
+	uri := func(s string) *string { return &s }
+	target := workflow.RadarScan{ID: uuid.New(), RadarID: "z9598", VolumeEndTime: now}
+	inputs := []workflow.RadarScan{
+		{ID: uuid.New(), RadarID: "z9598", VolumeEndTime: now, NormalizedURI: uri("s3://rainpulse/equal")},
+		{ID: uuid.New(), RadarID: "z9599", VolumeEndTime: now.Add(300 * time.Second), NormalizedURI: uri("s3://rainpulse/future")},
+		{ID: uuid.New(), RadarID: "z9599", VolumeEndTime: now.Add(-300 * time.Second), NormalizedURI: uri("s3://rainpulse/past")},
+	}
+	temporal, cross := radarQCContextFromScans(target, inputs, qcContextFusionConfiguration{Enabled: true, TemporalSelectionMode: "past_only"})
+	if len(temporal) != 0 || len(cross) != 1 || cross[0].InputURI != "s3://rainpulse/past" {
+		t.Fatalf("causal contexts: temporal=%v cross=%v", temporal, cross)
 	}
 }

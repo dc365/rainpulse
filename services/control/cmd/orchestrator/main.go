@@ -801,26 +801,58 @@ func createRadarQC(
 }
 
 type qcContextFusionConfiguration struct {
-	Enabled                         bool `yaml:"enabled"`
-	MaximumTemporalContextScans     int  `yaml:"maximum_temporal_context_scans"`
-	CrossRadarMaximumTimeOffsetSecs int  `yaml:"cross_radar_max_time_offset_seconds"`
+	Enabled                         bool   `yaml:"enabled"`
+	MaximumTemporalContextScans     int    `yaml:"maximum_temporal_context_scans"`
+	TemporalMaxTimeOffsetSecs       int    `yaml:"temporal_max_time_offset_seconds"`
+	TemporalSelectionMode           string `yaml:"temporal_selection_mode"`
+	CrossRadarMaximumTimeOffsetSecs int    `yaml:"cross_radar_max_time_offset_seconds"`
+}
+
+type radarQCContextCandidateStore interface {
+	ListRadarQCContextCandidates(
+		ctx context.Context,
+		scanID uuid.UUID,
+		radarID string,
+		volumeEndTime time.Time,
+		sameRadarWindow time.Duration,
+		crossRadarWindow time.Duration,
+		allowFutureTemporal bool,
+	) ([]workflow.RadarScan, error)
+}
+
+func radarQCContextWindows(config qcContextFusionConfiguration) (time.Duration, time.Duration, bool) {
+	maximumTemporalOffset := time.Duration(config.TemporalMaxTimeOffsetSecs) * time.Second
+	if maximumTemporalOffset <= 0 {
+		maximumTemporalOffset = 15 * time.Minute
+	}
+	maximumCrossOffset := time.Duration(config.CrossRadarMaximumTimeOffsetSecs) * time.Second
+	if maximumCrossOffset <= 0 {
+		maximumCrossOffset = 5 * time.Minute
+	}
+	return maximumTemporalOffset, maximumCrossOffset, config.TemporalSelectionMode == "symmetric_offline"
 }
 
 func selectRadarQCContext(
 	ctx context.Context,
-	store *postgresstore.Store,
+	store radarQCContextCandidateStore,
 	scan workflow.RadarScan,
 	config qcContextFusionConfiguration,
 ) ([]orchestration.RadarQCContextInput, []orchestration.RadarQCContextInput, error) {
 	if !config.Enabled {
 		return nil, nil, nil
 	}
-	// ListRadarScans is deliberately bounded by the store contract (200).  This
-	// is enough to select the nearest three temporal scans and one scan per
-	// neighbouring radar without making regeneration fail before QC is queued.
-	candidates, err := store.ListRadarScans(ctx, 200, nil, nil)
+	maximumTemporalOffset, maximumCrossOffset, allowFutureTemporal := radarQCContextWindows(config)
+	candidates, err := store.ListRadarQCContextCandidates(
+		ctx,
+		scan.ID,
+		scan.RadarID,
+		scan.VolumeEndTime,
+		maximumTemporalOffset,
+		maximumCrossOffset,
+		allowFutureTemporal,
+	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("list radar scans for QC context: %w", err)
+		return nil, nil, fmt.Errorf("list radar QC context candidates: %w", err)
 	}
 	temporal, crossRadar := radarQCContextFromScans(scan, candidates, config)
 	return temporal, crossRadar, nil
@@ -838,38 +870,54 @@ func radarQCContextFromScans(
 	if maximumTemporal <= 0 || maximumTemporal > 3 {
 		maximumTemporal = 3
 	}
-	maximumCrossOffset := time.Duration(config.CrossRadarMaximumTimeOffsetSecs) * time.Second
-	if maximumCrossOffset <= 0 {
-		maximumCrossOffset = 5 * time.Minute
-	}
+	maximumTemporalOffset, maximumCrossOffset, allowFutureTemporal := radarQCContextWindows(config)
 	temporalCandidates := make([]workflow.RadarScan, 0, maximumTemporal)
 	crossByRadar := make(map[string]workflow.RadarScan)
 	for _, candidate := range candidates {
 		if candidate.ID == scan.ID || candidate.NormalizedURI == nil || *candidate.NormalizedURI == "" {
 			continue
 		}
-		if candidate.RadarID == scan.RadarID {
+		if scan.NormalizedURI != nil && *scan.NormalizedURI != "" && *candidate.NormalizedURI == *scan.NormalizedURI {
+			continue
+		}
+		if strings.EqualFold(candidate.RadarID, scan.RadarID) {
+			if !allowFutureTemporal && !candidate.VolumeEndTime.Before(scan.VolumeEndTime) {
+				continue
+			}
+			offset := absoluteDuration(candidate.VolumeEndTime.Sub(scan.VolumeEndTime))
+			if offset > maximumTemporalOffset {
+				continue
+			}
 			temporalCandidates = append(temporalCandidates, candidate)
+			continue
+		}
+		if !allowFutureTemporal && candidate.VolumeEndTime.After(scan.VolumeEndTime) {
 			continue
 		}
 		offset := absoluteDuration(candidate.VolumeEndTime.Sub(scan.VolumeEndTime))
 		if offset > maximumCrossOffset {
 			continue
 		}
-		current, exists := crossByRadar[candidate.RadarID]
-		if !exists || offset < absoluteDuration(current.VolumeEndTime.Sub(scan.VolumeEndTime)) ||
-			(offset == absoluteDuration(current.VolumeEndTime.Sub(scan.VolumeEndTime)) && candidate.ID.String() < current.ID.String()) {
-			crossByRadar[candidate.RadarID] = candidate
+		radarKey := strings.ToLower(candidate.RadarID)
+		current, exists := crossByRadar[radarKey]
+		if !exists || radarQCContextCandidateLess(candidate, current, scan.VolumeEndTime) {
+			crossByRadar[radarKey] = candidate
 		}
 	}
 	sort.Slice(temporalCandidates, func(left, right int) bool {
-		leftOffset := absoluteDuration(temporalCandidates[left].VolumeEndTime.Sub(scan.VolumeEndTime))
-		rightOffset := absoluteDuration(temporalCandidates[right].VolumeEndTime.Sub(scan.VolumeEndTime))
-		if leftOffset == rightOffset {
-			return temporalCandidates[left].ID.String() < temporalCandidates[right].ID.String()
-		}
-		return leftOffset < rightOffset
+		return radarQCContextCandidateLess(temporalCandidates[left], temporalCandidates[right], scan.VolumeEndTime)
 	})
+	uniqueTemporalCandidates := make([]workflow.RadarScan, 0, len(temporalCandidates))
+	seenTemporalURI := make(map[string]struct{}, len(temporalCandidates))
+	for _, candidate := range temporalCandidates {
+		uri := *candidate.NormalizedURI
+		if _, seen := seenTemporalURI[uri]; seen {
+			continue
+		}
+		seenTemporalURI[uri] = struct{}{}
+		uniqueTemporalCandidates = append(uniqueTemporalCandidates, candidate)
+	}
+	temporalCandidates = uniqueTemporalCandidates
 	if len(temporalCandidates) > maximumTemporal {
 		temporalCandidates = temporalCandidates[:maximumTemporal]
 	}
@@ -895,6 +943,18 @@ func radarQCContextFromScans(
 		})
 	}
 	return temporal, crossRadar
+}
+
+func radarQCContextCandidateLess(left workflow.RadarScan, right workflow.RadarScan, targetTime time.Time) bool {
+	leftOffset := absoluteDuration(left.VolumeEndTime.Sub(targetTime))
+	rightOffset := absoluteDuration(right.VolumeEndTime.Sub(targetTime))
+	if leftOffset != rightOffset {
+		return leftOffset < rightOffset
+	}
+	if !left.VolumeEndTime.Equal(right.VolumeEndTime) {
+		return left.VolumeEndTime.Before(right.VolumeEndTime)
+	}
+	return left.ID.String() < right.ID.String()
 }
 
 func radarGrid(

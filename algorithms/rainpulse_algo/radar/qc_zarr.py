@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Literal
 from uuid import UUID
 
 import numpy as np
@@ -9,7 +11,31 @@ import zarr
 from numcodecs import Blosc
 from zarr.storage import MemoryStore
 
+from .attenuation import (
+    ATTENUATION_CORRECTION_SHADOW_FIELD,
+    ATTENUATION_SHADOW_AVAILABLE_MASK_FIELDS,
+    ATTENUATION_SHADOW_OUTPUT_DTYPES,
+    ATTENUATION_SHADOW_SEGMENT_INDEX_FIELD,
+    SPECIFIC_ATTENUATION_SHADOW_FIELD,
+)
+from .phase_processing import (
+    KDP_SHADOW_UNCERTAINTY_FIELD,
+    PHASE_PROCESSING_AVAILABLE_MASK_FIELDS,
+    PHASE_PROCESSING_OUTPUT_DTYPES,
+    PHIDP_SHADOW_SEGMENT_INDEX_FIELD,
+)
 from .qc import QCInputError, QCResult
+from .qc_geometry import (
+    CROSS_RADAR_TRUSTED_SUPPORT_FIELD,
+    QC_GEOMETRY_AVAILABLE_MASK_FIELDS,
+    QC_GEOMETRY_OUTPUT_DTYPES,
+    VERTICAL_HEIGHT_DIFFERENCE_M_FIELD,
+)
+from .qc_texture import (
+    TEXTURE_AVAILABLE_MASK_FIELDS,
+    TEXTURE_OUTPUT_DTYPES,
+    TEXTURE_SUPPORT_RATE_FIELDS,
+)
 
 CONTRACT_NAME = "rainpulse.qc-radar-volume"
 CONTRACT_VERSION = "1.0"
@@ -35,6 +61,22 @@ REQUIRED_FIELDS = {
     "P_RADIAL_INTERFERENCE": np.dtype("float32"),
 }
 
+QC_ZARR_LAYOUT_64X512 = "64x512"
+QC_ZARR_LAYOUT_128X1024 = "128x1024"
+QC_ZARR_LAYOUT_FULL_RAY_RANGE = "full-ray-range"
+SUPPORTED_QC_ZARR_LAYOUTS = (
+    QC_ZARR_LAYOUT_64X512,
+    QC_ZARR_LAYOUT_128X1024,
+    QC_ZARR_LAYOUT_FULL_RAY_RANGE,
+)
+DEFAULT_QC_ZARR_LAYOUT = QC_ZARR_LAYOUT_64X512
+
+
+@dataclass(frozen=True)
+class QCZarrWriteSettings:
+    layout: Literal["64x512", "128x1024", "full-ray-range"] = DEFAULT_QC_ZARR_LAYOUT
+    write_empty_chunks: bool = False
+
 
 def build_qc_zarr_store(
     normalized_objects: Mapping[str, bytes],
@@ -43,7 +85,49 @@ def build_qc_zarr_store(
     asset_id: UUID | str,
     normalized_volume_uri: str,
     provenance: Mapping[str, str] | None = None,
+    write_settings: QCZarrWriteSettings | None = None,
 ) -> dict[str, bytes]:
+    objects, _ = build_validated_qc_zarr_store(
+        normalized_objects,
+        result,
+        asset_id=asset_id,
+        normalized_volume_uri=normalized_volume_uri,
+        provenance=provenance,
+        write_settings=write_settings,
+    )
+    return objects
+
+
+def build_validated_qc_zarr_store(
+    normalized_objects: Mapping[str, bytes],
+    result: QCResult,
+    *,
+    asset_id: UUID | str,
+    normalized_volume_uri: str,
+    provenance: Mapping[str, str] | None = None,
+    write_settings: QCZarrWriteSettings | None = None,
+) -> tuple[dict[str, bytes], dict[str, Any]]:
+    objects = _build_qc_zarr_store_objects(
+        normalized_objects,
+        result,
+        asset_id=asset_id,
+        normalized_volume_uri=normalized_volume_uri,
+        provenance=provenance,
+        write_settings=write_settings,
+    )
+    return objects, validate_qc_zarr_store(objects)
+
+
+def _build_qc_zarr_store_objects(
+    normalized_objects: Mapping[str, bytes],
+    result: QCResult,
+    *,
+    asset_id: UUID | str,
+    normalized_volume_uri: str,
+    provenance: Mapping[str, str] | None = None,
+    write_settings: QCZarrWriteSettings | None = None,
+) -> dict[str, bytes]:
+    settings = _coerce_write_settings(write_settings)
     source_store = MemoryStore()
     source_store.update({key: bytes(value) for key, value in normalized_objects.items()})
     source = zarr.open_group(store=source_store, mode="r")
@@ -62,6 +146,7 @@ def build_qc_zarr_store(
             "radar_config_version": source.attrs["radar_config_version"],
             "qc_profile": result.profile.profile_version,
             "qc_pipeline_version": result.profile.pipeline_version,
+            "decision_version": result.profile.decision_version,
             "flag_definition_version": result.profile.flag_definition_version,
             "dem_asset_version": None,
             "clutter_map_version": result.profile.static_ground_clutter.asset_version,
@@ -73,6 +158,8 @@ def build_qc_zarr_store(
             "unavailable_component_policy": (
                 result.profile.quality_index.unavailable_component_policy
             ),
+            "field_chunk_layout": settings.layout,
+            "write_empty_chunks": settings.write_empty_chunks,
         }
     )
     if provenance:
@@ -119,18 +206,17 @@ def build_qc_zarr_store(
             array = group.create_dataset(
                 name,
                 data=values,
-                chunks=(min(64, values.shape[0]), min(512, values.shape[1])),
+                chunks=_field_chunks(values, settings.layout),
                 compressor=compressor,
                 overwrite=True,
                 fill_value=_fill_value(values.dtype),
+                write_empty_chunks=settings.write_empty_chunks,
             )
             array.attrs.update(_field_attributes(name))
 
     output_store["qc/summary.json"] = result.summary_bytes()
     zarr.consolidate_metadata(output_store)
-    objects = {str(key): bytes(value) for key, value in output_store.items()}
-    validate_qc_zarr_store(objects)
-    return objects
+    return {str(key): bytes(value) for key, value in output_store.items()}
 
 
 def validate_qc_zarr_store(objects: Mapping[str, bytes]) -> dict[str, Any]:
@@ -143,6 +229,9 @@ def validate_qc_zarr_store(objects: Mapping[str, bytes]) -> dict[str, Any]:
         raise QCInputError("QC Zarr contract name is invalid")
     if root.attrs.get("geometry_encoding") != GEOMETRY_ENCODING:
         raise QCInputError("QC Zarr geometry encoding is invalid")
+    layout = root.attrs.get("field_chunk_layout", DEFAULT_QC_ZARR_LAYOUT)
+    if layout not in SUPPORTED_QC_ZARR_LAYOUTS:
+        raise QCInputError("QC Zarr field chunk layout is invalid")
     modules = root.attrs.get("module_provenance")
     if not isinstance(modules, list) or any(
         item.get("status") not in {"applied", "skipped", "failed"} for item in modules
@@ -159,13 +248,21 @@ def validate_qc_zarr_store(objects: Mapping[str, bytes]) -> dict[str, Any]:
 
     valid_total = 0
     missing_total = 0
-    quality_values: list[np.ndarray] = []
+    quality_sum = 0.0
+    quality_count = 0
+    field_chunk_shape: tuple[int, int] | None = None
     for sweep_number in sweep_numbers:
         group = root[f"sweep_{int(sweep_number):03d}"]
         shape = (len(group["azimuth"]), len(group["range"]))
         for name, dtype in REQUIRED_FIELDS.items():
             if name not in group or group[name].shape != shape or group[name].dtype != dtype:
                 raise QCInputError(f"QC field {name} has invalid shape or dtype")
+        if field_chunk_shape is None:
+            field_chunk_shape = tuple(int(item) for item in group["DBZH_QC"].chunks)
+        _validate_texture_fields(group, shape)
+        _validate_geometry_fields(group, shape)
+        _validate_phase_processing_fields(group, shape)
+        _validate_attenuation_fields(group, shape)
         valid = group["VALID_MASK"][:]
         low_quality = group["LOW_QUALITY_MASK"][:]
         flags = group["QC_FLAGS"][:]
@@ -209,16 +306,20 @@ def validate_qc_zarr_store(objects: Mapping[str, bytes]) -> dict[str, Any]:
         valid_total += int(np.count_nonzero(valid))
         missing_total += int(np.count_nonzero(missing))
         quality = group["QUALITY_INDEX"][:]
-        quality_values.append(quality[np.isfinite(quality)])
-    finite_quality = np.concatenate(quality_values)
+        finite_quality = quality[np.isfinite(quality)]
+        quality_sum += float(np.sum(finite_quality))
+        quality_count += int(finite_quality.size)
     return {
         "sweep_count": int(len(sweep_numbers)),
         "ray_count": int(ends[-1] + 1),
         "valid_gate_count": valid_total,
         "missing_gate_count": missing_total,
-        "mean_quality_index": float(finite_quality.mean()) if finite_quality.size else 0.0,
+        "mean_quality_index": quality_sum / quality_count if quality_count else 0.0,
         "object_count": len(objects),
         "size_bytes": sum(len(value) for value in objects.values()),
+        "field_chunk_layout": str(layout),
+        "field_chunk_shape": list(field_chunk_shape or (0, 0)),
+        "write_empty_chunks": bool(root.attrs.get("write_empty_chunks", False)),
     }
 
 
@@ -242,11 +343,70 @@ def _fill_value(dtype: np.dtype[Any]) -> float | int:
     return np.nan if np.issubdtype(dtype, np.floating) else 0
 
 
+def default_qc_zarr_write_settings() -> QCZarrWriteSettings:
+    layout = os.getenv("RAINPULSE_RADAR_QC_ZARR_LAYOUT", DEFAULT_QC_ZARR_LAYOUT)
+    if layout not in SUPPORTED_QC_ZARR_LAYOUTS:
+        raise QCInputError(f"unsupported QC Zarr chunk layout {layout!r}")
+    write_empty_chunks = _environment_flag(
+        "RAINPULSE_RADAR_QC_ZARR_WRITE_EMPTY_CHUNKS",
+        default=False,
+    )
+    return QCZarrWriteSettings(
+        layout=layout,
+        write_empty_chunks=write_empty_chunks,
+    )
+
+
+def _coerce_write_settings(write_settings: QCZarrWriteSettings | None) -> QCZarrWriteSettings:
+    return write_settings or default_qc_zarr_write_settings()
+
+
+def _field_chunks(values: np.ndarray, layout: str) -> tuple[int, int]:
+    if values.ndim != 2:
+        raise QCInputError("QC fields must be 2-D to determine chunk layout")
+    if layout == QC_ZARR_LAYOUT_64X512:
+        return min(64, values.shape[0]), min(512, values.shape[1])
+    if layout == QC_ZARR_LAYOUT_128X1024:
+        return min(128, values.shape[0]), min(1024, values.shape[1])
+    if layout == QC_ZARR_LAYOUT_FULL_RAY_RANGE:
+        return 1, values.shape[1]
+    raise QCInputError(f"unsupported QC Zarr chunk layout {layout!r}")
+
+
+def _environment_flag(name: str, *, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise QCInputError(f"{name} must be a boolean flag")
+
+
 def _field_attributes(name: str) -> dict[str, Any]:
     if name == "QC_FLAGS":
         return {"units": "1", "storage_dtype": "uint32"}
     if name.endswith("_MASK"):
         return {"units": "1", "valid_values": [0, 1]}
+    if name in {PHIDP_SHADOW_SEGMENT_INDEX_FIELD, ATTENUATION_SHADOW_SEGMENT_INDEX_FIELD}:
+        return {"units": "1", "missing_value": -1, "minimum_value": -1}
+    if name == VERTICAL_HEIGHT_DIFFERENCE_M_FIELD:
+        return {"units": "m", "missing_value": "NaN", "minimum_value": 0.0}
+    if name == SPECIFIC_ATTENUATION_SHADOW_FIELD:
+        return {"units": "dB km-1", "missing_value": "NaN", "minimum_value": 0.0}
+    if name == ATTENUATION_CORRECTION_SHADOW_FIELD:
+        return {"units": "dB", "missing_value": "NaN", "minimum_value": 0.0}
+    if name in TEXTURE_SUPPORT_RATE_FIELDS or name == "PHIDP_CIRCULAR_VARIANCE":
+        return {"units": "1", "valid_range": [0.0, 1.0], "missing_value": "NaN"}
+    if name.endswith("_TEXTURE"):
+        if name.startswith("DBZH"):
+            return {"units": "dBZ", "missing_value": "NaN", "minimum_value": 0.0}
+        if name.startswith("ZDR"):
+            return {"units": "dB", "missing_value": "NaN", "minimum_value": 0.0}
+        if name.startswith("RHOHV"):
+            return {"units": "1", "missing_value": "NaN", "minimum_value": 0.0}
     if name == "INTERFERENCE_TYPE":
         return {
             "units": "1",
@@ -261,6 +421,8 @@ def _field_attributes(name: str) -> dict[str, Any]:
         }
     if name.startswith(("QI_", "P_")) or name == "QUALITY_INDEX":
         return {"units": "1", "valid_range": [0.0, 1.0], "missing_value": "NaN"}
+    if name.startswith("KDP"):
+        return {"units": "degree km-1", "missing_value": "NaN"}
     if name.startswith("DBZH"):
         return {"units": "dBZ", "missing_value": "NaN"}
     if name.startswith("ZDR"):
@@ -270,3 +432,104 @@ def _field_attributes(name: str) -> dict[str, Any]:
     if name.startswith("VR"):
         return {"units": "m s-1", "missing_value": "NaN"}
     return {"missing_value": "NaN"}
+
+
+def _validate_texture_fields(group: zarr.Group, shape: tuple[int, int]) -> None:
+    for name, dtype in TEXTURE_OUTPUT_DTYPES.items():
+        if name not in group:
+            continue
+        array = group[name]
+        if array.shape != shape or array.dtype != dtype:
+            raise QCInputError(f"QC texture field {name} has invalid shape or dtype")
+        values = array[:]
+        if name in TEXTURE_AVAILABLE_MASK_FIELDS:
+            if np.any((values != 0) & (values != 1)):
+                raise QCInputError(f"QC texture availability mask {name} is not binary")
+            continue
+        finite = values[np.isfinite(values)]
+        if name in TEXTURE_SUPPORT_RATE_FIELDS or name == "PHIDP_CIRCULAR_VARIANCE":
+            if finite.size and (finite.min() < 0 or finite.max() > 1):
+                raise QCInputError(f"QC texture support field {name} is outside [0, 1]")
+            continue
+        if finite.size and finite.min() < 0:
+            raise QCInputError(f"QC texture field {name} must be non-negative")
+
+
+def _validate_geometry_fields(group: zarr.Group, shape: tuple[int, int]) -> None:
+    for name, dtype in QC_GEOMETRY_OUTPUT_DTYPES.items():
+        if name not in group:
+            continue
+        array = group[name]
+        if array.shape != shape or array.dtype != dtype:
+            raise QCInputError(f"QC geometry field {name} has invalid shape or dtype")
+        values = array[:]
+        if name in QC_GEOMETRY_AVAILABLE_MASK_FIELDS:
+            if np.any((values != 0) & (values != 1)):
+                raise QCInputError(f"QC geometry availability mask {name} is not binary")
+            continue
+        finite = values[np.isfinite(values)]
+        if name == CROSS_RADAR_TRUSTED_SUPPORT_FIELD:
+            if finite.size and (finite.min() < 0 or finite.max() > 1):
+                raise QCInputError(f"QC geometry support field {name} is outside [0, 1]")
+            continue
+        if name == VERTICAL_HEIGHT_DIFFERENCE_M_FIELD and finite.size and finite.min() < 0:
+            raise QCInputError(f"QC geometry field {name} must be non-negative")
+
+
+def _validate_phase_processing_fields(group: zarr.Group, shape: tuple[int, int]) -> None:
+    for name, dtype in PHASE_PROCESSING_OUTPUT_DTYPES.items():
+        if name not in group:
+            continue
+        array = group[name]
+        if array.shape != shape or array.dtype != dtype:
+            raise QCInputError(
+                f"QC phase-processing field {name} has invalid shape or dtype"
+            )
+        values = array[:]
+        if name in PHASE_PROCESSING_AVAILABLE_MASK_FIELDS:
+            if np.any((values != 0) & (values != 1)):
+                raise QCInputError(
+                    f"QC phase-processing mask {name} is not binary"
+                )
+            continue
+        if name == PHIDP_SHADOW_SEGMENT_INDEX_FIELD:
+            if np.any(values < -1):
+                raise QCInputError(
+                    f"QC phase-processing segment field {name} must be >= -1"
+                )
+            continue
+        finite = values[np.isfinite(values)]
+        if name == KDP_SHADOW_UNCERTAINTY_FIELD and finite.size and finite.min() < 0:
+            raise QCInputError(
+                f"QC phase-processing field {name} must be non-negative"
+            )
+
+
+def _validate_attenuation_fields(group: zarr.Group, shape: tuple[int, int]) -> None:
+    for name, dtype in ATTENUATION_SHADOW_OUTPUT_DTYPES.items():
+        if name not in group:
+            continue
+        array = group[name]
+        if array.shape != shape or array.dtype != dtype:
+            raise QCInputError(
+                f"QC attenuation-shadow field {name} has invalid shape or dtype"
+            )
+        values = array[:]
+        if name in ATTENUATION_SHADOW_AVAILABLE_MASK_FIELDS:
+            if np.any((values != 0) & (values != 1)):
+                raise QCInputError(
+                    f"QC attenuation-shadow mask {name} is not binary"
+                )
+            continue
+        if name == ATTENUATION_SHADOW_SEGMENT_INDEX_FIELD:
+            if np.any(values < -1):
+                raise QCInputError(
+                    f"QC attenuation-shadow segment field {name} must be >= -1"
+                )
+            continue
+        finite = values[np.isfinite(values)]
+        if name in {SPECIFIC_ATTENUATION_SHADOW_FIELD, ATTENUATION_CORRECTION_SHADOW_FIELD}:
+            if finite.size and finite.min() < 0:
+                raise QCInputError(
+                    f"QC attenuation-shadow field {name} must be non-negative"
+                )

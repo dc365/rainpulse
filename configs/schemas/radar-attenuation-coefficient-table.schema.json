@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/schemas/radar-attenuation-coefficient-table.schema.json",
+  "title": "RainPulse C2-P3 shadow attenuation coefficient table",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "table_version",
+    "artifact_contract_version",
+    "source_calibration_profile_version",
+    "reference_manifest_version",
+    "radar_band",
+    "entries"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "table_version": { "type": "string", "minLength": 1 },
+    "artifact_contract_version": { "const": "1.0" },
+    "source_calibration_profile_version": {
+      "const": "fujian-radar-calibration-shadow-v1"
+    },
+    "reference_manifest_version": { "type": "string", "minLength": 1 },
+    "radar_band": { "const": "S" },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "radar_id",
+          "coefficient_state",
+          "coefficient_a",
+          "exponent_b",
+          "applicable_temperature_range_c",
+          "fitted_process_ids",
+          "validation_process_ids"
+        ],
+        "properties": {
+          "radar_id": { "type": "string", "minLength": 1 },
+          "coefficient_state": { "const": "verified_shadow_use" },
+          "coefficient_a": { "type": "number", "exclusiveMinimum": 0 },
+          "exponent_b": { "type": "number", "exclusiveMinimum": 0 },
+          "applicable_temperature_range_c": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "prefixItems": [
+              { "type": "number" },
+              { "type": "number" }
+            ],
+            "items": false
+          },
+          "fitted_process_ids": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "validation_process_ids": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    }
+  }
+}

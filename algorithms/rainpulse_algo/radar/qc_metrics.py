@@ -31,11 +31,8 @@ def echo_classification_metrics(
     true_negative = int(np.count_nonzero(valid & ~truth & ~predicted))
     precision = _safe_ratio(true_positive, true_positive + false_positive)
     recall = _safe_ratio(true_positive, true_positive + false_negative)
-    f1 = (
-        2.0 * precision * recall / (precision + recall)
-        if precision is not None and recall is not None and precision + recall > 0
-        else None
-    )
+    f1_denominator = 2 * true_positive + false_positive + false_negative
+    f1 = float((2 * true_positive) / f1_denominator) if f1_denominator else None
     return {
         "evaluated_gate_count": int(np.count_nonzero(valid)),
         "true_positive": true_positive,
@@ -77,7 +74,9 @@ def polar_mask_area_km2(
     mask: np.ndarray,
     ranges_m: np.ndarray,
     azimuth_deg: np.ndarray,
-) -> float:
+    *,
+    beam_width_deg: float | None = None,
+) -> float | None:
     selected = np.asarray(mask, dtype=bool)
     ranges = np.asarray(ranges_m, dtype="float64")
     azimuth = np.asarray(azimuth_deg, dtype="float64")
@@ -89,9 +88,19 @@ def polar_mask_area_km2(
         raise ValueError("polar ranges must be finite and strictly increasing")
     if not np.all(np.isfinite(azimuth)):
         raise ValueError("polar azimuths must be finite")
+    if beam_width_deg is None:
+        return None
+    width = float(beam_width_deg)
+    if not np.isfinite(width) or not 0 < width <= 360:
+        raise ValueError("verified horizontal beam width must be finite and in (0, 360]")
+    # Repeated coordinates observe the same wedge; union their selected gates.
+    azimuth, inverse = np.unique(np.mod(azimuth, 360.0), return_inverse=True)
+    merged = np.zeros((azimuth.size, ranges.size), dtype=bool)
+    np.logical_or.at(merged, inverse, selected)
+    selected = merged
     range_edges = _coordinate_edges(ranges, floor_zero=True)
     radial_area = 0.5 * (range_edges[1:] ** 2 - range_edges[:-1] ** 2)
-    azimuth_width = _cyclic_azimuth_width_radians(azimuth)
+    azimuth_width = _cyclic_azimuth_width_radians(azimuth, width)
     gate_area = azimuth_width[:, None] * radial_area[None, :]
     return float(np.sum(gate_area[selected]) / 1_000_000.0)
 
@@ -167,7 +176,15 @@ def gauge_verification_metrics(
 
 
 def unavailable_acceptance_metrics(reason: str) -> dict[str, Any]:
-    return {"status": "skipped", "reason": reason}
+    return {"status": "unavailable", "reason": reason}
+
+
+def insufficient_acceptance_metrics(reason: str, **payload: Any) -> dict[str, Any]:
+    return {"status": "insufficient_data", "reason": reason, **payload}
+
+
+def failed_acceptance_metrics(reason: str) -> dict[str, Any]:
+    return {"status": "failed", "reason": reason}
 
 
 def _safe_ratio(numerator: int, denominator: int) -> float | None:
@@ -192,9 +209,9 @@ def _coordinate_edges(values: np.ndarray, *, floor_zero: bool) -> np.ndarray:
     return edges
 
 
-def _cyclic_azimuth_width_radians(azimuth: np.ndarray) -> np.ndarray:
+def _cyclic_azimuth_width_radians(azimuth: np.ndarray, beam_width_deg: float) -> np.ndarray:
     if azimuth.size == 1:
-        return np.array([2 * np.pi], dtype="float64")
+        return np.deg2rad(np.array([beam_width_deg], dtype="float64"))
     normalized = np.mod(azimuth, 360.0)
     order = np.argsort(normalized)
     sorted_azimuth = normalized[order]
@@ -202,7 +219,9 @@ def _cyclic_azimuth_width_radians(azimuth: np.ndarray) -> np.ndarray:
     following = np.roll(sorted_azimuth, -1)
     previous_gap = np.mod(sorted_azimuth - previous, 360.0)
     following_gap = np.mod(following - sorted_azimuth, 360.0)
-    widths = np.deg2rad((previous_gap + following_gap) / 2.0)
+    widths = np.deg2rad(
+        (np.minimum(previous_gap, beam_width_deg) + np.minimum(following_gap, beam_width_deg)) / 2.0
+    )
     result = np.empty_like(widths)
     result[order] = widths
     return result

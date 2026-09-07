@@ -174,6 +174,68 @@ func TestListEndpointsRejectLimitsOutsideContract(t *testing.T) {
 	}
 }
 
+func TestListRadarScansSupportsSnapshotPagination(t *testing.T) {
+	snapshot := time.Date(2026, 8, 28, 2, 31, 0, 0, time.UTC)
+	scanID := uuid.MustParse("10000000-0000-4000-8000-000000000041")
+	uri := "s3://rainpulse/radar/normalized/z9598/scan-041/volume.zarr"
+	store := &fakeObservationStore{
+		radarScanPage: workflow.RadarScanListPage{
+			Items: []workflow.RadarScan{{
+				ID: scanID, RunID: uuid.MustParse("10000000-0000-4000-8000-000000000042"),
+				RadarID: "z9598", VolumeStartTime: snapshot.Add(-2 * time.Minute),
+				VolumeEndTime: snapshot.Add(-time.Minute), ReceivedAt: snapshot.Add(-time.Minute),
+				RadarConfigVersion: "z9598-test-v1", Status: workflow.RadarScanQCReady,
+				NormalizedURI: &uri, CreatedAt: snapshot.Add(-time.Minute), UpdatedAt: snapshot.Add(-time.Minute),
+			}},
+			NextCursor: &workflow.RadarScanListCursor{
+				VolumeEndTime: snapshot.Add(-time.Minute),
+				ScanID:        scanID,
+			},
+			SnapshotTime: snapshot,
+		},
+	}
+	handler := api.NewHandler(api.Options{Observations: store})
+	target := "/api/v1/radar-scans?limit=1&radar_id=z9598&status=QC_READY&start_time=2026-08-28T02:00:00Z&end_time=2026-08-28T03:00:00Z&snapshot_time=2026-08-28T02:31:00Z"
+	request := httptest.NewRequest(http.MethodGet, target, nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET %s: status=%d body=%s", target, response.Code, response.Body.String())
+	}
+	if store.radarScanQuery == nil {
+		t.Fatal("snapshot pagination query was not delegated")
+	}
+	if store.radarScanQuery.Limit != 1 || store.radarScanQuery.RadarID == nil || *store.radarScanQuery.RadarID != "z9598" {
+		t.Fatalf("unexpected delegated query: %#v", store.radarScanQuery)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode radar scan page: %v", err)
+	}
+	if payload["snapshot_time"] != "2026-08-28T02:31:00Z" {
+		t.Fatalf("unexpected snapshot time payload: %#v", payload)
+	}
+	nextCursor, _ := payload["next_cursor"].(string)
+	if nextCursor == "" {
+		t.Fatalf("expected next_cursor in payload: %#v", payload)
+	}
+}
+
+func TestListRadarScansRejectsInvalidSnapshotCursor(t *testing.T) {
+	handler := api.NewHandler(api.Options{Observations: &fakeObservationStore{}})
+	target := "/api/v1/radar-scans?cursor=not-a-valid-cursor"
+	request := httptest.NewRequest(http.MethodGet, target, nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_cursor") {
+		t.Fatalf("GET %s: status=%d body=%s", target, response.Code, response.Body.String())
+	}
+}
+
 func TestAdministrativeEndpointsFailClosed(t *testing.T) {
 	runID := uuid.MustParse("f3641335-13a3-4f68-96c0-56a5e0e684d7")
 	target := "/api/v1/admin/runs/" + runID.String() + "/rerun"
@@ -1124,14 +1186,16 @@ func (commands *fakeRunCommands) Rerun(
 }
 
 type fakeObservationStore struct {
-	radars      []workflow.Radar
-	scans       []workflow.RadarScan
-	analysis    workflow.AnalysisCycle
-	qc          workflow.RadarQCMetrics
-	grid        workflow.RadarGridMetrics
-	mosaic      workflow.AnalysisMosaicMetrics
-	qpe         workflow.AnalysisQPEMetrics
-	diagnostics workflow.AnalysisDiagnostics
+	radars         []workflow.Radar
+	scans          []workflow.RadarScan
+	radarScanPage  workflow.RadarScanListPage
+	radarScanQuery *workflow.RadarScanListQuery
+	analysis       workflow.AnalysisCycle
+	qc             workflow.RadarQCMetrics
+	grid           workflow.RadarGridMetrics
+	mosaic         workflow.AnalysisMosaicMetrics
+	qpe            workflow.AnalysisQPEMetrics
+	diagnostics    workflow.AnalysisDiagnostics
 }
 
 func (store *fakeObservationStore) GetAnalysisDiagnostics(
@@ -1230,6 +1294,18 @@ func (store *fakeObservationStore) ListRadarScans(
 	*workflow.RadarScanStatus,
 ) ([]workflow.RadarScan, error) {
 	return store.scans, nil
+}
+
+func (store *fakeObservationStore) ListRadarScansByQuery(
+	_ context.Context,
+	query workflow.RadarScanListQuery,
+) (workflow.RadarScanListPage, error) {
+	store.radarScanQuery = &query
+	page := store.radarScanPage
+	if page.SnapshotTime.IsZero() {
+		page.SnapshotTime = query.SnapshotTime
+	}
+	return page, nil
 }
 
 func (store *fakeObservationStore) GetRadarScan(_ context.Context, scanID uuid.UUID) (workflow.RadarScan, error) {

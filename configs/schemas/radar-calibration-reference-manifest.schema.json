@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/schemas/radar-calibration-reference-manifest.schema.json",
+  "title": "RainPulse C2-P3 shadow radar calibration reference manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "manifest_version",
+    "source_calibration_profile_version",
+    "generated_at",
+    "radar_band",
+    "references"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "manifest_version": { "type": "string", "minLength": 1 },
+    "source_calibration_profile_version": {
+      "const": "fujian-radar-calibration-shadow-v1"
+    },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "radar_band": { "const": "S" },
+    "references": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "process_id",
+          "case_id",
+          "role",
+          "truth_kind",
+          "radar_ids",
+          "start_time_utc",
+          "end_time_utc",
+          "reference_uri",
+          "source_sha256"
+        ],
+        "properties": {
+          "process_id": { "type": "string", "minLength": 1 },
+          "case_id": { "type": "string", "minLength": 1 },
+          "role": {
+            "enum": [
+              "coefficient_fitting",
+              "independent_validation"
+            ]
+          },
+          "truth_kind": {
+            "enum": [
+              "gauge_accumulation_1h",
+              "reference_qpe_1h"
+            ]
+          },
+          "radar_ids": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "start_time_utc": { "type": "string", "format": "date-time" },
+          "end_time_utc": { "type": "string", "format": "date-time" },
+          "reference_uri": { "type": "string", "minLength": 1 },
+          "source_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    }
+  }
+}

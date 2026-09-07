@@ -29,6 +29,18 @@ nowcast operation:
 13. [`probability-calibration-artifact.md`](probability-calibration-artifact.md)
     defines the disabled-by-default RP-025 calibration and shadow-evaluation
     boundary.
+14. [`radar-attenuation-artifact.md`](radar-attenuation-artifact.md)
+   defines the disabled-by-default C2 shadow attenuation boundary.
+15. [`radar-relative-bias-artifact.md`](radar-relative-bias-artifact.md)
+   defines the disabled-by-default C2 inter-radar relative-bias boundary.
+16. [`radar-calibration-reference-manifest.md`](radar-calibration-reference-manifest.md)
+   defines the disabled-by-default C2-P3 disjoint independent-reference split.
+17. [`radar-attenuation-coefficient-table.md`](radar-attenuation-coefficient-table.md)
+   defines the disabled-by-default C2-P3 versioned site/band coefficient table.
+18. [`radar-attenuation-environment-manifest.md`](radar-attenuation-environment-manifest.md)
+   binds explicit temperature and blockage evidence to scan identity and content hashes.
+19. [`radar-qc-b3-offline-builders.md`](radar-qc-b3-offline-builders.md)
+   defines executable label, clutter, and independent promotion evidence builders.
 
 Offline algorithm verification may additionally publish the presentation-only
 [`algorithm-verification-map-bundle.md`](algorithm-verification-map-bundle.md).

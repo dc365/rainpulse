@@ -4,7 +4,7 @@ import asyncio
 import json
 import os
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -68,6 +68,7 @@ class WorkerResult:
     metrics: dict[str, float] = field(default_factory=dict)
     objects: dict[str, bytes] | None = None
     diagnostics: dict[str, Any] = field(default_factory=dict)
+    observability: dict[str, Any] = field(default_factory=dict)
 
     def payloads(self) -> dict[str, bytes]:
         return normalize_artifact_objects(data=self.data, objects=self.objects)
@@ -195,6 +196,9 @@ class Worker:
             "delivery_attempt": delivery_attempt,
         }
         log_event("info", "job.started", **context)
+        failure_stage = "load_completion"
+        result_observability: dict[str, Any] = {}
+        publication_observability: dict[str, Any] = {}
 
         try:
             existing = await asyncio.to_thread(
@@ -220,8 +224,10 @@ class Worker:
                 )
                 return
 
+            failure_stage = "worker_execute"
             raw_result = await asyncio.to_thread(self._handler.executor, request)
             result = self._coerce_result(raw_result)
+            result_observability = self._coerce_observability(result.observability)
             completion = self._build_completion(
                 request=request,
                 started_at=started_at,
@@ -229,6 +235,7 @@ class Worker:
                 result=result,
                 delivery_attempt=delivery_attempt,
             )
+            failure_stage = "artifact_publish"
             published = await asyncio.to_thread(
                 self._publisher.publish,
                 output_prefix=request.payload.output_prefix,
@@ -238,9 +245,13 @@ class Worker:
                 completion=completion,
                 artifact_name=self._handler.artifact_name,
             )
+            publication_observability = self._publication_observability(published)
             authoritative_completion = getattr(published, "completion", completion)
             self._validate_existing(authoritative_completion, request)
+            failure_stage = "result_publish"
+            event_publish_started = time.perf_counter()
             await self._publish_result(jetstream, authoritative_completion)
+            event_publish_ms = _elapsed_ms(event_publish_started)
             if not await self._ack_terminal_result(message, context):
                 return
             log_event(
@@ -249,10 +260,23 @@ class Worker:
                 duration_ms=authoritative_completion.payload.runtime_ms,
                 publication_reused=bool(getattr(published, "reused", False)),
                 result_event_id=str(authoritative_completion.event_id),
+                **self._log_observability_fields(
+                    started_tick=started_tick,
+                    result_observability=result_observability,
+                    publication_observability=publication_observability,
+                    event_publish_ms=event_publish_ms,
+                ),
                 **context,
             )
         except Exception as error:  # noqa: BLE001 - classified before delivery handling
             retryable = self._is_retryable(error)
+            error_observability = self._error_observability_fields(
+                error,
+                default_stage=failure_stage,
+                started_tick=started_tick,
+                result_observability=result_observability,
+                publication_observability=publication_observability,
+            )
             if retryable and delivery_attempt < self._handler.max_deliveries:
                 delay = min(30, 2 ** (delivery_attempt - 1))
                 await message.nak(delay=delay)
@@ -264,6 +288,7 @@ class Worker:
                     error_message=str(error)[:512],
                     retry_delay_seconds=delay,
                     max_deliveries=self._handler.max_deliveries,
+                    **error_observability,
                     **context,
                 )
                 return
@@ -276,6 +301,8 @@ class Worker:
                 delivery_attempt=delivery_attempt,
                 originally_retryable=retryable,
                 retry_exhausted=retryable,
+                observability=error_observability,
+                failure_stage=str(error_observability.get("failure_stage", failure_stage)),
             )
             try:
                 await self._publish_result(jetstream, failure)
@@ -299,6 +326,7 @@ class Worker:
                 exception=type(error).__name__,
                 error_message=str(error)[:512],
                 result_event_id=str(failure.event_id),
+                **error_observability,
                 **context,
             )
 
@@ -409,9 +437,23 @@ class Worker:
         delivery_attempt: int = 1,
         originally_retryable: bool = False,
         retry_exhausted: bool = False,
+        observability: Mapping[str, Any] | None = None,
+        failure_stage: str | None = None,
     ) -> JobFailed:
         finished_at = datetime.now(UTC)
         simulated = isinstance(error, SimulatedFailure)
+        details: dict[str, Any] = {
+            "worker_id": self._config.worker_id,
+            "exception": type(error).__name__,
+            "delivery_attempt": delivery_attempt,
+            "max_deliveries": self._handler.max_deliveries,
+            "originally_retryable": originally_retryable,
+            "retry_exhausted": retry_exhausted,
+        }
+        if failure_stage is not None:
+            details["failure_stage"] = failure_stage
+        if observability:
+            details["observability"] = dict(observability)
         return JobFailed(
             event_id=result_event_id(request.job_id, "job.failed"),
             occurred_at=finished_at,
@@ -427,14 +469,7 @@ class Worker:
                     "RP-005 simulated worker failure" if simulated else "Worker processing failed"
                 ),
                 retryable=False,
-                details={
-                    "worker_id": self._config.worker_id,
-                    "exception": type(error).__name__,
-                    "delivery_attempt": delivery_attempt,
-                    "max_deliveries": self._handler.max_deliveries,
-                    "originally_retryable": originally_retryable,
-                    "retry_exhausted": retry_exhausted,
-                },
+                details=details,
             ),
         )
 
@@ -480,6 +515,63 @@ class Worker:
             return result
         data, metrics = result
         return WorkerResult(data=data, metrics=metrics)
+
+    @staticmethod
+    def _coerce_observability(observability: Mapping[str, Any] | None) -> dict[str, Any]:
+        if observability is None:
+            return {}
+        normalized: dict[str, Any] = {}
+        for key, value in observability.items():
+            if value is None or isinstance(value, (bool, int, float, str)):
+                normalized[key] = value
+        return normalized
+
+    def _publication_observability(self, published: Any) -> dict[str, Any]:
+        return {
+            "output_bytes": getattr(published, "size_bytes", None),
+            "object_count": getattr(published, "object_count", None),
+            "upload_ms": getattr(published, "upload_ms", None),
+            "marker_commit_ms": getattr(published, "marker_commit_ms", None),
+        }
+
+    def _log_observability_fields(
+        self,
+        *,
+        started_tick: float,
+        result_observability: Mapping[str, Any],
+        publication_observability: Mapping[str, Any],
+        event_publish_ms: float | None = None,
+        failure_stage: str | None = None,
+    ) -> dict[str, Any]:
+        fields = {
+            **self._coerce_observability(result_observability),
+            **self._coerce_observability(publication_observability),
+        }
+        fields["event_publish_ms"] = event_publish_ms
+        fields["end_to_end_ms"] = _elapsed_ms(started_tick)
+        if failure_stage is not None:
+            fields["failure_stage"] = failure_stage
+        return fields
+
+    def _error_observability_fields(
+        self,
+        error: Exception,
+        *,
+        default_stage: str,
+        started_tick: float,
+        result_observability: Mapping[str, Any],
+        publication_observability: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        failure_stage = getattr(error, "failure_stage", getattr(error, "stage", default_stage))
+        error_observability = self._coerce_observability(
+            getattr(error, "observability", None)
+        )
+        return self._log_observability_fields(
+            started_tick=started_tick,
+            result_observability={**result_observability, **error_observability},
+            publication_observability=publication_observability,
+            failure_stage=str(failure_stage),
+        )
 
     async def _handle_health(
         self,
@@ -527,3 +619,7 @@ def log_event(level: str, event: str, **fields: Any) -> None:
         ),
         flush=True,
     )
+
+
+def _elapsed_ms(started_tick: float) -> float:
+    return round((time.perf_counter() - started_tick) * 1000, 3)

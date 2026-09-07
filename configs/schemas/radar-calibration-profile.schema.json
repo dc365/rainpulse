@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/schemas/radar-calibration-profile.schema.json",
+  "title": "RainPulse C2-P3 shadow radar calibration profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_version",
+    "artifact_contract_version",
+    "source_relative_bias_artifact_contract_version",
+    "source_attenuation_artifact_contract_version",
+    "radar_band",
+    "reference_policy",
+    "activation"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "profile_version": { "const": "fujian-radar-calibration-shadow-v1" },
+    "artifact_contract_version": { "const": "1.0" },
+    "source_relative_bias_artifact_contract_version": { "const": "1.0" },
+    "source_attenuation_artifact_contract_version": { "const": "1.0" },
+    "radar_band": { "const": "S" },
+    "reference_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "required_roles",
+        "allowed_truth_kinds",
+        "minimum_fitting_processes",
+        "minimum_validation_processes"
+      ],
+      "properties": {
+        "required_roles": {
+          "const": [
+            "coefficient_fitting",
+            "independent_validation"
+          ]
+        },
+        "allowed_truth_kinds": {
+          "const": [
+            "gauge_accumulation_1h",
+            "reference_qpe_1h"
+          ]
+        },
+        "minimum_fitting_processes": { "type": "integer", "minimum": 1 },
+        "minimum_validation_processes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "activation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "worker_integration_enabled",
+        "qi_calibration_enabled",
+        "required_gate"
+      ],
+      "properties": {
+        "worker_integration_enabled": { "const": false },
+        "qi_calibration_enabled": { "const": false },
+        "required_gate": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

@@ -37,6 +37,12 @@ operational data here.
   do not reset, clean, or broadly overwrite the server checkout.
 - Compose uses `deploy/docker-compose.yaml` together with
   `deploy/docker-compose.realtime-shadow.yaml` and `deploy/.env`.
+- Deployment configuration guide: `deploy/README.md`. The simplified `.env.example`
+  contains deployment inputs only. `RAINPULSE_RADAR_DATA_ROOT` is an absolute,
+  same-path read-only bind boundary covering BDP metadata input roots; legacy
+  `FMT_L2_Z959X_SBD` mounts were removed. Host GPU launcher paths derive from the
+  project root; `/opt/rainpulse` remains a container-only convention. These
+  configuration simplifications require the next deployment to take effect.
 - The Go control services follow the Ruiyun BDP runtime integration. Their
   program/configuration code is `bdp-dp-rada-rainpulse`; `RADA_L2_FMT` input
   roots come from BDP metadata when the platform is available, with the

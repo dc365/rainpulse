@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/schemas/radar-relative-bias-profile.schema.json",
+  "title": "RainPulse C2 shadow relative-bias profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_version",
+    "artifact_contract_version",
+    "source_normalized_radar_volume_contract_version",
+    "radar_band",
+    "comparison_field_name",
+    "thresholds",
+    "bootstrap_samples",
+    "random_seed",
+    "activation"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "profile_version": { "const": "fujian-radar-relative-bias-shadow-v1" },
+    "artifact_contract_version": { "const": "1.0" },
+    "source_normalized_radar_volume_contract_version": { "const": "1.0" },
+    "radar_band": { "const": "S" },
+    "comparison_field_name": { "const": "DBZH" },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum_dbzh",
+        "maximum_time_offset_seconds",
+        "maximum_blockage_fraction",
+        "maximum_height_difference_m",
+        "minimum_comparable_gate_count",
+        "minimum_independent_processes"
+      ],
+      "properties": {
+        "minimum_dbzh": { "type": "number", "minimum": 0 },
+        "maximum_time_offset_seconds": { "type": "integer", "minimum": 1 },
+        "maximum_blockage_fraction": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "maximum_height_difference_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "minimum_comparable_gate_count": { "type": "integer", "minimum": 1 },
+        "minimum_independent_processes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "bootstrap_samples": { "type": "integer", "minimum": 1 },
+    "random_seed": { "type": "integer", "minimum": 0 },
+    "activation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "worker_integration_enabled",
+        "truth_designation_enabled",
+        "required_gate"
+      ],
+      "properties": {
+        "worker_integration_enabled": { "const": false },
+        "truth_designation_enabled": { "const": false },
+        "required_gate": {
+          "const": "independent_absolute_reference_and_process_grouped_overlap_evidence_required"
+        }
+      }
+    }
+  }
+}

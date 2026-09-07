@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import UUID
 
 import numpy as np
@@ -12,18 +14,31 @@ from pyproj import Geod
 from zarr.storage import MemoryStore
 
 from rainpulse_algo.grid import RegularLatLonGrid
+from rainpulse_algo.radar.ancillary import (
+    AncillarySource,
+    Bounds,
+    CoastlineSource,
+    DEMSource,
+    iter_dem_tiles,
+    sha256_file,
+)
 from rainpulse_algo.radar.blockage import (
     beam_centre_height_m,
     circular_partial_blockage,
     map_grid_to_polar,
 )
 from rainpulse_algo.radar.config import load_radar_config
+from rainpulse_algo.radar.dem import SharedDEMCache, VerifiedDEMTileStore
 from rainpulse_algo.radar.grid_profile import load_radar_grid_profile
 from rainpulse_algo.radar.grid_zarr import (
     build_radar_grid_zarr_store,
     validate_radar_grid_zarr_store,
 )
-from rainpulse_algo.radar.hybrid import RadarGridInputError, build_hybrid_scan
+from rainpulse_algo.radar.hybrid import (
+    RadarGridInputError,
+    build_hybrid_scan,
+    create_hybrid_scan_caches,
+)
 
 from .test_fmt_decoder import make_config
 
@@ -46,6 +61,40 @@ class RidgeTerrain:
             latitude,
         )
         return np.where(distance < 800, 1692.0, 1760.0).astype("float32")
+
+
+class CountingTerrain(RidgeTerrain):
+    cache_identity = "counting-ridge-v1"
+
+    def __init__(self, radar_longitude: float, radar_latitude: float) -> None:
+        super().__init__(radar_longitude, radar_latitude)
+        self.sample_calls = 0
+
+    def sample(self, longitude: np.ndarray, latitude: np.ndarray) -> np.ndarray:
+        self.sample_calls += 1
+        return super().sample(longitude, latitude)
+
+
+class FakeRasterDataset:
+    def __init__(
+        self,
+        values: np.ndarray,
+        bounds: tuple[float, float, float, float],
+    ) -> None:
+        self._values = values
+        self.bounds = bounds
+        self.crs = SimpleNamespace(to_epsg=lambda: 4326)
+
+    def __enter__(self) -> FakeRasterDataset:
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        del exc_type, exc, tb
+
+    def read(self, index: int, masked: bool = True) -> np.ma.MaskedArray:
+        assert index == 1
+        assert masked is True
+        return np.ma.array(self._values, mask=np.zeros(self._values.shape, dtype=bool))
 
 
 def flag_masks() -> dict[str, np.uint32]:
@@ -141,6 +190,61 @@ def qc_fixture(radar_config_version: str) -> dict[str, bytes]:
     return {str(key): bytes(value) for key, value in store.items()}
 
 
+def dem_source_fixture() -> AncillarySource:
+    return AncillarySource(
+        domain_id="synthetic-dem-domain-v1",
+        config_version="synthetic-ancillary-config-v1",
+        bounds=Bounds(west=117, east=118, south=27, north=28),
+        dem=DEMSource(
+            asset_version="synthetic-dem-asset-v1",
+            base_url="https://example.test/dem",
+            planned_tile_count=1,
+            storage_prefix="ancillary/dem/synthetic-dem-asset-v1",
+            native_resolution_arc_seconds=1.0,
+            max_uncovered_land_area_km2_per_tile=0.1,
+        ),
+        coastline=CoastlineSource(
+            asset_version="synthetic-coastline-v1",
+            source_url="https://example.test/coastline.zip",
+            source_sha256="0" * 64,
+            storage_prefix="ancillary/coastline/synthetic-coastline-v1",
+        ),
+    )
+
+
+def write_dem_runtime_fixture(root: Path, source: AncillarySource) -> Path:
+    tile = iter_dem_tiles(source)[0]
+    tile_path = root / tile.relative_path
+    tile_path.parent.mkdir(parents=True, exist_ok=True)
+    tile_path.write_bytes(b"synthetic-dem-tile")
+    manifest_dir = root / "manifests"
+    manifest_dir.mkdir(parents=True, exist_ok=True)
+    manifest = {
+        "domain_id": source.domain_id,
+        "config_version": source.config_version,
+        "dem_asset_version": source.dem.asset_version,
+        "assets": [
+            {
+                "asset_type": "dem_tile",
+                "tile_id": tile.tile_id,
+                "relative_path": tile.relative_path.as_posix(),
+                "size_bytes": tile_path.stat().st_size,
+                "sha256": sha256_file(tile_path),
+            }
+        ],
+    }
+    verification = {
+        "status": "accepted",
+        "domain_id": source.domain_id,
+        "config_version": source.config_version,
+    }
+    (manifest_dir / f"{source.config_version}.json").write_text(json.dumps(manifest))
+    (manifest_dir / f"{source.config_version}.verification.json").write_text(
+        json.dumps(verification)
+    )
+    return tile_path
+
+
 def test_beam_geometry_and_partial_blockage_have_physical_limits() -> None:
     profile = load_radar_grid_profile(PROFILE_PATH)
     height = beam_centre_height_m(
@@ -208,6 +312,7 @@ def test_hybrid_scan_selects_higher_sweep_behind_low_beam_ridge(tmp_path: Path) 
     assert result.fields["BLOCKAGE_RATE"][north_cell] < 0.7
     assert result.fields["QI_METEO"][north_cell] == pytest.approx(0.95)
     assert np.isnan(result.fields["QI_ATTENUATION"][north_cell])
+    assert np.isnan(result.fields["QI_CALIBRATION"][north_cell])
     assert result.fields["QI_RANGE"][north_cell] == pytest.approx(0.8)
     assert not result.operational_eligible
     assert "vertical_datum_unverified" in result.operational_reasons
@@ -318,3 +423,164 @@ def test_grid_rejects_flag_definition_missing_configured_hard_reject(
             ),
             flag_masks=incomplete_flags,
         )
+
+
+def test_hybrid_scan_reuses_geometry_candidate_and_dem_blockage_caches(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    radar_config = load_radar_config(make_config(tmp_path))
+    grid = small_grid(
+        float(radar_config.site["longitude_deg"]),
+        float(radar_config.site["latitude_deg"]),
+    )
+    profile = replace(
+        load_radar_grid_profile(PROFILE_PATH),
+        grid_id=grid.grid_id,
+        grid_config_version=grid.config_version,
+    )
+    terrain = CountingTerrain(
+        float(radar_config.site["longitude_deg"]),
+        float(radar_config.site["latitude_deg"]),
+    )
+    caches = create_hybrid_scan_caches(
+        candidate_budget_bytes=1_000_000,
+        geometry_budget_bytes=1_000_000,
+        dem_budget_bytes=1_000_000,
+    )
+
+    import rainpulse_algo.radar.hybrid as hybrid_module
+
+    counts = {"mapping": 0, "blockage": 0, "candidate": 0}
+    original_mapping = hybrid_module.map_grid_to_polar
+    original_blockage = hybrid_module.calculate_polar_blockage
+    original_candidate = hybrid_module._candidate_fields
+
+    def count_mapping(*args: object, **kwargs: object):
+        counts["mapping"] += 1
+        return original_mapping(*args, **kwargs)
+
+    def count_blockage(*args: object, **kwargs: object):
+        counts["blockage"] += 1
+        return original_blockage(*args, **kwargs)
+
+    def count_candidate(*args: object, **kwargs: object):
+        counts["candidate"] += 1
+        return original_candidate(*args, **kwargs)
+
+    monkeypatch.setattr(hybrid_module, "map_grid_to_polar", count_mapping)
+    monkeypatch.setattr(hybrid_module, "calculate_polar_blockage", count_blockage)
+    monkeypatch.setattr(hybrid_module, "_candidate_fields", count_candidate)
+
+    first = build_hybrid_scan(
+        qc_fixture(radar_config.config_version),
+        radar_config=radar_config,
+        grid=grid,
+        profile=profile,
+        terrain=terrain,
+        flag_masks=flag_masks(),
+        caches=caches,
+    )
+    second = build_hybrid_scan(
+        qc_fixture(radar_config.config_version),
+        radar_config=radar_config,
+        grid=grid,
+        profile=profile,
+        terrain=terrain,
+        flag_masks=flag_masks(),
+        caches=caches,
+    )
+
+    assert counts == {"mapping": 2, "blockage": 2, "candidate": 2}
+    assert terrain.sample_calls == 2
+    assert first.cache_stats["geometry_miss"] == 2
+    assert first.cache_stats["candidate_miss"] == 2
+    assert first.cache_stats["dem_miss"] == 2
+    assert second.cache_stats["geometry_hit"] == 2
+    assert second.cache_stats["candidate_hit"] == 2
+    assert second.cache_stats["dem_hit"] == 2
+    np.testing.assert_allclose(first.fields["DBZH_QC"], second.fields["DBZH_QC"])
+
+
+def test_verified_dem_tile_store_reuses_shared_byte_budget_cache(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = dem_source_fixture()
+    tile_path = write_dem_runtime_fixture(tmp_path, source)
+    cache = SharedDEMCache(4 * 1024)
+    values = np.arange(16, dtype="float32").reshape(4, 4)
+    open_calls = 0
+
+    def fake_open(path: Path) -> FakeRasterDataset:
+        nonlocal open_calls
+        open_calls += 1
+        assert Path(path) == tile_path
+        return FakeRasterDataset(values, (117.0, 27.0, 118.0, 28.0))
+
+    monkeypatch.setattr("rainpulse_algo.radar.dem.rasterio.open", fake_open)
+
+    first = VerifiedDEMTileStore(
+        source,
+        tmp_path,
+        expected_asset_version=source.dem.asset_version,
+        expected_config_version=source.config_version,
+        cache=cache,
+    )
+    second = VerifiedDEMTileStore(
+        source,
+        tmp_path,
+        expected_asset_version=source.dem.asset_version,
+        expected_config_version=source.config_version,
+        cache=cache,
+    )
+
+    sampled_first = first.sample(np.array([117.25]), np.array([27.75]))
+    sampled_second = second.sample(np.array([117.25]), np.array([27.75]))
+
+    assert sampled_first[0] == pytest.approx(5.0)
+    assert sampled_second[0] == pytest.approx(5.0)
+    assert open_calls == 1
+    assert first.cache_stats() == {"hits": 0, "misses": 1}
+    assert second.cache_stats() == {"hits": 1, "misses": 0}
+
+
+def test_verified_dem_tile_store_skips_cache_when_tile_exceeds_budget(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = dem_source_fixture()
+    tile_path = write_dem_runtime_fixture(tmp_path, source)
+    cache = SharedDEMCache(32)
+    values = np.arange(16, dtype="float32").reshape(4, 4)
+    open_calls = 0
+
+    def fake_open(path: Path) -> FakeRasterDataset:
+        nonlocal open_calls
+        open_calls += 1
+        assert Path(path) == tile_path
+        return FakeRasterDataset(values, (117.0, 27.0, 118.0, 28.0))
+
+    monkeypatch.setattr("rainpulse_algo.radar.dem.rasterio.open", fake_open)
+
+    first = VerifiedDEMTileStore(
+        source,
+        tmp_path,
+        expected_asset_version=source.dem.asset_version,
+        expected_config_version=source.config_version,
+        cache=cache,
+    )
+    second = VerifiedDEMTileStore(
+        source,
+        tmp_path,
+        expected_asset_version=source.dem.asset_version,
+        expected_config_version=source.config_version,
+        cache=cache,
+    )
+
+    first.sample(np.array([117.25]), np.array([27.75]))
+    second.sample(np.array([117.25]), np.array([27.75]))
+
+    assert open_calls == 2
+    assert first.cache_stats() == {"hits": 0, "misses": 1}
+    assert second.cache_stats() == {"hits": 0, "misses": 1}

@@ -41,13 +41,23 @@ def test_echo_classification_metrics_keep_undefined_denominators_explicit() -> N
     assert missing_truth["evaluated_gate_count"] == 1
 
 
+def test_echo_classification_metrics_report_zero_f1_for_total_miss() -> None:
+    metrics = echo_classification_metrics(
+        np.array([[1, 1]], dtype="uint8"),
+        np.array([[0.1, 0.2]], dtype="float32"),
+        threshold=0.8,
+    )
+
+    assert metrics["precision"] is None
+    assert metrics["recall"] == pytest.approx(0.0)
+    assert metrics["f1"] == pytest.approx(0.0)
+
+
 def test_real_precipitation_retention_rate_uses_labelled_meteorological_gates() -> None:
     truth_meteo = np.array([[1, 1, 0, 1]], dtype="uint8")
     retained = np.array([[1, 0, 1, 1]], dtype="uint8")
 
-    assert real_precipitation_retention_rate(truth_meteo, retained) == pytest.approx(
-        2 / 3
-    )
+    assert real_precipitation_retention_rate(truth_meteo, retained) == pytest.approx(2 / 3)
 
 
 def test_polar_mask_area_uses_gate_wedge_geometry() -> None:
@@ -55,7 +65,7 @@ def test_polar_mask_area_uses_gate_wedge_geometry() -> None:
     ranges = np.array([500.0, 1_500.0], dtype="float32")
     azimuth = np.array([0.0, 90.0, 180.0, 270.0], dtype="float32")
 
-    assert polar_mask_area_km2(mask, ranges, azimuth) == pytest.approx(
+    assert polar_mask_area_km2(mask, ranges, azimuth, beam_width_deg=90.0) == pytest.approx(
         np.pi * 2_000.0**2 / 1_000_000.0,
         rel=1e-5,
     )
@@ -85,11 +95,10 @@ def test_qpe_and_gauge_metrics_report_tail_bias_and_correlation() -> None:
 def test_acceptance_report_computes_available_metrics_and_skips_absent_truth() -> None:
     report = build_acceptance_report(
         {
-            "predicted_anomaly_probability": np.array(
-                [[0.9, 0.1], [0.8, 0.2]], dtype="float32"
-            ),
+            "predicted_anomaly_probability": np.array([[0.9, 0.1], [0.8, 0.2]], dtype="float32"),
             "ranges_m": np.array([500.0, 1_500.0], dtype="float32"),
             "azimuth_deg": np.array([0.0, 180.0], dtype="float32"),
+            "beam_width_deg": np.array(180.0),
             "qpe_rate_mm_h": np.array([[1.0, 2.0], [3.0, 4.0]], dtype="float32"),
         },
         anomaly_threshold=0.8,
@@ -98,22 +107,21 @@ def test_acceptance_report_computes_available_metrics_and_skips_absent_truth() -
     assert report["pollution_area"]["status"] == "computed"
     assert report["qpe_distribution"]["p95_mm_h"] is not None
     assert report["echo_classification"] == {
-        "status": "skipped",
+        "status": "unavailable",
         "reason": "labelled_anomaly_truth_unavailable",
     }
-    assert report["gauge_verification"]["status"] == "skipped"
+    assert report["gauge_verification"]["status"] == "unavailable"
 
 
 def test_acceptance_report_masks_pollution_area_and_marks_computed_truth() -> None:
     report = build_acceptance_report(
         {
-            "predicted_anomaly_probability": np.array(
-                [[0.9, 0.9], [0.9, 0.9]], dtype="float32"
-            ),
+            "predicted_anomaly_probability": np.array([[0.9, 0.9], [0.9, 0.9]], dtype="float32"),
             "truth_anomaly": np.array([[1, 1], [1, 1]], dtype="uint8"),
             "valid_mask": np.array([[1, 0], [0, 0]], dtype="uint8"),
             "ranges_m": np.array([500.0, 1_500.0], dtype="float32"),
             "azimuth_deg": np.array([0.0, 180.0], dtype="float32"),
+            "beam_width_deg": np.array(180.0),
         },
         anomaly_threshold=0.8,
     )
@@ -123,3 +131,86 @@ def test_acceptance_report_masks_pollution_area_and_marks_computed_truth() -> No
     assert report["pollution_area"]["area_km2"] == pytest.approx(
         0.5 * np.pi * 1_000.0**2 / 1_000_000.0
     )
+
+
+def test_acceptance_report_marks_missing_inputs_and_empty_pairs_explicitly() -> None:
+    report = build_acceptance_report(
+        {
+            "predicted_anomaly_probability": np.array([[0.2, 0.1], [0.4, 0.3]], dtype="float32"),
+            "truth_anomaly": np.array([[1, 0], [0, 1]], dtype="uint8"),
+            "valid_mask": np.zeros((2, 2), dtype="uint8"),
+            "ranges_m": np.array([500.0, 1_500.0], dtype="float32"),
+            "azimuth_deg": np.array([0.0, 180.0], dtype="float32"),
+            "beam_width_deg": np.array(180.0),
+            "qpe_rate_mm_h": np.array([[np.nan, np.nan]], dtype="float32"),
+            "qpe_accumulation_mm": np.array([np.nan, np.nan], dtype="float32"),
+            "gauge_accumulation_mm": np.array([1.0, np.nan], dtype="float32"),
+        },
+        anomaly_threshold=0.8,
+    )
+
+    assert report["echo_classification"]["status"] == "insufficient_data"
+    assert report["echo_classification"]["evaluated_gate_count"] == 0
+    assert report["qpe_distribution"]["status"] == "insufficient_data"
+    assert report["qpe_distribution"]["sample_count"] == 0
+    assert report["gauge_verification"]["status"] == "insufficient_data"
+    assert report["gauge_verification"]["sample_count"] == 0
+
+    unavailable = build_acceptance_report(
+        {
+            "predicted_anomaly_probability": np.array([[0.9]], dtype="float32"),
+        },
+        anomaly_threshold=0.8,
+    )
+
+    assert unavailable["echo_classification"]["status"] == "unavailable"
+    assert unavailable["gauge_verification"]["status"] == "unavailable"
+
+
+def test_acceptance_report_marks_metric_validation_failures_without_aborting() -> None:
+    report = build_acceptance_report(
+        {
+            "predicted_anomaly_probability": np.array([[0.9, 0.1]], dtype="float32"),
+            "truth_anomaly": np.array([[1, 0]], dtype="uint8"),
+            "valid_mask": np.array([[1], [0]], dtype="uint8"),
+            "ranges_m": np.array([500.0, 1_500.0], dtype="float32"),
+            "azimuth_deg": np.array([0.0], dtype="float32"),
+        },
+        anomaly_threshold=0.8,
+    )
+
+    assert report["echo_classification"]["status"] == "failed"
+    assert "valid mask" in report["echo_classification"]["reason"]
+    assert report["pollution_area"]["status"] == "failed"
+    assert "valid mask" in report["pollution_area"]["reason"]
+
+
+def test_sector_area_requires_beam_width_and_does_not_fill_blind_sector() -> None:
+    mask = np.ones((3, 2), dtype=bool)
+    ranges = np.array([500.0, 1500.0])
+    azimuth = np.array([0.0, 1.0, 2.0])
+    assert polar_mask_area_km2(mask, ranges, azimuth) is None
+    area = polar_mask_area_km2(mask, ranges, azimuth, beam_width_deg=1.0)
+    assert area == pytest.approx(np.pi * 2000**2 / 1e6 * 3 / 360)
+
+
+def test_duplicate_rays_do_not_duplicate_observed_area() -> None:
+    mask = np.ones((3, 2), dtype=bool)
+    assert polar_mask_area_km2(
+        mask, np.array([500.0, 1500.0]), np.array([0.0, 0.0, 1.0]), beam_width_deg=1.0
+    ) == pytest.approx(np.pi * 4 * 2 / 360)
+
+
+def test_acceptance_area_is_unavailable_without_horizontal_beam_metadata() -> None:
+    report = build_acceptance_report(
+        {
+            "predicted_anomaly_probability": np.ones((3, 2)),
+            "azimuth_deg": np.array([0.0, 1.0, 2.0]),
+            "ranges_m": np.array([500.0, 1500.0]),
+        },
+        anomaly_threshold=0.8,
+    )
+    assert report["pollution_area"] == {
+        "status": "unavailable",
+        "reason": "verified_horizontal_beam_width_unavailable",
+    }

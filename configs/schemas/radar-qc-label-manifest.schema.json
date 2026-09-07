@@ -1,0 +1,286 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/schemas/radar-qc-label-manifest.schema.json",
+  "title": "RainPulse radar QC label manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "manifest_version",
+    "generated_at",
+    "required_case_categories",
+    "holdout_locked_after_freeze",
+    "partition_summaries",
+    "scans"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "manifest_version": {
+      "const": "radar-qc-label-manifest-v1"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "required_case_categories": {
+      "type": "array",
+      "minItems": 7,
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "holdout_locked_after_freeze": {
+      "type": "boolean"
+    },
+    "frozen_config_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "frozen_code_revision": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "partition_summaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "development",
+        "holdout"
+      ],
+      "properties": {
+        "development": {
+          "$ref": "#/$defs/partitionSummary"
+        },
+        "holdout": {
+          "$ref": "#/$defs/partitionSummary"
+        }
+      }
+    },
+    "scans": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/scanEntry"
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "input_manifest_sha256",
+        "operational_eligible"
+      ],
+      "properties": {
+        "input_manifest_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "operational_eligible": {
+          "const": false
+        }
+      }
+    }
+  },
+  "$defs": {
+    "statusValue": {
+      "enum": [
+        "ready",
+        "insufficient_data"
+      ]
+    },
+    "categorySummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "independent_process_count",
+        "status"
+      ],
+      "properties": {
+        "independent_process_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "status": {
+          "$ref": "#/$defs/statusValue"
+        }
+      }
+    },
+    "partitionSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scan_count",
+        "process_count",
+        "case_categories"
+      ],
+      "properties": {
+        "scan_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "process_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "case_categories": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/categorySummary"
+          }
+        }
+      }
+    },
+    "contextEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "radar_id",
+        "scan_id",
+        "input_uri"
+      ],
+      "properties": {
+        "radar_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scan_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "input_uri": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "scanEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "process_id",
+        "partition",
+        "case_category",
+        "radar_id",
+        "scan_id",
+        "volume_end_time_utc",
+        "input_uri",
+        "label_counts",
+        "annotator",
+        "label_source",
+        "label_version",
+        "review_status",
+        "temporal_context",
+        "cross_radar_context"
+      ],
+      "properties": {
+        "process_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "partition": {
+          "enum": [
+            "development",
+            "holdout"
+          ]
+        },
+        "case_category": {
+          "type": "string",
+          "minLength": 1
+        },
+        "radar_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scan_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "volume_end_time_utc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "input_uri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label_counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "meteorological",
+            "non_meteorological",
+            "uncertain"
+          ],
+          "properties": {
+            "meteorological": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "non_meteorological": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "uncertain": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "annotator": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label_source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "review_status": {
+          "type": "string",
+          "minLength": 1
+        },
+        "temporal_context": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/contextEntry"
+          }
+        },
+        "cross_radar_context": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/contextEntry"
+          }
+        },
+        "label_artifact": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "uri",
+            "sha256"
+          ],
+          "properties": {
+            "uri": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        }
+      }
+    }
+  }
+}

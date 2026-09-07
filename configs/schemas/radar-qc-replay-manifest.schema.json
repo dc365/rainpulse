@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/schemas/radar-qc-replay-manifest.schema.json",
+  "title": "RainPulse radar QC replay manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "mode",
+    "radar_ids",
+    "start_time",
+    "end_time",
+    "expected_scan_ids",
+    "scans"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "mode": {
+      "enum": [
+        "replay_manifest",
+        "catalog"
+      ]
+    },
+    "radar_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "start_time": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "end_time": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "snapshot_time": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expected_scan_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "scans": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/scanEntry"
+      }
+    }
+  },
+  "$defs": {
+    "contextEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "radar_id",
+        "input_uri",
+        "artifact_sha256"
+      ],
+      "properties": {
+        "radar_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "input_uri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifact_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "scanEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scan_id",
+        "radar_id",
+        "volume_start_time",
+        "volume_end_time",
+        "temporal_context",
+        "cross_radar_context",
+        "artifact_sha256"
+      ],
+      "properties": {
+        "scan_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "radar_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "process_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "volume_start_time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "volume_end_time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "normalized_uri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "input_uri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "temporal_context": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/contextEntry"
+          }
+        },
+        "cross_radar_context": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/contextEntry"
+          }
+        },
+        "artifact_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "normalized_uri"
+          ]
+        },
+        {
+          "required": [
+            "input_uri"
+          ]
+        }
+      ]
+    }
+  }
+}

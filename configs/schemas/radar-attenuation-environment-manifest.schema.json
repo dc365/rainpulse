@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Explicit attenuation environment inputs",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "scans"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "scans": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+      "required": ["scan_id", "radar_id", "volume_end_time_utc", "source_uri", "npz_path", "sha256"],
+      "properties": {
+        "scan_id": {"type": "string", "minLength": 1},
+        "radar_id": {"type": "string", "minLength": 1},
+        "volume_end_time_utc": {"type": "string", "format": "date-time"},
+        "source_uri": {"type": "string", "minLength": 1},
+        "npz_path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }}
+  }
+}

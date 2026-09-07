@@ -1,0 +1,21 @@
+schema_version: "1.0"
+profile_version: fujian-radar-calibration-shadow-v1
+artifact_contract_version: "1.0"
+source_relative_bias_artifact_contract_version: "1.0"
+source_attenuation_artifact_contract_version: "1.0"
+radar_band: S
+
+reference_policy:
+  required_roles:
+    - coefficient_fitting
+    - independent_validation
+  allowed_truth_kinds:
+    - gauge_accumulation_1h
+    - reference_qpe_1h
+  minimum_fitting_processes: 3
+  minimum_validation_processes: 3
+
+activation:
+  worker_integration_enabled: false
+  qi_calibration_enabled: false
+  required_gate: versioned_site_band_coefficients_and_disjoint_independent_calibration_reference_required

@@ -11,7 +11,65 @@ import yaml
 import zarr
 from zarr.storage import MemoryStore
 
+from .attenuation import (
+    ATTENUATION_SHADOW_MODULE_NAME,
+    ATTENUATION_SHADOW_PRODUCED_VARIABLES,
+    AttenuationInputError,
+    AttenuationProfile,
+    attenuation_qc_fields,
+    attenuation_qc_metrics,
+    empty_attenuation_qc_fields,
+    process_kdp_attenuation_sweep,
+)
+from .phase_processing import (
+    KDP_SHADOW_AVAILABLE_MASK_FIELD,
+    KDP_SHADOW_FIELD,
+    PHASE_PROCESSING_MODULE_NAME,
+    PHASE_PROCESSING_PRODUCED_VARIABLES,
+    PhaseProcessingInputError,
+    PhaseProcessingProfile,
+    empty_phase_processing_qc_fields,
+    phase_processing_qc_fields,
+    phase_processing_qc_metrics,
+    process_phidp_sweep,
+)
+from .qc_decision import (
+    RADIAL_CANDIDATE_REASON_EDGE,
+    RADIAL_CANDIDATE_REASON_EXTENT,
+    RADIAL_CANDIDATE_REASON_FAN,
+    RADIAL_CANDIDATE_REASON_MULTISCALE,
+    RADIAL_CANDIDATE_REASON_NEIGHBOUR,
+    RADIAL_CANDIDATE_REASON_RESIDUAL,
+    RADIAL_CANDIDATE_REASON_SATURATED,
+    RADIAL_CANDIDATE_REASON_SEGMENT,
+    RADIAL_FINAL_REASON_CONTEXT_PROMOTED,
+    RADIAL_FINAL_REASON_STRONG_OVERRIDE,
+    RADIAL_FINAL_REASON_STRONG_SEED,
+    RADIAL_FINAL_REASON_VETO_SOFT,
+    RADIAL_FINAL_REASON_WEAK_SOFT,
+    RadialDecisionV2,
+    summarize_radial_decision,
+)
+from .qc_flags import PHASE1_HARD_REJECT_FLAGS
+from .qc_geometry import (
+    CROSS_RADAR_TRUSTED_AVAILABLE_MASK_FIELD,
+    CROSS_RADAR_TRUSTED_SUPPORT_FIELD,
+    VERTICAL_CONSISTENCY_AVAILABLE_MASK_FIELD,
+    VERTICAL_HEIGHT_DIFFERENCE_M_FIELD,
+    RadarBeamContext,
+    build_vertical_consistency_diagnostics,
+)
+from .qc_input import QCInputView, open_qc_input
 from .qc_metrics import polar_mask_area_km2
+from .qc_texture import (
+    TEXTURE_AZIMUTH_HALF_WINDOW_DEG,
+    TEXTURE_INPUT_FIELDS,
+    TEXTURE_MIN_SUPPORT_FRACTION,
+    TEXTURE_MODULE_NAME,
+    TEXTURE_PRODUCED_VARIABLES,
+    TEXTURE_RANGE_WINDOW_METERS,
+    build_texture_diagnostics,
+)
 
 # A constant-power transmitter/interference signal grows with range after the
 # radar's range correction and can occupy a contiguous fan of neighbouring
@@ -27,6 +85,8 @@ _SATURATED_RADIAL_MINIMUM_HIGH_RUN = 350
 _SATURATED_RADIAL_MINIMUM_RANGE_GROWTH_DB = 12.0
 _SATURATED_RADIAL_MAXIMUM_POWER_IQR_DB = 6.0
 _SATURATED_RADIAL_SIGNATURE_VERSION = "long-range-saturated-radial-v3"
+_V2_NEIGHBOUR_MAX_AZIMUTH_GAP_DEG = 1.5
+_V2_VERTICAL_MAX_AZIMUTH_OFFSET_DEG = 0.75
 
 INTERFERENCE_TYPE_CODES = {
     "none": 0,
@@ -134,6 +194,10 @@ class RadialContextFusionConfig:
     minimum_temporal_context_scans: int
     maximum_temporal_context_scans: int
     temporal_persistence_threshold: float
+    temporal_max_time_offset_seconds: int
+    temporal_selection_mode: Literal["past_only", "symmetric_offline"]
+    allow_vertical_negative_promotion: bool
+    allow_cross_radar_negative_promotion: bool
     cross_radar_max_time_offset_seconds: int
     cross_radar_echo_threshold_dbzh: float
     minimum_cross_radar_overlap_gates: int
@@ -173,6 +237,7 @@ class RadialMorphologyConfig:
 
 @dataclass(frozen=True)
 class RadialInterferenceConfig:
+    decision_version: Literal["legacy-v1", "evidence-v2"]
     minimum_valid_gate_fraction: float
     minimum_consecutive_gates: int
     neighbour_difference_db: float
@@ -208,6 +273,7 @@ class QualityIndexConfig:
 class BasicQCProfile:
     profile_version: str
     pipeline_version: str
+    decision_version: Literal["legacy-v1", "evidence-v2"]
     flag_definition_version: str
     health_gate: HealthGateConfig
     echo: EchoConfig
@@ -248,6 +314,9 @@ class RadialInterferenceDetection:
     weak_candidate_ray_count: int
     context_promoted_ray_count: int
     cross_radar_vetoed_ray_count: int
+    decision_summary: dict[str, Any] | None = None
+    candidate_ray_mask: np.ndarray | None = None
+    observed_ray_mask: np.ndarray | None = None
 
 
 @dataclass(frozen=True)
@@ -308,6 +377,14 @@ class QCResult:
         return json.dumps(self.summary, separators=(",", ":"), sort_keys=True).encode()
 
 
+@dataclass(frozen=True)
+class VolumeVerticalConsistencyResult:
+    probabilities: dict[str, np.ndarray]
+    available_masks: dict[str, np.ndarray]
+    height_differences_m: dict[str, np.ndarray]
+    metrics: dict[str, float]
+
+
 def load_qc_profile(path: str | Path, flag_path: str | Path) -> BasicQCProfile:
     value = yaml.safe_load(Path(path).read_text())
     flags = yaml.safe_load(Path(flag_path).read_text())
@@ -342,9 +419,11 @@ def load_qc_profile(path: str | Path, flag_path: str | Path) -> BasicQCProfile:
     clutter = value["static_ground_clutter"]
     sea_ap = value["sea_ap"]
     qi = value["quality_index"]
+    decision_version = value.get("decision_version", "legacy-v1")
     profile = BasicQCProfile(
         profile_version=value["profile_version"],
         pipeline_version=value["pipeline_version"],
+        decision_version=decision_version,
         flag_definition_version=value["flag_definition_version"],
         health_gate=HealthGateConfig(
             reject_states=tuple(health["reject_states"]),
@@ -380,6 +459,7 @@ def load_qc_profile(path: str | Path, flag_path: str | Path) -> BasicQCProfile:
             maximum_range_m=float(vertical.get("maximum_range_m", 150_000.0)),
         ),
         radial_interference=RadialInterferenceConfig(
+            decision_version=decision_version,
             minimum_valid_gate_fraction=float(radial["minimum_valid_gate_fraction"]),
             minimum_consecutive_gates=int(radial["minimum_consecutive_gates"]),
             neighbour_difference_db=float(radial["neighbour_difference_db"]),
@@ -401,9 +481,7 @@ def load_qc_profile(path: str | Path, flag_path: str | Path) -> BasicQCProfile:
                 fan_closure=RadialFanClosureConfig(
                     enabled=bool(fan_closure.get("enabled", False)),
                     extent_gap_enabled=bool(fan_closure.get("extent_gap_enabled", False)),
-                    edge_extension_enabled=bool(
-                        fan_closure.get("edge_extension_enabled", False)
-                    ),
+                    edge_extension_enabled=bool(fan_closure.get("edge_extension_enabled", False)),
                     residual_completion_enabled=bool(
                         fan_closure.get("residual_completion_enabled", False)
                     ),
@@ -461,9 +539,7 @@ def load_qc_profile(path: str | Path, flag_path: str | Path) -> BasicQCProfile:
                     minimum_far_segment_start_m=float(
                         fan_closure.get("minimum_far_segment_start_m", 200_000.0)
                     ),
-                    minimum_far_segment_gates=int(
-                        fan_closure.get("minimum_far_segment_gates", 24)
-                    ),
+                    minimum_far_segment_gates=int(fan_closure.get("minimum_far_segment_gates", 24)),
                 ),
                 radial_extent_promotion=RadialExtentPromotionConfig(
                     enabled=bool(radial_extent.get("enabled", False)),
@@ -512,6 +588,18 @@ def load_qc_profile(path: str | Path, flag_path: str | Path) -> BasicQCProfile:
                     ),
                     temporal_persistence_threshold=float(
                         context_fusion.get("temporal_persistence_threshold", 0.66)
+                    ),
+                    temporal_max_time_offset_seconds=int(
+                        context_fusion.get("temporal_max_time_offset_seconds", 900)
+                    ),
+                    temporal_selection_mode=context_fusion.get(
+                        "temporal_selection_mode", "past_only"
+                    ),
+                    allow_vertical_negative_promotion=bool(
+                        context_fusion.get("allow_vertical_negative_promotion", False)
+                    ),
+                    allow_cross_radar_negative_promotion=bool(
+                        context_fusion.get("allow_cross_radar_negative_promotion", False)
                     ),
                     cross_radar_max_time_offset_seconds=int(
                         context_fusion.get("cross_radar_max_time_offset_seconds", 300)
@@ -575,7 +663,12 @@ def apply_basic_qc(
     profile: BasicQCProfile,
     *,
     ancillary_maps: dict[str, dict[str, np.ndarray]] | None = None,
+    input_view: QCInputView | None = None,
+    blockage_by_sweep: dict[str, np.ndarray] | None = None,
     radial_context: dict[str, dict[str, np.ndarray]] | None = None,
+    radar_beam_context: RadarBeamContext | None = None,
+    phase_processing_profile: PhaseProcessingProfile | None = None,
+    attenuation_profile: AttenuationProfile | None = None,
     created_at: datetime | None = None,
 ) -> QCResult:
     if "health/summary.json" not in normalized_objects:
@@ -587,23 +680,35 @@ def apply_basic_qc(
     if state not in {"HEALTHY", "DEGRADED"}:
         raise QCInputError(f"unsupported radar health state {state!r}")
 
-    store = MemoryStore()
-    store.update(normalized_objects)
-    root = zarr.open_group(store=store, mode="r")
+    view = input_view if input_view is not None else open_qc_input(normalized_objects)
+    if view.objects is not normalized_objects:
+        raise QCInputError("QC input view belongs to a different artifact")
+    root = view.root
     if root.attrs.get("contract_name") != "rainpulse.normalized-radar-volume":
         raise QCInputError("QC input is not a NormalizedRadarVolume")
     if health.get("radar_id") != root.attrs.get("radar_id"):
         raise QCInputError("radar health identity differs from normalized volume")
 
-    vertical_probabilities = _volume_vertical_consistency(root, profile)
+    vertical_diagnostics = _volume_vertical_consistency_diagnostics(
+        root,
+        profile,
+        radar_beam_context=radar_beam_context,
+    )
+    vertical_probabilities = vertical_diagnostics.probabilities
+    vertical_available_masks = vertical_diagnostics.available_masks
+    vertical_height_differences = vertical_diagnostics.height_differences_m
     higher_elevation_extents = _volume_higher_elevation_radial_extents(root, profile)
     sweeps: list[QCSweep] = []
     radial_ray_count = 0
     radial_gate_count = 0
     radial_area_km2 = 0.0
+    radial_area_available = True
     radial_weak_candidate_ray_count = 0
     radial_context_promoted_ray_count = 0
     radial_cross_radar_vetoed_ray_count = 0
+    cross_radar_trusted_available_gate_count = 0
+    cross_radar_trusted_available_ray_count = 0
+    radial_decision_summary: dict[str, Any] = {}
     type_ray_counts = {name: 0 for name in INTERFERENCE_TYPE_CODES if name != "none"}
     type_gate_counts = {name: 0 for name in INTERFERENCE_TYPE_CODES if name != "none"}
     missing_count = 0
@@ -613,6 +718,17 @@ def apply_basic_qc(
     ground_count = 0
     sea_count = 0
     ap_count = 0
+    texture_metrics: dict[str, float] = {}
+    phase_processing_metrics: dict[str, float] = {}
+    phase_processing_input_sweep_count = 0
+    phase_processing_missing_input_sweep_count = 0
+    phase_processing_failed_sweep_count = 0
+    phase_processing_failure_reason: str | None = None
+    attenuation_input_sweep_count = 0
+    attenuation_missing_input_sweep_count = 0
+    attenuation_failed_sweep_count = 0
+    attenuation_failure_reason: str | None = None
+    attenuation_processing_metrics: dict[str, float] = {}
     clutter_available = profile.static_ground_clutter.asset_uri is not None
     sea_ap_available = profile.sea_ap.coastline_asset_uri is not None
 
@@ -661,14 +777,61 @@ def apply_basic_qc(
             low_snr = valid & ~no_rain & np.isfinite(snr) & (snr < profile.echo.low_snr_db)
             flags[low_snr] |= profile.flag_masks["LOW_SNR"]
 
+        azimuth = group["azimuth"][:]
         ranges = group["range"][:]
+        try:
+            texture = build_texture_diagnostics(
+                azimuth,
+                ranges,
+                {
+                    "DBZH": dbzh,
+                    "RHOHV": rhohv,
+                    "ZDR": zdr,
+                    "PHIDP": phidp,
+                },
+            )
+        except ValueError as error:
+            raise QCInputError(str(error)) from error
+        for metric_name, metric_value in texture.metrics.items():
+            texture_metrics[metric_name] = texture_metrics.get(metric_name, 0.0) + float(
+                metric_value
+            )
         p_vertical = vertical_probabilities.get(name, np.full(dbzh.shape, np.nan, dtype="float32"))
         sweep_radial_context = (radial_context or {}).get(name, {})
+        cross_radar_trusted_support = np.asarray(
+            sweep_radial_context.get(
+                CROSS_RADAR_TRUSTED_SUPPORT_FIELD,
+                np.full(dbzh.shape, np.nan, dtype="float32"),
+            ),
+            dtype="float32",
+        )
+        cross_radar_trusted_available = np.asarray(
+            sweep_radial_context.get(
+                CROSS_RADAR_TRUSTED_AVAILABLE_MASK_FIELD,
+                np.zeros(dbzh.shape, dtype="uint8"),
+            ),
+            dtype="uint8",
+        )
+        if cross_radar_trusted_support.shape != dbzh.shape:
+            raise QCInputError(
+                f"cross-radar trusted support differs from sweep gate shape for {name}"
+            )
+        if cross_radar_trusted_available.shape != dbzh.shape:
+            raise QCInputError(
+                f"cross-radar trusted availability differs from sweep gate shape for {name}"
+            )
+        cross_radar_trusted_available_gate_count += int(
+            np.count_nonzero(cross_radar_trusted_available)
+        )
+        cross_radar_trusted_available_ray_count += int(
+            np.count_nonzero(np.any(cross_radar_trusted_available == 1, axis=1))
+        )
         detection = _detect_radial_interference(
             dbzh,
             valid,
             profile.radial_interference,
             ranges_m=ranges,
+            azimuth_deg=azimuth,
             vertical_consistency=(
                 p_vertical if profile.vertical_consistency.mode == "radial_evidence" else None
             ),
@@ -681,14 +844,25 @@ def apply_basic_qc(
         flags[radial_flags] |= profile.flag_masks["RADIAL_INTERFERENCE"]
         radial_ray_count += detection.flagged_ray_count
         radial_gate_count += int(np.count_nonzero(radial_flags))
-        radial_area_km2 += polar_mask_area_km2(
+        sweep_area = polar_mask_area_km2(
             radial_flags,
             ranges,
-            group["azimuth"][:],
+            azimuth,
+            beam_width_deg=(
+                radar_beam_context.beam_width_horizontal_deg
+                if radar_beam_context is not None
+                else None
+            ),
         )
+        if sweep_area is None:
+            radial_area_available = False
+        else:
+            radial_area_km2 += sweep_area
         radial_weak_candidate_ray_count += detection.weak_candidate_ray_count
         radial_context_promoted_ray_count += detection.context_promoted_ray_count
         radial_cross_radar_vetoed_ray_count += detection.cross_radar_vetoed_ray_count
+        if detection.decision_summary:
+            radial_decision_summary[name] = detection.decision_summary
         for type_name in type_ray_counts:
             type_ray_counts[type_name] += detection.type_ray_counts[type_name]
             type_gate_counts[type_name] += detection.type_gate_counts[type_name]
@@ -770,6 +944,95 @@ def apply_basic_qc(
             )
             if source_name in group
         }
+        if phase_processing_profile is not None:
+            phase_fields = empty_phase_processing_qc_fields(dbzh.shape)
+            if phase_processing_profile.shadow_processing_enabled:
+                if phidp is None:
+                    phase_processing_missing_input_sweep_count += 1
+                else:
+                    phase_processing_input_sweep_count += 1
+                    try:
+                        phase_result = process_phidp_sweep(
+                            phidp,
+                            ranges,
+                            profile=phase_processing_profile,
+                            trusted_gate_mask=np.isfinite(phidp)
+                            & valid
+                            & (
+                                (
+                                    flags
+                                    & np.uint32(
+                                        sum(
+                                            int(profile.flag_masks.get(flag, 0))
+                                            for flag in PHASE1_HARD_REJECT_FLAGS
+                                        )
+                                    )
+                                )
+                                == 0
+                            ),
+                            input_phase_unit="degree",
+                        )
+                    except PhaseProcessingInputError as error:
+                        phase_processing_failed_sweep_count += 1
+                        if phase_processing_failure_reason is None:
+                            phase_processing_failure_reason = str(error)
+                    else:
+                        phase_fields = phase_processing_qc_fields(phase_result)
+                        _accumulate_metrics(
+                            phase_processing_metrics,
+                            phase_processing_qc_metrics(phase_result),
+                        )
+            optional.update(phase_fields)
+        if attenuation_profile is not None:
+            attenuation_fields = empty_attenuation_qc_fields(dbzh.shape)
+            attenuation_input = _attenuation_shadow_input(optional, dbzh.shape)
+            if attenuation_input is None:
+                attenuation_missing_input_sweep_count += 1
+            else:
+                attenuation_input_sweep_count += 1
+                kdp_shadow, kdp_shadow_available_mask = attenuation_input
+                blockage = (blockage_by_sweep or {}).get(name)
+                if blockage is None or not np.any(np.isfinite(blockage)):
+                    attenuation_processing_metrics["blockage_unavailable_sweep_count"] = (
+                        attenuation_processing_metrics.get("blockage_unavailable_sweep_count", 0.0)
+                        + 1
+                    )
+                try:
+                    attenuation_result = process_kdp_attenuation_sweep(
+                        dbzh,
+                        kdp_shadow,
+                        ranges,
+                        profile=attenuation_profile,
+                        kdp_available_mask=kdp_shadow_available_mask,
+                        blockage_fraction=blockage,
+                    )
+                except AttenuationInputError as error:
+                    attenuation_failed_sweep_count += 1
+                    if attenuation_failure_reason is None:
+                        attenuation_failure_reason = str(error)
+                else:
+                    attenuation_fields = attenuation_qc_fields(attenuation_result)
+                    _accumulate_metrics(
+                        attenuation_processing_metrics,
+                        attenuation_qc_metrics(attenuation_result),
+                    )
+            optional.update(attenuation_fields)
+        if profile.decision_version == "evidence-v2" and profile.vertical_consistency.enabled:
+            optional[VERTICAL_CONSISTENCY_AVAILABLE_MASK_FIELD] = vertical_available_masks.get(
+                name,
+                np.zeros(dbzh.shape, dtype="uint8"),
+            )
+            optional[VERTICAL_HEIGHT_DIFFERENCE_M_FIELD] = vertical_height_differences.get(
+                name,
+                np.full(dbzh.shape, np.nan, dtype="float32"),
+            )
+        if (
+            profile.decision_version == "evidence-v2"
+            and profile.radial_interference.morphology.context_fusion.enabled
+        ):
+            optional[CROSS_RADAR_TRUSTED_SUPPORT_FIELD] = cross_radar_trusted_support
+            optional[CROSS_RADAR_TRUSTED_AVAILABLE_MASK_FIELD] = cross_radar_trusted_available
+        optional.update(texture.fields)
         sweeps.append(
             QCSweep(
                 name=name,
@@ -797,20 +1060,48 @@ def apply_basic_qc(
 
     dual_pol_available = any(np.any(np.isfinite(sweep.p_meteo_dual_pol)) for sweep in sweeps)
     vertical_available = any(np.any(np.isfinite(sweep.p_vertical_consistency)) for sweep in sweeps)
+    phase_processing_module = _phase_processing_module_record(
+        phase_processing_profile,
+        input_sweep_count=phase_processing_input_sweep_count,
+        missing_input_sweep_count=phase_processing_missing_input_sweep_count,
+        failed_sweep_count=phase_processing_failed_sweep_count,
+        processing_metrics=phase_processing_metrics,
+        failure_reason=phase_processing_failure_reason,
+    )
+    attenuation_module = _attenuation_shadow_module_record(
+        attenuation_profile,
+        input_sweep_count=attenuation_input_sweep_count,
+        missing_input_sweep_count=attenuation_missing_input_sweep_count,
+        failed_sweep_count=attenuation_failed_sweep_count,
+        processing_metrics=attenuation_processing_metrics,
+        failure_reason=attenuation_failure_reason,
+    )
     modules = _module_records(
         profile,
         clutter_available=clutter_available,
         sea_ap_available=sea_ap_available,
         dual_pol_available=dual_pol_available,
         vertical_available=vertical_available,
+        phase_processing_module=phase_processing_module,
+        attenuation_module=attenuation_module,
+        vertical_metrics=vertical_diagnostics.metrics,
         radial_ray_count=radial_ray_count,
         radial_weak_candidate_ray_count=radial_weak_candidate_ray_count,
         radial_context_promoted_ray_count=radial_context_promoted_ray_count,
         radial_cross_radar_vetoed_ray_count=radial_cross_radar_vetoed_ray_count,
+        cross_radar_trusted_metrics={
+            "available_gate_count": float(cross_radar_trusted_available_gate_count),
+            "available_ray_count": float(cross_radar_trusted_available_ray_count),
+            "enabled": float(
+                profile.decision_version == "evidence-v2"
+                and profile.radial_interference.morphology.context_fusion.enabled
+            ),
+        },
         type_ray_counts=type_ray_counts,
         ground_count=ground_count,
         sea_count=sea_count,
         ap_count=ap_count,
+        texture_metrics=texture_metrics,
     )
     finite_quality = np.concatenate(
         [sweep.quality_index[np.isfinite(sweep.quality_index)] for sweep in sweeps]
@@ -822,6 +1113,7 @@ def apply_basic_qc(
         "scan_id": root.attrs.get("scan_id"),
         "qc_profile": profile.profile_version,
         "qc_pipeline_version": profile.pipeline_version,
+        "decision_version": profile.decision_version,
         "flag_definition_version": profile.flag_definition_version,
         "health_state": state,
         "mean_quality_index": round(mean_quality, 6),
@@ -831,12 +1123,43 @@ def apply_basic_qc(
         "no_rain_gate_count": no_rain_count,
         "radial_interference_ray_count": radial_ray_count,
         "radial_interference_gate_count": radial_gate_count,
-        "radial_interference_area_km2": round(radial_area_km2, 6),
+        "radial_interference_area_km2": round(radial_area_km2, 6)
+        if radial_area_available
+        else None,
+        "radial_interference_area_status": "computed" if radial_area_available else "unavailable",
+        "radial_interference_area_definition": "sum_of_observed_polar_wedges_per_elevation",
         "radial_weak_candidate_ray_count": radial_weak_candidate_ray_count,
         "radial_context_promoted_ray_count": radial_context_promoted_ray_count,
         "radial_cross_radar_vetoed_ray_count": radial_cross_radar_vetoed_ray_count,
+        "vertical_consistency_available_gate_count": int(
+            vertical_diagnostics.metrics.get("available_gate_count", 0.0)
+        ),
+        "vertical_consistency_geometry_aware": bool(
+            vertical_diagnostics.metrics.get("geometry_aware", 0.0)
+        ),
+        "vertical_consistency_verified_vertical_datum": bool(
+            vertical_diagnostics.metrics.get("verified_vertical_datum", 0.0)
+        ),
+        "phase_processing_shadow_available_gate_count": int(
+            phase_processing_module.metrics.get("available_gate_count", 0.0)
+        ),
+        "phase_processing_shadow_processed_segment_count": int(
+            phase_processing_module.metrics.get("processed_segment_count", 0.0)
+        ),
+        "phase_processing_shadow_system_phase_available_ray_count": int(
+            phase_processing_module.metrics.get("system_phase_available_ray_count", 0.0)
+        ),
+        "attenuation_shadow_available_gate_count": int(
+            attenuation_module.metrics.get("available_gate_count", 0.0)
+        ),
+        "attenuation_shadow_processed_segment_count": int(
+            attenuation_module.metrics.get("processed_segment_count", 0.0)
+        ),
+        "cross_radar_trusted_available_gate_count": cross_radar_trusted_available_gate_count,
+        "cross_radar_trusted_available_ray_count": cross_radar_trusted_available_ray_count,
         "interference_type_ray_counts": type_ray_counts,
         "interference_type_gate_counts": type_gate_counts,
+        "decision_summary": radial_decision_summary,
         "ground_clutter_gate_count": ground_count,
         "sea_clutter_gate_count": sea_count,
         "ap_gate_count": ap_count,
@@ -905,9 +1228,7 @@ def audit_long_range_saturated_radials(
             "minimum_high_gate_fraction": _SATURATED_RADIAL_MINIMUM_HIGH_FRACTION,
             "minimum_high_run": _SATURATED_RADIAL_MINIMUM_HIGH_RUN,
             "minimum_range_growth_db": _SATURATED_RADIAL_MINIMUM_RANGE_GROWTH_DB,
-            "maximum_range_corrected_power_iqr_db": (
-                _SATURATED_RADIAL_MAXIMUM_POWER_IQR_DB
-            ),
+            "maximum_range_corrected_power_iqr_db": (_SATURATED_RADIAL_MAXIMUM_POWER_IQR_DB),
         },
         "saturated_ray_count": total,
         "sweeps": sweep_results,
@@ -1004,8 +1325,26 @@ def _volume_vertical_consistency(
     root: zarr.Group,
     profile: BasicQCProfile,
 ) -> dict[str, np.ndarray]:
+    return _volume_vertical_consistency_diagnostics(root, profile).probabilities
+
+
+def _volume_vertical_consistency_diagnostics(
+    root: zarr.Group,
+    profile: BasicQCProfile,
+    *,
+    radar_beam_context: RadarBeamContext | None = None,
+) -> VolumeVerticalConsistencyResult:
     if not profile.vertical_consistency.enabled:
-        return {}
+        return VolumeVerticalConsistencyResult(
+            probabilities={},
+            available_masks={},
+            height_differences_m={},
+            metrics={
+                "geometry_aware": 0.0,
+                "verified_vertical_datum": 0.0,
+                "available_gate_count": 0.0,
+            },
+        )
     inputs: list[dict[str, Any]] = []
     names: list[str] = []
     for sweep_number in root["sweep_number"][:]:
@@ -1022,17 +1361,57 @@ def _volume_vertical_consistency(
                 "dbzh": dbzh,
                 "azimuth": group["azimuth"][:],
                 "range": group["range"][:],
-                "elevation": float(np.nanmedian(group["elevation"][:])),
+                "elevation": (
+                    group["elevation"][:]
+                    if profile.decision_version == "evidence-v2"
+                    else float(np.nanmedian(group["elevation"][:]))
+                ),
             }
         )
         names.append(name)
+    if profile.decision_version == "evidence-v2":
+        try:
+            diagnostics = build_vertical_consistency_diagnostics(
+                tuple(inputs),
+                minimum_dbzh=profile.vertical_consistency.minimum_dbzh,
+                support_tolerance_db=profile.vertical_consistency.support_tolerance_db,
+                maximum_range_m=profile.vertical_consistency.maximum_range_m,
+                strict_observability=True,
+                maximum_azimuth_offset_deg=_V2_VERTICAL_MAX_AZIMUTH_OFFSET_DEG,
+                radar_beam_context=radar_beam_context,
+            )
+        except ValueError as error:
+            raise QCInputError(str(error)) from error
+        return VolumeVerticalConsistencyResult(
+            probabilities=dict(zip(names, diagnostics.probabilities, strict=True)),
+            available_masks=dict(zip(names, diagnostics.available_masks, strict=True)),
+            height_differences_m=dict(zip(names, diagnostics.height_differences_m, strict=True)),
+            metrics=diagnostics.metrics,
+        )
     values = _vertical_consistency_probabilities(
         tuple(inputs),
         minimum_dbzh=profile.vertical_consistency.minimum_dbzh,
         support_tolerance_db=profile.vertical_consistency.support_tolerance_db,
         maximum_range_m=profile.vertical_consistency.maximum_range_m,
     )
-    return dict(zip(names, values, strict=True))
+    available_masks = tuple(
+        np.isfinite(probability).astype("uint8", copy=False) for probability in values
+    )
+    height_differences = tuple(
+        np.full(probability.shape, np.nan, dtype="float32") for probability in values
+    )
+    return VolumeVerticalConsistencyResult(
+        probabilities=dict(zip(names, values, strict=True)),
+        available_masks=dict(zip(names, available_masks, strict=True)),
+        height_differences_m=dict(zip(names, height_differences, strict=True)),
+        metrics={
+            "geometry_aware": 0.0,
+            "verified_vertical_datum": 0.0,
+            "available_gate_count": float(
+                sum(int(np.count_nonzero(mask)) for mask in available_masks)
+            ),
+        },
+    )
 
 
 def _vertical_consistency_probabilities(
@@ -1041,6 +1420,8 @@ def _vertical_consistency_probabilities(
     minimum_dbzh: float,
     support_tolerance_db: float,
     maximum_range_m: float,
+    strict_observability: bool = False,
+    maximum_azimuth_offset_deg: float | None = None,
 ) -> tuple[np.ndarray, ...]:
     results = [
         np.full(np.asarray(sweep["dbzh"]).shape, np.nan, dtype="float32") for sweep in sweeps
@@ -1058,11 +1439,11 @@ def _vertical_consistency_probabilities(
         high_dbzh = np.asarray(high["dbzh"], dtype="float32")
         if low_dbzh.ndim != 2 or high_dbzh.ndim != 2:
             raise QCInputError("vertical consistency expects two-dimensional sweeps")
-        ray_index = _nearest_azimuth_indices(
+        ray_index, azimuth_offset, azimuth_supported = _nearest_azimuth_matches(
             np.asarray(low["azimuth"], dtype="float64"),
             np.asarray(high["azimuth"], dtype="float64"),
         )
-        gate_index = _nearest_coordinate_indices(
+        gate_index, gate_supported = _nearest_coordinate_matches(
             np.asarray(low["range"], dtype="float64"),
             np.asarray(high["range"], dtype="float64"),
         )
@@ -1074,8 +1455,19 @@ def _vertical_consistency_probabilities(
         )
         difference = np.maximum(low_dbzh - matched, 0.0)
         consistency = 1.0 - np.clip(difference / support_tolerance_db, 0.0, 1.0)
-        consistency[eligible & ~np.isfinite(matched)] = 0.0
-        results[low_index][eligible] = consistency[eligible]
+        if strict_observability:
+            supported = np.broadcast_to(azimuth_supported[:, None], low_dbzh.shape).copy()
+            supported &= np.broadcast_to(gate_supported[None, :], low_dbzh.shape)
+            if maximum_azimuth_offset_deg is not None:
+                supported &= np.broadcast_to(
+                    azimuth_offset[:, None] <= maximum_azimuth_offset_deg,
+                    low_dbzh.shape,
+                )
+            supported &= np.isfinite(matched)
+            results[low_index][eligible & supported] = consistency[eligible & supported]
+        else:
+            consistency[eligible & ~np.isfinite(matched)] = 0.0
+            results[low_index][eligible] = consistency[eligible]
     return tuple(results)
 
 
@@ -1101,12 +1493,25 @@ def _volume_higher_elevation_radial_extents(
             }
         )
         names.append(name)
-    values = _higher_elevation_radial_extent_fractions(tuple(inputs))
+    values = _higher_elevation_radial_extent_fractions(
+        tuple(inputs),
+        minimum_dbzh=profile.vertical_consistency.minimum_dbzh,
+        strict_observability=profile.decision_version == "evidence-v2",
+        maximum_azimuth_offset_deg=(
+            _V2_VERTICAL_MAX_AZIMUTH_OFFSET_DEG
+            if profile.decision_version == "evidence-v2"
+            else None
+        ),
+    )
     return dict(zip(names, values, strict=True))
 
 
 def _higher_elevation_radial_extent_fractions(
     sweeps: tuple[dict[str, Any], ...],
+    *,
+    minimum_dbzh: float = 10.0,
+    strict_observability: bool = False,
+    maximum_azimuth_offset_deg: float | None = None,
 ) -> tuple[np.ndarray, ...]:
     """Map the next reflectivity elevation's radial echo extent to each ray."""
     results = [
@@ -1119,15 +1524,34 @@ def _higher_elevation_radial_extent_fractions(
         if not higher:
             continue
         high = min(higher, key=lambda item: float(item["elevation"]))
-        high_extent = _radial_range_extent_fractions(
-            np.isfinite(np.asarray(high["dbzh"])),
-            np.asarray(high["range"], dtype="float64"),
-        )
-        ray_index = _nearest_azimuth_indices(
-            np.asarray(low["azimuth"], dtype="float64"),
-            np.asarray(high["azimuth"], dtype="float64"),
-        )
-        results[low_index] = high_extent[ray_index].astype("float32")
+        high_dbzh = np.asarray(high["dbzh"], dtype="float32")
+        if strict_observability:
+            high_observed = np.isfinite(high_dbzh)
+            high_echo = high_observed & (high_dbzh >= minimum_dbzh)
+            high_extent = _radial_range_extent_fractions_with_unavailable(
+                high_echo,
+                high_observed,
+                np.asarray(high["range"], dtype="float64"),
+            )
+            ray_index, azimuth_offset, azimuth_supported = _nearest_azimuth_matches(
+                np.asarray(low["azimuth"], dtype="float64"),
+                np.asarray(high["azimuth"], dtype="float64"),
+            )
+            matched = high_extent[ray_index].astype("float32")
+            supported = azimuth_supported
+            if maximum_azimuth_offset_deg is not None:
+                supported &= azimuth_offset <= maximum_azimuth_offset_deg
+            results[low_index][supported] = matched[supported]
+        else:
+            high_extent = _radial_range_extent_fractions(
+                np.isfinite(high_dbzh),
+                np.asarray(high["range"], dtype="float64"),
+            )
+            ray_index = _nearest_azimuth_indices(
+                np.asarray(low["azimuth"], dtype="float64"),
+                np.asarray(high["azimuth"], dtype="float64"),
+            )
+            results[low_index] = high_extent[ray_index].astype("float32")
     return tuple(results)
 
 
@@ -1162,11 +1586,24 @@ def _detect_radial_interference(
     config: RadialInterferenceConfig,
     *,
     ranges_m: np.ndarray | None = None,
+    azimuth_deg: np.ndarray | None = None,
     vertical_consistency: np.ndarray | None = None,
     higher_elevation_extent_fraction: np.ndarray | None = None,
     temporal_persistence: np.ndarray | None = None,
     cross_radar_consistency: np.ndarray | None = None,
 ) -> RadialInterferenceDetection:
+    if config.decision_version == "evidence-v2":
+        return _detect_radial_interference_v2(
+            dbzh,
+            valid,
+            config,
+            ranges_m=ranges_m,
+            azimuth_deg=azimuth_deg,
+            vertical_consistency=vertical_consistency,
+            higher_elevation_extent_fraction=higher_elevation_extent_fraction,
+            temporal_persistence=temporal_persistence,
+            cross_radar_consistency=cross_radar_consistency,
+        )
     probabilities = np.zeros(dbzh.shape, dtype="float32")
     probabilities[~valid] = np.nan
     interference_type = np.zeros(dbzh.shape, dtype="uint8")
@@ -1411,7 +1848,398 @@ def _detect_radial_interference(
         int(np.count_nonzero(weak_candidate_rays)),
         int(np.count_nonzero(context_promoted_rays)),
         int(np.count_nonzero(cross_radar_vetoed_rays)),
+        candidate_ray_mask=np.any(
+            np.nan_to_num(probabilities, nan=0.0) >= config.morphology.diagnostic_probability,
+            axis=1,
+        ),
+        observed_ray_mask=np.any(valid, axis=1),
     )
+
+
+def _detect_radial_interference_v2(
+    dbzh: np.ndarray,
+    valid: np.ndarray,
+    config: RadialInterferenceConfig,
+    *,
+    ranges_m: np.ndarray | None = None,
+    azimuth_deg: np.ndarray | None = None,
+    vertical_consistency: np.ndarray | None = None,
+    higher_elevation_extent_fraction: np.ndarray | None = None,
+    temporal_persistence: np.ndarray | None = None,
+    cross_radar_consistency: np.ndarray | None = None,
+) -> RadialInterferenceDetection:
+    probabilities = np.zeros(dbzh.shape, dtype="float32")
+    probabilities[~valid] = np.nan
+    interference_type = np.zeros(dbzh.shape, dtype="uint8")
+    type_ray_counts = {name: 0 for name in INTERFERENCE_TYPE_CODES if name != "none"}
+    type_gate_counts = {name: 0 for name in INTERFERENCE_TYPE_CODES if name != "none"}
+    if dbzh.shape[0] < 2:
+        return RadialInterferenceDetection(
+            probabilities,
+            interference_type,
+            0,
+            type_ray_counts,
+            type_gate_counts,
+            0,
+            0,
+            0,
+            summarize_radial_decision(
+                RadialDecisionV2(
+                    observed_mask=valid.copy(),
+                    candidate_mask=np.zeros(dbzh.shape, dtype=bool),
+                    candidate_reason_bits=np.zeros(dbzh.shape, dtype="uint16"),
+                    strong_seed_mask=np.zeros(dbzh.shape, dtype=bool),
+                    meteo_veto_mask=np.zeros(dbzh.shape, dtype=bool),
+                    hard_mask=np.zeros(dbzh.shape, dtype=bool),
+                    soft_mask=np.zeros(dbzh.shape, dtype=bool),
+                    override_mask=np.zeros(dbzh.shape, dtype=bool),
+                    final_reason=np.zeros(dbzh.shape, dtype="uint8"),
+                )
+            ),
+        )
+    ranges = (
+        np.asarray(ranges_m, dtype="float64")
+        if ranges_m is not None
+        else np.arange(dbzh.shape[1], dtype="float64")
+    )
+    if ranges.shape != (dbzh.shape[1],):
+        raise QCInputError("radial interference range coordinate differs from gate shape")
+    if vertical_consistency is not None and vertical_consistency.shape != dbzh.shape:
+        raise QCInputError("vertical consistency differs from radial gate shape")
+    if higher_elevation_extent_fraction is not None and higher_elevation_extent_fraction.shape != (
+        dbzh.shape[0],
+    ):
+        raise QCInputError("higher-elevation extent differs from radial ray shape")
+    temporal_persistence = _validated_optional_ray_evidence(
+        temporal_persistence,
+        dbzh.shape[0],
+        "temporal persistence",
+    )
+    cross_radar_consistency = _validated_optional_ray_evidence(
+        cross_radar_consistency,
+        dbzh.shape[0],
+        "cross-radar consistency",
+    )
+
+    candidate_mask = np.zeros(dbzh.shape, dtype=bool)
+    candidate_reason_bits = np.zeros(dbzh.shape, dtype="uint16")
+    strong_seed_mask = np.zeros(dbzh.shape, dtype=bool)
+    context_promoted_rays = np.zeros(dbzh.shape[0], dtype=bool)
+    cross_radar_vetoed_rays = np.zeros(dbzh.shape[0], dtype=bool)
+
+    previous_rays, next_rays = _adjacent_ray_indices(
+        azimuth_deg,
+        dbzh.shape[0],
+        maximum_gap_deg=_V2_NEIGHBOUR_MAX_AZIMUTH_GAP_DEG,
+    )
+    for ray_index in range(dbzh.shape[0]):
+        ray_valid = valid[ray_index]
+        if _is_long_range_saturated_radial(dbzh[ray_index], ray_valid):
+            candidate_mask[ray_index, ray_valid] = True
+            candidate_reason_bits[ray_index, ray_valid] |= RADIAL_CANDIDATE_REASON_SATURATED
+            strong_seed_mask[ray_index, ray_valid] = True
+            _record_radial_type(
+                probabilities,
+                interference_type,
+                ray_index,
+                ray_valid,
+                "broad",
+                config.flag_probability,
+            )
+            continue
+
+        baseline = _neighbour_baseline(dbzh, ray_index)
+        positive_candidate = (
+            ray_valid
+            & np.isfinite(baseline)
+            & ((dbzh[ray_index] - baseline) >= config.morphology.candidate_difference_db)
+        )
+        if np.any(positive_candidate):
+            candidate_reason_bits[ray_index, positive_candidate] |= (
+                RADIAL_CANDIDATE_REASON_NEIGHBOUR
+            )
+        for start, end in _true_segments(
+            positive_candidate,
+            config.morphology.minimum_segment_gates,
+        ):
+            candidate_mask[ray_index, start:end] = True
+            candidate_reason_bits[ray_index, start:end] |= RADIAL_CANDIDATE_REASON_SEGMENT
+
+        previous_ray = previous_rays[ray_index]
+        following_ray = next_rays[ray_index]
+        if previous_ray >= 0 and following_ray >= 0 and previous_ray != following_ray:
+            shared_observed = ray_valid & valid[previous_ray] & valid[following_ray]
+            if (
+                np.count_nonzero(shared_observed) > 0
+                and float(np.mean(ray_valid)) >= config.minimum_valid_gate_fraction
+            ):
+                strong_candidate = (
+                    shared_observed
+                    & ((dbzh[ray_index] - dbzh[previous_ray]) >= config.neighbour_difference_db)
+                    & ((dbzh[ray_index] - dbzh[following_ray]) >= config.neighbour_difference_db)
+                )
+                if np.any(strong_candidate):
+                    candidate_reason_bits[ray_index, strong_candidate] |= (
+                        RADIAL_CANDIDATE_REASON_NEIGHBOUR | RADIAL_CANDIDATE_REASON_SEGMENT
+                    )
+                if np.count_nonzero(strong_candidate) / np.count_nonzero(shared_observed) >= 0.50:
+                    for start, end in _true_segments(
+                        strong_candidate,
+                        config.minimum_consecutive_gates,
+                    ):
+                        candidate_mask[ray_index, start:end] = True
+                        strong_seed_mask[ray_index, start:end] = True
+
+        type_name = _classify_v2_radial_type(
+            dbzh[ray_index],
+            ray_valid,
+            candidate_mask[ray_index] | strong_seed_mask[ray_index],
+            ranges,
+            config,
+        )
+        weak_gates = candidate_mask[ray_index] & ~strong_seed_mask[ray_index]
+        if np.any(weak_gates):
+            _record_radial_type(
+                probabilities,
+                interference_type,
+                ray_index,
+                weak_gates,
+                type_name,
+                config.morphology.diagnostic_probability,
+            )
+        if np.any(strong_seed_mask[ray_index]):
+            _record_radial_type(
+                probabilities,
+                interference_type,
+                ray_index,
+                strong_seed_mask[ray_index],
+                type_name,
+                config.flag_probability,
+            )
+
+    # All expansion stages anchor only to the independent initial detections.
+    strong_seed_mask.flags.writeable = False
+    if config.morphology.fan_closure.enabled:
+        pre_hard = np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability
+        _close_seeded_radial_fans(
+            dbzh,
+            valid,
+            ranges,
+            probabilities,
+            interference_type,
+            config,
+            seed_mask=strong_seed_mask,
+        )
+        post_hard = np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability
+        new_hard = post_hard & ~pre_hard
+        candidate_mask |= new_hard
+        candidate_reason_bits[new_hard] |= RADIAL_CANDIDATE_REASON_FAN
+        if config.morphology.fan_closure.edge_extension_enabled:
+            pre_hard = post_hard
+            _extend_seeded_radial_fan_edges(
+                dbzh,
+                valid,
+                ranges,
+                probabilities,
+                interference_type,
+                config,
+                seed_mask=strong_seed_mask,
+            )
+            post_hard = np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability
+            new_hard = post_hard & ~pre_hard
+            candidate_mask |= new_hard
+            candidate_reason_bits[new_hard] |= RADIAL_CANDIDATE_REASON_EDGE
+        if config.morphology.fan_closure.residual_completion_enabled:
+            pre_hard = np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability
+            _complete_seeded_radial_residuals(
+                dbzh,
+                valid,
+                ranges,
+                probabilities,
+                interference_type,
+                config,
+                seed_mask=strong_seed_mask,
+            )
+            post_hard = np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability
+            new_hard = post_hard & ~pre_hard
+            candidate_mask |= new_hard
+            candidate_reason_bits[new_hard] |= RADIAL_CANDIDATE_REASON_RESIDUAL
+
+    if config.morphology.radial_extent_promotion.enabled:
+        pre_diag = np.nan_to_num(probabilities, nan=0.0) >= config.morphology.diagnostic_probability
+        (
+            extent_candidates,
+            extent_promoted,
+            extent_vetoed,
+        ) = _promote_radial_extent_evidence(
+            dbzh,
+            valid,
+            ranges,
+            probabilities,
+            interference_type,
+            config,
+            higher_elevation_extent_fraction,
+            temporal_persistence,
+            cross_radar_consistency,
+            seed_mask=strong_seed_mask,
+        )
+        post_diag = (
+            np.nan_to_num(probabilities, nan=0.0) >= config.morphology.diagnostic_probability
+        )
+        new_diag = post_diag & ~pre_diag
+        candidate_mask |= new_diag
+        candidate_reason_bits[new_diag] |= RADIAL_CANDIDATE_REASON_EXTENT
+        context_promoted_rays |= extent_promoted
+        cross_radar_vetoed_rays |= extent_vetoed
+        for ray_index in np.flatnonzero(extent_candidates):
+            candidate_mask[int(ray_index), valid[int(ray_index)]] = True
+
+    if config.morphology.multiscale_promotion.enabled:
+        pre_hard = np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability
+        _promote_multiscale_radial_evidence(
+            dbzh,
+            valid,
+            probabilities,
+            interference_type,
+            config,
+        )
+        post_hard = np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability
+        new_hard = post_hard & ~pre_hard
+        candidate_mask |= new_hard
+        candidate_reason_bits[new_hard] |= RADIAL_CANDIDATE_REASON_MULTISCALE
+        strong_seed_rays = np.any(strong_seed_mask, axis=1)
+        for ray_index in np.flatnonzero(np.any(new_hard, axis=1)):
+            if strong_seed_rays[int(ray_index)] or context_promoted_rays[int(ray_index)]:
+                continue
+            probabilities[int(ray_index), new_hard[int(ray_index)]] = (
+                config.morphology.diagnostic_probability
+            )
+
+    hard_mask = valid & (np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability)
+    meteo_veto_mask = np.zeros(dbzh.shape, dtype=bool)
+    override_mask = np.zeros(dbzh.shape, dtype=bool)
+    fusion = config.morphology.context_fusion
+    if cross_radar_consistency is not None:
+        for ray_index in range(dbzh.shape[0]):
+            consistency = float(cross_radar_consistency[ray_index])
+            if (
+                not np.isfinite(consistency)
+                or consistency < fusion.cross_radar_veto_min_consistency
+            ):
+                continue
+            ray_candidate = candidate_mask[ray_index] | hard_mask[ray_index]
+            if not np.any(ray_candidate):
+                continue
+            meteo_veto_mask[ray_index, ray_candidate] = True
+            override = strong_seed_mask[ray_index] & ray_candidate
+            if np.any(override):
+                override_mask[ray_index, override] = True
+            demote = hard_mask[ray_index] & ~strong_seed_mask[ray_index]
+            if np.any(demote):
+                probabilities[ray_index, demote] = config.morphology.diagnostic_probability
+                cross_radar_vetoed_rays[ray_index] = True
+
+    hard_mask = valid & (np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability)
+    soft_mask = candidate_mask & ~hard_mask
+    final_reason = np.zeros(dbzh.shape, dtype="uint8")
+    final_reason[hard_mask & strong_seed_mask] = RADIAL_FINAL_REASON_STRONG_SEED
+    final_reason[override_mask] = RADIAL_FINAL_REASON_STRONG_OVERRIDE
+    final_reason[hard_mask & ~strong_seed_mask] = RADIAL_FINAL_REASON_CONTEXT_PROMOTED
+    final_reason[soft_mask & meteo_veto_mask] = RADIAL_FINAL_REASON_VETO_SOFT
+    final_reason[soft_mask & ~meteo_veto_mask] = RADIAL_FINAL_REASON_WEAK_SOFT
+    decision = RadialDecisionV2(
+        observed_mask=valid.copy(),
+        candidate_mask=candidate_mask,
+        candidate_reason_bits=candidate_reason_bits,
+        strong_seed_mask=strong_seed_mask,
+        meteo_veto_mask=meteo_veto_mask,
+        hard_mask=hard_mask,
+        soft_mask=soft_mask,
+        override_mask=override_mask,
+        final_reason=final_reason,
+    )
+    decision_summary = summarize_radial_decision(decision)
+    flagged_ray_count = int(np.count_nonzero(np.any(hard_mask, axis=1)))
+    weak_candidate_rays = np.any(candidate_mask & ~strong_seed_mask, axis=1)
+    for type_name, code in INTERFERENCE_TYPE_CODES.items():
+        if type_name == "none":
+            continue
+        typed = interference_type == code
+        type_ray_counts[type_name] = int(np.count_nonzero(np.any(typed, axis=1)))
+        type_gate_counts[type_name] = int(np.count_nonzero(typed))
+    return RadialInterferenceDetection(
+        probabilities,
+        interference_type,
+        flagged_ray_count,
+        type_ray_counts,
+        type_gate_counts,
+        int(np.count_nonzero(weak_candidate_rays)),
+        int(np.count_nonzero(context_promoted_rays)),
+        int(np.count_nonzero(cross_radar_vetoed_rays)),
+        decision_summary,
+        np.any(candidate_mask, axis=1),
+        np.any(valid, axis=1),
+    )
+
+
+def _adjacent_ray_indices(
+    azimuth_deg: np.ndarray | None,
+    ray_count: int,
+    *,
+    maximum_gap_deg: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    if azimuth_deg is None:
+        previous = np.roll(np.arange(ray_count, dtype="int64"), 1)
+        following = np.roll(np.arange(ray_count, dtype="int64"), -1)
+        return previous, following
+    azimuth = np.asarray(azimuth_deg, dtype="float64")
+    if azimuth.shape != (ray_count,):
+        raise QCInputError("radial interference azimuth coordinate differs from ray shape")
+    previous = np.full(ray_count, -1, dtype="int64")
+    following = np.full(ray_count, -1, dtype="int64")
+    finite = np.flatnonzero(np.isfinite(azimuth))
+    if finite.size < 2:
+        return previous, following
+    normalized = np.mod(azimuth[finite], 360.0)
+    order = np.argsort(normalized, kind="stable")
+    sorted_values = normalized[order]
+    sorted_indices = finite[order]
+    previous_gap = np.mod(sorted_values - np.roll(sorted_values, 1), 360.0)
+    following_gap = np.mod(np.roll(sorted_values, -1) - sorted_values, 360.0)
+    previous[sorted_indices] = np.where(
+        previous_gap <= maximum_gap_deg,
+        np.roll(sorted_indices, 1),
+        -1,
+    )
+    following[sorted_indices] = np.where(
+        following_gap <= maximum_gap_deg,
+        np.roll(sorted_indices, -1),
+        -1,
+    )
+    return previous, following
+
+
+def _classify_v2_radial_type(
+    values: np.ndarray,
+    valid: np.ndarray,
+    candidate: np.ndarray,
+    ranges_m: np.ndarray,
+    config: RadialInterferenceConfig,
+) -> str:
+    segments = _true_segments(candidate, config.morphology.minimum_segment_gates)
+    if not segments:
+        return "narrow"
+    if (
+        len(segments) == 1
+        and np.count_nonzero(candidate) >= 0.5 * np.count_nonzero(valid)
+        and _near_to_far_drop(values, valid) >= config.morphology.reverse_minimum_drop_db
+    ):
+        return "reverse"
+    if len(segments) >= config.morphology.intermittent_minimum_segments:
+        return "intermittent"
+    if ranges_m[max(end for _, end in segments) - 1] <= config.morphology.short_range_max_m:
+        return "short_range"
+    return "narrow"
 
 
 def _close_seeded_radial_fans(
@@ -1421,11 +2249,15 @@ def _close_seeded_radial_fans(
     probabilities: np.ndarray,
     interference_type: np.ndarray,
     config: RadialInterferenceConfig,
+    *,
+    seed_mask: np.ndarray | None = None,
 ) -> None:
     """Fill only bounded holes inside an already confirmed radial fan."""
     closure = config.morphology.fan_closure
     hard_rays = np.any(
-        np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability,
+        (np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability)
+        if seed_mask is None
+        else seed_mask,
         axis=1,
     )
     if np.count_nonzero(hard_rays) < 2:
@@ -1500,11 +2332,15 @@ def _extend_seeded_radial_fan_edges(
     probabilities: np.ndarray,
     interference_type: np.ndarray,
     config: RadialInterferenceConfig,
+    *,
+    seed_mask: np.ndarray | None = None,
 ) -> None:
     """Extend a confirmed fan across a short, truncated open boundary."""
     closure = config.morphology.fan_closure
     hard_rays = np.any(
-        np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability,
+        (np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability)
+        if seed_mask is None
+        else seed_mask,
         axis=1,
     )
     if not np.any(hard_rays):
@@ -1542,11 +2378,17 @@ def _complete_seeded_radial_residuals(
     probabilities: np.ndarray,
     interference_type: np.ndarray,
     config: RadialInterferenceConfig,
+    *,
+    seed_mask: np.ndarray | None = None,
 ) -> None:
     """Close holes on confirmed rays and remove only seeded far fragments."""
     closure = config.morphology.fan_closure
     promotion = config.morphology.radial_extent_promotion
-    hard = np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability
+    hard = (
+        (np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability)
+        if seed_mask is None
+        else seed_mask
+    )
     if not np.any(hard):
         return
 
@@ -1580,7 +2422,11 @@ def _complete_seeded_radial_residuals(
 
     if not closure.far_segment_extension_enabled:
         return
-    hard = np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability
+    hard = (
+        (np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability)
+        if seed_mask is None
+        else seed_mask
+    )
     seeded_neighbour = np.roll(hard, 1, axis=0) | np.roll(hard, -1, axis=0)
 
     # A confirmed fan can hide its open boundary from the first-pass neighbour
@@ -1622,7 +2468,11 @@ def _complete_seeded_radial_residuals(
             )
             break
 
-    hard = np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability
+    hard = (
+        (np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability)
+        if seed_mask is None
+        else seed_mask
+    )
     seeded_neighbour = np.roll(hard, 1, axis=0) | np.roll(hard, -1, axis=0)
     for ray_index in range(dbzh.shape[0]):
         candidate = (
@@ -1742,10 +2592,18 @@ def _promote_radial_extent_evidence(
     higher_elevation_extent_fraction: np.ndarray | None,
     temporal_persistence: np.ndarray | None,
     cross_radar_consistency: np.ndarray | None,
+    *,
+    seed_mask: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Fuse independent context without letting weak geometry hard-flag alone."""
     promotion = config.morphology.radial_extent_promotion
     fusion = config.morphology.context_fusion
+    allow_vertical_negative = (
+        config.decision_version == "legacy-v1" or fusion.allow_vertical_negative_promotion
+    )
+    allow_cross_negative = (
+        config.decision_version == "legacy-v1" or fusion.allow_cross_radar_negative_promotion
+    )
     ray_count = dbzh.shape[0]
     higher_extent_by_ray = (
         np.asarray(higher_elevation_extent_fraction, dtype="float32")
@@ -1766,6 +2624,7 @@ def _promote_radial_extent_evidence(
         np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability,
         axis=1,
     )
+    anchor_rays = hard_rays if seed_mask is None else np.any(seed_mask, axis=1)
     diagnostic_rays = np.any(
         (np.nan_to_num(probabilities, nan=0.0) >= config.morphology.diagnostic_probability)
         & (np.nan_to_num(probabilities, nan=0.0) < config.flag_probability),
@@ -1780,11 +2639,12 @@ def _promote_radial_extent_evidence(
         ray_valid = valid[ray_index]
         higher_extent = float(higher_extent_by_ray[ray_index])
         vertical_evidence[ray_index] = (
-            np.isfinite(higher_extent)
+            allow_vertical_negative
+            and np.isfinite(higher_extent)
             and higher_extent <= promotion.maximum_higher_elevation_extent_fraction
         )
         fan_context = diagnostic_rays[ray_index] and _has_circular_neighbour(
-            hard_rays,
+            anchor_rays,
             ray_index,
             promotion.maximum_hard_seed_distance_rays,
         )
@@ -1836,7 +2696,7 @@ def _promote_radial_extent_evidence(
                 "narrow",
                 config.morphology.diagnostic_probability,
             )
-            if strong_geometry[ray_index]:
+            if strong_geometry[ray_index] and config.decision_version == "legacy-v1":
                 should_promote = True
             elif not fusion.enabled:
                 should_promote = bool(vertical_evidence[ray_index])
@@ -1859,6 +2719,7 @@ def _promote_radial_extent_evidence(
                 else:
                     if (
                         np.isfinite(consistency)
+                        and allow_cross_negative
                         and consistency <= fusion.cross_radar_promotion_max_consistency
                     ):
                         evidence_count += 1
@@ -1980,6 +2841,21 @@ def _radial_range_extent_fractions(
         return result
     for ray_index in range(valid.shape[0]):
         result[ray_index] = _radial_range_extent_fraction(valid[ray_index], ranges_m)
+    return result
+
+
+def _radial_range_extent_fractions_with_unavailable(
+    echo: np.ndarray,
+    observed: np.ndarray,
+    ranges_m: np.ndarray,
+) -> np.ndarray:
+    if echo.ndim != 2 or observed.shape != echo.shape or ranges_m.shape != (echo.shape[1],):
+        raise QCInputError("radial extent geometry differs from gate shape")
+    result = np.full(echo.shape[0], np.nan, dtype="float32")
+    for ray_index in range(echo.shape[0]):
+        if np.count_nonzero(observed[ray_index]) == 0:
+            continue
+        result[ray_index] = _radial_range_extent_fraction(echo[ray_index], ranges_m)
     return result
 
 
@@ -2116,10 +2992,13 @@ def _minimum_circular_neighbour_step(values: np.ndarray, *, period: float) -> np
 
 def _temporal_radial_persistence(
     azimuth: np.ndarray,
-    context_scans: tuple[tuple[np.ndarray, np.ndarray], ...],
+    context_scans: tuple[
+        tuple[np.ndarray, np.ndarray] | tuple[np.ndarray, np.ndarray, np.ndarray], ...
+    ],
     *,
     minimum_context_scans: int,
     maximum_context_scans: int,
+    maximum_azimuth_offset_deg: float | None = 0.75,
 ) -> np.ndarray:
     """Return same-azimuth candidate persistence across ordered nearby scans."""
     source_azimuth = np.asarray(azimuth, dtype="float64")
@@ -2130,15 +3009,42 @@ def _temporal_radial_persistence(
     selected = context_scans[:maximum_context_scans]
     if len(selected) < minimum_context_scans:
         return np.full(source_azimuth.shape, np.nan, dtype="float32")
-    aligned: list[np.ndarray] = []
-    for context_azimuth, context_candidates in selected:
+    candidate_hits = np.zeros(source_azimuth.shape, dtype="float64")
+    observed_counts = np.zeros(source_azimuth.shape, dtype="int32")
+    for item in selected:
+        if len(item) == 2:
+            context_azimuth, context_candidates = item
+            context_observed = np.ones_like(context_candidates, dtype=bool)
+        else:
+            context_azimuth, context_candidates, context_observed = item
         target_azimuth = np.asarray(context_azimuth, dtype="float64")
         candidates = np.asarray(context_candidates, dtype=bool)
-        if target_azimuth.ndim != 1 or candidates.shape != target_azimuth.shape:
+        observed = np.asarray(context_observed, dtype=bool)
+        if (
+            target_azimuth.ndim != 1
+            or candidates.shape != target_azimuth.shape
+            or observed.shape != target_azimuth.shape
+        ):
             raise QCInputError("temporal context candidates differ from their azimuth shape")
-        indices = _nearest_azimuth_indices(source_azimuth, target_azimuth)
-        aligned.append(candidates[indices])
-    return np.mean(np.stack(aligned, axis=0), axis=0, dtype="float64").astype("float32")
+        if not np.any(np.isfinite(target_azimuth)):
+            continue
+        indices, offsets, angular_supported = _nearest_azimuth_matches(
+            source_azimuth, target_azimuth
+        )
+        aligned_observed = observed[indices] & angular_supported
+        if maximum_azimuth_offset_deg is not None:
+            aligned_observed &= offsets <= maximum_azimuth_offset_deg
+        candidate_hits += (candidates[indices] & aligned_observed).astype(
+            "float64",
+            copy=False,
+        )
+        observed_counts += aligned_observed.astype("int32", copy=False)
+    result = np.full(source_azimuth.shape, np.nan, dtype="float32")
+    supported = observed_counts >= minimum_context_scans
+    result[supported] = (candidate_hits[supported] / observed_counts[supported]).astype(
+        "float32", copy=False
+    )
+    return result
 
 
 def _cross_radar_consistency_by_ray(
@@ -2172,17 +3078,55 @@ def _cross_radar_consistency_by_ray(
         overlap_count = int(np.count_nonzero(overlap))
         if overlap_count < minimum_overlap_gates:
             continue
-        result[ray_index] = np.count_nonzero(
-            overlap & neighbour_echo[ray_index]
-        ) / overlap_count
+        result[ray_index] = np.count_nonzero(overlap & neighbour_echo[ray_index]) / overlap_count
     return result
 
 
 def _nearest_azimuth_indices(source: np.ndarray, target: np.ndarray) -> np.ndarray:
-    if target.size == 0:
-        raise QCInputError("vertical comparison target has no azimuths")
-    difference = np.abs((source[:, None] - target[None, :] + 180.0) % 360.0 - 180.0)
-    return np.argmin(difference, axis=1)
+    indices, _, _ = _nearest_azimuth_matches(source, target)
+    return indices
+
+
+def _nearest_azimuth_matches(
+    source: np.ndarray,
+    target: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    source_values = np.asarray(source, dtype="float64")
+    target_values = np.asarray(target, dtype="float64")
+    target_indices = np.flatnonzero(np.isfinite(target_values))
+    if target_indices.size == 0:
+        raise QCInputError("vertical comparison target has no finite azimuths")
+    normalized_target = np.mod(target_values[target_indices], 360.0)
+    order = np.argsort(normalized_target, kind="stable")
+    sorted_target = normalized_target[order]
+    sorted_indices = target_indices[order]
+    unique_mask = np.ones(sorted_target.shape, dtype=bool)
+    if sorted_target.size > 1:
+        unique_mask[1:] = sorted_target[1:] != sorted_target[:-1]
+    unique_target = sorted_target[unique_mask]
+    unique_indices = sorted_indices[unique_mask]
+
+    result = np.zeros(source_values.shape, dtype="int64")
+    offset = np.full(source_values.shape, np.nan, dtype="float64")
+    supported = np.isfinite(source_values)
+    if not np.any(supported):
+        return result, offset, supported
+    normalized_source = np.mod(source_values[supported], 360.0)
+    positions = np.searchsorted(unique_target, normalized_source, side="left")
+    right = positions % unique_target.size
+    left = (positions - 1) % unique_target.size
+    right_values = unique_target[right]
+    left_values = unique_target[left]
+    right_delta = np.abs((right_values - normalized_source + 180.0) % 360.0 - 180.0)
+    left_delta = np.abs((left_values - normalized_source + 180.0) % 360.0 - 180.0)
+    choose_right = right_delta < left_delta
+    equal = right_delta == left_delta
+    if np.any(equal):
+        choose_right[equal] = unique_indices[right[equal]] < unique_indices[left[equal]]
+    chosen_positions = np.where(choose_right, right, left)
+    result[supported] = unique_indices[chosen_positions]
+    offset[supported] = np.where(choose_right, right_delta, left_delta)
+    return result, offset, supported
 
 
 def _nearest_coordinate_indices(source: np.ndarray, target: np.ndarray) -> np.ndarray:
@@ -2193,6 +3137,19 @@ def _nearest_coordinate_indices(source: np.ndarray, target: np.ndarray) -> np.nd
     previous = np.clip(insertion - 1, 0, target.size - 1)
     use_previous = np.abs(source - target[previous]) <= np.abs(source - target[following])
     return np.where(use_previous, previous, following)
+
+
+def _nearest_coordinate_matches(
+    source: np.ndarray,
+    target: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    source_values = np.asarray(source, dtype="float64")
+    indices = _nearest_coordinate_indices(source_values, np.asarray(target, dtype="float64"))
+    supported = np.isfinite(source_values)
+    if target.size:
+        supported &= source_values >= float(target[0])
+        supported &= source_values <= float(target[-1])
+    return indices, supported
 
 
 def _is_long_range_saturated_radial(dbzh: np.ndarray, valid: np.ndarray) -> bool:
@@ -2262,16 +3219,21 @@ def _module_records(
     sea_ap_available: bool,
     dual_pol_available: bool,
     vertical_available: bool,
+    phase_processing_module: QCModuleRecord,
+    attenuation_module: QCModuleRecord,
+    vertical_metrics: dict[str, float],
     radial_ray_count: int,
     radial_weak_candidate_ray_count: int,
     radial_context_promoted_ray_count: int,
     radial_cross_radar_vetoed_ray_count: int,
+    cross_radar_trusted_metrics: dict[str, float],
     type_ray_counts: dict[str, int],
     ground_count: int,
     sea_count: int,
     ap_count: int,
+    texture_metrics: dict[str, float],
 ) -> tuple[QCModuleRecord, ...]:
-    return (
+    records = [
         QCModuleRecord("health_gate", profile.pipeline_version, "applied", (), (), None, {}),
         QCModuleRecord(
             "missing_and_echo_state",
@@ -2283,6 +3245,20 @@ def _module_records(
             {},
         ),
         QCModuleRecord(
+            TEXTURE_MODULE_NAME,
+            profile.pipeline_version,
+            "applied",
+            TEXTURE_INPUT_FIELDS,
+            TEXTURE_PRODUCED_VARIABLES,
+            None,
+            {
+                "range_window_m": TEXTURE_RANGE_WINDOW_METERS,
+                "azimuth_half_window_deg": TEXTURE_AZIMUTH_HALF_WINDOW_DEG,
+                "minimum_support_fraction": TEXTURE_MIN_SUPPORT_FRACTION,
+                **texture_metrics,
+            },
+        ),
+        QCModuleRecord(
             "dual_pol_fuzzy",
             profile.pipeline_version,
             "applied" if dual_pol_available else "skipped",
@@ -2291,18 +3267,27 @@ def _module_records(
             (None if dual_pol_available else "dual_pol_fuzzy_disabled_or_fields_unavailable"),
             {"diagnostic_only": float(profile.dual_pol_fuzzy.mode == "diagnostic_only")},
         ),
+        phase_processing_module,
+        attenuation_module,
         QCModuleRecord(
             "vertical_consistency",
             profile.pipeline_version,
             "applied" if vertical_available else "skipped",
             ("DBZH", "azimuth", "range", "elevation"),
-            ("P_VERTICAL_CONSISTENCY",),
             (
-                None
-                if vertical_available
-                else "vertical_consistency_disabled_or_higher_sweep_unavailable"
+                (
+                    "P_VERTICAL_CONSISTENCY",
+                    VERTICAL_CONSISTENCY_AVAILABLE_MASK_FIELD,
+                    VERTICAL_HEIGHT_DIFFERENCE_M_FIELD,
+                )
+                if profile.decision_version == "evidence-v2"
+                else ("P_VERTICAL_CONSISTENCY",)
             ),
-            {"diagnostic_only": float(profile.vertical_consistency.mode == "diagnostic_only")},
+            (None if vertical_available else "vertical_consistency_unavailable"),
+            {
+                "diagnostic_only": float(profile.vertical_consistency.mode == "diagnostic_only"),
+                **vertical_metrics,
+            },
         ),
         QCModuleRecord(
             "radial_interference",
@@ -2387,7 +3372,167 @@ def _module_records(
             "verified_calibration_and_phase_processing_unavailable",
             {},
         ),
+    ]
+    if profile.decision_version == "evidence-v2":
+        trusted_available = cross_radar_trusted_metrics.get("available_gate_count", 0.0) > 0
+        records.append(
+            QCModuleRecord(
+                "cross_radar_trusted_support",
+                profile.pipeline_version,
+                "applied" if trusted_available else "skipped",
+                ("DBZH", "azimuth", "range", "elevation"),
+                (
+                    CROSS_RADAR_TRUSTED_SUPPORT_FIELD,
+                    CROSS_RADAR_TRUSTED_AVAILABLE_MASK_FIELD,
+                ),
+                (None if trusted_available else "cross_radar_trusted_support_unavailable"),
+                dict(cross_radar_trusted_metrics),
+            )
+        )
+    return tuple(records)
+
+
+def _phase_processing_module_record(
+    phase_processing_profile: PhaseProcessingProfile | None,
+    *,
+    input_sweep_count: int,
+    missing_input_sweep_count: int,
+    failed_sweep_count: int,
+    processing_metrics: dict[str, float],
+    failure_reason: str | None,
+) -> QCModuleRecord:
+    shadow_enabled = False
+    worker_enabled = False
+    if phase_processing_profile is None:
+        version = "phase2-shadow-unconfigured"
+        status = "skipped"
+        reason = "phase_processing_shadow_profile_unconfigured"
+    else:
+        version = phase_processing_profile.profile_version
+        shadow_enabled = phase_processing_profile.shadow_processing_enabled
+        worker_enabled = phase_processing_profile.worker_integration_enabled
+        if not shadow_enabled:
+            status = "skipped"
+            reason = "phase_processing_shadow_disabled"
+        elif failed_sweep_count > 0:
+            status = "failed"
+            reason = failure_reason or "phase_processing_shadow_failed"
+        elif input_sweep_count == 0:
+            status = "skipped"
+            reason = "phidp_field_unavailable"
+        else:
+            status = "applied"
+            reason = None
+    metrics = {
+        "profile_configured": float(phase_processing_profile is not None),
+        "shadow_processing_enabled": float(shadow_enabled),
+        "worker_integration_enabled": float(worker_enabled),
+        "input_sweep_count": float(input_sweep_count),
+        "missing_input_sweep_count": float(missing_input_sweep_count),
+        "failed_sweep_count": float(failed_sweep_count),
+        **processing_metrics,
+    }
+    return QCModuleRecord(
+        PHASE_PROCESSING_MODULE_NAME,
+        version,
+        status,
+        ("PHIDP", "range"),
+        PHASE_PROCESSING_PRODUCED_VARIABLES,
+        reason,
+        metrics,
     )
+
+
+def _attenuation_shadow_module_record(
+    attenuation_profile: AttenuationProfile | None,
+    *,
+    input_sweep_count: int,
+    missing_input_sweep_count: int,
+    failed_sweep_count: int,
+    processing_metrics: dict[str, float],
+    failure_reason: str | None,
+) -> QCModuleRecord:
+    shadow_enabled = False
+    worker_enabled = False
+    coefficients_configured = False
+    if attenuation_profile is None:
+        version = "phase2-attenuation-shadow-unconfigured"
+        status = "skipped"
+        reason = "attenuation_shadow_profile_unconfigured"
+    else:
+        version = attenuation_profile.profile_version
+        shadow_enabled = attenuation_profile.shadow_processing_enabled
+        worker_enabled = attenuation_profile.worker_integration_enabled
+        coefficients_configured = attenuation_profile.coefficients.source != "unconfigured"
+        if not shadow_enabled:
+            status = "skipped"
+            reason = "attenuation_shadow_disabled"
+        elif input_sweep_count == 0:
+            status = "skipped"
+            reason = "kdp_shadow_field_unavailable"
+        elif not coefficients_configured:
+            status = "skipped"
+            reason = "attenuation_coefficients_unconfigured"
+        elif failed_sweep_count > 0:
+            status = "failed"
+            reason = failure_reason or "attenuation_shadow_failed"
+        elif processing_metrics.get("available_gate_count", 0.0) == 0:
+            status = "skipped"
+            reason = (
+                "blockage_unavailable"
+                if processing_metrics.get("blockage_unavailable_sweep_count", 0.0) > 0
+                else "attenuation_shadow_no_available_gates"
+            )
+        else:
+            status = "applied"
+            reason = None
+    metrics = {
+        "profile_configured": float(attenuation_profile is not None),
+        "shadow_processing_enabled": float(shadow_enabled),
+        "worker_integration_enabled": float(worker_enabled),
+        "coefficients_configured": float(coefficients_configured),
+        "input_sweep_count": float(input_sweep_count),
+        "missing_input_sweep_count": float(missing_input_sweep_count),
+        "failed_sweep_count": float(failed_sweep_count),
+        **processing_metrics,
+    }
+    return QCModuleRecord(
+        ATTENUATION_SHADOW_MODULE_NAME,
+        version,
+        status,
+        ("DBZH", KDP_SHADOW_FIELD, "range"),
+        ATTENUATION_SHADOW_PRODUCED_VARIABLES,
+        reason,
+        metrics,
+    )
+
+
+def _attenuation_shadow_input(
+    optional_qc_fields: dict[str, np.ndarray],
+    expected_shape: tuple[int, int],
+) -> tuple[np.ndarray, np.ndarray] | None:
+    if KDP_SHADOW_FIELD not in optional_qc_fields:
+        return None
+    if KDP_SHADOW_AVAILABLE_MASK_FIELD not in optional_qc_fields:
+        return None
+    kdp_shadow = np.asarray(optional_qc_fields[KDP_SHADOW_FIELD], dtype="float32")
+    available_mask = np.asarray(
+        optional_qc_fields[KDP_SHADOW_AVAILABLE_MASK_FIELD],
+        dtype="uint8",
+    )
+    if kdp_shadow.shape != expected_shape:
+        raise QCInputError("KDP_SHADOW field shape differs from sweep gate shape")
+    if available_mask.shape != expected_shape:
+        raise QCInputError("KDP_SHADOW_AVAILABLE_MASK shape differs from sweep gate shape")
+    usable = (available_mask == 1) & np.isfinite(kdp_shadow)
+    if not np.any(usable):
+        return None
+    return kdp_shadow, usable
+
+
+def _accumulate_metrics(target: dict[str, float], values: dict[str, float]) -> None:
+    for name, value in values.items():
+        target[name] = target.get(name, 0.0) + float(value)
 
 
 def _longest_run(values: np.ndarray) -> int:
@@ -2407,6 +3552,8 @@ def _pair(value: list[float]) -> tuple[float, float]:
 
 
 def _validate_profile(profile: BasicQCProfile) -> None:
+    if profile.decision_version not in {"legacy-v1", "evidence-v2"}:
+        raise QCConfigError("unsupported decision version")
     if not 0 <= profile.health_gate.degraded_quality_multiplier <= 1:
         raise QCConfigError("invalid degraded quality multiplier")
     if (
@@ -2478,6 +3625,10 @@ def _validate_profile(profile: BasicQCProfile) -> None:
         raise QCConfigError("radial temporal context minimum must be two or three scans")
     if not context.minimum_temporal_context_scans <= context.maximum_temporal_context_scans <= 3:
         raise QCConfigError("radial temporal context maximum must follow its minimum")
+    if context.temporal_max_time_offset_seconds <= 0:
+        raise QCConfigError("radial temporal maximum time offset must be positive")
+    if context.temporal_selection_mode not in {"past_only", "symmetric_offline"}:
+        raise QCConfigError("unsupported radial temporal selection mode")
     for value in (
         context.temporal_persistence_threshold,
         context.cross_radar_promotion_max_consistency,
@@ -2485,10 +3636,7 @@ def _validate_profile(profile: BasicQCProfile) -> None:
     ):
         if not 0 <= value <= 1:
             raise QCConfigError("invalid radial context fusion probability")
-    if (
-        context.cross_radar_promotion_max_consistency
-        >= context.cross_radar_veto_min_consistency
-    ):
+    if context.cross_radar_promotion_max_consistency >= context.cross_radar_veto_min_consistency:
         raise QCConfigError("cross-radar promotion threshold must be below veto threshold")
     if context.minimum_cross_radar_overlap_gates <= 0:
         raise QCConfigError("cross-radar overlap gate count must be positive")

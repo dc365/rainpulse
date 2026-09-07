@@ -48,7 +48,7 @@
       "RAINPULSE_PIPELINE_MOSAIC_MAX_WAIT": "4m",
       "RAINPULSE_PIPELINE_FORECAST_ENABLED": "true",
       "RAINPULSE_PIPELINE_REQUIRE_ALL_RADARS": "false",
-      "RAINPULSE_PIPELINE_QC_CONFIG": "/opt/rainpulse/configs/qc/rp043-fujian-radial-closure-v1.yaml",
+      "RAINPULSE_PIPELINE_QC_CONFIG": "/opt/rainpulse/configs/qc/fujian-qc-evidence-v2.yaml",
       "RAINPULSE_PIPELINE_GRID_CONFIG": "/opt/rainpulse/configs/gridding/rp043-hybrid-radial-closure-v1.yaml",
       "RAINPULSE_PIPELINE_MOSAIC_CONFIG": "/opt/rainpulse/configs/mosaic/rp043-fujian-realtime-shadow-v1.yaml",
       "RAINPULSE_PIPELINE_QPE_CONFIG": "/opt/rainpulse/configs/qpe/rp011-basic-zr-v1.yaml",

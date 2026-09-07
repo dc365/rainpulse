@@ -27,8 +27,8 @@ rg --quiet 'geometry_encoding.*sweep_groups_v1|GEOMETRY_ENCODING = "sweep_groups
 rg --quiet 'raw_reserved_codes' algorithms/rainpulse_algo/radar/zarr_volume.py
 rg --quiet 'radar-decode-fmt' algorithms/rainpulse_algo/worker/handlers.py
 rg --quiet 'radar-decode-worker:' deploy/docker-compose.yaml
-rg --quiet '/data/Weather/RADA/FMT_L2_Z959X_SBD:ro' deploy/docker-compose.yaml
-rg --quiet '/data/Weather/RADA/RADA_L2_FMT/OBS_TEMP:ro' deploy/docker-compose.yaml
+rg --quiet 'RAINPULSE_RADAR_DATA_ROOT' deploy/docker-compose.yaml
+rg --quiet 'create_host_path: false' deploy/docker-compose.yaml
 [[ $(rg -c 'RAINPULSE_RADAR_CONFIG_DIR:.*RAINPULSE_RADAR_CONFIG_DIR' deploy/docker-compose.yaml) -eq 2 ]]
 
 printf 'RP-006 real radar decoder structure checks passed\n'

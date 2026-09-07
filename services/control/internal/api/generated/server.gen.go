@@ -1696,7 +1696,9 @@ type RadarScan struct {
 
 // RadarScanPage defines model for RadarScanPage.
 type RadarScanPage struct {
-	Items []RadarScan `json:"items"`
+	Items        []RadarScan `json:"items"`
+	NextCursor   *string     `json:"next_cursor,omitempty"`
+	SnapshotTime *time.Time  `json:"snapshot_time,omitempty"`
 }
 
 // RadarScanRunStatus defines model for RadarScanRunStatus.
@@ -1891,9 +1893,13 @@ type ListProductsParams struct {
 
 // ListRadarScansParams defines parameters for ListRadarScans.
 type ListRadarScansParams struct {
-	Limit   *Limit              `form:"limit,omitempty" json:"limit,omitempty"`
-	RadarId *string             `form:"radar_id,omitempty" json:"radar_id,omitempty"`
-	Status  *RadarScanRunStatus `form:"status,omitempty" json:"status,omitempty"`
+	Limit        *Limit              `form:"limit,omitempty" json:"limit,omitempty"`
+	RadarId      *string             `form:"radar_id,omitempty" json:"radar_id,omitempty"`
+	Status       *RadarScanRunStatus `form:"status,omitempty" json:"status,omitempty"`
+	StartTime    *time.Time          `form:"start_time,omitempty" json:"start_time,omitempty"`
+	EndTime      *time.Time          `form:"end_time,omitempty" json:"end_time,omitempty"`
+	Cursor       *string             `form:"cursor,omitempty" json:"cursor,omitempty"`
+	SnapshotTime *time.Time          `form:"snapshot_time,omitempty" json:"snapshot_time,omitempty"`
 }
 
 // ListRunsParams defines parameters for ListRuns.
@@ -3538,6 +3544,58 @@ func (siw *ServerInterfaceWrapper) ListRadarScans(w http.ResponseWriter, r *http
 			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "start_time" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "start_time", r.URL.Query(), &params.StartTime, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "start_time"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "start_time", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "end_time" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "end_time", r.URL.Query(), &params.EndTime, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "end_time"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "end_time", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "snapshot_time" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "snapshot_time", r.URL.Query(), &params.SnapshotTime, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "snapshot_time"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "snapshot_time", Err: err})
 		}
 		return
 	}

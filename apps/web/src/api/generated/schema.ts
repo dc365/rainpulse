@@ -1026,6 +1026,9 @@ export interface components {
         };
         RadarScanPage: {
             items: components["schemas"]["RadarScan"][];
+            next_cursor?: string;
+            /** Format: date-time */
+            snapshot_time?: string;
         };
         AnalysisRadar: {
             radar_id: string;
@@ -2042,6 +2045,10 @@ export interface operations {
                 limit?: components["parameters"]["Limit"];
                 radar_id?: string;
                 status?: components["schemas"]["RadarScanRunStatus"];
+                start_time?: string;
+                end_time?: string;
+                cursor?: string;
+                snapshot_time?: string;
             };
             header?: never;
             path?: never;

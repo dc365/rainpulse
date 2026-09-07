@@ -1,0 +1,28 @@
+schema_version: "1.0"
+profile_version: fujian-kdp-attenuation-shadow-v1
+artifact_contract_version: "1.0"
+source_normalized_radar_volume_contract_version: "1.0"
+source_phase_processing_profile_version: fujian-phidp-kdp-shadow-v1
+radar_band: S
+
+method:
+  name: kdp_path_integral
+  integration_scheme: two_way_trapezoidal
+
+coefficients:
+  source: unconfigured
+  coefficient_a: null
+  exponent_b: null
+  minimum_kdp_deg_per_km: 0.0
+  maximum_specific_attenuation_db_per_km: 6.0
+  maximum_correction_db: 12.0
+
+applicability:
+  maximum_blockage_fraction: 0.30
+  corrected_reflectivity_cap_dbz: 80.0
+  unavailable_segment_policy: split_and_reset
+
+activation:
+  shadow_processing_enabled: true
+  worker_integration_enabled: false
+  required_gate: verified_s_band_attenuation_coefficients_and_independent_calibration_reference_required

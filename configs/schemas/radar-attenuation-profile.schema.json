@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/schemas/radar-attenuation-profile.schema.json",
+  "title": "RainPulse C2 shadow attenuation profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_version",
+    "artifact_contract_version",
+    "source_normalized_radar_volume_contract_version",
+    "source_phase_processing_profile_version",
+    "radar_band",
+    "method",
+    "coefficients",
+    "applicability",
+    "activation"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "profile_version": { "const": "fujian-kdp-attenuation-shadow-v1" },
+    "artifact_contract_version": { "const": "1.0" },
+    "source_normalized_radar_volume_contract_version": { "const": "1.0" },
+    "source_phase_processing_profile_version": {
+      "const": "fujian-phidp-kdp-shadow-v1"
+    },
+    "radar_band": { "const": "S" },
+    "method": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "integration_scheme"],
+      "properties": {
+        "name": { "const": "kdp_path_integral" },
+        "integration_scheme": { "const": "two_way_trapezoidal" }
+      }
+    },
+    "coefficients": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "coefficient_a",
+        "exponent_b",
+        "minimum_kdp_deg_per_km",
+        "maximum_specific_attenuation_db_per_km",
+        "maximum_correction_db"
+      ],
+      "properties": {
+        "source": {
+          "enum": ["unconfigured", "explicit_shadow_coefficients"]
+        },
+        "coefficient_a": { "type": ["number", "null"] },
+        "exponent_b": { "type": ["number", "null"] },
+        "minimum_kdp_deg_per_km": { "type": "number", "minimum": 0 },
+        "maximum_specific_attenuation_db_per_km": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "maximum_correction_db": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "source": { "const": "unconfigured" } },
+            "required": ["source"]
+          },
+          "then": {
+            "properties": {
+              "coefficient_a": { "const": null },
+              "exponent_b": { "const": null }
+            }
+          }
+        }
+      ]
+    },
+    "applicability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maximum_blockage_fraction",
+        "corrected_reflectivity_cap_dbz",
+        "unavailable_segment_policy"
+      ],
+      "properties": {
+        "maximum_blockage_fraction": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "corrected_reflectivity_cap_dbz": {
+          "type": "number"
+        },
+        "unavailable_segment_policy": { "const": "split_and_reset" }
+      }
+    },
+    "activation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "shadow_processing_enabled",
+        "worker_integration_enabled",
+        "required_gate"
+      ],
+      "properties": {
+        "shadow_processing_enabled": { "const": true },
+        "worker_integration_enabled": { "const": false },
+        "required_gate": {
+          "const": "verified_s_band_attenuation_coefficients_and_independent_calibration_reference_required"
+        }
+      }
+    }
+  }
+}

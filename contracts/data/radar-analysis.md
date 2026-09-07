@@ -60,6 +60,37 @@ with `RATE_QPE=0`; values above the configured cap are capped and counted in
 the QPE summary rather than hidden. Phase-1 gauge adjustment is disabled until
 quality-controlled station observations and rules are supplied.
 
+## Optional stratiform VPR correction
+
+When a dedicated QPE profile explicitly enables VPR, `RadarAnalysis` may add
+the optional fields `DBZH_VPR_INPUT`, `DBZH_VPR_CORRECTED`, `VPR_CORRECTION_DB`,
+`VPR_UNCERTAINTY_DB`, `VPR_APPLIED_MASK`, `VPR_STRATIFORM_MASK`,
+`VPR_OVERSHOOT_MASK`, `PRECIP_TYPE`, `MELTING_LAYER_BOTTOM_HEIGHT`, and
+`MELTING_LAYER_TOP_HEIGHT`. `DBZH_VPR_INPUT` preserves the original mosaic
+reflectivity, including observations subsequently rejected as overshoot. The
+immutable source mosaic remains available through `input_mosaic_uri`.
+`DBZH_QC` retains uncorrected mosaic reflectivity only in cells that remain
+valid; the optional corrected field records reflectivity used for rainfall
+conversion. All required floating-point fields become NaN in missing cells;
+`LOW_QUALITY_MASK`, `SOURCE_RADAR`, and `CONTRIBUTOR_COUNT` become zero there.
+Optional VPR input and decision diagnostics retain evidence in rejected cells
+and must never be interpreted as valid nowcast input.
+
+This correction is allowed only in stratiform scenes and only when the input
+`RadarMosaic` already carries explicit precipitation type plus melting-layer
+bottom/top height fields from trusted upstream data. A VPR-enabled profile must
+fail closed when those explicit inputs are absent; it must not guess a freezing
+level height from one static threshold or silently fall back to fabricated
+mixed-phase deletion.
+
+Cells inside the melting layer may set `BRIGHT_BAND` and `CORRECTED` in
+`QC_FLAGS` while recording the applied dB reduction. Stratiform cells above the
+melting layer may use the versioned extrapolation rule recorded in attributes
+and summary metadata. Any far-range overshoot without supported near-surface
+observation must remain missing: `VPR_OVERSHOOT_MASK=1`, `VALID_MASK=0`, and
+`RATE_QPE=NaN`. Convective cells remain passthrough by default; stratiform VPR
+must not be applied outside the configured scene class.
+
 ## Fusion invariants
 
 - Invalid, fully blocked, or seriously interfered inputs are excluded.

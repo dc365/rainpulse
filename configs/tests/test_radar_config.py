@@ -2,6 +2,7 @@ import copy
 import hashlib
 import json
 import math
+import re
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,26 @@ from jsonschema import Draft202012Validator, FormatChecker, ValidationError
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_ROOT = REPOSITORY_ROOT / "configs"
+
+
+def test_deployment_example_only_exposes_consumed_compose_parameters() -> None:
+    deploy = REPOSITORY_ROOT / "deploy"
+    example = (deploy / ".env.example").read_text()
+    compose = (deploy / "docker-compose.yaml").read_text() + (
+        deploy / "docker-compose.realtime-shadow.yaml"
+    ).read_text()
+    keys = re.findall(r"^(RAINPULSE_[A-Z0-9_]+)=", example, re.MULTILINE)
+    assert len(keys) == len(set(keys))
+    assert set(keys) <= set(re.findall(r"\$\{(RAINPULSE_[A-Z0-9_]+)", compose))
+    assert "/opt/rainpulse" not in example
+    assert "FMT_L2_Z959X_SBD" not in compose
+    platform = json.loads(
+        (CONFIG_ROOT / "platform/bdp-dp-rada-rainpulse.json").read_text()
+    )
+    override = yaml.safe_load((deploy / "docker-compose.realtime-shadow.yaml").read_text())
+    assert platform["environment"]["orchestrator"]["RAINPULSE_PIPELINE_QC_CONFIG"] == (
+        override["services"]["radar-qc-worker"]["environment"]["RAINPULSE_RADAR_QC_CONFIG"]
+    )
 
 
 def load_schema() -> dict:
@@ -283,7 +304,7 @@ def test_rp047_qc_profile_requires_context_fusion_for_weak_candidates() -> None:
     assert profile["pipeline_version"] == "rp047-fujian-radial-evidence-1.5.0"
 
 
-def test_rp047_realtime_shadow_versions_the_full_reprocessing_chain() -> None:
+def test_realtime_shadow_versions_the_full_reprocessing_chain() -> None:
     profiles = (
         (
             "schemas/radar-grid-profile.schema.json",
@@ -306,9 +327,9 @@ def test_rp047_realtime_shadow_versions_the_full_reprocessing_chain() -> None:
     override = yaml.safe_load(
         (REPOSITORY_ROOT / "deploy" / "docker-compose.realtime-shadow.yaml").read_text()
     )["services"]
-    assert "rp047" in override["radar-qc-worker"]["environment"][
+    assert override["radar-qc-worker"]["environment"][
         "RAINPULSE_RADAR_QC_CONFIG"
-    ]
+    ].endswith("qc/fujian-qc-evidence-v2.yaml")
     orchestrator = override["orchestrator"]["environment"]
     assert orchestrator["RAINPULSE_PIPELINE_QC_CONFIG"] == override[
         "radar-qc-worker"
@@ -400,6 +421,269 @@ def test_rp031_automatic_verification_profile_is_frozen_and_non_promoting() -> N
     assert profile["fss_windows_km"] == [1, 5, 10, 20, 40]
     assert profile["validity_domain"] == "common"
     assert profile["promotion_eligible"] is False
+
+
+def test_fujian_qc_promotion_profile_freezes_b3_non_inferiority_gates() -> None:
+    schema = json.loads(
+        (CONFIG_ROOT / "schemas" / "radar-qc-promotion-profile.schema.json").read_text()
+    )
+    profile = yaml.safe_load(
+        (CONFIG_ROOT / "verification" / "fujian-qc-promotion-v1.yaml").read_text()
+    )
+
+    Draft202012Validator.check_schema(schema)
+    Draft202012Validator(schema).validate(profile)
+    assert profile["profile_version"] == "fujian-qc-promotion-v1"
+    assert profile["bootstrap_samples"] == 2000
+    assert profile["random_seed"] == 20260905
+    assert profile["minimum_independent_processes_per_category"] == 3
+    assert profile["strong_echo_dbzh_threshold"] == 40.0
+    assert profile["gates"]["anomaly_precision_lower_bound"] == 0.0
+    assert profile["gates"]["anomaly_recall_lower_bound"] == 0.0
+    assert profile["gates"]["meteorological_retention_lower_bound"] == -0.005
+    assert profile["gates"]["qpe_rmse_ratio_upper_bound"] == 1.02
+
+
+def test_fujian_phase_processing_profile_freezes_c1_shadow_only_parameters() -> None:
+    schema = json.loads(
+        (CONFIG_ROOT / "schemas" / "radar-phase-processing-profile.schema.json").read_text()
+    )
+    profile = yaml.safe_load(
+        (CONFIG_ROOT / "verification" / "fujian-phidp-kdp-shadow-v1.yaml").read_text()
+    )
+
+    Draft202012Validator.check_schema(schema)
+    Draft202012Validator(schema).validate(profile)
+    assert profile["profile_version"] == "fujian-phidp-kdp-shadow-v1"
+    assert profile["artifact_contract_version"] == "1.0"
+    assert profile["source_normalized_radar_volume_contract_version"] == "1.0"
+    assert profile["phase_field_name"] == "PHIDP"
+    assert profile["phase_wrap_period_degrees"] == 360.0
+    assert profile["segmentation"]["minimum_valid_run_gates"] == 9
+    assert profile["system_phase"]["source_mode"] == "estimate_from_first_valid_gates"
+    assert profile["system_phase"]["first_gate_count"] == 5
+    assert profile["fitting"]["method"] == "robust_local_linear"
+    assert profile["fitting"]["window_half_width_km"] == 3.0
+    assert profile["fitting"]["minimum_segment_gates"] == 9
+    assert profile["activation"]["shadow_processing_enabled"] is True
+    assert profile["activation"]["worker_integration_enabled"] is False
+
+
+def test_fujian_kdp_attenuation_profile_freezes_c2_shadow_only_boundary() -> None:
+    schema = json.loads(
+        (CONFIG_ROOT / "schemas" / "radar-attenuation-profile.schema.json").read_text()
+    )
+    profile = yaml.safe_load(
+        (CONFIG_ROOT / "verification" / "fujian-kdp-attenuation-shadow-v1.yaml").read_text()
+    )
+
+    Draft202012Validator.check_schema(schema)
+    Draft202012Validator(schema).validate(profile)
+    assert profile["profile_version"] == "fujian-kdp-attenuation-shadow-v1"
+    assert profile["artifact_contract_version"] == "1.0"
+    assert profile["source_normalized_radar_volume_contract_version"] == "1.0"
+    assert profile["source_phase_processing_profile_version"] == "fujian-phidp-kdp-shadow-v1"
+    assert profile["radar_band"] == "S"
+    assert profile["method"]["name"] == "kdp_path_integral"
+    assert profile["method"]["integration_scheme"] == "two_way_trapezoidal"
+    assert profile["coefficients"]["source"] == "unconfigured"
+    assert profile["coefficients"]["coefficient_a"] is None
+    assert profile["coefficients"]["exponent_b"] is None
+    assert profile["activation"]["shadow_processing_enabled"] is True
+    assert profile["activation"]["worker_integration_enabled"] is False
+
+
+def test_fujian_relative_bias_profile_freezes_c2_shadow_pair_boundary() -> None:
+    schema = json.loads(
+        (CONFIG_ROOT / "schemas" / "radar-relative-bias-profile.schema.json").read_text()
+    )
+    profile = yaml.safe_load(
+        (CONFIG_ROOT / "verification" / "fujian-radar-relative-bias-shadow-v1.yaml").read_text()
+    )
+
+    Draft202012Validator.check_schema(schema)
+    Draft202012Validator(schema).validate(profile)
+    assert profile["profile_version"] == "fujian-radar-relative-bias-shadow-v1"
+    assert profile["artifact_contract_version"] == "1.0"
+    assert profile["source_normalized_radar_volume_contract_version"] == "1.0"
+    assert profile["radar_band"] == "S"
+    assert profile["comparison_field_name"] == "DBZH"
+    assert profile["thresholds"]["minimum_dbzh"] == 10.0
+    assert profile["thresholds"]["maximum_time_offset_seconds"] == 300
+    assert profile["thresholds"]["maximum_blockage_fraction"] == 0.30
+    assert profile["thresholds"]["maximum_height_difference_m"] == 500.0
+    assert profile["thresholds"]["minimum_comparable_gate_count"] == 80
+    assert profile["thresholds"]["minimum_independent_processes"] == 3
+    assert profile["activation"]["worker_integration_enabled"] is False
+    assert profile["activation"]["truth_designation_enabled"] is False
+
+
+def test_fujian_radar_calibration_profile_freezes_c2_p3_shadow_boundary() -> None:
+    schema = json.loads(
+        (CONFIG_ROOT / "schemas" / "radar-calibration-profile.schema.json").read_text()
+    )
+    profile = yaml.safe_load(
+        (CONFIG_ROOT / "verification" / "fujian-radar-calibration-shadow-v1.yaml").read_text()
+    )
+
+    Draft202012Validator.check_schema(schema)
+    Draft202012Validator(schema).validate(profile)
+    assert profile["profile_version"] == "fujian-radar-calibration-shadow-v1"
+    assert profile["artifact_contract_version"] == "1.0"
+    assert profile["source_relative_bias_artifact_contract_version"] == "1.0"
+    assert profile["source_attenuation_artifact_contract_version"] == "1.0"
+    assert profile["radar_band"] == "S"
+    assert profile["reference_policy"]["required_roles"] == [
+        "coefficient_fitting",
+        "independent_validation",
+    ]
+    assert profile["reference_policy"]["allowed_truth_kinds"] == [
+        "gauge_accumulation_1h",
+        "reference_qpe_1h",
+    ]
+    assert profile["reference_policy"]["minimum_fitting_processes"] == 3
+    assert profile["reference_policy"]["minimum_validation_processes"] == 3
+    assert profile["activation"]["worker_integration_enabled"] is False
+    assert profile["activation"]["qi_calibration_enabled"] is False
+
+
+def test_radar_calibration_reference_manifest_schema_requires_disjoint_shadow_splits() -> None:
+    schema = json.loads(
+        (
+            CONFIG_ROOT / "schemas" / "radar-calibration-reference-manifest.schema.json"
+        ).read_text()
+    )
+    manifest = {
+        "schema_version": "1.0",
+        "manifest_version": "radar-calibration-reference-manifest-v1",
+        "source_calibration_profile_version": "fujian-radar-calibration-shadow-v1",
+        "generated_at": "2026-09-07T08:00:00Z",
+        "radar_band": "S",
+        "references": [
+            {
+                "process_id": "storm-fit-001",
+                "case_id": "case-fit-001",
+                "role": "coefficient_fitting",
+                "truth_kind": "gauge_accumulation_1h",
+                "radar_ids": ["z9598", "z9593"],
+                "start_time_utc": "2026-08-28T02:00:00Z",
+                "end_time_utc": "2026-08-28T03:00:00Z",
+                "reference_uri": "s3://rainpulse/calibration/fit-001.parquet",
+                "source_sha256": "a" * 64,
+            },
+            {
+                "process_id": "storm-val-101",
+                "case_id": "case-val-101",
+                "role": "independent_validation",
+                "truth_kind": "reference_qpe_1h",
+                "radar_ids": ["z9598", "z9593"],
+                "start_time_utc": "2026-08-29T02:00:00Z",
+                "end_time_utc": "2026-08-29T03:00:00Z",
+                "reference_uri": "s3://rainpulse/calibration/val-101.parquet",
+                "source_sha256": "b" * 64,
+            },
+        ],
+    }
+
+    Draft202012Validator.check_schema(schema)
+    Draft202012Validator(schema).validate(manifest)
+
+
+def test_radar_attenuation_coefficient_table_schema_freezes_verified_shadow_entries() -> None:
+    schema = json.loads(
+        (
+            CONFIG_ROOT / "schemas" / "radar-attenuation-coefficient-table.schema.json"
+        ).read_text()
+    )
+    table = {
+        "schema_version": "1.0",
+        "table_version": "fujian-s-band-attenuation-coefficients-v1",
+        "artifact_contract_version": "1.0",
+        "source_calibration_profile_version": "fujian-radar-calibration-shadow-v1",
+        "reference_manifest_version": "fujian-radar-calibration-reference-20260907-v1",
+        "radar_band": "S",
+        "entries": [
+            {
+                "radar_id": "z9598",
+                "coefficient_state": "verified_shadow_use",
+                "coefficient_a": 0.04,
+                "exponent_b": 1.0,
+                "applicable_temperature_range_c": [5.0, 35.0],
+                "fitted_process_ids": ["storm-fit-001", "storm-fit-002", "storm-fit-003"],
+                "validation_process_ids": [
+                    "storm-val-101",
+                    "storm-val-102",
+                    "storm-val-103",
+                ],
+            }
+        ],
+    }
+
+    Draft202012Validator.check_schema(schema)
+    Draft202012Validator(schema).validate(table)
+
+
+def test_radar_qc_replay_manifest_schema_freezes_manifest_loader_boundary() -> None:
+    schema = json.loads(
+        (
+            CONFIG_ROOT / "schemas" / "radar-qc-replay-manifest.schema.json"
+        ).read_text()
+    )
+    manifest = {
+        "schema_version": "1.0",
+        "mode": "replay_manifest",
+        "radar_ids": ["z9598", "z9593"],
+        "start_time": "2026-08-28T02:54:00Z",
+        "end_time": "2026-08-28T03:06:00Z",
+        "snapshot_time": "2026-08-28T03:10:00Z",
+        "expected_scan_ids": [
+            "10000000-0000-4000-8000-000000000401",
+            "10000000-0000-4000-8000-000000000402",
+        ],
+        "scans": [
+            {
+                "scan_id": "10000000-0000-4000-8000-000000000401",
+                "radar_id": "z9598",
+                "volume_start_time": "2026-08-28T02:54:00Z",
+                "volume_end_time": "2026-08-28T03:00:00Z",
+                "artifact_sha256": "a" * 64,
+                "normalized_uri": "s3://rainpulse/radar/normalized/z9598/scan-401/volume.zarr",
+                "temporal_context": [
+                    {
+                        "radar_id": "z9598",
+                        "artifact_sha256": "b" * 64,
+                        "input_uri": "s3://rainpulse/radar/normalized/z9598/context-301/volume.zarr",
+                    }
+                ],
+                "cross_radar_context": [
+                    {
+                        "radar_id": "z9593",
+                        "artifact_sha256": "b" * 64,
+                        "input_uri": "s3://rainpulse/radar/normalized/z9593/context-302/volume.zarr",
+                    }
+                ],
+            },
+            {
+                "scan_id": "10000000-0000-4000-8000-000000000402",
+                "radar_id": "z9593",
+                "volume_start_time": "2026-08-28T03:00:00Z",
+                "volume_end_time": "2026-08-28T03:06:00Z",
+                "artifact_sha256": "a" * 64,
+                "normalized_uri": "s3://rainpulse/radar/normalized/z9593/scan-402/volume.zarr",
+                "temporal_context": [],
+                "cross_radar_context": [],
+            },
+        ],
+    }
+
+    Draft202012Validator.check_schema(schema)
+    Draft202012Validator(schema, format_checker=FormatChecker()).validate(manifest)
+    assert manifest["mode"] == "replay_manifest"
+    assert manifest["expected_scan_ids"] == [
+        "10000000-0000-4000-8000-000000000401",
+        "10000000-0000-4000-8000-000000000402",
+    ]
+    assert manifest["scans"][0]["normalized_uri"].endswith("/volume.zarr")
 
 
 def test_rp009_hybrid_profile_is_valid_and_explicitly_engineering_only() -> None:
@@ -571,6 +855,37 @@ def test_rp011_qpe_profile_freezes_basic_zr_and_disables_gauge_adjustment() -> N
         "method": "none",
         "observation_qc_version": None,
     }
+
+
+def test_rp017_qpe_profile_freezes_explicit_stratiform_vpr_boundary() -> None:
+    schema = json.loads(
+        (CONFIG_ROOT / "schemas" / "qpe-profile.schema.json").read_text()
+    )
+    profile = yaml.safe_load(
+        (CONFIG_ROOT / "qpe" / "rp017-stratiform-vpr-v1.yaml").read_text()
+    )
+
+    Draft202012Validator.check_schema(schema)
+    Draft202012Validator(schema).validate(profile)
+    assert profile["profile_version"] == "rp017-stratiform-vpr-v1"
+    assert profile["algorithm_version"] == "stratiform-vpr-qpe-1.0.1"
+    assert profile["qpe"]["relation"] == "power_law_z_r"
+    assert profile["vpr_correction"]["enabled"] is True
+    assert profile["vpr_correction"]["method"] == "stratiform_piecewise_linear"
+    assert profile["vpr_correction"]["precipitation_type_field"] == "PRECIP_TYPE"
+    assert profile["vpr_correction"]["stratiform_code"] == 1
+    assert profile["vpr_correction"]["convective_code"] == 2
+    assert profile["vpr_correction"]["melting_layer_bottom_field"] == (
+        "MELTING_LAYER_BOTTOM_HEIGHT"
+    )
+    assert profile["vpr_correction"]["melting_layer_top_field"] == (
+        "MELTING_LAYER_TOP_HEIGHT"
+    )
+    assert profile["vpr_correction"]["corrected_reflectivity_field"] == (
+        "DBZH_VPR_CORRECTED"
+    )
+    assert profile["vpr_correction"]["overshoot_policy"] == "mark_missing"
+    assert profile["vpr_correction"]["write_bright_band_flag"] is True
 
 
 def test_rp012_diagnostic_profile_freezes_layers_and_transparency() -> None:

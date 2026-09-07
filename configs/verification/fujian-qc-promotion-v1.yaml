@@ -1,0 +1,11 @@
+schema_version: "1.0"
+profile_version: fujian-qc-promotion-v1
+bootstrap_samples: 2000
+random_seed: 20260905
+minimum_independent_processes_per_category: 3
+strong_echo_dbzh_threshold: 40.0
+gates:
+  anomaly_precision_lower_bound: 0.0
+  anomaly_recall_lower_bound: 0.0
+  meteorological_retention_lower_bound: -0.005
+  qpe_rmse_ratio_upper_bound: 1.02

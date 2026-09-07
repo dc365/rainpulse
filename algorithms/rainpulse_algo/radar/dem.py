@@ -1,17 +1,27 @@
 from __future__ import annotations
 
 import json
-from collections import OrderedDict
 from pathlib import Path
 
 import numpy as np
 import rasterio
 
 from .ancillary import AncillarySource, iter_dem_tiles, sha256_file
+from .runtime_cache import ByteBudgetLRUCache
 
 
 class DEMAssetError(RuntimeError):
     """Raised when a versioned DEM runtime asset cannot be trusted or sampled."""
+
+
+DEFAULT_DEM_CACHE_BUDGET_BYTES = 256 * 1024 * 1024
+
+
+class SharedDEMCache(ByteBudgetLRUCache[object]):
+    pass
+
+
+_DEFAULT_DEM_CACHE = SharedDEMCache(DEFAULT_DEM_CACHE_BUDGET_BYTES)
 
 
 class VerifiedDEMTileStore:
@@ -24,21 +34,17 @@ class VerifiedDEMTileStore:
         *,
         expected_asset_version: str,
         expected_config_version: str,
-        cache_tiles: int = 8,
+        cache: SharedDEMCache | None = None,
     ) -> None:
         if source.dem.asset_version != expected_asset_version:
             raise DEMAssetError("DEM asset version differs from the Hybrid Scan profile")
         if source.config_version != expected_config_version:
             raise DEMAssetError("ancillary config version differs from the Hybrid Scan profile")
-        if cache_tiles < 1:
-            raise DEMAssetError("DEM cache must retain at least one tile")
         self.source = source
         self.root = Path(root).resolve()
-        self.cache_tiles = cache_tiles
-        self._cache: OrderedDict[str, tuple[np.ndarray, tuple[float, float, float, float]]] = (
-            OrderedDict()
-        )
-        self._validated: set[str] = set()
+        self._cache = cache or _DEFAULT_DEM_CACHE
+        self.cache_hits = 0
+        self.cache_misses = 0
         self._tiles = {
             (tile.latitude, tile.longitude): tile for tile in iter_dem_tiles(source)
         }
@@ -53,6 +59,7 @@ class VerifiedDEMTileStore:
         if not manifest_path.is_file() or not verification_path.is_file():
             raise DEMAssetError("DEM runtime manifest and verification are required")
         self.manifest_path = manifest_path
+        self.manifest_sha256 = sha256_file(manifest_path)
         manifest = json.loads(manifest_path.read_text())
         verification = json.loads(verification_path.read_text())
         if (
@@ -135,10 +142,48 @@ class VerifiedDEMTileStore:
         tile_id: str,
         asset: dict[str, object],
     ) -> tuple[np.ndarray, tuple[float, float, float, float]]:
-        cached = self._cache.pop(tile_id, None)
-        if cached is not None:
-            self._cache[tile_id] = cached
-            return cached
+        lookup = self._cache.get_or_compute(
+            self._cache_key(tile_id, asset),
+            factory=lambda: self._read_tile(tile_id, asset),
+            size_of=_dem_tile_size_bytes,
+            freeze=_freeze_dem_tile,
+        )
+        if lookup.hit:
+            self.cache_hits += 1
+        else:
+            self.cache_misses += 1
+        return lookup.value
+
+    @property
+    def cache_identity(self) -> str:
+        return (
+            f"{self.source.config_version}|{self.source.dem.asset_version}|"
+            f"{self.manifest_sha256}|{self.root.as_posix()}"
+        )
+
+    def cache_stats(self) -> dict[str, int]:
+        return {"hits": self.cache_hits, "misses": self.cache_misses}
+
+    def _cache_key(self, tile_id: str, asset: dict[str, object]) -> str:
+        relative_path = asset.get("relative_path")
+        size_bytes = asset.get("size_bytes")
+        sha256 = asset.get("sha256")
+        if not isinstance(relative_path, str):
+            raise DEMAssetError(f"DEM tile {tile_id} has no runtime path")
+        if type(size_bytes) is not int or size_bytes < 0:
+            raise DEMAssetError(f"DEM tile {tile_id} has invalid manifest size")
+        if not isinstance(sha256, str) or not sha256:
+            raise DEMAssetError(f"DEM tile {tile_id} has invalid manifest digest")
+        return (
+            f"dem-tile|{self.cache_identity}|{tile_id}|{relative_path}|"
+            f"{size_bytes}|{sha256}"
+        )
+
+    def _read_tile(
+        self,
+        tile_id: str,
+        asset: dict[str, object],
+    ) -> tuple[np.ndarray, tuple[float, float, float, float]]:
         relative_path = asset.get("relative_path")
         if not isinstance(relative_path, str):
             raise DEMAssetError(f"DEM tile {tile_id} has no runtime path")
@@ -147,17 +192,29 @@ class VerifiedDEMTileStore:
             raise DEMAssetError(f"DEM tile is unavailable: {path}")
         if path.stat().st_size != asset.get("size_bytes"):
             raise DEMAssetError(f"DEM tile size differs from the manifest: {path}")
-        if tile_id not in self._validated:
-            if sha256_file(path) != asset.get("sha256"):
-                raise DEMAssetError(f"DEM tile SHA-256 differs from the manifest: {path}")
-            self._validated.add(tile_id)
+        if sha256_file(path) != asset.get("sha256"):
+            raise DEMAssetError(f"DEM tile SHA-256 differs from the manifest: {path}")
         with rasterio.open(path) as dataset:
             if dataset.crs is None or dataset.crs.to_epsg() != 4326:
                 raise DEMAssetError(f"DEM tile CRS is not EPSG:4326: {path}")
             values = dataset.read(1, masked=True).filled(np.nan).astype("float32")
             bounds = tuple(float(item) for item in dataset.bounds)
-        cached = (values, bounds)
-        self._cache[tile_id] = cached
-        while len(self._cache) > self.cache_tiles:
-            self._cache.popitem(last=False)
-        return cached
+        return values, bounds
+
+
+def default_dem_cache() -> SharedDEMCache:
+    return _DEFAULT_DEM_CACHE
+
+
+def _dem_tile_size_bytes(value: tuple[np.ndarray, tuple[float, float, float, float]]) -> int:
+    data, _bounds = value
+    return int(data.nbytes)
+
+
+def _freeze_dem_tile(
+    value: tuple[np.ndarray, tuple[float, float, float, float]]
+) -> tuple[np.ndarray, tuple[float, float, float, float]]:
+    data, bounds = value
+    readonly = np.asarray(data)
+    readonly.setflags(write=False)
+    return readonly, bounds

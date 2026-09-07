@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rainpulse.local/schemas/radar-phase-processing-profile.schema.json",
+  "title": "RainPulse C1 shadow PHIDP/KDP phase-processing profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_version",
+    "artifact_contract_version",
+    "source_normalized_radar_volume_contract_version",
+    "phase_field_name",
+    "phase_wrap_period_degrees",
+    "segmentation",
+    "system_phase",
+    "fitting",
+    "activation"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "profile_version": { "const": "fujian-phidp-kdp-shadow-v1" },
+    "artifact_contract_version": { "const": "1.0" },
+    "source_normalized_radar_volume_contract_version": { "const": "1.0" },
+    "phase_field_name": { "const": "PHIDP" },
+    "phase_wrap_period_degrees": { "const": 360.0 },
+    "segmentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minimum_valid_run_gates", "maximum_missing_run_gates"],
+      "properties": {
+        "minimum_valid_run_gates": { "type": "integer", "minimum": 5 },
+        "maximum_missing_run_gates": { "const": 0 }
+      }
+    },
+    "system_phase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_mode",
+        "first_gate_count",
+        "minimum_gate_count",
+        "allow_override_input"
+      ],
+      "properties": {
+        "source_mode": { "const": "estimate_from_first_valid_gates" },
+        "first_gate_count": { "type": "integer", "minimum": 3 },
+        "minimum_gate_count": { "type": "integer", "minimum": 3 },
+        "allow_override_input": { "const": true }
+      }
+    },
+    "fitting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "window_half_width_km",
+        "minimum_window_gates",
+        "maximum_window_gates",
+        "minimum_segment_gates",
+        "robust_weighting",
+        "tukey_tuning_constant",
+        "maximum_iterations"
+      ],
+      "properties": {
+        "method": { "const": "robust_local_linear" },
+        "window_half_width_km": { "type": "number", "exclusiveMinimum": 0 },
+        "minimum_window_gates": { "type": "integer", "minimum": 3 },
+        "maximum_window_gates": { "type": "integer", "minimum": 5 },
+        "minimum_segment_gates": { "type": "integer", "minimum": 5 },
+        "robust_weighting": { "const": "tukey_biweight" },
+        "tukey_tuning_constant": { "type": "number", "exclusiveMinimum": 0 },
+        "maximum_iterations": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "activation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "shadow_processing_enabled",
+        "worker_integration_enabled",
+        "required_gate"
+      ],
+      "properties": {
+        "shadow_processing_enabled": { "const": true },
+        "worker_integration_enabled": { "const": false },
+        "required_gate": {
+          "const": "phidp_metadata_and_representative_real_cases_required"
+        }
+      }
+    }
+  }
+}

@@ -3,7 +3,12 @@ from __future__ import annotations
 import io
 import json
 import os
+import resource
+import sys
+import time
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from urllib.parse import unquote, urlparse
 from uuid import NAMESPACE_URL, uuid5
 
@@ -17,11 +22,17 @@ from zarr.storage import MemoryStore
 from rainpulse_algo.worker.domain_contracts import RadarQCRequested
 from rainpulse_algo.worker.object_store import (
     ArtifactObjectReader,
+    artifact_sha256,
     minio_client_from_environment,
     parse_s3_uri,
 )
 from rainpulse_algo.worker.runtime import WorkerResult
 
+from .ancillary import load_source
+from .attenuation import AttenuationProfile, load_attenuation_profile
+from .config import load_radar_config
+from .dem import VerifiedDEMTileStore
+from .phase_processing import PhaseProcessingProfile, load_phase_processing_profile
 from .qc import (
     BasicQCProfile,
     QCConfigError,
@@ -33,7 +44,28 @@ from .qc import (
     apply_basic_qc,
     load_qc_profile,
 )
-from .qc_zarr import build_qc_zarr_store, validate_qc_zarr_store
+from .qc_context import (
+    RadialCandidateSweep,
+    comparison_digest_for_sweep,
+    extract_radial_candidate_sweeps,
+    volume_geometry_digest,
+)
+from .qc_geometry import (
+    CROSS_RADAR_TRUSTED_AVAILABLE_MASK_FIELD,
+    CROSS_RADAR_TRUSTED_SUPPORT_FIELD,
+    CrossRadarSupportReference,
+    RadarBeamContext,
+    build_trusted_cross_radar_support,
+    radar_beam_context_from_config,
+)
+from .qc_zarr import build_validated_qc_zarr_store
+
+
+class RadarQCStageError(RuntimeError):
+    def __init__(self, stage: str, observability: dict[str, Any], cause: Exception) -> None:
+        super().__init__(str(cause))
+        self.stage = stage
+        self.observability = dict(observability)
 
 
 def execute_basic_qc(request: RadarQCRequested) -> WorkerResult:
@@ -45,37 +77,82 @@ def _execute_basic_qc(request: RadarQCRequested, client: Minio) -> WorkerResult:
         _required_file("RAINPULSE_RADAR_QC_CONFIG"),
         _required_file("RAINPULSE_QC_FLAG_DEFINITIONS"),
     )
+    _load_shadow_runtime_profiles()  # Fail invalid runtime configuration before reading inputs.
     _validate_request_versions(request, profile)
-    normalized = ArtifactObjectReader(client).load(request.payload.input_uri)
-    ancillary = _load_ancillary_maps(profile, client)
-    radial_context, context_provenance = _load_radial_context(
-        request,
-        normalized,
-        profile,
-        client,
-    )
-    result = apply_basic_qc(
-        normalized,
-        profile,
-        ancillary_maps=ancillary,
-        radial_context=radial_context,
-    )
+    observability: dict[str, Any] = {
+        "input_read_ms": 0.0,
+        "context_ms": 0.0,
+        "qc_core_ms": 0.0,
+        "serialize_validate_ms": 0.0,
+        "input_bytes": 0,
+        "output_bytes": 0,
+        "object_count": 0,
+        "context_age_seconds": 0.0,
+        "cache_hit": 0,
+        "cache_miss": 0,
+        "rss_bytes": _process_rss_bytes(),
+    }
+
+    input_started = time.perf_counter()
+    try:
+        normalized = ArtifactObjectReader(client).load(request.payload.input_uri)
+    except Exception as error:  # noqa: BLE001 - attach stage observability
+        observability["input_read_ms"] = _elapsed_ms(input_started)
+        observability["rss_bytes"] = _process_rss_bytes()
+        raise RadarQCStageError("input_read", observability, error) from error
+    observability["input_read_ms"] = _elapsed_ms(input_started)
+    observability["input_bytes"] = sum(len(value) for value in normalized.values())
+
+    context_started = time.perf_counter()
+    try:
+        prepared, context_provenance = prepare_qc_inputs(request, normalized, profile, client)
+    except Exception as error:  # noqa: BLE001 - attach stage observability
+        observability["context_ms"] = _elapsed_ms(context_started)
+        observability["rss_bytes"] = _process_rss_bytes()
+        raise RadarQCStageError("context", observability, error) from error
+    observability["context_ms"] = _elapsed_ms(context_started)
+    observability["context_age_seconds"] = float(context_provenance.get("context_age_seconds", 0.0))
+
+    qc_started = time.perf_counter()
+    try:
+        result = apply_basic_qc(
+            normalized,
+            profile,
+            **prepared,
+        )
+    except Exception as error:  # noqa: BLE001 - attach stage observability
+        observability["qc_core_ms"] = _elapsed_ms(qc_started)
+        observability["rss_bytes"] = _process_rss_bytes()
+        raise RadarQCStageError("qc_core", observability, error) from error
+    observability["qc_core_ms"] = _elapsed_ms(qc_started)
+
     result.summary["radial_context"] = context_provenance
     qc_asset_id = uuid5(NAMESPACE_URL, f"rainpulse:qc-asset:{request.job_id}")
-    objects = build_qc_zarr_store(
-        normalized,
-        result,
-        asset_id=qc_asset_id,
-        normalized_volume_uri=request.payload.input_uri,
-        provenance={
-            "scan_id": str(request.payload.scan_id),
-            "run_id": str(request.run_id),
-            "job_id": str(request.job_id),
-            "trace_id": str(request.trace_id),
-            "radial_context": json.dumps(context_provenance, sort_keys=True),
-        },
-    )
-    validation = validate_qc_zarr_store(objects)
+    serialize_started = time.perf_counter()
+    try:
+        objects, validation = build_validated_qc_zarr_store(
+            normalized,
+            result,
+            asset_id=qc_asset_id,
+            normalized_volume_uri=request.payload.input_uri,
+            provenance={
+                "scan_id": str(request.payload.scan_id),
+                "run_id": str(request.run_id),
+                "job_id": str(request.job_id),
+                "trace_id": str(request.trace_id),
+                "context_fingerprint": str(context_provenance["context_fingerprint"]),
+                "radial_context": json.dumps(context_provenance, sort_keys=True),
+            },
+        )
+    except Exception as error:  # noqa: BLE001 - attach stage observability
+        observability["serialize_validate_ms"] = _elapsed_ms(serialize_started)
+        observability["rss_bytes"] = _process_rss_bytes()
+        raise RadarQCStageError("serialize_validate", observability, error) from error
+    observability["serialize_validate_ms"] = _elapsed_ms(serialize_started)
+    observability["output_bytes"] = int(validation["size_bytes"])
+    observability["object_count"] = int(validation["object_count"])
+    observability["rss_bytes"] = _process_rss_bytes()
+
     summary = result.summary
     return WorkerResult(
         objects=objects,
@@ -89,14 +166,12 @@ def _execute_basic_qc(request: RadarQCRequested, client: Minio) -> WorkerResult:
             "missing_gate_count": float(validation["missing_gate_count"]),
             "low_quality_gate_count": float(summary["low_quality_gate_count"]),
             "mean_quality_index": float(summary["mean_quality_index"]),
-            "radial_interference_ray_count": float(
-                summary["radial_interference_ray_count"]
-            ),
-            "radial_interference_gate_count": float(
-                summary["radial_interference_gate_count"]
-            ),
-            "radial_interference_area_km2": float(
-                summary["radial_interference_area_km2"]
+            "radial_interference_ray_count": float(summary["radial_interference_ray_count"]),
+            "radial_interference_gate_count": float(summary["radial_interference_gate_count"]),
+            **(
+                {"radial_interference_area_km2": float(summary["radial_interference_area_km2"])}
+                if summary["radial_interference_area_km2"] is not None
+                else {}
             ),
             "radial_temporal_context_volume_count": float(
                 context_provenance["temporal_available_count"]
@@ -105,7 +180,73 @@ def _execute_basic_qc(request: RadarQCRequested, client: Minio) -> WorkerResult:
                 context_provenance["cross_radar_available_count"]
             ),
         },
+        observability=observability,
     )
+
+
+def prepare_qc_inputs(request, normalized, profile, client, *, reader=None, ancillary_maps=None):
+    """One preparation path for online QC and frozen scientific replay."""
+    from .qc_input import open_qc_input
+
+    view = open_qc_input(normalized)
+    ancillary = (
+        ancillary_maps if ancillary_maps is not None else _load_ancillary_maps(profile, client)
+    )
+    beam, terrain, config_dir, dem_version = _load_qc_geometry_resources(request, profile)
+    context, provenance = _load_radial_context(
+        request,
+        normalized,
+        profile,
+        client,
+        current_beam_context=beam,
+        terrain=terrain,
+        radar_config_dir=config_dir,
+        expected_dem_asset_version=dem_version,
+        input_view=view,
+        reader=reader,
+    )
+    phase, attenuation = _load_shadow_runtime_profiles()
+    blockage = None
+    if (
+        attenuation is not None
+        and beam is not None
+        and terrain is not None
+        and beam.altitude_datum_status == "verified_egm2008"
+    ):
+        from .blockage import calculate_polar_blockage
+        from .qc_geometry import QC_GEOMETRY_BEAM_CONFIG, QC_GEOMETRY_BLOCKAGE_CONFIG
+
+        blockage = {}
+        for number in view.root["sweep_number"][:]:
+            name = f"sweep_{int(number):03d}"
+            group = view.root[name]
+            result = calculate_polar_blockage(
+                azimuth_deg=group["azimuth"][:],
+                elevation_deg=group["elevation"][:],
+                range_m=group["range"][:],
+                required_max_gate=np.full(
+                    len(group["azimuth"]), len(group["range"]) - 1, dtype="int32"
+                ),
+                radar_longitude_deg=beam.longitude_deg,
+                radar_latitude_deg=beam.latitude_deg,
+                antenna_altitude_m=beam.antenna_altitude_m,
+                vertical_beam_width_deg=beam.beam_width_vertical_deg,
+                beam_config=QC_GEOMETRY_BEAM_CONFIG,
+                blockage_config=QC_GEOMETRY_BLOCKAGE_CONFIG,
+                terrain=terrain,
+            )
+            blockage[name] = np.where(result.support_mask == 1, result.cumulative, np.nan).astype(
+                "float32"
+            )
+    return {
+        "ancillary_maps": ancillary,
+        "radial_context": context,
+        "radar_beam_context": beam,
+        "input_view": view,
+        "phase_processing_profile": phase,
+        "attenuation_profile": attenuation,
+        "blockage_by_sweep": blockage,
+    }, provenance
 
 
 def _load_radial_context(
@@ -113,67 +254,207 @@ def _load_radial_context(
     normalized: dict[str, bytes],
     profile: BasicQCProfile,
     client: Minio,
-) -> tuple[dict[str, dict[str, np.ndarray]] | None, dict[str, int]]:
+    *,
+    current_beam_context: RadarBeamContext | None = None,
+    terrain: VerifiedDEMTileStore | None = None,
+    radar_config_dir: Path | None = None,
+    expected_dem_asset_version: str | None = None,
+    input_view=None,
+    reader=None,
+) -> tuple[dict[str, dict[str, np.ndarray]] | None, dict[str, Any]]:
     fusion = profile.radial_interference.morphology.context_fusion
-    provenance = {
+    current_root = input_view.root if input_view is not None else _normalized_root(normalized)
+    current_end_time = _required_utc_time(
+        current_root.attrs.get("volume_end_time_utc"),
+        field_name="current radar volume end time",
+    )
+    provenance: dict[str, Any] = {
         "temporal_requested_count": len(request.payload.temporal_context),
         "temporal_available_count": 0,
+        "temporal_used_count": 0,
         "cross_radar_requested_count": len(request.payload.cross_radar_context),
         "cross_radar_available_count": 0,
+        "cross_radar_used_count": 0,
         "temporal_supported_sweep_count": 0,
         "cross_radar_supported_sweep_count": 0,
+        "vertical_geometry_verified": bool(
+            current_beam_context is not None
+            and current_beam_context.altitude_datum_status == "verified_egm2008"
+        ),
+        "cross_radar_trusted_enabled": bool(profile.decision_version == "evidence-v2"),
+        "cross_radar_trusted_reference_count": 0,
+        "artifacts": [
+            _context_provenance_entry(
+                role="current",
+                requested_radar_id=request.payload.radar_id,
+                input_uri=request.payload.input_uri,
+                objects=normalized,
+                root=current_root,
+                used=True,
+            )
+        ],
     }
     if not fusion.enabled:
+        provenance["context_fingerprint"] = _radial_context_fingerprint(
+            provenance["artifacts"],
+            profile,
+        )
+        provenance["context_age_seconds"] = 0.0
         return None, provenance
 
-    reader = ArtifactObjectReader(client)
-    temporal_candidates: list[dict[str, tuple[np.ndarray, np.ndarray]]] = []
+    reader = reader or ArtifactObjectReader(client)
+    temporal_candidates: list[dict[str, RadialCandidateSweep]] = []
+    temporal_entries: list[dict[str, Any]] = []
+    seen_temporal = {request.payload.input_uri}
+    seen_temporal_scans = {str(request.payload.scan_id)}
     for input_ref in request.payload.temporal_context:
-        try:
-            objects = reader.load(input_ref.input_uri)
-            candidates = _radial_candidates_by_sweep(objects, profile)
-        # Context evidence is optional.  A missing/corrupt secondary artifact
-        # must not prevent the current volume from completing its primary QC.
-        except (OSError, RuntimeError, S3Error, QCInputError, QCConfigError, ValueError):
+        entry = _context_provenance_entry(
+            role="temporal",
+            requested_radar_id=input_ref.radar_id,
+            input_uri=input_ref.input_uri,
+        )
+        if input_ref.input_uri in seen_temporal:
+            entry["skip_reason"] = "duplicate_temporal_input"
+            provenance["artifacts"].append(entry)
             continue
-        temporal_candidates.append(candidates)
-    provenance["temporal_available_count"] = len(temporal_candidates)
-
-    cross_roots: list[zarr.Group] = []
-    for input_ref in request.payload.cross_radar_context:
+        seen_temporal.add(input_ref.input_uri)
         try:
             objects = reader.load(input_ref.input_uri)
             root = _normalized_root(objects)
+            entry.update(_verified_context_artifact_fields(objects, root))
+            scan_identity = str(root.attrs.get("scan_id", ""))
+            if not scan_identity or scan_identity in seen_temporal_scans:
+                entry["skip_reason"] = "duplicate_or_missing_temporal_scan"
+                provenance["artifacts"].append(entry)
+                continue
+            seen_temporal_scans.add(scan_identity)
+            skip_reason = _validate_temporal_context_artifact(
+                root,
+                request=request,
+                current_end_time=current_end_time,
+                profile=profile,
+            )
+            if skip_reason is not None:
+                entry["skip_reason"] = skip_reason
+                provenance["artifacts"].append(entry)
+                continue
+            candidates = {
+                sweep.comparison_digest: sweep
+                for sweep in _radial_candidates_by_sweep(objects, profile).values()
+            }
+        # Context evidence is optional.  A missing/corrupt secondary artifact
+        # must not prevent the current volume from completing its primary QC.
+        except (OSError, RuntimeError, S3Error, QCInputError, QCConfigError, ValueError):
+            entry["skip_reason"] = "artifact_unavailable"
+            provenance["artifacts"].append(entry)
+            continue
+        entry["skip_reason"] = "no_comparable_sweep"
+        temporal_entries.append(entry)
+        temporal_candidates.append(candidates)
+        provenance["artifacts"].append(entry)
+    provenance["temporal_available_count"] = len(temporal_candidates)
+
+    cross_roots: list[zarr.Group] = []
+    cross_support_references: list[CrossRadarSupportReference | None] = []
+    cross_entries: list[dict[str, Any]] = []
+    seen_cross_uris = {request.payload.input_uri}
+    seen_cross_radars = {request.payload.radar_id.lower()}
+    for input_ref in request.payload.cross_radar_context:
+        entry = _context_provenance_entry(
+            role="cross_radar",
+            requested_radar_id=input_ref.radar_id,
+            input_uri=input_ref.input_uri,
+        )
+        if (
+            input_ref.input_uri in seen_cross_uris
+            or input_ref.radar_id.lower() in seen_cross_radars
+        ):
+            entry["skip_reason"] = "duplicate_cross_radar_input"
+            provenance["artifacts"].append(entry)
+            continue
+        seen_cross_uris.add(input_ref.input_uri)
+        seen_cross_radars.add(input_ref.radar_id.lower())
+        try:
+            objects = reader.load(input_ref.input_uri)
+            root = _normalized_root(objects)
+            entry.update(_verified_context_artifact_fields(objects, root))
         # Keep cross-radar input best-effort for the same reason as temporal
         # evidence: it can influence a weak candidate but cannot own the job.
         except (OSError, RuntimeError, S3Error, QCInputError, ValueError):
+            entry["skip_reason"] = "artifact_unavailable"
+            provenance["artifacts"].append(entry)
             continue
-        if str(root.attrs.get("radar_id", "")).lower() == request.payload.radar_id.lower():
+        skip_reason = _validate_cross_radar_context_artifact(
+            root,
+            request=request,
+            requested_radar_id=input_ref.radar_id,
+            current_end_time=current_end_time,
+            profile=profile,
+        )
+        if skip_reason is not None:
+            entry["skip_reason"] = skip_reason
+            provenance["artifacts"].append(entry)
             continue
-        if str(root.attrs.get("radar_id", "")).lower() != input_ref.radar_id.lower():
-            continue
+        entry["skip_reason"] = "no_comparable_sweep"
         cross_roots.append(root)
+        cross_support_references.append(
+            _load_cross_radar_support_reference(
+                objects,
+                root,
+                profile,
+                radar_config_dir=radar_config_dir,
+                expected_dem_asset_version=expected_dem_asset_version,
+            )
+        )
+        cross_entries.append(entry)
+        provenance["artifacts"].append(entry)
     provenance["cross_radar_available_count"] = len(cross_roots)
+    provenance["cross_radar_trusted_reference_count"] = sum(
+        1
+        for reference in cross_support_references
+        if reference is not None
+        and reference.beam_context is not None
+        and reference.beam_context.altitude_datum_status == "verified_egm2008"
+        and reference.health_available
+        and reference.dem_compatible
+    )
 
     if not temporal_candidates and not cross_roots:
+        provenance["context_fingerprint"] = _radial_context_fingerprint(
+            provenance["artifacts"],
+            profile,
+        )
+        provenance["context_age_seconds"] = 0.0
         return None, provenance
-    current_root = _normalized_root(normalized)
     context: dict[str, dict[str, np.ndarray]] = {}
     for sweep_number in current_root["sweep_number"][:]:
         name = f"sweep_{int(sweep_number):03d}"
         group = current_root[name]
+        comparison_digest = comparison_digest_for_sweep(group)
         sweep_context: dict[str, np.ndarray] = {}
-        temporal_inputs = [
-            values[name]
-            for values in temporal_candidates
-            if name in values
-        ]
+        temporal_inputs = []
+        for index, values in enumerate(temporal_candidates):
+            sweep = values.get(comparison_digest)
+            if sweep is None:
+                continue
+            temporal_entries[index]["used"] = True
+            temporal_entries[index]["skip_reason"] = None
+            temporal_inputs.append(
+                (
+                    sweep.azimuth_deg,
+                    sweep.candidate_mask_by_ray,
+                    sweep.observed_mask_by_ray,
+                )
+            )
         if temporal_inputs:
             persistence = _temporal_radial_persistence(
                 group["azimuth"][:],
                 tuple(temporal_inputs),
                 minimum_context_scans=fusion.minimum_temporal_context_scans,
                 maximum_context_scans=fusion.maximum_temporal_context_scans,
+                maximum_azimuth_offset_deg=(
+                    0.75 if profile.decision_version == "evidence-v2" else None
+                ),
             )
             sweep_context["temporal_persistence"] = persistence
             if np.any(np.isfinite(persistence)):
@@ -181,42 +462,362 @@ def _load_radial_context(
 
         if "DBZH" in group and cross_roots:
             dbzh = group["DBZH"][:].astype("float32", copy=False)
-            neighbours = tuple(
-                _reproject_neighbour_to_current_polar(current_root, group, root)
-                for root in cross_roots
-            )
-            consistency = _cross_radar_consistency_by_ray(
-                dbzh,
-                np.isfinite(dbzh),
-                neighbours,
-                echo_threshold_dbzh=fusion.cross_radar_echo_threshold_dbzh,
-                minimum_overlap_gates=fusion.minimum_cross_radar_overlap_gates,
-            )
+            if profile.decision_version == "evidence-v2":
+                trusted_references = [
+                    (index, reference)
+                    for index, reference in enumerate(cross_support_references)
+                    if reference is not None
+                ]
+                if current_beam_context is not None and terrain is not None and trusted_references:
+                    diagnostics = build_trusted_cross_radar_support(
+                        {
+                            "dbzh": dbzh,
+                            "azimuth": group["azimuth"][:],
+                            "range": group["range"][:],
+                            "elevation": group["elevation"][:],
+                        },
+                        current_beam_context,
+                        tuple(reference for _, reference in trusted_references),
+                        terrain=terrain,
+                        echo_threshold_dbzh=fusion.cross_radar_echo_threshold_dbzh,
+                        minimum_overlap_gates=fusion.minimum_cross_radar_overlap_gates,
+                        valid_range_dbz=profile.echo.dbzh_valid_range_dbz,
+                    )
+                    for used, (index, _reference) in zip(
+                        diagnostics.reference_used_mask,
+                        trusted_references,
+                        strict=True,
+                    ):
+                        if used:
+                            cross_entries[index]["used"] = True
+                            cross_entries[index]["skip_reason"] = None
+                    consistency = diagnostics.consistency_by_ray
+                    sweep_context[CROSS_RADAR_TRUSTED_SUPPORT_FIELD] = diagnostics.support_fraction
+                    sweep_context[CROSS_RADAR_TRUSTED_AVAILABLE_MASK_FIELD] = (
+                        diagnostics.available_mask
+                    )
+                else:
+                    consistency = np.full(dbzh.shape[0], np.nan, dtype="float32")
+                    sweep_context[CROSS_RADAR_TRUSTED_SUPPORT_FIELD] = np.full(
+                        dbzh.shape,
+                        np.nan,
+                        dtype="float32",
+                    )
+                    sweep_context[CROSS_RADAR_TRUSTED_AVAILABLE_MASK_FIELD] = np.zeros(
+                        dbzh.shape,
+                        dtype="uint8",
+                    )
+            else:
+                reprojected_neighbours = []
+                for index, root in enumerate(cross_roots):
+                    neighbour = _reproject_neighbour_to_current_polar(current_root, group, root)
+                    if np.any(np.isfinite(neighbour)):
+                        cross_entries[index]["used"] = True
+                        cross_entries[index]["skip_reason"] = None
+                    reprojected_neighbours.append(neighbour)
+                consistency = _cross_radar_consistency_by_ray(
+                    dbzh,
+                    np.isfinite(dbzh),
+                    tuple(reprojected_neighbours),
+                    echo_threshold_dbzh=fusion.cross_radar_echo_threshold_dbzh,
+                    minimum_overlap_gates=fusion.minimum_cross_radar_overlap_gates,
+                )
             sweep_context["cross_radar_consistency"] = consistency
             if np.any(np.isfinite(consistency)):
                 provenance["cross_radar_supported_sweep_count"] += 1
         if sweep_context:
             context[name] = sweep_context
+    provenance["temporal_used_count"] = sum(1 for entry in temporal_entries if bool(entry["used"]))
+    provenance["cross_radar_used_count"] = sum(1 for entry in cross_entries if bool(entry["used"]))
+    provenance["context_fingerprint"] = _radial_context_fingerprint(
+        provenance["artifacts"],
+        profile,
+    )
+    provenance["context_age_seconds"] = _context_age_seconds(
+        current_end_time,
+        provenance["artifacts"],
+    )
     return context or None, provenance
 
 
 def _radial_candidates_by_sweep(
     normalized: dict[str, bytes],
     profile: BasicQCProfile,
-) -> dict[str, tuple[np.ndarray, np.ndarray]]:
-    result = apply_basic_qc(normalized, profile)
-    root = _normalized_root(normalized)
-    threshold = profile.radial_interference.morphology.diagnostic_probability
-    return {
-        sweep.name: (
-            root[sweep.name]["azimuth"][:].astype("float32", copy=False),
-            np.any(
-                np.nan_to_num(sweep.p_radial_interference, nan=0.0) >= threshold,
-                axis=1,
-            ),
+) -> dict[str, RadialCandidateSweep]:
+    return extract_radial_candidate_sweeps(normalized, profile)
+
+
+def _load_qc_geometry_resources(
+    request: RadarQCRequested,
+    profile: BasicQCProfile,
+) -> tuple[
+    RadarBeamContext | None,
+    VerifiedDEMTileStore | None,
+    Path | None,
+    str | None,
+]:
+    if profile.decision_version != "evidence-v2":
+        return None, None, None, None
+    radar_config_dir = _optional_directory("RAINPULSE_RADAR_CONFIG_DIR")
+    if radar_config_dir is None:
+        return None, None, None, None
+    try:
+        current_radar_config = load_radar_config(
+            radar_config_dir / f"{request.payload.radar_id}.yaml"
         )
-        for sweep in result.sweeps
+        if current_radar_config.radar_id.lower() != request.payload.radar_id.lower():
+            return None, None, radar_config_dir, None
+        current_beam_context = radar_beam_context_from_config(current_radar_config)
+    except (OSError, ValueError):
+        return None, None, radar_config_dir, None
+
+    ancillary_config_path = _optional_file("RAINPULSE_ANCILLARY_CONFIG")
+    ancillary_root = _optional_directory("RAINPULSE_ANCILLARY_ROOT")
+    expected_dem_asset_version = current_radar_config.ancillary.get("dem_asset_version")
+    if (
+        ancillary_config_path is None
+        or ancillary_root is None
+        or not isinstance(expected_dem_asset_version, str)
+        or not expected_dem_asset_version
+    ):
+        return current_beam_context, None, radar_config_dir, None
+    try:
+        ancillary_source = load_source(ancillary_config_path)
+        terrain = VerifiedDEMTileStore(
+            ancillary_source,
+            ancillary_root,
+            expected_asset_version=expected_dem_asset_version,
+            expected_config_version=ancillary_source.config_version,
+        )
+    except (OSError, RuntimeError, ValueError):
+        terrain = None
+    return current_beam_context, terrain, radar_config_dir, expected_dem_asset_version
+
+
+def _load_cross_radar_support_reference(
+    objects: dict[str, bytes],
+    root: zarr.Group,
+    profile: BasicQCProfile,
+    *,
+    radar_config_dir: Path | None,
+    expected_dem_asset_version: str | None,
+) -> CrossRadarSupportReference | None:
+    if radar_config_dir is None:
+        return None
+    radar_id = str(root.attrs.get("radar_id", "")).strip()
+    if not radar_id:
+        return None
+    try:
+        radar_config = load_radar_config(radar_config_dir / f"{radar_id}.yaml")
+        beam_context = radar_beam_context_from_config(radar_config)
+    except (OSError, ValueError):
+        return None
+    try:
+        candidate_sweeps = _radial_candidates_by_sweep(objects, profile)
+    except (RuntimeError, QCInputError, QCConfigError, ValueError):
+        candidate_sweeps = {}
+    return CrossRadarSupportReference(
+        radar_id=radar_id,
+        root=root,
+        beam_context=beam_context,
+        health_available=str(root.attrs.get("radar_health", "")).upper() in {"HEALTHY", "DEGRADED"},
+        dem_compatible=(
+            isinstance(expected_dem_asset_version, str)
+            and expected_dem_asset_version
+            and radar_config.ancillary.get("dem_asset_version") == expected_dem_asset_version
+        ),
+        hard_interference_by_sweep={
+            name: np.asarray(sweep.hard_flag_by_ray, dtype=bool)
+            for name, sweep in candidate_sweeps.items()
+        },
+    )
+
+
+def _context_provenance_entry(
+    *,
+    role: str,
+    requested_radar_id: str,
+    input_uri: str,
+    objects: dict[str, bytes] | None = None,
+    root: zarr.Group | None = None,
+    used: bool = False,
+) -> dict[str, Any]:
+    entry: dict[str, Any] = {
+        "role": role,
+        "requested_radar_id": requested_radar_id,
+        "input_uri": input_uri,
+        "used": used,
+        "skip_reason": None,
     }
+    if objects is not None and root is not None:
+        entry.update(_verified_context_artifact_fields(objects, root))
+    return entry
+
+
+def _verified_context_artifact_fields(
+    objects: dict[str, bytes],
+    root: zarr.Group,
+) -> dict[str, Any]:
+    return {
+        "artifact_sha256": artifact_sha256(objects),
+        "scan_id": str(root.attrs.get("scan_id", "")),
+        "radar_id": str(root.attrs.get("radar_id", "")),
+        "volume_end_time_utc": _attribute_text(root.attrs.get("volume_end_time_utc")),
+        "geometry_digest": volume_geometry_digest(root),
+        "radar_health": str(root.attrs.get("radar_health", "")),
+        "scan_completeness": _attribute_float(root.attrs.get("scan_completeness")),
+    }
+
+
+def _validate_temporal_context_artifact(
+    root: zarr.Group,
+    *,
+    request: RadarQCRequested,
+    current_end_time: datetime,
+    profile: BasicQCProfile,
+) -> str | None:
+    actual_radar_id = str(root.attrs.get("radar_id", "")).strip().lower()
+    if actual_radar_id != request.payload.radar_id.lower():
+        return "temporal_radar_id_mismatch"
+    if str(root.attrs.get("radar_health", "")).upper() == "UNAVAILABLE":
+        return "radar_health_unavailable"
+    try:
+        end_time = _required_utc_time(
+            root.attrs.get("volume_end_time_utc"),
+            field_name="temporal context volume end time",
+        )
+    except QCInputError:
+        return "invalid_volume_end_time"
+    delta_seconds = (end_time - current_end_time).total_seconds()
+    fusion = profile.radial_interference.morphology.context_fusion
+    if fusion.temporal_selection_mode != "symmetric_offline" and delta_seconds >= 0:
+        return "future_time_disallowed" if delta_seconds > 0 else "non_past_temporal_context"
+    if abs(delta_seconds) > fusion.temporal_max_time_offset_seconds:
+        return "time_out_of_window"
+    return None
+
+
+def _validate_cross_radar_context_artifact(
+    root: zarr.Group,
+    *,
+    request: RadarQCRequested,
+    requested_radar_id: str,
+    current_end_time: datetime,
+    profile: BasicQCProfile,
+) -> str | None:
+    actual_radar_id = str(root.attrs.get("radar_id", "")).strip().lower()
+    if actual_radar_id == request.payload.radar_id.lower():
+        return "cross_same_radar"
+    if actual_radar_id != requested_radar_id.lower():
+        return "cross_radar_id_mismatch"
+    if str(root.attrs.get("radar_health", "")).upper() == "UNAVAILABLE":
+        return "radar_health_unavailable"
+    try:
+        end_time = _required_utc_time(
+            root.attrs.get("volume_end_time_utc"),
+            field_name="cross-radar context volume end time",
+        )
+    except QCInputError:
+        return "invalid_volume_end_time"
+    fusion = profile.radial_interference.morphology.context_fusion
+    delta_seconds = (end_time - current_end_time).total_seconds()
+    if fusion.temporal_selection_mode != "symmetric_offline" and delta_seconds > 0:
+        return "future_time_disallowed"
+    if abs(delta_seconds) > fusion.cross_radar_max_time_offset_seconds:
+        return "time_out_of_window"
+    return None
+
+
+def _required_utc_time(value: object, *, field_name: str) -> datetime:
+    if not isinstance(value, str) or not value:
+        raise QCInputError(f"{field_name} is missing")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise QCInputError(f"{field_name} is invalid") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise QCInputError(f"{field_name} must include UTC offset")
+    return parsed.astimezone(UTC)
+
+
+def _attribute_text(value: object) -> str | None:
+    if value is None:
+        return None
+    return str(value)
+
+
+def _attribute_float(value: object) -> float | None:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(numeric):
+        return None
+    return numeric
+
+
+def _elapsed_ms(started_tick: float) -> float:
+    return round((time.perf_counter() - started_tick) * 1000, 3)
+
+
+def _process_rss_bytes() -> int:
+    rss = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    if sys.platform == "darwin":
+        return rss
+    return rss * 1024
+
+
+def _radial_context_fingerprint(
+    artifacts: list[dict[str, Any]],
+    profile: BasicQCProfile,
+) -> str:
+    payload = {
+        "qc_profile": profile.profile_version,
+        "qc_pipeline_version": profile.pipeline_version,
+        "decision_version": profile.decision_version,
+        "flag_definition_version": profile.flag_definition_version,
+        "temporal_selection_mode": (
+            profile.radial_interference.morphology.context_fusion.temporal_selection_mode
+        ),
+        "temporal_max_time_offset_seconds": (
+            profile.radial_interference.morphology.context_fusion.temporal_max_time_offset_seconds
+        ),
+        "cross_radar_max_time_offset_seconds": (
+            profile.radial_interference.morphology.context_fusion.cross_radar_max_time_offset_seconds
+        ),
+        "artifacts": artifacts,
+    }
+    return artifact_sha256(
+        {
+            "radial_context.json": json.dumps(
+                payload,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        }
+    )
+
+
+def _context_age_seconds(current_end_time: datetime, artifacts: list[dict[str, Any]]) -> float:
+    maximum_age = 0.0
+    for artifact in artifacts:
+        if artifact.get("role") == "current" or not bool(artifact.get("used")):
+            continue
+        raw_end_time = artifact.get("volume_end_time_utc")
+        if not isinstance(raw_end_time, str) or not raw_end_time:
+            continue
+        try:
+            context_end_time = _required_utc_time(
+                raw_end_time,
+                field_name="context volume end time",
+            )
+        except QCInputError:
+            continue
+        maximum_age = max(
+            maximum_age,
+            abs((current_end_time - context_end_time).total_seconds()),
+        )
+    return float(maximum_age)
 
 
 def _normalized_root(objects: dict[str, bytes]) -> zarr.Group:
@@ -246,8 +847,7 @@ def _reproject_neighbour_to_current_polar(
     except (KeyError, TypeError, ValueError):
         return result
     if not all(
-        np.isfinite(item)
-        for item in (current_lon, current_lat, neighbour_lon, neighbour_lat)
+        np.isfinite(item) for item in (current_lon, current_lat, neighbour_lon, neighbour_lat)
     ):
         return result
 
@@ -298,8 +898,7 @@ def _nearest_elevation_sweep(
 ) -> zarr.Group | None:
     target = float(np.nanmedian(current_group["elevation"][:]))
     candidates = [
-        neighbour_root[f"sweep_{int(number):03d}"]
-        for number in neighbour_root["sweep_number"][:]
+        neighbour_root[f"sweep_{int(number):03d}"] for number in neighbour_root["sweep_number"][:]
     ]
     candidates = [item for item in candidates if "elevation" in item and "DBZH" in item]
     if not candidates:
@@ -378,13 +977,47 @@ def _merge_npz(
 ) -> None:
     for key, values in arrays.items():
         sweep, separator, field = key.partition("__")
-        if not separator or not sweep.startswith("sweep_") or field not in {
-            "ground_clutter",
-            "sea_clutter",
-            "ap",
-        }:
+        if (
+            not separator
+            or not sweep.startswith("sweep_")
+            or field
+            not in {
+                "ground_clutter",
+                "sea_clutter",
+                "ap",
+            }
+        ):
             raise QCConfigError(f"invalid QC ancillary array key {key!r}")
         target.setdefault(sweep, {})[field] = values
+
+
+def _load_shadow_runtime_profiles() -> tuple[
+    PhaseProcessingProfile | None, AttenuationProfile | None
+]:
+    phase_processing_path = _optional_file("RAINPULSE_RADAR_PHASE_PROCESSING_PROFILE")
+    attenuation_path = _optional_file("RAINPULSE_RADAR_ATTENUATION_PROFILE")
+    try:
+        phase_processing_profile = (
+            None
+            if phase_processing_path is None
+            else load_phase_processing_profile(phase_processing_path)
+        )
+        attenuation_profile = (
+            None if attenuation_path is None else load_attenuation_profile(attenuation_path)
+        )
+    except ValueError as error:
+        raise QCConfigError(str(error)) from error
+    if (
+        phase_processing_profile is not None
+        and attenuation_profile is not None
+        and attenuation_profile.source_phase_processing_profile_version
+        != phase_processing_profile.profile_version
+    ):
+        raise QCConfigError(
+            "attenuation profile source_phase_processing_profile_version differs "
+            "from the selected phase-processing profile"
+        )
+    return phase_processing_profile, attenuation_profile
 
 
 def _required_file(name: str) -> Path:
@@ -394,6 +1027,26 @@ def _required_file(name: str) -> Path:
     path = Path(value).resolve(strict=True)
     if not path.is_file():
         raise QCConfigError(f"{name} must identify a file")
+    return path
+
+
+def _optional_file(name: str) -> Path | None:
+    value = os.getenv(name)
+    if not value:
+        return None
+    path = Path(value).resolve(strict=True)
+    if not path.is_file():
+        raise QCConfigError(f"{name} must identify a file")
+    return path
+
+
+def _optional_directory(name: str) -> Path | None:
+    value = os.getenv(name)
+    if not value:
+        return None
+    path = Path(value).resolve(strict=True)
+    if not path.is_dir():
+        raise QCConfigError(f"{name} must identify a directory")
     return path
 
 
