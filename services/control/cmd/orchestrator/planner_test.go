@@ -149,6 +149,41 @@ func TestManualRegenerationBypassesRealtimeForecastLookback(t *testing.T) {
 	}
 }
 
+func TestHistoricalReplayWindowBypassesOnlyItsBoundedInterval(t *testing.T) {
+	start := time.Date(2026, time.August, 28, 0, 0, 0, 0, time.UTC)
+	end := start.Add(8 * time.Hour)
+	planner := &pipelinePlanner{settings: pipelineSettings{
+		lookback:              time.Hour,
+		historicalReplayStart: &start,
+		historicalReplayEnd:   &end,
+	}}
+	if planner.outsideLookback(start.Add(20 * time.Minute)) {
+		t.Fatal("bounded historical replay time was blocked")
+	}
+	if !planner.outsideLookback(end) {
+		t.Fatal("historical replay end must be exclusive")
+	}
+	if !planner.outsideLookback(start.Add(-time.Minute)) {
+		t.Fatal("time before historical replay was incorrectly admitted")
+	}
+}
+
+func TestHistoricalReplayWindowRequiresPairedValidBounds(t *testing.T) {
+	t.Setenv("RAINPULSE_PIPELINE_HISTORICAL_REPLAY_START_UTC", "2026-08-28T00:00:00Z")
+	if _, _, err := historicalReplayWindowFromEnvironment(); err == nil {
+		t.Fatal("missing replay end was accepted")
+	}
+	t.Setenv("RAINPULSE_PIPELINE_HISTORICAL_REPLAY_END_UTC", "2026-08-28T00:00:00Z")
+	if _, _, err := historicalReplayWindowFromEnvironment(); err == nil {
+		t.Fatal("empty replay window was accepted")
+	}
+	t.Setenv("RAINPULSE_PIPELINE_HISTORICAL_REPLAY_END_UTC", "2026-08-28T08:05:00Z")
+	start, end, err := historicalReplayWindowFromEnvironment()
+	if err != nil || start == nil || end == nil || !end.After(*start) {
+		t.Fatalf("valid replay window = %v..%v, err=%v", start, end, err)
+	}
+}
+
 func TestDistinctRegenerationScansDeduplicatesSharedInputFrames(t *testing.T) {
 	shared := workflow.RadarScan{ID: uuid.New(), RadarID: "z9591"}
 	other := workflow.RadarScan{ID: uuid.New(), RadarID: "z9598"}

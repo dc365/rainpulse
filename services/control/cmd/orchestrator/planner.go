@@ -21,6 +21,8 @@ type pipelineSettings struct {
 	mode                      string
 	interval                  time.Duration
 	lookback                  time.Duration
+	historicalReplayStart     *time.Time
+	historicalReplayEnd       *time.Time
 	mosaicEarliestDelay       time.Duration
 	mosaicMaximumWait         time.Duration
 	radarIDs                  map[string]struct{}
@@ -86,6 +88,10 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 	if err != nil || lookback < 0 {
 		return nil, fmt.Errorf("RAINPULSE_PIPELINE_LOOKBACK must be a non-negative duration")
 	}
+	historicalReplayStart, historicalReplayEnd, err := historicalReplayWindowFromEnvironment()
+	if err != nil {
+		return nil, err
+	}
 	mosaicEarliestDelay, err := time.ParseDuration(
 		environmentOrDefault("RAINPULSE_PIPELINE_MOSAIC_DELAY", "30s"),
 	)
@@ -129,6 +135,8 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 		mode:                      mode,
 		interval:                  interval,
 		lookback:                  lookback,
+		historicalReplayStart:     historicalReplayStart,
+		historicalReplayEnd:       historicalReplayEnd,
 		mosaicEarliestDelay:       mosaicEarliestDelay,
 		mosaicMaximumWait:         mosaicMaximumWait,
 		radarIDs:                  radarIDs,
@@ -675,8 +683,50 @@ func (planner *pipelinePlanner) planForecasts(ctx context.Context) error {
 }
 
 func (planner *pipelinePlanner) outsideLookback(value time.Time) bool {
+	if planner.inHistoricalReplayWindow(value) {
+		return false
+	}
 	return planner.settings.lookback > 0 &&
 		time.Since(value.UTC()) > planner.settings.lookback
+}
+
+// historicalReplayWindowFromEnvironment opens a deliberately bounded window
+// for recovering archived radar data.  It never changes the ordinary realtime
+// lookback outside that interval, preventing an old backlog from being planned
+// accidentally after a recovery is complete.
+func historicalReplayWindowFromEnvironment() (*time.Time, *time.Time, error) {
+	startRaw := strings.TrimSpace(os.Getenv("RAINPULSE_PIPELINE_HISTORICAL_REPLAY_START_UTC"))
+	endRaw := strings.TrimSpace(os.Getenv("RAINPULSE_PIPELINE_HISTORICAL_REPLAY_END_UTC"))
+	if startRaw == "" && endRaw == "" {
+		return nil, nil, nil
+	}
+	if startRaw == "" || endRaw == "" {
+		return nil, nil, fmt.Errorf("historical replay requires both RAINPULSE_PIPELINE_HISTORICAL_REPLAY_START_UTC and RAINPULSE_PIPELINE_HISTORICAL_REPLAY_END_UTC")
+	}
+	start, err := time.Parse(time.RFC3339, startRaw)
+	if err != nil {
+		return nil, nil, fmt.Errorf("parse RAINPULSE_PIPELINE_HISTORICAL_REPLAY_START_UTC: %w", err)
+	}
+	end, err := time.Parse(time.RFC3339, endRaw)
+	if err != nil {
+		return nil, nil, fmt.Errorf("parse RAINPULSE_PIPELINE_HISTORICAL_REPLAY_END_UTC: %w", err)
+	}
+	start = start.UTC()
+	end = end.UTC()
+	if !end.After(start) {
+		return nil, nil, fmt.Errorf("historical replay end must be after start")
+	}
+	return &start, &end, nil
+}
+
+func (planner *pipelinePlanner) inHistoricalReplayWindow(value time.Time) bool {
+	start := planner.settings.historicalReplayStart
+	end := planner.settings.historicalReplayEnd
+	if start == nil || end == nil {
+		return false
+	}
+	value = value.UTC()
+	return !value.Before(*start) && value.Before(*end)
 }
 
 func (planner *pipelinePlanner) outsideForecastLookback(run workflow.Run) bool {
