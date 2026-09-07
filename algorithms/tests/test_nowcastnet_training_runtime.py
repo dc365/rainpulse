@@ -149,6 +149,10 @@ GENERATIVE_WEEKEND_CONTINUATION_EVIDENCE_PATH = (
     / "evidence"
     / "nowcastnet-generative-weekend-continuation-v1.json"
 )
+GENERATIVE_WEEKEND_CONTINUATION_ACCEPTANCE_EVIDENCE_PATH = (
+    REPOSITORY_ROOT / "configs" / "training" / "evidence"
+    / "nowcastnet-generative-weekend-continuation-acceptance-v1.json"
+)
 
 
 def _sha256(path: Path) -> str:
@@ -715,6 +719,33 @@ def test_weekend_continuation_keeps_weekday_daytime_and_holdout_closed() -> None
         "independent_holdout_opened": False,
         "next_gate": "validate_the_weekend_window_before_any_subsequent_one_time_permit",
     }
+    assert evidence["operational_eligible"] is False
+
+
+def test_weekend_continuation_acceptance_restores_the_default_guard() -> None:
+    evidence = json.loads(GENERATIVE_WEEKEND_CONTINUATION_ACCEPTANCE_EVIDENCE_PATH.read_text())
+    assert evidence["status"] == "passed"
+    assert evidence["identity"]["holdout_windows_processed"] == 0
+    assert evidence["window"]["start_step"] == 35184
+    assert evidence["window"]["end_step"] == 118283
+    assert evidence["window"]["completed_steps"] == 83099
+    assert evidence["metrics"]["total_rows"] == 118283
+    assert evidence["metrics"]["global_steps_contiguous"] is True
+    assert evidence["metrics"]["all_required_values_finite"] is True
+    assert evidence["output_checkpoint"]["hash_verified"] is True
+    assert evidence["output_checkpoint"]["cpu_readback_verified"] is True
+    assert evidence["output_checkpoint"]["state_fingerprints_verified"] is True
+    assert evidence["output_checkpoint"]["random_state_fingerprint_verified"] is True
+    assert evidence["shared_services"]["qwen3_6_recovery"].startswith("passed")
+    assert evidence["shared_services"]["qwen3_8_recovery"] == "passed"
+    assert evidence["shared_services"]["vllm_stopped"] is False
+    assert evidence["shared_services"]["training_processes_remaining"] == 0
+    assert evidence["scheduler_lifecycle"]["weekend_one_shot_stop_executed"] is True
+    assert evidence["scheduler_lifecycle"]["weekend_daytime_guard_restored_to_default"] is True
+    assert evidence["scheduler_lifecycle"]["weekday_daytime_start_authorized"] is False
+    assert evidence["scheduler_lifecycle"]["subsequent_window_permit_present"] is False
+    assert evidence["decision"]["weekend_continuation_accepted"] is True
+    assert evidence["decision"]["subsequent_window_approved"] is False
     assert evidence["operational_eligible"] is False
 
 

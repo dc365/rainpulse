@@ -1,0 +1,78 @@
+{
+  "schema_version": "1.0",
+  "status": "passed",
+  "measured_at": "2026-09-07T01:35:00+00:00",
+  "scope": "explicit_weekend_daytime_generative_continuation_acceptance",
+  "identity": {
+    "training_code_revision": "3c7c9a1ec9249f54cd72a5ea3de9727e6c26e215",
+    "generative_profile_sha256": "e33cd36ad4c61cedfbb76dd9d52e821513f6916b6dc3fef68b0352a6bf071fdb",
+    "parent_checkpoint_sha256": "be791c9878e639fc63db3a23609ecb0d2351dfb90c7d533778469665a9032632",
+    "sample_index_sha256": "e758c938c929020c64e17ea827b05431f08b059c4033fcaa3b27a72ec1decddf",
+    "holdout_windows_processed": 0
+  },
+  "window": {
+    "window_id": "window-0004",
+    "start_step": 35184,
+    "end_step": 118283,
+    "completed_steps": 83099,
+    "target_step": 500000,
+    "remaining_steps": 381717,
+    "finished_at": "2026-09-06T23:45:32.920493+00:00",
+    "duration_seconds": 156892.7114874106,
+    "stop_reason": "signal:SIGTERM",
+    "checkpoint_state_exact_on_resume": true,
+    "random_state_exact_on_resume": true,
+    "peak_allocated_memory_bytes": 38713096192,
+    "peak_reserved_memory_bytes": 39785070592
+  },
+  "metrics": {
+    "total_rows": 118283,
+    "invocation_rows": 83099,
+    "global_steps_contiguous": true,
+    "all_required_values_finite": true,
+    "metrics_sha256": "60f64beb589b044da4e85af75b535c7f7260fa55a318902790e14c9572657836"
+  },
+  "output_checkpoint": {
+    "global_step": 118283,
+    "sha256": "bc58d99229f2b09a349f7fffe938ac637a24756da4a20b6f1b5b90b68663fc8d",
+    "hash_verified": true,
+    "cpu_readback_verified": true,
+    "state_fingerprints_verified": true,
+    "random_state_fingerprint_verified": true
+  },
+  "reports": {
+    "preflight_sha256": "5ac9e1bb1e79e250bf508b2fcd9f075692537819305d7b066dc94325a0894825",
+    "consumed_permit_sha256": "ebd18b6df2a328afdb615c3587d53f5e4047f4dbb35a533d10e6c3f40bfc00ae",
+    "latest_marker_sha256": "7d2102f453364515a7fde4c26deb482f0902ecebb082e02c9bf01cf9225c5067",
+    "training_report_sha256": "3632cafdf2eb7163d9b949f9cb7b57034183fef5b00215300c64793d1bb2a351",
+    "window_finals_sha256": "398e0d8c536e644d4b528cd276474d0d780d906b33d022cf2dbc075198a05217"
+  },
+  "shared_services": {
+    "qwen3_6_recovery": "passed_after_manual_restart",
+    "qwen3_8_recovery": "passed",
+    "vllm_stopped": false,
+    "training_processes_remaining": 0
+  },
+  "scheduler_lifecycle": {
+    "weekend_one_shot_stop_executed": true,
+    "weekend_daytime_guard_restored_to_default": true,
+    "weekday_daytime_start_authorized": false,
+    "automatic_following_window_start_enabled": false,
+    "subsequent_window_permit_present": false
+  },
+  "storage": {
+    "checkpoint_count": 18,
+    "training_output_free_bytes": 557804593152,
+    "sample_storage_free_bytes": 129146028032,
+    "raw_data_mutated": false,
+    "samples_mutated": false
+  },
+  "decision": {
+    "weekend_continuation_accepted": true,
+    "subsequent_window_approved": false,
+    "independent_holdout_opened": false,
+    "generative_training_complete": false,
+    "next_gate": "review_weekend_continuation_before_any_new_one_time_permit"
+  },
+  "operational_eligible": false
+}

@@ -1,14 +1,14 @@
 # NowcastNet 训练阶段状态
 
-更新日期：2026-09-05
+更新日期：2026-09-07
 
 方案版本：`TRAINING_PLAN_v1.0`
 
-总体状态：`formal_generative_weekend_continuation_running`
+总体状态：`formal_generative_weekend_continuation_accepted`
 
-当前阶段：阶段 C、经明确批准的周末连续训练正在从第 35,184 步继续生成阶段 500,000 步正式训练
+当前阶段：阶段 C、经明确批准的周末连续训练已验收；当前 checkpoint 为第 118,283 步
 
-下一动作：每小时监控周末连续窗口；周一 07:45 一次性停止器优雅收尾后，验收 checkpoint、累计指标与共享服务恢复。验收前不批准任何后续窗口
+下一动作：人工复核周末连续训练验收证据后，才可签发绑定第 118,283 步 checkpoint 的新一次性许可；当前没有后续许可或 timer
 
 ## 1. 阶段看板
 
@@ -97,8 +97,8 @@
 - `window-0001` 的停止 timer 在验收后关闭，之后经人工批准重新签发了绑定第 14,725 步 checkpoint 的 `window-0002` 一次性许可。第二窗按计划在 07:45 收到 SIGTERM 并优雅结束，停止 timer 已在验收后关闭。
 - 第二窗口从第 14,725 步运行至第 35,184 步，新增 20,459 步；累计 35,184 行指标全量扫描连续且有限，指标 SHA-256 为 `c3c1302b…fbfc`。最终 checkpoint `64378356…f935` 的 CPU 回读、五类状态指纹和随机状态指纹均通过。
 - 双 Qwen 已恢复并健康，VLLM 全程未停止，没有遗留训练进程。当前 NAS 样本卷可用约 362.31 GB，低于“重建完整库”500 GB 门槛；既有冻结样本未变化，当前只读训练不受影响，但再次物化或扩容前必须先恢复该余量。
-- 用户已明确批准本周末白天继续训练。服务器守卫仅对周六、周日放开白天启动，工作日白天仍拒绝；同时将训练单元启动时限设为 5 分钟，使其不短于 Qwen 的受控停止时限。首次 `window-0003` 在共享服务切换阶段因原 90 秒启动时限失败，未创建训练步数、checkpoint 或指标，双 Qwen 已自动恢复。
-- 修复后以新的 `window-0004` 一次性许可从第 35,184 步恢复，初始已推进至第 35,191 步且指标有限。周末连续运行使用一次性停止器在周一 07:45 收尾；不启用自动后续窗口，不开放独立留出，VLLM 继续运行。
+- 用户明确批准的周末连续训练已从第 35,184 步运行至第 118,283 步，新增 83,099 步；118,283 行累计指标全量扫描连续且有限，最终 checkpoint `bc58d992…fc8d` 的哈希、CPU 回读、五类状态指纹与随机状态指纹均通过。
+- 一次性停止器已按计划优雅停止训练。双 Qwen 均已恢复健康、VLLM 全程未停止；Qwen3.6 曾以成功退出码结束，已由 user systemd 手工重启并通过健康检查。周末白天守卫已恢复为默认夜间规则，工作日白天仍拒绝，后续许可和 timer 均关闭。
 
 ## 3. 数据准备执行清单
 
@@ -195,3 +195,4 @@
 | 2026-09-04 | 生成阶段第二个正式训练窗口批准与启动 | 本批次 `main` | evidence `nowcastnet-generative-second-formal-window-approval-v1.json`；input checkpoint `089f3dba…3639`；CPU preflight `efa2830e…770e` | 64 个样本随机回读和父权重、代码、数据/输出隔离及输出容量复验通过；从第 14,725 步开始第二窗，双 Qwen 按资源协议暂停、VLLM 未停；07:45 自动停止、每小时监控，第三窗未批准，独立留出为 0 |
 | 2026-09-05 | 生成阶段第二个正式训练窗口验收 | 本批次 `main` | evidence `nowcastnet-generative-second-formal-window-v1.json`；checkpoint `64378356…f935`；metrics `c3c1302b…fbfc` | 从第 14,725 步到第 35,184 步优雅停止；累计指标连续有限，checkpoint CPU 回读、五类状态和随机状态指纹均通过；双 Qwen 已恢复、VLLM 未停、timer 与第三窗口许可均关闭；独立留出仍为 0 |
 | 2026-09-05 | 周末连续训练批准与启动 | 本批次 `main` | evidence `nowcastnet-generative-weekend-continuation-v1.json`；input checkpoint `64378356…f935`；CPU preflight `5ac9e1bb…4825` | 周末白天例外只对周六、周日开放，工作日白天仍关闭；首次共享服务切换超时未创建任何训练步数，修复训练启动时限后以新许可恢复第 35,184 步。双 Qwen 按资源协议暂停、VLLM 未停；一次性停止器固定于周一 07:45，独立留出为 0 |
+| 2026-09-07 | 周末连续训练验收 | 本批次 `main` | evidence `nowcastnet-generative-weekend-continuation-acceptance-v1.json`；checkpoint `bc58d992…fc8d`；metrics `60f64beb…7836` | 从第 35,184 步到第 118,283 步优雅停止；累计指标连续有限，checkpoint CPU 回读、五类状态和随机状态指纹均通过；双 Qwen 健康、VLLM 未停，周末守卫、timer 与后续许可均关闭；独立留出仍为 0 |
