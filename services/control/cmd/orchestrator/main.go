@@ -1930,7 +1930,7 @@ func replay(ctx context.Context, store *postgresstore.Store, bus *messaging.JetS
 	if err != nil {
 		return fmt.Errorf("encode replayed job request: %w", err)
 	}
-	subject, err := requestedSubject(eventType)
+	subject, err := requestedSubject(eventType, job.ModelVersion)
 	if err != nil {
 		return err
 	}
@@ -1945,7 +1945,7 @@ func replay(ctx context.Context, store *postgresstore.Store, bus *messaging.JetS
 	})
 }
 
-func requestedSubject(eventType string) (string, error) {
+func requestedSubject(eventType, modelVersion string) (string, error) {
 	switch eventType {
 	case orchestration.JobRequestedEventType:
 		return orchestration.JobRequestedSubject, nil
@@ -1964,7 +1964,10 @@ func requestedSubject(eventType string) (string, error) {
 	case orchestration.NowcastInputRequestedEventType:
 		return orchestration.NowcastInputRequestedSubject, nil
 	case orchestration.PystepsLKRequestedEventType:
-		return orchestration.PystepsLKRequestedSubject, nil
+		if modelVersion != orchestration.PystepsLKModelVersion && modelVersion != "pysteps-lk-1.1.0" {
+			return "", fmt.Errorf("unsupported replay LK model version %q", modelVersion)
+		}
+		return orchestration.PystepsLKSubjectForVersion(modelVersion), nil
 	case orchestration.NowcastNetShadowRequestedEventType:
 		return orchestration.NowcastNetShadowRequestedSubject, nil
 	case orchestration.ProductBuildRequestedEventType:

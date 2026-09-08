@@ -765,6 +765,17 @@ func TestCreatePystepsLKSchedulesOnlyCommittedInputReadyRun(t *testing.T) {
 		t.Fatalf("pySTEPS-LK identity is not deterministic: %v", err)
 	}
 
+	newSubject := repository.pystepsLK.Outbox.Subject
+	input.ModelVersion = "pysteps-lk-1.1.0"
+	_, legacyJob, err := service.CreatePystepsLK(context.Background(), input)
+	if err != nil {
+		t.Fatalf("legacy replay: %v", err)
+	}
+	if repository.pystepsLK.Outbox.Subject != "rainpulse.jobs.requested.pysteps_lk" ||
+		repository.pystepsLK.Outbox.Subject == newSubject || legacyJob.ID == job.ID {
+		t.Fatal("legacy replay must retain its queue and have a separate v2 identity")
+	}
+
 	input.CurrentStatus = workflow.RunPreprocessing
 	if _, _, err := service.CreatePystepsLK(context.Background(), input); err == nil {
 		t.Fatal("pySTEPS-LK must reject a run that is not INPUT_READY")

@@ -13,6 +13,12 @@ import {
 import { radarDisplayExtent, radarSiteFor } from '../radarSites'
 import { focusedPanelFromSearch, workspaceLayoutSearch } from './layoutState'
 import { HistoryPicker } from './HistoryPicker'
+import { useWorkspaceData } from './useWorkspaceData'
+import { cycleAgeSeconds, isLiveCycle } from './workspaceState'
+import { WorkspaceCrosshairInspector } from './WorkspaceCrosshairInspector'
+import type { MapProbeDetail } from './mapProbe'
+import type { MapCoordinate } from '../RasterGISMap'
+import { VerificationInspector } from './VerificationInspector'
 import {
   analysisCycleAt,
   availabilityAt,
@@ -26,7 +32,6 @@ import {
   radarIDs,
   reasonLabel,
   timelineForPreset,
-  type CycleList,
   type CycleSummary,
   type WorkspaceCycleDetail,
   type WorkspacePanel,
@@ -40,25 +45,27 @@ const presetLabels: Record<WorkspacePreset, string> = {
 }
 
 export function MainWorkspace() {
-  const [cycles, setCycles] = useState<CycleSummary[]>([])
-  const [selectedCycleID, setSelectedCycleID] = useState<string>('')
-  const [followLatest, setFollowLatest] = useState(true)
-  const [catalogRevision, setCatalogRevision] = useState('')
-  const [detail, setDetail] = useState<WorkspaceCycleDetail | null>(null)
+  const { state, now, connection, refresh, requestCycle, setTime: setSelectedTime, follow, pin } = useWorkspaceData()
+  const { cycles, detail, selectedTime: snapshotTime, loading } = state
+  const selectedCycleID = detail?.cycle_id ?? ''
+  const followLatest = state.mode === 'follow'
+  const error = [state.catalogError, state.detailError ? `更新失败${detail ? `，保留 ${formatLocalCycleTime(detail.issue_time)} 起报结果` : ''}：${state.detailError}` : null,
+    state.stale ? '数据服务降级，当前显示缓存结果' : null, ...(detail?.warnings ?? [])].filter(Boolean).join('；') || null
+  const [probe, setProbe] = useState<MapProbeDetail | null>(null)
   const [preset, setPreset] = useState<WorkspacePreset>('forecast')
-  const [selectedRadarID, setSelectedRadarID] = useState<string | null>(null)
-  const [selectedTime, setSelectedTime] = useState<string | null>(null)
+  const [storedRadarID, setSelectedRadarID] = useState<string | null>(null)
+  const selectedRadarID = detail && storedRadarID && radarIDs(detail).includes(storedRadarID) ? storedRadarID : detail ? radarIDs(detail)[0] ?? null : null
+  const [verificationAlgorithm, setVerificationAlgorithm] = useState('lk')
+  const [verificationPoint, setVerificationPoint] = useState<MapCoordinate | null>(null)
   const [mobilePanelID, setMobilePanelID] = useState<string>('qpe')
   const [focusedPanelID, setFocusedPanelID] = useState<string | null>(() => (
     focusedPanelFromSearch(typeof window === 'undefined' ? '' : window.location.search)
   ))
   const [focusMenuOpen, setFocusMenuOpen] = useState(false)
   const [playing, setPlaying] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [basemapVisible, setBasemapVisible] = useState(true)
   const [rasterStyle, setRasterStyle] = useState<GISRasterStyle>('grid')
-  const [showRasterValues, setShowRasterValues] = useState(false)
+  const [showRasterValues, setShowRasterValues] = useState(true)
   const [rasterOpacity, setRasterOpacity] = useState(1)
   const [layerErrors, setLayerErrors] = useState<Record<string, boolean>>({})
   const layoutPickerRef = useRef<HTMLDivElement>(null)
@@ -67,75 +74,17 @@ export function MainWorkspace() {
     setLayerErrors((current) => updateLayerErrorState(current, panelID, failed))
   }, [])
 
-  useEffect(() => {
-    const controller = new AbortController()
-    const loadCatalog = () => {
-      void fetchJSON<CycleList>('/api/v1/workspace/cycles?limit=200', controller.signal)
-        .then((payload) => {
-          setCycles(payload.items)
-          if (!isRealtimeCycle(payload.items[0] ?? null)) setFollowLatest(false)
-          setSelectedCycleID((current) => {
-            const latest = payload.items[0]?.cycle_id ?? ''
-            if ((followLatest && isRealtimeCycle(payload.items[0] ?? null)) || !current) return latest
-            return current
-          })
-          setCatalogRevision(catalogIdentity(payload.items))
-          setError(payload.degraded_sources?.length
-            ? `部分目录降级：${payload.degraded_sources.join('、')}`
-            : null)
-        })
-        .catch((requestError: unknown) => {
-          if (!isAbortError(requestError)) {
-            setError(requestError instanceof Error ? requestError.message : '读取周期目录失败')
-          }
-        })
-    }
-    loadCatalog()
-    const timer = window.setInterval(loadCatalog, 30_000)
-    return () => {
-      controller.abort()
-      if (timer != null) window.clearInterval(timer)
-    }
-  }, [followLatest])
-
-  useEffect(() => {
-    if (!selectedCycleID) return
-    const controller = new AbortController()
-    void fetchJSON<WorkspaceCycleDetail>(
-      `/api/v1/workspace/cycles/${encodeURIComponent(selectedCycleID)}`,
-      controller.signal,
-    )
-      .then((payload) => {
-        setDetail(payload)
-        setSelectedTime((current) => current && payload.timeline.includes(current)
-          ? current
-          : payload.issue_time)
-        const radars = radarIDs(payload)
-        setSelectedRadarID((current) => current && radars.includes(current) ? current : radars[0] ?? null)
-        setLayerErrors({})
-        setError(payload.warnings?.length ? `证据不完整：${payload.warnings.join('、')}` : null)
-      })
-      .catch((requestError: unknown) => {
-        if (!isAbortError(requestError)) {
-          const message = requestError instanceof Error ? requestError.message : '读取工作台失败'
-          setError(`更新失败，保留当前结果：${message}`)
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false)
-      })
-    return () => controller.abort()
-  }, [catalogRevision, selectedCycleID])
-
   const panels = useMemo(
-    () => detail ? panelsForPreset(detail, preset, selectedRadarID) : [],
-    [detail, preset, selectedRadarID],
+    () => detail ? panelsForPreset(detail, preset, selectedRadarID, verificationAlgorithm) : [],
+    [detail, preset, selectedRadarID, verificationAlgorithm],
   )
 
   const timelineValues = useMemo(
-    () => detail ? timelineForPreset(detail, cycles, preset) : [],
-    [cycles, detail, preset],
+    () => detail ? timelineForPreset(detail, cycles, preset, verificationAlgorithm) : [],
+    [cycles, detail, preset, verificationAlgorithm],
   )
+
+  const selectedTime = preset === 'verification' && !timelineValues.includes(snapshotTime ?? '') ? timelineValues[0] ?? detail?.issue_time ?? null : snapshotTime
 
   const focusedPanel = focusedPanelID
     ? panels.find((panel) => panel.panel_id === focusedPanelID) ?? null
@@ -178,9 +127,9 @@ export function MainWorkspace() {
       const matchingCycle = analysisCycleAt(cycles, detail.grid_id, value)
       if (matchingCycle) {
         if (matchingCycle.cycle_id !== selectedCycleID) {
-          setLoading(true)
-          setSelectedCycleID(matchingCycle.cycle_id)
-          setFollowLatest(false)
+          requestCycle(matchingCycle, value)
+          if (stopPlayback) setPlaying(false)
+          return
         }
       } else {
         nextValue = detail.issue_time
@@ -189,7 +138,7 @@ export function MainWorkspace() {
     if (stopPlayback) setPlaying(false)
     setSelectedTime(nextValue)
     setLayerErrors({})
-  }, [cycles, detail, preset, selectedCycleID])
+  }, [cycles, detail, preset, selectedCycleID, requestCycle, setSelectedTime])
 
   useEffect(() => {
     if (!playing || loading || !detail || timelineValues.length < 2) return
@@ -206,12 +155,12 @@ export function MainWorkspace() {
       ? mobilePanelID
       : panels[0]?.panel_id ?? '')
 
-  const latestCycle = cycles[0] ?? null
-  const realtimeAvailable = isRealtimeCycle(latestCycle)
-  const selectedCycle = cycles.find((cycle) => cycle.cycle_id === selectedCycleID) ?? null
+  const latestCycle = cycles.find(isLiveCycle) ?? null
+  const realtimeAvailable = isLiveCycle(latestCycle) && cycleAgeSeconds(latestCycle, now) <= 900
+  const selectedCycle = detail
   const isRealtimeView = Boolean(
     followLatest
-    && realtimeAvailable
+    && realtimeAvailable && !state.stale && !state.catalogError && !state.detailError
     && selectedCycle?.cycle_id === latestCycle?.cycle_id,
   )
   const historicalCycles = cycles
@@ -262,49 +211,43 @@ export function MainWorkspace() {
         <div className="workspace-data-mode" role="group" aria-label="数据模式">
           <button
             type="button"
-            className={isRealtimeView ? 'active' : ''}
-            aria-pressed={isRealtimeView}
-            disabled={!realtimeAvailable}
+            className={followLatest ? 'active' : ''}
+            aria-pressed={followLatest}
             title={realtimeAvailable ? '跟随最新实时周期' : '当前没有新鲜的实时周期'}
             onClick={() => {
-              if (!latestCycle) return
-              setLoading(true)
               setPlaying(false)
-              setSelectedCycleID(latestCycle.cycle_id)
-              setSelectedTime(latestCycle.issue_time)
-              setFollowLatest(true)
+              if (preset === 'verification') setPreset('forecast')
+              follow()
             }}
           >
             <i aria-hidden="true" />
             实时监测
           </button>
-          <button type="button" className={!isRealtimeView ? 'active' : ''} aria-pressed={!isRealtimeView} onClick={() => { setFollowLatest(false); setPlaying(false) }}>历史案例</button>
+          <button type="button" className={!followLatest ? 'active' : ''} aria-pressed={!followLatest} onClick={() => { pin(); setPlaying(false) }}>历史案例</button>
           <span className="workspace-data-mode-note">
-            {realtimeAvailable ? '跟随最新' : '暂无新鲜数据'}
+            {followLatest ? realtimeAvailable ? '跟随最新' : '等待新资料 · 自动恢复' : '固定历史起报'}
           </span>
         </div>
-        {!isRealtimeView ? <HistoryPicker cycles={historicalCycles} selectedID={selectedCycleID}
+        {!followLatest ? <HistoryPicker cycles={historicalCycles} selectedID={selectedCycleID}
             onSelect={(cycle) => {
-              if (cycle.cycle_id !== selectedCycleID) setLoading(true)
               setPlaying(false)
-              setSelectedCycleID(cycle.cycle_id)
-              setSelectedTime(cycle.issue_time)
-              setFollowLatest(false)
+              requestCycle(cycle)
             }}
-          /> : <section className="workspace-cycle-summary live" aria-label="当前周期">
-          <span>{isRealtimeView ? '实时周期' : '历史回放'}</span>
+          /> : <section className={`workspace-cycle-summary${isRealtimeView ? ' live' : ''}`} aria-label="当前周期">
+          <span>{isRealtimeView ? '实时周期' : '保留结果'}</span>
           <strong>{selectedCycle ? formatLocalCycleTime(selectedCycle.issue_time) : '读取周期中'}</strong>
           <small>{selectedCycle ? formatUTCCycleTime(selectedCycle.issue_time) : '—'}</small>
         </section>}
         <div className="workspace-freshness" aria-label="数据时效">
           <i className={isRealtimeView ? 'fresh' : ''} />
-          <span>{isRealtimeView ? '自动更新 · 30 秒' : '历史回放 · 固定起报'}</span>
-          <strong>{isRealtimeView && detail ? ageLabel(detail.freshness_seconds) : selectedCycle ? capabilityText(selectedCycle) : '读取中'}</strong>
+          <span>{followLatest ? connection === 'connected' ? '自动跟随 · 已连接' : '自动跟随 · 轮询恢复' : '历史回放 · 固定起报'}</span>
+          <strong>{followLatest && detail ? ageLabel(cycleAgeSeconds(detail, now)) : selectedCycle ? capabilityText(selectedCycle) : '读取中'}</strong>
         </div>
         <a className="admin-link" href="/admin">后台</a>
       </header>
 
-      {error ? <div className="workspace-warning" role="status">{error}</div> : null}
+      {error ? <div className="workspace-warning" role="status">{error} <button type="button" onClick={refresh}>重试</button></div> : null}
+      {loading && detail ? <div className="workspace-pending" role="status">正在读取所选周期；当前仍显示 {formatLocalCycleTime(detail.issue_time)} 起报结果。</div> : null}
 
       <section className="workspace-controls" aria-label="工作台控制">
         <div className="preset-tabs" role="tablist" aria-label="工作台预设">
@@ -316,6 +259,7 @@ export function MainWorkspace() {
               className={preset === key ? 'active' : ''}
               key={key}
               onClick={() => {
+                if (key === 'verification') pin()
                 setPreset(key)
                 if (selectedTime) applyTimeSelection(selectedTime, true, key)
               }}
@@ -333,6 +277,10 @@ export function MainWorkspace() {
             </select>
           </label>
         ) : null}
+        {preset === 'verification' && <label className="verification-algorithm">对照预报
+          <select aria-label="检验算法" value={verificationAlgorithm} onChange={event => { setVerificationAlgorithm(event.target.value); setPlaying(false) }}>
+            <option value="lk">LK 确定性</option><option value="steps">STEPS P50</option><option value="nowcastnet">NowcastNet</option>
+          </select></label>}
         <div className="map-tools" role="group" aria-label="地图显示">
           <div className="workspace-layout-picker" ref={layoutPickerRef}>
             <button
@@ -340,7 +288,7 @@ export function MainWorkspace() {
               className={focusedPanel ? '' : 'active'}
               aria-pressed={!focusedPanel}
               onClick={showComparison}
-            >四图</button>
+            >{preset === 'verification' ? '双图' : '四图'}</button>
             <button
               type="button"
               className={focusedPanel ? 'active workspace-focus-trigger' : 'workspace-focus-trigger'}
@@ -386,14 +334,16 @@ export function MainWorkspace() {
             type="button"
             className={showRasterValues ? 'active' : ''}
             aria-pressed={showRasterValues}
-            title="当前读取渲染色阶；真实格点值接口将在下一阶段接入"
+            title="读取数值产品中的真实格点，不从图片颜色反推雨量"
             onClick={() => setShowRasterValues((value) => !value)}
-          >色阶值</button>
+          >点值</button>
           <label><span>雨层 {Math.round(rasterOpacity * 100)}%</span><input aria-label="雨层透明度" type="range" min="0.55" max="1" step="0.05" value={rasterOpacity} onChange={(event) => setRasterOpacity(Number(event.target.value))} /></label>
         </div>
         {detail ? <QualityStrip detail={detail} /> : null}
       </section>
 
+      {preset === 'verification' && detail && <VerificationInspector detail={detail} algorithm={verificationAlgorithm}
+        validTime={selectedTime} point={verificationPoint} onClear={() => setVerificationPoint(null)} />}
       <section className="mobile-panel-tabs" role="tablist" aria-label="移动端地图面板">
         {panels.map((panel) => (
           <button
@@ -425,7 +375,10 @@ export function MainWorkspace() {
             fitExtent={mapFitExtent}
             basemapVisible={basemapVisible}
             rasterStyle={rasterStyle}
-            showRasterValues={showRasterValues}
+            showRasterValues={false}
+            onProbe={showRasterValues ? setProbe : undefined}
+            onSelectPoint={preset === 'verification' ? setVerificationPoint : undefined}
+            point={preset === 'verification' ? verificationPoint ?? undefined : undefined}
             rasterOpacity={rasterOpacity}
             layerError={layerErrors[panel.panel_id] === true}
             onLayerError={updateLayerError}
@@ -436,7 +389,7 @@ export function MainWorkspace() {
             onShowComparison={showComparison}
           />
         ))}
-        {!loading && panels.length === 0 ? <div className="workspace-empty">当前周期没有可显示图层。</div> : null}
+        {panels.length === 0 ? <div className="workspace-empty" role="status">{loading ? '正在读取工作台…' : '暂无可显示的数据周期。'}{!loading && <button type="button" onClick={refresh}>重新读取</button>}</div> : null}
       </section>
 
       {detail ? (
@@ -451,6 +404,8 @@ export function MainWorkspace() {
           onSelect={selectTime}
         />
       ) : null}
+      <WorkspaceCrosshairInspector probe={showRasterValues && probe && detail && panels.some(panel =>
+        displayFrameAt(detail, panel, selectedTime).frame?.image_url === probe.assetUrl) ? probe : null} />
     </main>
   )
 }
@@ -473,6 +428,9 @@ function MapPanel({
   focused,
   onFocus,
   onShowComparison,
+  onProbe,
+  onSelectPoint,
+  point,
 }: {
   panel: WorkspacePanel
   detail: WorkspaceCycleDetail | null
@@ -491,6 +449,9 @@ function MapPanel({
   focused: boolean
   onFocus: () => void
   onShowComparison: () => void
+  onProbe?: (probe: MapProbeDetail | null) => void
+  onSelectPoint?: (point: MapCoordinate) => void
+  point?: MapCoordinate
 }) {
   const { frame, usesAnalysisBaseline } = detail
     ? displayFrameAt(detail, panel, selectedTime)
@@ -548,6 +509,10 @@ function MapPanel({
     (failed: boolean) => onLayerError(panel.panel_id, failed),
     [onLayerError, panel.panel_id],
   )
+  const handleProbe = useCallback((point: MapCoordinate | null) => {
+    onProbe?.(point && frame ? { ...point, assetUrl: frame.image_url, panelID: panel.panel_id,
+      panelLabel: displayName, validTime: frame.valid_time, frameKind: frame.frame_kind } : null)
+  }, [onProbe, frame, panel.panel_id, displayName])
   return (
     <article className={`workspace-map-panel${mobileActive ? ' mobile-active' : ''}${focused ? ' focus-selected' : ''}${focusMode && !focused ? ' focus-suppressed' : ''}`}>
       <div
@@ -557,7 +522,7 @@ function MapPanel({
         <strong>{displayName}</strong>
         <span>{roleLabel(panel)}</span>
         <b>{lifecycle}</b>
-        <small>{frameContext}</small>
+        <small>{frameContext}{frame?.frame_kind === 'derived' ? ' · 派生帧' : ''}{panel.panel_id === 'steps' ? ' · 未校准集合' : ''}</small>
       </div>
       <button
         type="button"
@@ -581,13 +546,16 @@ function MapPanel({
         legend={legend}
         legendMode={panel.legend_unit ? 'scale' : 'categorical'}
         legendUnit={panel.legend_unit ?? frame?.unit ?? ''}
-        footerNote={panel.data_kind === 'probability_exceedance' ? '透明：缺测 / 低于 1%' : '透明：缺测 / 无覆盖'}
+        footerNote={panel.data_kind === 'probability_exceedance' ? '原始集合频率，未校准；空白不代表零风险，请查询有效覆盖' : '空白不代表无雨；点值区分有效零雨量与缺测'}
         mapLabel={`${displayName}同步地图，EPSG:4326`}
         resetViewLabel="复位同步地图范围"
         emptyStateHint={unavailable}
         loading={loading}
         layerError={layerError}
         onLayerError={handleLayerError}
+        onProbe={onProbe ? handleProbe : undefined}
+        onSelectPoint={onSelectPoint}
+        point={point}
         sharedView={sharedView}
         comparisonMode
         basemapVisible={basemapVisible}
@@ -655,7 +623,7 @@ export function SharedTimeline({
     const active = rail?.querySelector<HTMLElement>('[aria-current="step"]')
     if (!rail || !active) return
     const left = active.offsetLeft - (rail.clientWidth - active.clientWidth) / 2
-    if (typeof rail.scrollTo === 'function') rail.scrollTo({ left, behavior: 'smooth' })
+    if (typeof rail.scrollTo === 'function') rail.scrollTo({ left, behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
     else rail.scrollLeft = left
   }, [activeIndex])
 
@@ -790,13 +758,6 @@ function capabilityText(cycle: CycleSummary) {
   ].filter(Boolean).join('/') || '分析中'
 }
 
-function isRealtimeCycle(cycle: CycleSummary | null) {
-  return cycle != null && ['operational', 'realtime_shadow'].includes(cycle.execution_mode)
-    && cycle.freshness_seconds >= 0 && cycle.freshness_seconds <= 15 * 60
-    && Date.now() - Date.parse(cycle.issue_time) >= 0
-    && Date.now() - Date.parse(cycle.issue_time) <= 15 * 60 * 1000
-}
-
 function formatLocalCycleTime(value: string) {
   return new Intl.DateTimeFormat('zh-CN', {
     timeZone: 'Asia/Taipei',
@@ -844,16 +805,6 @@ function panelShortLabel(panel: WorkspacePanel) {
   return panelDisplayName(panel)
 }
 
-function catalogIdentity(items: CycleSummary[]) {
-  return items.map((cycle) => [
-    cycle.cycle_id,
-    cycle.analysis_id ?? '',
-    cycle.run_id ?? '',
-    cycle.ensemble_bundle_id ?? '',
-    cycle.nowcastnet_bundle_id ?? '',
-  ].join(':')).join('|')
-}
-
 function compactLegendLabel(label: string, unit?: string | null) {
   let value = label.trim().replace(/^≥\s*/, '')
   if (unit && value.endsWith(` ${unit}`)) value = value.slice(0, -(unit.length + 1)).trim()
@@ -861,9 +812,10 @@ function compactLegendLabel(label: string, unit?: string | null) {
 }
 
 function ageLabel(seconds: number) {
-  if (seconds < 60) return `${seconds}s`
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`
-  return `${Math.floor(seconds / 3600)}h`
+  if (!Number.isFinite(seconds)) return '时效异常'
+  if (seconds < 60) return `${Math.floor(seconds)} 秒`
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} 分钟`
+  return `${Math.floor(seconds / 3600)} 小时`
 }
 
 function percent(value?: number) {
@@ -888,14 +840,4 @@ function expandExtent(extent: GISMapExtent): GISMapExtent {
   const x = (extent[2] - extent[0]) * .08
   const y = (extent[3] - extent[1]) * .08
   return [extent[0] - x, extent[1] - y, extent[2] + x, extent[3] + y]
-}
-
-async function fetchJSON<T>(path: string, signal: AbortSignal): Promise<T> {
-  const response = await fetch(path, { signal })
-  if (!response.ok) throw new Error(`接口 ${path} 响应 ${response.status}`)
-  return await response.json() as T
-}
-
-function isAbortError(error: unknown) {
-  return error instanceof DOMException && error.name === 'AbortError'
 }

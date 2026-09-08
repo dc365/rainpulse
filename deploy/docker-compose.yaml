@@ -550,9 +550,9 @@ services:
       RAINPULSE_OBJECT_STORE_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
       RAINPULSE_MAX_INPUT_ARTIFACT_BYTES: "${RAINPULSE_MAX_INPUT_ARTIFACT_BYTES:-2147483648}"
       RAINPULSE_WORKER_HEALTH_ADDR: "0.0.0.0:8091"
-      RAINPULSE_WORKER_ID: rp016-pysteps-lk
-      RAINPULSE_WORKER_PROFILE: pysteps-lk
-      RAINPULSE_PYSTEPS_LK_CONFIG: /opt/rainpulse/configs/nowcast/rp016-pysteps-lk-v1.yaml
+      RAINPULSE_WORKER_ID: prelaunch-pysteps-lk-v2
+      RAINPULSE_WORKER_PROFILE: pysteps-lk-v2
+      RAINPULSE_PYSTEPS_LK_CONFIG: /opt/rainpulse/configs/nowcast/prelaunch-pysteps-lk-v2.yaml
       RAINPULSE_GRID_CONFIG: /opt/rainpulse/configs/grids/fuzhou-0p01deg-v1.yaml
       TZ: UTC
     volumes:
@@ -562,7 +562,7 @@ services:
         - CMD
         - python
         - -c
-        - "import json,urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:8091/healthz', timeout=2))['profile'] == 'pysteps-lk'"
+        - "import json,urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:8091/healthz', timeout=2))['profile'] == 'pysteps-lk-v2'"
       interval: 5s
       timeout: 3s
       retries: 20

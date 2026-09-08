@@ -1049,7 +1049,7 @@ func diagnosticPanel(layer diagnosticLayer, validTime string) (panelView, bool) 
 		legend = append(legend, legendEntry{Minimum: item.Minimum, Label: item.Label, Color: item.Color})
 	}
 	frame := frameView{AssetID: layer.LayerID, ValidTime: validTime, LeadMinutes: 0,
-		ImageURL: layer.ImageURL, MediaType: "image/png"}
+		ImageURL: layer.ImageURL, MediaType: "image/png", FrameKind: "analysis"}
 	if layer.Unit != nil {
 		frame.Unit = *layer.Unit
 	}
@@ -1082,6 +1082,10 @@ func (handler *Handler) addForecastProducts(ctx context.Context, detail *cycleDe
 		panel := panelView{PanelID: panelID, AlgorithmID: item.ModelID, DisplayName: displayName,
 			Role: "forecast", Lifecycle: lifecycle, DataKind: "rain_rate", CadenceMinutes: 5,
 			Status: "ready", LegendUnit: "mm/h", Legend: rainfallLegend()}
+		frameKind := ""
+		if panelID == "lk" {
+			frameKind = "native"
+		}
 		for _, asset := range assets {
 			if asset.AssetType != "rendered_png" || asset.ContentURL == "" {
 				continue
@@ -1100,7 +1104,7 @@ func (handler *Handler) addForecastProducts(ctx context.Context, detail *cycleDe
 			}
 			panel.Frames = append(panel.Frames, frameView{AssetID: asset.AssetID,
 				ValidTime: validTime, LeadMinutes: lead, ImageURL: asset.ContentURL,
-				MediaType: asset.MediaType, Unit: unit, SHA256: asset.SHA256,
+				MediaType: asset.MediaType, Unit: unit, SHA256: asset.SHA256, FrameKind: frameKind,
 				CoverageRatio: asset.CoverageRatio, ValidCellCount: asset.ValidCellCount,
 				MissingCount: asset.MissingCount})
 		}
@@ -1171,7 +1175,7 @@ func (handler *Handler) addEnsemble(ctx context.Context, detail *cycleDetail, cy
 		}
 		panel.Frames = append(panel.Frames, frameView{AssetID: asset.AssetID,
 			ValidTime: asset.ValidTime, LeadMinutes: lead, ImageURL: asset.ContentURL,
-			MediaType: asset.MediaType, Unit: unit, SHA256: asset.SHA256,
+			MediaType: asset.MediaType, Unit: unit, SHA256: asset.SHA256, FrameKind: "native",
 			CoverageRatio: asset.CoverageRatio, ValidCellCount: asset.ValidCellCount,
 			MissingCount: asset.MissingCount})
 	}

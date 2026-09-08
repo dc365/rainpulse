@@ -98,6 +98,11 @@ def run_pysteps_steps_fields(
     if np.any(~np.isfinite(rate[valid])) or np.any(rate[valid] < 0.0):
         raise PystepsStepsInputError("STEPS input contains invalid precipitation rates")
     working_rate = rate
+    native_support = profile.support.input_missing_policy == "native_nan_member_support_v2"
+    if native_support:
+        # NaNs must reach STEPS so its domain_mask is carried through the real
+        # member velocity perturbations. Filling here would erase source support.
+        working_rate = np.where(valid, rate, np.nan).astype("float32")
     if (
         profile.support.input_missing_policy
         == "dry_floor_working_copy_preserve_deterministic_support"
@@ -118,9 +123,7 @@ def run_pysteps_steps_fields(
     fallback = False
     fallback_reason: str | None = None
 
-    latest_trackable = valid[-1] & (
-        rate[-1] >= profile.ensemble.precipitation_threshold_mm_h
-    )
+    latest_trackable = valid[-1] & (rate[-1] >= profile.ensemble.precipitation_threshold_mm_h)
     latest_trackable_count = int(np.count_nonzero(latest_trackable))
     if latest_trackable_count == 0:
         members = np.zeros((member_count, lead_count, *grid.shape), dtype="float32")
@@ -155,9 +158,7 @@ def run_pysteps_steps_fields(
             "ar_order": profile.ensemble.autoregressive_order,
             "vel_pert_method": profile.ensemble.velocity_perturbation_method,
             "conditional": False,
-            "probmatching_method": _none_value(
-                profile.ensemble.probability_matching_method
-            ),
+            "probmatching_method": _none_value(profile.ensemble.probability_matching_method),
             "mask_method": profile.ensemble.mask_method,
             "seed": profile.ensemble.random_seed,
             "num_workers": profile.ensemble.num_workers,
@@ -165,6 +166,8 @@ def run_pysteps_steps_fields(
             "domain": profile.ensemble.domain,
             "return_output": True,
         }
+        if native_support:
+            kwargs["extrap_kwargs"] = {"interp_order": 1, "allow_nonfinite_values": True}
         try:
             backend_output = forecast(
                 transformed,
@@ -297,9 +300,7 @@ def _output_support(
     if policy == "deterministic_support_minimum_members_finite":
         minimum = profile.support.minimum_valid_members
         if minimum is None:
-            raise PystepsStepsInputError(
-                "minimum-member STEPS support requires a member threshold"
-            )
+            raise PystepsStepsInputError("minimum-member STEPS support requires a member threshold")
         return np.count_nonzero(member_valid, axis=0) >= minimum
     raise PystepsStepsInputError("unsupported STEPS output support policy")
 
@@ -311,9 +312,7 @@ def _probability(
     threshold: float,
 ) -> np.ndarray:
     valid_count = np.count_nonzero(member_valid, axis=0)
-    exceedance_count = np.count_nonzero(
-        member_valid & (members > threshold), axis=0
-    )
+    exceedance_count = np.count_nonzero(member_valid & (members > threshold), axis=0)
     values = np.divide(
         exceedance_count,
         valid_count,
@@ -332,9 +331,9 @@ def _quantile(
 ) -> np.ndarray:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
-        values = np.nanquantile(
-            np.where(member_valid, members, np.nan), quantile, axis=0
-        ).astype("float32")
+        values = np.nanquantile(np.where(member_valid, members, np.nan), quantile, axis=0).astype(
+            "float32"
+        )
     values[~output_valid] = np.nan
     return values
 

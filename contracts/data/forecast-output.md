@@ -161,3 +161,18 @@ older committed RP-014 artifacts that predate these optional diagnostics.
   atomic publish to `products/{run_id}/{model_id}/{model_version}/`.
 - Re-delivery of the same `job_id` must resolve to the same published product,
   never a duplicate product record.
+
+## Versioned observation-support policies (prelaunch)
+
+`prelaunch-pysteps-lk-v2` publishes only cells with complete support from the
+actual interpolation kernel. A fractional stencil touching missing input is
+missing, not diluted by a zero-filled working array. `advection_support_policy`
+records `full_kernel_support_v2`. Frozen RP profiles explicitly retain their
+legacy policy for scientific replay and are not the active worker default.
+
+`prelaunch-pysteps-steps-v6` preserves NaNs into the frozen pySTEPS backend.
+Its native domain mask is applied before advection with each member's actual
+perturbed velocity; finite member support is intersected with deterministic
+support. The stored member masks and minimum-member publication rule remain
+authoritative. Raw frequencies are uncalibrated. These engineering changes do
+not enable operational publication or constitute Fujian skill acceptance.

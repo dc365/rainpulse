@@ -16,6 +16,7 @@ from zarr.storage import MemoryStore
 
 from rainpulse_algo.grid import RegularLatLonGrid
 
+from .advection_support import forecast_with_full_support
 from .input_zarr import validate_nowcast_input_zarr_store
 from .pysteps_profile import PystepsLKProfile
 
@@ -146,9 +147,7 @@ def run_pysteps_lk_fields(
     ):
         raise PystepsLKInputError("pySTEPS-LK field shape differs from the configured grid")
     if not (
-        profile.sequence.minimum_frames
-        <= reflectivity.shape[0]
-        <= profile.sequence.maximum_frames
+        profile.sequence.minimum_frames <= reflectivity.shape[0] <= profile.sequence.maximum_frames
     ):
         raise PystepsLKInputError("pySTEPS-LK frame count is outside profile bounds")
 
@@ -229,6 +228,7 @@ def run_pysteps_lk_fields(
         lead_count,
         profile.extrapolation.interpolation_order,
         extrapolate,
+        support_policy=profile.extrapolation.support_policy,
     )
     persistence_rate = np.repeat(latest_rate[np.newaxis, ...], lead_count, axis=0)
     persistence_valid = np.repeat(latest_valid[np.newaxis, ...], lead_count, axis=0)
@@ -245,6 +245,7 @@ def run_pysteps_lk_fields(
         lead_count,
         profile.extrapolation.interpolation_order,
         extrapolate,
+        support_policy=profile.extrapolation.support_policy,
     )
 
     confidence = _forecast_confidence(
@@ -502,7 +503,16 @@ def _forecast_with_support(
     lead_count: int,
     interpolation_order: int,
     extrapolate: Extrapolator,
+    *,
+    support_policy: str = "full_kernel_support_v2",
 ) -> tuple[np.ndarray, np.ndarray]:
+    if support_policy == "full_kernel_support_v2":
+        return forecast_with_full_support(
+            latest_rate, latest_valid, velocity, lead_count, interpolation_order, extrapolate
+        )
+    if support_policy != "legacy_nearest_v1":
+        raise PystepsLKInputError("unsupported advection support policy")
+    # Kept only to reproduce immutable historical experiment configurations.
     working_rate = np.where(latest_valid, latest_rate, 0.0).astype("float32")
     forecast = extrapolate(working_rate, velocity, lead_count, interpolation_order).astype(
         "float32"

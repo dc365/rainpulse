@@ -393,6 +393,13 @@ func TestWorkspaceDetailReturnsStableFourPanelForecastLayout(t *testing.T) {
 	if got := len(payload.Panels[panelIndex(payload.Panels, "steps")].Frames); got != 2 {
 		t.Fatalf("STEPS frames = %d", got)
 	}
+	for panelID, expected := range map[string]string{"qpe": "analysis", "lk": "native", "steps": "native"} {
+		for _, frame := range payload.Panels[panelIndex(payload.Panels, panelID)].Frames {
+			if frame.FrameKind != expected {
+				t.Fatalf("%s frame kind = %q, expected %q", panelID, frame.FrameKind, expected)
+			}
+		}
+	}
 	if len(payload.Radars) != 2 || payload.Radars[0].RadarID != "z9591" {
 		t.Fatalf("radars = %+v", payload.Radars)
 	}

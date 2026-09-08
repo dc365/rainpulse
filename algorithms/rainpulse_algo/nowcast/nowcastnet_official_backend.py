@@ -45,9 +45,7 @@ def verify_file_sha256(path: str | Path, expected_sha256: str) -> None:
         raise OfficialNowcastNetBackendError(f"required artifact is missing: {candidate}")
     actual = sha256_file(candidate)
     if actual != expected_sha256:
-        raise OfficialNowcastNetBackendError(
-            f"artifact SHA-256 mismatch for {candidate}: {actual}"
-        )
+        raise OfficialNowcastNetBackendError(f"artifact SHA-256 mismatch for {candidate}: {actual}")
 
 
 def verify_official_capsule(capsule_root: str | Path, profile: NowcastNetProfile) -> Path:
@@ -69,10 +67,8 @@ def verify_official_capsule(capsule_root: str | Path, profile: NowcastNetProfile
     for relative_path, expected in _PATCHED_SOURCE_SHA256.items():
         verify_file_sha256(root / relative_path, expected)
     weights_path = root / "data" / "checkpoints" / "mrms_model.ckpt"
-    if weights_path.resolve() != profile.weights_path().resolve():
-        raise OfficialNowcastNetBackendError(
-            "official capsule weights do not resolve to the frozen weights URI"
-        )
+    # The explicit capsule_root may be relocated. All source and weight
+    # checksums below remain mandatory and are not derived from this path.
     verify_file_sha256(weights_path, profile.artifact.weights_sha256)
     return weights_path
 
@@ -129,9 +125,7 @@ class OfficialNowcastNetBackend:
             if not torch.cuda.is_available():
                 raise OfficialNowcastNetBackendError("CUDA is unavailable to PyTorch")
             index = int(self.device.split(":", maxsplit=1)[1])
-            capability = ".".join(
-                str(value) for value in torch.cuda.get_device_capability(index)
-            )
+            capability = ".".join(str(value) for value in torch.cuda.get_device_capability(index))
             if capability != runtime.target_compute_capability:
                 raise OfficialNowcastNetBackendError(
                     "CUDA device capability must be "
@@ -252,9 +246,7 @@ class OfficialNowcastNetBackend:
                     if self.device.startswith("cuda:"):
                         self._torch.cuda.manual_seed_all(seed)
                     output = self._network(tensor)
-                    values = output[..., 0].detach().to("cpu").numpy().astype(
-                        "float32", copy=False
-                    )
+                    values = output[..., 0].detach().to("cpu").numpy().astype("float32", copy=False)
                     members.append(values)
         except Exception as exc:
             raise OfficialNowcastNetBackendError(
@@ -273,9 +265,7 @@ class OfficialNowcastNetBackend:
         if self.device.startswith("cuda:"):
             index = int(self.device.split(":", maxsplit=1)[1])
             result["device_name"] = self._torch.cuda.get_device_name(index)
-            result["device_capability"] = list(
-                self._torch.cuda.get_device_capability(index)
-            )
+            result["device_capability"] = list(self._torch.cuda.get_device_capability(index))
         else:
             result["device_name"] = "cpu-smoke-only"
             result["device_capability"] = None
@@ -294,8 +284,6 @@ class OfficialNowcastNetBackend:
             }
         index = int(self.device.split(":", maxsplit=1)[1])
         return {
-            "gpu_peak_allocated_bytes": int(
-                self._torch.cuda.max_memory_allocated(index)
-            ),
+            "gpu_peak_allocated_bytes": int(self._torch.cuda.max_memory_allocated(index)),
             "gpu_peak_reserved_bytes": int(self._torch.cuda.max_memory_reserved(index)),
         }

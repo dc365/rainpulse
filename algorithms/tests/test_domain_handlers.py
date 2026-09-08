@@ -212,3 +212,13 @@ def test_nowcastnet_shadow_contract_freezes_five_minute_product_semantics() -> N
     value["payload"]["input_frames"][2]["analysis_time"] = issue_time.isoformat()
     with pytest.raises(ValidationError):
         NowcastNetShadowRequested.model_validate(value)
+
+
+def test_lk_v2_queue_is_disjoint_from_legacy_replay() -> None:
+    legacy = handler_for_profile("pysteps-lk")
+    active = handler_for_profile("pysteps-lk-v2")
+    assert legacy.subject == "rainpulse.jobs.requested.pysteps_lk"
+    assert legacy.consumer == "rainpulse-pysteps-lk-1-0-0"
+    assert active.subject == "rainpulse.jobs.requested.pysteps_lk.v2"
+    assert active.consumer != legacy.consumer
+    assert active.executor is legacy.executor

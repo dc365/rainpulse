@@ -390,3 +390,9 @@ mrms-nowcastnet-freeze-gate:
 
 mrms-faults:
 	uv run --project algorithms pytest algorithms/tests/test_mrms_archive.py::test_verify_checks_size_and_optional_hash algorithms/tests/test_mrms_precip.py::test_reader_crops_to_ascending_grid_and_preserves_mrms_source_states algorithms/tests/test_mrms_hindcast.py::test_archive_source_rejects_a_missing_required_source_slot algorithms/tests/test_mrms_hindcast.py::test_archive_source_checks_manifest_hash_before_grib_decode algorithms/tests/test_pysteps_lk.py::test_uses_explicit_zero_motion_fallback_for_no_rain algorithms/tests/test_pysteps_lk.py::test_empty_motion_domain_has_specific_zero_motion_fallback
+
+.PHONY: test-prelaunch
+test-prelaunch:
+	uv run --project algorithms pytest algorithms/tests/test_advection_support.py algorithms/tests/test_frozen_profile_integrity.py algorithms/tests/test_steps_native_support.py
+	pnpm --dir apps/web exec vitest run src/workspace
+	bash scripts/go_control.sh test -buildvcs=false -race ./internal/workspace

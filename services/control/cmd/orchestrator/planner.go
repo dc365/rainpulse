@@ -146,7 +146,7 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 		qpeConfig:                 environmentOrDefault("RAINPULSE_PIPELINE_QPE_CONFIG", "/opt/rainpulse/configs/qpe/rp011-basic-zr-v1.yaml"),
 		diagnosticConfig:          environmentOrDefault("RAINPULSE_PIPELINE_DIAGNOSTIC_CONFIG", "/opt/rainpulse/configs/diagnostics/rp012-operational-diagnostics-v1.yaml"),
 		nowcastConfig:             environmentOrDefault("RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG", "/opt/rainpulse/configs/nowcast/rp013-fixed-5min-v1.1.yaml"),
-		pystepsConfig:             environmentOrDefault("RAINPULSE_PIPELINE_PYSTEPS_CONFIG", "/opt/rainpulse/configs/nowcast/rp016-pysteps-lk-v1.yaml"),
+		pystepsConfig:             environmentOrDefault("RAINPULSE_PIPELINE_PYSTEPS_CONFIG", "/opt/rainpulse/configs/nowcast/prelaunch-pysteps-lk-v2.yaml"),
 		nowcastNetShadowConfig:    environmentOrDefault("RAINPULSE_PIPELINE_NOWCASTNET_SHADOW_CONFIG", "/opt/rainpulse/configs/nowcast/fujian-nowcastnet-shadow-v2.yaml"),
 		productConfig:             environmentOrDefault("RAINPULSE_PIPELINE_PRODUCT_CONFIG", "/opt/rainpulse/configs/products/rp015-application-products-v1.yaml"),
 		verificationConfig:        environmentOrDefault("RAINPULSE_PIPELINE_VERIFICATION_CONFIG", "/opt/rainpulse/configs/verification/rp031-operational-deterministic-v1.yaml"),

@@ -66,13 +66,9 @@ def build_ensemble_forecast_output_zarr_store(
         "random_seed": result.random_seed,
         "ensemble_fallback_used": result.ensemble_fallback_used,
         "ensemble_fallback_reason": result.ensemble_fallback_reason,
-        "probability_calibration_status": (
-            profile.probability_products.calibration_status
-        ),
+        "probability_calibration_status": (profile.probability_products.calibration_status),
         "probability_event_operator": profile.probability_products.event_operator,
-        "probability_thresholds_mm_h": list(
-            profile.probability_products.rain_rate_thresholds_mm_h
-        ),
+        "probability_thresholds_mm_h": list(profile.probability_products.rain_rate_thresholds_mm_h),
         "quantiles": list(profile.probability_products.quantiles),
         "nominal_pixel_spacing_km": result.nominal_pixel_spacing_km,
         "motion_fallback_used": deterministic.motion_fallback_used,
@@ -109,9 +105,7 @@ def build_ensemble_forecast_output_zarr_store(
             "input_missing_policy": profile.support.input_missing_policy,
             "output_support_policy": profile.support.output_support_policy,
             "minimum_valid_members": profile.support.minimum_valid_members,
-            "probability_calibration_status": (
-                profile.probability_products.calibration_status
-            ),
+            "probability_calibration_status": (profile.probability_products.calibration_status),
             "probability_event_operator": profile.probability_products.event_operator,
             "probability_thresholds_mm_h": list(
                 profile.probability_products.rain_rate_thresholds_mm_h
@@ -259,16 +253,13 @@ def validate_ensemble_forecast_output_zarr_store(
             )
         expected_output_valid = np.all(member_valid, axis=0)
     elif output_support_policy == "deterministic_support_minimum_members_finite":
-        if (
-            not isinstance(minimum_valid_members, int)
-            or not 2 <= minimum_valid_members <= len(members)
+        if not isinstance(minimum_valid_members, int) or not 2 <= minimum_valid_members <= len(
+            members
         ):
             raise PystepsStepsInputError(
                 "minimum-member ensemble support has an invalid member count"
             )
-        expected_output_valid = (
-            np.count_nonzero(member_valid, axis=0) >= minimum_valid_members
-        )
+        expected_output_valid = np.count_nonzero(member_valid, axis=0) >= minimum_valid_members
     else:
         raise PystepsStepsInputError("ensemble output support policy is invalid")
     if not np.array_equal(output_valid, expected_output_valid):
@@ -296,9 +287,7 @@ def validate_ensemble_forecast_output_zarr_store(
         name = _probability_name(threshold)
         values = root[name][:]
         valid_count = np.count_nonzero(member_valid, axis=0)
-        exceedance_count = np.count_nonzero(
-            member_valid & (rates > threshold), axis=0
-        )
+        exceedance_count = np.count_nonzero(member_valid & (rates > threshold), axis=0)
         expected_values = np.divide(
             exceedance_count,
             valid_count,
@@ -324,6 +313,7 @@ def validate_ensemble_forecast_output_zarr_store(
         raise PystepsStepsInputError("ensemble member-count attribute is invalid")
     if root.attrs.get("input_missing_policy") not in {
         "reject_any_missing",
+        "native_nan_member_support_v2",
         "dry_floor_working_copy_preserve_deterministic_support",
     }:
         raise PystepsStepsInputError("ensemble input missing policy is invalid")

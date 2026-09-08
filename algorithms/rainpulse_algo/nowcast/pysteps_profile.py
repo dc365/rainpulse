@@ -48,6 +48,7 @@ class ExtrapolationConfig:
     lead_count: int
     lead_step_minutes: int
     baselines: tuple[str, ...]
+    support_policy: str = "legacy_nearest_v1"
 
 
 @dataclass(frozen=True)
@@ -124,6 +125,7 @@ def load_pysteps_lk_profile(path: str | Path) -> PystepsLKProfile:
                 lead_count=int(extrapolation["lead_count"]),
                 lead_step_minutes=int(extrapolation["lead_step_minutes"]),
                 baselines=tuple(str(value) for value in extrapolation["baselines"]),
+                support_policy=str(extrapolation.get("support_policy", "legacy_nearest_v1")),
             ),
             confidence=ConfidenceConfig(
                 decay_minutes=float(confidence["decay_minutes"]),
@@ -177,12 +179,20 @@ def _validate(profile: PystepsLKProfile) -> None:
         raise PystepsLKConfigError("Lucas-Kanade neighbourhoods must be positive")
     if lk.opening_size_pixels < 0 or lk.outlier_stddev <= 0:
         raise PystepsLKConfigError("invalid Lucas-Kanade cleanup parameters")
+    if profile.extrapolation.support_policy not in {"legacy_nearest_v1", "full_kernel_support_v2"}:
+        raise PystepsLKConfigError("unsupported advection support policy")
+    if (
+        profile.extrapolation.support_policy == "full_kernel_support_v2"
+        and profile.extrapolation.interpolation_order not in (0, 1)
+    ):
+        raise PystepsLKConfigError("full-kernel support requires interpolation order 0 or 1")
     if profile.extrapolation != ExtrapolationConfig(
         "semilagrangian",
         profile.extrapolation.interpolation_order,
         24,
         5,
         ("persistence", "translation"),
+        profile.extrapolation.support_policy,
     ):
         raise PystepsLKConfigError("pySTEPS-LK extrapolation identity or lead times differ")
     if profile.extrapolation.interpolation_order not in {0, 1, 3}:

@@ -1,6 +1,6 @@
 # RainPulse Project Memory
 
-Updated: 2026-09-03 (Asia/Taipei)
+Updated: 2026-09-08 (Asia/Taipei)
 
 This file is the concise handoff for a new Codex session. Stable engineering
 rules remain in `AGENTS.md`; implementation details remain in the referenced RP
@@ -22,6 +22,21 @@ operational data here.
   `docs/report/20260831.md`, `rainpulse-feat-ui-overhaul.patch`, and
   `rainpulse-ui-overhaul-round2.patch`. Do not delete, stage, or modify them
   unless the user explicitly asks.
+
+## Prelaunch convergence
+
+- The 2026-09-08 source convergence restores frozen NowcastNet artifact identity;
+  deployment locations remain separate from the frozen profile.
+- New LK jobs use model `pysteps-lk-2.0.0`, the prelaunch LK v2 config, and the
+  distinct `pysteps-lk-v2` Worker profile/queue. Legacy LK replay retains its
+  original queue and profile. See `docs/PRELAUNCH_CONVERGENCE_20260908.md`.
+- Historical STEPS regeneration defaults to v6 with native NaN member support
+  and LK v2. These changes require engineering replay before operational use.
+- Verification replay pins the issue cycle and compares only native rain-rate
+  samples at matching valid times and grid coordinates; its N=1 result is not
+  a whole-field skill score.
+- Source integration does not deploy services, regenerate historical products,
+  or promote scientific/operational acceptance gates.
 
 ## Test deployment
 

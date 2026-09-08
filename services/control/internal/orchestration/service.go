@@ -1109,7 +1109,7 @@ func (service *Service) CreatePystepsLK(
 		Outbox: workflow.OutboxEvent{
 			ID: eventID, AggregateID: jobID.String(),
 			EventType: PystepsLKRequestedEventType,
-			Subject:   PystepsLKRequestedSubject, Payload: payload,
+			Subject:   PystepsLKSubjectForVersion(input.ModelVersion), Payload: payload,
 		},
 	}
 	if err := service.repository.CreatePystepsLKBundle(ctx, bundle); err != nil {
@@ -1130,7 +1130,7 @@ func validatePystepsLKInput(input PystepsLKInput) error {
 	if !input.IssueTime.UTC().Equal(input.IssueTime.UTC().Truncate(5 * time.Minute)) {
 		return fmt.Errorf("pySTEPS-LK issue time must be on a five-minute UTC boundary")
 	}
-	if input.ModelID != PystepsLKModelID || input.ModelVersion != PystepsLKModelVersion ||
+	if input.ModelID != PystepsLKModelID || !supportedPystepsLKVersion(input.ModelVersion) ||
 		input.ConfigVersion == "" || input.ForecastContractVersion != "1.1" {
 		return fmt.Errorf("pySTEPS-LK model and contract identity differs from the active profile")
 	}
@@ -1360,7 +1360,7 @@ func validateProductBuildInput(input ProductBuildInput) error {
 	if !input.IssueTime.UTC().Equal(input.IssueTime.UTC().Truncate(5 * time.Minute)) {
 		return fmt.Errorf("product build issue time must be on a five-minute UTC boundary")
 	}
-	if input.ModelID != PystepsLKModelID || input.ModelVersion != PystepsLKModelVersion ||
+	if input.ModelID != PystepsLKModelID || !supportedPystepsLKVersion(input.ModelVersion) ||
 		input.ModelConfigVersion == "" || input.ProductConfigVersion == "" ||
 		input.ProductBundleContract != "1.0" {
 		return fmt.Errorf("product build model or contract identity differs from RP-015")
@@ -1456,7 +1456,7 @@ func validateForecastVerificationInput(input ForecastVerificationInput) error {
 		return fmt.Errorf("verification requires forecast run state PUBLISHED")
 	}
 	if !input.IssueTime.UTC().Equal(input.IssueTime.UTC().Truncate(5*time.Minute)) ||
-		input.ModelID != PystepsLKModelID || input.ModelVersion != PystepsLKModelVersion ||
+		input.ModelID != PystepsLKModelID || !supportedPystepsLKVersion(input.ModelVersion) ||
 		input.ForecastContractVersion != "1.1" || input.ResultContractVersion != "1.0" {
 		return fmt.Errorf("verification model, time, or contract identity differs from RP-031")
 	}

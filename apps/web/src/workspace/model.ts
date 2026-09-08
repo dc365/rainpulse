@@ -1,3 +1,4 @@
+import { verificationTimes } from './verification'
 export type WorkspacePreset = 'forecast' | 'qc' | 'verification'
 
 export type CycleCapabilities = {
@@ -48,6 +49,9 @@ export type WorkspaceFrame = {
   observation_time?: string
   observation_offset_seconds?: number
   reference_observation?: boolean
+  frame_kind?: "native" | "derived" | "analysis"
+  derivation?: string
+  source_leads?: number[]
 }
 
 export type WorkspacePanel = {
@@ -136,7 +140,12 @@ export function timelineForPreset(
   detail: WorkspaceCycleDetail,
   cycles: CycleSummary[],
   preset: WorkspacePreset,
+  verificationAlgorithm = 'lk',
 ) {
+  if (preset === 'verification') {
+    const values = verificationTimes(detail, verificationAlgorithm)
+    return values.length ? values : [detail.issue_time]
+  }
   if (preset !== 'qc') return detail.timeline
   return detail.timeline.filter((value) => (
     Date.parse(value) === Date.parse(detail.issue_time)
@@ -148,7 +157,12 @@ export function panelsForPreset(
   detail: WorkspaceCycleDetail,
   preset: WorkspacePreset,
   radarID: string | null,
+  verificationAlgorithm = 'lk',
 ) {
+  if (preset === 'verification') {
+    return ['qpe', verificationAlgorithm].map(id => panelByID(detail, id))
+      .filter((panel): panel is WorkspacePanel => panel != null)
+  }
   if (preset !== 'qc') {
     return forecastPanelIDs
       .map((panelID) => panelByID(detail, panelID))

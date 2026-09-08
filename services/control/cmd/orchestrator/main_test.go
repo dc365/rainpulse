@@ -63,13 +63,13 @@ func TestRequestedSubjectCoversEveryRequestEvent(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.eventType, func(t *testing.T) {
-			got, err := requestedSubject(test.eventType)
+			got, err := requestedSubject(test.eventType, orchestration.PystepsLKModelVersion)
 			if err != nil || got != test.subject {
 				t.Fatalf("requestedSubject(%q) = %q, want %q", test.eventType, got, test.subject)
 			}
 		})
 	}
-	if _, err := requestedSubject("unknown.requested.v1"); err == nil {
+	if _, err := requestedSubject("unknown.requested.v1", ""); err == nil {
 		t.Fatal("unknown replay event type was routed instead of rejected")
 	}
 }
@@ -291,5 +291,15 @@ func TestRadarQCContextPastOnlyRejectsFutureNeighbourAndSameInstant(t *testing.T
 	temporal, cross := radarQCContextFromScans(target, inputs, qcContextFusionConfiguration{Enabled: true, TemporalSelectionMode: "past_only"})
 	if len(temporal) != 0 || len(cross) != 1 || cross[0].InputURI != "s3://rainpulse/past" {
 		t.Fatalf("causal contexts: temporal=%v cross=%v", temporal, cross)
+	}
+}
+
+func TestRequestedSubjectKeepsLegacyLKReplayOffV2Queue(t *testing.T) {
+	subject, err := requestedSubject(orchestration.PystepsLKRequestedEventType, "pysteps-lk-1.1.0")
+	if err != nil || subject != "rainpulse.jobs.requested.pysteps_lk" {
+		t.Fatalf("legacy subject = %q, error = %v", subject, err)
+	}
+	if _, err := requestedSubject(orchestration.PystepsLKRequestedEventType, "unknown"); err == nil {
+		t.Fatal("unknown LK version routed to active queue")
 	}
 }

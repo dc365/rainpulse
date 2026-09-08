@@ -8,6 +8,7 @@ required_files=(
   "configs/schemas/pysteps-lk-profile.schema.json"
   "configs/nowcast/rp014-pysteps-lk-v1.yaml"
   "configs/nowcast/rp016-pysteps-lk-v1.yaml"
+  "configs/nowcast/prelaunch-pysteps-lk-v2.yaml"
   "contracts/data/forecast-output.md"
   "contracts/events/forecast-pysteps-lk-requested.schema.json"
   "contracts/events/forecast-baseline-ready.schema.json"
@@ -25,13 +26,13 @@ for relative_path in "${required_files[@]}"; do
   fi
 done
 
-grep -q 'RAINPULSE_WORKER_PROFILE: pysteps-lk' \
+grep -q 'RAINPULSE_WORKER_PROFILE: pysteps-lk-v2$' \
   "$repo_root/deploy/docker-compose.yaml"
-grep -q 'RAINPULSE_PYSTEPS_LK_CONFIG: /opt/rainpulse/configs/nowcast/rp016-pysteps-lk-v1.yaml' \
+grep -q 'RAINPULSE_PYSTEPS_LK_CONFIG: /opt/rainpulse/configs/nowcast/prelaunch-pysteps-lk-v2.yaml' \
   "$repo_root/deploy/docker-compose.yaml"
 grep -q 'PystepsLKJobType' \
   "$repo_root/services/control/internal/orchestration/events.go"
-grep -q 'PystepsLKModelVersion.*pysteps-lk-1.1.0' \
+grep -q 'PystepsLKModelVersion.*pysteps-lk-2.0.0' \
   "$repo_root/services/control/internal/orchestration/events.go"
 grep -q 'technical_forecast_quality_index_not_calibrated_probability' \
   "$repo_root/algorithms/rainpulse_algo/nowcast/forecast_zarr.py"

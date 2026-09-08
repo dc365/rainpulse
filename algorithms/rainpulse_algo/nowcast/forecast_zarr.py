@@ -77,6 +77,7 @@ def build_forecast_output_zarr_store(
         "maximum_forecast_rate_mm_h": _finite_max(result.rain_rate),
         "baseline_models": list(profile.extrapolation.baselines),
         "missing_policy": profile.motion.missing_policy,
+        "advection_support_policy": profile.extrapolation.support_policy,
         "confidence_kind": CONFIDENCE_KIND,
         "runtime_ms": runtime_ms,
     }
@@ -104,6 +105,7 @@ def build_forecast_output_zarr_store(
             "motion_method": profile.motion.method,
             "extrapolation_method": profile.extrapolation.method,
             "missing_policy": profile.motion.missing_policy,
+            "advection_support_policy": profile.extrapolation.support_policy,
             "missing_buffer_pixels": profile.motion.missing_buffer_pixels,
             "motion_fallback_used": result.motion_fallback_used,
             "motion_fallback_reason": result.motion_fallback_reason,

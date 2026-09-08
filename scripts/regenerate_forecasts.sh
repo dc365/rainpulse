@@ -109,8 +109,8 @@ run_steps() {
         --force \
         --output-root '{staging_root}' \
         --grid-config "${REGEN_GRID_CONFIG:-configs/grids/fuzhou-0p01deg-v1.yaml}" \
-        --lk-config "${REGEN_LK_CONFIG:-configs/nowcast/rp016-pysteps-lk-v1.yaml}" \
-        --steps-config "${REGEN_STEPS_CONFIG:-configs/nowcast/rp049-pysteps-steps-history-v5.yaml}" \
+        --lk-config "${REGEN_LK_CONFIG:-configs/nowcast/prelaunch-pysteps-lk-v2.yaml}" \
+        --steps-config "${REGEN_STEPS_CONFIG:-configs/nowcast/prelaunch-pysteps-steps-v6.yaml}" \
         --product-config "${REGEN_ENSEMBLE_PRODUCT_CONFIG:-configs/products/rp023-ensemble-application-products-v1.yaml}"
   )
 }

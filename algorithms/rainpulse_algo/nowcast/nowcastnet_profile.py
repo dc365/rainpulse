@@ -182,9 +182,7 @@ def load_nowcastnet_profile(path: str | Path) -> NowcastNetProfile:
     except NowcastNetConfigError:
         raise
     except (KeyError, TypeError, ValueError, yaml.YAMLError) as exc:
-        raise NowcastNetConfigError(
-            f"invalid NowcastNet profile {profile_path}: {exc}"
-        ) from exc
+        raise NowcastNetConfigError(f"invalid NowcastNet profile {profile_path}: {exc}") from exc
     _validate_profile(profile)
     return profile
 
@@ -241,15 +239,12 @@ def _validate_profile(profile: NowcastNetProfile) -> None:
     if profile.artifact.weights_uri and not profile.artifact.weights_sha256:
         raise NowcastNetConfigError("weights URI requires a SHA-256")
     if profile.artifact.weights_uri:
-        expected_weights_path = Path(
-            "/home/yons/hwapp/ruiyun-bdp/bdp-dp/bdp-dp-rada/"
-            "bdp-dp-rada-rainpulse/runtime/nowcastnet/official-v1/"
-            "data/checkpoints/mrms_model.ckpt"
-        )
-        if profile.weights_path() != expected_weights_path:
-            raise NowcastNetConfigError(
-                "NowcastNet weights URI differs from the frozen RP-026 runtime path"
-            )
+        # Installation paths are deployment bindings, not scientific identity.
+        if (
+            not profile.weights_path().is_absolute()
+            or profile.weights_path().name != "mrms_model.ckpt"
+        ):
+            raise NowcastNetConfigError("weights URI must name an absolute local checkpoint")
     if profile.activation.realtime_shadow_enabled:
         raise NowcastNetConfigError("RP-026 cannot enable realtime NowcastNet shadow inference")
     if profile.activation.product_publication_enabled:

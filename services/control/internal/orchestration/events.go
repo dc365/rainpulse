@@ -45,10 +45,10 @@ const (
 	NowcastInputReadyEventType             = "nowcast.input.ready.v1"
 	NowcastInputReadySubject               = "rainpulse.jobs.lifecycle.nowcast_input_ready"
 	PystepsLKRequestedEventType            = "forecast.pysteps_lk.requested.v1"
-	PystepsLKRequestedSubject              = "rainpulse.jobs.requested.pysteps_lk"
+	PystepsLKRequestedSubject              = "rainpulse.jobs.requested.pysteps_lk.v2"
 	PystepsLKJobType                       = "model.pysteps_lk"
 	PystepsLKModelID                       = "pysteps-lk"
-	PystepsLKModelVersion                  = "pysteps-lk-1.1.0"
+	PystepsLKModelVersion                  = "pysteps-lk-2.0.0"
 	PystepsLKConfidenceKind                = "technical_forecast_quality_index_not_calibrated_probability"
 	NowcastNetShadowRequestedEventType     = "forecast.nowcastnet_shadow.requested.v1"
 	NowcastNetShadowRequestedSubject       = "rainpulse.jobs.requested.nowcastnet_shadow"
@@ -632,4 +632,18 @@ func ensureJSONEOF(decoder *json.Decoder) error {
 		return fmt.Errorf("decode trailing completion data: %w", err)
 	}
 	return fmt.Errorf("completion event contains trailing JSON")
+}
+
+// Old versions remain readable/replayable; new active jobs use the versioned
+// full-kernel support profile instead of mutating the frozen RP-016 experiment.
+func supportedPystepsLKVersion(version string) bool {
+	return version == PystepsLKModelVersion || version == "pysteps-lk-1.1.0"
+}
+
+// PystepsLKSubjectForVersion preserves the legacy queue for explicit replay.
+func PystepsLKSubjectForVersion(version string) string {
+	if version == "pysteps-lk-1.1.0" {
+		return "rainpulse.jobs.requested.pysteps_lk"
+	}
+	return PystepsLKRequestedSubject
 }

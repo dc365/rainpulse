@@ -113,6 +113,14 @@ func (handler *responseCacheHandler) ServeHTTP(
 	defer result.Body.Close()
 
 	body := append([]byte(nil), recorder.Body.Bytes()...)
+	// An inner stale response must not acquire a fresh outer TTL or hide its age.
+	if result.Header.Get("X-RainPulse-Stale-Seconds") != "" {
+		copyHeaders(response.Header(), result.Header)
+		response.Header().Set("X-RainPulse-Cache", "UPSTREAM_STALE")
+		response.WriteHeader(result.StatusCode)
+		_, _ = response.Write(body)
+		return
+	}
 	if result.StatusCode >= http.StatusOK && result.StatusCode < http.StatusMultipleChoices {
 		stored := cachedResponse{
 			status:     result.StatusCode,

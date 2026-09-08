@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	nowcastnetproductstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/nowcastnetproducts"
@@ -34,6 +36,8 @@ type RuntimeOptions struct {
 }
 
 type runtimeHandler struct {
+	eventHubOnce       sync.Once
+	eventHub           *workspaceEventHub
 	next               http.Handler
 	workspace          http.Handler
 	store              RuntimeStore
@@ -239,52 +243,51 @@ func (handler *runtimeHandler) streamWorkspaceEvents(response http.ResponseWrite
 		runtimeWriteError(response, http.StatusInternalServerError, "streaming_unavailable", "HTTP streaming is unavailable")
 		return
 	}
+	handler.eventHubOnce.Do(func() {
+		handler.eventHub = newWorkspaceEventHub(environmentDuration("RAINPULSE_WORKSPACE_EVENT_INTERVAL", 2*time.Second), func(ctx context.Context) (string, error) {
+			recorder := httptest.NewRecorder()
+			upstream := httptest.NewRequestWithContext(ctx, http.MethodGet, workspacePrefix+"?limit=200", nil)
+			// Shared source respects both caches; a subscriber cannot force a rebuild.
+			handler.workspace.ServeHTTP(recorder, upstream)
+			if recorder.Code != http.StatusOK {
+				return "", fmt.Errorf("catalog returned %d", recorder.Code)
+			}
+			revision, err := workspaceRevision(recorder.Body.Bytes())
+			if recorder.Header().Get("X-RainPulse-Stale-Seconds") != "" {
+				revision += "-stale"
+			}
+			return revision, err
+		})
+	})
 	response.Header().Set("Content-Type", "text/event-stream")
 	response.Header().Set("Cache-Control", "no-cache, no-transform")
-	response.Header().Set("Connection", "keep-alive")
 	response.Header().Set("X-Accel-Buffering", "no")
-	interval := environmentDuration("RAINPULSE_WORKSPACE_EVENT_INTERVAL", 2*time.Second)
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	lastETag := ""
-	emit := func() bool {
-		recorder := httptest.NewRecorder()
-		upstream := httptest.NewRequestWithContext(request.Context(), http.MethodGet, workspacePrefix+"?limit=200", nil)
-		upstream.Header.Set("Cache-Control", "no-cache")
-		handler.workspace.ServeHTTP(recorder, upstream)
-		if recorder.Code != http.StatusOK {
-			return true
-		}
-		etag := recorder.Header().Get("ETag")
-		if etag == "" {
-			etag = responseETag(recorder.Body.Bytes())
-		}
-		if etag == lastETag {
-			return true
-		}
-		lastETag = etag
-		payload, _ := json.Marshal(map[string]any{
-			"event":       "workspace.changed",
-			"etag":        etag,
-			"occurred_at": handler.now().UTC().Format(time.RFC3339),
-		})
-		if _, err := fmt.Fprintf(response, "event: workspace.changed\ndata: %s\n\n", payload); err != nil {
-			return false
-		}
-		flusher.Flush()
-		return true
-	}
-	if !emit() {
+	updates, unsubscribe := handler.eventHub.subscribe()
+	defer unsubscribe()
+	heartbeat := time.NewTicker(15 * time.Second)
+	defer heartbeat.Stop()
+	if _, err := fmt.Fprint(response, ": connected\n\n"); err != nil {
 		return
 	}
+	flusher.Flush()
 	for {
 		select {
 		case <-request.Context().Done():
 			return
-		case <-ticker.C:
-			if !emit() {
+		case revision, open := <-updates:
+			if !open {
 				return
 			}
+			payload, _ := json.Marshal(map[string]string{"event": "workspace.changed", "revision": revision})
+			if _, err := fmt.Fprintf(response, "id: %s\nevent: workspace.changed\ndata: %s\n\n", revision, payload); err != nil {
+				return
+			}
+			flusher.Flush()
+		case <-heartbeat.C:
+			if _, err := fmt.Fprint(response, ": heartbeat\n\n"); err != nil {
+				return
+			}
+			flusher.Flush()
 		}
 	}
 }

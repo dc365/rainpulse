@@ -99,9 +99,7 @@ def load_pysteps_steps_profile(path: str | Path) -> PystepsStepsProfile:
                 cascade_levels=int(ensemble["cascade_levels"]),
                 autoregressive_order=int(ensemble["autoregressive_order"]),
                 transformation=str(ensemble["transformation"]),
-                precipitation_threshold_mm_h=float(
-                    ensemble["precipitation_threshold_mm_h"]
-                ),
+                precipitation_threshold_mm_h=float(ensemble["precipitation_threshold_mm_h"]),
                 minimum_trackable_precipitation_pixels=int(
                     ensemble.get("minimum_trackable_precipitation_pixels", 1)
                 ),
@@ -109,9 +107,7 @@ def load_pysteps_steps_profile(path: str | Path) -> PystepsStepsProfile:
                 bandpass_filter_method=str(ensemble["bandpass_filter_method"]),
                 precipitation_noise_method=str(ensemble["precipitation_noise_method"]),
                 noise_stddev_adjustment=str(ensemble["noise_stddev_adjustment"]),
-                velocity_perturbation_method=str(
-                    ensemble["velocity_perturbation_method"]
-                ),
+                velocity_perturbation_method=str(ensemble["velocity_perturbation_method"]),
                 probability_matching_method=str(ensemble["probability_matching_method"]),
                 mask_method=str(ensemble["mask_method"]),
                 domain=str(ensemble["domain"]),
@@ -192,6 +188,7 @@ def _validate(profile: PystepsStepsProfile) -> None:
         raise PystepsStepsConfigError("unsupported STEPS compute domain")
     if profile.support.input_missing_policy not in {
         "reject_any_missing",
+        "native_nan_member_support_v2",
         "dry_floor_working_copy_preserve_deterministic_support",
     }:
         raise PystepsStepsConfigError("RP-022 support policy differs from the frozen gate")
@@ -202,9 +199,7 @@ def _validate(profile: PystepsStepsProfile) -> None:
             raise PystepsStepsConfigError(
                 "all-member support policy cannot define a minimum member count"
             )
-    elif profile.support.output_support_policy == (
-        "deterministic_support_minimum_members_finite"
-    ):
+    elif profile.support.output_support_policy == ("deterministic_support_minimum_members_finite"):
         minimum = profile.support.minimum_valid_members
         if minimum is None or not 2 <= minimum <= ensemble.member_count:
             raise PystepsStepsConfigError(

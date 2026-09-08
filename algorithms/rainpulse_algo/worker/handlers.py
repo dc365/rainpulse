@@ -244,6 +244,16 @@ HANDLERS = {
         artifact_name="forecast.zarr",
         ack_wait_seconds=900,
     ),
+    "pysteps-lk-v2": TaskHandler(
+        profile="pysteps-lk-v2",
+        subject="rainpulse.jobs.requested.pysteps_lk.v2",
+        consumer="rainpulse-pysteps-lk-2-0-0",
+        request_model=PystepsLKRequested,
+        executor=_execute_pysteps_lk,
+        asset_type="forecast_output",
+        artifact_name="forecast.zarr",
+        ack_wait_seconds=900,
+    ),
     "nowcastnet-offline": TaskHandler(
         profile="nowcastnet-offline",
         subject="rainpulse.jobs.requested.nowcastnet_offline",

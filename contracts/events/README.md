@@ -55,8 +55,11 @@ machines to those idempotent job records.
 - Synthetic domain task tokens use `_synthetic` suffixes and cannot compete
   with real `radar_qc`, `radar_grid`, `analysis_mosaic`, `analysis_qpe`, or `nowcast_input`
   commands.
-- The real RP-014 task uses `rainpulse.jobs.requested.pysteps_lk`; the legacy
-  simulation remains isolated on `rainpulse.jobs.requested.model_pysteps_lk`.
+- LK 2.0.0 tasks use `rainpulse.jobs.requested.pysteps_lk.v2` and the
+  `pysteps-lk-v2` Worker profile. Frozen LK 1.1.0 replay retains
+  `rainpulse.jobs.requested.pysteps_lk` and the `pysteps-lk` Worker profile;
+  each profile has a distinct durable consumer. The legacy simulation remains
+  isolated on `rainpulse.jobs.requested.model_pysteps_lk`.
 - The RP-015 application-product task uses
   `rainpulse.jobs.requested.product_build`.
 - The RP-031 automatic-verification task uses

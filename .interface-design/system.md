@@ -54,3 +54,16 @@ Use a continuous rail for any sequence of forecast-valid times. Do not render ev
 - Timestamp button grids, repeated filters, duplicate time axes, decorative gradients, floating card shadows, oversized status badges, or arbitrary algorithm colors.
 - Dense metadata that competes with the maps or obscures the selected valid time.
 - Page-level horizontal overflow at 390 px and narrower.
+
+## Prelaunch refinement
+
+Keep the default four-map forecast comparison and explicit single-map focus.
+Verification is a paired observation/selected-forecast task with an explicitly
+labelled single-gridpoint numerical comparison; it is not another four-map tab.
+Critical map captions, times and thresholds should be about 12px, not 7–9px.
+Warnings and verification information participate in a flexible vertical shell;
+never squeeze them into a fixed row count that displaces the map or timeline.
+Numerical hover values come from the immutable numeric asset, not palette
+reverse lookup. Do not patch OpenLayers prototypes or infer frame identity from
+DOM text. Show derived, missing, stale and uncalibrated states explicitly, and
+honour reduced-motion preferences. Retain native meteorological palette colors.

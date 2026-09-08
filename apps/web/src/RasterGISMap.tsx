@@ -300,25 +300,26 @@ async function readRasterPixels(imageUrl: string, signal: AbortSignal): Promise<
   }
 }
 
-function updateSelectionLayer(
+// eslint-disable-next-line react-refresh/only-export-components
+export function updateSelectionLayer(
   source: VectorSource,
   point: MapCoordinate,
-  bbox: readonly number[],
+  bbox?: readonly number[],
 ) {
-  const [west, south, east, north] = bbox
   source.clear()
-  source.addFeatures([
-    new Feature({
+  if (bbox?.length === 4) {
+    const [west, south, east, north] = bbox
+    source.addFeature(new Feature({
       geometry: new Polygon([[
         [west, south], [east, south], [east, north], [west, north], [west, south],
       ]]),
       kind: 'area',
-    }),
-    new Feature({
-      geometry: new Point([point.longitude, point.latitude]),
-      kind: 'point',
-    }),
-  ])
+    }))
+  }
+  source.addFeature(new Feature({
+    geometry: new Point([point.longitude, point.latitude]),
+    kind: 'point',
+  }))
 }
 
 function clampCoordinate(coordinate: number[], extent: GISMapExtent) {
@@ -360,6 +361,7 @@ interface RasterGISMapProps {
   layerError: boolean
   onLayerError: (failed: boolean) => void
   onSelectPoint?: (point: MapCoordinate) => void
+  onProbe?: (point: MapCoordinate | null) => void
   referenceContext?: GISReferenceContext
   radarContext?: GISRadarContext
   className?: string
@@ -396,6 +398,7 @@ export function RasterGISMap({
   layerError,
   onLayerError,
   onSelectPoint,
+  onProbe,
   referenceContext,
   radarContext,
   className = '',
@@ -423,6 +426,10 @@ export function RasterGISMap({
   const probeRef = useRef<HTMLDivElement>(null)
   const probeOverlayRef = useRef<Overlay | null>(null)
   const onSelectPointRef = useRef(onSelectPoint)
+  const onProbeRef = useRef(onProbe)
+  const loadedImageRef = useRef<string | null>(null)
+  const [loadedFrame, setLoadedFrame] = useState<string | null>(null)
+  const imageUrlRef = useRef(imageUrl)
   const onLayerErrorRef = useRef(onLayerError)
   const imageExtentRef = useRef(imageExtent)
   const fitExtentRef = useRef(fitExtent)
@@ -448,6 +455,9 @@ export function RasterGISMap({
   const showRasterValues = controlledShowRasterValues ?? localShowRasterValues
   const rasterOpacity = controlledRasterOpacity ?? localRasterOpacity
   const rasterOpacityRef = useRef(rasterOpacity)
+
+  useEffect(() => { onProbeRef.current = onProbe }, [onProbe])
+  useEffect(() => { imageUrlRef.current = imageUrl; loadedImageRef.current = null }, [imageUrl])
 
   useEffect(() => {
     onSelectPointRef.current = onSelectPoint
@@ -593,10 +603,18 @@ export function RasterGISMap({
     const clickKey = map.on('click', (event) => {
       onSelectPointRef.current?.(clampCoordinate(event.coordinate, imageExtentRef.current))
     })
+    let lastProbeAt = 0
     const pointerKey = map.on('pointermove', (event) => {
       if (event.dragging) return
       const [longitude, latitude] = event.coordinate
       setHoverCoordinate({ longitude, latitude })
+      if (onProbeRef.current) {
+        if (loadedImageRef.current === imageUrlRef.current && performance.now() - lastProbeAt > 60) {
+          lastProbeAt = performance.now()
+          onProbeRef.current({ longitude, latitude })
+        }
+        return
+      }
       const sampled = rasterPixelsRef.current
         ? rasterValueAtCoordinate(
             rasterPixelsRef.current,
@@ -611,6 +629,7 @@ export function RasterGISMap({
     const moveKey = map.on('moveend', refreshRasterValues)
     const viewport = map.getViewport()
     const clearHover = () => {
+      onProbeRef.current?.(null)
       setHoverCoordinate(null)
       setHoverRasterValue(null)
       probeOverlayRef.current?.setPosition(undefined)
@@ -680,7 +699,7 @@ export function RasterGISMap({
     rasterPixelsRef.current = null
     probeOverlayRef.current?.setPosition(undefined)
     refreshRasterValuesRef.current?.()
-    if (!imageUrl) return () => controller.abort()
+    if (!imageUrl || (onProbeRef.current && !showRasterValuesRef.current)) return () => controller.abort()
 
     void readRasterPixels(imageUrl, controller.signal)
       .then((pixels) => {
@@ -707,10 +726,21 @@ export function RasterGISMap({
     const source = new ImageStatic({
       url: imageUrl,
       projection: 'EPSG:4326',
-      imageExtent: [...imageExtent],
+      imageExtent: [...imageExtentRef.current],
       interpolate: rasterStyle === 'smooth',
     })
-    source.once('imageloaderror', () => onLayerErrorRef.current(true))
+    source.once('imageloadend', () => {
+      if (layer.getSource() === source) {
+        loadedImageRef.current = imageUrl
+        setLoadedFrame(`${imageUrl}|${rasterStyle}`)
+      }
+    })
+    source.once('imageloaderror', () => {
+      if (layer.getSource() !== source) return
+      loadedImageRef.current = null
+      onProbeRef.current?.(null)
+      onLayerErrorRef.current(true)
+    })
     layer.setSource(source)
 
     const reduceMotion = typeof window !== 'undefined'
@@ -731,12 +761,12 @@ export function RasterGISMap({
       }
       requestAnimationFrame(step)
     }
-  }, [comparisonMode, fitExtentKey, imageExtent, imageUrl, rasterStyle, referenceContext])
+  }, [comparisonMode, fitExtentKey, imageExtentKey, imageUrl, rasterStyle, referenceContext])
 
   useEffect(() => {
     const source = selectionLayerRef.current?.getSource()
     if (!source) return
-    if (point && bbox?.length === 4) updateSelectionLayer(source, point, bbox)
+    if (point) updateSelectionLayer(source, point, bbox)
     else source.clear()
   }, [bbox, fitExtentKey, point, referenceContext])
 
@@ -794,8 +824,14 @@ export function RasterGISMap({
         ref={targetRef}
         className="nowcast-gis-map"
         role="application"
-        aria-label={mapLabel}
+        aria-label={`${mapLabel}${onSelectPoint ? '；方向键平移，Enter 或空格选择地图中心格点' : ''}`}
         tabIndex={0}
+        onKeyDown={event => {
+          if (!onSelectPoint || (event.key !== 'Enter' && event.key !== ' ')) return
+          event.preventDefault()
+          const center = mapRef.current?.getView().getCenter()
+          if (center) onSelectPoint(clampCoordinate(center, imageExtent))
+        }}
       />
       <span className="sr-only" role="img" aria-label={imageDescription} data-source={imageUrl} data-extent={imageExtent.join(',')} />
 
@@ -859,7 +895,7 @@ export function RasterGISMap({
           : '移动指针读取经纬度和色阶值')}</small>
       </div> : null}
 
-      {comparisonMode ? (
+      {comparisonMode && showRasterValues && !onProbe ? (
         <div
           ref={probeRef}
           className={`gis-raster-probe${hoverRasterValue ? ' visible' : ''}`}
@@ -912,6 +948,10 @@ export function RasterGISMap({
             )}
           </div>
         </div>
+      ) : null}
+
+      {!loading && !layerError && imageUrl && loadedFrame !== `${imageUrl}|${rasterStyle}` ? (
+        <div className="gis-message frame-pending" role="status">正在加载当前时刻图层…</div>
       ) : null}
 
       {!comparisonMode ? <div className={`gis-legend ${legendMode}`} aria-label={`${productLabel}图例`} tabIndex={0}>

@@ -41,3 +41,23 @@ frames through +120 minutes are appended to `qpe` as verification truth.
   operational eligibility.
 - The status proxy endpoints fail with HTTP 503 and a machine-readable reason
   when their internal service is not configured or unavailable.
+
+## Prelaunch client consistency and verification
+
+The client keeps the requested cycle separate from the committed displayed
+snapshot. Header, valid time and map descriptors switch together after a valid
+cycle response. A failed selection keeps the old cycle identity visible.
+Following realtime is operator intent and does not expire when radar data is
+stale. Cached/stale responses must not be presented as fresh.
+
+`frame_kind`, when supplied, is `analysis`, `native` or `derived`; derivation and
+source leads remain attached to derived frames. Point verification accepts only
+explicit native forecasts and native/analysis truth at the same valid time,
+coordinate and rain-rate units. Missing, derived or mismatched pairs are not
+scored. The workbench point comparison is N=1 against radar QPE, not a full-field
+skill score or an independent gauge validation.
+
+`GET /api/v1/workspace/events` emits `workspace.changed` with a stable `revision`.
+Clock-only freshness changes do not alter that revision. SSE sends heartbeat
+comments. One bounded producer per API process uses the normal projection
+caches; browser reconnection and low-frequency polling recover missed events.

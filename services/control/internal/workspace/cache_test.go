@@ -130,3 +130,24 @@ func executeCacheRequest(handler http.Handler, method, path, etag string) *httpt
 	handler.ServeHTTP(response, request)
 	return response
 }
+
+func TestResponseCacheDoesNotRefreshStaleInnerProjection(t *testing.T) {
+	calls := 0
+	core := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("X-RainPulse-Stale-Seconds", "30")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"items":[]}`))
+	})
+	cached := WithResponseCache(core, ResponseCacheOptions{CatalogTTL: time.Minute})
+	for i := 0; i < 2; i++ {
+		out := httptest.NewRecorder()
+		cached.ServeHTTP(out, httptest.NewRequest(http.MethodGet, workspacePrefix, nil))
+		if out.Header().Get("X-RainPulse-Cache") != "UPSTREAM_STALE" || out.Header().Get("X-RainPulse-Stale-Seconds") != "30" {
+			t.Fatal("stale provenance hidden")
+		}
+	}
+	if calls != 2 {
+		t.Fatalf("stale result was cached for another TTL: %d calls", calls)
+	}
+}
