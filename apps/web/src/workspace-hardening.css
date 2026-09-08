@@ -1,0 +1,49 @@
+/* Pre-launch readability and state-semantics overrides.
+   Keep the dense instrument-like layout, but do not make operational metadata
+   depend on 7–9 px text to fit the viewport. */
+
+.workspace-map-focus,
+.workspace-map-caption span,
+.workspace-map-caption small,
+.workspace-map-caption b {
+  font-size: 10px;
+}
+
+.workspace-comparison-map .gis-radar-meta header b,
+.workspace-comparison-map .gis-radar-meta header span,
+.workspace-comparison-map .gis-radar-meta p,
+.workspace-comparison-map .gis-radar-meta small {
+  font-size: 10px;
+}
+
+.workspace-comparison-map .gis-comparison-legend > header strong,
+.workspace-comparison-map .gis-comparison-legend-scale small,
+.workspace-comparison-map .gis-comparison-legend-list small {
+  font-size: 9px;
+  line-height: 1.1;
+}
+
+.workspace-timeline-state > span,
+.workspace-timeline-issue small {
+  font-size: 10px;
+}
+
+.verification-strip > span {
+  min-width: 86px;
+}
+.verification-strip strong {
+  font-size: 12px;
+}
+
+.workspace-map-grid[aria-busy="true"] .workspace-map-panel {
+  cursor: progress;
+}
+
+@media (max-width: 760px) {
+  .workspace-map-caption span,
+  .workspace-map-caption small,
+  .workspace-map-caption b,
+  .workspace-map-focus {
+    font-size: 10px;
+  }
+}
