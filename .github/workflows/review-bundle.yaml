@@ -23,7 +23,8 @@ jobs:
           retention-days: 7
           if-no-files-found: error
   offline-toolkit:
-    if: github.event_name == 'push' && github.event.head_commit.message == 'ci: prepare offline review toolkit'
+    if: >-
+      github.event_name == 'push' && github.event.head_commit.message == 'ci: prepare offline review toolkit'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
