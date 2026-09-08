@@ -8,11 +8,13 @@ import {
   RasterGISMap,
   type GISLegendEntry,
   type GISMapExtent,
+  type GISMapProbe,
   type GISRasterStyle,
 } from '../RasterGISMap'
 import { radarDisplayExtent, radarSiteFor } from '../radarSites'
 import { focusedPanelFromSearch, workspaceLayoutSearch } from './layoutState'
 import { HistoryPicker } from './HistoryPicker'
+import { clearMapProbe, dispatchMapProbe } from './mapProbeBridge'
 import {
   analysisCycleAt,
   availabilityAt,
@@ -42,8 +44,12 @@ const presetLabels: Record<WorkspacePreset, string> = {
 export function MainWorkspace() {
   const [cycles, setCycles] = useState<CycleSummary[]>([])
   const [selectedCycleID, setSelectedCycleID] = useState<string>('')
+  // This is user intent, not a derived data-freshness flag. A temporary ingest
+  // delay must never silently kick a forecaster out of live-follow mode.
   const [followLatest, setFollowLatest] = useState(true)
   const [catalogRevision, setCatalogRevision] = useState('')
+  // detail is the last successfully loaded, atomic display snapshot. Header,
+  // maps and timeline stay on this same identity until the next detail succeeds.
   const [detail, setDetail] = useState<WorkspaceCycleDetail | null>(null)
   const [preset, setPreset] = useState<WorkspacePreset>('forecast')
   const [selectedRadarID, setSelectedRadarID] = useState<string | null>(null)
@@ -73,7 +79,6 @@ export function MainWorkspace() {
       void fetchJSON<CycleList>('/api/v1/workspace/cycles?limit=200', controller.signal)
         .then((payload) => {
           setCycles(payload.items)
-          if (!isRealtimeCycle(payload.items[0] ?? null)) setFollowLatest(false)
           setSelectedCycleID((current) => {
             const latest = payload.items[0]?.cycle_id ?? ''
             if ((followLatest && isRealtimeCycle(payload.items[0] ?? null)) || !current) return latest
@@ -90,10 +95,13 @@ export function MainWorkspace() {
           }
         })
     }
+    const handleWorkspaceChanged = () => loadCatalog()
     loadCatalog()
+    window.addEventListener('rainpulse:workspace-changed', handleWorkspaceChanged)
     const timer = window.setInterval(loadCatalog, 30_000)
     return () => {
       controller.abort()
+      window.removeEventListener('rainpulse:workspace-changed', handleWorkspaceChanged)
       if (timer != null) window.clearInterval(timer)
     }
   }, [followLatest])
@@ -118,7 +126,7 @@ export function MainWorkspace() {
       .catch((requestError: unknown) => {
         if (!isAbortError(requestError)) {
           const message = requestError instanceof Error ? requestError.message : '读取工作台失败'
-          setError(`更新失败，保留当前结果：${message}`)
+          setError(`更新失败，当前画面仍保留上一成功周期：${message}`)
         }
       })
       .finally(() => {
@@ -208,11 +216,14 @@ export function MainWorkspace() {
 
   const latestCycle = cycles[0] ?? null
   const realtimeAvailable = isRealtimeCycle(latestCycle)
-  const selectedCycle = cycles.find((cycle) => cycle.cycle_id === selectedCycleID) ?? null
+  const displayedCycle: CycleSummary | null = detail
   const isRealtimeView = Boolean(
     followLatest
     && realtimeAvailable
-    && selectedCycle?.cycle_id === latestCycle?.cycle_id,
+    && detail?.cycle_id === latestCycle?.cycle_id,
+  )
+  const switchingCycle = Boolean(
+    loading && detail && selectedCycleID && selectedCycleID !== detail.cycle_id,
   )
   const historicalCycles = cycles
 
@@ -262,44 +273,48 @@ export function MainWorkspace() {
         <div className="workspace-data-mode" role="group" aria-label="数据模式">
           <button
             type="button"
-            className={isRealtimeView ? 'active' : ''}
-            aria-pressed={isRealtimeView}
-            disabled={!realtimeAvailable}
-            title={realtimeAvailable ? '跟随最新实时周期' : '当前没有新鲜的实时周期'}
+            className={followLatest ? 'active' : ''}
+            aria-pressed={followLatest}
+            title={realtimeAvailable ? '跟随最新实时周期' : '保持实时跟随，等待新鲜数据'}
             onClick={() => {
-              if (!latestCycle) return
-              setLoading(true)
               setPlaying(false)
-              setSelectedCycleID(latestCycle.cycle_id)
-              setSelectedTime(latestCycle.issue_time)
               setFollowLatest(true)
+              if (realtimeAvailable && latestCycle && latestCycle.cycle_id !== selectedCycleID) {
+                setLoading(true)
+                setSelectedCycleID(latestCycle.cycle_id)
+              }
             }}
           >
             <i aria-hidden="true" />
             实时监测
           </button>
-          <button type="button" className={!isRealtimeView ? 'active' : ''} aria-pressed={!isRealtimeView} onClick={() => { setFollowLatest(false); setPlaying(false) }}>历史案例</button>
+          <button type="button" className={!followLatest ? 'active' : ''} aria-pressed={!followLatest} onClick={() => { setFollowLatest(false); setPlaying(false) }}>历史案例</button>
           <span className="workspace-data-mode-note">
-            {realtimeAvailable ? '跟随最新' : '暂无新鲜数据'}
+            {followLatest ? (realtimeAvailable ? '跟随最新' : '等待新资料') : '固定历史'}
           </span>
         </div>
-        {!isRealtimeView ? <HistoryPicker cycles={historicalCycles} selectedID={selectedCycleID}
+        {!followLatest ? <HistoryPicker cycles={historicalCycles} selectedID={selectedCycleID}
             onSelect={(cycle) => {
               if (cycle.cycle_id !== selectedCycleID) setLoading(true)
               setPlaying(false)
               setSelectedCycleID(cycle.cycle_id)
-              setSelectedTime(cycle.issue_time)
               setFollowLatest(false)
             }}
-          /> : <section className="workspace-cycle-summary live" aria-label="当前周期">
-          <span>{isRealtimeView ? '实时周期' : '历史回放'}</span>
-          <strong>{selectedCycle ? formatLocalCycleTime(selectedCycle.issue_time) : '读取周期中'}</strong>
-          <small>{selectedCycle ? formatUTCCycleTime(selectedCycle.issue_time) : '—'}</small>
+          /> : <section className={`workspace-cycle-summary${isRealtimeView ? ' live' : ''}`} aria-label="当前周期">
+          <span>{isRealtimeView ? '实时周期' : '实时跟随'}</span>
+          <strong>{displayedCycle ? formatLocalCycleTime(displayedCycle.issue_time) : '等待周期'}</strong>
+          <small>{displayedCycle ? formatUTCCycleTime(displayedCycle.issue_time) : '—'}</small>
         </section>}
         <div className="workspace-freshness" aria-label="数据时效">
           <i className={isRealtimeView ? 'fresh' : ''} />
-          <span>{isRealtimeView ? '自动更新 · 30 秒' : '历史回放 · 固定起报'}</span>
-          <strong>{isRealtimeView && detail ? ageLabel(detail.freshness_seconds) : selectedCycle ? capabilityText(selectedCycle) : '读取中'}</strong>
+          <span>{followLatest
+            ? realtimeAvailable ? '实时跟随 · SSE + 30秒兜底' : '实时跟随 · 等待新资料'
+            : '历史回放 · 固定起报'}</span>
+          <strong>{switchingCycle
+            ? '切换中'
+            : followLatest && detail
+              ? ageLabel(detail.freshness_seconds)
+              : displayedCycle ? capabilityText(displayedCycle) : '读取中'}</strong>
         </div>
         <a className="admin-link" href="/admin">后台</a>
       </header>
@@ -363,7 +378,7 @@ export function MainWorkspace() {
                     key={panel.panel_id}
                     onClick={() => focusPanel(panel.panel_id)}
                   >
-                    <span><strong>{panelDisplayName(panel)}</strong><small>{roleLabel(panel)}</small></span>
+                    <span><strong>{panelDisplayName(panel)}</strong><small>{roleLabel(panel, preset)}</small></span>
                     <i aria-hidden="true">{focusedPanelID === panel.panel_id ? '✓' : ''}</i>
                   </button>
                 ))}
@@ -386,12 +401,14 @@ export function MainWorkspace() {
             type="button"
             className={showRasterValues ? 'active' : ''}
             aria-pressed={showRasterValues}
-            title="当前读取渲染色阶；真实格点值接口将在下一阶段接入"
+            title="显示渲染色阶标注；鼠标悬停使用精确格点接口"
             onClick={() => setShowRasterValues((value) => !value)}
-          >色阶值</button>
+          >色阶标注</button>
           <label><span>雨层 {Math.round(rasterOpacity * 100)}%</span><input aria-label="雨层透明度" type="range" min="0.55" max="1" step="0.05" value={rasterOpacity} onChange={(event) => setRasterOpacity(Number(event.target.value))} /></label>
         </div>
-        {detail ? <QualityStrip detail={detail} /> : null}
+        {detail ? preset === 'verification'
+          ? <VerificationStrip detail={detail} panels={panels} selectedTime={selectedTime} />
+          : <QualityStrip detail={detail} /> : null}
       </section>
 
       <section className="mobile-panel-tabs" role="tablist" aria-label="移动端地图面板">
@@ -413,11 +430,13 @@ export function MainWorkspace() {
       <section
         className={`workspace-map-grid panels-${Math.min(4, Math.max(1, panels.length))}${focusedPanel ? ' layout-focus' : ''}`}
         aria-label={focusedPanel ? `${panelDisplayName(focusedPanel)}单图` : '同步地图对比'}
+        aria-busy={loading}
       >
         {panels.map((panel) => (
           <MapPanel
             key={panel.panel_id}
             panel={panel}
+            preset={preset}
             detail={detail}
             selectedTime={selectedTime}
             loading={loading}
@@ -457,6 +476,7 @@ export function MainWorkspace() {
 
 function MapPanel({
   panel,
+  preset,
   detail,
   selectedTime,
   loading,
@@ -475,6 +495,7 @@ function MapPanel({
   onShowComparison,
 }: {
   panel: WorkspacePanel
+  preset: WorkspacePreset
   detail: WorkspaceCycleDetail | null
   selectedTime: string | null
   loading: boolean
@@ -548,14 +569,26 @@ function MapPanel({
     (failed: boolean) => onLayerError(panel.panel_id, failed),
     [onLayerError, panel.panel_id],
   )
+  const handleProbe = useCallback((probe: GISMapProbe) => {
+    dispatchMapProbe({
+      ...probe,
+      assetUrl: frame?.image_url ?? '',
+      panelLabel: displayName,
+    })
+  }, [displayName, frame?.image_url])
+
+  useEffect(() => {
+    clearMapProbe()
+  }, [frame?.image_url])
+
   return (
     <article className={`workspace-map-panel${mobileActive ? ' mobile-active' : ''}${focused ? ' focus-selected' : ''}${focusMode && !focused ? ' focus-suppressed' : ''}`}>
       <div
         className="workspace-map-caption"
-        aria-label={`${displayName}，${roleLabel(panel)}，${lifecycle}，${frameContext}`}
+        aria-label={`${displayName}，${roleLabel(panel, preset)}，${lifecycle}，${frameContext}`}
       >
         <strong>{displayName}</strong>
-        <span>{roleLabel(panel)}</span>
+        <span>{roleLabel(panel, preset)}</span>
         <b>{lifecycle}</b>
         <small>{frameContext}</small>
       </div>
@@ -581,13 +614,17 @@ function MapPanel({
         legend={legend}
         legendMode={panel.legend_unit ? 'scale' : 'categorical'}
         legendUnit={panel.legend_unit ?? frame?.unit ?? ''}
-        footerNote={panel.data_kind === 'probability_exceedance' ? '透明：缺测 / 低于 1%' : '透明：缺测 / 无覆盖'}
+        footerNote={panel.data_kind === 'probability_exceedance'
+          ? '透明：缺测 / 无覆盖；低概率仍按色阶显示'
+          : '透明：缺测 / 无覆盖'}
         mapLabel={`${displayName}同步地图，EPSG:4326`}
         resetViewLabel="复位同步地图范围"
         emptyStateHint={unavailable}
         loading={loading}
         layerError={layerError}
         onLayerError={handleLayerError}
+        onProbe={handleProbe}
+        onProbeClear={clearMapProbe}
         sharedView={sharedView}
         comparisonMode
         basemapVisible={basemapVisible}
@@ -781,6 +818,30 @@ function QualityStrip({ detail }: { detail: WorkspaceCycleDetail }) {
   )
 }
 
+function VerificationStrip({
+  detail,
+  panels,
+  selectedTime,
+}: {
+  detail: WorkspaceCycleDetail
+  panels: WorkspacePanel[]
+  selectedTime: string | null
+}) {
+  const value = selectedTime ?? detail.issue_time
+  const qpe = detail.panels.find((panel) => panel.panel_id === 'qpe')
+  const observationReady = qpe ? frameAt(qpe, value) != null : false
+  const forecastPanels = panels.filter((panel) => panel.role === 'forecast')
+  const nativeForecastCount = forecastPanels.filter((panel) => frameAt(panel, value) != null).length
+  return (
+    <div className="quality-strip verification-strip" aria-label="固定起报检验状态">
+      <span><small>检验时效</small><strong>{leadLabel(detail.issue_time, value)}</strong></span>
+      <span><small>验证实况</small><strong>{observationReady ? '可用' : '待到达'}</strong></span>
+      <span><small>原生预报</small><strong>{nativeForecastCount}/{forecastPanels.length || 0}</strong></span>
+      <span><small>检验口径</small><strong>固定起报</strong></span>
+    </div>
+  )
+}
+
 function capabilityText(cycle: CycleSummary) {
   return [
     cycle.capabilities.radar ? 'QPE' : null,
@@ -819,7 +880,11 @@ function formatUTCCycleTime(value: string) {
   }).format(new Date(value)) + ' UTC'
 }
 
-function roleLabel(panel: WorkspacePanel) {
+function roleLabel(panel: WorkspacePanel, preset: WorkspacePreset = 'forecast') {
+  if (preset === 'verification') {
+    if (panel.panel_id === 'qpe') return '验证实况'
+    if (panel.role === 'forecast') return '固定起报预报'
+  }
   if (panel.role === 'observation') return '实况分析'
   if (panel.role === 'qc') return panel.radar_id ? `${panel.radar_id.toUpperCase()} 质控` : '质控证据'
   if (panel.role === 'diagnostic') return '分析诊断'
