@@ -507,8 +507,18 @@ def _forecast_with_support(
     forecast = extrapolate(working_rate, velocity, lead_count, interpolation_order).astype(
         "float32"
     )
-    support = extrapolate(latest_valid.astype("float32"), velocity, lead_count, 0)
-    valid = (support >= 0.5) & np.isfinite(forecast)
+    # Use the same interpolation kernel for the support field as for rain rate.
+    # A nearest-neighbour support mask can label a bilinearly mixed cell valid
+    # even when part of its interpolation footprint came from missing source
+    # data. Keep only cells whose complete interpolation footprint was observed.
+    support = extrapolate(
+        latest_valid.astype("float32"),
+        velocity,
+        lead_count,
+        interpolation_order,
+    )
+    full_support = np.float32(1.0 - 1e-5)
+    valid = np.isfinite(support) & (support >= full_support) & np.isfinite(forecast)
     forecast[~valid] = np.nan
     forecast[valid] = np.maximum(forecast[valid], 0.0)
     return forecast, valid
