@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -28,6 +29,7 @@ from rainpulse_algo.nowcast.nowcastnet_profile import (
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PROFILE_PATH = REPOSITORY_ROOT / "configs" / "nowcast" / "rp026-nowcastnet-offline-v1.yaml"
 SCHEMA_PATH = REPOSITORY_ROOT / "configs" / "schemas" / "nowcastnet-profile.schema.json"
+FROZEN_PROFILE_SHA256 = "b6c42503366053110ac555906b3383a34448e7dbd17dc5d78ea7b05140ba2e8b"
 
 
 @pytest.fixture(scope="module")
@@ -46,14 +48,16 @@ def _input(profile, fill: float = 1.0) -> tuple[np.ndarray, np.ndarray]:
 
 def test_profile_schema_and_offline_only_boundary(profile) -> None:
     schema = json.loads(SCHEMA_PATH.read_text())
-    raw = yaml.safe_load(PROFILE_PATH.read_text())
+    raw_bytes = PROFILE_PATH.read_bytes()
+    raw = yaml.safe_load(raw_bytes)
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(raw)
 
+    assert hashlib.sha256(raw_bytes).hexdigest() == FROZEN_PROFILE_SHA256
     assert profile.offline_readiness_blockers() == ()
     profile.require_offline_ready()
     assert profile.weights_path() == Path(
-        "/home/yons/hwapp/ruiyun-bdp/bdp-dp/bdp-dp-rada/bdp-dp-rada-rainpulse/runtime/nowcastnet/official-v1/data/checkpoints/mrms_model.ckpt"
+        "/opt/rainpulse/nowcastnet/official-v1/data/checkpoints/mrms_model.ckpt"
     )
     assert profile.activation.realtime_shadow_enabled is False
     assert profile.activation.product_publication_enabled is False
