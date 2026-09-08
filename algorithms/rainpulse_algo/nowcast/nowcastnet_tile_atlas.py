@@ -222,10 +222,19 @@ def chunked(values: Sequence[PreparedTile], size: int) -> Iterable[tuple[Prepare
 
 
 def stitch_member_tiles(
-    values: Sequence[tuple[AtlasTile, np.ndarray]], *, output_shape: tuple[int, int]
+    values: Sequence[tuple[AtlasTile, np.ndarray]],
+    *,
+    output_shape: tuple[int, int],
+    weight_power: int = 1,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Stitch only trusted windows; unserved cells remain NaN/missing."""
+    """Stitch trusted windows. Power 2 is offline-only; default stays unchanged.
 
+    Squaring spatial weights favours the more central tile without selecting
+    by rain intensity. Normalization retains a convex combination, not a boost.
+    """
+
+    if weight_power not in (1, 2):
+        raise TileAtlasError("weight_power must be 1 or 2")
     if not values:
         raise TileAtlasError("no Tile Atlas forecasts are available")
     first = np.asarray(values[0][1], dtype="float32")
@@ -241,7 +250,7 @@ def stitch_member_tiles(
         trusted = tile.trusted
         global_trusted = tile.global_trusted
         local = forecast[:, :, trusted.y_start : trusted.y_end, trusted.x_start : trusted.x_end]
-        edge_weight = _raised_edge_weight(local.shape[-2:])
+        edge_weight = _raised_edge_weight(local.shape[-2:]) ** weight_power
         weighted[
             :,
             :,

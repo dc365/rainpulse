@@ -45,6 +45,7 @@ def adapt_members_to_five_minutes(
     *,
     native_leads: Sequence[int] = tuple(range(10, 121, 10)),
     motion_estimator: DenseMotionEstimator | None = None,
+    midpoint_space: str = "log",
 ) -> AdaptedForecast:
     """Add odd leads by bidirectional dense-flow advection in log-rain space.
 
@@ -54,6 +55,10 @@ def adapt_members_to_five_minutes(
     A derived value is valid only when *both* warped anchors are valid.
     """
 
+    # Experimental rain-space averaging changes only the midpoint combination,
+    # not motion estimation or spatial warping. The live default stays frozen.
+    if midpoint_space not in ("log", "rain"):
+        raise TemporalAdapterError("midpoint_space must be log or rain")
     members = np.asarray(native_members, dtype="float32")
     member_valid = np.asarray(native_valid, dtype="uint8")
     analysis = np.asarray(analysis_rate, dtype="float32")
@@ -102,9 +107,7 @@ def adapt_members_to_five_minutes(
         left_index = right_index - 1
         left_lead = anchor_leads[left_index]
         right_lead = anchor_leads[right_index]
-        left_mean, left_mask = _ensemble_anchor(
-            anchors[:, left_index], anchor_valid[:, left_index]
-        )
+        left_mean, left_mask = _ensemble_anchor(anchors[:, left_index], anchor_valid[:, left_index])
         right_mean, right_mask = _ensemble_anchor(
             anchors[:, right_index], anchor_valid[:, right_index]
         )
@@ -126,6 +129,7 @@ def adapt_members_to_five_minutes(
                     anchor_valid[member_index, right_index],
                     forward_motion,
                     backward_motion,
+                    midpoint_space=midpoint_space,
                 )
                 output[member_index, output_index] = value
                 output_valid[member_index, output_index] = valid
@@ -134,7 +138,9 @@ def adapt_members_to_five_minutes(
             AdaptedFrame(
                 lead,
                 "derived",
-                "bidirectional-dense-optical-flow-advection-v1",
+                "bidirectional-dense-optical-flow-advection-v1"
+                if midpoint_space == "log"
+                else "bidirectional-dense-optical-flow-rain-midpoint-experimental-v1",
                 (left_lead, right_lead),
             )
         )
@@ -198,12 +204,17 @@ def _bidirectional_midpoint(
     right_valid: np.ndarray,
     forward_motion: np.ndarray,
     backward_motion: np.ndarray,
+    *,
+    midpoint_space: str = "log",
 ) -> tuple[np.ndarray, np.ndarray]:
     left_value, left_support = _warp_log_field(left, left_valid, forward_motion, 0.5)
     right_value, right_support = _warp_log_field(right, right_valid, backward_motion, 0.5)
     valid = left_support & right_support & np.isfinite(left_value) & np.isfinite(right_value)
     result = np.full(left.shape, np.nan, dtype="float32")
-    result[valid] = np.expm1((left_value[valid] + right_value[valid]) * 0.5).astype("float32")
+    if midpoint_space == "rain":
+        result[valid] = (np.expm1(left_value[valid]) + np.expm1(right_value[valid])) * 0.5
+    else:
+        result[valid] = np.expm1((left_value[valid] + right_value[valid]) * 0.5).astype("float32")
     result[valid] = np.maximum(result[valid], 0.0)
     return result, valid.astype("uint8")
 
@@ -218,9 +229,12 @@ def _warp_log_field(
     coordinates = np.stack((y - fraction * motion[0], x - fraction * motion[1]))
     source = np.log1p(np.where(valid == 1, np.maximum(values, 0.0), 0.0)).astype("float32")
     warped = map_coordinates(source, coordinates, order=1, mode="constant", cval=np.nan)
-    support = map_coordinates(
-        (valid == 1).astype("float32"), coordinates, order=0, mode="constant", cval=0.0
-    ) >= 0.5
+    support = (
+        map_coordinates(
+            (valid == 1).astype("float32"), coordinates, order=0, mode="constant", cval=0.0
+        )
+        >= 0.5
+    )
     return warped.astype("float32", copy=False), support
 
 

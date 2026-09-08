@@ -1,0 +1,28 @@
+schema_version: "1.0"
+atlas_version: fujian-nowcastnet-tile-atlas-v2
+grid:
+  grid_id: fuzhou_118_123_25_27_0p01deg_v1
+  grid_config_version: fuzhou-grid-0p01deg-v1
+  height: 201
+  width: 501
+policy:
+  spatial_multiple: 32
+  missing_policy: reject_any_missing
+  trusted_overlap_blending: raised-edge-v1
+  operational_eligible: false
+# Interior input edges retain a 16-cell halo; trusted outputs overlap.
+tiles:
+  - {tile_id: north-0, input: {y_start: 0, x_start: 0, height: 128, width: 128}, trusted: {y_start: 0, y_end: 112, x_start: 0, x_end: 112}}
+  - {tile_id: north-64, input: {y_start: 0, x_start: 64, height: 128, width: 128}, trusted: {y_start: 0, y_end: 112, x_start: 16, x_end: 112}}
+  - {tile_id: north-128, input: {y_start: 0, x_start: 128, height: 128, width: 128}, trusted: {y_start: 0, y_end: 112, x_start: 16, x_end: 112}}
+  - {tile_id: north-192, input: {y_start: 0, x_start: 192, height: 128, width: 128}, trusted: {y_start: 0, y_end: 112, x_start: 16, x_end: 112}}
+  - {tile_id: north-256, input: {y_start: 0, x_start: 256, height: 128, width: 128}, trusted: {y_start: 0, y_end: 112, x_start: 16, x_end: 112}}
+  - {tile_id: north-320, input: {y_start: 0, x_start: 320, height: 128, width: 128}, trusted: {y_start: 0, y_end: 112, x_start: 16, x_end: 112}}
+  - {tile_id: north-373, input: {y_start: 0, x_start: 373, height: 128, width: 128}, trusted: {y_start: 0, y_end: 112, x_start: 16, x_end: 128}}
+  - {tile_id: south-0, input: {y_start: 73, x_start: 0, height: 128, width: 128}, trusted: {y_start: 16, y_end: 128, x_start: 0, x_end: 112}}
+  - {tile_id: south-64, input: {y_start: 73, x_start: 64, height: 128, width: 128}, trusted: {y_start: 16, y_end: 128, x_start: 16, x_end: 112}}
+  - {tile_id: south-128, input: {y_start: 73, x_start: 128, height: 128, width: 128}, trusted: {y_start: 16, y_end: 128, x_start: 16, x_end: 112}}
+  - {tile_id: south-192, input: {y_start: 73, x_start: 192, height: 128, width: 128}, trusted: {y_start: 16, y_end: 128, x_start: 16, x_end: 112}}
+  - {tile_id: south-256, input: {y_start: 73, x_start: 256, height: 128, width: 128}, trusted: {y_start: 16, y_end: 128, x_start: 16, x_end: 112}}
+  - {tile_id: south-320, input: {y_start: 73, x_start: 320, height: 128, width: 128}, trusted: {y_start: 16, y_end: 128, x_start: 16, x_end: 112}}
+  - {tile_id: south-373, input: {y_start: 73, x_start: 373, height: 128, width: 128}, trusted: {y_start: 16, y_end: 128, x_start: 16, x_end: 128}}
