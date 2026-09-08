@@ -12,6 +12,7 @@ import {
 } from '../RasterGISMap'
 import { radarDisplayExtent, radarSiteFor } from '../radarSites'
 import { focusedPanelFromSearch, workspaceLayoutSearch } from './layoutState'
+import { HistoryPicker } from './HistoryPicker'
 import {
   analysisCycleAt,
   availabilityAt,
@@ -72,9 +73,10 @@ export function MainWorkspace() {
       void fetchJSON<CycleList>('/api/v1/workspace/cycles?limit=200', controller.signal)
         .then((payload) => {
           setCycles(payload.items)
+          if (!isRealtimeCycle(payload.items[0] ?? null)) setFollowLatest(false)
           setSelectedCycleID((current) => {
             const latest = payload.items[0]?.cycle_id ?? ''
-            if (followLatest || !payload.items.some((item) => item.cycle_id === current)) return latest
+            if ((followLatest && isRealtimeCycle(payload.items[0] ?? null)) || !current) return latest
             return current
           })
           setCatalogRevision(catalogIdentity(payload.items))
@@ -89,7 +91,7 @@ export function MainWorkspace() {
         })
     }
     loadCatalog()
-    const timer = followLatest ? window.setInterval(loadCatalog, 30_000) : null
+    const timer = window.setInterval(loadCatalog, 30_000)
     return () => {
       controller.abort()
       if (timer != null) window.clearInterval(timer)
@@ -178,7 +180,7 @@ export function MainWorkspace() {
         if (matchingCycle.cycle_id !== selectedCycleID) {
           setLoading(true)
           setSelectedCycleID(matchingCycle.cycle_id)
-          setFollowLatest(matchingCycle.cycle_id === cycles[0]?.cycle_id)
+          setFollowLatest(false)
         }
       } else {
         nextValue = detail.issue_time
@@ -203,6 +205,16 @@ export function MainWorkspace() {
     ?? (panels.some((panel) => panel.panel_id === mobilePanelID)
       ? mobilePanelID
       : panels[0]?.panel_id ?? '')
+
+  const latestCycle = cycles[0] ?? null
+  const realtimeAvailable = isRealtimeCycle(latestCycle)
+  const selectedCycle = cycles.find((cycle) => cycle.cycle_id === selectedCycleID) ?? null
+  const isRealtimeView = Boolean(
+    followLatest
+    && realtimeAvailable
+    && selectedCycle?.cycle_id === latestCycle?.cycle_id,
+  )
+  const historicalCycles = cycles
 
   const selectedRadarSite = preset === 'qc' ? radarSiteFor(selectedRadarID) : undefined
   const mapFitExtent: GISMapExtent = selectedRadarSite
@@ -247,46 +259,48 @@ export function MainWorkspace() {
           <strong>RainPulse</strong>
           <small>短临降水工作台</small>
         </a>
-        <label className="cycle-selector">
-          <span>周期</span>
-          <select
-            aria-label="选择分析周期"
-            value={selectedCycleID}
-            onChange={(event) => {
-              const value = event.target.value
-              const cycle = cycles.find((item) => item.cycle_id === value)
+        <div className="workspace-data-mode" role="group" aria-label="数据模式">
+          <button
+            type="button"
+            className={isRealtimeView ? 'active' : ''}
+            aria-pressed={isRealtimeView}
+            disabled={!realtimeAvailable}
+            title={realtimeAvailable ? '跟随最新实时周期' : '当前没有新鲜的实时周期'}
+            onClick={() => {
+              if (!latestCycle) return
               setLoading(true)
               setPlaying(false)
-              setSelectedCycleID(value)
-              setSelectedTime(cycle?.issue_time ?? null)
-              setFollowLatest(value === cycles[0]?.cycle_id)
+              setSelectedCycleID(latestCycle.cycle_id)
+              setSelectedTime(latestCycle.issue_time)
+              setFollowLatest(true)
             }}
           >
-            {cycles.map((cycle) => (
-              <option key={cycle.cycle_id} value={cycle.cycle_id}>
-                {formatCycleTime(cycle.issue_time)} · {capabilityText(cycle)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="button"
-          className={`workspace-status${followLatest ? ' following' : ''}`}
-          aria-pressed={followLatest}
-          aria-label={followLatest ? '停止实时跟随' : '恢复实时跟随'}
-          onClick={() => {
-            setFollowLatest((value) => !value)
-            if (!followLatest && cycles[0]) {
-              setLoading(true)
-              setSelectedCycleID(cycles[0].cycle_id)
-              setSelectedTime(cycles[0].issue_time)
-            }
-          }}
-        >
-          <i className={detail && detail.freshness_seconds <= 900 ? 'fresh' : ''} />
-          <span>{followLatest ? '实时跟随' : '历史固定'} · {detail?.execution_mode === 'realtime_shadow' ? '影子' : detail?.execution_mode ?? '读取中'}</span>
-          <strong>{detail ? ageLabel(detail.freshness_seconds) : '—'}</strong>
-        </button>
+            <i aria-hidden="true" />
+            实时监测
+          </button>
+          <button type="button" className={!isRealtimeView ? 'active' : ''} aria-pressed={!isRealtimeView} onClick={() => { setFollowLatest(false); setPlaying(false) }}>历史案例</button>
+          <span className="workspace-data-mode-note">
+            {realtimeAvailable ? '跟随最新' : '暂无新鲜数据'}
+          </span>
+        </div>
+        {!isRealtimeView ? <HistoryPicker cycles={historicalCycles} selectedID={selectedCycleID}
+            onSelect={(cycle) => {
+              if (cycle.cycle_id !== selectedCycleID) setLoading(true)
+              setPlaying(false)
+              setSelectedCycleID(cycle.cycle_id)
+              setSelectedTime(cycle.issue_time)
+              setFollowLatest(false)
+            }}
+          /> : <section className="workspace-cycle-summary live" aria-label="当前周期">
+          <span>{isRealtimeView ? '实时周期' : '历史回放'}</span>
+          <strong>{selectedCycle ? formatLocalCycleTime(selectedCycle.issue_time) : '读取周期中'}</strong>
+          <small>{selectedCycle ? formatUTCCycleTime(selectedCycle.issue_time) : '—'}</small>
+        </section>}
+        <div className="workspace-freshness" aria-label="数据时效">
+          <i className={isRealtimeView ? 'fresh' : ''} />
+          <span>{isRealtimeView ? '自动更新 · 30 秒' : '历史回放 · 固定起报'}</span>
+          <strong>{isRealtimeView && detail ? ageLabel(detail.freshness_seconds) : selectedCycle ? capabilityText(selectedCycle) : '读取中'}</strong>
+        </div>
         <a className="admin-link" href="/admin">后台</a>
       </header>
 
@@ -774,6 +788,35 @@ function capabilityText(cycle: CycleSummary) {
     cycle.capabilities.steps ? 'STEPS' : null,
     cycle.capabilities.nowcastnet ? 'NowcastNet' : null,
   ].filter(Boolean).join('/') || '分析中'
+}
+
+function isRealtimeCycle(cycle: CycleSummary | null) {
+  return cycle != null && ['operational', 'realtime_shadow'].includes(cycle.execution_mode)
+    && cycle.freshness_seconds >= 0 && cycle.freshness_seconds <= 15 * 60
+    && Date.now() - Date.parse(cycle.issue_time) >= 0
+    && Date.now() - Date.parse(cycle.issue_time) <= 15 * 60 * 1000
+}
+
+function formatLocalCycleTime(value: string) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Taipei',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(value)) + ' CST'
+}
+
+function formatUTCCycleTime(value: string) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'UTC',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(value)) + ' UTC'
 }
 
 function roleLabel(panel: WorkspacePanel) {
