@@ -1393,4 +1393,4 @@ button, select { min-height: 40px; }
 .workspace-shell [class*="legend"] * { font-size: 12px; }
 
 /* Never expose a previous raster under a newly committed frame caption. */
-.workspace-shell .gis-message.frame-pending { inset: 0; width: auto; height: auto; z-index: 20; position: absolute; transform: none; border: 0; border-radius: 0; background: var(--rp-paper); display: grid; place-content: center; pointer-events: none; }
+.workspace-shell .gis-message.frame-pending { inset: auto 10px 38px auto; width: auto; height: auto; max-width: calc(100% - 20px); padding: 6px 10px; z-index: 20; position: absolute; transform: none; border: 1px solid var(--rp-line); border-radius: 4px; background: var(--rp-paper); pointer-events: none; }

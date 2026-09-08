@@ -427,6 +427,7 @@ export function RasterGISMap({
   const probeOverlayRef = useRef<Overlay | null>(null)
   const onSelectPointRef = useRef(onSelectPoint)
   const onProbeRef = useRef(onProbe)
+  const frameCacheRef = useRef(new Map<string, ImageStatic>())
   const loadedImageRef = useRef<string | null>(null)
   const [loadedFrame, setLoadedFrame] = useState<string | null>(null)
   const imageUrlRef = useRef(imageUrl)
@@ -723,43 +724,49 @@ export function RasterGISMap({
       return
     }
     onLayerErrorRef.current(false)
-    const source = new ImageStatic({
+    onProbeRef.current?.(null)
+    const key = `${imageUrl}|${rasterStyle}|${imageExtentKey}`
+    const cache = frameCacheRef.current
+    const cached = cache.get(key)
+    const source = cached ?? new ImageStatic({
       url: imageUrl,
       projection: 'EPSG:4326',
       imageExtent: [...imageExtentRef.current],
       interpolate: rasterStyle === 'smooth',
     })
-    source.once('imageloadend', () => {
-      if (layer.getSource() === source) {
-        loadedImageRef.current = imageUrl
-        setLoadedFrame(`${imageUrl}|${rasterStyle}`)
-      }
-    })
-    source.once('imageloaderror', () => {
-      if (layer.getSource() !== source) return
-      loadedImageRef.current = null
-      onProbeRef.current?.(null)
-      onLayerErrorRef.current(true)
-    })
-    layer.setSource(source)
-
-    const reduceMotion = typeof window !== 'undefined'
-      && typeof window.matchMedia === 'function'
-      && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    if (comparisonMode || reduceMotion) {
+    let active = true
+    const commit = () => {
+      if (!active || rasterLayerRef.current !== layer) return
+      cache.delete(key)
+      cache.set(key, source)
+      // Bound decoded-image memory per map, including back/forward playback.
+      while (cache.size > 4) cache.delete(cache.keys().next().value!)
+      layer.setSource(source)
       layer.setOpacity(rasterOpacityRef.current)
-    } else {
-      const from = Math.min(0.25, rasterOpacityRef.current)
-      const startAt = performance.now()
-      layer.setOpacity(from)
-      const step = (now: number) => {
-        if (rasterLayerRef.current !== layer || layer.getSource() !== source) return
-        const ratio = Math.min(1, (now - startAt) / 160)
-        const targetOpacity = rasterOpacityRef.current
-        layer.setOpacity(from + (targetOpacity - from) * ratio)
-        if (ratio < 1) requestAnimationFrame(step)
-      }
-      requestAnimationFrame(step)
+      loadedImageRef.current = imageUrl
+      setLoadedFrame(`${imageUrl}|${rasterStyle}`)
+    }
+    if (cached) {
+      commit()
+      return
+    }
+    const events = [
+      source.once('imageloadend', commit),
+      source.once('imageloaderror', () => {
+        if (!active || rasterLayerRef.current !== layer) return
+        loadedImageRef.current = null
+        layer.setSource(null)
+        onProbeRef.current?.(null)
+        onLayerErrorRef.current(true)
+      }),
+    ]
+    // Keep the last decoded frame visible until its replacement is ready.
+    // The pending badge explicitly identifies that retained frame as previous.
+    if (!layer.getSource()) layer.setSource(source)
+    source.getImage(source.getImageExtent(), 1, 1, source.getProjection()!)?.load()
+    return () => {
+      active = false
+      unByKey(events)
     }
   }, [comparisonMode, fitExtentKey, imageExtentKey, imageUrl, rasterStyle, referenceContext])
 
@@ -951,7 +958,7 @@ export function RasterGISMap({
       ) : null}
 
       {!loading && !layerError && imageUrl && loadedFrame !== `${imageUrl}|${rasterStyle}` ? (
-        <div className="gis-message frame-pending" role="status">正在加载当前时刻图层…</div>
+        <div className="gis-message frame-pending" role="status">{loadedFrame ? '正在切换时效 · 暂显示上一帧' : '正在加载当前时刻图层…'}</div>
       ) : null}
 
       {!comparisonMode ? <div className={`gis-legend ${legendMode}`} aria-label={`${productLabel}图例`} tabIndex={0}>

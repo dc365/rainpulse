@@ -47,3 +47,37 @@ it('keeps the source on equivalent bounds and errors, replaces changed frames, a
   fireEvent.keyDown(map, { key: ' ' })
   expect(onSelectPoint).toHaveBeenCalledTimes(2)
 })
+
+it('retains a loaded frame while loading the next, ignores late loads, and reuses recent frames', () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
+  const images = vi.spyOn(ImageStatic.prototype, 'getImage')
+  const sources = vi.spyOn(ImageLayer.prototype, 'setSource')
+  const props = { imageDescription: 'rain', validTimeLabel: 'T0', contextLabel: 'test',
+    productLabel: 'rain', legend: [], footerNote: '', mapLabel: 'map', resetViewLabel: 'reset',
+    loading: false, layerError: false, onLayerError: vi.fn(), onProbe: vi.fn(),
+    showRasterValues: false, comparisonMode: true, imageExtent: [118,25,123,27] as [number,number,number,number] }
+  const { rerender } = render(<RasterGISMap {...props} imageUrl="/A.png" />)
+  const sourceFor = (url: string) => {
+    const candidates = [...images.mock.instances, ...sources.mock.calls.map(([s]) => s)]
+    return candidates.find(s => s instanceof ImageStatic && s.getUrl() === url) as ImageStatic
+  }
+  const a = sourceFor('/A.png')
+  expect(a).toBeInstanceOf(ImageStatic)
+  act(() => a.dispatchEvent('imageloadend'))
+  const layer = sources.mock.contexts.find(l => (l as ImageLayer<ImageStatic>).getSource() === a) as ImageLayer<ImageStatic>
+  rerender(<RasterGISMap {...props} imageUrl="/B.png" />)
+  expect(layer.getSource()).toBe(a)
+  const b = sourceFor('/B.png')
+  rerender(<RasterGISMap {...props} imageUrl="/C.png" />)
+  act(() => b.dispatchEvent('imageloadend'))
+  expect(layer.getSource()).toBe(a)
+  const c = sourceFor('/C.png')
+  act(() => c.dispatchEvent('imageloadend'))
+  expect(layer.getSource()).toBe(c)
+  rerender(<RasterGISMap {...props} imageUrl="/A.png" />)
+  expect(layer.getSource()).toBe(a)
+  rerender(<RasterGISMap {...props} imageUrl="/D.png" />)
+  act(() => sourceFor('/D.png').dispatchEvent('imageloaderror'))
+  expect(layer.getSource()).toBeNull()
+  expect(props.onLayerError).toHaveBeenLastCalledWith(true)
+})
