@@ -430,6 +430,7 @@ export function RasterGISMap({
   const frameCacheRef = useRef(new Map<string, ImageStatic>())
   const loadedImageRef = useRef<string | null>(null)
   const [loadedFrame, setLoadedFrame] = useState<string | null>(null)
+  const [slowFrame, setSlowFrame] = useState<string | null>(null)
   const imageUrlRef = useRef(imageUrl)
   const onLayerErrorRef = useRef(onLayerError)
   const imageExtentRef = useRef(imageExtent)
@@ -456,6 +457,17 @@ export function RasterGISMap({
   const showRasterValues = controlledShowRasterValues ?? localShowRasterValues
   const rasterOpacity = controlledRasterOpacity ?? localRasterOpacity
   const rasterOpacityRef = useRef(rasterOpacity)
+
+  const pendingFrame = imageUrl && !loading && !layerError
+    && loadedFrame !== `${imageUrl}|${rasterStyle}` ? `${imageUrl}|${rasterStyle}` : null
+  useEffect(() => {
+    if (!pendingFrame) return
+    const timer = window.setTimeout(() => setSlowFrame(pendingFrame), 800)
+    return () => {
+      window.clearTimeout(timer)
+      setSlowFrame(null)
+    }
+  }, [pendingFrame])
 
   useEffect(() => { onProbeRef.current = onProbe }, [onProbe])
   useEffect(() => { imageUrlRef.current = imageUrl; loadedImageRef.current = null }, [imageUrl])
@@ -957,7 +969,7 @@ export function RasterGISMap({
         </div>
       ) : null}
 
-      {!loading && !layerError && imageUrl && loadedFrame !== `${imageUrl}|${rasterStyle}` ? (
+      {pendingFrame && slowFrame === pendingFrame ? (
         <div className="gis-message frame-pending" role="status">{loadedFrame ? '正在切换时效 · 暂显示上一帧' : '正在加载当前时刻图层…'}</div>
       ) : null}
 

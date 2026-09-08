@@ -18,7 +18,7 @@ vi.mock('ol/Map.js', async () => {
     addOverlay() {}
   } }
 })
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
+afterEach(() => { vi.useRealTimers(); cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 it('keeps the source on equivalent bounds and errors, replaces changed frames, and selects by keyboard', () => {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
   const sources = vi.spyOn(ImageLayer.prototype, 'setSource')
@@ -48,7 +48,8 @@ it('keeps the source on equivalent bounds and errors, replaces changed frames, a
   expect(onSelectPoint).toHaveBeenCalledTimes(2)
 })
 
-it('retains a loaded frame while loading the next, ignores late loads, and reuses recent frames', () => {
+it('retains frames and delays slow-load feedback without flashing during quick switches', () => {
+  vi.useFakeTimers()
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
   const images = vi.spyOn(ImageStatic.prototype, 'getImage')
   const sources = vi.spyOn(ImageLayer.prototype, 'setSource')
@@ -67,13 +68,21 @@ it('retains a loaded frame while loading the next, ignores late loads, and reuse
   const layer = sources.mock.contexts.find(l => (l as ImageLayer<ImageStatic>).getSource() === a) as ImageLayer<ImageStatic>
   rerender(<RasterGISMap {...props} imageUrl="/B.png" />)
   expect(layer.getSource()).toBe(a)
+  expect(screen.queryByText(/正在切换时效/)).toBeNull()
+  act(() => vi.advanceTimersByTime(400))
+  expect(screen.queryByText(/正在切换时效/)).toBeNull()
   const b = sourceFor('/B.png')
   rerender(<RasterGISMap {...props} imageUrl="/C.png" />)
   act(() => b.dispatchEvent('imageloadend'))
   expect(layer.getSource()).toBe(a)
+  act(() => vi.advanceTimersByTime(799))
+  expect(screen.queryByText(/正在切换时效/)).toBeNull()
+  act(() => vi.advanceTimersByTime(1))
+  expect(screen.getByText(/正在切换时效/)).toBeTruthy()
   const c = sourceFor('/C.png')
   act(() => c.dispatchEvent('imageloadend'))
   expect(layer.getSource()).toBe(c)
+  expect(screen.queryByText(/正在切换时效/)).toBeNull()
   rerender(<RasterGISMap {...props} imageUrl="/A.png" />)
   expect(layer.getSource()).toBe(a)
   rerender(<RasterGISMap {...props} imageUrl="/D.png" />)
