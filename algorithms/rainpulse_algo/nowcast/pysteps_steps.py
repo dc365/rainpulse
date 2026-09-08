@@ -98,6 +98,7 @@ def run_pysteps_steps_fields(
     if np.any(~np.isfinite(rate[valid])) or np.any(rate[valid] < 0.0):
         raise PystepsStepsInputError("STEPS input contains invalid precipitation rates")
     working_rate = rate
+    partial_support = not np.all(valid)
     if (
         profile.support.input_missing_policy
         == "dry_floor_working_copy_preserve_deterministic_support"
@@ -141,6 +142,16 @@ def run_pysteps_steps_fields(
             profile.ensemble.precipitation_threshold_mm_h,
         )
         forecast = backend or _load_steps_backend()
+        # When historical inputs contain holes, we cannot prove the support of
+        # independently velocity-perturbed trajectories because the upstream
+        # pySTEPS API does not return member velocities. Disable velocity
+        # perturbations for that partial-domain path so every member shares the
+        # deterministic, explicitly advected support mask. Precipitation-noise
+        # uncertainty remains active. Fully observed inputs retain the frozen
+        # configured velocity perturbation method.
+        velocity_perturbation_method = (
+            None if partial_support else profile.ensemble.velocity_perturbation_method
+        )
         kwargs: dict[str, Any] = {
             "n_ens_members": member_count,
             "n_cascade_levels": profile.ensemble.cascade_levels,
@@ -153,7 +164,7 @@ def run_pysteps_steps_fields(
             "noise_method": profile.ensemble.precipitation_noise_method,
             "noise_stddev_adj": _none_value(profile.ensemble.noise_stddev_adjustment),
             "ar_order": profile.ensemble.autoregressive_order,
-            "vel_pert_method": profile.ensemble.velocity_perturbation_method,
+            "vel_pert_method": velocity_perturbation_method,
             "conditional": False,
             "probmatching_method": _none_value(
                 profile.ensemble.probability_matching_method
