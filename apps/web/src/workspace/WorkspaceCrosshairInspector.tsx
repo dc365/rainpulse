@@ -18,10 +18,16 @@ type ExactSample = {
   source: string
 }
 
+type SampleError = {
+  code?: string
+  message?: string
+}
+
 export function WorkspaceCrosshairInspector() {
   const [probe, setProbe] = useState<MapProbeDetail | null>(null)
   const [sample, setSample] = useState<ExactSample | null>(null)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'unavailable'>('idle')
+  const [unavailableMessage, setUnavailableMessage] = useState('')
   const sequence = useRef(0)
 
   useEffect(() => {
@@ -31,14 +37,17 @@ export function WorkspaceCrosshairInspector() {
       if (!detail) return
       setProbe(detail)
       setSample(null)
+      setUnavailableMessage(detail.assetUrl ? '' : '当前图层没有可查询的数值资产')
       setStatus(detail.assetUrl ? 'idle' : 'unavailable')
       shell?.style.setProperty('--rp-crosshair-x', `${detail.xRatio * 100}%`)
       shell?.style.setProperty('--rp-crosshair-y', `${detail.yRatio * 100}%`)
       shell?.setAttribute('data-crosshair-visible', 'true')
     }
     const onClear = () => {
+      sequence.current += 1
       setProbe(null)
       setSample(null)
+      setUnavailableMessage('')
       setStatus('idle')
       shell?.removeAttribute('data-crosshair-visible')
     }
@@ -58,6 +67,7 @@ export function WorkspaceCrosshairInspector() {
     const controller = new AbortController()
     const timer = window.setTimeout(() => {
       setStatus('loading')
+      setUnavailableMessage('')
       const query = new URLSearchParams({
         asset_url: probe.assetUrl,
         longitude: String(probe.longitude),
@@ -67,7 +77,9 @@ export function WorkspaceCrosshairInspector() {
         .then(async (response) => {
           if (current !== sequence.current) return
           if (!response.ok) {
+            const payload = await response.json().catch(() => null) as SampleError | null
             setSample(null)
+            setUnavailableMessage(sampleErrorLabel(payload?.code))
             setStatus('unavailable')
             return
           }
@@ -78,6 +90,7 @@ export function WorkspaceCrosshairInspector() {
           if (current === sequence.current
             && !(error instanceof DOMException && error.name === 'AbortError')) {
             setSample(null)
+            setUnavailableMessage('精确格点服务暂不可用')
             setStatus('unavailable')
           }
         })
@@ -105,11 +118,18 @@ export function WorkspaceCrosshairInspector() {
       ) : (
         <div>
           <strong>{status === 'loading' ? '读取精确格点…' : '精确值暂不可用'}</strong>
-          <span>{status === 'unavailable' ? '旧产物需重生成数值侧车' : '等待图层'}</span>
+          <span>{status === 'unavailable' ? unavailableMessage : '等待图层'}</span>
         </div>
       )}
     </aside>
   )
+}
+
+function sampleErrorLabel(code?: string) {
+  if (code === 'exact_sample_unavailable') return '当前产品未发布可查询的精确格点值'
+  if (code === 'sample_source_not_found') return '当前数值源暂不可用'
+  if (code === 'invalid_sample_source') return '当前数值源校验失败'
+  return '精确格点服务暂不可用'
 }
 
 function formatValue(value: number) {
