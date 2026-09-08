@@ -6,6 +6,7 @@ import { WorkspaceLiveBridge } from './workspace/WorkspaceLiveBridge'
 import './styles.css'
 import './workspace.css'
 import './workspace-runtime.css'
+import './workspace-hardening.css'
 
 export default function App() {
   return window.location.pathname.startsWith('/admin')
