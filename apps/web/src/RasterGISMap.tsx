@@ -53,6 +53,12 @@ export type GISMotionVector = {
   end_longitude: number
   end_latitude: number
 }
+export type GISMapProbe = {
+  longitude: number
+  latitude: number
+  xRatio: number
+  yRatio: number
+}
 
 const DEFAULT_OPACITY = 0.72
 
@@ -360,6 +366,8 @@ interface RasterGISMapProps {
   layerError: boolean
   onLayerError: (failed: boolean) => void
   onSelectPoint?: (point: MapCoordinate) => void
+  onProbe?: (probe: GISMapProbe) => void
+  onProbeClear?: () => void
   referenceContext?: GISReferenceContext
   radarContext?: GISRadarContext
   className?: string
@@ -396,6 +404,8 @@ export function RasterGISMap({
   layerError,
   onLayerError,
   onSelectPoint,
+  onProbe,
+  onProbeClear,
   referenceContext,
   radarContext,
   className = '',
@@ -423,6 +433,8 @@ export function RasterGISMap({
   const probeRef = useRef<HTMLDivElement>(null)
   const probeOverlayRef = useRef<Overlay | null>(null)
   const onSelectPointRef = useRef(onSelectPoint)
+  const onProbeRef = useRef(onProbe)
+  const onProbeClearRef = useRef(onProbeClear)
   const onLayerErrorRef = useRef(onLayerError)
   const imageExtentRef = useRef(imageExtent)
   const fitExtentRef = useRef(fitExtent)
@@ -452,6 +464,14 @@ export function RasterGISMap({
   useEffect(() => {
     onSelectPointRef.current = onSelectPoint
   }, [onSelectPoint])
+
+  useEffect(() => {
+    onProbeRef.current = onProbe
+  }, [onProbe])
+
+  useEffect(() => {
+    onProbeClearRef.current = onProbeClear
+  }, [onProbeClear])
 
   useEffect(() => {
     onLayerErrorRef.current = onLayerError
@@ -597,6 +617,15 @@ export function RasterGISMap({
       if (event.dragging) return
       const [longitude, latitude] = event.coordinate
       setHoverCoordinate({ longitude, latitude })
+      const size = map.getSize()
+      if (size && size[0] > 0 && size[1] > 0) {
+        onProbeRef.current?.({
+          longitude,
+          latitude,
+          xRatio: Math.min(1, Math.max(0, event.pixel[0] / size[0])),
+          yRatio: Math.min(1, Math.max(0, event.pixel[1] / size[1])),
+        })
+      }
       const sampled = rasterPixelsRef.current
         ? rasterValueAtCoordinate(
             rasterPixelsRef.current,
@@ -614,6 +643,7 @@ export function RasterGISMap({
       setHoverCoordinate(null)
       setHoverRasterValue(null)
       probeOverlayRef.current?.setPosition(undefined)
+      onProbeClearRef.current?.()
     }
     viewport.addEventListener('pointerleave', clearHover)
 
@@ -650,6 +680,7 @@ export function RasterGISMap({
     return () => {
       unByKey([clickKey, pointerKey, moveKey])
       viewport.removeEventListener('pointerleave', clearHover)
+      onProbeClearRef.current?.()
       map.setTarget(undefined)
       mapRef.current = null
       basemapLayerRef.current = null
