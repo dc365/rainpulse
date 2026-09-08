@@ -22,3 +22,31 @@ jobs:
           path: ${{ runner.temp }}/rainpulse-source.zip
           retention-days: 7
           if-no-files-found: error
+  offline-toolkit:
+    if: github.event_name == 'push' && github.event.head_commit.message == 'ci: prepare offline review toolkit'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.10.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Prepare isolated review dependencies
+        run: |
+          pnpm install --frozen-lockfile
+          python -m pip install --no-deps --target "$RUNNER_TEMP/review-python" pysteps==1.21.5 zarr==2.18.7 numcodecs==0.15.1 minio==7.2.20 nats-py==2.15.0 fasteners asciitree deprecated wrapt jsmin pycryptodome ruff==0.15.12
+          tar -czf "$RUNNER_TEMP/review-web.tar.gz" node_modules apps/web/node_modules
+          tar -czf "$RUNNER_TEMP/review-python.tar.gz" -C "$RUNNER_TEMP/review-python" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rainpulse-offline-review-toolkit
+          path: |
+            ${{ runner.temp }}/review-web.tar.gz
+            ${{ runner.temp }}/review-python.tar.gz
+          retention-days: 1
+          if-no-files-found: error
