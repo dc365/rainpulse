@@ -68,11 +68,11 @@ def verify_official_capsule(capsule_root: str | Path, profile: NowcastNetProfile
     verify_file_sha256(root / "data" / "LICENSE", _DATA_LICENSE_SHA256)
     for relative_path, expected in _PATCHED_SOURCE_SHA256.items():
         verify_file_sha256(root / relative_path, expected)
+    # The profile keeps a frozen logical URI so its hash remains reproducible
+    # across Docker, host-GPU and air-gapped deployments. The runtime capsule
+    # root is allowed to relocate physically; immutable hashes and reviewed
+    # capsule markers, not a machine-specific absolute path, prove identity.
     weights_path = root / "data" / "checkpoints" / "mrms_model.ckpt"
-    if weights_path.resolve() != profile.weights_path().resolve():
-        raise OfficialNowcastNetBackendError(
-            "official capsule weights do not resolve to the frozen weights URI"
-        )
     verify_file_sha256(weights_path, profile.artifact.weights_sha256)
     return weights_path
 
@@ -269,6 +269,8 @@ class OfficialNowcastNetBackend:
             "device": self.device,
             "weights_sha256": self.profile.artifact.weights_sha256,
             "capsule_archive_sha256": self.profile.artifact.capsule_archive_sha256,
+            "logical_weights_uri": self.profile.artifact.weights_uri,
+            "resolved_weights_path": str(self.weights_path),
         }
         if self.device.startswith("cuda:"):
             index = int(self.device.split(":", maxsplit=1)[1])
