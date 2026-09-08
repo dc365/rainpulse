@@ -7,9 +7,14 @@ export function WorkspaceLiveBridge() {
     source.onopen = () => setConnected(true)
     source.onerror = () => setConnected(false)
     source.addEventListener('workspace.changed', (event) => {
-      window.dispatchEvent(new CustomEvent('rainpulse:workspace-changed', {
-        detail: JSON.parse((event as MessageEvent<string>).data) as unknown,
-      }))
+      try {
+        const detail = JSON.parse((event as MessageEvent<string>).data) as unknown
+        window.dispatchEvent(new CustomEvent('rainpulse:workspace-changed', { detail }))
+      } catch {
+        // A malformed event must not break the live bridge. The 30-second
+        // catalog fallback remains authoritative and the EventSource reconnects
+        // independently of this browser-side notification.
+      }
     })
     return () => source.close()
   }, [])
