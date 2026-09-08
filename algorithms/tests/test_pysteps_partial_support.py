@@ -5,8 +5,8 @@ from dataclasses import replace
 from rainpulse_algo.nowcast.pysteps_steps import run_pysteps_steps_fields
 from rainpulse_algo.nowcast.steps_profile import StepsSupportConfig
 
-from .test_pysteps_lk import tiny_grid
 from .test_pysteps_lk import profile as lk_profile
+from .test_pysteps_lk import tiny_grid
 from .test_pysteps_steps import seeded_backend, steps_fields, steps_profile
 
 
