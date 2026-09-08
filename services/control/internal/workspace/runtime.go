@@ -243,14 +243,17 @@ func (handler *runtimeHandler) streamWorkspaceEvents(response http.ResponseWrite
 	response.Header().Set("Cache-Control", "no-cache, no-transform")
 	response.Header().Set("Connection", "keep-alive")
 	response.Header().Set("X-Accel-Buffering", "no")
-	interval := environmentDuration("RAINPULSE_WORKSPACE_EVENT_INTERVAL", 2*time.Second)
+	// Workspace projections are already cached and immutable product assets do
+	// not need a per-browser forced rebuild. A five-second event cadence keeps
+	// the live UI responsive while allowing concurrent clients to share the same
+	// short-lived catalog projection.
+	interval := environmentDuration("RAINPULSE_WORKSPACE_EVENT_INTERVAL", 5*time.Second)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	lastETag := ""
 	emit := func() bool {
 		recorder := httptest.NewRecorder()
 		upstream := httptest.NewRequestWithContext(request.Context(), http.MethodGet, workspacePrefix+"?limit=200", nil)
-		upstream.Header.Set("Cache-Control", "no-cache")
 		handler.workspace.ServeHTTP(recorder, upstream)
 		if recorder.Code != http.StatusOK {
 			return true
