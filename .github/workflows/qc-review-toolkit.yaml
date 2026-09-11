@@ -1,0 +1,42 @@
+name: qc-review-toolkit
+on:
+  workflow_dispatch:
+  push:
+    branches: ['feature/radar-qc-opensource-20260911']
+    paths: ['.github/workflows/qc-review-toolkit.yaml']
+permissions:
+  contents: read
+jobs:
+  toolkit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.11.10'
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.x'
+      - name: Prepare source and locked QC dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/qc-review" "$RUNNER_TEMP/qc-python"
+          git archive --format=zip --output="$RUNNER_TEMP/qc-review/source.zip" HEAD
+          uv add --project algorithms --no-sync 'arm_pyart==2.2.5' 'wradlib==2.9.5'
+          uv export --project algorithms --locked --no-emit-project --format requirements.txt > "$RUNNER_TEMP/qc-review/requirements.txt"
+          python -m pip install --target "$RUNNER_TEMP/qc-python" --report "$RUNNER_TEMP/qc-review/install-report.json" -r "$RUNNER_TEMP/qc-review/requirements.txt" ruff==0.15.12
+          cp algorithms/pyproject.toml algorithms/uv.lock "$RUNNER_TEMP/qc-review/"
+          tar -czf "$RUNNER_TEMP/qc-review/python.tar.gz" -C "$RUNNER_TEMP/qc-python" .
+          tar -czf "$RUNNER_TEMP/qc-review/go.tar.gz" -C "$(go env GOROOT)" .
+          PYTHONPATH="$RUNNER_TEMP/qc-python" python -c 'import pyart, wradlib; print(pyart.__version__, wradlib.__version__)' > "$RUNNER_TEMP/qc-review/import-proof.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rainpulse-qc-review-toolkit
+          path: ${{ runner.temp }}/qc-review/
+          retention-days: 7
+          if-no-files-found: error
