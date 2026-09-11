@@ -183,6 +183,8 @@ services:
       RAINPULSE_MINIO_WORKER_ACCESS_KEY: "${RAINPULSE_MINIO_WORKER_ACCESS_KEY:?set RAINPULSE_MINIO_WORKER_ACCESS_KEY in deploy/.env}"
       RAINPULSE_MINIO_WORKER_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
       RAINPULSE_ORCHESTRATOR_HEALTH_ADDR: ":8090"
+      RAINPULSE_OBJECT_STORE_ACCESS_KEY: "${RAINPULSE_MINIO_WORKER_ACCESS_KEY:?set RAINPULSE_MINIO_WORKER_ACCESS_KEY in deploy/.env}"
+      RAINPULSE_OBJECT_STORE_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
       RAINPULSE_RADAR_INGEST_ENABLED: "${RAINPULSE_RADAR_INGEST_ENABLED:-false}"
       RAINPULSE_RADAR_INGEST_CONFIG: "${RAINPULSE_RADAR_INGEST_CONFIG:-/opt/rainpulse/configs/radars/z9598.yaml}"
       RAINPULSE_RADAR_INGEST_ROOT: "${RAINPULSE_RADAR_DATA_ROOT:-/data/Weather/RADA/RADA_L2_FMT/OBS_TEMP}"
@@ -222,7 +224,8 @@ services:
     restart: unless-stopped
 
   simulation-worker:
-    image: rainpulse-simulation-worker
+    profiles: ["test"]
+    image: rainpulse-cpu-worker:${RAINPULSE_CPU_IMAGE_TAG:-latest}
     build:
       context: ..
       dockerfile: algorithms/worker.Dockerfile
@@ -257,7 +260,7 @@ services:
     restart: unless-stopped
 
   radar-decode-worker:
-    image: rainpulse-radar-decode-worker
+    image: rainpulse-cpu-worker:${RAINPULSE_CPU_IMAGE_TAG:-latest}
     build:
       context: ..
       dockerfile: algorithms/worker.Dockerfile
@@ -296,7 +299,7 @@ services:
     restart: unless-stopped
 
   radar-qc-worker:
-    image: rainpulse-radar-qc-worker
+    image: rainpulse-cpu-worker:${RAINPULSE_CPU_IMAGE_TAG:-latest}
     build:
       context: ..
       dockerfile: algorithms/worker.Dockerfile
@@ -335,7 +338,7 @@ services:
     restart: unless-stopped
 
   radar-grid-worker:
-    image: rainpulse-radar-grid-worker
+    image: rainpulse-cpu-worker:${RAINPULSE_CPU_IMAGE_TAG:-latest}
     build:
       context: ..
       dockerfile: algorithms/worker.Dockerfile
@@ -378,7 +381,7 @@ services:
     restart: unless-stopped
 
   radar-mosaic-worker:
-    image: rainpulse-radar-mosaic-worker
+    image: rainpulse-cpu-worker:${RAINPULSE_CPU_IMAGE_TAG:-latest}
     build:
       context: ..
       dockerfile: algorithms/worker.Dockerfile
@@ -417,7 +420,7 @@ services:
     restart: unless-stopped
 
   analysis-qpe-worker:
-    image: rainpulse-analysis-qpe-worker
+    image: rainpulse-cpu-worker:${RAINPULSE_CPU_IMAGE_TAG:-latest}
     build:
       context: ..
       dockerfile: algorithms/worker.Dockerfile
@@ -455,7 +458,7 @@ services:
     restart: unless-stopped
 
   analysis-diagnostics-worker:
-    image: rainpulse-analysis-diagnostics-worker
+    image: rainpulse-cpu-worker:${RAINPULSE_CPU_IMAGE_TAG:-latest}
     build:
       context: ..
       dockerfile: algorithms/worker.Dockerfile
@@ -493,7 +496,7 @@ services:
     restart: unless-stopped
 
   nowcast-input-worker:
-    image: rainpulse-nowcast-input-worker
+    image: rainpulse-cpu-worker:${RAINPULSE_CPU_IMAGE_TAG:-latest}
     build:
       context: ..
       dockerfile: algorithms/worker.Dockerfile
@@ -532,7 +535,7 @@ services:
     restart: unless-stopped
 
   pysteps-lk-worker:
-    image: rainpulse-pysteps-lk-worker
+    image: rainpulse-cpu-worker:${RAINPULSE_CPU_IMAGE_TAG:-latest}
     build:
       context: ..
       dockerfile: algorithms/worker.Dockerfile
@@ -570,7 +573,7 @@ services:
     restart: unless-stopped
 
   product-builder-worker:
-    image: rainpulse-product-builder-worker
+    image: rainpulse-cpu-worker:${RAINPULSE_CPU_IMAGE_TAG:-latest}
     build:
       context: ..
       dockerfile: algorithms/worker.Dockerfile
@@ -595,6 +598,7 @@ services:
       TZ: UTC
     volumes:
       - ../configs:/opt/rainpulse/configs:ro
+      - "${RAINPULSE_NOWCASTNET_PRODUCT_HOST_ROOT:-../runtime/products/nowcastnet}:/var/lib/rainpulse/nowcastnet-products:ro"
     healthcheck:
       test:
         - CMD
@@ -608,7 +612,7 @@ services:
     restart: unless-stopped
 
   forecast-verification-worker:
-    image: rainpulse-forecast-verification-worker
+    image: rainpulse-cpu-worker:${RAINPULSE_CPU_IMAGE_TAG:-latest}
     build:
       context: ..
       dockerfile: algorithms/worker.Dockerfile
@@ -657,8 +661,6 @@ services:
         condition: service_completed_successfully
       orchestrator:
         condition: service_healthy
-      simulation-worker:
-        condition: service_healthy
       analysis-diagnostics-worker:
         condition: service_healthy
       nowcast-input-worker:
@@ -687,6 +689,7 @@ services:
       RAINPULSE_OBJECT_STORE_SECRET_KEY: "${RAINPULSE_MINIO_WORKER_SECRET_KEY:?set RAINPULSE_MINIO_WORKER_SECRET_KEY in deploy/.env}"
       RAINPULSE_MAX_INPUT_ARTIFACT_BYTES: "${RAINPULSE_MAX_INPUT_ARTIFACT_BYTES:-2147483648}"
       RAINPULSE_ALGORITHM_VERIFICATION_ROOT: /var/lib/rainpulse/algorithm-verification
+      RAINPULSE_VERIFICATION_JOB_ROOT: /var/lib/rainpulse/verification-jobs
       RAINPULSE_ENSEMBLE_PRODUCT_ROOT: /var/lib/rainpulse/ensemble-products
       RAINPULSE_NOWCASTNET_PRODUCT_ROOT: /var/lib/rainpulse/nowcastnet-products
       RAINPULSE_ADMIN_TOKEN: "${RAINPULSE_ADMIN_TOKEN:-}"
@@ -694,6 +697,7 @@ services:
     volumes:
       - "${RAINPULSE_BDP_CONF_HOST_ROOT:-../runtime/bdp-conf}:/ruiyun-bdp/conf:ro"
       - "${RAINPULSE_ALGORITHM_VERIFICATION_HOST_ROOT:-../runtime/reports/mrms}:/var/lib/rainpulse/algorithm-verification:ro"
+      - "${RAINPULSE_VERIFICATION_JOB_HOST_ROOT:-../runtime/reports/workspace-verification}:/var/lib/rainpulse/verification-jobs"
       - "${RAINPULSE_ENSEMBLE_PRODUCT_HOST_ROOT:-../runtime/products/ensemble}:/var/lib/rainpulse/ensemble-products:ro"
       - "${RAINPULSE_NOWCASTNET_PRODUCT_HOST_ROOT:-../runtime/products/nowcastnet}:/var/lib/rainpulse/nowcastnet-products:ro"
     ports:
@@ -731,6 +735,7 @@ services:
     restart: unless-stopped
 
   prometheus:
+    profiles: ["observability"]
     image: prom/prometheus:v3.13.1
     depends_on:
       api:
@@ -757,6 +762,7 @@ services:
     restart: unless-stopped
 
   node-exporter:
+    profiles: ["observability"]
     image: quay.io/prometheus/node-exporter:v1.9.1
     command:
       - --path.rootfs=/host
@@ -766,6 +772,7 @@ services:
     restart: unless-stopped
 
   alertmanager:
+    profiles: ["observability"]
     image: rainpulse/alertmanager:v0.34.0
     build:
       context: ..

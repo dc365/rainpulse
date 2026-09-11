@@ -1213,6 +1213,8 @@ export interface components {
             updated_at: string;
         };
         AnalysisCyclePage: {
+            /** Format: uuid */
+            next_cursor?: string | null;
             items: components["schemas"]["AnalysisCycle"][];
         };
         ForecastRun: {
@@ -1226,6 +1228,11 @@ export interface components {
             degraded_reason?: string | null;
             /** Format: uuid */
             rerun_of?: string | null;
+            /**
+             * Format: uuid
+             * @description Exact algorithm-only regeneration job; baseline run is unchanged.
+             */
+            regeneration_job_id?: string;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -1235,7 +1242,7 @@ export interface components {
          * @description A bounded operator preset. Downstream presets reuse the committed source lineage and never accept free-form algorithm parameters.
          * @enum {string}
          */
-        RegenerationPreset: "forecast_all" | "pysteps_lk" | "products";
+        RegenerationPreset: "forecast_all" | "pysteps_lk" | "nowcastnet" | "products";
         RegenerationRequest: {
             preset: components["schemas"]["RegenerationPreset"];
             reason: string;
@@ -2140,6 +2147,8 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: components["parameters"]["Limit"];
+                /** @description Analysis ID from next_cursor. Continues descending analysis_time, created_at, analysis_id order; versions are retained, not deduplicated before paging. */
+                cursor?: string;
                 status?: components["schemas"]["AnalysisCycleStatus"];
             };
             header?: never;

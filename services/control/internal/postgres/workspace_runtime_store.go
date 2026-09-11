@@ -129,13 +129,14 @@ func (store *Store) ListCompletedNowcastNetAlgorithmRuns(
 		return nil, fmt.Errorf("NowcastNet algorithm run limit is invalid")
 	}
 	rows, err := store.pool.Query(ctx, `
-SELECT ar.algorithm_run_id, ar.run_id, ar.job_id, f.issue_time, f.grid_id,
+SELECT DISTINCT ON (f.grid_id, f.issue_time, ar.algorithm_id)
+       ar.algorithm_run_id, ar.run_id, ar.job_id, f.issue_time, f.grid_id,
        ar.output_uri, ar.completed_at
 FROM algorithm_runs AS ar
 JOIN forecast_runs AS f ON f.run_id = ar.run_id
 WHERE ar.algorithm_id = 'nowcastnet' AND ar.status = 'completed'
   AND ar.output_uri IS NOT NULL AND ar.completed_at IS NOT NULL
-ORDER BY ar.completed_at DESC
+ORDER BY f.grid_id, f.issue_time DESC, ar.algorithm_id, ar.completed_at DESC, ar.algorithm_run_id DESC
 LIMIT $1`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list completed NowcastNet algorithm runs: %w", err)

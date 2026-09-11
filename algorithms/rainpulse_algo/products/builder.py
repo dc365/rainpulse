@@ -20,6 +20,7 @@ from rainpulse_algo.diagnostics.png import encode_rgba_png, png_dimensions
 from rainpulse_algo.grid import RegularLatLonGrid
 from rainpulse_algo.nowcast.forecast_zarr import validate_forecast_output_zarr_store
 
+from .accumulation import accumulate_windows
 from .point_index import encode_point_query_index, validate_point_query_index
 from .profile import PaletteStop, ProductBuilderProfile
 
@@ -63,18 +64,9 @@ def build_application_product_bundle(
     rain_rate = forecast["rain_rate"][0, :].astype("float32")
     valid_mask = forecast["output_valid_mask"][:].astype("uint8")
     confidence = forecast["confidence"][:].astype("float32")
-    accumulations = {
-        "accumulation_60": (
-            forecast["accum_60"][0, :].astype("float32"),
-            np.all(valid_mask[:12] == 1, axis=0),
-            60,
-        ),
-        "accumulation_120": (
-            forecast["accum_120"][0, :].astype("float32"),
-            np.all(valid_mask[:24] == 1, axis=0),
-            120,
-        ),
-    }
+    accumulation = accumulate_windows(
+        rain_rate[None], valid_mask[None], confidence[None], lead_minutes=lead_minutes
+    )
     created_at = datetime.now(UTC)
     objects: dict[str, bytes] = {}
     products: list[dict[str, Any]] = []
@@ -148,7 +140,13 @@ def build_application_product_bundle(
         }
     )
 
-    for product_type, (values, valid, lead) in accumulations.items():
+    for product_type, window_index, lead in (
+        ("accumulation_60", 0, 60),
+        ("accumulation_60", 1, 120),
+        ("accumulation_120", 2, 120),
+    ):
+        values = accumulation.amount_mm[0, window_index]
+        valid = accumulation.valid_mask[0, window_index]
         valid_time = issue_time + timedelta(minutes=lead)
         assets = _build_field_assets(
             objects,
@@ -159,7 +157,7 @@ def build_application_product_bundle(
             issue_time=issue_time,
             valid_time=valid_time,
             lead_minutes=lead,
-            interval_minutes=lead,
+            interval_minutes=60 if product_type == "accumulation_60" else 120,
             unit="mm",
             variable_name="rainfall_amount",
             profile=profile,
@@ -172,14 +170,46 @@ def build_application_product_bundle(
             model_config_version=str(forecast.attrs["config_version"]),
             created_at=created_at,
         )
-        products.append(
-            {
-                "product_id": str(product_ids[product_type]),
-                "product_type": product_type,
-                "valid_times": [valid_time.isoformat()],
-                "member_count": 1,
-                "assets": assets,
-            }
+        existing = next((p for p in products if p["product_type"] == product_type), None)
+        if existing is not None:
+            existing["valid_times"].append(valid_time.isoformat())
+            existing["assets"].extend(assets)
+        else:
+            products.append(
+                {
+                    "product_id": str(product_ids[product_type]),
+                    "product_type": product_type,
+                    "valid_times": [valid_time.isoformat()],
+                    "member_count": 1,
+                    "assets": assets,
+                }
+            )
+
+    for product_type, indices in (("accumulation_60", [0, 1]), ("accumulation_120", [2])):
+        point_path = f"{product_type}/query/point-index.bin"
+        data = encode_point_query_index(
+            accumulation.amount_mm[0, indices],
+            accumulation.confidence[0, indices],
+            accumulation.valid_mask[0, indices],
+            west=grid.west,
+            south=grid.south,
+            longitude_interval=grid.longitude_interval_deg,
+            latitude_interval=grid.latitude_interval_deg,
+        )
+        objects[point_path] = data
+        product = next(p for p in products if p["product_type"] == product_type)
+        product["assets"].append(
+            _asset(
+                point_path,
+                data,
+                asset_type="point_query_index",
+                media_type=POINT_INDEX_MEDIA_TYPE,
+                lead_minutes=None,
+                valid_time=None,
+                unit="mm",
+                state=None,
+                extra={"lead_count": len(indices), "header_bytes": 64, "record_bytes": 5},
+            )
         )
 
     manifest = {
@@ -211,11 +241,10 @@ def build_application_product_bundle(
         "renderer_version": profile.builder_version,
         "palette_version": profile.palette.version,
         "products": products,
+        "accumulation_version": "1.0",
         "created_at": created_at.isoformat(),
     }
-    objects["manifest.json"] = json.dumps(
-        manifest, separators=(",", ":"), sort_keys=True
-    ).encode()
+    objects["manifest.json"] = json.dumps(manifest, separators=(",", ":"), sort_keys=True).encode()
     validate_application_product_bundle(objects)
     return dict(sorted(objects.items()))
 
@@ -247,8 +276,11 @@ def validate_application_product_bundle(objects: Mapping[str, bytes]) -> dict[st
         assets = product.get("assets")
         if not isinstance(valid_times, list) or not valid_times or not isinstance(assets, list):
             raise ProductBuildInputError("application product valid times or assets are invalid")
-        expected_valid_count = 24 if product["product_type"] == "rain_rate" else 1
-        expected_asset_count = 73 if product["product_type"] == "rain_rate" else 3
+        expected_valid_count, expected_asset_count = {
+            "rain_rate": (24, 73),
+            "accumulation_60": (2, 7),
+            "accumulation_120": (1, 4),
+        }[product["product_type"]]
         if len(valid_times) != expected_valid_count or len(assets) != expected_asset_count:
             raise ProductBuildInputError("application product lead or asset count is invalid")
         for asset in assets:
@@ -398,9 +430,7 @@ def _build_field_assets(
         if asset_type == "rendered_png":
             extra = {
                 "palette_version": profile.palette.version,
-                "value_breaks": [
-                    {"minimum": stop.minimum, "color": stop.color} for stop in stops
-                ],
+                "value_breaks": [{"minimum": stop.minimum, "color": stop.color} for stop in stops],
                 "opacity": profile.palette.opacity,
                 "transparent_below": profile.palette.transparent_below_mm,
                 "pixel_edge_bounds": list(grid.pixel_edge_bounds),
@@ -668,8 +698,7 @@ def _validate_netcdf(
                 or dataset.dimensions.get("lat") != manifest["height"]
                 or dataset.dimensions.get("lon") != manifest["width"]
                 or variable_name not in dataset.variables
-                or dataset.variables[variable_name].shape
-                != (manifest["height"], manifest["width"])
+                or dataset.variables[variable_name].shape != (manifest["height"], manifest["width"])
             ):
                 raise ProductBuildInputError("application NetCDF dimensions differ")
             field = dataset.variables[variable_name]

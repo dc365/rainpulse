@@ -1,5 +1,16 @@
 # EnsembleApplicationProductBundle contract
 
+## Fixed-window extension (2026-09)
+
+New bundles include two additional P50 layers: `accumulation-60-p50` with
+end leads 60/120, and `accumulation-120-p50` with end lead 120. The first
+layer represents separate hours, not two running totals. Units are `mm`.
+Each member is integrated first; quantiles are calculated afterwards, using
+complete temporal and member support. These layers have PNG and NetCDF assets
+plus separate point-query sidecars in `point_queries`. The eight original
+instantaneous layers retain their existing semantics. Go readers accept legacy
+eight-layer and new ten-layer bundles; new builders produce ten layers.
+
 `rainpulse.ensemble-application-product-bundle contract_version=1.0` is the
 RP-023 offline distribution boundary for one committed ensemble
 `ForecastOutput contract_version=1.2`.

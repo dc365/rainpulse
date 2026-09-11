@@ -8,7 +8,7 @@ mode=base
 
 usage() {
   cat <<'EOF'
-Usage: ./verify.sh [--env-file PATH] [--mode base|realtime-shadow]
+Usage: ./verify.sh [--env-file PATH] [--mode base|realtime-shadow|unified]
 
 Verify Compose configuration, container health, and the local API/Web entry
 points after an air-gap deployment. It performs no data ingestion or deletion.
@@ -37,7 +37,7 @@ while (($#)); do
   esac
 done
 
-[[ "$mode" == base || "$mode" == realtime-shadow ]] || {
+[[ "$mode" == base || "$mode" == realtime-shadow || "$mode" == unified ]] || {
   printf 'unsupported deployment mode: %s\n' "$mode" >&2
   exit 2
 }
@@ -67,8 +67,13 @@ compose_command=(
   "${docker_command[@]}" compose --env-file "$environment_file"
   -f "$package_root/deploy/docker-compose.yaml"
 )
-if [[ "$mode" == realtime-shadow ]]; then
+if [[ "$mode" == realtime-shadow || "$mode" == unified ]]; then
   compose_command+=(-f "$package_root/deploy/docker-compose.realtime-shadow.yaml")
+fi
+
+if [[ "$mode" == unified ]]; then
+  compose_command+=(-f "$package_root/deploy/docker-compose.unified.yaml")
+  systemctl is-active --quiet rainpulse
 fi
 
 "${compose_command[@]}" config --quiet

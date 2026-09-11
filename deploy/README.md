@@ -1,5 +1,15 @@
 # 部署配置
 
+## 当前推荐：单 Go 进程
+
+105 已切换为 `rainpulse.service`，Web/API/接入/编排在同一 Go 进程，CPU Workers 共用 `rainpulse-cpu-worker` 镜像。日常用 `sudo systemctl restart rainpulse` 更新 Go 服务，使用 `journalctl -u rainpulse` 查日志。
+
+容器运维须同时加载 `docker-compose.yaml`、`docker-compose.realtime-shadow.yaml`、`docker-compose.unified.yaml`；不要只用旧两份配置执行 `up`，否则会重新启动旧 Go 容器。旧入口目前只供回退。
+
+构建：`bash scripts/build_realtime_shadow.sh --unified`。离线打包：`bash scripts/package_airgap_deploy.sh --unified --output /绝对路径/rainpulse-unified.zip`。安装：包内 `./install.sh --mode unified --service-user <已有普通账户>`；更新已有部署需 `--replace-existing`。历史案例仍使用独立案例包。
+
+部署准备与回退约定见 `docs/SINGLE_PROCESS_DEPLOYMENT_20260911.md`。以下全 Compose 启动命令仅用于旧部署/回退；不要用于已切换的105。
+
 日常只维护 `deploy/.env`。从 `.env.example` 复制后填写凭据、BDP 配置目录与雷达挂载目录，其余先用默认值。不要把算法 YAML 的参数复制到 `.env`。
 
 ## 配置职责
@@ -14,7 +24,7 @@
 
 `.env` 是 Compose 的变量替换输入，不会自动注入所有容器。只有 Compose 中 `${变量名}` 引用的值才会被读取。过去示例中的很多 `RAINPULSE_PIPELINE_*_CONFIG`、服务 URL 和固定路径在 Compose 中没有对应替换点，填写它们不会覆盖固定值，现已从示例移除。
 
-Go 启动时 BDP common/component 配置会覆盖相应进程环境变量。Python Worker 不直接读取 BDP；更改算法 profile 时必须同时更新编排器与对应 Worker，不能只改配置中心的一端。当前实时覆盖层使用 `fujian-qc-evidence-v2`，C1/C2 物理订正仍按数据门控启用。
+Go 启动时 BDP common/component 配置会覆盖相应进程环境变量。Python Worker 不直接读取 BDP；更改算法 profile 时必须同时更新编排器与对应 Worker，不能只改配置中心的一端。当前源码的实时覆盖层使用 `fujian-qc-evidence-v3`，新增的长距离极化联合检测只对 Z9598 启用；105 是否已切换以部署记录和实际任务版本为准。C1/C2 物理订正仍按数据门控启用。
 
 ## 路径只有两类
 
@@ -53,6 +63,7 @@ docker compose --env-file deploy/.env -f deploy/docker-compose.yaml -f deploy/do
 | `RAINPULSE_INFRA_BIND_ADDRESS` | `127.0.0.1`，数据库、消息队列、对象存储与监控 |
 | `RAINPULSE_BDP_MODE` | 示例为 `required`，未设置时 Compose 兼容默认 `prefer` |
 | `RAINPULSE_ALGORITHM_VERIFICATION_HOST_ROOT` | `../runtime/reports/mrms` |
+| `RAINPULSE_VERIFICATION_JOB_HOST_ROOT` | `../runtime/reports/workspace-verification`，检验任务的小型报告（最多八份） |
 | `RAINPULSE_ENSEMBLE_PRODUCT_HOST_ROOT` | `../runtime/products/ensemble` |
 | `RAINPULSE_NOWCASTNET_PRODUCT_HOST_ROOT` | `../runtime/products/nowcastnet` |
 | `RAINPULSE_ANCILLARY_ROOT` | `../runtime/ancillary/assets` |
@@ -61,6 +72,8 @@ docker compose --env-file deploy/.env -f deploy/docker-compose.yaml -f deploy/do
 | `RAINPULSE_WORKSPACE_CACHE_*` | 已有合理默认值，保留 Compose 中的可选调优入口 |
 
 派生产物版本保留策略由生成程序控制，默认保留一版。旧示例 `RAINPULSE_DERIVED_PRODUCT_KEEP_VERSIONS` 不是 Compose 服务的全局清理开关，删除该示例项不会删除数据。
+
+首次部署检验分析功能前，在项目根创建 `runtime/reports/workspace-verification`，并保证 API 容器 UID/GID `65532:65532` 可写；自定义报告目录也遵守该权限约定。报告是可选检验结果，不是预报数据副本，详见 `docs/VERIFICATION_ANALYSIS_20260910.md`。
 
 C1/C2 诊断影子仅在具备数据、完成验证后追加以下配置；默认均为空：
 

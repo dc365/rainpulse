@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 
-import type { CycleList, CycleSummary } from './model'
+import type { CycleSummary } from './model'
+import { readCycleCatalog } from './readCycleCatalog'
 
 type SystemStatus = { status?: string, version?: string }
 type RadarStatus = {
@@ -71,7 +72,7 @@ export function AdminWorkspace() {
       read<RadarStatus[]>('/api/v1/radars/status', controller.signal),
       readOptional('/api/v1/workspace/ingest-status', controller.signal),
       readOptional('/api/v1/workspace/nowcastnet-shadow-status', controller.signal),
-      read<CycleList>('/api/v1/workspace/cycles?limit=200', controller.signal),
+      readCycleCatalog(controller.signal),
       readOptional('/api/v1/operations/issues', controller.signal),
       readOptional('/api/v1/alerts', controller.signal),
     ]).then(([system, radars, ingest, nowcastnet, cycles, issues, alerts]) => {
@@ -103,7 +104,7 @@ export function AdminWorkspace() {
       <section className="admin-summary">
         <article><span>控制面</span><strong>{snapshot.system?.status ?? '读取中'}</strong><small>{snapshot.system?.version ?? '—'}</small></article>
         <article><span>接入数据源</span><strong>{snapshot.ingest?.sources?.length ?? snapshot.radars.length}</strong><small>{snapshot.ingest?.execution_mode ?? '状态读取中'}</small></article>
-        <article><span>NowcastNet</span><strong>{shadowStatusLabel(snapshot.nowcastnet)}</strong><small>{snapshot.nowcastnet?.profile_version ?? '影子探测'}</small></article>
+        <article><span>NowcastNet 历史产品</span><strong>{snapshot.cycles.filter((cycle) => cycle.capabilities.nowcastnet).length} 个时次</strong><small>具体重算状态见下方任务</small></article>
         <article><span>运行问题</span><strong>{evidenceCount(snapshot.issues)}</strong><small>只读证据</small></article>
         <article><span>活动告警</span><strong>{evidenceCount(snapshot.alerts)}</strong><small>Prometheus / Alertmanager</small></article>
       </section>
@@ -168,7 +169,7 @@ export function AdminWorkspace() {
   )
 }
 
-type RegenerationPreset = 'forecast_all' | 'pysteps_lk' | 'products'
+type RegenerationPreset = 'forecast_all' | 'pysteps_lk' | 'nowcastnet' | 'products'
 
 const regenerationPresets: Array<{
   value: RegenerationPreset
@@ -177,16 +178,22 @@ const regenerationPresets: Array<{
 }> = [
   { value: 'forecast_all', label: '主链路全部', route: '质控 → QPE → LK → 产品' },
   { value: 'pysteps_lk', label: 'pySTEPS-LK', route: '输入 → 光流外推 → 产品' },
+  { value: 'nowcastnet', label: 'NowcastNet', route: '已有 QPE → NowcastNet → 替换当前结果' },
   { value: 'products', label: '应用产品', route: '安全重走依赖 → 产品' },
 ]
 
 type RegenerationResult = {
+  regeneration_job_id?: string
+  cycle_id?: string
   run_id?: string
   rerun_of?: string
   status?: string
   code?: string
   message?: string
 }
+
+type RegenerationJob = { job_id: string, job_type: string, status: string, config_version?: string, error_message?: string }
+const jobState = (value?: string) => ({ SUCCEEDED: '已完成', FAILED: '失败', RUNNING: '计算中', PENDING: '排队中', QUEUED: '排队中', PUBLISHED: '已发布' }[value ?? ''] ?? value ?? '等待调度')
 
 function RegenerationPanel({ cycles }: { cycles: CycleSummary[] }) {
   const runnableCycles = cycles.filter((cycle) => cycle.run_id)
@@ -196,7 +203,46 @@ function RegenerationPanel({ cycles }: { cycles: CycleSummary[] }) {
   const [confirming, setConfirming] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [result, setResult] = useState<RegenerationResult | null>(null)
+  const [result, setResult] = useState<RegenerationResult | null>(() => {
+    try { return JSON.parse(sessionStorage.getItem('rainpulse-regeneration') ?? 'null') as RegenerationResult | null } catch { return null }
+  })
+  const [jobs, setJobs] = useState<RegenerationJob[]>([])
+  const [runState, setRunState] = useState('')
+  const [currentBundle, setCurrentBundle] = useState('')
+  useEffect(() => {
+    if (!result?.run_id) return
+    const controller = new AbortController()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const poll = async () => {
+      try {
+        const [run, tasks] = await Promise.all([
+          read<RegenerationResult>(`/api/v1/runs/${result.run_id}`, controller.signal),
+          read<RegenerationJob[]>(`/api/v1/runs/${result.run_id}/jobs`, controller.signal),
+        ])
+        const selected = result.regeneration_job_id ? tasks.filter((job) => job.job_id === result.regeneration_job_id) : tasks
+        if (controller.signal.aborted) return
+        setJobs(selected)
+        setRunState(run.status ?? '')
+        let switched = false
+        if (result.cycle_id) {
+          const cycle = await read<{ nowcastnet_bundle_id?: string }>(`/api/v1/workspace/cycles/${encodeURIComponent(result.cycle_id)}`, controller.signal)
+          if (controller.signal.aborted) return
+          setCurrentBundle(cycle.nowcastnet_bundle_id ?? '')
+          switched = cycle.nowcastnet_bundle_id === result.regeneration_job_id
+        }
+        const failed = selected.some((job) => job.status === 'FAILED') || run.status === 'FAILED'
+        const completed = result.regeneration_job_id ? switched && selected.some((job) => job.status === 'SUCCEEDED') : run.status === 'PUBLISHED' && selected.length > 0 && selected.every((job) => job.status === 'SUCCEEDED')
+        if (!failed && !completed) timer = setTimeout(() => void poll(), 3000)
+      } catch (cause) {
+        if (!controller.signal.aborted) {
+          setError(`状态查询失败，正在重试：${cause instanceof Error ? cause.message : '网络错误'}`)
+          timer = setTimeout(() => void poll(), 5000)
+        }
+      }
+    }
+    void poll()
+    return () => { controller.abort(); if (timer) clearTimeout(timer) }
+  }, [result])
 
   const effectiveCycleID = runnableCycles.some((cycle) => cycle.cycle_id === cycleID)
     ? cycleID
@@ -210,6 +256,10 @@ function RegenerationPanel({ cycles }: { cycles: CycleSummary[] }) {
     setConfirming(false)
     setError(null)
     setResult(null)
+    setJobs([])
+    setRunState('')
+    setCurrentBundle('')
+    sessionStorage.removeItem('rainpulse-regeneration')
   }
 
   const submit = async (event: FormEvent) => {
@@ -236,7 +286,9 @@ function RegenerationPanel({ cycles }: { cycles: CycleSummary[] }) {
       if (!response.ok) {
         throw new Error(regenerationError(payload, response.status))
       }
-      setResult(payload)
+      const tracked = { ...payload, cycle_id: selectedCycle.cycle_id }
+      setResult(tracked)
+      sessionStorage.setItem('rainpulse-regeneration', JSON.stringify(tracked))
       setConfirming(false)
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : '重算请求提交失败')
@@ -250,7 +302,7 @@ function RegenerationPanel({ cycles }: { cycles: CycleSummary[] }) {
     <section className="admin-panel admin-regeneration-panel">
       <header>
         <div><span>Manual regeneration</span><h1>数据重算</h1></div>
-        <small>固定预设 · 新运行发布 · 旧结果成功前保留</small>
+        <small>同一时次每种算法仅展示当前结果 · 成功后替换 · 失败保留</small>
       </header>
       <form className="admin-regeneration" onSubmit={(event) => void submit(event)}>
         <div className="admin-regeneration-fields">
@@ -305,7 +357,7 @@ function RegenerationPanel({ cycles }: { cycles: CycleSummary[] }) {
             <div><dt>源运行</dt><dd title={selectedCycle?.run_id}>{shortID(selectedCycle?.run_id)}</dd></div>
             <div><dt>格点</dt><dd title={selectedCycle?.grid_id}>{selectedCycle?.grid_id ?? '—'}</dd></div>
           </dl>
-          <p>创建新的可追溯运行；新结果成功发布后，工作台自动选择最新版本。</p>
+          <p>重算使用当前生效参数，不自动启用实验方案。NowcastNet 单独重算不重复处理雷达或 LK。</p>
           {confirming ? (
             <div className="admin-regeneration-confirm">
               <strong>确认提交这次重算？</strong>
@@ -320,12 +372,17 @@ function RegenerationPanel({ cycles }: { cycles: CycleSummary[] }) {
               {submitting ? '提交中…' : '准备重算'}
             </button>
           )}
-          {result ? <p className="admin-regeneration-success">已受理：{shortID(result.run_id)} · {result.status ?? 'QUEUED'}</p> : null}
+          {result ? <p className="admin-regeneration-success">已受理：{shortID(result.run_id)} · 以下方任务状态为准</p> : null}
+          {result ? <div aria-live="polite">
+            <p>主链路：{jobState(runState)}（不代表所有算法已完成）</p>
+            {jobs.map((job) => <p key={job.job_id}>{job.job_type === 'model.nowcastnet_shadow' ? 'NowcastNet' : job.job_type}：{jobState(job.status)} · {job.config_version}{job.error_message ? ` · ${job.error_message}` : ''}</p>)}
+            {result.regeneration_job_id ? <p>{currentBundle === result.regeneration_job_id ? '工作台已切换本次新结果' : '工作台暂时保留原结果'} · {shortID(currentBundle)}</p> : null}
+          </div> : null}
           {error ? <p className="admin-regeneration-error" role="alert">{error}</p> : null}
         </aside>
       </form>
       <footer className="admin-regeneration-note">
-        “主链路全部”从参与输入序列的雷达质控开始重建；pySTEPS-STEPS 与 NowcastNet 离线产物仍沿用服务器受控入口。
+        仅更新 NowcastNet 请直接选择该算法；“主链路全部”重建质控、QPE、LK 和产品。STEPS 不包含在此入口。输入参数相同，重算结果可能相同。
       </footer>
     </section>
   )

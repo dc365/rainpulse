@@ -8,26 +8,31 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
 
 type Options struct {
+	APIHandler http.Handler
 	WebRoot    string
 	APIBaseURL string
 	AdminToken string
 }
 
 func NewHandler(options Options) (http.Handler, error) {
-	target, err := url.Parse(options.APIBaseURL)
-	if err != nil {
-		return nil, fmt.Errorf("parse API base URL: %w", err)
-	}
-	if target.Scheme == "" || target.Host == "" {
-		return nil, fmt.Errorf("API base URL must include scheme and host")
-	}
+	proxy := options.APIHandler
+	if proxy == nil {
+		target, err := url.Parse(options.APIBaseURL)
+		if err != nil {
+			return nil, fmt.Errorf("parse API base URL: %w", err)
+		}
+		if target.Scheme == "" || target.Host == "" {
+			return nil, fmt.Errorf("API base URL must include scheme and host")
+		}
 
-	proxy := httputil.NewSingleHostReverseProxy(target)
+		proxy = httputil.NewSingleHostReverseProxy(target)
+	}
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		response.Header().Set(
 			"Content-Security-Policy",
@@ -54,6 +59,10 @@ func NewHandler(options Options) (http.Handler, error) {
 		case strings.HasPrefix(request.URL.Path, "/api/v1/admin/"):
 			http.NotFound(response, request)
 		case strings.HasPrefix(request.URL.Path, "/api/"):
+			if request.Method == http.MethodPost && (request.URL.Path == "/api/v1/workspace/accumulations" || request.URL.Path == "/api/v1/workspace/verification" || request.URL.Path == "/api/v1/workspace/verification/compare") {
+				// Cold member-array reads may exceed the normal 30-second response deadline.
+				_ = http.NewResponseController(response).SetWriteDeadline(time.Now().Add(125 * time.Second))
+			}
 			proxy.ServeHTTP(response, request)
 		default:
 			serveSPA(options.WebRoot, response, request)

@@ -133,6 +133,13 @@ button, select { min-height: 40px; }
 .case-popover header button { min-height: 28px; width: 28px; }
 .case-dates { display: flex; gap: 8px; overflow-x: auto; padding: 12px 0; }
 .case-dates button { flex-shrink: 0; padding: 0 12px; }
+.case-range { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; align-items: end; margin-bottom: 12px; }
+.case-range label { display: grid; gap: 4px; color: var(--rp-muted); font-size: 12px; min-width: 0; }
+.case-range input { width: 100%; min-width: 0; box-sizing: border-box; background: var(--rp-canvas); color: var(--rp-ink); border: 1px solid var(--rp-line); border-radius: 4px; padding: 6px 8px; font: inherit; font-variant-numeric: tabular-nums; }
+.case-range input:focus-visible { outline: 2px solid var(--rp-teal); outline-offset: 2px; }
+.case-range button { padding: 6px 12px; min-height: 32px; }
+.case-popover .case-range-error { color: var(--rp-risk); }
+.case-popover .case-coverage { color: var(--rp-muted); font-size: 11px; }
 .case-popover p { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; margin: 8px 0; }
 .case-popover p span, .case-popover footer { color: var(--rp-muted); font-size: 11px; }
 .case-times { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; max-height: 260px; overflow-y: auto; padding: 3px; }
@@ -1380,6 +1387,31 @@ button, select { min-height: 40px; }
 .verification-inspector select { font-size: 12px; min-height: 32px; }
 .verification-values { padding: 8px 0; }
 .verification-values strong { font-variant-numeric: tabular-nums; }
+.verification-analysis { flex-shrink: 0; min-width: 0; background: var(--rp-paper); border: 1px solid var(--rp-line); font-size: 12px; }
+.verification-analysis button, .verification-analysis select, .verification-analysis input { font: inherit; color: var(--rp-ink); }
+.verification-analysis button, .verification-analysis select, .verification-analysis input[type="datetime-local"] { background: var(--rp-canvas); border: 1px solid var(--rp-line); border-radius: 6px; padding: 6px 8px; }
+.verification-analysis button { cursor: pointer; }
+.verification-analysis button:disabled { opacity: .5; cursor: default; }
+.verification-analysis button:focus-visible, .verification-chart circle:focus-visible { outline: 2px solid var(--rp-teal); outline-offset: 2px; }
+.verification-analysis .analysis-toggle { width: 100%; display: flex; align-items: center; gap: 12px; border: 0; border-radius: 0; text-align: left; font-weight: 600; padding: 8px 12px; }
+.analysis-toggle small, .analysis-body small { color: var(--rp-muted); font-weight: 400; }
+.analysis-body { padding: 8px 12px; max-height: 360px; overflow: auto; }
+.analysis-tabs, .analysis-controls, .analysis-progress, .analysis-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 8px; }
+.analysis-tabs button[aria-selected="true"] { background: var(--rp-teal-soft); border-color: var(--rp-teal); color: var(--rp-teal); }
+.analysis-controls label { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.analysis-progress progress { width: 120px; height: 6px; accent-color: var(--rp-teal); }
+.analysis-progress small { flex-basis: 100%; }
+.verification-chart { display: block; width: 100%; height: 208px; overflow: visible; }
+.verification-chart text { fill: var(--rp-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.verification-chart circle[role="button"] { cursor: pointer; }
+.analysis-legend { justify-content: center; font-weight: 600; }
+.analysis-table { overflow-x: auto; }
+.analysis-table table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.analysis-table th, .analysis-table td { padding: 8px; text-align: right; border-bottom: 1px solid var(--rp-line); white-space: nowrap; }
+.analysis-table th:first-child { text-align: left; }
+.analysis-table td small { display: block; }
+.analysis-records { display: flex; flex-wrap: wrap; gap: 4px; max-height: 160px; overflow: auto; margin: 8px 0; }
+@media (max-width: 640px) { .analysis-toggle small { display: none; } .analysis-body { max-height: 460px; padding: 8px; } .verification-chart { height: 160px; } }
 .verification-inspector > small { display: block; font-size: 11px; }
 .workspace-exact-probe { pointer-events: none; }
 @media (max-width: 1024px) {
@@ -1394,3 +1426,61 @@ button, select { min-height: 40px; }
 
 /* Never expose a previous raster under a newly committed frame caption. */
 .workspace-shell .gis-message.frame-pending { inset: auto 10px 38px auto; width: auto; height: auto; max-width: calc(100% - 20px); padding: 6px 10px; z-index: 20; position: absolute; transform: none; border: 1px solid var(--rp-line); border-radius: 4px; background: var(--rp-paper); pointer-events: none; }
+.workspace-product-modes {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.workspace-product-modes button {
+  padding: 5px 9px;
+  border: 1px solid #cbdcda;
+  border-radius: 4px;
+  background: #f7fbfa;
+  color: #476560;
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.workspace-product-modes button.active {
+  background: #dcedea;
+  border-color: #14786d;
+  color: #126f65;
+}
+.workspace-product-modes button:focus-visible {
+  outline: 2px solid #14786d;
+  outline-offset: 2px;
+}
+.workspace-timeline-rail.accumulation-rail > button {
+  flex: 1;
+  min-width: 110px;
+  max-width: none;
+}
+.accumulation-rail > button.active {
+  background: #e3f0ed;
+}
+.shared-timeline[data-product-mode] .workspace-timeline-context {
+  flex-wrap: wrap;
+}
+.shared-timeline:not([data-product-mode="rain_rate"]) .workspace-timeline-state strong {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+@media (max-width: 640px) {
+  .workspace-product-modes { width: 100%; padding: 4px; }
+  .workspace-product-modes button { flex: 1; padding-inline: 4px; }
+  .shared-timeline[data-product-mode] .workspace-timeline-state {
+    flex: 1 1 200px;
+    padding: 6px;
+  }
+  .shared-timeline[data-product-mode] .workspace-timeline-state > span { display: none; }
+  .shared-timeline[data-product-mode] .workspace-timeline-state strong { flex: 1; }
+}
+.interval-shortcuts { display: flex; gap: 4px; }
+.interval-shortcuts button, .interval-retry { border: 1px solid #cddcda; border-radius: 4px; padding: 5px 10px; background: #f8fbfa; color: #315650; cursor: pointer; white-space: nowrap; }
+.interval-shortcuts button[aria-pressed="true"] { background: #dceeea; border-color: #14796c; color: #126d61; }
+.selectable-timeline { touch-action: pan-y; user-select: none; }
+.selectable-timeline button[data-selected="true"] { background: var(--rp-teal-soft); border-radius: 0; color: var(--rp-teal); }
+.selectable-timeline button[data-selected="true"] .workspace-timeline-node { background: var(--rp-teal); }
+.selectable-timeline button { cursor: pointer; }

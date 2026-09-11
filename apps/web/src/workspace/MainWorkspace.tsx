@@ -19,6 +19,10 @@ import { WorkspaceCrosshairInspector } from './WorkspaceCrosshairInspector'
 import type { MapProbeDetail } from './mapProbe'
 import type { MapCoordinate } from '../RasterGISMap'
 import { VerificationInspector } from './VerificationInspector'
+import { VerificationAnalysis } from './VerificationAnalysis'
+import { verificationValidTime } from './verificationAnalysisModel'
+import { accumulationLabel, type ProductMode } from './accumulation'
+import { intervalLabel, useIntervalPanels, type Interval } from './IntervalTimeline'
 import {
   analysisCycleAt,
   availabilityAt,
@@ -44,18 +48,25 @@ const presetLabels: Record<WorkspacePreset, string> = {
   verification: '检验回放',
 }
 
+export function visibleWorkspaceWarnings(warnings: string[] = []) {
+  // Optional ensemble diagnostics remain in the API; missing layers explain themselves.
+  return warnings.filter(warning => warning !== 'ensemble-product')
+}
+
 export function MainWorkspace() {
   const { state, now, connection, refresh, requestCycle, setTime: setSelectedTime, follow, pin } = useWorkspaceData()
   const { cycles, detail, selectedTime: snapshotTime, loading } = state
   const selectedCycleID = detail?.cycle_id ?? ''
   const followLatest = state.mode === 'follow'
   const error = [state.catalogError, state.detailError ? `更新失败${detail ? `，保留 ${formatLocalCycleTime(detail.issue_time)} 起报结果` : ''}：${state.detailError}` : null,
-    state.stale ? '数据服务降级，当前显示缓存结果' : null, ...(detail?.warnings ?? [])].filter(Boolean).join('；') || null
+    state.stale ? '数据服务降级，当前显示缓存结果' : null, ...visibleWorkspaceWarnings(detail?.warnings)].filter(Boolean).join('；') || null
   const [probe, setProbe] = useState<MapProbeDetail | null>(null)
   const [preset, setPreset] = useState<WorkspacePreset>('forecast')
   const [storedRadarID, setSelectedRadarID] = useState<string | null>(null)
   const selectedRadarID = detail && storedRadarID && radarIDs(detail).includes(storedRadarID) ? storedRadarID : detail ? radarIDs(detail)[0] ?? null : null
   const [verificationAlgorithm, setVerificationAlgorithm] = useState('lk')
+  const [verificationThreshold, setVerificationThreshold] = useState(20)
+  const [verificationWindow, setVerificationWindow] = useState(10)
   const [verificationPoint, setVerificationPoint] = useState<MapCoordinate | null>(null)
   const [mobilePanelID, setMobilePanelID] = useState<string>('qpe')
   const [focusedPanelID, setFocusedPanelID] = useState<string | null>(() => (
@@ -63,6 +74,10 @@ export function MainWorkspace() {
   ))
   const [focusMenuOpen, setFocusMenuOpen] = useState(false)
   const [playing, setPlaying] = useState(false)
+  const [productMode, setProductMode] = useState<ProductMode>('rain_rate')
+  const [interval, setInterval] = useState<Interval>({ start: 0, end: 60 })
+  const activeProductMode = preset === 'forecast' ? productMode : 'rain_rate'
+  const accumulation = useIntervalPanels(detail, activeProductMode !== 'rain_rate', interval)
   const [basemapVisible, setBasemapVisible] = useState(true)
   const [rasterStyle, setRasterStyle] = useState<GISRasterStyle>('grid')
   const [showRasterValues, setShowRasterValues] = useState(true)
@@ -75,8 +90,12 @@ export function MainWorkspace() {
   }, [])
 
   const panels = useMemo(
-    () => detail ? panelsForPreset(detail, preset, selectedRadarID, verificationAlgorithm) : [],
-    [detail, preset, selectedRadarID, verificationAlgorithm],
+    () => detail ? activeProductMode === 'rain_rate' ? panelsForPreset(detail, preset, selectedRadarID, verificationAlgorithm)
+      : panelsForPreset(detail, 'forecast', selectedRadarID, verificationAlgorithm).map(panel => accumulation.panels?.find(result => result.panel_id === panel.panel_id) ?? ({
+        ...panel, data_kind: 'accumulation_interval', frames: [], legend_unit: 'mm', legend: [], status: 'unavailable' as const,
+        unavailable_reason: accumulation.error || '正在累计所选区间…',
+      })) : [],
+    [detail, preset, selectedRadarID, verificationAlgorithm, activeProductMode, accumulation.panels, accumulation.error],
   )
 
   const timelineValues = useMemo(
@@ -84,7 +103,9 @@ export function MainWorkspace() {
     [cycles, detail, preset, verificationAlgorithm],
   )
 
-  const selectedTime = preset === 'verification' && !timelineValues.includes(snapshotTime ?? '') ? timelineValues[0] ?? detail?.issue_time ?? null : snapshotTime
+  const selectedTime = activeProductMode !== 'rain_rate'
+    ? detail ? new Date(Date.parse(detail.issue_time) + interval.end * 60_000).toISOString() : null
+    : preset === 'verification' && !timelineValues.includes(snapshotTime ?? '') ? timelineValues[0] ?? detail?.issue_time ?? null : snapshotTime
 
   const focusedPanel = focusedPanelID
     ? panels.find((panel) => panel.panel_id === focusedPanelID) ?? null
@@ -122,6 +143,12 @@ export function MainWorkspace() {
     stopPlayback: boolean,
     targetPreset: WorkspacePreset = preset,
   ) => {
+    if (targetPreset === 'forecast' && activeProductMode !== 'rain_rate' && detail) {
+      setProbe(null)
+      setLayerErrors({})
+      if (stopPlayback) setPlaying(false)
+      return
+    }
     let nextValue = value
     if (targetPreset === 'qc' && detail && Date.parse(value) !== Date.parse(detail.issue_time)) {
       const matchingCycle = analysisCycleAt(cycles, detail.grid_id, value)
@@ -138,7 +165,7 @@ export function MainWorkspace() {
     if (stopPlayback) setPlaying(false)
     setSelectedTime(nextValue)
     setLayerErrors({})
-  }, [cycles, detail, preset, selectedCycleID, requestCycle, setSelectedTime])
+  }, [cycles, detail, preset, selectedCycleID, requestCycle, setSelectedTime, activeProductMode])
 
   useEffect(() => {
     if (!playing || loading || !detail || timelineValues.length < 2) return
@@ -343,6 +370,7 @@ export function MainWorkspace() {
       </section>
 
       {preset === 'verification' && detail && <VerificationInspector detail={detail} algorithm={verificationAlgorithm}
+        threshold={verificationThreshold} onThresholdChange={setVerificationThreshold} windowKM={verificationWindow} onWindowChange={setVerificationWindow}
         validTime={selectedTime} point={verificationPoint} onClear={() => setVerificationPoint(null)} />}
       <section className="mobile-panel-tabs" role="tablist" aria-label="移动端地图面板">
         {panels.map((panel) => (
@@ -392,16 +420,34 @@ export function MainWorkspace() {
         {panels.length === 0 ? <div className="workspace-empty" role="status">{loading ? '正在读取工作台…' : '暂无可显示的数据周期。'}{!loading && <button type="button" onClick={refresh}>重新读取</button>}</div> : null}
       </section>
 
+      {preset === 'verification' && detail && <VerificationAnalysis detail={detail} cycles={cycles} validTime={selectedTime}
+        threshold={verificationThreshold} windowKM={verificationWindow} onThresholdChange={setVerificationThreshold} onWindowChange={setVerificationWindow}
+        onNavigate={(id,lead,algorithm)=>{
+          const cycle=cycles.find(c=>c.cycle_id===id);if(!cycle)return
+          const time=verificationValidTime(cycle.issue_time,lead,id===detail.cycle_id?detail.timeline:undefined)
+          setVerificationAlgorithm(algorithm);setPlaying(false);setVerificationPoint(null);setProbe(null)
+          if(id===detail.cycle_id)setSelectedTime(time);else requestCycle(cycle,time)
+        }} />}
       {detail ? (
         <SharedTimeline
+          selectedInterval={activeProductMode !== 'rain_rate' ? interval : null}
+          intervalBusy={accumulation.busy}
+          onInterval={preset === 'forecast' ? (value) => {
+            setInterval(value); setProductMode('hourly'); setPlaying(false); setProbe(null); setLayerErrors({})
+          } : undefined}
+          onRetryInterval={accumulation.retry}
           detail={detail}
           issueTime={detail.issue_time}
           values={timelineValues}
-          panels={panels}
+          panels={panelsForPreset(detail, preset, selectedRadarID, verificationAlgorithm)}
           selectedTime={selectedTime}
           playing={playing}
-          onTogglePlaying={() => setPlaying((value) => !value)}
-          onSelect={selectTime}
+          onTogglePlaying={() => { setProductMode('rain_rate'); setPlaying((value) => !value) }}
+          onSelect={value => {
+            setProductMode('rain_rate'); setPlaying(false); setProbe(null); setLayerErrors({})
+            if (preset === 'forecast') setSelectedTime(value)
+            else selectTime(value)
+          }}
         />
       ) : null}
       <WorkspaceCrosshairInspector probe={showRasterValues && probe && detail && panels.some(panel =>
@@ -487,7 +533,9 @@ function MapPanel({
     sourceLabel: isQCFlagsPanel ? entry.label ?? undefined : undefined,
   }))
   const unavailable = !usesAnalysisBaseline && panel.status !== 'ready'
-    ? reasonLabel(panel.unavailable_reason)
+    ? panel.unavailable_reason === 'observation_accumulation_unavailable' ? '观测累计产品暂不可用，不使用预报或零值填补。'
+      : panel.unavailable_reason === 'accumulation_not_generated' ? '本起报累计产品尚未生成，需重新生成数据。' : reasonLabel(panel.unavailable_reason)
+    : panel.data_kind.startsWith('accumulation_') && frame == null ? '该区间累计数据不完整或尚未生成。'
     : frame == null ? '当前算法无原生该有效时刻，未进行插值。' : undefined
   const lifecycle = panel.lifecycle === 'shadow'
     ? '影子'
@@ -498,7 +546,11 @@ function MapPanel({
       : panel.lifecycle === 'analysis'
         ? '分析'
         : '业务'
-  const frameContext = usesAnalysisBaseline
+  const frameContext = panel.data_kind.startsWith('accumulation_') && detail && selectedTime
+    ? panel.data_kind === 'accumulation_interval' && frame?.source_leads?.length
+      ? intervalLabel(detail.issue_time, { start: frame.source_leads[0]-5, end: frame.lead_time_minutes })
+      : accumulationLabel(detail.issue_time, selectedTime, panel.data_kind === 'accumulation_60' ? 'hourly' : 'total_2h')
+    : usesAnalysisBaseline
     ? 'T0 分析场'
     : frame?.reference_observation && frame.observation_time
     ? `参考体扫 ${formatValidTime(frame.observation_time)}（${formatObservationOffset(frame.observation_offset_seconds)}，未参与本时次拼图）`
@@ -550,7 +602,8 @@ function MapPanel({
         mapLabel={`${displayName}同步地图，EPSG:4326`}
         resetViewLabel="复位同步地图范围"
         emptyStateHint={unavailable}
-        loading={loading}
+        loading={loading || panel.unavailable_reason === '正在累计所选区间…'}
+        loadingLabel={panel.unavailable_reason === '正在累计所选区间…' ? '正在计算累积…' : undefined}
         layerError={layerError}
         onLayerError={handleLayerError}
         onProbe={onProbe ? handleProbe : undefined}
@@ -589,6 +642,12 @@ export function updateLayerErrorState(
 }
 
 export function SharedTimeline({
+  productMode = 'rain_rate',
+  onProductMode,
+  selectedInterval = null,
+  onInterval,
+  intervalBusy = false,
+  onRetryInterval,
   detail,
   issueTime,
   values,
@@ -598,6 +657,12 @@ export function SharedTimeline({
   onTogglePlaying,
   onSelect,
 }: {
+  productMode?: ProductMode
+  onProductMode?: (mode: ProductMode) => void
+  selectedInterval?: Interval | null
+  onInterval?: (range: Interval) => void
+  intervalBusy?: boolean
+  onRetryInterval?: () => void
   detail?: WorkspaceCycleDetail
   issueTime: string
   values: string[]
@@ -608,6 +673,18 @@ export function SharedTimeline({
   onSelect: (value: string) => void
 }) {
   const railRef = useRef<HTMLDivElement>(null)
+  const gesture = useRef<{ lead: number; x: number; moved: boolean; end: number } | null>(null)
+  const [draftInterval, setDraftInterval] = useState<Interval | null>(null)
+  const highlighted = draftInterval ?? selectedInterval
+  const leadValue = (lead: number) => values.find(value => Math.round((Date.parse(value)-Date.parse(issueTime))/60_000) === lead)
+  const pointerLead = (x: number) => {
+    const nodes = Array.from(railRef.current?.querySelectorAll<HTMLElement>('[data-lead]') ?? [])
+    return nodes.reduce<HTMLElement | null>((best, node) => {
+      const distance = (item: HTMLElement) => { const box = item.getBoundingClientRect(); return Math.abs(x-box.left-box.width/2) }
+      return !best || distance(node) < distance(best) ? node : best
+    }, null)?.dataset.lead
+  }
+  const cancelGesture = () => { gesture.current = null; setDraftInterval(null) }
   const selectedIndex = values.indexOf(selectedTime ?? issueTime)
   const activeIndex = selectedIndex >= 0 ? selectedIndex : 0
   const activeValue = values[activeIndex] ?? selectedTime ?? issueTime
@@ -621,11 +698,12 @@ export function SharedTimeline({
   useEffect(() => {
     const rail = railRef.current
     const active = rail?.querySelector<HTMLElement>('[aria-current="step"]')
+      ?? rail?.querySelector<HTMLElement>(`[data-lead="${selectedInterval?.end}"]`)
     if (!rail || !active) return
     const left = active.offsetLeft - (rail.clientWidth - active.clientWidth) / 2
     if (typeof rail.scrollTo === 'function') rail.scrollTo({ left, behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
     else rail.scrollLeft = left
-  }, [activeIndex])
+  }, [activeIndex, selectedInterval?.end])
 
   const move = (step: number) => {
     const next = values[Math.min(values.length - 1, Math.max(0, activeIndex + step))]
@@ -651,13 +729,24 @@ export function SharedTimeline({
   return (
     <section
       className="shared-timeline"
+      data-product-mode={productMode}
       data-playing={playing}
       aria-label="统一有效时间轴"
       tabIndex={0}
       onKeyDown={handleKeyDown}
     >
       <div className="workspace-timeline-context">
-        <div className="workspace-timeline-playback">
+        {onInterval && <div className="interval-shortcuts" role="group" aria-label="累计快捷区间">
+          {[[0,60],[60,120],[0,120]].map(([start,end]) => <button type="button" key={`${start}-${end}`}
+            aria-pressed={selectedInterval?.start === start && selectedInterval.end === end}
+            onClick={() => onInterval({start,end})}>{start/60}–{end/60} 时</button>)}
+        </div>}
+        {!onInterval && onProductMode && <div className="workspace-product-modes" role="group" aria-label="降水产品">
+          {(['rain_rate', 'hourly'] as ProductMode[]).map(mode => <button type="button" key={mode}
+            className={productMode === mode ? 'active' : ''} aria-pressed={productMode === mode}
+            onClick={() => onProductMode(mode)}>{mode === 'rain_rate' ? '5分钟雨强' : '区间累计'}</button>)}
+        </div>}
+        {productMode !== 'total_2h' && <div className="workspace-timeline-playback">
           <button
             type="button"
             onClick={() => move(-1)}
@@ -684,38 +773,72 @@ export function SharedTimeline({
           >
             <span aria-hidden="true">▶</span>
           </button>
-        </div>
-        <div className="workspace-timeline-periods" aria-hidden="true">
+        </div>}
+        {productMode === 'rain_rate' && !onProductMode && !onInterval && <div className="workspace-timeline-periods" aria-hidden="true">
           <span>未来 0–1 小时</span>
           <span>未来 1–2 小时</span>
-        </div>
+        </div>}
         <div className="workspace-timeline-state">
           <span>{playing ? <i aria-hidden="true" /> : null}{playing
             ? `播放中 · ${activeIndex + 1}/${values.length} 帧`
+            : productMode !== 'rain_rate' ? `${values.length} 个累计区间`
             : `${values.length} 帧${intervalMinutes ? ` · ${intervalMinutes} 分钟间隔` : ''}`}</span>
           <span className="workspace-timeline-issue"><small>起报</small>{formatCycleTime(issueTime)}</span>
-          <strong>{leadLabel(issueTime, activeValue)} · {formatValidTime(activeValue)}</strong>
+          <strong>{highlighted ? `${intervalLabel(issueTime, highlighted)}${intervalBusy && !draftInterval ? ' · 计算中…' : ''}` : productMode === 'rain_rate' ? `${leadLabel(issueTime, activeValue)} · ${formatValidTime(activeValue)}`
+            : accumulationLabel(issueTime, activeValue, productMode)}</strong>
         </div>
       </div>
 
-      <div className="workspace-timeline-rail" ref={railRef}>
+      <div className={`workspace-timeline-rail${onInterval ? ' selectable-timeline' : ''}${productMode !== 'rain_rate' ? ' accumulation-rail' : ''}`} ref={railRef}
+        onPointerDown={event => {
+          if (!onInterval || event.button !== 0 || event.isPrimary === false) return
+          const node = (event.target as HTMLElement).closest<HTMLElement>('[data-lead]')
+          const lead = Number(node?.dataset.lead ?? pointerLead(event.clientX))
+          if (!Number.isFinite(lead) || lead < 0 || lead > 120) return
+          gesture.current = {lead, end:lead, x:event.clientX, moved:false}
+          event.currentTarget.setPointerCapture?.(event.pointerId)
+        }}
+        onPointerMove={event => {
+          const current = gesture.current
+          if (!current) return
+          current.moved ||= Math.abs(event.clientX-current.x) >= 5
+          if (!current.moved) return
+          const lead = Number(pointerLead(event.clientX))
+          if (!Number.isFinite(lead) || lead < 0 || lead > 120) return
+          current.end = lead
+          setDraftInterval(lead === current.lead ? null : {start:Math.min(lead,current.lead),end:Math.max(lead,current.lead)})
+        }}
+        onPointerUp={event => {
+          const current = gesture.current
+          if (!current) return
+          cancelGesture()
+          if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+          if (current.moved && current.end !== current.lead) onInterval?.({start:Math.min(current.lead,current.end),end:Math.max(current.lead,current.end)})
+          else { const value = leadValue(current.lead); if (value) onSelect(value) }
+        }}
+        onPointerCancel={cancelGesture}
+        onLostPointerCapture={cancelGesture}>
         {values.map((value, index) => {
           const leadMinutes = Math.round((Date.parse(value) - Date.parse(issueTime)) / 60_000)
-          const active = index === activeIndex
+          const active = !highlighted && index === activeIndex
           const major = leadMinutes === 0 || leadMinutes === 60 || leadMinutes === 120
           return (
             <button
               type="button"
               className={active ? 'active' : ''}
               key={value}
-              onClick={() => onSelect(value)}
+              onClick={event => { if (!onInterval || event.detail === 0) onSelect(value) }}
+              data-lead={leadMinutes}
+              data-selected={Boolean(highlighted && leadMinutes >= highlighted.start && leadMinutes <= highlighted.end)}
               aria-current={active ? 'step' : undefined}
-              aria-label={`${leadLabel(issueTime, value)}，${formatValidTime(value)}`}
+              aria-label={productMode === 'rain_rate' ? `${leadLabel(issueTime, value)}，${formatValidTime(value)}` : accumulationLabel(issueTime, value, productMode)}
               title={`${formatValidTime(value)} · ${panels.filter((panel) => isDisplayAvailable(panel, value)).length}/${panels.length} 面板可用`}
               data-major={major}
             >
               <i className="workspace-timeline-node" aria-hidden="true" />
-              <span className="workspace-timeline-lead">{leadMinutes === 0 ? 'T0' : `${leadMinutes > 0 ? '+' : ''}${leadMinutes}`}</span>
+              <span className="workspace-timeline-lead">{productMode === 'rain_rate'
+                ? leadMinutes === 0 ? 'T0' : `${leadMinutes > 0 ? '+' : ''}${leadMinutes}`
+                : `${productMode === 'total_2h' ? 0 : leadMinutes / 60 - 1}–${leadMinutes / 60} 小时`}</span>
               <span className="workspace-timeline-lanes" aria-hidden="true">
                 {panels.map((panel) => (
                   <i key={panel.panel_id} data-ready={isDisplayAvailable(panel, value)} />
@@ -727,11 +850,12 @@ export function SharedTimeline({
       </div>
 
       <div className="workspace-timeline-availability" aria-label="图层可用性">
-        <span className="workspace-timeline-current"><i />当前时效</span>
+        <span className="workspace-timeline-current"><i />{highlighted ? '累计区间' : '当前时效'}</span>
         {panels.map((panel) => (
           <span key={panel.panel_id}><i data-ready={isDisplayAvailable(panel, selectedTime ?? issueTime)} />{panelDisplayName(panel)}</span>
         ))}
-        <small>← → 键逐帧查看</small>
+        {selectedInterval && onRetryInterval && <button type="button" onClick={onRetryInterval} disabled={intervalBusy}>重新计算</button>}
+        <small>{onInterval ? '点击看单时效 · 按住拖动看累计' : '← → 键逐帧查看'}</small>
       </div>
     </section>
   )

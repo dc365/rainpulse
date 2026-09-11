@@ -60,6 +60,18 @@ GOWORK=off go -C "$repository_root/services/control" mod edit -modfile="$staging
   -replace="bdp-publiccode-common@v1.0.0=$common_root" \
   -replace="bdp-publiccode-puremanage@v1.0.0=$puremanage_root" \
   -replace="hw-common@v1.0.0=$hw_common_root"
+# Dependency-module replace directives do not propagate to the main module.
+# Newer BDP public code references the local RuiyunDB SDK (its own replacement
+# may be a Windows path), so resolve the adjacent source tree here as well.
+ruiyundb_sdk_root="${RUIYUNDB_SDK_ROOT:-$(dirname "$bdp_root")/ruiyun-db/ruiyundb-sdk/ruiyundb-sdk-go}"
+if [[ -f "$ruiyundb_sdk_root/go.mod" ]]; then
+  GOWORK=off go -C "$repository_root/services/control" mod edit -modfile="$staging_mod" \
+    -replace="ruiyundb-sdk-go=$ruiyundb_sdk_root"
+  # Align the pre-split parent with the SDK's split RPC module to avoid two
+  # modules exporting googleapis/rpc. Only affects this generated build module.
+  GOWORK=off go -C "$repository_root/services/control" mod edit -modfile="$staging_mod" \
+    -require="google.golang.org/genproto@v0.0.0-20251029180050-ab9386a59fda"
+fi
 GOWORK=off go -C "$repository_root/services/control" mod tidy -modfile="$staging_mod"
 mv "$staging_mod" "$mod_file"
 if [[ -f "$staging_sum" ]]; then

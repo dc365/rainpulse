@@ -93,12 +93,13 @@ def test_builds_atomic_three_product_distribution_suite() -> None:
     products = {item["product_type"]: item for item in manifest["products"]}
 
     assert validation["product_count"] == 3
-    assert validation["asset_count"] == 79
-    assert validation["object_count"] == 80
+    assert validation["asset_count"] == 84
+    assert validation["object_count"] == 85
     assert len(products["rain_rate"]["valid_times"]) == 24
     assert len(products["rain_rate"]["assets"]) == 73
-    assert len(products["accumulation_60"]["assets"]) == 3
-    assert len(products["accumulation_120"]["assets"]) == 3
+    assert len(products["accumulation_60"]["assets"]) == 7
+    assert len(products["accumulation_60"]["valid_times"]) == 2
+    assert len(products["accumulation_120"]["assets"]) == 4
     assert manifest["source_forecast"]["sha256"] == artifact_sha256(forecast)
 
     png_asset = next(

@@ -61,6 +61,10 @@ type RadarScanPageStore interface {
 	ListRadarScansByQuery(context.Context, workflow.RadarScanListQuery) (workflow.RadarScanListPage, error)
 }
 
+type AnalysisCyclePageStore interface {
+	ListAnalysisCyclesPage(context.Context, int, *workflow.AnalysisStatus, *uuid.UUID) ([]workflow.AnalysisCycle, *uuid.UUID, error)
+}
+
 type DiagnosticLayerReader interface {
 	Read(context.Context, string, string) ([]byte, string, error)
 }
@@ -1174,7 +1178,17 @@ func (service *server) ListAnalysisCycles(
 		value := workflow.AnalysisStatus(*params.Status)
 		status = &value
 	}
-	cycles, err := service.observations.ListAnalysisCycles(request.Context(), limit, status)
+	var cycles []workflow.AnalysisCycle
+	var next *uuid.UUID
+	var err error
+	if paged, ok := service.observations.(AnalysisCyclePageStore); ok {
+		cycles, next, err = paged.ListAnalysisCyclesPage(request.Context(), limit, status, params.Cursor)
+	} else if params.Cursor != nil {
+		writeError(response, http.StatusServiceUnavailable, "pagination_unavailable", "analysis pagination is unavailable")
+		return
+	} else {
+		cycles, err = service.observations.ListAnalysisCycles(request.Context(), limit, status)
+	}
 	if err != nil {
 		writeStoreError(response, err)
 		return
@@ -1183,7 +1197,7 @@ func (service *server) ListAnalysisCycles(
 	for _, cycle := range cycles {
 		items = append(items, toAPIAnalysis(cycle))
 	}
-	writeJSON(response, http.StatusOK, apiv1.AnalysisCyclePage{Items: items})
+	writeJSON(response, http.StatusOK, apiv1.AnalysisCyclePage{Items: items, NextCursor: next})
 }
 
 func (service *server) GetAnalysisCycle(
@@ -1734,15 +1748,16 @@ func writeStreamEvent(response http.ResponseWriter, snapshot streamSnapshot) err
 
 func toAPIRun(run workflow.Run) apiv1.ForecastRun {
 	return apiv1.ForecastRun{
-		RunId:          run.ID,
-		IssueTime:      run.IssueTime.UTC(),
-		GridId:         run.GridID,
-		ConfigVersion:  run.ConfigVersion,
-		Status:         apiv1.RunStatus(run.Status),
-		DegradedReason: run.DegradedReason,
-		RerunOf:        run.RerunOf,
-		CreatedAt:      run.CreatedAt.UTC(),
-		UpdatedAt:      run.UpdatedAt.UTC(),
+		RunId:             run.ID,
+		IssueTime:         run.IssueTime.UTC(),
+		GridId:            run.GridID,
+		ConfigVersion:     run.ConfigVersion,
+		Status:            apiv1.RunStatus(run.Status),
+		DegradedReason:    run.DegradedReason,
+		RerunOf:           run.RerunOf,
+		RegenerationJobId: run.RegenerationJobID,
+		CreatedAt:         run.CreatedAt.UTC(),
+		UpdatedAt:         run.UpdatedAt.UTC(),
 	}
 }
 

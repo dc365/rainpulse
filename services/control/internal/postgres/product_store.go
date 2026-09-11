@@ -384,12 +384,16 @@ func validateApplicationProductManifest(
 		expectedTimes, expectedAssets := 1, 3
 		if product.ProductType == workflow.ProductRainRate {
 			expectedTimes, expectedAssets = 24, 73
+		} else if product.ProductType == workflow.ProductAccumulation60 && len(product.Assets) == 7 {
+			expectedTimes, expectedAssets = 2, 7
+		} else if product.ProductType == workflow.ProductAccumulation120 && len(product.Assets) == 4 {
+			expectedAssets = 4
 		}
 		if len(product.ValidTimes) != expectedTimes || len(product.Assets) != expectedAssets {
 			return fmt.Errorf("%w: product lead or asset count differs", orchestration.ErrInvalidEvent)
 		}
 		for index, validTime := range product.ValidTimes {
-			expectedLead := 60
+			expectedLead := (index + 1) * 60
 			if product.ProductType == workflow.ProductRainRate {
 				expectedLead = (index + 1) * 5
 			} else if product.ProductType == workflow.ProductAccumulation120 {
@@ -403,8 +407,12 @@ func validateApplicationProductManifest(
 			return err
 		}
 	}
-	if len(seenProducts) != 3 || len(seenPaths) != 79 {
+	if len(seenProducts) != 3 || (len(seenPaths) != 79 && len(seenPaths) != 84) {
 		return fmt.Errorf("%w: incomplete RP-015 product suite", orchestration.ErrInvalidEvent)
+	}
+	if (len(seenPaths) == 84 && manifest.AccumulationVersion != "1.0") ||
+		(len(seenPaths) == 79 && manifest.AccumulationVersion != "") {
+		return fmt.Errorf("%w: accumulation extension version differs", orchestration.ErrInvalidEvent)
 	}
 	return nil
 }
@@ -429,9 +437,14 @@ func validateProductAssets(
 		}
 		seenPaths[asset.ObjectPath] = struct{}{}
 		if asset.AssetType == "point_query_index" {
-			if product.ProductType != workflow.ProductRainRate || asset.LeadMinutes != nil ||
+			unit := "mm"
+			if product.ProductType == workflow.ProductRainRate {
+				unit = "mm h-1"
+			}
+			expectedSize := int64(64 + 501*201*5*len(product.ValidTimes))
+			if asset.LeadMinutes != nil ||
 				asset.ValidTime != nil || asset.MediaType != "application/vnd.rainpulse.point-index" ||
-				asset.Unit != "mm h-1" || asset.SizeBytes != 12084184 {
+				asset.Unit != unit || asset.SizeBytes != expectedSize {
 				return fmt.Errorf("%w: invalid point-query asset", orchestration.ErrInvalidEvent)
 			}
 			pointIndexes++
@@ -482,13 +495,18 @@ func validateProductAssets(
 		return fmt.Errorf("%w: rain-rate asset suite is incomplete", orchestration.ErrInvalidEvent)
 	}
 	if product.ProductType != workflow.ProductRainRate &&
-		(len(mediaCounts) != 1 || pointIndexes != 0) {
+		(len(mediaCounts) != len(product.ValidTimes) || pointIndexes > 1 ||
+			(len(product.Assets) != 3 && pointIndexes != 1)) {
 		return fmt.Errorf("%w: accumulation asset suite is incomplete", orchestration.ErrInvalidEvent)
 	}
 	return nil
 }
 
 func manifestValidTime(product workflow.ProductManifestEntry, leadMinutes int) time.Time {
+	if product.ProductType == workflow.ProductAccumulation60 && len(product.ValidTimes) == 2 &&
+		(leadMinutes == 60 || leadMinutes == 120) {
+		return product.ValidTimes[leadMinutes/60-1]
+	}
 	if product.ProductType == workflow.ProductRainRate {
 		if leadMinutes < 5 || leadMinutes > 120 || leadMinutes%5 != 0 {
 			return time.Time{}

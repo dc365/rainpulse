@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { focusedPanelFromSearch, workspaceLayoutSearch } from './layoutState'
-import { SharedTimeline, updateLayerErrorState } from './MainWorkspace'
+import { SharedTimeline, updateLayerErrorState, visibleWorkspaceWarnings } from './MainWorkspace'
 import type { WorkspacePanel } from './model'
 
 const issueTime = '2026-09-01T01:00:00Z'
@@ -50,6 +50,11 @@ const panels: WorkspacePanel[] = [
 ]
 
 afterEach(cleanup)
+
+it('hides optional ensemble diagnostics without hiding other warnings', () => {
+  expect(visibleWorkspaceWarnings(['ensemble-product'])).toEqual([])
+  expect(visibleWorkspaceWarnings(['ensemble-product', 'analysis-fallback'])).toEqual(['analysis-fallback'])
+})
 
 describe('SharedTimeline', () => {
   it('renders a continuous rail and moves by controls or keyboard', () => {

@@ -186,8 +186,7 @@ def load_shadow_task_configuration(path: str | Path) -> ShadowTaskConfiguration:
         or configuration.native_output_lead_minutes != tuple(range(10, 121, 10))
         or configuration.gpu_batch_size < 1
         or configuration.batch_fallback != "serial"
-        or configuration.temporal_adapter
-        != "bidirectional-dense-optical-flow-advection-v1"
+        or configuration.temporal_adapter != "bidirectional-dense-optical-flow-advection-v1"
         or raw.get("lifecycle") != "shadow"
         or raw.get("operational_eligible") is not False
     ):
@@ -239,9 +238,7 @@ def _execute_nowcastnet_shadow(
     info["runtime_ms"] = runtime_ms
     info["temporal_adapter"] = runtime.task.temporal_adapter
     info["native_frame_count"] = len(runtime.task.native_output_lead_minutes)
-    info["derived_frame_count"] = sum(
-        frame.frame_kind == "derived" for frame in adapted.frames
-    )
+    info["derived_frame_count"] = sum(frame.frame_kind == "derived" for frame in adapted.frames)
     objects = build_nowcastnet_shadow_product_bundle(
         adapted,
         run_id=request.run_id,
@@ -372,7 +369,12 @@ def run_fixed_tile_atlas(
                         ],
                     )
                 )
-    stitched, stitched_valid = stitch_member_tiles(tile_forecasts, output_shape=runtime.grid.shape)
+    # Keep original inputs/noise/batching; make the previously adjacent outputs
+    # overlap before numerical publication, never by filtering rendered PNGs.
+    halo = 16 if runtime.atlas.atlas_version == "fujian-nowcastnet-tile-atlas-v1" else 0
+    stitched, stitched_valid = stitch_member_tiles(
+        tile_forecasts, output_shape=runtime.grid.shape, trusted_halo=halo
+    )
     publish = np.broadcast_to(
         preparation.publication_mask[np.newaxis, np.newaxis, ...],
         stitched_valid.shape,
@@ -383,10 +385,10 @@ def run_fixed_tile_atlas(
     stitched = np.where(stitched_valid == 1, stitched, np.nan).astype("float32", copy=False)
     summary: dict[str, Any] = {
         "eligible_tile_count": len(preparation.eligible),
+        "stitch_policy": "trusted-halo16-raised-edge-v1" if halo else "raised-edge-v1",
         "rejected_tile_count": len(preparation.rejected),
         "rejected_tiles": [
-            {"tile_id": tile_id, "reason": reason}
-            for tile_id, reason in preparation.rejected
+            {"tile_id": tile_id, "reason": reason} for tile_id, reason in preparation.rejected
         ],
         "trusted_coverage_ratio": preparation.trusted_coverage_ratio,
         "publication_coverage_ratio": float(np.mean(preparation.publication_mask)),

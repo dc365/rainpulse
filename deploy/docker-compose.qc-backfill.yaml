@@ -1,0 +1,9 @@
+# Optional 105 historical backfill capacity. Apply after unified overlay.
+# Keep serial regeneration submission; parallelize independent scans within a request.
+services:
+  radar-qc-worker:
+    deploy:
+      replicas: 4
+  radar-grid-worker:
+    deploy:
+      replicas: 4

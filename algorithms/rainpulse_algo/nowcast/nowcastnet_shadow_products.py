@@ -12,6 +12,8 @@ import numpy as np
 
 from rainpulse_algo.diagnostics.png import encode_rgba_png
 from rainpulse_algo.grid import RegularLatLonGrid
+from rainpulse_algo.products.accumulation import accumulate_windows
+from rainpulse_algo.products.accumulation_render import render_accumulation_windows
 from rainpulse_algo.products.builder import rainfall_rgba
 from rainpulse_algo.products.point_index import encode_point_query_index
 from rainpulse_algo.products.profile import ProductBuilderProfile
@@ -72,9 +74,7 @@ def build_nowcastnet_shadow_product_bundle(
         raise NowcastNetShadowProductError("NowcastNet shadow lead times differ")
     if any(frame.frame_kind not in {"native", "derived"} for frame in forecast.frames):
         raise NowcastNetShadowProductError("NowcastNet frame kind is invalid")
-    if np.any((valid != 0) & (valid != 1)) or np.any(
-        ~np.isfinite(members[valid == 1])
-    ):
+    if np.any((valid != 0) & (valid != 1)) or np.any(~np.isfinite(members[valid == 1])):
         raise NowcastNetShadowProductError("NowcastNet shadow values or masks are invalid")
     if np.any(confidence[valid == 1] < 0) or np.any(confidence[valid == 1] > 1):
         raise NowcastNetShadowProductError("NowcastNet shadow confidence is invalid")
@@ -139,6 +139,13 @@ def build_nowcastnet_shadow_product_bundle(
         latitude_interval=grid.latitude_interval_deg,
     )
     objects[POINT_QUERY_PATH] = point_index
+    accumulation_objects, accumulation_frames, accumulation_queries = render_accumulation_windows(
+        accumulate_windows(members, valid, confidence, lead_minutes=leads),
+        issue_time=issue_time,
+        grid=grid,
+        palette=product_profile.palette,
+    )
+    objects.update(accumulation_objects)
     created_at = datetime.now(UTC)
     manifest = {
         "contract_name": CONTRACT_NAME,
@@ -171,7 +178,10 @@ def build_nowcastnet_shadow_product_bundle(
             for stop in product_profile.palette.rain_rate
         ],
         "frames": frames,
+        "accumulations": accumulation_frames,
+        "accumulation_version": "1.0",
         "point_queries": {
+            **accumulation_queries,
             "nowcastnet": {
                 "object_path": POINT_QUERY_PATH,
                 "sha256": hashlib.sha256(point_index).hexdigest(),
@@ -184,7 +194,7 @@ def build_nowcastnet_shadow_product_bundle(
                 "frame_kinds": [frame.frame_kind for frame in forecast.frames],
                 "derivations": [frame.derivation or "" for frame in forecast.frames],
                 "quality_kind": "shadow_member_mean_support_fraction",
-            }
+            },
         },
         "input_analysis": input_analysis,
         "runtime": runtime,

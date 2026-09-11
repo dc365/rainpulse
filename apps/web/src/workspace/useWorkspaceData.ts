@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useReducer, useState } from 'react'
 import type { CycleSummary } from './model'
-import { assertCycleDetail, assertCycleList, initialWorkspaceState, workspaceReducer } from './workspaceState'
+import { assertCycleDetail, initialWorkspaceState, workspaceReducer } from './workspaceState'
+import { readCycleCatalog } from './readCycleCatalog'
 
 export function useWorkspaceData() {
   const [state, dispatch] = useReducer(workspaceReducer, initialWorkspaceState)
@@ -11,10 +12,9 @@ export function useWorkspaceData() {
 
   useEffect(() => {
     const controller = new AbortController()
-    void readJSON('/api/v1/workspace/cycles?limit=200', controller.signal)
-      .then(({ payload }) => {
+    void readCycleCatalog(controller.signal)
+      .then(payload => {
         if (controller.signal.aborted) return
-        assertCycleList(payload)
         dispatch({ type: 'catalog', payload })
       }).catch((error: unknown) => {
         if (!controller.signal.aborted) dispatch({ type: 'catalog-error', message: errorMessage(error) })

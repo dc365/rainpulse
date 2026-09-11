@@ -61,6 +61,7 @@ from .qc_geometry import (
 )
 from .qc_input import QCInputView, open_qc_input
 from .qc_metrics import polar_mask_area_km2
+from .qc_polarimetric_radial import polarimetric_extent_masks
 from .qc_texture import (
     TEXTURE_AZIMUTH_HALF_WINDOW_DEG,
     TEXTURE_INPUT_FIELDS,
@@ -244,6 +245,7 @@ class RadialInterferenceConfig:
     low_quality_probability: float
     flag_probability: float
     morphology: RadialMorphologyConfig
+    polarimetric_extent_radars: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -459,6 +461,7 @@ def load_qc_profile(path: str | Path, flag_path: str | Path) -> BasicQCProfile:
             maximum_range_m=float(vertical.get("maximum_range_m", 150_000.0)),
         ),
         radial_interference=RadialInterferenceConfig(
+            polarimetric_extent_radars=tuple(radial.get("polarimetric_extent_radars", [])),
             decision_version=decision_version,
             minimum_valid_gate_fraction=float(radial["minimum_valid_gate_fraction"]),
             minimum_consecutive_gates=int(radial["minimum_consecutive_gates"]),
@@ -832,6 +835,12 @@ def apply_basic_qc(
             profile.radial_interference,
             ranges_m=ranges,
             azimuth_deg=azimuth,
+            rhohv=(
+                rhohv
+                if root.attrs.get("radar_id")
+                in profile.radial_interference.polarimetric_extent_radars
+                else None
+            ),
             vertical_consistency=(
                 p_vertical if profile.vertical_consistency.mode == "radial_evidence" else None
             ),
@@ -1586,6 +1595,7 @@ def _detect_radial_interference(
     config: RadialInterferenceConfig,
     *,
     ranges_m: np.ndarray | None = None,
+    rhohv: np.ndarray | None = None,
     azimuth_deg: np.ndarray | None = None,
     vertical_consistency: np.ndarray | None = None,
     higher_elevation_extent_fraction: np.ndarray | None = None,
@@ -1598,6 +1608,7 @@ def _detect_radial_interference(
             valid,
             config,
             ranges_m=ranges_m,
+            rhohv=rhohv,
             azimuth_deg=azimuth_deg,
             vertical_consistency=vertical_consistency,
             higher_elevation_extent_fraction=higher_elevation_extent_fraction,
@@ -1862,6 +1873,7 @@ def _detect_radial_interference_v2(
     config: RadialInterferenceConfig,
     *,
     ranges_m: np.ndarray | None = None,
+    rhohv: np.ndarray | None = None,
     azimuth_deg: np.ndarray | None = None,
     vertical_consistency: np.ndarray | None = None,
     higher_elevation_extent_fraction: np.ndarray | None = None,
@@ -2115,6 +2127,22 @@ def _detect_radial_interference_v2(
                 config.morphology.diagnostic_probability
             )
 
+    # Add independent polarimetric/range evidence only after seed expansion.
+    # It cannot seed fan growth and remains subject to the weather veto below.
+    polar_candidate = None
+    if config.polarimetric_extent_radars and rhohv is not None:
+        polar_candidate, polar_hard = polarimetric_extent_masks(dbzh, valid, rhohv, ranges)
+        candidate_mask |= polar_candidate
+        candidate_reason_bits[polar_candidate] |= RADIAL_CANDIDATE_REASON_EXTENT
+        probabilities[polar_candidate] = np.maximum(
+            probabilities[polar_candidate], config.morphology.diagnostic_probability
+        )
+        probabilities[polar_hard] = np.maximum(probabilities[polar_hard], config.flag_probability)
+        interference_type[polar_candidate & (interference_type == 0)] = INTERFERENCE_TYPE_CODES[
+            "broad"
+        ]
+        context_promoted_rays |= np.any(polar_hard, axis=1)
+
     hard_mask = valid & (np.nan_to_num(probabilities, nan=0.0) >= config.flag_probability)
     meteo_veto_mask = np.zeros(dbzh.shape, dtype=bool)
     override_mask = np.zeros(dbzh.shape, dtype=bool)
@@ -2159,6 +2187,14 @@ def _detect_radial_interference_v2(
         final_reason=final_reason,
     )
     decision_summary = summarize_radial_decision(decision)
+    if polar_candidate is not None:
+        decision_summary["polarimetric_extent"] = {
+            "detector_version": "range-rhohv-1.0.0",
+            "candidate_gate_count": int(np.count_nonzero(polar_candidate)),
+            "hard_gate_count": int(np.count_nonzero(polar_candidate & hard_mask)),
+            "veto_gate_count": int(np.count_nonzero(polar_candidate & meteo_veto_mask)),
+        }
+
     flagged_ray_count = int(np.count_nonzero(np.any(hard_mask, axis=1)))
     weak_candidate_rays = np.any(candidate_mask & ~strong_seed_mask, axis=1)
     for type_name, code in INTERFERENCE_TYPE_CODES.items():
@@ -3561,6 +3597,13 @@ def _validate_profile(profile: BasicQCProfile) -> None:
         > profile.radial_interference.flag_probability
     ):
         raise QCConfigError("radial low-quality probability must not exceed flag probability")
+    allowlist = profile.radial_interference.polarimetric_extent_radars
+    if allowlist and profile.decision_version != "evidence-v2":
+        raise QCConfigError("polarimetric extent requires evidence-v2 decisions")
+    if any(
+        not isinstance(radar, str) or not radar or radar != radar.lower() for radar in allowlist
+    ) or len(set(allowlist)) != len(allowlist):
+        raise QCConfigError("polarimetric extent requires unique lowercase radar IDs")
     morphology = profile.radial_interference.morphology
     if morphology.diagnostic_probability > profile.radial_interference.flag_probability:
         raise QCConfigError("radial diagnostic probability must not exceed flag probability")

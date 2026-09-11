@@ -36,10 +36,13 @@ type RuntimeOptions struct {
 }
 
 type runtimeHandler struct {
+	analysisOnce       sync.Once
+	analysis           *analysisJobs
 	eventHubOnce       sync.Once
 	eventHub           *workspaceEventHub
 	next               http.Handler
 	workspace          http.Handler
+	intervalProjection http.Handler
 	store              RuntimeStore
 	objects            RuntimeObjectReader
 	nowcastNetProducts nowcastNetProductStore
@@ -92,7 +95,7 @@ func NewRuntimeHandler(core http.Handler, options RuntimeOptions) http.Handler {
 		now = time.Now
 	}
 	return &runtimeHandler{
-		next: projected, workspace: projected,
+		next: projected, workspace: projected, intervalProjection: projection,
 		store: options.Store, objects: options.Objects,
 		nowcastNetProducts: newCombinedNowcastNetProductStore(formalNowcastNet, legacyNowcastNet),
 		ensembleRoot:       strings.TrimSpace(options.EnsembleRoot),
@@ -103,6 +106,20 @@ func NewRuntimeHandler(core http.Handler, options RuntimeOptions) http.Handler {
 
 func (handler *runtimeHandler) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 	switch {
+	case request.URL.Path == verificationPath+"/compare" && request.Method == http.MethodPost:
+		handler.compareVerification(response, request)
+		return
+	case request.URL.Path == analysisJobsPath || strings.HasPrefix(request.URL.Path, analysisJobsPath+"/"):
+		handler.verificationJobs(response, request)
+		return
+	case request.URL.Path == intervalPath && request.Method == http.MethodPost:
+		handler.calculateInterval(response, request)
+	case request.URL.Path == verificationPath && request.Method == http.MethodPost:
+		handler.calculateVerification(response, request)
+		return
+	case request.Method == http.MethodGet && intervalAssetPattern.MatchString(request.URL.Path):
+		handler.proxyInterval(response, request, strings.Replace(request.URL.Path, intervalPath, "/interval", 1))
+		return
 	case request.Method == http.MethodGet && request.URL.Path == workspaceSamplePath:
 		handler.getExactSample(response, request)
 		return
@@ -124,6 +141,11 @@ func (handler *runtimeHandler) ServeHTTP(response http.ResponseWriter, request *
 
 func (handler *runtimeHandler) getExactSample(response http.ResponseWriter, request *http.Request) {
 	assetURL := strings.TrimSpace(request.URL.Query().Get("asset_url"))
+	if intervalAssetPattern.MatchString(assetURL) {
+		target := strings.Replace(strings.TrimSuffix(assetURL, "/image"), intervalPath, "/interval", 1) + "/sample?" + request.URL.Query().Encode()
+		handler.proxyInterval(response, request, target)
+		return
+	}
 	longitude, longitudeErr := strconv.ParseFloat(request.URL.Query().Get("longitude"), 64)
 	latitude, latitudeErr := strconv.ParseFloat(request.URL.Query().Get("latitude"), 64)
 	if assetURL == "" || longitudeErr != nil || latitudeErr != nil ||

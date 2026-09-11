@@ -94,6 +94,7 @@ type SourceForecastManifest struct {
 }
 
 type ApplicationProductManifest struct {
+	AccumulationVersion  string                 `json:"accumulation_version,omitempty"`
 	ContractName         string                 `json:"contract_name"`
 	ContractVersion      string                 `json:"contract_version"`
 	RunID                uuid.UUID              `json:"run_id"`

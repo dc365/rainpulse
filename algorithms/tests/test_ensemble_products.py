@@ -97,9 +97,9 @@ def test_builds_complete_png_and_netcdf_layer_suite() -> None:
     validation = validate_ensemble_application_product_bundle(objects)
     manifest = validation["manifest"]
 
-    assert validation["layer_count"] == 8
-    assert validation["asset_count"] == 384
-    assert validation["object_count"] == 385
+    assert validation["layer_count"] == 10
+    assert validation["asset_count"] == 390
+    assert validation["object_count"] == 393
     assert manifest["member_count"] == 12
     assert manifest["operational_eligible"] is False
     assert manifest["source_forecast"]["sha256"] == artifact_sha256(forecast)

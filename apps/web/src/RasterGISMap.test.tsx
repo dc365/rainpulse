@@ -19,6 +19,18 @@ vi.mock('ol/Map.js', async () => {
   } }
 })
 afterEach(() => { vi.useRealTimers(); cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
+it('shows accumulation progress instead of unavailable, but retains real failure feedback', () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
+  const props = { imageDescription: 'rain', validTimeLabel: 'T0', contextLabel: 'test',
+    productLabel: 'rain', legend: [], footerNote: '', mapLabel: 'rain map', resetViewLabel: 'reset',
+    loading: true, loadingLabel: '正在计算累积…', layerError: false, onLayerError: vi.fn(),
+    imageExtent: [118,25,123,27] as [number,number,number,number] }
+  const { rerender } = render(<RasterGISMap {...props} />)
+  expect(screen.getByText('正在计算累积…')).toBeTruthy()
+  expect(screen.queryByText('降水图层暂不可用')).toBeNull()
+  rerender(<RasterGISMap {...props} loading={false} />)
+  expect(screen.getByText('降水图层暂不可用')).toBeTruthy()
+})
 it('keeps the source on equivalent bounds and errors, replaces changed frames, and selects by keyboard', () => {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
   const sources = vi.spyOn(ImageLayer.prototype, 'setSource')

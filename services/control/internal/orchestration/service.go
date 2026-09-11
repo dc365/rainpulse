@@ -200,6 +200,7 @@ type PystepsLKInput struct {
 }
 
 type NowcastNetShadowInput struct {
+	RegenerationID           uuid.UUID
 	RunID                    uuid.UUID
 	IssueTime                time.Time
 	GridID                   string
@@ -270,9 +271,10 @@ type Service struct {
 type RegenerationPreset string
 
 const (
-	RegenerationForecast  RegenerationPreset = "forecast_all"
-	RegenerationPystepsLK RegenerationPreset = "pysteps_lk"
-	RegenerationProducts  RegenerationPreset = "products"
+	RegenerationForecast   RegenerationPreset = "forecast_all"
+	RegenerationPystepsLK  RegenerationPreset = "pysteps_lk"
+	RegenerationProducts   RegenerationPreset = "products"
+	RegenerationNowcastNet RegenerationPreset = "nowcastnet"
 )
 
 type RegenerationRequest struct {
@@ -1168,6 +1170,9 @@ func (service *Service) CreateNowcastNetShadow(
 	now := service.now().UTC()
 	issueTime := input.IssueTime.UTC()
 	jobID := stableID("nowcastnet-shadow-job", input.RunID.String(), input.ModelVersion, input.ConfigVersion)
+	if input.RegenerationID != uuid.Nil {
+		jobID = stableID("nowcastnet-shadow-regeneration", input.RunID.String(), input.RegenerationID.String())
+	}
 	traceID := stableID("nowcastnet-shadow-trace", input.RunID.String())
 	eventID := stableID("nowcastnet-shadow-request", jobID.String())
 	algorithmRunID := stableID("nowcastnet-shadow-algorithm-run", jobID.String())
@@ -1176,6 +1181,9 @@ func (service *Service) CreateNowcastNetShadow(
 		input.RunID, url.PathEscape(input.ModelID), url.PathEscape(input.ModelVersion),
 		url.PathEscape(input.ConfigVersion),
 	)
+	if input.RegenerationID != uuid.Nil {
+		outputPrefix += jobID.String() + "/"
+	}
 	frames := make([]NowcastNetShadowAnalysisFrame, len(input.InputFrames))
 	for index, frame := range input.InputFrames {
 		frames[index] = NowcastNetShadowAnalysisFrame{
@@ -1220,7 +1228,7 @@ func (service *Service) CreateNowcastNetShadow(
 func validateNowcastNetShadowInput(input NowcastNetShadowInput) error {
 	if input.RunID == uuid.Nil || input.IssueTime.IsZero() || input.GridID == "" ||
 		(input.CurrentStatus != workflow.RunInputReady &&
-			!(input.HistoricalRegeneration && input.CurrentStatus == workflow.RunPublished)) {
+			!((input.HistoricalRegeneration || input.RegenerationID != uuid.Nil) && input.CurrentStatus == workflow.RunPublished)) {
 		return fmt.Errorf("NowcastNet shadow requires an INPUT_READY forecast run")
 	}
 	if !input.IssueTime.UTC().Equal(input.IssueTime.UTC().Truncate(5 * time.Minute)) {
@@ -1762,6 +1770,25 @@ func (service *Service) Rerun(
 	if err != nil {
 		return workflow.Run{}, err
 	}
+	if request.Preset == RegenerationNowcastNet {
+		loader, ok := service.repository.(interface {
+			GetNowcastNetRegeneration(context.Context, uuid.UUID) (NowcastNetShadowInput, error)
+		})
+		if !ok {
+			return workflow.Run{}, ErrUnsupportedRerun
+		}
+		input, err := loader.GetNowcastNetRegeneration(ctx, sourceRunID)
+		if err != nil {
+			return workflow.Run{}, err
+		}
+		input.RegenerationID = service.newID()
+		job, err := service.CreateNowcastNetShadow(ctx, input)
+		if err != nil {
+			return workflow.Run{}, err
+		}
+		source.RegenerationJobID = &job.ID
+		return source, nil
+	}
 	if active, activeErr := service.repository.FindActiveRegeneration(ctx, sourceRunID, request.Preset); activeErr == nil {
 		return active, ErrRegenerationActive
 	} else if !errors.Is(activeErr, workflow.ErrNotFound) {
@@ -1837,7 +1864,7 @@ func (service *Service) Rerun(
 
 func validRegenerationPreset(value RegenerationPreset) bool {
 	switch value {
-	case RegenerationForecast, RegenerationPystepsLK, RegenerationProducts:
+	case RegenerationForecast, RegenerationPystepsLK, RegenerationProducts, RegenerationNowcastNet:
 		return true
 	default:
 		return false

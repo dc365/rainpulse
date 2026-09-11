@@ -43,6 +43,39 @@ func TestWorkspaceAddsNativeCadenceNowcastNetShadowPanel(t *testing.T) {
 	}
 }
 
+func TestWorkspaceSeparatesAccumulationWindowsFromRainRate(t *testing.T) {
+	issue := time.Date(2026, 8, 28, 8, 30, 0, 0, time.UTC)
+	bundle := nowcastnetproductstore.Bundle{BundleID: uuid.New(), IssueTime: issue,
+		Frames: []nowcastnetproductstore.Frame{{LeadMinutes: 5, ValidTime: issue.Add(5 * time.Minute)}},
+	}
+	for i, id := range []string{"hour_1", "hour_2", "total_2h"} {
+		lead := []int{60, 120, 120}[i]
+		bundle.Accumulations = append(bundle.Accumulations, nowcastnetproductstore.Frame{
+			WindowID: id, LeadMinutes: lead, ValidTime: issue.Add(time.Duration(lead) * time.Minute), Unit: "mm",
+		})
+	}
+	detail := cycleDetail{}
+	new(Handler).addNowcastNetProduct(&detail, bundle)
+	if len(detail.Panels) != 3 {
+		t.Fatalf("panels: %+v", detail.Panels)
+	}
+	for _, panel := range detail.Panels {
+		if panel.PanelID == "nowcastnet" {
+			if len(panel.Frames) != 1 {
+				t.Fatal("accumulation mixed with rain rate")
+			}
+			continue
+		}
+		want := 1
+		if panel.DataKind == "accumulation_60" {
+			want = 2
+		}
+		if len(panel.Frames) != want || panel.LegendUnit != "mm" || *panel.Legend[1].Minimum != 0.5 {
+			t.Fatalf("accumulation panel: %+v", panel)
+		}
+	}
+}
+
 func TestWorkspaceListCollapsesAnalysisAndForecastIntoOneCycle(t *testing.T) {
 	core := fixtureCore(t)
 	handler := &Handler{core: core, now: func() time.Time {

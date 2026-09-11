@@ -26,6 +26,7 @@ export type CycleList = {
   items: CycleSummary[]
   generated_at: string
   degraded_sources?: string[]
+  next_cursor?: string | null
 }
 
 export type WorkspaceLegendEntry = {
@@ -203,7 +204,7 @@ export function displayFrameAt(
 
   const atIssueTime = validTime != null
     && Date.parse(validTime) === Date.parse(detail.issue_time)
-  if (panel.role !== 'forecast' || !atIssueTime) {
+  if (panel.role !== 'forecast' || !atIssueTime || panel.data_kind.startsWith('accumulation_')) {
     return { frame: null, usesAnalysisBaseline: false }
   }
 

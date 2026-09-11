@@ -4,6 +4,12 @@ set -euo pipefail
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repository_root"
 
+deployment_mode="${1:-legacy}"
+case "$deployment_mode" in
+  legacy|--unified) ;;
+  *) echo "Usage: scripts/build_realtime_shadow.sh [--unified]" >&2; exit 2 ;;
+esac
+
 mkdir -p .build/linux-amd64
 # The shadow probe reuses the standard long-lived Python worker image. Build
 # its pinned site-packages before Docker evaluates algorithms/worker.Dockerfile.
@@ -13,6 +19,10 @@ make prepare-bdp-go
 revision="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
 version="${RAINPULSE_VERSION:-$revision}"
 ldflags="-s -w -X github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo.Version=$version -X github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo.Revision=$revision"
+if [[ "$deployment_mode" == "--unified" ]]; then
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 RAINPULSE_REQUIRE_BDP_SOURCE=1 bash scripts/go_control.sh build -buildvcs=false -trimpath \
+  -ldflags="$ldflags" -o "$repository_root/.build/linux-amd64/rainpulse" .
+else
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 RAINPULSE_REQUIRE_BDP_SOURCE=1 bash scripts/go_control.sh build -buildvcs=false -trimpath \
   -ldflags="$ldflags" -o "$repository_root/.build/linux-amd64/rainpulse-api" ./cmd/api
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 RAINPULSE_REQUIRE_BDP_SOURCE=1 bash scripts/go_control.sh build -buildvcs=false -trimpath \
@@ -21,6 +31,7 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 RAINPULSE_REQUIRE_BDP_SOURCE=1 bash script
   -ldflags="$ldflags" -o "$repository_root/.build/linux-amd64/rainpulse-ingest" ./cmd/ingest
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 RAINPULSE_REQUIRE_BDP_SOURCE=1 bash scripts/go_control.sh build -buildvcs=false -trimpath \
   -ldflags="-s -w" -o "$repository_root/.build/linux-amd64/rainpulse-healthcheck" ./cmd/healthcheck
+fi
 pnpm --filter @rainpulse/web build
 
 echo "Built RainPulse realtime-shadow control binaries and Web assets."

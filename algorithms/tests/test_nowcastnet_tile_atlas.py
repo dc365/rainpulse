@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+
 from rainpulse_algo.nowcast.nowcastnet_tile_atlas import (
     AtlasTile,
     TileAtlas,
@@ -125,3 +126,26 @@ def test_large_context_candidate_covers_grid_and_preserves_consensus() -> None:
     )
     assert np.all(valid == 1)
     np.testing.assert_allclose(result[0, 0], field, rtol=1e-6)
+
+
+def test_original_atlas_halo_blends_without_changing_consensus() -> None:
+    root = Path(__file__).resolve().parents[2]
+    atlas = load_tile_atlas(root / "configs/nowcast/fujian-nowcastnet-tile-atlas-v1.yaml")
+    values = [
+        (t, np.full((1, 1, t.height, t.width), 1 + t.x_start / 64 + t.y_start / 64))
+        for t in atlas.tiles
+    ]
+    hard, _ = stitch_member_tiles(values, output_shape=atlas.grid_shape)
+    smooth, valid = stitch_member_tiles(values, output_shape=atlas.grid_shape, trusted_halo=16)
+    assert np.max(np.abs(np.diff(hard, axis=-1))) > 1
+    assert np.max(np.abs(np.diff(smooth, axis=-1))) < 0.3
+    assert np.max(np.abs(np.diff(smooth, axis=-2))) < 0.3
+    assert np.all(valid == 1)
+    field = np.ones(atlas.grid_shape, dtype="float32")
+    field[96, 192] = 80
+    same, _ = stitch_member_tiles(
+        [(t, field[t.y_start : t.y_end, t.x_start : t.x_end][None, None]) for t in atlas.tiles],
+        output_shape=atlas.grid_shape,
+        trusted_halo=16,
+    )
+    np.testing.assert_allclose(same[0, 0], field, rtol=1e-6)

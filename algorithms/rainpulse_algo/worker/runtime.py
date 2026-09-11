@@ -367,9 +367,7 @@ class Worker:
         *,
         replay: bool = False,
     ) -> None:
-        subject = (
-            JOB_COMPLETED_SUBJECT if isinstance(event, JobCompleted) else JOB_FAILED_SUBJECT
-        )
+        subject = JOB_COMPLETED_SUBJECT if isinstance(event, JobCompleted) else JOB_FAILED_SUBJECT
         headers = {} if replay else {"Nats-Msg-Id": str(event.event_id)}
         await jetstream.publish(
             subject,
@@ -490,12 +488,16 @@ class Worker:
             return True
         if isinstance(error, S3Error):
             response_status = getattr(error.response, "status", 0)
-            return error.code in {
-                "InternalError",
-                "RequestTimeout",
-                "ServiceUnavailable",
-                "SlowDown",
-            } or response_status >= 500
+            return (
+                error.code
+                in {
+                    "InternalError",
+                    "RequestTimeout",
+                    "ServiceUnavailable",
+                    "SlowDown",
+                }
+                or response_status >= 500
+            )
         return False
 
     @staticmethod
@@ -563,9 +565,7 @@ class Worker:
         publication_observability: Mapping[str, Any],
     ) -> dict[str, Any]:
         failure_stage = getattr(error, "failure_stage", getattr(error, "stage", default_stage))
-        error_observability = self._coerce_observability(
-            getattr(error, "observability", None)
-        )
+        error_observability = self._coerce_observability(getattr(error, "observability", None))
         return self._log_observability_fields(
             started_tick=started_tick,
             result_observability={**result_observability, **error_observability},
@@ -581,7 +581,46 @@ class Worker:
         try:
             request_line = await asyncio.wait_for(reader.readline(), timeout=2)
             path = request_line.decode(errors="replace").split(" ")[1]
-        except (TimeoutError, IndexError):
+            if path.startswith("/interval") and self._handler.profile == "product-builder":
+                from rainpulse_algo.products.interval import IntervalService
+
+                if not hasattr(self, "_interval_service"):
+                    self._interval_service = IntervalService()
+                    self._interval_slots = asyncio.Semaphore(4)
+                headers = {}
+                for _ in range(32):
+                    line = await asyncio.wait_for(reader.readline(), timeout=2)
+                    if line in (b"\r\n", b"\n", b""):
+                        break
+                    name, value = line.decode().split(":", 1)
+                    headers[name.lower()] = value.strip()
+                size = int(headers.get("content-length", "0"))
+                maximum = 8 * 1024**2 if path == "/interval/summary" else 65536
+                if not 0 <= size <= maximum or "transfer-encoding" in headers:
+                    raise ValueError("invalid interval request length")
+                body = await asyncio.wait_for(reader.readexactly(size), timeout=5)
+                if self._interval_slots.locked():
+                    code, media, data = 429, "application/json", b'{"error":"busy; retry shortly"}'
+                else:
+                    async with self._interval_slots:
+                        code, media, data = await asyncio.to_thread(
+                            self._interval_service.dispatch,
+                            request_line.decode().split(" ")[0],
+                            path,
+                            body,
+                        )
+                writer.write(
+                    (
+                        f"HTTP/1.1 {code} Result\r\nContent-Type: {media}\r\n"
+                        f"Content-Length: {len(data)}\r\nConnection: close\r\n\r\n"
+                    ).encode()
+                    + data
+                )
+                await writer.drain()
+                writer.close()
+                await writer.wait_closed()
+                return
+        except (TimeoutError, IndexError, ValueError, asyncio.IncompleteReadError):
             path = ""
         connected = self._connection is not None and self._connection.is_connected
         healthy = path == "/healthz" and self._ready and connected

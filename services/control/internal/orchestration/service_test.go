@@ -826,6 +826,25 @@ func TestCreateNowcastNetShadowSchedulesIndependentAlgorithmRun(t *testing.T) {
 	if err != nil || second.ID != job.ID {
 		t.Fatalf("NowcastNet shadow identifiers are not deterministic: %v", err)
 	}
+	input.RegenerationID = uuid.New()
+	input.CurrentStatus = workflow.RunPublished
+	regenerated, err := service.CreateNowcastNetShadow(context.Background(), input)
+	if err != nil || regenerated.ID == job.ID {
+		t.Fatalf("manual NowcastNet must create a distinct job without rebuilding baseline: %v", err)
+	}
+	var rerun NowcastNetShadowRequested
+	if err := json.Unmarshal(repository.nowcastNetShadow.Outbox.Payload, &rerun); err != nil {
+		t.Fatal(err)
+	}
+	if rerun.RunID != requested.RunID || rerun.Payload.OutputPrefix == requested.Payload.OutputPrefix {
+		t.Fatal("manual regeneration must reuse baseline identity but isolate output until success")
+	}
+	repository.run = workflow.Run{ID: input.RunID, Status: workflow.RunPublished}
+	repository.nowcastRegeneration = input
+	returned, err := service.Rerun(context.Background(), input.RunID, RegenerationRequest{Preset: RegenerationNowcastNet, Reason: "manual NowcastNet test"})
+	if err != nil || returned.ID != input.RunID || returned.RegenerationJobID == nil || returned.Status != workflow.RunPublished {
+		t.Fatalf("algorithm-only rerun must preserve baseline and return exact job: %#v %v", returned, err)
+	}
 	input.InputFrames[3].AnalysisTime = input.InputFrames[3].AnalysisTime.Add(time.Minute)
 	if _, err := service.CreateNowcastNetShadow(context.Background(), input); err == nil {
 		t.Fatal("NowcastNet shadow accepted a non-exact analysis frame")
@@ -954,6 +973,7 @@ func TestCreateForecastVerificationRequiresCompleteFutureTruth(t *testing.T) {
 }
 
 type fakeRepository struct {
+	nowcastRegeneration  NowcastNetShadowInput
 	created              workflow.CreateBundle
 	radarDecode          workflow.RadarDecodeBundle
 	radarQC              workflow.RadarQCBundle
@@ -1095,6 +1115,10 @@ func (repository *fakeRepository) GetRun(_ context.Context, runID uuid.UUID) (wo
 		return repository.run, nil
 	}
 	return workflow.Run{}, workflow.ErrNotFound
+}
+
+func (repository *fakeRepository) GetNowcastNetRegeneration(context.Context, uuid.UUID) (NowcastNetShadowInput, error) {
+	return repository.nowcastRegeneration, nil
 }
 
 func (repository *fakeRepository) GetNowcastInputRegeneration(

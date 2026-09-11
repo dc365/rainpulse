@@ -18,6 +18,17 @@ GET /api/v1/workspace/nowcastnet-shadow-status
 identified by one grid and one UTC issue time. Its detail contains one absolute
 `valid_time` timeline and an ordered list of map panels.
 
+The cycle list accepts `limit` (default 100, maximum 500) and `cursor` (the
+previous page's `next_cursor` cycle ID). Items are ordered by UTC issue time
+descending, then cycle ID descending. `next_cursor` is absent on the final page.
+Clients must follow all pages before presenting a complete history catalog.
+Upstream analysis versions are also paginated before per-cycle selection, so
+recomputing one cycle cannot evict older times. Pagination is a live read, not a
+frozen snapshot; a later refresh discovers concurrently added newer results.
+Date/time filtering uses Beijing time in the picker and only filters published
+results. It neither scans raw directories nor launches processing; an empty
+result range makes no claim about raw-data availability.
+
 ## Stable forecast panels
 
 The first four panel identities are stable even when products are absent:

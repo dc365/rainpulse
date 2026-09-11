@@ -1,0 +1,82 @@
+# Apply after base and realtime-shadow. Only Go deployment changes; data volumes stay.
+services:
+  api:
+    profiles: ["legacy-control"]
+  web:
+    profiles: ["legacy-control"]
+  orchestrator:
+    profiles: ["legacy-control"]
+  radar-ingest:
+    profiles: ["legacy-control"]
+  radar-decode-worker:
+    depends_on: !override
+      nats:
+        condition: service_healthy
+      minio-worker-policy:
+        condition: service_completed_successfully
+  radar-qc-worker:
+    depends_on: !override
+      nats:
+        condition: service_healthy
+      minio-worker-policy:
+        condition: service_completed_successfully
+  radar-grid-worker:
+    depends_on: !override
+      nats:
+        condition: service_healthy
+      minio-worker-policy:
+        condition: service_completed_successfully
+  radar-mosaic-worker:
+    depends_on: !override
+      nats:
+        condition: service_healthy
+      minio-worker-policy:
+        condition: service_completed_successfully
+  analysis-qpe-worker:
+    depends_on: !override
+      nats:
+        condition: service_healthy
+      minio-worker-policy:
+        condition: service_completed_successfully
+  analysis-diagnostics-worker:
+    depends_on: !override
+      nats:
+        condition: service_healthy
+      minio-worker-policy:
+        condition: service_completed_successfully
+  nowcast-input-worker:
+    depends_on: !override
+      nats:
+        condition: service_healthy
+      minio-worker-policy:
+        condition: service_completed_successfully
+  pysteps-lk-worker:
+    depends_on: !override
+      nats:
+        condition: service_healthy
+      minio-worker-policy:
+        condition: service_completed_successfully
+  product-builder-worker:
+    depends_on: !override
+      nats:
+        condition: service_healthy
+      minio-worker-policy:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:18091:8091"
+  forecast-verification-worker:
+    depends_on: !override
+      nats:
+        condition: service_healthy
+      minio-worker-policy:
+        condition: service_completed_successfully
+  nowcastnet-shadow-probe:
+    depends_on: !override
+      minio-worker-policy:
+        condition: service_completed_successfully
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      RAINPULSE_ANALYSIS_CATALOG_URL: http://host.docker.internal:4173/api/v1/analysis-cycles?status=ANALYSIS_READY&limit=200
+    ports:
+      - "127.0.0.1:18094:8094"

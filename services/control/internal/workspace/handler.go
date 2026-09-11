@@ -135,6 +135,7 @@ type cycleList struct {
 	Items           []cycleSummary `json:"items"`
 	GeneratedAt     string         `json:"generated_at"`
 	DegradedSources []string       `json:"degraded_sources,omitempty"`
+	NextCursor      string         `json:"next_cursor,omitempty"`
 }
 
 type gridView struct {
@@ -237,7 +238,8 @@ type forecastRun struct {
 }
 
 type analysisCyclePage struct {
-	Items []analysisCycle `json:"items"`
+	Items      []analysisCycle `json:"items"`
+	NextCursor *string         `json:"next_cursor"`
 }
 
 type analysisCycle struct {
@@ -478,24 +480,46 @@ func (handler *Handler) readRemoteJSON(ctx context.Context, upstreamURL string, 
 }
 
 func (handler *Handler) listCycles(response http.ResponseWriter, request *http.Request) {
+	cursor := request.URL.Query().Get("cursor")
+	var cursorTime time.Time
+	if cursor != "" {
+		_, parsed, err := decodeCycleID(cursor)
+		if err != nil {
+			writeError(response, http.StatusBadRequest, err)
+			return
+		}
+		cursorTime = parsed
+	}
 	catalog, degraded := handler.catalog(request.Context())
 	items := make([]cycleSummary, 0, len(catalog))
 	for _, item := range catalog {
 		if !handler.catalogCycleVisible(item.summary) {
 			continue
 		}
+		if cursor != "" {
+			issue, _ := normalizedTime(item.summary.IssueTime)
+			if issue.After(cursorTime) || (issue.Equal(cursorTime) && item.summary.CycleID >= cursor) {
+				continue
+			}
+		}
 		items = append(items, item.summary)
 	}
 	sort.Slice(items, func(left, right int) bool {
+		if items[left].IssueTime == items[right].IssueTime {
+			return items[left].CycleID > items[right].CycleID
+		}
 		return items[left].IssueTime > items[right].IssueTime
 	})
 	limit := queryLimit(request.URL.Query().Get("limit"), 100, 500)
+	nextCursor := ""
 	if len(items) > limit {
 		items = items[:limit]
+		nextCursor = items[len(items)-1].CycleID
 	}
 	writeJSON(response, http.StatusOK, cycleList{
 		SchemaVersion: workspaceContractVersion,
 		Items:         items, GeneratedAt: handler.now().Format(time.RFC3339), DegradedSources: degraded,
+		NextCursor: nextCursor,
 	})
 }
 
@@ -734,10 +758,18 @@ func (handler *Handler) catalog(ctx context.Context) (map[string]*cycleAccumulat
 		}
 	}
 
-	var analyses analysisCyclePage
-	if err := handler.readCore(ctx, "/api/v1/analysis-cycles?status=ANALYSIS_READY&limit=200", &analyses); err != nil {
-		degraded = append(degraded, "analysis-cycles")
-	} else {
+	cursor := ""
+	seenAnalysisCursors := make(map[string]struct{})
+	for {
+		path := "/api/v1/analysis-cycles?status=ANALYSIS_READY&limit=200"
+		if cursor != "" {
+			path += "&cursor=" + url.QueryEscape(cursor)
+		}
+		var analyses analysisCyclePage
+		if err := handler.readCore(ctx, path, &analyses); err != nil {
+			degraded = append(degraded, "analysis-cycles")
+			break
+		}
 		for index := range analyses.Items {
 			analysis := analyses.Items[index]
 			parsed, ok := normalizedTime(analysis.AnalysisTime)
@@ -754,6 +786,16 @@ func (handler *Handler) catalog(ctx context.Context) (map[string]*cycleAccumulat
 			entry.summary.AnalysisID = analysis.AnalysisID
 			entry.summary.Capabilities.Radar = true
 		}
+		if analyses.NextCursor == nil || strings.TrimSpace(*analyses.NextCursor) == "" {
+			break
+		}
+		next := strings.TrimSpace(*analyses.NextCursor)
+		if _, repeated := seenAnalysisCursors[next]; repeated {
+			degraded = append(degraded, "analysis-cycles:cursor")
+			break
+		}
+		seenAnalysisCursors[next] = struct{}{}
+		cursor = next
 	}
 
 	var ensembles []ensembleCycle
@@ -1070,7 +1112,7 @@ func (handler *Handler) addForecastProducts(ctx context.Context, detail *cycleDe
 		return
 	}
 	for _, item := range page.Items {
-		if item.ProductType != "rain_rate" {
+		if item.ProductType != "rain_rate" && item.ProductType != "accumulation_60" && item.ProductType != "accumulation_120" {
 			continue
 		}
 		var assets []productAsset
@@ -1082,6 +1124,13 @@ func (handler *Handler) addForecastProducts(ctx context.Context, detail *cycleDe
 		panel := panelView{PanelID: panelID, AlgorithmID: item.ModelID, DisplayName: displayName,
 			Role: "forecast", Lifecycle: lifecycle, DataKind: "rain_rate", CadenceMinutes: 5,
 			Status: "ready", LegendUnit: "mm/h", Legend: rainfallLegend()}
+		if item.ProductType != "rain_rate" {
+			panel.PanelID += ":" + item.ProductType
+			panel.DataKind = item.ProductType
+			panel.LegendUnit = "mm"
+			panel.CadenceMinutes = 60
+			panel.Legend = accumulationLegend()
+		}
 		frameKind := ""
 		if panelID == "lk" {
 			frameKind = "native"
@@ -1098,7 +1147,7 @@ func (handler *Handler) addForecastProducts(ctx context.Context, detail *cycleDe
 			if validTime == "" {
 				validTime = addLead(run.IssueTime, lead)
 			}
-			unit := "mm/h"
+			unit := panel.LegendUnit
 			if asset.Unit != nil {
 				unit = *asset.Unit
 			}
@@ -1139,12 +1188,26 @@ func (handler *Handler) addEnsemble(ctx context.Context, detail *cycleDetail, cy
 		return
 	}
 	layer := preferredEnsembleLayer(bundle.Layers)
+	for index := range bundle.Layers {
+		candidate := &bundle.Layers[index]
+		if candidate.ProductType == "accumulation_60" || candidate.ProductType == "accumulation_120" {
+			addEnsembleLayer(detail, bundle, candidate)
+		}
+	}
+	addEnsembleLayer(detail, bundle, layer)
+}
+
+func addEnsembleLayer(detail *cycleDetail, bundle ensembleBundle, layer *ensembleLayer) {
 	if layer == nil {
 		return
 	}
 	panel := panelView{PanelID: "steps", AlgorithmID: "pysteps-steps",
 		DisplayName: "pySTEPS-STEPS", Role: "forecast", Lifecycle: "offline",
 		DataKind: layer.ProductType, CadenceMinutes: 5, Status: "ready"}
+	if strings.HasPrefix(layer.ProductType, "accumulation_") {
+		panel.PanelID += ":" + layer.ProductType
+		panel.CadenceMinutes = 60
+	}
 	if bundle.OperationalEligible {
 		panel.Lifecycle = "operational"
 	}
@@ -1240,6 +1303,32 @@ func (handler *Handler) addNowcastNetProduct(
 	sortFrames(panel.Frames)
 	upsertPanel(detail, panel)
 	detail.Capabilities.NowcastNet = true
+	for _, kind := range []string{"accumulation_60", "accumulation_120"} {
+		accum := panel
+		accum.PanelID = "nowcastnet:" + kind
+		accum.DataKind, accum.LegendUnit = kind, "mm"
+		accum.Legend, accum.Frames = accumulationLegend(), []frameView{}
+		accum.CadenceMinutes = 60
+		for _, asset := range bundle.Accumulations {
+			if (kind == "accumulation_120") != (asset.WindowID == "total_2h") {
+				continue
+			}
+			bounds, coverage := asset.Bounds, asset.CoverageRatio
+			validCount, missingCount := int(asset.ValidCellCount), int(asset.MissingCellCount)
+			accum.Frames = append(accum.Frames, frameView{
+				AssetID: asset.AssetID, ValidTime: asset.ValidTime.UTC().Format(time.RFC3339),
+				LeadMinutes: asset.LeadMinutes, Unit: "mm", FrameKind: "derived",
+				Derivation: asset.Derivation, SourceLeads: asset.SourceLeads,
+				ImageURL:  fmt.Sprintf("%s/%s/assets/%s", nowcastNetProductPrefix, bundle.BundleID.String(), asset.AssetID),
+				MediaType: asset.MediaType, SHA256: asset.SHA256, Bounds: &bounds, CoverageRatio: &coverage,
+				ValidCellCount: &validCount, MissingCount: &missingCount,
+			})
+		}
+		if len(accum.Frames) > 0 {
+			sortFrames(accum.Frames)
+			upsertPanel(detail, accum)
+		}
+	}
 }
 
 func (handler *Handler) getNowcastNetProductAsset(
@@ -1498,6 +1587,16 @@ func rainfallLegend() []legendEntry {
 		result = append(result, legendEntry{Minimum: &minimum, Color: item.color})
 	}
 	return result
+}
+
+func accumulationLegend() []legendEntry {
+	legend := rainfallLegend()
+	values := []float64{0.1, 0.5, 1, 2.5, 5, 10, 25, 50, 100}
+	for i := range legend {
+		minimum := values[i]
+		legend[i].Minimum = &minimum
+	}
+	return legend
 }
 
 func uniqueStrings(values []string) []string {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/workflow"
@@ -1258,19 +1259,49 @@ func (store *Store) ListAnalysisCycles(
 	limit int,
 	status *workflow.AnalysisStatus,
 ) ([]workflow.AnalysisCycle, error) {
+	cycles, _, err := store.ListAnalysisCyclesPage(ctx, limit, status, nil)
+	return cycles, err
+}
+
+// ListAnalysisCyclesPage retains immutable versions and uses a total order so
+// duplicate analysis/creation timestamps cannot hide older cycles at a page edge.
+func (store *Store) ListAnalysisCyclesPage(
+	ctx context.Context, limit int, status *workflow.AnalysisStatus, cursor *uuid.UUID,
+) ([]workflow.AnalysisCycle, *uuid.UUID, error) {
+	return store.listAnalysisCyclesPage(ctx, limit, status, cursor, false)
+}
+
+// ListAutomaticAnalysisCycles excludes regeneration-owned products. Their QPE
+// and diagnostics must retain the request identity, even after a failed batch.
+func (store *Store) ListAutomaticAnalysisCycles(ctx context.Context, limit int, status *workflow.AnalysisStatus) ([]workflow.AnalysisCycle, error) {
+	cycles, _, err := store.listAnalysisCyclesPage(ctx, limit, status, nil, true)
+	return cycles, err
+}
+
+func (store *Store) listAnalysisCyclesPage(ctx context.Context, limit int, status *workflow.AnalysisStatus, cursor *uuid.UUID, automaticOnly bool) ([]workflow.AnalysisCycle, *uuid.UUID, error) {
 	if err := validatePageLimit(limit); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	statusValue := ""
 	if status != nil {
 		statusValue = string(*status)
 	}
-	rows, err := store.pool.Query(ctx, analysisSelect+`
-WHERE ($1 = '' OR a.status = $1)
-ORDER BY a.analysis_time DESC, a.created_at DESC
-LIMIT $2`, statusValue, limit)
+	var after workflow.AnalysisCycle
+	if cursor != nil {
+		var err error
+		after, err = scanAnalysis(store.pool.QueryRow(ctx, analysisSelect+` WHERE a.analysis_id = $1`, *cursor))
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	predicate := analysisPagePredicate
+	if automaticOnly {
+		predicate = automaticAnalysisPagePredicate()
+	}
+	rows, err := store.pool.Query(ctx, analysisSelect+predicate,
+		statusValue, limit+1, cursor == nil, after.AnalysisTime, after.CreatedAt, after.ID)
 	if err != nil {
-		return nil, fmt.Errorf("list analysis cycles: %w", err)
+		return nil, nil, fmt.Errorf("list analysis cycles: %w", err)
 	}
 	defer rows.Close()
 
@@ -1278,22 +1309,41 @@ LIMIT $2`, statusValue, limit)
 	for rows.Next() {
 		cycle, err := scanAnalysis(rows)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		cycles = append(cycles, cycle)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate analysis cycles: %w", err)
+		return nil, nil, fmt.Errorf("iterate analysis cycles: %w", err)
 	}
 	rows.Close()
+	var next *uuid.UUID
+	if len(cycles) > limit {
+		cycles = cycles[:limit]
+		id := cycles[len(cycles)-1].ID
+		next = &id
+	}
 	for index := range cycles {
 		cycles[index].Radars, err = store.listAnalysisRadars(ctx, cycles[index].ID)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	return cycles, nil
+	return cycles, next, nil
 }
+
+func automaticAnalysisPagePredicate() string {
+	return strings.Replace(analysisPagePredicate, "WHERE ", `WHERE NOT EXISTS (
+    SELECT 1 FROM mosaic_runs m JOIN jobs j ON j.job_id = m.job_id
+    WHERE m.analysis_id = a.analysis_id AND j.regeneration_request_id IS NOT NULL
+  ) AND `, 1)
+}
+
+const analysisPagePredicate = `
+WHERE ($1 = '' OR a.status = $1)
+  AND ($3 OR (a.analysis_time, a.created_at, a.analysis_id) < ($4, $5, $6))
+ORDER BY a.analysis_time DESC, a.created_at DESC, a.analysis_id DESC
+LIMIT $2`
 
 func (store *Store) GetAnalysisCycle(ctx context.Context, analysisID uuid.UUID) (workflow.AnalysisCycle, error) {
 	cycle, err := scanAnalysis(store.pool.QueryRow(ctx, analysisSelect+` WHERE a.analysis_id = $1`, analysisID))

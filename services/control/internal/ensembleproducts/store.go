@@ -259,7 +259,7 @@ func validateBundle(bundle Bundle, directoryID string) error {
 		bundle.CalibrationStatus != "raw_ensemble_relative_frequency_uncalibrated" ||
 		bundle.OperationalGate != "independent_fujian_probabilistic_acceptance_required" ||
 		bundle.SourceForecast.URI == "" || !validSHA(bundle.SourceForecast.SHA256) ||
-		bundle.SourceForecast.ContractVersion != "1.2" || len(bundle.Layers) != 8 ||
+		bundle.SourceForecast.ContractVersion != "1.2" || (len(bundle.Layers) != 8 && len(bundle.Layers) != 10) ||
 		bundle.CreatedAt.IsZero() {
 		return fmt.Errorf("%w: ensemble manifest identity differs", ErrInvalidBundle)
 	}
@@ -275,7 +275,18 @@ func validateBundle(bundle Bundle, directoryID string) error {
 	}
 	cellCount := int64(bundle.Width) * int64(bundle.Height)
 	for _, layer := range bundle.Layers {
-		if layerIDs[layer.LayerID] || len(layer.ValidTimes) != 24 || len(layer.Assets) != 48 ||
+		leads := make([]int, 24)
+		for i := range leads {
+			leads[i] = (i + 1) * 5
+		}
+		accumulation := layer.ProductType == "accumulation_60" || layer.ProductType == "accumulation_120"
+		if layer.ProductType == "accumulation_60" {
+			leads = []int{60, 120}
+		}
+		if layer.ProductType == "accumulation_120" {
+			leads = []int{120}
+		}
+		if layerIDs[layer.LayerID] || len(layer.ValidTimes) != len(leads) || len(layer.Assets) != 2*len(leads) ||
 			len(layer.Legend) < 2 || layer.VariableName == "" || layer.Unit == "" {
 			return fmt.Errorf("%w: ensemble layer structure differs", ErrInvalidBundle)
 		}
@@ -293,11 +304,19 @@ func validateBundle(bundle Bundle, directoryID string) error {
 				math.Abs(*layer.Quantile-expected) > 1e-9 || layer.Unit != "mm h-1" {
 				return fmt.Errorf("%w: quantile selector differs", ErrInvalidBundle)
 			}
+		} else if accumulation {
+			expectedID := "accumulation-60-p50"
+			if layer.ProductType == "accumulation_120" {
+				expectedID = "accumulation-120-p50"
+			}
+			if layer.LayerID != expectedID || layer.Unit != "mm" || layer.Quantile == nil || *layer.Quantile != 0.5 || layer.ThresholdMMH != nil {
+				return fmt.Errorf("%w: accumulation selector differs", ErrInvalidBundle)
+			}
 		} else {
 			return fmt.Errorf("%w: ensemble product type is invalid", ErrInvalidBundle)
 		}
 		for index, validTime := range layer.ValidTimes {
-			expected := bundle.IssueTime.Add(time.Duration((index+1)*5) * time.Minute)
+			expected := bundle.IssueTime.Add(time.Duration(leads[index]) * time.Minute)
 			if !validTime.Equal(expected) {
 				return fmt.Errorf("%w: ensemble valid times differ", ErrInvalidBundle)
 			}
@@ -333,7 +352,7 @@ func validateBundle(bundle Bundle, directoryID string) error {
 			assetIDs[asset.AssetID] = true
 			objectPaths[asset.ObjectPath] = true
 		}
-		for lead := 5; lead <= 120; lead += 5 {
+		for _, lead := range leads {
 			for _, assetType := range []string{"rendered_png", "application_netcdf"} {
 				if !leadFormats[fmt.Sprintf("%03d/%s", lead, assetType)] {
 					return fmt.Errorf("%w: ensemble lead asset is missing", ErrInvalidBundle)
@@ -345,6 +364,9 @@ func validateBundle(bundle Bundle, directoryID string) error {
 		"probability-gt-1", "probability-gt-5", "probability-gt-10",
 		"probability-gt-20", "probability-gt-50",
 		"quantile-p10", "quantile-p50", "quantile-p90",
+	}
+	if len(bundle.Layers) == 10 {
+		expectedLayers = append(expectedLayers, "accumulation-60-p50", "accumulation-120-p50")
 	}
 	for _, layerID := range expectedLayers {
 		if !layerIDs[layerID] {

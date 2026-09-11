@@ -66,7 +66,7 @@ func (store formalNowcastNetProductStore) ReadAsset(
 		if bundle.BundleID.String() != bundleID {
 			continue
 		}
-		for _, frame := range bundle.Frames {
+		for _, frame := range append(append([]nowcastnetproducts.Frame{}, bundle.Frames...), bundle.Accumulations...) {
 			if frame.AssetID != assetID {
 				continue
 			}

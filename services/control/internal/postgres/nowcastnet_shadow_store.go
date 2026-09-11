@@ -48,6 +48,21 @@ WHERE run_id = $1`, runID).Scan(&input.IssueTime, &input.GridID, &input.CurrentS
 	return input, nil
 }
 
+// Reuse current QPE and the registered active profile; do not rebuild radar/LK.
+func (store *Store) GetNowcastNetRegeneration(ctx context.Context, runID uuid.UUID) (orchestration.NowcastNetShadowInput, error) {
+	input, err := store.GetNowcastNetShadowInput(ctx, runID)
+	if err != nil {
+		return input, err
+	}
+	input.ModelID = orchestration.NowcastNetShadowModelID
+	input.ModelVersion = orchestration.NowcastNetShadowModelVersion
+	input.ConfigVersion = "fujian-nowcastnet-shadow-v2"
+	input.SourceModelConfigVersion = "rp026-nowcastnet-offline-v1"
+	input.TileAtlasVersion = "fujian-nowcastnet-tile-atlas-v1"
+	err = store.pool.QueryRow(ctx, `SELECT config, sha256 FROM config_versions WHERE config_version=$1`, input.ConfigVersion).Scan(&input.Config, &input.ConfigSHA256)
+	return input, err
+}
+
 // A full historical rerun creates a newer analysis lineage at the same valid
 // times as the retained source lineage.  NowcastNet needs one frame per time,
 // so prefer the newest completed analysis rather than returning both versions.
@@ -83,6 +98,22 @@ func (store *Store) CreateNowcastNetShadowBundle(
 		return fmt.Errorf("begin NowcastNet shadow transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	// One active NowcastNet job per geographic cycle, including different base runs.
+	identity := bundle.Run.GridID + ":" + bundle.Run.IssueTime.UTC().Format(time.RFC3339) + ":nowcastnet"
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, identity); err != nil {
+		return err
+	}
+	var active bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS (
+        SELECT 1 FROM algorithm_runs a JOIN forecast_runs f ON f.run_id=a.run_id
+        WHERE f.grid_id=$1 AND f.issue_time=$2 AND a.algorithm_id='nowcastnet'
+          AND a.status='running' AND a.job_id<>$3
+    )`, bundle.Run.GridID, bundle.Run.IssueTime, bundle.Job.ID).Scan(&active); err != nil {
+		return err
+	}
+	if active {
+		return orchestration.ErrRegenerationActive
+	}
 
 	if _, err = tx.Exec(ctx, `
 INSERT INTO config_versions (config_version, sha256, config, description, created_at)
@@ -132,8 +163,7 @@ SELECT status, issue_time, grid_id, rerun_of IS NOT NULL
 FROM forecast_runs WHERE run_id = $1 FOR UPDATE`, bundle.Run.ID).Scan(&currentStatus, &issueTime, &gridID, &historicalRegeneration); err != nil {
 		return fmt.Errorf("lock NowcastNet shadow forecast run: %w", err)
 	}
-	if (currentStatus != workflow.RunInputReady &&
-		!(historicalRegeneration && currentStatus == workflow.RunPublished)) ||
+	if (currentStatus != workflow.RunInputReady && currentStatus != workflow.RunPublished) ||
 		!issueTime.Equal(bundle.Run.IssueTime) || gridID != bundle.Run.GridID {
 		return fmt.Errorf("NowcastNet shadow requires the committed INPUT_READY forecast run")
 	}

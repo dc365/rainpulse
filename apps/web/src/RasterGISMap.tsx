@@ -358,6 +358,7 @@ interface RasterGISMapProps {
   emptyStateHint?: string
   bbox?: readonly number[]
   loading: boolean
+  loadingLabel?: string
   layerError: boolean
   onLayerError: (failed: boolean) => void
   onSelectPoint?: (point: MapCoordinate) => void
@@ -395,6 +396,7 @@ export function RasterGISMap({
   emptyStateHint,
   bbox,
   loading,
+  loadingLabel = '正在读取降水图层',
   layerError,
   onLayerError,
   onSelectPoint,
@@ -991,7 +993,7 @@ export function RasterGISMap({
 
       {(!imageUrl || layerError) ? (
         <div className="gis-layer-empty" role="status">
-          <strong>{loading ? '正在读取降水图层' : '降水图层暂不可用'}</strong>
+          <strong>{loading ? loadingLabel : '降水图层暂不可用'}</strong>
           <small>{layerError ? '图层校验或网络请求失败' : (emptyStateHint ?? '等待已发布的透明 PNG 产品')}</small>
         </div>
       ) : null}

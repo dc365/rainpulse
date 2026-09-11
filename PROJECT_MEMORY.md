@@ -1,6 +1,6 @@
 # RainPulse Project Memory
 
-Updated: 2026-09-08 (Asia/Taipei)
+Updated: 2026-09-11 (Asia/Taipei)
 
 This file is the concise handoff for a new Codex session. Stable engineering
 rules remain in `AGENTS.md`; implementation details remain in the referenced RP
@@ -25,6 +25,16 @@ operational data here.
 
 ## Prelaunch convergence
 
+- 2026-09-11: Z9598 QC candidate `fujian-qc-evidence-2.1.0` / profile v3 adds
+  radar-scoped long-range polarimetric evidence; three real Worker replays and
+  105 Python/config tests pass. Regeneration QPE ownership race is fixed in
+  source and PostgreSQL-tested. Deployed on 105 at 2026-09-11 08:35:28 UTC;
+  native service healthy, first regeneration succeeded. QC/grid scaled to four
+  healthy replicas each on 105; optional deploy/docker-compose.qc-backfill.yaml
+  preserves this backfill capacity. Requests remain serial.
+  Do not claim the site has switched or all reruns finished.
+  See `docs/Z9598_径向干扰优化与验证_20260911.md`.
+
 - The 2026-09-08 source convergence restores frozen NowcastNet artifact identity;
   deployment locations remain separate from the frozen profile.
 - New LK jobs use model `pysteps-lk-2.0.0`, the prelaunch LK v2 config, and the
@@ -39,6 +49,16 @@ operational data here.
   or promote scientific/operational acceptance gates.
 
 ## Test deployment
+
+- 2026-09-11: 105 now uses one native Go process (`rainpulse.service`) for Web,
+  API, ingest and orchestration. Public port 4173; loopback 8080 compatibility
+  remains for GPU scripts. CPU containers share `rainpulse-cpu-worker:latest`.
+  Include deploy/docker-compose.unified.yaml for container operations; never
+  start legacy Go containers alongside the host service. Old containers/images
+  are stopped/retained for migration rollback; data volumes are unchanged.
+  See docs/SINGLE_PROCESS_DEPLOYMENT_20260911.md. The old cmd binaries are thin
+  rollback entrypoints; shared code moved to internal/apiapp, ingestapp and
+  controlplane. Platform setup follows the ruiyun-bdp-go integration.
 
 - Existing test host: `yons@192.168.28.105`.
 - Active deployment root (migrated on 2026-09-03):
@@ -69,6 +89,42 @@ operational data here.
 
 ## Current product and UI behavior
 
+- 2026-09-10 verification replay now computes native-frame whole-field CSI, FSS,
+  event-any neighborhood CSI, MAE/RMSE through Go and the existing product worker.
+  No map click required. Threshold/km changes reuse metric rows. Missing remains
+  missing; common and neighborhood coverage are displayed. Deployed to 105 and
+  tested at 08/28 16:30 +30/+110 for LK, STEPS and NowcastNet. This is per-selected
+  frame radar-QPE comparison, not historical batch statistics or model promotion.
+  See `docs/SPATIAL_VERIFICATION_20260910.md` for single-frame verification.
+- 2026-09-10 added expandable verification analysis: cross-lead curves linked to
+  the original timeline, common-domain PSD, and manually started batch reports.
+  A single CPU job runs at a time; identical settings replace the saved report,
+  at most eight reports persist under runtime/reports/workspace-verification.
+  PSD requires a complete common square (at least 32 cells per side), never
+  fills missing cells with zero, and exposes crop bounds/coverage. Batch scores
+  are equal-record macro means on shared finite samples, not pooled CSI.
+  Deployed and checked on 105: three 08/28 cycles, 36 lead groups, 34 matched and
+  two skipped. See `docs/VERIFICATION_ANALYSIS_20260910.md`.
+
+- 2026-09-09 simplified interval selection uses the original five-minute timeline:
+  click selects a single rain-rate frame; press/drag/release selects accumulation,
+  with 0–1/1–2/0–2 h shortcuts. No mode buttons or separate handle-based timeline.
+  React requests Go
+  `/api/v1/workspace/accumulations`; existing product-builder worker computes from
+  numerical sources (including future observed QPE), without GPU/model reruns.
+  STEPS integrates members before P50; NowcastNet integrates its retained mean.
+  Missing stays missing. PNG/exact values share a bounded 10-minute memory cache;
+  no extra persistent product versions. Deployed to 105 and exercised with the
+  08/28 16:30 CST case across four intervals and four algorithms. See
+  `docs/ACCUMULATION_TIMELINE_20260909.md` and `contracts/data/workspace-interval.md`.
+
+- Historical analysis and workspace catalogs now follow keyset pagination before
+  presenting all available cycles. Never treat a `limit=200` response as the full
+  history: duplicate calculation versions previously hid morning results.
+  The case picker adds Beijing-time start/end filtering and an all-day reset;
+  it filters existing results only, not raw files or replay configuration.
+  See `docs/HISTORY_CATALOG_PAGINATION_20260908.md` for tests and deployment proof.
+
 - The unified realtime workspace is the active interface. It defaults to four
   synchronized maps and allows switching any selected algorithm to a single-map
   view.
@@ -88,6 +144,20 @@ operational data here.
   source/derived products and were intentionally left unchanged.
 
 ## Algorithms and regeneration
+
+- NowcastNet atlas v2 is an offline overlap candidate, not the active default.
+  Follow-up fixed-tile experiments isolated spatial weighting and log-midpoint
+  attenuation. Neither sharper weights nor rain-space midpoint averaging has
+  demonstrated consistent accuracy gains; both remain offline opt-ins. The
+  three-step experiment is now closed: 192x256 v3 context ran on three starts,
+  including temporal rechecks, but long-lead skill was not consistently better.
+  Same local RNG seed is not geographic noise consistency; the frozen model
+  noise path was inspected, not rewritten. No candidate was promoted.
+  Temporal defaults remain unchanged.
+  A controlled 16:30 case reduced old-boundary jumps but also reduced strong-rain
+  area; do not switch the worker or mass-regenerate history based on visual
+  continuity alone. See `docs/NOWCASTNET_OVERLAP_20260908.md`; the standalone
+  comparison runner never publishes products.
 
 - Phase-1 critical path remains radar QC, Hybrid Scan/grid, mosaic, QPE,
   NowcastInput, pySTEPS-LK and application products. pySTEPS-STEPS and
@@ -117,6 +187,15 @@ operational data here.
   NowcastInput, pySTEPS-LK and product publication all completed successfully.
 
 ## Data-version and retention intent
+
+- History replay packaging: `scripts/package_history_case.sh --date YYYY-MM-DD`
+  creates a separate case ZIP (Beijing calendar date by default), with scoped
+  database lineage, current derived products and point indexes, not raw/model
+  data or queues. The ZIP contains `import_history_case.sh`; fresh target case
+  database and stopped application services are required. See
+  `docs/内网离线部署.md`. 08/28 export: 123 cycles, 57,035 files, approximately
+  3.24 GB ZIP; checksums and isolated PostgreSQL rollback acceptance passed.
+  Program image packaging remains a separate step and must match its Git config.
 
 - The workbench should expose only the latest successful version for a cycle and
   algorithm. Recalculation must not leave multiple selectable product versions.

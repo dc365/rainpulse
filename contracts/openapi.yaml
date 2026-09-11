@@ -238,6 +238,12 @@ paths:
       summary: List fixed-time multi-radar analysis workflows
       parameters:
         - $ref: "#/components/parameters/Limit"
+        - name: cursor
+          in: query
+          description: Analysis ID from next_cursor. Continues descending analysis_time, created_at, analysis_id order; versions are retained, not deduplicated before paging.
+          schema:
+            type: string
+            format: uuid
         - name: status
           in: query
           schema:
@@ -2232,6 +2238,10 @@ components:
       additionalProperties: false
       required: [items]
       properties:
+        next_cursor:
+          type: string
+          format: uuid
+          nullable: true
         items:
           type: array
           items:
@@ -2267,6 +2277,10 @@ components:
           type: string
           format: uuid
           nullable: true
+        regeneration_job_id:
+          type: string
+          format: uuid
+          description: Exact algorithm-only regeneration job; baseline run is unchanged.
         created_at:
           type: string
           format: date-time
@@ -2281,6 +2295,7 @@ components:
       enum:
         - forecast_all
         - pysteps_lk
+        - nowcastnet
         - products
     RegenerationRequest:
       type: object

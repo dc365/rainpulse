@@ -30,7 +30,7 @@ const (
 
 var (
 	diagnosticAssetPattern = regexp.MustCompile(`^/api/v1/diagnostics/([0-9a-f-]{36})/layers/([a-z0-9-]+)$`)
-	productAssetPattern    = regexp.MustCompile(`^/api/v1/products/([0-9a-f-]{36})/assets/([0-9a-f-]{36})$`)
+	productAssetPattern    = regexp.MustCompile(`^/api/v1/products/([0-9a-f-]{36})/assets/([0-9a-f-]{36})(?:/content)?$`)
 	ensembleAssetPattern   = regexp.MustCompile(`^/api/v1/ensemble-products/([0-9a-f-]{36})/assets/([a-z0-9-]+)$`)
 	nowcastNetAssetPattern = regexp.MustCompile(`^/api/v1/workspace/nowcastnet-products/([0-9a-f-]{36})/assets/([a-z0-9-]+)$`)
 	leadPattern            = regexp.MustCompile(`(?:^|-)lead-(\d{3})(?:-|$)`)
@@ -67,8 +67,14 @@ func (handler *runtimeHandler) sampleAsset(
 		)
 	}
 	if match := ensembleAssetPattern.FindStringSubmatch(parsed.Path); match != nil {
+		queryID := stepsPointQueryID
+		for _, id := range []string{"accumulation-60-p50", "accumulation-120-p50"} {
+			if strings.HasPrefix(match[2], id+"-lead-") {
+				queryID = id
+			}
+		}
 		return handler.sampleFileProduct(
-			assetURL, handler.ensembleRoot, match[1], match[2], stepsPointQueryID,
+			assetURL, handler.ensembleRoot, match[1], match[2], queryID,
 			longitude, latitude, "steps-p50",
 		)
 	}
@@ -98,7 +104,13 @@ func (handler *runtimeHandler) sampleNowcastNetProduct(
 	if err != nil {
 		return ExactSample{}, fmt.Errorf("%w: read NowcastNet manifest: %v", errSampleNotFound, err)
 	}
-	metadata, err := pointQueryFromManifest(manifestData, nowcastPointQueryID)
+	queryID := nowcastPointQueryID
+	for _, id := range []string{"accumulation-hour-1", "accumulation-hour-2", "accumulation-total-2h"} {
+		if strings.HasPrefix(assetID, id+"-lead-") {
+			queryID = id
+		}
+	}
+	metadata, err := pointQueryFromManifest(manifestData, queryID)
 	if err != nil {
 		return ExactSample{}, err
 	}
@@ -211,12 +223,16 @@ func (handler *runtimeHandler) sampleDeterministicProduct(
 		return ExactSample{}, fmt.Errorf("%w: product point values differ", errInvalidSample)
 	}
 	value := values[leadIndex]
+	unit := "mm/h"
+	if product.ProductType == workflow.ProductAccumulation60 || product.ProductType == workflow.ProductAccumulation120 {
+		unit = "mm"
+	}
 	return ExactSample{
 		SchemaVersion: "1.0", AssetURL: assetURL,
 		Longitude: longitude, Latitude: latitude,
 		GridLongitude: gridLongitude, GridLatitude: gridLatitude,
 		Value: value.RainRate, Confidence: value.Confidence, Valid: value.Valid,
-		Unit: "mm/h", LeadTimeMinutes: leadMinutes,
+		Unit: unit, LeadTimeMinutes: leadMinutes,
 		ValidTime: validTime, FrameKind: "native", Source: "product-point-index",
 	}, nil
 }
@@ -291,6 +307,10 @@ func pointQueryFromManifest(data []byte, queryID string) (pointQueryMetadata, er
 		return pointQueryMetadata{}, fmt.Errorf("%w: manifest JSON: %v", errInvalidSample, err)
 	}
 	metadata, exists := manifest.PointQueries[queryID]
+	if !exists && queryID == nowcastPointQueryID {
+		// Current shadow bundles name the same ensemble-mean sidecar "nowcastnet".
+		metadata, exists = manifest.PointQueries["nowcastnet"]
+	}
 	if !exists {
 		return pointQueryMetadata{}, errUnsupportedSample
 	}

@@ -5,6 +5,7 @@ set -euo pipefail
 package_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 environment_file="$package_root/deploy/.env"
 mode=base
+service_user="${SUDO_USER:-$(id -un)}"
 replace_existing=false
 
 usage() {
@@ -17,7 +18,8 @@ and set environment-specific secrets before running this command.
 
 Options:
   --env-file PATH            Compose environment file (default: deploy/.env)
-  --mode base|realtime-shadow
+  --mode base|realtime-shadow|unified
+  --service-user NAME        Host service account for unified mode (default: caller)
                               Base is the default and keeps ingest/pipeline disabled.
   --replace-existing         Permit image load and Compose replacement on an existing host.
   -h, --help                 Show this help
@@ -26,6 +28,10 @@ EOF
 
 while (($#)); do
   case "$1" in
+    --service-user)
+      service_user=${2:?missing service user}
+      shift 2
+      ;;
     --env-file)
       environment_file=${2:?missing path after --env-file}
       shift 2
@@ -50,7 +56,7 @@ while (($#)); do
   esac
 done
 
-[[ "$mode" == base || "$mode" == realtime-shadow ]] || {
+[[ "$mode" == base || "$mode" == realtime-shadow || "$mode" == unified ]] || {
   printf 'unsupported deployment mode: %s\n' "$mode" >&2
   exit 2
 }
@@ -73,6 +79,12 @@ done
   printf 'create %s from deploy/.env.example and set the required secrets first\n' "$environment_file" >&2
   exit 1
 }
+
+if [[ -f "$package_root/.build/linux-amd64/rainpulse" && "$mode" != unified ]]; then
+  echo 'This is a unified package; use --mode unified.' >&2
+  exit 2
+fi
+environment_file="$(cd "$(dirname "$environment_file")" && pwd)/$(basename "$environment_file")"
 
 required_secrets=(
   RAINPULSE_POSTGRES_PASSWORD
@@ -128,7 +140,7 @@ compose_command=(
   "${docker_command[@]}" compose --env-file "$environment_file"
   -f "$package_root/deploy/docker-compose.yaml"
 )
-if [[ "$mode" == realtime-shadow ]]; then
+if [[ "$mode" == realtime-shadow || "$mode" == unified ]]; then
   bdp_root="$(awk -F= '$1 == "RAINPULSE_BDP_CONF_HOST_ROOT" {print substr($0, length($1) + 2)}' "$environment_file" | tail -n 1)"
   bdp_root=${bdp_root:-../runtime/bdp-conf}
   [[ "$bdp_root" == /* ]] || bdp_root="$package_root/deploy/$bdp_root"
@@ -146,8 +158,21 @@ if [[ "$mode" == realtime-shadow ]]; then
 fi
 
 mkdir -p "$package_root/runtime/reports/mrms" \
+  "$package_root/runtime/reports/workspace-verification" \
   "$package_root/runtime/products/ensemble" \
   "$package_root/runtime/products/nowcastnet"
 "${compose_command[@]}" config --quiet
+if [[ "$mode" == unified ]]; then
+  require_command python3
+  [[ -f "$package_root/.build/linux-amd64/rainpulse" ]] || { echo 'Not a unified package.' >&2; exit 1; }
+  compose_command+=(-f "$package_root/deploy/docker-compose.unified.yaml")
+  "${compose_command[@]}" up -d --no-build --pull never --wait migrate nats minio-worker-policy
+  privileged=()
+  if [[ $EUID -ne 0 ]]; then privileged=(sudo); fi
+  "${privileged[@]}" python3 "$package_root/scripts/configure_unified.py" --root "$package_root" --user "$service_user" --env-file "$environment_file"
+  "${privileged[@]}" env RAINPULSE_DEPLOY_ENV_FILE="$environment_file" bash "$package_root/scripts/switch_unified.sh"
+  "$package_root/verify.sh" --env-file "$environment_file" --mode unified
+  exit
+fi
 "${compose_command[@]}" up -d --no-build --pull never --wait
 "$package_root/verify.sh" --env-file "$environment_file" --mode "$mode"

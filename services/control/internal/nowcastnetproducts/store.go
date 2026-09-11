@@ -41,21 +41,23 @@ type ROI struct {
 }
 
 type Frame struct {
-	AssetID          string     `json:"asset_id"`
-	ObjectPath       string     `json:"object_path"`
-	MediaType        string     `json:"media_type"`
-	SHA256           string     `json:"sha256"`
-	SizeBytes        int64      `json:"size_bytes"`
-	LeadMinutes      int        `json:"lead_time_minutes"`
-	ValidTime        time.Time  `json:"valid_time"`
-	Unit             string     `json:"unit"`
-	CoverageRatio    float64    `json:"coverage_ratio"`
-	ValidCellCount   int64      `json:"valid_cell_count"`
-	MissingCellCount int64      `json:"missing_cell_count"`
-	Bounds           [4]float64 `json:"pixel_edge_bounds"`
-	FrameKind        string     `json:"frame_kind,omitempty"`
-	Derivation       string     `json:"derivation,omitempty"`
-	SourceLeads      []int      `json:"source_leads,omitempty"`
+	WindowID           string     `json:"window_id,omitempty"`
+	WindowStartMinutes int        `json:"window_start_minutes,omitempty"`
+	AssetID            string     `json:"asset_id"`
+	ObjectPath         string     `json:"object_path"`
+	MediaType          string     `json:"media_type"`
+	SHA256             string     `json:"sha256"`
+	SizeBytes          int64      `json:"size_bytes"`
+	LeadMinutes        int        `json:"lead_time_minutes"`
+	ValidTime          time.Time  `json:"valid_time"`
+	Unit               string     `json:"unit"`
+	CoverageRatio      float64    `json:"coverage_ratio"`
+	ValidCellCount     int64      `json:"valid_cell_count"`
+	MissingCellCount   int64      `json:"missing_cell_count"`
+	Bounds             [4]float64 `json:"pixel_edge_bounds"`
+	FrameKind          string     `json:"frame_kind,omitempty"`
+	Derivation         string     `json:"derivation,omitempty"`
+	SourceLeads        []int      `json:"source_leads,omitempty"`
 }
 
 type Bundle struct {
@@ -82,6 +84,7 @@ type Bundle struct {
 	LegendUnit          string        `json:"legend_unit"`
 	Legend              []LegendEntry `json:"legend"`
 	Frames              []Frame       `json:"frames"`
+	Accumulations       []Frame       `json:"accumulations,omitempty"`
 	CreatedAt           time.Time     `json:"created_at"`
 }
 
@@ -155,9 +158,10 @@ func (store *FileStore) ReadAsset(ctx context.Context, bundleID, assetID string)
 		return AssetContent{}, err
 	}
 	var selected *Frame
-	for index := range bundle.Frames {
-		if bundle.Frames[index].AssetID == assetID {
-			selected = &bundle.Frames[index]
+	frames := append(slices.Clone(bundle.Frames), bundle.Accumulations...)
+	for index := range frames {
+		if frames[index].AssetID == assetID {
+			selected = &frames[index]
 			break
 		}
 	}
@@ -308,6 +312,26 @@ func validateBundle(bundle Bundle, directoryID string) error {
 		}
 		assets[frame.AssetID] = true
 		paths[frame.ObjectPath] = true
+	}
+	if len(bundle.Accumulations) != 0 && len(bundle.Accumulations) != 3 {
+		return fmt.Errorf("%w: incomplete accumulation windows", ErrInvalidBundle)
+	}
+	for index, frame := range bundle.Accumulations {
+		ids := []string{"hour_1", "hour_2", "total_2h"}
+		starts, ends := []int{0, 60, 0}, []int{60, 120, 120}
+		if frame.WindowID != ids[index] || frame.WindowStartMinutes != starts[index] ||
+			frame.LeadMinutes != ends[index] || frame.Unit != "mm" ||
+			!frame.ValidTime.Equal(bundle.IssueTime.Add(time.Duration(ends[index])*time.Minute)) ||
+			!validSegment(frame.AssetID) || assets[frame.AssetID] ||
+			!validObjectPath(frame.ObjectPath) || paths[frame.ObjectPath] ||
+			!validSHA(frame.SHA256) || frame.SizeBytes < 8 || frame.SizeBytes > maximumAssetBytes ||
+			frame.MediaType != "image/png" || !sameBounds(frame.Bounds, bundle.Bounds) ||
+			frame.ValidCellCount < 0 || frame.MissingCellCount < 0 ||
+			frame.ValidCellCount+frame.MissingCellCount != cellCount ||
+			math.IsNaN(frame.CoverageRatio) || math.Abs(frame.CoverageRatio-float64(frame.ValidCellCount)/float64(cellCount)) > 1e-9 {
+			return fmt.Errorf("%w: accumulation metadata differs", ErrInvalidBundle)
+		}
+		assets[frame.AssetID], paths[frame.ObjectPath] = true, true
 	}
 	return nil
 }

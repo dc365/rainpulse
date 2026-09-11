@@ -1,4 +1,4 @@
-package main
+package controlplane
 
 import (
 	"context"
@@ -510,7 +510,7 @@ func (planner *pipelinePlanner) listRadarScans(
 
 func (planner *pipelinePlanner) planAnalyses(ctx context.Context) error {
 	qpeStatus := workflow.AnalysisQPE
-	cycles, err := planner.store.ListAnalysisCycles(ctx, 200, &qpeStatus)
+	cycles, err := planner.store.ListAutomaticAnalysisCycles(ctx, 200, &qpeStatus)
 	if err != nil {
 		return err
 	}
@@ -534,7 +534,7 @@ func (planner *pipelinePlanner) planAnalyses(ctx context.Context) error {
 	}
 
 	readyStatus := workflow.AnalysisReady
-	ready, err := planner.store.ListAnalysisCycles(ctx, 200, &readyStatus)
+	ready, err := planner.store.ListAutomaticAnalysisCycles(ctx, 200, &readyStatus)
 	if err != nil {
 		return err
 	}

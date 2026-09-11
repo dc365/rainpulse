@@ -329,7 +329,7 @@ def test_realtime_shadow_versions_the_full_reprocessing_chain() -> None:
     )["services"]
     assert override["radar-qc-worker"]["environment"][
         "RAINPULSE_RADAR_QC_CONFIG"
-    ].endswith("qc/fujian-qc-evidence-v2.yaml")
+    ].endswith("qc/fujian-qc-evidence-v3.yaml")
     orchestrator = override["orchestrator"]["environment"]
     assert orchestrator["RAINPULSE_PIPELINE_QC_CONFIG"] == override[
         "radar-qc-worker"
@@ -1043,3 +1043,13 @@ def test_rp015_product_profile_freezes_all_distribution_formats() -> None:
     assert profile["outputs"]["cog"]["compression"] == "DEFLATE"
     assert profile["outputs"]["netcdf"]["format"] == "NETCDF3_CLASSIC"
     assert profile["outputs"]["netcdf"]["fill_value"] == -9999.0
+
+
+def test_v3_polarimetric_qc_profile_is_valid_and_scoped():
+    schema = json.loads((CONFIG_ROOT / "schemas" / "radar-qc.schema.json").read_text())
+    profile = yaml.safe_load((CONFIG_ROOT / "qc" / "fujian-qc-evidence-v3.yaml").read_text())
+    Draft202012Validator(schema).validate(profile)
+    assert profile["radial_interference"]["polarimetric_extent_radars"] == ["z9598"]
+    assert profile["pipeline_version"] == "fujian-qc-evidence-2.1.0"
+    previous = yaml.safe_load((CONFIG_ROOT / "qc" / "fujian-qc-evidence-v2.yaml").read_text())
+    Draft202012Validator(schema).validate(previous)

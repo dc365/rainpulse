@@ -39,12 +39,8 @@ def test_shadow_product_keeps_native_and_derived_frame_lineage() -> None:
         AdaptedFrame(
             lead_minutes=lead,
             frame_kind="native" if lead % 10 == 0 else "derived",
-            derivation=None
-            if lead % 10 == 0
-            else "bidirectional-dense-optical-flow-advection-v1",
-            source_leads=(lead,)
-            if lead % 10 == 0
-            else (lead - 5, lead + 5),
+            derivation=None if lead % 10 == 0 else "bidirectional-dense-optical-flow-advection-v1",
+            source_leads=(lead,) if lead % 10 == 0 else (lead - 5, lead + 5),
         )
         for lead in range(5, 121, 5)
     )
@@ -84,3 +80,12 @@ def test_shadow_product_keeps_native_and_derived_frame_lineage() -> None:
         "native",
     ]
     assert validate_point_query_index(objects[POINT_QUERY_PATH])["lead_count"] == 24
+    assert [f["window_id"] for f in manifest["accumulations"]] == ["hour_1", "hour_2", "total_2h"]
+    for frame, expected in zip(manifest["accumulations"], (2, 2, 4), strict=True):
+        assert frame["unit"] == "mm"
+        query_id = frame["asset_id"].split("-lead-")[0]
+        query = manifest["point_queries"][query_id]
+        data = objects[query["object_path"]]
+        assert validate_point_query_index(data)["lead_count"] == 1
+        # Point index records contain big-endian float32 plus one confidence byte.
+        assert float(np.frombuffer(data[64:68], dtype=">f4")[0]) == expected

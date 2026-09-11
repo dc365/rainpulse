@@ -11,16 +11,17 @@ import (
 var ErrNotFound = errors.New("workflow record not found")
 
 type Run struct {
-	ID             uuid.UUID
-	IssueTime      time.Time
-	GridID         string
-	ConfigVersion  string
-	Status         RunStatus
-	DegradedReason *string
-	RerunOf        *uuid.UUID
-	Reason         string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	RegenerationJobID *uuid.UUID
+	ID                uuid.UUID
+	IssueTime         time.Time
+	GridID            string
+	ConfigVersion     string
+	Status            RunStatus
+	DegradedReason    *string
+	RerunOf           *uuid.UUID
+	Reason            string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 type Job struct {

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -226,6 +226,7 @@ def stitch_member_tiles(
     *,
     output_shape: tuple[int, int],
     weight_power: int = 1,
+    trusted_halo: int = 0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Stitch trusted windows. Power 2 is offline-only; default stays unchanged.
 
@@ -235,6 +236,8 @@ def stitch_member_tiles(
 
     if weight_power not in (1, 2):
         raise TileAtlasError("weight_power must be 1 or 2")
+    if trusted_halo not in (0, 16):
+        raise TileAtlasError("trusted_halo must be 0 or 16")
     if not values:
         raise TileAtlasError("no Tile Atlas forecasts are available")
     first = np.asarray(values[0][1], dtype="float32")
@@ -244,6 +247,17 @@ def stitch_member_tiles(
     weighted = np.zeros((members, leads, *output_shape), dtype="float64")
     weights = np.zeros(output_shape, dtype="float64")
     for tile, raw_forecast in values:
+        if trusted_halo:
+            t = tile.trusted
+            tile = replace(
+                tile,
+                trusted=TrustedWindow(
+                    max(0, t.y_start - trusted_halo),
+                    min(tile.height, t.y_end + trusted_halo),
+                    max(0, t.x_start - trusted_halo),
+                    min(tile.width, t.x_end + trusted_halo),
+                ),
+            )
         forecast = np.asarray(raw_forecast, dtype="float32")
         if forecast.shape != (members, leads, tile.height, tile.width):
             raise TileAtlasError(f"tile forecast shape differs for {tile.tile_id}")

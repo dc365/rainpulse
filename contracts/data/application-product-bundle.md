@@ -8,13 +8,19 @@ used as the input of another scientific processing stage.
 One build publishes exactly three immutable product identities:
 
 - `rain_rate`: 24 valid times at 5-minute steps from T+5 through T+120.
-- `accumulation_60`: one amount field valid at T+60, integrated over `(T,T+60]`.
+- `accumulation_60`: hourly amounts ending at T+60 and T+120, integrated over
+  `(T,T+60]` and `(T+60,T+120]` respectively. Legacy bundles have only T+60.
 - `accumulation_120`: one amount field valid at T+120, integrated over `(T,T+120]`.
 
 Every rain-rate lead and each accumulation contains a browser RGBA PNG, a
 WGS84 Cloud Optimized GeoTIFF, and one NetCDF classic application file. The
-rain-rate product also contains a fixed-record point-query index. The index is
+rain-rate and both accumulation products also contain a fixed-record point-query index. The index is
 an API delivery aid only; it does not replace ForecastOutput or NetCDF.
+
+The fixed-window extension has 84 assets: 73 rain-rate, seven hourly, four
+two-hour. Readers retain compatibility with the legacy 79-asset suite. New
+builders emit the complete 84-asset suite atomically; mixed partial suites are
+rejected. See `accumulation-windows.md` for integration and missing-cell rules.
 
 ## Grid and state rules
 

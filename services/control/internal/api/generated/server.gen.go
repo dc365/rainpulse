@@ -647,6 +647,7 @@ func (e RadarScanRunStatus) Valid() bool {
 // Defines values for RegenerationPreset.
 const (
 	ForecastAll RegenerationPreset = "forecast_all"
+	Nowcastnet  RegenerationPreset = "nowcastnet"
 	Products    RegenerationPreset = "products"
 	PystepsLk   RegenerationPreset = "pysteps_lk"
 )
@@ -655,6 +656,8 @@ const (
 func (e RegenerationPreset) Valid() bool {
 	switch e {
 	case ForecastAll:
+		return true
+	case Nowcastnet:
 		return true
 	case Products:
 		return true
@@ -1172,7 +1175,8 @@ type AnalysisCycle struct {
 
 // AnalysisCyclePage defines model for AnalysisCyclePage.
 type AnalysisCyclePage struct {
-	Items []AnalysisCycle `json:"items"`
+	Items      []AnalysisCycle     `json:"items"`
+	NextCursor *openapi_types.UUID `json:"next_cursor,omitempty"`
 }
 
 // AnalysisCycleStatus defines model for AnalysisCycleStatus.
@@ -1428,15 +1432,18 @@ type ForecastJob struct {
 
 // ForecastRun defines model for ForecastRun.
 type ForecastRun struct {
-	ConfigVersion  string              `json:"config_version"`
-	CreatedAt      time.Time           `json:"created_at"`
-	DegradedReason *string             `json:"degraded_reason,omitempty"`
-	GridId         string              `json:"grid_id"`
-	IssueTime      time.Time           `json:"issue_time"`
-	RerunOf        *openapi_types.UUID `json:"rerun_of,omitempty"`
-	RunId          openapi_types.UUID  `json:"run_id"`
-	Status         RunStatus           `json:"status"`
-	UpdatedAt      time.Time           `json:"updated_at"`
+	ConfigVersion  string    `json:"config_version"`
+	CreatedAt      time.Time `json:"created_at"`
+	DegradedReason *string   `json:"degraded_reason,omitempty"`
+	GridId         string    `json:"grid_id"`
+	IssueTime      time.Time `json:"issue_time"`
+
+	// RegenerationJobId Exact algorithm-only regeneration job; baseline run is unchanged.
+	RegenerationJobId *openapi_types.UUID `json:"regeneration_job_id,omitempty"`
+	RerunOf           *openapi_types.UUID `json:"rerun_of,omitempty"`
+	RunId             openapi_types.UUID  `json:"run_id"`
+	Status            RunStatus           `json:"status"`
+	UpdatedAt         time.Time           `json:"updated_at"`
 }
 
 // ForecastRunPage defines model for ForecastRunPage.
@@ -1845,7 +1852,10 @@ type GetAlgorithmVerificationProbabilityMapFrameParams struct {
 
 // ListAnalysisCyclesParams defines parameters for ListAnalysisCycles.
 type ListAnalysisCyclesParams struct {
-	Limit  *Limit               `form:"limit,omitempty" json:"limit,omitempty"`
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor Analysis ID from next_cursor. Continues descending analysis_time, created_at, analysis_id order; versions are retained, not deduplicated before paging.
+	Cursor *openapi_types.UUID  `form:"cursor,omitempty" json:"cursor,omitempty"`
 	Status *AnalysisCycleStatus `form:"status,omitempty" json:"status,omitempty"`
 }
 
@@ -2861,6 +2871,19 @@ func (siw *ServerInterfaceWrapper) ListAnalysisCycles(w http.ResponseWriter, r *
 			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
 		}
 		return
 	}

@@ -6,6 +6,7 @@ repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 environment_file=""
 output_path=""
 include_realtime_shadow=true
+unified=false
 installer_root="$repository_root/packaging/airgap"
 
 usage() {
@@ -22,6 +23,7 @@ Options:
   --source-root PATH         RainPulse source root to archive (default: script parent)
   --output PATH              Destination ZIP (default: .build/rainpulse-airgap-<git-sha>.zip)
   --base-only                Export only the base Compose stack, not realtime-shadow images
+  --unified                  Package one Go binary, Web assets and shared CPU image
   --installer-root PATH      Directory containing install.sh and verify.sh
                              (default: packaging/airgap in this source tree)
   -h, --help                 Show this help
@@ -34,6 +36,10 @@ EOF
 
 while (($#)); do
   case "$1" in
+    --unified)
+      unified=true
+      shift
+      ;;
     --env-file)
       environment_file=${2:?missing path after --env-file}
       shift 2
@@ -126,6 +132,12 @@ if [[ "$include_realtime_shadow" == true ]]; then
   )
 fi
 
+if [[ "$unified" == true ]]; then
+  [[ "$include_realtime_shadow" == true ]] || { echo '--unified cannot use --base-only' >&2; exit 2; }
+  [[ -f "$repository_root/.build/linux-amd64/rainpulse" && -f "$repository_root/apps/web/dist/index.html" ]] || { echo 'Build the unified binary and Web first.' >&2; exit 1; }
+  compose_command+=(-f "$repository_root/deploy/docker-compose.unified.yaml")
+fi
+"${compose_command[@]}" config --quiet
 mapfile -t images < <("${compose_command[@]}" config --images | LC_ALL=C sort -u)
 ((${#images[@]} > 0)) || {
   printf 'Compose did not resolve any images.\n' >&2
@@ -155,6 +167,22 @@ git -C "$repository_root" archive --format=tar "$revision" deploy configs \
   | tar -x -C "$package_root"
 install -m 0755 "$installer_root/install.sh" "$package_root/install.sh"
 install -m 0755 "$installer_root/verify.sh" "$package_root/verify.sh"
+if [[ "$unified" == true ]]; then
+  # Explicit allowlist: never archive the working tree or deploy/.env.
+  while IFS= read -r -d '' config_path; do
+    [[ -f "$repository_root/$config_path" && ! -L "$repository_root/$config_path" ]] || { echo "Missing/nonregular tracked config: $config_path" >&2; exit 1; }
+    install -D -m 0644 "$repository_root/$config_path" "$package_root/$config_path"
+  done < <(git -C "$repository_root" ls-files -z -- configs)
+  for name in docker-compose.yaml docker-compose.realtime-shadow.yaml docker-compose.unified.yaml; do
+    install -m 0644 "$repository_root/deploy/$name" "$package_root/deploy/$name"
+  done
+  mkdir -p "$package_root/.build/linux-amd64" "$package_root/apps/web" "$package_root/scripts"
+  install -m 0755 "$repository_root/.build/linux-amd64/rainpulse" "$package_root/.build/linux-amd64/rainpulse"
+  cp -R "$repository_root/apps/web/dist" "$package_root/apps/web/dist"
+  for name in configure_unified.py switch_unified.sh; do
+    install -m 0755 "$repository_root/scripts/$name" "$package_root/scripts/$name"
+  done
+fi
 
 printf '%s\n' "${images[@]}" >"$package_root/images/images.txt"
 image_archive="$package_root/images/rainpulse-images.tar"
@@ -166,6 +194,7 @@ if [[ "${docker_command[0]}" == sudo ]]; then
 fi
 
 mode=base_and_realtime_shadow
+if [[ "$unified" == true ]]; then mode=unified; fi
 if [[ "$include_realtime_shadow" == false ]]; then
   mode=base_only
 fi
@@ -173,6 +202,9 @@ fi
   printf '{\n'
   printf '  "package_format": "rainpulse-airgap/1.0",\n'
   printf '  "source_revision": "%s",\n' "$revision"
+  if [[ "$unified" == true ]]; then
+    printf '  "artifact_snapshot": "working-tree allowlist; source_revision is checkout base, SHA256SUMS identifies delivered files",\n'
+  fi
   printf '  "image_set": "%s",\n' "$mode"
   printf '  "image_count": %d,\n' "${#images[@]}"
   printf '  "excluded": ["deploy/.env", "BDP configuration and credentials", "radar/static/model data", "runtime volumes and generated products"]\n'

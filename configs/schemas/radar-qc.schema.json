@@ -19,6 +19,7 @@
   "properties": {
     "schema_version": { "const": "1.0" },
     "profile_version": { "$ref": "#/$defs/version" },
+    "decision_version": { "enum": ["legacy-v1", "evidence-v2"] },
     "pipeline_version": { "$ref": "#/$defs/version" },
     "flag_definition_version": { "$ref": "#/$defs/version" },
     "health_gate": {
@@ -113,6 +114,7 @@
         "flag_probability"
       ],
       "properties": {
+        "polarimetric_extent_radars": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z0-9_-]+$"}, "default": [], "description": "Explicit radar allowlist for long-range polarimetric interference evidence; disabled when empty."},
         "minimum_valid_gate_fraction": { "$ref": "#/$defs/probability" },
         "minimum_consecutive_gates": { "type": "integer", "minimum": 2 },
         "neighbour_difference_db": { "type": "number", "exclusiveMinimum": 0 },
@@ -230,6 +232,10 @@
                 "cross_radar_veto_min_consistency"
               ],
               "properties": {
+                "temporal_selection_mode": { "enum": ["past_only", "symmetric_offline"] },
+                "temporal_max_time_offset_seconds": { "type": "integer", "minimum": 1 },
+                "allow_vertical_negative_promotion": { "type": "boolean" },
+                "allow_cross_radar_negative_promotion": { "type": "boolean" },
                 "enabled": { "type": "boolean" },
                 "minimum_independent_evidence": { "type": "integer", "minimum": 2, "maximum": 4 },
                 "minimum_temporal_context_scans": { "type": "integer", "minimum": 2, "maximum": 3 },
