@@ -92,6 +92,10 @@ def build_radar_grid_zarr_store(
             "polar_blockage_diagnostics": "polar/{sweep}/",
         }
     )
+    if source["flag_definition_version"] == "qc-flags-v2":
+        root.attrs.update(
+            {key: source[key] for key in ("qc_engine", "qc_parameters_sha256", "qc_libraries")}
+        )
     if provenance:
         root.attrs.update(dict(provenance))
 

@@ -389,6 +389,13 @@ class VolumeVerticalConsistencyResult:
 
 def load_qc_profile(path: str | Path, flag_path: str | Path) -> BasicQCProfile:
     value = yaml.safe_load(Path(path).read_text())
+    if value.get("engine") == "open_source":
+        from .qc_engine.profile import load_open_source_profile
+
+        try:
+            return load_open_source_profile(path, flag_path)
+        except ValueError as error:
+            raise QCConfigError(str(error)) from error
     flags = yaml.safe_load(Path(flag_path).read_text())
     if value.get("schema_version") != "1.0":
         raise QCConfigError("unsupported radar QC schema version")
@@ -674,6 +681,16 @@ def apply_basic_qc(
     attenuation_profile: AttenuationProfile | None = None,
     created_at: datetime | None = None,
 ) -> QCResult:
+    if getattr(profile, "engine", None) == "open_source":
+        from .qc_engine.runner import run_open_source_qc
+
+        return run_open_source_qc(
+            normalized_objects, profile, ancillary_maps=ancillary_maps,
+            input_view=input_view, blockage_by_sweep=blockage_by_sweep,
+            radial_context=radial_context, radar_beam_context=radar_beam_context,
+            phase_processing_profile=phase_processing_profile,
+            attenuation_profile=attenuation_profile, created_at=created_at,
+        )
     if "health/summary.json" not in normalized_objects:
         raise QCInputError("normalized volume has no RP-007 health summary")
     health = json.loads(normalized_objects["health/summary.json"])

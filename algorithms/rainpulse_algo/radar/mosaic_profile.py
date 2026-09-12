@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 
-from .qc_flags import PHASE1_HARD_REJECT_FLAGS
+from .qc_flags import hard_reject_flags
 
 
 class RadarMosaicConfigError(ValueError):
@@ -129,7 +129,7 @@ def _validate_profile(profile: RadarMosaicProfile) -> None:
     if fusion.blended_source_code != 65535:
         raise RadarMosaicConfigError("the reserved blended source code must be 65535")
     reject_flags = set(fusion.reject_flags)
-    missing = sorted(PHASE1_HARD_REJECT_FLAGS - reject_flags)
+    missing = sorted(hard_reject_flags(profile.flag_definition_version) - reject_flags)
     if missing:
         raise RadarMosaicConfigError(
             "mosaic reject_flags omit Phase-1 hard rejects: " + ",".join(missing)

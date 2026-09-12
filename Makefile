@@ -396,3 +396,7 @@ test-prelaunch:
 	uv run --project algorithms pytest algorithms/tests/test_advection_support.py algorithms/tests/test_frozen_profile_integrity.py algorithms/tests/test_steps_native_support.py
 	pnpm --dir apps/web exec vitest run src/workspace
 	bash scripts/go_control.sh test -buildvcs=false -race ./internal/workspace
+
+.PHONY: test-qc-opensource
+test-qc-opensource:
+	uv run --project algorithms pytest algorithms/tests/test_qc_opensource.py algorithms/tests/test_qc_opensource_delivery.py

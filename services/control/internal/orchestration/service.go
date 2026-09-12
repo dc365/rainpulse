@@ -413,6 +413,18 @@ func (service *Service) CreateRadarQC(
 	}
 	now := service.now().UTC()
 	identity := []string{input.RunID.String(), input.QCPipelineVersion}
+	if strings.HasPrefix(input.QCPipelineVersion, "qc-opensource-") {
+		// Freeze every requested input and configuration, not just a human-readable version.
+		contextJSON, err := json.Marshal(struct {
+			Temporal []RadarQCContextInput `json:"temporal"`
+			Cross    []RadarQCContextInput `json:"cross"`
+		}{input.TemporalContext, input.CrossRadarContext})
+		if err != nil {
+			return workflow.Job{}, err
+		}
+		identity = append(identity, input.NormalizedURI, input.QCConfigSHA256,
+			input.QCProfile, input.RadarConfigVersion, input.FlagDefinitionVersion, string(contextJSON))
+	}
 	if input.RegenerationID != uuid.Nil {
 		identity = append(identity, input.RegenerationID.String())
 	}
@@ -428,6 +440,11 @@ func (service *Service) CreateRadarQC(
 	if input.RegenerationID != uuid.Nil {
 		outputPrefix += "regenerations/" + input.RegenerationID.String() + "/"
 	}
+	profileHash := ""
+	if strings.HasPrefix(input.QCPipelineVersion, "qc-opensource-") {
+		profileHash = input.QCConfigSHA256
+		outputPrefix += "inputs/" + jobID.String() + "/"
+	}
 	request := RadarQCRequested{
 		SchemaVersion: SchemaVersion,
 		EventID:       eventID,
@@ -437,7 +454,8 @@ func (service *Service) CreateRadarQC(
 		JobID:         jobID,
 		TraceID:       traceID,
 		Payload: RadarQCRequestedPayload{
-			ScanID: input.ScanID, RadarID: input.RadarID,
+			QCProfileSHA256: profileHash,
+			ScanID:          input.ScanID, RadarID: input.RadarID,
 			InputURI:          input.NormalizedURI,
 			TemporalContext:   input.TemporalContext,
 			CrossRadarContext: input.CrossRadarContext,

@@ -262,6 +262,13 @@ type radarConfiguration struct {
 }
 
 type qcConfiguration struct {
+	Engine  string `yaml:"engine"`
+	Context struct {
+		Enabled               bool `yaml:"enabled"`
+		MaxTemporalScans      int  `yaml:"max_temporal_scans"`
+		MaxAgeSeconds         int  `yaml:"max_age_seconds"`
+		MaxCrossOffsetSeconds int  `yaml:"max_cross_offset_seconds"`
+	} `yaml:"context"`
 	ProfileVersion        string `yaml:"profile_version"`
 	PipelineVersion       string `yaml:"pipeline_version"`
 	FlagDefinitionVersion string `yaml:"flag_definition_version"`
@@ -771,11 +778,21 @@ func createRadarQC(
 	if err != nil {
 		return workflow.RadarScan{}, workflow.Job{}, err
 	}
+	contextConfig := config.RadialInterference.Morphology.ContextFusion
+	if config.Engine == "open_source" {
+		contextConfig = qcContextFusionConfiguration{
+			Enabled:                         config.Context.Enabled,
+			MaximumTemporalContextScans:     config.Context.MaxTemporalScans,
+			TemporalMaxTimeOffsetSecs:       config.Context.MaxAgeSeconds,
+			TemporalSelectionMode:           "past_only",
+			CrossRadarMaximumTimeOffsetSecs: config.Context.MaxCrossOffsetSeconds,
+		}
+	}
 	temporalContext, crossRadarContext, err := selectRadarQCContext(
 		ctx,
 		store,
 		scan,
-		config.RadialInterference.Morphology.ContextFusion,
+		contextConfig,
 	)
 	if err != nil {
 		return workflow.RadarScan{}, workflow.Job{}, err

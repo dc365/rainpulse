@@ -136,6 +136,7 @@ type RadarQCRequested struct {
 }
 
 type RadarQCRequestedPayload struct {
+	QCProfileSHA256       string                `json:"qc_profile_sha256,omitempty"`
 	ScanID                uuid.UUID             `json:"scan_id"`
 	RadarID               string                `json:"radar_id"`
 	InputURI              string                `json:"input_uri"`

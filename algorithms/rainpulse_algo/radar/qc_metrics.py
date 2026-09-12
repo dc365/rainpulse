@@ -225,3 +225,56 @@ def _cyclic_azimuth_width_radians(azimuth: np.ndarray, beam_width_deg: float) ->
     result = np.empty_like(widths)
     result[order] = widths
     return result
+
+
+def compare_measurement_actions(
+    labels: np.ndarray,
+    observed_mask: np.ndarray,
+    rejected_mask: np.ndarray,
+    reflectivity_dbz: np.ndarray,
+) -> dict[str, object]:
+    """Fixed-input review metrics, not a promotion decision.
+
+    Label codes: 0 uncertain, 1 trusted meteorological measurement,
+    2 confirmed interference, 3 weather/interference mixture. Code 3 is NOT
+    trusted quantitative weather. Denominators never depend on candidate output.
+    """
+    shape = np.asarray(observed_mask).shape
+    arrays = [np.asarray(item) for item in (labels, observed_mask, rejected_mask, reflectivity_dbz)]
+    if any(item.shape != shape for item in arrays):
+        raise ValueError("measurement-review label geometry mismatch")
+    label, observed, reject, dbzh = arrays
+    if np.any(~np.isin(label, [0, 1, 2, 3])):
+        raise ValueError("unsupported measurement-review label code")
+    if not np.isin(observed, [0, 1]).all() or not np.isin(reject, [0, 1]).all():
+        raise ValueError("measurement-review masks must be binary")
+    observed = observed.astype(bool)
+    reject = reject.astype(bool)
+    if np.any(observed & ~np.isfinite(dbzh)):
+        raise ValueError("fixed observed domain contains a nonfinite measurement")
+    weather = observed & (label == 1)
+    interference = observed & (label == 2)
+    mixed = observed & (label == 3)
+    strong = weather & np.isfinite(dbzh) & (dbzh >= 35)
+
+    def fraction(mask, decision):
+        count = int(np.count_nonzero(mask))
+        return float(np.count_nonzero(mask & decision) / count) if count else None
+
+    return {
+        "status": "review_metrics_only_not_operational_acceptance",
+        "denominator_policy": "fixed_observed_input_and_independent_labels",
+        "trusted_weather_count": int(weather.sum()),
+        "interference_count": int(interference.sum()),
+        "mixed_count": int(mixed.sum()),
+        "uncertain_count": int(np.count_nonzero(observed & (label == 0))),
+        "strong_weather_count": int(strong.sum()),
+        "interference_recall": fraction(interference, reject),
+        "trusted_weather_false_reject_rate": fraction(weather, reject),
+        "strong_weather_retention": fraction(strong, ~reject),
+        "mixed_measurement_withheld_rate": fraction(mixed, reject),
+        "trusted_weather_retained": int(np.count_nonzero(weather & ~reject)),
+        "trusted_weather_rejected": int(np.count_nonzero(weather & reject)),
+        "interference_retained": int(np.count_nonzero(interference & ~reject)),
+        "interference_rejected": int(np.count_nonzero(interference & reject)),
+    }

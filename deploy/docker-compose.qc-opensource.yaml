@@ -1,0 +1,36 @@
+# Explicit candidate override. Read docs/radar-qc-opensource/RUNBOOK.md first.
+# Does not deploy the native Go service or drain/version-separate shared queues.
+x-qc-env: &qc-env
+  RAINPULSE_QC_FLAG_DEFINITIONS: /opt/rainpulse/configs/qc/flag-definitions-v2.yaml
+  PYART_QUIET: '1'
+  OMP_NUM_THREADS: '1'
+  OPENBLAS_NUM_THREADS: '1'
+  MKL_NUM_THREADS: '1'
+services:
+  radar-qc-worker:
+    image: rainpulse-cpu-worker:${RAINPULSE_QC_CANDIDATE_IMAGE_TAG:-qc-opensource-1.0.0}
+    environment:
+      <<: *qc-env
+      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/fujian-qc-opensource-v1.yaml
+      RAINPULSE_RADAR_PHASE_PROCESSING_PROFILE: ''
+      RAINPULSE_RADAR_ATTENUATION_PROFILE: ''
+  radar-grid-worker:
+    image: rainpulse-cpu-worker:${RAINPULSE_QC_CANDIDATE_IMAGE_TAG:-qc-opensource-1.0.0}
+    environment:
+      <<: *qc-env
+      RAINPULSE_RADAR_GRID_CONFIG: /opt/rainpulse/configs/gridding/qc-opensource-hybrid-v1.yaml
+  radar-mosaic-worker:
+    image: rainpulse-cpu-worker:${RAINPULSE_QC_CANDIDATE_IMAGE_TAG:-qc-opensource-1.0.0}
+    environment:
+      <<: *qc-env
+      RAINPULSE_RADAR_MOSAIC_CONFIG: /opt/rainpulse/configs/mosaic/qc-opensource-mosaic-v1.yaml
+  analysis-qpe-worker:
+    image: rainpulse-cpu-worker:${RAINPULSE_QC_CANDIDATE_IMAGE_TAG:-qc-opensource-1.0.0}
+    environment:
+      <<: *qc-env
+      RAINPULSE_QPE_CONFIG: /opt/rainpulse/configs/qpe/qc-opensource-zr-v1.yaml
+  analysis-diagnostics-worker:
+    image: rainpulse-cpu-worker:${RAINPULSE_QC_CANDIDATE_IMAGE_TAG:-qc-opensource-1.0.0}
+    environment:
+      <<: *qc-env
+      RAINPULSE_DIAGNOSTIC_CONFIG: /opt/rainpulse/configs/diagnostics/qc-opensource-diagnostics-v1.yaml

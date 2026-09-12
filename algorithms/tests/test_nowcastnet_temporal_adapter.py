@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+
 from rainpulse_algo.nowcast.temporal_adapter import adapt_members_to_five_minutes
 
 

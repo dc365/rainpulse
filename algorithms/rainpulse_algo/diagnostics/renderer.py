@@ -73,6 +73,7 @@ BUSINESS_HARD_REJECT_FLAG_NAMES = (
     "MISSING",
     "HARDWARE_ANOMALY",
     "RADIAL_INTERFERENCE",
+    "NON_METEOROLOGICAL",
     "GROUND_CLUTTER",
     "SEA_CLUTTER",
     "ANOMALOUS_PROPAGATION",
@@ -252,6 +253,10 @@ def build_diagnostic_bundle(
                 and profile.renderer_version in BUSINESS_REFLECTIVITY_MASK_RENDERERS
             ):
                 field_valid &= ~business_reject
+                if qc.attrs.get("flag_definition_version") == "qc-flags-v2":
+                    if "QPE_ELIGIBLE_MASK" not in group:
+                        raise DiagnosticInputError("v2 QC lacks quantitative eligibility")
+                    field_valid &= group["QPE_ELIGIBLE_MASK"][:] == 1
             rgba = _scalar_rgba(group[field][:], field_valid, stops)
             projected = _polar_to_ppi(
                 rgba,

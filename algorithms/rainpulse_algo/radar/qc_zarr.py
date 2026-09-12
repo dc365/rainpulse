@@ -162,6 +162,17 @@ def _build_qc_zarr_store_objects(
             "write_empty_chunks": settings.write_empty_chunks,
         }
     )
+    if getattr(result.profile, "engine", None) == "open_source":
+        root.attrs.update(
+            {
+                "qc_engine": "open_source",
+                "operational_eligible": False,
+                "qc_parameters_sha256": result.profile.parameters_hash,
+                "qc_libraries": result.summary["libraries"],
+                "qc_action_semantics": "0:KEEP,1:DOWNWEIGHT,2:REJECT,3:MISSING",
+                "qc_score_semantics": "uncalibrated_membership_not_probability",
+            }
+        )
     if provenance:
         root.attrs.update(dict(provenance))
 
@@ -196,11 +207,19 @@ def _build_qc_zarr_store_objects(
             "P_SEA_CLUTTER": qc_sweep.p_sea_clutter,
             "P_RADIAL_INTERFERENCE": qc_sweep.p_radial_interference,
         }
-        if result.profile.dual_pol_fuzzy.enabled:
-            fields["P_METEO_DUAL_POL"] = qc_sweep.p_meteo_dual_pol
-        if result.profile.vertical_consistency.enabled:
+        if getattr(result.profile, "engine", None) == "open_source":
             fields["P_VERTICAL_CONSISTENCY"] = qc_sweep.p_vertical_consistency
-        if result.profile.radial_interference.morphology.enabled:
+        elif result.profile.dual_pol_fuzzy.enabled:
+            fields["P_METEO_DUAL_POL"] = qc_sweep.p_meteo_dual_pol
+        if (
+            getattr(result.profile, "engine", None) != "open_source"
+            and result.profile.vertical_consistency.enabled
+        ):
+            fields["P_VERTICAL_CONSISTENCY"] = qc_sweep.p_vertical_consistency
+        if (
+            getattr(result.profile, "engine", None) != "open_source"
+            and result.profile.radial_interference.morphology.enabled
+        ):
             fields["INTERFERENCE_TYPE"] = qc_sweep.interference_type
         for name, values in fields.items():
             array = group.create_dataset(
@@ -263,6 +282,10 @@ def validate_qc_zarr_store(objects: Mapping[str, bytes]) -> dict[str, Any]:
         _validate_geometry_fields(group, shape)
         _validate_phase_processing_fields(group, shape)
         _validate_attenuation_fields(group, shape)
+        if root.attrs.get("qc_engine") == "open_source":
+            from .qc_engine.validation import validate_sweep
+
+            validate_sweep(group, root.attrs)
         valid = group["VALID_MASK"][:]
         low_quality = group["LOW_QUALITY_MASK"][:]
         flags = group["QC_FLAGS"][:]
@@ -386,6 +409,19 @@ def _environment_flag(name: str, *, default: bool) -> bool:
 
 
 def _field_attributes(name: str) -> dict[str, Any]:
+    if name == "QC_ACTION":
+        return {
+            "units": "1",
+            "codes": {"0": "KEEP", "1": "DOWNWEIGHT", "2": "REJECT", "3": "MISSING"},
+        }
+    if name == "QC_DECISION_REASON":
+        return {"units": "1", "definition": "type-specific-v1-reason-bits"}
+    if name in {"METEO_SCORE", "OS_FUZZY_RAW_SCORE", "WEATHER_SUPPORT_SCORE"}:
+        return {
+            "units": "1",
+            "score_semantics": "uncalibrated_membership_not_probability",
+            "missing_value": "NaN",
+        }
     if name == "QC_FLAGS":
         return {"units": "1", "storage_dtype": "uint32"}
     if name.endswith("_MASK"):
@@ -482,27 +518,19 @@ def _validate_phase_processing_fields(group: zarr.Group, shape: tuple[int, int])
             continue
         array = group[name]
         if array.shape != shape or array.dtype != dtype:
-            raise QCInputError(
-                f"QC phase-processing field {name} has invalid shape or dtype"
-            )
+            raise QCInputError(f"QC phase-processing field {name} has invalid shape or dtype")
         values = array[:]
         if name in PHASE_PROCESSING_AVAILABLE_MASK_FIELDS:
             if np.any((values != 0) & (values != 1)):
-                raise QCInputError(
-                    f"QC phase-processing mask {name} is not binary"
-                )
+                raise QCInputError(f"QC phase-processing mask {name} is not binary")
             continue
         if name == PHIDP_SHADOW_SEGMENT_INDEX_FIELD:
             if np.any(values < -1):
-                raise QCInputError(
-                    f"QC phase-processing segment field {name} must be >= -1"
-                )
+                raise QCInputError(f"QC phase-processing segment field {name} must be >= -1")
             continue
         finite = values[np.isfinite(values)]
         if name == KDP_SHADOW_UNCERTAINTY_FIELD and finite.size and finite.min() < 0:
-            raise QCInputError(
-                f"QC phase-processing field {name} must be non-negative"
-            )
+            raise QCInputError(f"QC phase-processing field {name} must be non-negative")
 
 
 def _validate_attenuation_fields(group: zarr.Group, shape: tuple[int, int]) -> None:
@@ -511,25 +539,17 @@ def _validate_attenuation_fields(group: zarr.Group, shape: tuple[int, int]) -> N
             continue
         array = group[name]
         if array.shape != shape or array.dtype != dtype:
-            raise QCInputError(
-                f"QC attenuation-shadow field {name} has invalid shape or dtype"
-            )
+            raise QCInputError(f"QC attenuation-shadow field {name} has invalid shape or dtype")
         values = array[:]
         if name in ATTENUATION_SHADOW_AVAILABLE_MASK_FIELDS:
             if np.any((values != 0) & (values != 1)):
-                raise QCInputError(
-                    f"QC attenuation-shadow mask {name} is not binary"
-                )
+                raise QCInputError(f"QC attenuation-shadow mask {name} is not binary")
             continue
         if name == ATTENUATION_SHADOW_SEGMENT_INDEX_FIELD:
             if np.any(values < -1):
-                raise QCInputError(
-                    f"QC attenuation-shadow segment field {name} must be >= -1"
-                )
+                raise QCInputError(f"QC attenuation-shadow segment field {name} must be >= -1")
             continue
         finite = values[np.isfinite(values)]
         if name in {SPECIFIC_ATTENUATION_SHADOW_FIELD, ATTENUATION_CORRECTION_SHADOW_FIELD}:
             if finite.size and finite.min() < 0:
-                raise QCInputError(
-                    f"QC attenuation-shadow field {name} must be non-negative"
-                )
+                raise QCInputError(f"QC attenuation-shadow field {name} must be non-negative")

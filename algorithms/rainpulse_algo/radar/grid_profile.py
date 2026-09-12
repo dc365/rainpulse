@@ -6,7 +6,7 @@ from typing import Literal
 
 import yaml
 
-from .qc_flags import PHASE1_HARD_REJECT_FLAGS
+from .qc_flags import hard_reject_flags
 
 
 class RadarGridConfigError(ValueError):
@@ -32,6 +32,7 @@ class BeamGeometryConfig:
 class BlockageConfig:
     flag_fraction: float
     maximum_usable_fraction: float
+    method: str = "circular_beam_partial_blockage"
 
 
 @dataclass(frozen=True)
@@ -81,7 +82,10 @@ def load_radar_grid_profile(path: str | Path) -> RadarGridProfile:
             raise RadarGridConfigError("antenna altitude must come from radar configuration")
         if beam["vertical_beam_width_source"] != "radar_config":
             raise RadarGridConfigError("vertical beam width must come from radar configuration")
-        if blockage["method"] != "circular_beam_partial_blockage":
+        if blockage["method"] not in {
+            "circular_beam_partial_blockage",
+            "wradlib_circular_beam_partial_blockage",
+        }:
             raise RadarGridConfigError("unsupported beam blockage method")
         if blockage["cumulative_rule"] != "maximum_along_ray":
             raise RadarGridConfigError("unsupported cumulative blockage rule")
@@ -103,37 +107,26 @@ def load_radar_grid_profile(path: str | Path) -> RadarGridProfile:
                 sampling=dem["sampling"],
             ),
             beam_geometry=BeamGeometryConfig(
-                effective_earth_radius_factor=float(
-                    beam["effective_earth_radius_factor"]
-                ),
+                effective_earth_radius_factor=float(beam["effective_earth_radius_factor"]),
                 earth_radius_m=float(beam["earth_radius_m"]),
-                unverified_vertical_datum_policy=beam[
-                    "unverified_vertical_datum_policy"
-                ],
+                unverified_vertical_datum_policy=beam["unverified_vertical_datum_policy"],
             ),
             blockage=BlockageConfig(
+                method=blockage["method"],
                 flag_fraction=float(blockage["flag_fraction"]),
                 maximum_usable_fraction=float(blockage["maximum_usable_fraction"]),
             ),
             polar_mapping=PolarMappingConfig(
-                maximum_azimuth_offset_deg=float(
-                    mapping["maximum_azimuth_offset_deg"]
-                ),
+                maximum_azimuth_offset_deg=float(mapping["maximum_azimuth_offset_deg"]),
                 maximum_range_offset_gate_fraction=float(
                     mapping["maximum_range_offset_gate_fraction"]
                 ),
             ),
             hybrid_scan=HybridScanConfig(
-                minimum_source_quality_index=float(
-                    hybrid["minimum_source_quality_index"]
-                ),
+                minimum_source_quality_index=float(hybrid["minimum_source_quality_index"]),
                 low_quality_threshold=float(hybrid["low_quality_threshold"]),
-                maximum_beam_height_agl_m=float(
-                    hybrid["maximum_beam_height_agl_m"]
-                ),
-                beam_height_quality_scale_m=float(
-                    hybrid["beam_height_quality_scale_m"]
-                ),
+                maximum_beam_height_agl_m=float(hybrid["maximum_beam_height_agl_m"]),
+                beam_height_quality_scale_m=float(hybrid["beam_height_quality_scale_m"]),
                 reject_flags=tuple(str(item) for item in hybrid["reject_flags"]),
             ),
         )
@@ -169,7 +162,7 @@ def _validate_profile(profile: RadarGridProfile) -> None:
     if profile.hybrid_scan.beam_height_quality_scale_m <= 0:
         raise RadarGridConfigError("beam height quality scale must be positive")
     reject_flags = set(profile.hybrid_scan.reject_flags)
-    missing = sorted(PHASE1_HARD_REJECT_FLAGS - reject_flags)
+    missing = sorted(hard_reject_flags(profile.flag_definition_version) - reject_flags)
     if missing:
         raise RadarGridConfigError(
             "Hybrid Scan reject_flags omit Phase-1 hard rejects: " + ",".join(missing)

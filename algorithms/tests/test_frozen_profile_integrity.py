@@ -39,5 +39,8 @@ def test_active_worker_planner_and_model_identity_move_together():
     model_version = re.search(r'PystepsLKModelVersion\s*=\s*"([^"\n]+)"', event_source)
     assert model_version is not None
     assert model_version.group(1) == profile["model_version"]
-    for filename in ["deploy/docker-compose.yaml", "services/control/cmd/orchestrator/planner.go"]:
+    for filename in [
+        "deploy/docker-compose.yaml",
+        "services/control/internal/controlplane/planner.go",
+    ]:
         assert "configs/nowcast/prelaunch-pysteps-lk-v2.yaml" in (ROOT / filename).read_text()

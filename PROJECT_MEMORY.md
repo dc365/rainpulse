@@ -25,6 +25,14 @@ operational data here.
 
 ## Prelaunch convergence
 
+- Open-source QC candidate engine and review tools are implemented on
+  `feature/radar-qc-opensource-20260911`; see `docs/radar-qc-opensource/README.md`.
+  Default business profiles remain unchanged. New engine uses flags v2 and a
+  coordinated QC/Hybrid/mosaic/QPE/diagnostics profile set, never mixed with v1.
+  Genuine Py-ART/wradlib tests are distinct from pending real-weather acceptance.
+  RADVOL SPIKE is a validated reference-import boundary, not a native run proof.
+  No deployment, source-data cleanup or operational promotion was performed.
+
 - 2026-09-11: Z9598 QC candidate `fujian-qc-evidence-2.1.0` / profile v3 adds
   radar-scoped long-range polarimetric evidence; three real Worker replays and
   105 Python/config tests pass. Regeneration QPE ownership race is fixed in

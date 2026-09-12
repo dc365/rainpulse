@@ -281,12 +281,20 @@ class IntervalService:
                 from rainpulse_algo.verification.analysis import compare, summarize
 
                 request = json.loads(body)
-                result = compare(self, request) if target.endswith("compare") else summarize(request["records"], request["algorithms"])
+                result = (
+                    compare(self, request)
+                    if target.endswith("compare")
+                    else summarize(request["records"], request["algorithms"])
+                )
                 return 200, "application/json", json.dumps(result, allow_nan=False).encode()
             if method == "POST" and target == "/interval/verification":
                 from rainpulse_algo.verification.workspace import calculate
 
-                return 200, "application/json", json.dumps(calculate(self, json.loads(body)), allow_nan=False).encode()
+                return (
+                    200,
+                    "application/json",
+                    json.dumps(calculate(self, json.loads(body)), allow_nan=False).encode(),
+                )
             if method == "POST" and target == "/interval":
                 return (
                     200,

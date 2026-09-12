@@ -18,13 +18,20 @@ export function useIntervalPanels(detail: WorkspaceCycleDetail | null, enabled: 
   useEffect(() => {
     if (!enabled || !detail) return
     const controller = new AbortController()
-    setResult(null)
+    // A new request key hides old results without an effect-driven state reset.
+    // Keep this accumulator local: StrictMode/re-enabling must not count old completions.
+    let received: { key: string; panels: WorkspacePanel[]; completed: number; error?: string } = {
+      key, panels: [], completed: 0,
+    }
     const receive = (panels: WorkspacePanel[], error?: string) => {
       if (controller.signal.aborted) return
-      setResult(previous => {
-        const current = previous?.key === key ? previous : { key, panels: [], completed: 0 }
-        return { key, panels: [...current.panels.filter(p => !panels.some(next => next.panel_id === p.panel_id)), ...panels], completed: current.completed+1, error: error || current.error }
-      })
+      received = {
+        key,
+        panels: [...received.panels.filter(p => !panels.some(next => next.panel_id === p.panel_id)), ...panels],
+        completed: received.completed + 1,
+        error: error || received.error,
+      }
+      setResult(received)
     }
     for (const algorithm of ['qpe','lk','steps','nowcastnet']) void fetch('/api/v1/workspace/accumulations', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,

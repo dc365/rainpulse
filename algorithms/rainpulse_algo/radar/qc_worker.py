@@ -77,7 +77,8 @@ def _execute_basic_qc(request: RadarQCRequested, client: Minio) -> WorkerResult:
         _required_file("RAINPULSE_RADAR_QC_CONFIG"),
         _required_file("RAINPULSE_QC_FLAG_DEFINITIONS"),
     )
-    _load_shadow_runtime_profiles()  # Fail invalid runtime configuration before reading inputs.
+    if getattr(profile, "engine", None) != "open_source":
+        _load_shadow_runtime_profiles()  # Validate only the selected engine's runtime.
     _validate_request_versions(request, profile)
     observability: dict[str, Any] = {
         "input_read_ms": 0.0,
@@ -119,6 +120,11 @@ def _execute_basic_qc(request: RadarQCRequested, client: Minio) -> WorkerResult:
             normalized,
             profile,
             **prepared,
+            **(
+                {"created_at": request.occurred_at}
+                if getattr(profile, "engine", None) == "open_source"
+                else {}
+            ),
         )
     except Exception as error:  # noqa: BLE001 - attach stage observability
         observability["qc_core_ms"] = _elapsed_ms(qc_started)
@@ -186,6 +192,17 @@ def _execute_basic_qc(request: RadarQCRequested, client: Minio) -> WorkerResult:
 
 def prepare_qc_inputs(request, normalized, profile, client, *, reader=None, ancillary_maps=None):
     """One preparation path for online QC and frozen scientific replay."""
+    if getattr(profile, "engine", None) == "open_source":
+        from .qc_engine.context import prepare_open_source_inputs
+
+        return prepare_open_source_inputs(
+            request,
+            normalized,
+            profile,
+            client,
+            reader=reader,
+            ancillary_maps=ancillary_maps,
+        )
     from .qc_input import open_qc_input
 
     view = open_qc_input(normalized)
@@ -556,7 +573,7 @@ def _load_qc_geometry_resources(
     Path | None,
     str | None,
 ]:
-    if profile.decision_version != "evidence-v2":
+    if profile.decision_version not in {"evidence-v2", "type-specific-v1"}:
         return None, None, None, None
     radar_config_dir = _optional_directory("RAINPULSE_RADAR_CONFIG_DIR")
     if radar_config_dir is None:
@@ -923,6 +940,14 @@ def _validate_request_versions(
     profile: BasicQCProfile,
 ) -> None:
     payload = request.payload
+    if getattr(profile, "engine", None) == "open_source":
+        import hashlib
+
+        actual = hashlib.sha256(
+            _required_file("RAINPULSE_RADAR_QC_CONFIG").read_bytes()
+        ).hexdigest()
+        if payload.qc_profile_sha256 != actual:
+            raise QCConfigError("mounted open-source QC profile SHA256 differs from frozen task")
     expected = (
         ("qc_profile", payload.qc_profile, profile.profile_version),
         ("qc_pipeline_version", payload.qc_pipeline_version, profile.pipeline_version),

@@ -77,12 +77,14 @@ def build_radar_mosaic(
     analysis_time = _utc(analysis_time)
     _validate_analysis_identity(inputs, analysis_time, grid, profile, flag_masks)
     roots = [_open_and_validate(item, analysis_time, grid, profile) for item in inputs]
-    codes = {radar_id: index + 1 for index, radar_id in enumerate(sorted({
-        item.radar_id for item in inputs
-    }))}
+    codes = {
+        radar_id: index + 1
+        for index, radar_id in enumerate(sorted({item.radar_id for item in inputs}))
+    }
     shape = grid.shape
     count = len(inputs)
 
+    _assert_consistent_qc_generation(roots, profile.flag_definition_version)
     dbzh = _stack(roots, "DBZH_QC")
     source_quality = _stack(roots, "QUALITY_INDEX")
     source_flags = _stack(roots, "QC_FLAGS")
@@ -93,8 +95,8 @@ def build_radar_mosaic(
             + (1.0 - profile.alignment.minimum_time_quality)
             * max(
                 0.0,
-                1.0 - abs(item.time_offset_seconds)
-                / profile.alignment.maximum_absolute_offset_seconds,
+                1.0
+                - abs(item.time_offset_seconds) / profile.alignment.maximum_absolute_offset_seconds,
             )
             for item in inputs
         ],
@@ -113,8 +115,7 @@ def build_radar_mosaic(
     )
     best_quality = np.max(np.where(usable, adjusted_quality, -np.inf), axis=0)
     contributes = usable & (
-        adjusted_quality
-        >= best_quality[None, :, :] - profile.fusion.similar_quality_max_difference
+        adjusted_quality >= best_quality[None, :, :] - profile.fusion.similar_quality_max_difference
     )
     contributor_count = np.sum(contributes, axis=0, dtype="uint8")
     valid = contributor_count > 0
@@ -143,11 +144,7 @@ def build_radar_mosaic(
     weighted_sources = {
         "QUALITY_INDEX": adjusted_quality,
         "QI_TIME": np.broadcast_to(time_quality, (count, *shape)),
-        **{
-            name: _stack(roots, name)
-            for name in QI_COMPONENTS
-            if name != "QI_TIME"
-        },
+        **{name: _stack(roots, name) for name in QI_COMPONENTS if name != "QI_TIME"},
         "SOURCE_ELEVATION": _stack(roots, "SOURCE_ELEVATION"),
         "BEAM_HEIGHT": _stack(roots, "BEAM_HEIGHT"),
         "TERRAIN_HEIGHT": _stack(roots, "TERRAIN_HEIGHT"),
@@ -176,17 +173,11 @@ def build_radar_mosaic(
     fields["VALID_MASK"] = valid.astype("uint8")
     fields["LOW_QUALITY_MASK"] = low.astype("uint8")
 
-    contributor_details = _contributor_details(
-        inputs, roots, contributes, adjusted_quality
-    )
+    contributor_details = _contributor_details(inputs, roots, contributes, adjusted_quality)
     actual_radars = {
-        item.radar_id
-        for index, item in enumerate(inputs)
-        if np.any(contributes[index])
+        item.radar_id for index, item in enumerate(inputs) if np.any(contributes[index])
     }
-    operational_reasons = _operational_reasons(
-        inputs, roots, actual_radars, profile
-    )
+    operational_reasons = _operational_reasons(inputs, roots, actual_radars, profile)
     total_cells = int(np.prod(shape))
     valid_count = int(np.count_nonzero(valid))
     summary = {
@@ -357,17 +348,11 @@ def _contributor_details(
                 "time_offset_seconds": item.time_offset_seconds,
                 "hybrid_scan_version": item.hybrid_scan_version,
                 "input_asset_ids": list(roots[index].attrs["input_asset_ids"]),
-                "qc_pipeline_version": str(
-                    roots[index].attrs["qc_pipeline_version"]
-                ),
-                "input_operational_eligible": bool(
-                    roots[index].attrs.get("operational_eligible")
-                ),
+                "qc_pipeline_version": str(roots[index].attrs["qc_pipeline_version"]),
+                "input_operational_eligible": bool(roots[index].attrs.get("operational_eligible")),
                 "contributing_cell_count": int(np.count_nonzero(mask)),
                 "mean_adjusted_quality_index": (
-                    float(np.mean(adjusted_quality[index][mask]))
-                    if np.any(mask)
-                    else 0.0
+                    float(np.mean(adjusted_quality[index][mask])) if np.any(mask) else 0.0
                 ),
             }
         )
@@ -404,3 +389,24 @@ def _utc(value: datetime) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
         raise RadarMosaicInputError("analysis and volume times must include UTC offset")
     return value.astimezone(UTC)
+
+
+def _assert_consistent_qc_generation(roots, flag_version):
+    """Never mix baseline and experimental v2 QC in one analysis."""
+    if flag_version != "qc-flags-v2":
+        return
+    signatures = set()
+    for root in roots:
+        attrs = root.attrs
+        digest = attrs.get("qc_parameters_sha256")
+        libraries = attrs.get("qc_libraries")
+        if (
+            attrs.get("qc_engine") != "open_source"
+            or not isinstance(digest, str)
+            or len(digest) != 64
+            or not isinstance(libraries, dict)
+        ):
+            raise RadarMosaicInputError("v2 RadarGrid lacks frozen QC generation identity")
+        signatures.add((attrs.get("qc_pipeline_version"), digest, tuple(sorted(libraries.items()))))
+    if len(signatures) != 1:
+        raise RadarMosaicInputError("mosaic cannot mix different open-source QC generations")

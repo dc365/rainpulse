@@ -1,0 +1,667 @@
+{
+  "$defs": {
+    "ClutterConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "asset_uri": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Asset Uri"
+        },
+        "asset_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Asset Version"
+        },
+        "asset_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Asset Sha256"
+        },
+        "flag_probability": {
+          "default": 0.9,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Flag Probability",
+          "type": "number"
+        }
+      },
+      "title": "ClutterConfig",
+      "type": "object"
+    },
+    "ContextConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "max_temporal_scans": {
+          "default": 3,
+          "maximum": 3,
+          "minimum": 0,
+          "title": "Max Temporal Scans",
+          "type": "integer"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "max_age_seconds": {
+          "default": 900,
+          "exclusiveMinimum": 0,
+          "title": "Max Age Seconds",
+          "type": "integer"
+        },
+        "max_cross_offset_seconds": {
+          "default": 300,
+          "exclusiveMinimum": 0,
+          "title": "Max Cross Offset Seconds",
+          "type": "integer"
+        },
+        "past_only": {
+          "const": true,
+          "default": true,
+          "title": "Past Only",
+          "type": "boolean"
+        },
+        "echo_threshold_dbz": {
+          "default": 10.0,
+          "title": "Echo Threshold Dbz",
+          "type": "number"
+        },
+        "strong_support": {
+          "default": 0.7,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Strong Support",
+          "type": "number"
+        }
+      },
+      "title": "ContextConfig",
+      "type": "object"
+    },
+    "EchoConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "dbzh_valid_range_dbz": {
+          "default": [
+            -32.0,
+            80.0
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Dbzh Valid Range Dbz",
+          "type": "array"
+        },
+        "no_rain_below_dbz": {
+          "default": -10.0,
+          "title": "No Rain Below Dbz",
+          "type": "number"
+        },
+        "low_snr_db": {
+          "default": 3.0,
+          "title": "Low Snr Db",
+          "type": "number"
+        },
+        "strong_echo_dbz": {
+          "default": 35.0,
+          "title": "Strong Echo Dbz",
+          "type": "number"
+        }
+      },
+      "title": "EchoConfig",
+      "type": "object"
+    },
+    "GeometryConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "maximum_azimuth_gap_factor": {
+          "default": 1.8,
+          "exclusiveMinimum": 1,
+          "maximum": 3,
+          "title": "Maximum Azimuth Gap Factor",
+          "type": "number"
+        },
+        "duplicate_tolerance_deg": {
+          "default": 0.01,
+          "exclusiveMinimum": 0,
+          "maximum": 0.1,
+          "title": "Duplicate Tolerance Deg",
+          "type": "number"
+        },
+        "maximum_elevation_spread_deg": {
+          "default": 0.3,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Maximum Elevation Spread Deg",
+          "type": "number"
+        },
+        "maximum_ray_count": {
+          "default": 2400,
+          "exclusiveMinimum": 0,
+          "title": "Maximum Ray Count",
+          "type": "integer"
+        },
+        "maximum_gate_count": {
+          "default": 5000,
+          "exclusiveMinimum": 0,
+          "title": "Maximum Gate Count",
+          "type": "integer"
+        },
+        "phase_period_deg": {
+          "default": 360.0,
+          "exclusiveMinimum": 0,
+          "title": "Phase Period Deg",
+          "type": "number"
+        }
+      },
+      "title": "GeometryConfig",
+      "type": "object"
+    },
+    "HealthConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "reject_states": {
+          "default": [
+            "UNAVAILABLE"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "title": "Reject States",
+          "type": "array"
+        },
+        "degraded_quality_multiplier": {
+          "default": 0.8,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Degraded Quality Multiplier",
+          "type": "number"
+        }
+      },
+      "title": "HealthConfig",
+      "type": "object"
+    },
+    "PhaseConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "band": {
+          "default": "S",
+          "enum": [
+            "S",
+            "C",
+            "X"
+          ],
+          "title": "Band",
+          "type": "string"
+        },
+        "window_gates": {
+          "default": 7,
+          "maximum": 31,
+          "minimum": 3,
+          "title": "Window Gates",
+          "type": "integer"
+        },
+        "minimum_segment_m": {
+          "default": 5000.0,
+          "exclusiveMinimum": 0,
+          "title": "Minimum Segment M",
+          "type": "number"
+        },
+        "minimum_rhohv": {
+          "default": 0.9,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Minimum Rhohv",
+          "type": "number"
+        },
+        "niter": {
+          "default": 2,
+          "maximum": 10,
+          "minimum": 1,
+          "title": "Niter",
+          "type": "integer"
+        },
+        "attenuation_enabled": {
+          "default": false,
+          "title": "Attenuation Enabled",
+          "type": "boolean"
+        },
+        "maximum_correction_db": {
+          "default": 10.0,
+          "exclusiveMinimum": 0,
+          "maximum": 20,
+          "title": "Maximum Correction Db",
+          "type": "number"
+        }
+      },
+      "title": "PhaseConfig",
+      "type": "object"
+    },
+    "PyArtConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "texture_window_m": {
+          "default": 1750.0,
+          "exclusiveMinimum": 0,
+          "title": "Texture Window M",
+          "type": "number"
+        },
+        "max_textrefl": {
+          "default": 8.0,
+          "exclusiveMinimum": 0,
+          "title": "Max Textrefl",
+          "type": "number"
+        },
+        "max_textzdr": {
+          "default": 2.85,
+          "exclusiveMinimum": 0,
+          "title": "Max Textzdr",
+          "type": "number"
+        },
+        "max_textphi": {
+          "default": 20.0,
+          "exclusiveMinimum": 0,
+          "title": "Max Textphi",
+          "type": "number"
+        },
+        "max_textrhv": {
+          "default": 0.3,
+          "exclusiveMinimum": 0,
+          "title": "Max Textrhv",
+          "type": "number"
+        },
+        "min_rhv": {
+          "default": 0.6,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Min Rhv",
+          "type": "number"
+        },
+        "object_threshold_dbz": {
+          "default": 0.0,
+          "title": "Object Threshold Dbz",
+          "type": "number"
+        },
+        "small_object_gates": {
+          "default": 10,
+          "minimum": 1,
+          "title": "Small Object Gates",
+          "type": "integer"
+        }
+      },
+      "title": "PyArtConfig",
+      "type": "object"
+    },
+    "QualityConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "aggregation": {
+          "const": "minimum",
+          "default": "minimum",
+          "title": "Aggregation",
+          "type": "string"
+        },
+        "components": {
+          "default": [
+            "QI_METEO",
+            "QI_INTERFERENCE"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "title": "Components",
+          "type": "array"
+        },
+        "low_quality_threshold": {
+          "default": 0.5,
+          "exclusiveMaximum": 1,
+          "exclusiveMinimum": 0,
+          "title": "Low Quality Threshold",
+          "type": "number"
+        },
+        "quantitative_minimum": {
+          "default": 0.5,
+          "exclusiveMaximum": 1,
+          "exclusiveMinimum": 0,
+          "title": "Quantitative Minimum",
+          "type": "number"
+        },
+        "suspect_quality": {
+          "default": 0.6,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Suspect Quality",
+          "type": "number"
+        },
+        "incomplete_capability_quality": {
+          "default": 0.7,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Incomplete Capability Quality",
+          "type": "number"
+        },
+        "low_snr_quality": {
+          "default": 0.3,
+          "exclusiveMaximum": 1,
+          "minimum": 0,
+          "title": "Low Snr Quality",
+          "type": "number"
+        },
+        "unavailable_component_policy": {
+          "const": "penalize_and_record",
+          "default": "penalize_and_record",
+          "title": "Unavailable Component Policy",
+          "type": "string"
+        }
+      },
+      "title": "QualityConfig",
+      "type": "object"
+    },
+    "RFIConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "minimum_segment_m": {
+          "default": 12000.0,
+          "exclusiveMinimum": 0,
+          "title": "Minimum Segment M",
+          "type": "number"
+        },
+        "local_window_m": {
+          "default": 8000.0,
+          "exclusiveMinimum": 0,
+          "title": "Local Window M",
+          "type": "number"
+        },
+        "azimuth_offsets_deg": {
+          "default": [
+            2.0,
+            5.0,
+            12.0,
+            25.0,
+            45.0
+          ],
+          "items": {
+            "type": "number"
+          },
+          "title": "Azimuth Offsets Deg",
+          "type": "array"
+        },
+        "minimum_echo_dbz": {
+          "default": 10.0,
+          "title": "Minimum Echo Dbz",
+          "type": "number"
+        },
+        "minimum_contrast_db": {
+          "default": 10.0,
+          "exclusiveMinimum": 0,
+          "title": "Minimum Contrast Db",
+          "type": "number"
+        },
+        "maximum_axial_std_db": {
+          "default": 4.0,
+          "exclusiveMinimum": 0,
+          "title": "Maximum Axial Std Db",
+          "type": "number"
+        },
+        "severe_rhohv": {
+          "default": 0.8,
+          "exclusiveMaximum": 1,
+          "exclusiveMinimum": 0,
+          "title": "Severe Rhohv",
+          "type": "number"
+        },
+        "minimum_measured_support": {
+          "default": 0.85,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Minimum Measured Support",
+          "type": "number"
+        }
+      },
+      "title": "RFIConfig",
+      "type": "object"
+    },
+    "SeaConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "coastline_asset_uri": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Coastline Asset Uri"
+        },
+        "asset_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Asset Version"
+        }
+      },
+      "title": "SeaConfig",
+      "type": "object"
+    },
+    "WradlibConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "gabella_window": {
+          "default": 5,
+          "maximum": 31,
+          "minimum": 3,
+          "title": "Gabella Window",
+          "type": "integer"
+        },
+        "gabella_thrsnorain": {
+          "default": 0.0,
+          "title": "Gabella Thrsnorain",
+          "type": "number"
+        },
+        "gabella_tr1": {
+          "default": 6.0,
+          "exclusiveMinimum": 0,
+          "title": "Gabella Tr1",
+          "type": "number"
+        },
+        "gabella_n_p": {
+          "default": 6,
+          "minimum": 1,
+          "title": "Gabella N P",
+          "type": "integer"
+        },
+        "gabella_tr2": {
+          "default": 1.3,
+          "exclusiveMinimum": 0,
+          "title": "Gabella Tr2",
+          "type": "number"
+        },
+        "low_meteo_score": {
+          "default": 0.25,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Low Meteo Score",
+          "type": "number"
+        },
+        "minimum_pol_moments": {
+          "default": 2,
+          "maximum": 3,
+          "minimum": 2,
+          "title": "Minimum Pol Moments",
+          "type": "integer"
+        },
+        "fuzzy_weights": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Fuzzy Weights",
+          "type": "object"
+        },
+        "fuzzy_trapezoids": {
+          "additionalProperties": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Fuzzy Trapezoids",
+          "type": "object"
+        }
+      },
+      "title": "WradlibConfig",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.1",
+      "default": "1.1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "engine": {
+      "const": "open_source",
+      "default": "open_source",
+      "title": "Engine",
+      "type": "string"
+    },
+    "profile_version": {
+      "default": "fujian-qc-opensource-v1",
+      "title": "Profile Version",
+      "type": "string"
+    },
+    "pipeline_version": {
+      "const": "qc-opensource-1.0.0",
+      "default": "qc-opensource-1.0.0",
+      "title": "Pipeline Version",
+      "type": "string"
+    },
+    "decision_version": {
+      "const": "type-specific-v1",
+      "default": "type-specific-v1",
+      "title": "Decision Version",
+      "type": "string"
+    },
+    "flag_definition_version": {
+      "const": "qc-flags-v2",
+      "default": "qc-flags-v2",
+      "title": "Flag Definition Version",
+      "type": "string"
+    },
+    "operational_eligible": {
+      "const": false,
+      "default": false,
+      "title": "Operational Eligible",
+      "type": "boolean"
+    },
+    "arm_pyart_version": {
+      "const": "2.2.5",
+      "default": "2.2.5",
+      "title": "Arm Pyart Version",
+      "type": "string"
+    },
+    "wradlib_version": {
+      "const": "2.9.5",
+      "default": "2.9.5",
+      "title": "Wradlib Version",
+      "type": "string"
+    },
+    "health_gate": {
+      "$ref": "#/$defs/HealthConfig"
+    },
+    "echo": {
+      "$ref": "#/$defs/EchoConfig"
+    },
+    "quality_index": {
+      "$ref": "#/$defs/QualityConfig"
+    },
+    "static_ground_clutter": {
+      "$ref": "#/$defs/ClutterConfig"
+    },
+    "sea_ap": {
+      "$ref": "#/$defs/SeaConfig"
+    },
+    "geometry": {
+      "$ref": "#/$defs/GeometryConfig"
+    },
+    "pyart": {
+      "$ref": "#/$defs/PyArtConfig"
+    },
+    "wradlib": {
+      "$ref": "#/$defs/WradlibConfig"
+    },
+    "rfi": {
+      "$ref": "#/$defs/RFIConfig"
+    },
+    "phase": {
+      "$ref": "#/$defs/PhaseConfig"
+    },
+    "context": {
+      "$ref": "#/$defs/ContextConfig"
+    }
+  },
+  "title": "OpenSourceQCProfile",
+  "type": "object"
+}

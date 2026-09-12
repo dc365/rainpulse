@@ -67,7 +67,7 @@
         "maximum_usable_fraction"
       ],
       "properties": {
-        "method": { "const": "circular_beam_partial_blockage" },
+        "method": { "enum": ["circular_beam_partial_blockage", "wradlib_circular_beam_partial_blockage"] },
         "cumulative_rule": { "const": "maximum_along_ray" },
         "flag_fraction": { "$ref": "#/$defs/probability" },
         "maximum_usable_fraction": { "$ref": "#/$defs/probability" }

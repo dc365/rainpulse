@@ -309,6 +309,7 @@ export function MainWorkspace() {
             <option value="lk">LK 确定性</option><option value="steps">STEPS P50</option><option value="nowcastnet">NowcastNet</option>
           </select></label>}
         <div className="map-tools" role="group" aria-label="地图显示">
+          {preset === 'qc' ? <a href="/qc-review">QC 对照</a> : null}
           <div className="workspace-layout-picker" ref={layoutPickerRef}>
             <button
               type="button"

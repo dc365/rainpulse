@@ -112,6 +112,11 @@ def build_hybrid_scan(
         raise RadarGridInputError("radar antenna altitude and vertical beam width are required")
     vertical_status = _vertical_datum_status(radar_config, profile)
     operational_reasons = _operational_reasons(root, radar_config, vertical_status)
+    if (
+        root.attrs.get("qc_engine") == "open_source"
+        and root.attrs.get("operational_eligible") is not True
+    ):
+        operational_reasons = (*operational_reasons, "qc_candidate_not_operationally_accepted")
 
     longitude, latitude = np.meshgrid(grid.longitude, grid.latitude)
     shape = grid.shape
@@ -209,9 +214,7 @@ def build_hybrid_scan(
         selection_counts[name] = int(np.count_nonzero(choose))
 
     output["QC_FLAGS"][~selected] = np.uint32(flag_masks["MISSING"])
-    output["QC_FLAGS"][~selected & severe_blockage_seen] |= np.uint32(
-        flag_masks["BEAM_BLOCKED"]
-    )
+    output["QC_FLAGS"][~selected & severe_blockage_seen] |= np.uint32(flag_masks["BEAM_BLOCKED"])
     if not polar_diagnostics:
         raise RadarGridInputError("QC volume has no selectable reflectivity sweep")
     valid_count = int(np.count_nonzero(selected))
@@ -234,12 +237,8 @@ def build_hybrid_scan(
         "missing_cell_count": int(np.prod(shape)) - valid_count,
         "low_quality_cell_count": low_quality_count,
         "valid_coverage_ratio": valid_count / int(np.prod(shape)),
-        "mean_quality_index": (
-            float(np.mean(finite_quality)) if finite_quality.size else 0.0
-        ),
-        "beam_blocked_missing_cell_count": int(
-            np.count_nonzero(~selected & severe_blockage_seen)
-        ),
+        "mean_quality_index": (float(np.mean(finite_quality)) if finite_quality.size else 0.0),
+        "beam_blocked_missing_cell_count": int(np.count_nonzero(~selected & severe_blockage_seen)),
         "selection_counts": selection_counts,
         "skipped_sweeps": skipped_sweeps,
     }
@@ -254,6 +253,9 @@ def build_hybrid_scan(
             "radar_config_version",
             "qc_profile",
             "qc_pipeline_version",
+            "qc_engine",
+            "qc_parameters_sha256",
+            "qc_libraries",
             "flag_definition_version",
         )
     }
@@ -408,9 +410,12 @@ def _mapping_cache_key(
         "radar_longitude_deg": radar_longitude_deg,
         "sweep_name": sweep_name,
     }
-    return "geometry|" + hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
+    return (
+        "geometry|"
+        + hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+    )
 
 
 def _polar_blockage_cache_key(
@@ -501,9 +506,7 @@ def _hybrid_profile_digest(
         "ancillary_config_version": profile.ancillary_config_version,
         "beam_geometry": {
             "earth_radius_m": profile.beam_geometry.earth_radius_m,
-            "effective_earth_radius_factor": (
-                profile.beam_geometry.effective_earth_radius_factor
-            ),
+            "effective_earth_radius_factor": (profile.beam_geometry.effective_earth_radius_factor),
         },
         "blockage": {
             "flag_fraction": profile.blockage.flag_fraction,
@@ -514,9 +517,7 @@ def _hybrid_profile_digest(
             "beam_height_quality_scale_m": profile.hybrid_scan.beam_height_quality_scale_m,
             "low_quality_threshold": profile.hybrid_scan.low_quality_threshold,
             "maximum_beam_height_agl_m": profile.hybrid_scan.maximum_beam_height_agl_m,
-            "minimum_source_quality_index": (
-                profile.hybrid_scan.minimum_source_quality_index
-            ),
+            "minimum_source_quality_index": (profile.hybrid_scan.minimum_source_quality_index),
             "reject_flags": list(profile.hybrid_scan.reject_flags),
         },
     }
@@ -625,9 +626,7 @@ def _map(values: np.ndarray, mapping: GridPolarMapping) -> np.ndarray:
     fill_value = np.nan if np.issubdtype(values.dtype, np.floating) else 0
     output = np.full(mapping.supported.shape, fill_value, dtype=values.dtype)
     supported = mapping.supported
-    output[supported] = values[
-        mapping.ray_index[supported], mapping.gate_index[supported]
-    ]
+    output[supported] = values[mapping.ray_index[supported], mapping.gate_index[supported]]
     return output
 
 
@@ -670,6 +669,11 @@ def _candidate_fields(
         & np.isfinite(beam_height)
         & np.isfinite(terrain_height)
     )
+    if profile.flag_definition_version == "qc-flags-v2":
+        for mask_name in ("REFLECTIVITY_TRUST_MASK", "QPE_ELIGIBLE_MASK"):
+            if mask_name not in group:
+                raise ValueError("open-source QC product is missing quantitative trust masks")
+            source_valid &= _map(group[mask_name][:], mapping) == 1
     usable = (
         finite
         & (source_valid == 1)
@@ -679,9 +683,7 @@ def _candidate_fields(
         & (beam_agl >= 0)
         & (beam_agl <= profile.hybrid_scan.maximum_beam_height_agl_m)
     )
-    severe = finite & (source_valid == 1) & (
-        blockage > profile.blockage.maximum_usable_fraction
-    )
+    severe = finite & (source_valid == 1) & (blockage > profile.blockage.maximum_usable_fraction)
     return {
         "dbzh": dbzh,
         "quality": quality,

@@ -268,11 +268,16 @@ def calculate_polar_blockage(
     )
     beam_height[~supported] = np.nan
     radius = beam_radius_m(range_matrix, vertical_beam_width_deg)
-    partial = circular_partial_blockage(terrain_height, beam_height, radius)
-    partial[~supported] = np.nan
-    missing_upstream = np.cumsum(supported & ~np.isfinite(partial), axis=1) > 0
-    cumulative = np.maximum.accumulate(np.where(np.isfinite(partial), partial, 0.0), axis=1)
-    cumulative[~supported | missing_upstream] = np.nan
+    if blockage_config.method == "wradlib_circular_beam_partial_blockage":
+        from .qc_engine.geometry import wradlib_blockage
+
+        partial, cumulative = wradlib_blockage(terrain_height, beam_height, radius, supported)
+    else:
+        partial = circular_partial_blockage(terrain_height, beam_height, radius)
+        partial[~supported] = np.nan
+        missing_upstream = np.cumsum(supported & ~np.isfinite(partial), axis=1) > 0
+        cumulative = np.maximum.accumulate(np.where(np.isfinite(partial), partial, 0.0), axis=1)
+        cumulative[~supported | missing_upstream] = np.nan
     if np.any(np.isfinite(cumulative) & ((cumulative < 0) | (cumulative > 1))):
         raise RuntimeError("calculated cumulative blockage is outside [0, 1]")
     if blockage_config.maximum_usable_fraction <= blockage_config.flag_fraction:

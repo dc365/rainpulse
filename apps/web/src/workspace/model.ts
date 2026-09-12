@@ -296,5 +296,6 @@ const qcFlagLabels: Record<string, string> = {
 }
 
 export function qcFlagLabel(value: string) {
+  if (value === "NON_METEOROLOGICAL") return "非气象污染（原因未细分）"
   return qcFlagLabels[value] ?? value
 }
