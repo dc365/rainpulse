@@ -36,6 +36,8 @@ class Reason(IntFlag):
     TEMPORAL_RFI_CONFIRMED = 2048
     BOUNDED_RESIDUAL_CONFIRMED = 4096
     RAW_POLARIMETRY_CONFIRMED = 8192
+    V3_MULTIVARIATE_CONFIRMED = 16384
+    V3_PERIPHERAL_REVIEW = 32768
 
 
 @dataclass(frozen=True)
@@ -93,6 +95,9 @@ def decide(
     quarantine = np.zeros(shape, bool)
     residual = np.zeros(shape, bool)
     temporal_used = np.zeros(shape, bool)
+    v3_multivariate = np.zeros(shape, bool)
+    v3_peripheral_review = np.zeros(shape, bool)
+    v3_score = np.zeros(shape, dtype="float32")
     temporal_count = np.zeros(shape, dtype="uint8")
     persistence = np.full(shape, np.nan, dtype="float32")
     if profile.rfi_objects is not None:
@@ -129,19 +134,65 @@ def decide(
                 raise ValueError("invalid temporal RFI persistence")
             persistence = np.where(temporal_count > 0, persistence, np.nan).astype("float32")
         core = radial & (object_evidence.arrays["RFI_LINKED_OBSERVATION_MASK"] == 0)
+        v3_peripheral_review = object_evidence.arrays.get(
+            "RFI_PERIPHERAL_REVIEW_MASK", np.zeros(shape, "uint8")
+        ).astype(bool)
+        rough_structure = object_evidence.arrays.get(
+            "RFI_ROUGH_STRUCTURE_MASK", np.zeros(shape, "uint8")
+        ).astype(bool)
+        high_rho_self = object_evidence.arrays.get(
+            "RFI_HIGH_RHO_SELF_SIGNATURE_MASK", np.zeros(shape, "uint8")
+        ).astype(bool)
+        contrast_structure = object_evidence.arrays.get(
+            "RFI_CONTRAST_MASK", np.zeros(shape, "uint8")
+        ).astype(bool)
+        review_domain = core | v3_peripheral_review
         time_support = temporal_count >= cfg.temporal_minimum_samples
         time_support &= np.isfinite(persistence) & (persistence >= cfg.temporal_minimum_fraction)
         if not profile.context.enabled:
             time_support[:] = False
+        phase_texture = data.get("OS_PHIDP_TEXTURE_CANDIDATE_MASK", np.zeros(shape, "uint8")) == 1
+        zdr_texture = data.get("OS_ZDR_TEXTURE_CANDIDATE_MASK", np.zeros(shape, "uint8")) == 1
+        rho_texture = data.get("OS_RHOHV_TEXTURE_CANDIDATE_MASK", np.zeros(shape, "uint8")) == 1
+        moderate_meteo = (data["METEO_SCORE_AVAILABLE_MASK"] == 1) & (
+            data["METEO_SCORE"] <= getattr(cfg, "moderate_meteo_score", 0.55)
+        )
+        if profile.decision_version == "rfi-objects-v3":
+            # Scores combine independent evidence families. They do not create observations;
+            # they only decide how to handle measured gates already inside an object/review zone.
+            v3_score += review_domain.astype("float32")
+            v3_score += suspect_rho.astype("float32")
+            v3_score += severe_rho.astype("float32") * 0.5
+            v3_score += (rough_structure & review_domain).astype("float32") * cfg.rough_structure_weight
+            v3_score += (high_rho_self & review_domain).astype("float32") * 0.75
+            v3_score += (contrast_structure & review_domain).astype("float32") * 0.5
+            v3_score += (phase_texture & review_domain).astype("float32") * cfg.phase_texture_weight
+            v3_score += (zdr_texture & review_domain).astype("float32") * cfg.zdr_texture_weight
+            v3_score += (rho_texture & review_domain).astype("float32") * cfg.rho_texture_weight
+            v3_score += (time_support & review_domain).astype("float32") * cfg.time_support_weight
+            v3_score += (moderate_meteo & review_domain).astype("float32") * cfg.meteo_score_weight
+            v3_score -= (weather & review_domain & ~severe_rho).astype("float32") * cfg.weather_conflict_penalty
+            v3_score = np.maximum(v3_score, 0)
         # Time alone never creates a candidate or cancels a new severe anomaly.
         temporal_used = core & suspect_rho & reliable & time_support & ~weather & ~severe_rho
         radial_reject = core & severe_rho & reliable
         radial_reject |= temporal_used
-        residual_allowed = radial & reliable & rho_available & (rho < cfg.residual_maximum_rhohv)
+        if profile.decision_version == "rfi-objects-v3":
+            high_correlation = rho_available & (rho >= cfg.suspect_rhohv)
+            v3_multivariate = review_domain & reliable & ~weather & (
+                ((~high_correlation) & (v3_score >= cfg.peripheral_confirm_score))
+                | (high_correlation & (v3_score >= cfg.high_rho_confirm_requires_independent_score))
+            )
+            radial_reject |= v3_multivariate
+        residual_allowed = (radial | v3_peripheral_review) & reliable & rho_available & (
+            rho < cfg.residual_maximum_rhohv
+        )
         residual = bounded_residual(native, object_evidence, radial_reject, residual_allowed, cfg)
         radial_reject |= residual
         # Do not label an uncertain measurement as confirmed non-meteorological.
         quarantine = radial & (suspect_rho | (~rho_available & time_support)) & ~radial_reject
+        if profile.decision_version == "rfi-objects-v3":
+            quarantine |= review_domain & ~radial_reject & (v3_score >= cfg.peripheral_quarantine_score)
     elif object_evidence is not None:
         raise ValueError("v2 object evidence cannot be passed to a v1 profile")
     ground_reject = np.zeros(shape, bool)
@@ -182,6 +233,8 @@ def decide(
             radial_reject & rain & (profile.rfi_objects is not None),
             Reason.RAW_POLARIMETRY_CONFIRMED,
         ),
+        (v3_multivariate & rain, Reason.V3_MULTIVARIATE_CONFIRMED),
+        (v3_peripheral_review & rain, Reason.V3_PERIPHERAL_REVIEW),
     ):
         reason[mask] |= np.uint16(code)
     quality = np.ones(shape, dtype="float32")
@@ -233,6 +286,9 @@ def decide(
                 "RFI_RESIDUAL_PROMOTED_MASK": (residual & rain).astype("uint8"),
                 "RFI_TEMPORAL_USED_MASK": (temporal_used & rain).astype("uint8"),
                 "RFI_MIXED_MASK": (weather & (radial_reject | quarantine) & rain).astype("uint8"),
+                "RFI_V3_EVIDENCE_SCORE": np.where(rain, v3_score, np.nan).astype("float32"),
+                "RFI_V3_CONFIRMATION_MASK": (v3_multivariate & rain).astype("uint8"),
+                "RFI_V3_PERIPHERAL_USED_MASK": (v3_peripheral_review & rain).astype("uint8"),
                 "TEMPORAL_RFI_SAMPLE_COUNT": temporal_count,
                 "TEMPORAL_CANDIDATE_PERSISTENCE": persistence,
             }

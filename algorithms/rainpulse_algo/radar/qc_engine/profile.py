@@ -149,6 +149,28 @@ class RFIObjectConfig(FrozenConfig):
     quarantine_quality: float = Field(default=0.25, ge=0, lt=1)
     azimuth_offsets_deg: tuple[float, ...] = (2.0, 5.0, 12.0, 25.0, 45.0, 60.0)
     maximum_axial_std_db: float = Field(default=4.0, gt=0)
+    rough_candidate_enabled: bool = False
+    rough_maximum_axial_std_db: float = Field(default=10.0, gt=0)
+    rough_minimum_low_rho_fraction: float = Field(default=0.55, ge=0, le=1)
+    high_rho_shape_quarantine: bool = False
+    high_rho_self_signature_enabled: bool = False
+    high_rho_minimum_span_m: float = Field(default=35000.0, gt=0)
+    high_rho_minimum_contrast_fraction: float = Field(default=0.25, ge=0, le=1)
+    peripheral_review_enabled: bool = False
+    peripheral_azimuth_deg: float = Field(default=2.0, ge=0, le=5)
+    peripheral_range_m: float = Field(default=2500.0, ge=0, le=8000)
+    peripheral_minimum_evidence_score: float = Field(default=1.5, ge=0)
+    peripheral_confirm_score: float = Field(default=3.0, gt=0)
+    peripheral_quarantine_score: float = Field(default=1.5, ge=0)
+    moderate_meteo_score: float = Field(default=0.55, ge=0, le=1)
+    phase_texture_weight: float = Field(default=0.75, ge=0)
+    zdr_texture_weight: float = Field(default=0.5, ge=0)
+    rho_texture_weight: float = Field(default=0.5, ge=0)
+    rough_structure_weight: float = Field(default=0.75, ge=0)
+    time_support_weight: float = Field(default=1.0, ge=0)
+    meteo_score_weight: float = Field(default=0.75, ge=0)
+    weather_conflict_penalty: float = Field(default=1.0, ge=0)
+    high_rho_confirm_requires_independent_score: float = Field(default=3.0, gt=0)
     self_signature_minimum_span_m: float = Field(default=25000.0, gt=0)
     self_signature_minimum_growth_db: float = Field(default=3.0, gt=0)
     self_signature_maximum_std_db: float = Field(default=6.0, gt=0)
@@ -182,6 +204,12 @@ class RFIObjectConfig(FrozenConfig):
             raise ValueError("suspect correlation must be below protected correlation")
         if self.maximum_gap_m >= self.minimum_segment_m:
             raise ValueError("a link cannot be as long as a candidate segment")
+        if self.rough_maximum_axial_std_db < self.maximum_axial_std_db:
+            raise ValueError("rough axial limit must be at least the strict axial limit")
+        if self.peripheral_confirm_score < self.peripheral_quarantine_score:
+            raise ValueError("peripheral confirmation score must not be below quarantine score")
+        if self.high_rho_confirm_requires_independent_score < self.peripheral_confirm_score:
+            raise ValueError("high-correlation confirmation must be at least as strict as peripheral confirmation")
         return self
 
 
@@ -210,8 +238,8 @@ class OpenSourceQCProfile(FrozenConfig):
     schema_version: Literal["1.1"] = "1.1"
     engine: Literal["open_source"] = "open_source"
     profile_version: str = "fujian-qc-opensource-v1"
-    pipeline_version: Literal["qc-opensource-1.0.0", "qc-opensource-2.0.0"] = "qc-opensource-1.0.0"
-    decision_version: Literal["type-specific-v1", "rfi-objects-v2"] = "type-specific-v1"
+    pipeline_version: Literal["qc-opensource-1.0.0", "qc-opensource-2.0.0", "qc-opensource-3.0.0"] = "qc-opensource-1.0.0"
+    decision_version: Literal["type-specific-v1", "rfi-objects-v2", "rfi-objects-v3"] = "type-specific-v1"
     flag_definition_version: Literal["qc-flags-v2"] = "qc-flags-v2"
     operational_eligible: Literal[False] = False
     arm_pyart_version: Literal["2.2.5"] = "2.2.5"
@@ -245,18 +273,21 @@ class OpenSourceQCProfile(FrozenConfig):
 
     @model_validator(mode="after")
     def validate_profile(self):
-        version2 = self.pipeline_version == "qc-opensource-2.0.0"
-        if version2 != (self.decision_version == "rfi-objects-v2") or version2 != (
-            self.rfi_objects is not None
-        ):
-            raise ValueError("object evidence requires a coordinated v2 pipeline/decision profile")
-        if (
-            version2
-            and self.rfi_objects.quarantine_quality >= self.quality_index.quantitative_minimum
-        ):
-            raise ValueError("quarantine quality must be below quantitative eligibility")
-        if version2 and self.rfi.enabled:
-            raise ValueError("v1 seed detector cannot be mixed with the v2 object engine")
+        object_version = {
+            "qc-opensource-1.0.0": None,
+            "qc-opensource-2.0.0": "rfi-objects-v2",
+            "qc-opensource-3.0.0": "rfi-objects-v3",
+        }[self.pipeline_version]
+        if object_version is None:
+            if self.decision_version != "type-specific-v1" or self.rfi_objects is not None:
+                raise ValueError("v1 open-source profile cannot include object evidence")
+        else:
+            if self.decision_version != object_version or self.rfi_objects is None:
+                raise ValueError("object evidence requires coordinated pipeline/decision versions")
+            if self.rfi_objects.quarantine_quality >= self.quality_index.quantitative_minimum:
+                raise ValueError("quarantine quality must be below quantitative eligibility")
+            if self.rfi.enabled:
+                raise ValueError("v1 seed detector cannot be mixed with the object engine")
         if self.echo.dbzh_valid_range_dbz[0] >= self.echo.dbzh_valid_range_dbz[1]:
             raise ValueError("reflectivity bounds must increase")
         if not self.rfi.azimuth_offsets_deg or any(

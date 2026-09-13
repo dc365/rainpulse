@@ -8,9 +8,9 @@ type Case = { case_id: string; radar_id: string; scan_id?: string; input_sha256:
 type Report = { schema_version: 'rainpulse.qc-review.v1'; operational_eligible: false; cases: Case[]; limitations: string[] }
 const actions = ['保留', '降权', '拒绝', '原始缺测']
 const risks = ['非径向候选', '结构候选', '疑似隔离 · 不用于 QPE', '确认径向污染']
-const reasons: Record<number, string> = { 1: '原始无效', 2: '非气象联合证据', 4: '径向与极化', 8: '静态杂波与极化', 16: '弱小对象与噪声', 32: '存在天气但测量污染', 64: '天气支持保留弱候选', 128: '单一证据族候选', 256: '能力不完整', 512: '低信噪比', 1024: '高风险隔离', 2048: '过去资料辅助确认', 4096: '有界残余确认', 8192: '原始极化支持确认' }
+const reasons: Record<number, string> = { 1: '原始无效', 2: '非气象联合证据', 4: '径向与极化', 8: '静态杂波与极化', 16: '弱小对象与噪声', 32: '存在天气但测量污染', 64: '天气支持保留弱候选', 128: '单一证据族候选', 256: '能力不完整', 512: '低信噪比', 1024: '高风险隔离', 2048: '过去资料辅助确认', 4096: '有界残余确认', 8192: '原始极化支持确认', 16384: 'V3 多变量确认', 32768: 'V3 外围复核范围' }
 function reasonText(value?: number | null) { return value == null ? '—' : Object.entries(reasons).filter(([bit]) => (value & Number(bit)) !== 0).map(([, text]) => text).join('；') || '无拒绝原因' }
-const methods: Record<string, string> = { pyart_raw_filter: 'Py-ART 原始候选', wradlib_raw_filter: 'wradlib 原始候选', open_source_fusion: '开源分类型决策', experimental_local_rfi: '局部门段增强（实验）', legacy: '旧引擎对照', rfi_objects_v2: '径向对象引擎 v2（候选）' }
+const methods: Record<string, string> = { pyart_raw_filter: 'Py-ART 原始候选', wradlib_raw_filter: 'wradlib 原始候选', open_source_fusion: '开源分类型决策', experimental_local_rfi: '局部门段增强（实验）', legacy: '旧引擎对照', rfi_objects_v2: '径向对象引擎 v2（候选）', rfi_objects_v3: '径向对象引擎 v3（多变量外围复核）' }
 
 function checkedReport(value: unknown): Report {
   const report = value as Report
@@ -50,11 +50,11 @@ export function QCReviewWorkspace() {
   const [sweepIndex, setSweepIndex] = useState(0)
   const [rayIndex, setRayIndex] = useState(0)
   const [page, setPage] = useState(0)
-  const [method, setMethod] = useState('rfi_objects_v2')
+  const [method, setMethod] = useState('rfi_objects_v3')
   const item = report?.cases[caseIndex]
   const sweep = item?.sweeps[sweepIndex]
   const baseRay = sweep?.radials[rayIndex]
-  const selectedMethod = baseRay?.variants?.[method] ? method : 'open_source_fusion'
+  const selectedMethod = baseRay?.variants?.[method] ? method : baseRay?.variants?.rfi_objects_v2 ? 'rfi_objects_v2' : 'open_source_fusion'
   const ray = baseRay ? { ...baseRay, fields: baseRay.variants?.[selectedMethod] ?? baseRay.fields } : undefined
   const identity = item?.profiles?.[selectedMethod]
   const loadFile = async (file?: File) => {

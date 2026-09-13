@@ -120,6 +120,13 @@ def compare_case(
             objects, candidate, input_view=view, created_at=created_at
         )
         runtimes["rfi_objects_v2"] = (time.perf_counter() - started) * 1000
+    if case.get("rfi_objects_v3") is True:
+        candidate = load_qc_profile(ROOT / "configs/qc/fujian-qc-rfi-objects-v3.yaml", flags_path)
+        started = time.perf_counter()
+        outputs["rfi_objects_v3"] = apply_basic_qc(
+            objects, candidate, input_view=view, created_at=created_at
+        )
+        runtimes["rfi_objects_v3"] = (time.perf_counter() - started) * 1000
     if legacy_profile is not None:
         legacy = load_qc_profile(legacy_profile, ROOT / "configs/qc/flag-definitions.yaml")
         started = time.perf_counter()
@@ -302,6 +309,12 @@ def compare_case(
                                     "OS_POL_TEXTURE_MOMENT_COUNT",
                                     "RFI_TEMPORAL_USED_MASK",
                                     "RFI_RESIDUAL_PROMOTED_MASK",
+                                    "RFI_PERIPHERAL_REVIEW_MASK",
+                                    "RFI_ROUGH_STRUCTURE_MASK",
+                                    "RFI_HIGH_RHO_SELF_SIGNATURE_MASK",
+                                    "RFI_V3_EVIDENCE_SCORE",
+                                    "RFI_V3_CONFIRMATION_MASK",
+                                    "RFI_V3_PERIPHERAL_USED_MASK",
                                     "TEMPORAL_RFI_SAMPLE_COUNT",
                                 }
                             },

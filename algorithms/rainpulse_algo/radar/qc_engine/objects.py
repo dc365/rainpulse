@@ -27,7 +27,7 @@ class ObjectEvidence:
 
     def summary(self):
         return {
-            "method": "native-polar-objects-v2",
+            "method": "native-polar-objects-v3-compatible",
             "status": "applied",
             "role": "structure_evidence_not_standalone_reject",
             "object_count": len(self.records),
@@ -120,9 +120,19 @@ def radial_objects(native: NativeSweep, config: RFIObjectConfig) -> ObjectEviden
     std, support = axial_statistics(corrected, observed, window)
     axial = observed & (support >= config.minimum_measured_support)
     stable = axial & (std <= config.maximum_axial_std_db)
+    rough = np.zeros(shape, bool)
+    if config.rough_candidate_enabled:
+        rough = axial & (std <= config.rough_maximum_axial_std_db)
     contrast, background = _background(native, config)
-    # The second route uses positive within-object measurements, not missing background.
-    seed = echo & stable & (contrast | low)
+    # V3 keeps the strict smooth/low-rho path, but adds two bounded review routes:
+    # 1) rough-but-still-radial segments supported by polarimetry, and
+    # 2) high-correlation self-signature segments.  Both only create hypotheses;
+    #    final rejection/quarantine remains in decision.py.
+    high_self_candidate = np.zeros(shape, bool)
+    if config.high_rho_self_signature_enabled:
+        high_self_candidate = echo & axial & (std <= config.self_signature_maximum_std_db)
+    seed = echo & ((stable & (contrast | low | high_self_candidate)) | (rough & (contrast | low)))
+    seed &= ~protected
     maximum_gap = int(np.floor(config.maximum_gap_m / dr))
     intervals = []
     by_ray = [[] for _ in native.azimuth]
@@ -135,19 +145,35 @@ def radial_objects(native: NativeSweep, config: RFIObjectConfig) -> ObjectEviden
             idx = np.flatnonzero(seed[ray, start:end]) + start
             has_contrast = bool(contrast[ray, idx].mean() >= config.minimum_background_fraction)
             tail = max(1, len(idx) // 5)
-            self_signature = bool(
+            base_self = bool(
                 (end - start) * dr >= config.self_signature_minimum_span_m
                 and np.std(corrected[ray, idx]) <= config.self_signature_maximum_std_db
                 and np.median(values[ray, idx[-tail:]]) - np.median(values[ray, idx[:tail]])
                 >= config.self_signature_minimum_growth_db
-                and low[ray, idx].mean() >= config.self_signature_minimum_low_rho_fraction
             )
-            if not (has_contrast or self_signature):
+            low_fraction = float(low[ray, idx].mean())
+            rough_fraction = float(rough[ray, idx].mean()) if config.rough_candidate_enabled else 0.0
+            classic_self_signature = bool(
+                base_self and low_fraction >= config.self_signature_minimum_low_rho_fraction
+            )
+            high_rho_self_signature = bool(
+                config.high_rho_self_signature_enabled
+                and base_self
+                and (end - start) * dr >= config.high_rho_minimum_span_m
+                and (has_contrast or rough_fraction >= config.high_rho_minimum_contrast_fraction)
+            )
+            rough_segment = bool(
+                config.rough_candidate_enabled
+                and rough_fraction >= config.rough_minimum_low_rho_fraction
+                and low_fraction >= config.rough_minimum_low_rho_fraction
+            )
+            self_signature = classic_self_signature or high_rho_self_signature
+            if not (has_contrast or self_signature or rough_segment):
                 continue
             if len(intervals) >= config.maximum_segments:
                 raise ValueError("RFI object segment budget exceeded; no partial QC is published")
             by_ray[ray].append(len(intervals))
-            intervals.append((ray, start, end, count, self_signature, has_contrast))
+            intervals.append((ray, start, end, count, self_signature, has_contrast, rough_segment, high_rho_self_signature))
     parents = list(range(len(intervals)))
 
     def find(i):
@@ -188,6 +214,9 @@ def radial_objects(native: NativeSweep, config: RFIObjectConfig) -> ObjectEviden
     self_mask = np.zeros(shape, bool)
     linked_mask = np.zeros(shape, bool)
     boundary_mask = np.zeros(shape, bool)
+    rough_mask = np.zeros(shape, bool)
+    high_rho_self_mask = np.zeros(shape, bool)
+    peripheral_mask = np.zeros(shape, bool)
     records = []
     for parts in groups.values():
         rays = np.unique([intervals[i][0] for i in parts])
@@ -212,7 +241,7 @@ def radial_objects(native: NativeSweep, config: RFIObjectConfig) -> ObjectEviden
         maximum_hole = 0
         source_count = total_span_gates = 0
         for i in parts:
-            ray, lo, hi, count, own, _ = intervals[i]
+            ray, lo, hi, count, own, _, rough_seg, high_self = intervals[i]
             # Object membership never includes a missing gate.
             chosen = seed[ray, lo:hi]
             # Bounded links may contain actual but weaker observations. They may be
@@ -222,6 +251,10 @@ def radial_objects(native: NativeSweep, config: RFIObjectConfig) -> ObjectEviden
             ids[ray, lo:hi][members] = identity
             linked_mask[ray, lo:hi][linked] = True
             self_mask[ray, lo:hi][chosen] = own
+            if rough_seg:
+                rough_mask[ray, lo:hi][members] = True
+            if high_self:
+                high_rho_self_mask[ray, lo:hi][members] = True
             marked += int(members.sum())
             source_count += count
             total_span_gates += hi - lo
@@ -243,6 +276,8 @@ def radial_objects(native: NativeSweep, config: RFIObjectConfig) -> ObjectEviden
                 "maximum_link_gap_m": maximum_hole * dr,
                 "has_self_signature": any(intervals[i][4] for i in parts),
                 "has_measured_background_contrast": any(intervals[i][5] for i in parts),
+                "has_rough_structure": any(intervals[i][6] for i in parts),
+                "has_high_rho_self_signature": any(intervals[i][7] for i in parts),
             }
         )
     # Recover only a bounded measured edge around accepted objects. Statistics across a
@@ -289,6 +324,19 @@ def radial_objects(native: NativeSweep, config: RFIObjectConfig) -> ObjectEviden
                         record["range_start_m"], float(native.ranges[gate])
                     )
                     record["range_end_m"] = max(record["range_end_m"], float(native.ranges[gate]))
+    if config.peripheral_review_enabled and np.any(ids > 0):
+        range_radius = max(1, int(np.floor(config.peripheral_range_m / dr)))
+        ray_radius = max(0, int(np.ceil(config.peripheral_azimuth_deg / native.audit["azimuth_spacing_deg"])))
+        structure = np.ones((2 * ray_radius + 1, 2 * range_radius + 1), dtype=bool)
+        halo = ndimage.binary_dilation(ids > 0, structure=structure) if structure.size else ids > 0
+        peripheral_mask = halo & (ids == 0) & echo & axial & ~protected
+        # Peripheral review is a CHECK RANGE, not an object membership range.
+        peripheral_mask &= rough | contrast | low | high_self_candidate
+        if not native.full_ppi and ray_radius > 0:
+            # Avoid artificial wrapping for incomplete sectors.
+            peripheral_mask[:ray_radius] = False
+            peripheral_mask[-ray_radius:] = False
+
     return ObjectEvidence(
         {
             "RFI_OBJECT_ID": ids,
@@ -297,6 +345,9 @@ def radial_objects(native: NativeSweep, config: RFIObjectConfig) -> ObjectEviden
             "RFI_SELF_SIGNATURE_MASK": self_mask.astype("uint8"),
             "RFI_LINKED_OBSERVATION_MASK": linked_mask.astype("uint8"),
             "RFI_BOUNDARY_OBSERVATION_MASK": boundary_mask.astype("uint8"),
+            "RFI_PERIPHERAL_REVIEW_MASK": peripheral_mask.astype("uint8"),
+            "RFI_ROUGH_STRUCTURE_MASK": rough_mask.astype("uint8"),
+            "RFI_HIGH_RHO_SELF_SIGNATURE_MASK": high_rho_self_mask.astype("uint8"),
             "RFI_CONTRAST_MASK": contrast.astype("uint8"),
             "RFI_AXIAL_STD_DB": np.where(observed & axial, std, np.nan).astype("float32"),
             "RFI_AXIAL_SUPPORT": np.where(observed, support, np.nan).astype("float32"),

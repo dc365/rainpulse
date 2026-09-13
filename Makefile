@@ -404,4 +404,4 @@ test-qc-opensource:
 .PHONY: test-qc-rfi-objects
 # Genuine pinned library regressions, not independent real-weather acceptance.
 test-qc-rfi-objects:
-	uv run --project algorithms pytest algorithms/tests/test_rfi_objects_v2.py algorithms/tests/test_rfi_objects_context.py algorithms/tests/test_rfi_objects_replay.py
+	uv run --project algorithms pytest algorithms/tests/test_rfi_objects_v2.py algorithms/tests/test_rfi_objects_v3.py algorithms/tests/test_rfi_objects_context.py algorithms/tests/test_rfi_objects_replay.py

@@ -555,6 +555,139 @@
           "title": "Maximum Axial Std Db",
           "type": "number"
         },
+        "rough_candidate_enabled": {
+          "default": false,
+          "title": "Rough Candidate Enabled",
+          "type": "boolean"
+        },
+        "rough_maximum_axial_std_db": {
+          "default": 10.0,
+          "exclusiveMinimum": 0,
+          "title": "Rough Maximum Axial Std Db",
+          "type": "number"
+        },
+        "rough_minimum_low_rho_fraction": {
+          "default": 0.55,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Rough Minimum Low Rho Fraction",
+          "type": "number"
+        },
+        "high_rho_shape_quarantine": {
+          "default": false,
+          "title": "High Rho Shape Quarantine",
+          "type": "boolean"
+        },
+        "high_rho_self_signature_enabled": {
+          "default": false,
+          "title": "High Rho Self Signature Enabled",
+          "type": "boolean"
+        },
+        "high_rho_minimum_span_m": {
+          "default": 35000.0,
+          "exclusiveMinimum": 0,
+          "title": "High Rho Minimum Span M",
+          "type": "number"
+        },
+        "high_rho_minimum_contrast_fraction": {
+          "default": 0.25,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "High Rho Minimum Contrast Fraction",
+          "type": "number"
+        },
+        "peripheral_review_enabled": {
+          "default": false,
+          "title": "Peripheral Review Enabled",
+          "type": "boolean"
+        },
+        "peripheral_azimuth_deg": {
+          "default": 2.0,
+          "maximum": 5,
+          "minimum": 0,
+          "title": "Peripheral Azimuth Deg",
+          "type": "number"
+        },
+        "peripheral_range_m": {
+          "default": 2500.0,
+          "maximum": 8000,
+          "minimum": 0,
+          "title": "Peripheral Range M",
+          "type": "number"
+        },
+        "peripheral_minimum_evidence_score": {
+          "default": 1.5,
+          "minimum": 0,
+          "title": "Peripheral Minimum Evidence Score",
+          "type": "number"
+        },
+        "peripheral_confirm_score": {
+          "default": 3.0,
+          "exclusiveMinimum": 0,
+          "title": "Peripheral Confirm Score",
+          "type": "number"
+        },
+        "peripheral_quarantine_score": {
+          "default": 1.5,
+          "minimum": 0,
+          "title": "Peripheral Quarantine Score",
+          "type": "number"
+        },
+        "moderate_meteo_score": {
+          "default": 0.55,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Moderate Meteo Score",
+          "type": "number"
+        },
+        "phase_texture_weight": {
+          "default": 0.75,
+          "minimum": 0,
+          "title": "Phase Texture Weight",
+          "type": "number"
+        },
+        "zdr_texture_weight": {
+          "default": 0.5,
+          "minimum": 0,
+          "title": "Zdr Texture Weight",
+          "type": "number"
+        },
+        "rho_texture_weight": {
+          "default": 0.5,
+          "minimum": 0,
+          "title": "Rho Texture Weight",
+          "type": "number"
+        },
+        "rough_structure_weight": {
+          "default": 0.75,
+          "minimum": 0,
+          "title": "Rough Structure Weight",
+          "type": "number"
+        },
+        "time_support_weight": {
+          "default": 1.0,
+          "minimum": 0,
+          "title": "Time Support Weight",
+          "type": "number"
+        },
+        "meteo_score_weight": {
+          "default": 0.75,
+          "minimum": 0,
+          "title": "Meteo Score Weight",
+          "type": "number"
+        },
+        "weather_conflict_penalty": {
+          "default": 1.0,
+          "minimum": 0,
+          "title": "Weather Conflict Penalty",
+          "type": "number"
+        },
+        "high_rho_confirm_requires_independent_score": {
+          "default": 3.0,
+          "exclusiveMinimum": 0,
+          "title": "High Rho Confirm Requires Independent Score",
+          "type": "number"
+        },
         "self_signature_minimum_span_m": {
           "default": 25000.0,
           "exclusiveMinimum": 0,
@@ -828,7 +961,8 @@
       "default": "qc-opensource-1.0.0",
       "enum": [
         "qc-opensource-1.0.0",
-        "qc-opensource-2.0.0"
+        "qc-opensource-2.0.0",
+        "qc-opensource-3.0.0"
       ],
       "title": "Pipeline Version",
       "type": "string"
@@ -837,7 +971,8 @@
       "default": "type-specific-v1",
       "enum": [
         "type-specific-v1",
-        "rfi-objects-v2"
+        "rfi-objects-v2",
+        "rfi-objects-v3"
       ],
       "title": "Decision Version",
       "type": "string"
