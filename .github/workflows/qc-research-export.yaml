@@ -1,0 +1,50 @@
+name: qc-research-export
+on:
+  push:
+    branches: [feature/radar-qc-afl-v4-20260913]
+    paths: [.github/workflows/qc-research-export.yaml]
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Export source with Git identities
+        run: |
+          mkdir -p "$RUNNER_TEMP/qc-export"
+          git archive --format=zip --output="$RUNNER_TEMP/qc-export/source.zip" 1251ea8fc8b628e48baf9ccaf28fd9349d3fb991
+          git bundle create "$RUNNER_TEMP/qc-export/source.bundle" HEAD main
+          git rev-parse HEAD > "$RUNNER_TEMP/qc-export/export-head.txt"
+      - name: Read publicly accessible paper supplements
+        continue-on-error: true
+        run: |
+          python - <<'PY'
+          import os, pathlib, urllib.request, json
+          root = pathlib.Path(os.environ['RUNNER_TEMP']) / 'qc-export'
+          sources = {
+            'afl-figure4.jpg': 'https://html.rhhz.net/qxxb_cn/html/PIC/20200110-4.jpg',
+            'afl.html': 'https://html.rhhz.net/qxxb_cn/html/2020010.htm',
+            'rdd.html': 'https://rdqxxb.itmm.org.cn/cn/article/doi/10.16032/j.issn.1004-4965.2022.073',
+          }
+          status = {}
+          for name, url in sources.items():
+              try:
+                  req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                  with urllib.request.urlopen(req, timeout=35) as response:
+                      data = response.read(12000000)
+                  (root / name).write_bytes(data)
+                  status[name] = {'url': url, 'bytes': len(data)}
+              except Exception as error:
+                  status[name] = {'url': url, 'error': str(error)}
+          (root / 'source-status.json').write_text(json.dumps(status, indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rainpulse-afl-source
+          path: ${{ runner.temp }}/qc-export/
+          retention-days: 7
+          if-no-files-found: error
