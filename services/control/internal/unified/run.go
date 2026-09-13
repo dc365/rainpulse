@@ -88,6 +88,11 @@ func Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	var tasks sync.WaitGroup
 	defer func() { cancel(); tasks.Wait() }()
+	tasks.Add(1)
+	go func() {
+		defer tasks.Done()
+		platform.MaintainHeartbeat(ctx)
+	}()
 	launch := func(name string, run func(context.Context) error) {
 		tasks.Add(1)
 		go func() {

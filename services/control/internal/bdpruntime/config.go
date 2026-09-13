@@ -52,6 +52,7 @@ type Runtime struct {
 	PlatformAvailable bool
 	ConfigLoaded      bool
 	Config            ProgramConfig
+	heartbeat         func()
 }
 
 func (runtime Runtime) Required() bool {

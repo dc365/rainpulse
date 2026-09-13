@@ -11,6 +11,7 @@ import (
 	commonconfig "bdp-publiccode-common/config"
 	programconfig "bdp-publiccode-puremanage/pureconfig/program"
 	"bdp-publiccode-puremanage/purelog/runninglog"
+	"bdp-publiccode-puremanage/pureprogram"
 
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/buildinfo"
 )
@@ -39,6 +40,7 @@ func Prepare(component Component, registerProgram bool) (Runtime, error) {
 	runtime.PlatformAvailable = true
 	if registerProgram {
 		initializeProgram(buildinfo.Identity(), runtime.ConfigCode)
+		runtime.heartbeat = pureprogram.UpdateHeartBeat
 		runtime.ConfigCode = ResolveConfigCode(os.Getenv("RAINPULSE_BDP_CONFIG_CODE"), platformProgramName())
 	}
 
