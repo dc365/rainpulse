@@ -11,7 +11,7 @@ from ..qc_input import open_qc_input
 from .adapters import adapt_sweep
 from .algorithms import library_evidence
 from .decision import Action, decide
-from .objects import radial_objects
+from .objects import objects_for_profile
 from .phase import process_phase
 from .radial import local_radial_candidates
 
@@ -66,7 +66,7 @@ def run_open_source_qc(
             prior = prior[sweep.original_indices]
         evidence = library_evidence(sweep, profile, prior)
         objects_evidence = (
-            radial_objects(sweep, profile.rfi_objects) if profile.rfi_objects is not None else None
+            objects_for_profile(sweep, profile) if profile.rfi_objects is not None else None
         )
         if objects_evidence is None:
             radial, radial_record = local_radial_candidates(sweep, profile.rfi)
@@ -226,6 +226,18 @@ def run_open_source_qc(
                 for code in Action
             },
         }
+        if profile.rfi_refinement is not None:
+            from .audit import audit_sweep
+
+            cfg = profile.rfi_refinement
+            sweep_records[sweep.name]["rfi_v3_audit"] = audit_sweep(
+                restore(sweep.fields["DBZH"]),
+                restore(observed),
+                {key: restore(value) for key, value in decision.arrays.items()},
+                sweep.ranges,
+                threshold=cfg.audit_echo_threshold_dbz,
+                maximum_rays=cfg.audit_maximum_rays,
+            )
     finite_quality = np.concatenate(
         [s.quality_index[np.isfinite(s.quality_index)] for s in results]
     )

@@ -120,6 +120,15 @@ def compare_case(
             objects, candidate, input_view=view, created_at=created_at
         )
         runtimes["rfi_objects_v2"] = (time.perf_counter() - started) * 1000
+    if case.get("rfi_multivariate_v3") is True:
+        candidate = load_qc_profile(
+            ROOT / "configs/qc/fujian-qc-rfi-multivariate-v3.yaml", flags_path
+        )
+        started = time.perf_counter()
+        outputs["rfi_multivariate_v3"] = apply_basic_qc(
+            objects, candidate, input_view=view, created_at=created_at
+        )
+        runtimes["rfi_multivariate_v3"] = (time.perf_counter() - started) * 1000
     if legacy_profile is not None:
         legacy = load_qc_profile(legacy_profile, ROOT / "configs/qc/flag-definitions.yaml")
         started = time.perf_counter()
@@ -218,6 +227,7 @@ def compare_case(
                     ]
                 diagnostic = outputs[method].summary["sweeps"][name]
                 entry["object_diagnostics"] = diagnostic.get("radial", {})
+                entry["residual_audit"] = diagnostic.get("rfi_v3_audit")
                 if "RFI_OBJECT_ID" in arrays:
                     entry["retained_candidate_gates"] = int(
                         ((arrays["RFI_OBJECT_ID"] > 0) & eligible).sum()
@@ -303,6 +313,19 @@ def compare_case(
                                     "RFI_TEMPORAL_USED_MASK",
                                     "RFI_RESIDUAL_PROMOTED_MASK",
                                     "TEMPORAL_RFI_SAMPLE_COUNT",
+                                    "TEMPORAL_RFI_VOTE_COUNT",
+                                    "RFI_STRUCTURAL_SEED_MASK",
+                                    "RFI_CORE_SEED_MASK",
+                                    "RFI_SEARCH_MASK",
+                                    "RFI_PERIPHERY_MASK",
+                                    "RFI_ROUGH_CANDIDATE_MASK",
+                                    "RFI_PHASE_NOISE_FRACTION",
+                                    "RFI_PHASE_CURVATURE_DEG",
+                                    "RFI_ZDR_OUTLIER_FRACTION",
+                                    "RFI_SNR_RELIABLE_MASK",
+                                    "RFI_V3_EVIDENCE_BITS",
+                                    "RFI_V3_BLOCKER_BITS",
+                                    "RFI_V3_DECISION_PATH",
                                 }
                             },
                         }

@@ -38,7 +38,7 @@ def validate_sweep(group, attrs) -> None:
     if np.any(action > Action.MISSING) or not np.array_equal(action == Action.MISSING, ~valid):
         raise ValueError("QC actions and original observation support disagree")
     quarantine = np.zeros(shape, bool)
-    if attrs.get("qc_pipeline_version") == "qc-opensource-2.0.0":
+    if attrs.get("qc_pipeline_version") in {"qc-opensource-2.0.0", "qc-opensource-3.0.0"}:
         for field, dtype in {
             "RFI_OBJECT_ID": "uint32",
             "RFI_RISK_STATE": "uint8",
@@ -115,3 +115,8 @@ def validate_sweep(group, attrs) -> None:
             raise ValueError("a field cannot remain trusted inside rejected reflectivity")
         if name + "_RAW" in group and np.any(~np.isfinite(group[name + "_RAW"][:][mask])):
             raise ValueError("trusted field contains nonfinite values")
+
+    if attrs.get("qc_pipeline_version") == "qc-opensource-3.0.0":
+        from .validation_v3 import validate_v3
+
+        validate_v3(group, attrs)

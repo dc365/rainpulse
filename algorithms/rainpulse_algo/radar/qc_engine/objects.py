@@ -333,3 +333,12 @@ def bounded_residual(native, objects, seeds, allowed, config):
             rows[0 if direction > 0 else -1] = False
         output |= range_result[other] & (ids == ids[other]) & rows[:, None] & allowed & (ids > 0)
     return output & ~seeds
+
+
+def objects_for_profile(native, profile):
+    """Single version dispatch for current and independently processed context cuts."""
+    if profile.rfi_refinement is not None:
+        from .objects_v3 import multivariate_objects
+
+        return multivariate_objects(native, profile)
+    return radial_objects(native, profile.rfi_objects) if profile.rfi_objects is not None else None

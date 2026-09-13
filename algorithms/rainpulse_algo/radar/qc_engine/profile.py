@@ -7,7 +7,7 @@ from typing import Literal
 
 import numpy as np
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_serializer, model_validator
 
 
 class FrozenConfig(BaseModel):
@@ -185,6 +185,51 @@ class RFIObjectConfig(FrozenConfig):
         return self
 
 
+class RFIRefinementConfig(FrozenConfig):
+    """V3 candidate parameters, not learned/calibrated probabilities.
+
+    None on legacy profiles keeps both their numerical behaviour and parameter
+    identities frozen. All windows and propagation bounds use physical units.
+    """
+
+    phase_lag_m: float = Field(default=750.0, gt=0, le=3000)
+    phase_window_m: float = Field(default=3000.0, gt=0, le=10000)
+    phase_curvature_deg: float = Field(default=25.0, gt=0, lt=180)
+    phase_noise_fraction: float = Field(default=0.4, gt=0, le=1)
+    phase_minimum_pairs: int = Field(default=3, ge=3, le=31)
+    phase_minimum_support: float = Field(default=0.8, gt=0.5, le=1)
+    zdr_plausible_range_db: tuple[float, float] = (-2.0, 6.0)
+    zdr_anomaly_fraction: float = Field(default=0.6, gt=0.5, le=1)
+    rough_minimum_span_m: float = Field(default=20000.0, gt=0)
+    rough_minimum_anomaly_fraction: float = Field(default=0.65, gt=0.5, le=1)
+    rough_maximum_corrected_iqr_db: float = Field(default=14.0, gt=0, le=30)
+    search_range_m: float = Field(default=4000.0, ge=0, le=10000)
+    search_azimuth_deg: float = Field(default=2.0, ge=0, le=5)
+    confirm_range_m: float = Field(default=1500.0, ge=0, le=5000)
+    confirm_azimuth_deg: float = Field(default=1.5, ge=0, le=3)
+    maximum_search_steps: int = Field(default=128, ge=1, le=512)
+    # Exact votes: 2 out of 3 is not the old rounded decimal 0.67 threshold.
+    temporal_vote_numerator: int = Field(default=2, ge=1, le=3)
+    temporal_vote_denominator: int = Field(default=3, ge=1, le=3)
+    temporal_minimum_votes: int = Field(default=2, ge=2, le=3)
+    audit_echo_threshold_dbz: float = 5.0
+    audit_maximum_rays: int = Field(default=24, ge=1, le=100)
+
+    @model_validator(mode="after")
+    def validate_limits(self):
+        if self.zdr_plausible_range_db[0] >= self.zdr_plausible_range_db[1]:
+            raise ValueError("ZDR plausible bounds must increase")
+        if self.phase_window_m < 2 * self.phase_lag_m:
+            raise ValueError("phase window must span both sides of the phase lag")
+        if not 0.5 < self.temporal_vote_numerator / self.temporal_vote_denominator <= 1:
+            raise ValueError("temporal votes must require a strict majority")
+        if self.confirm_range_m > self.search_range_m:
+            raise ValueError("confirmation range cannot exceed the independent search envelope")
+        if self.confirm_azimuth_deg > self.search_azimuth_deg:
+            raise ValueError("confirmation angle cannot exceed the independent search envelope")
+        return self
+
+
 class PhaseConfig(FrozenConfig):
     enabled: bool = True
     band: Literal["S", "C", "X"] = "S"
@@ -210,8 +255,12 @@ class OpenSourceQCProfile(FrozenConfig):
     schema_version: Literal["1.1"] = "1.1"
     engine: Literal["open_source"] = "open_source"
     profile_version: str = "fujian-qc-opensource-v1"
-    pipeline_version: Literal["qc-opensource-1.0.0", "qc-opensource-2.0.0"] = "qc-opensource-1.0.0"
-    decision_version: Literal["type-specific-v1", "rfi-objects-v2"] = "type-specific-v1"
+    pipeline_version: Literal[
+        "qc-opensource-1.0.0", "qc-opensource-2.0.0", "qc-opensource-3.0.0"
+    ] = "qc-opensource-1.0.0"
+    decision_version: Literal["type-specific-v1", "rfi-objects-v2", "rfi-multivariate-v3"] = (
+        "type-specific-v1"
+    )
     flag_definition_version: Literal["qc-flags-v2"] = "qc-flags-v2"
     operational_eligible: Literal[False] = False
     arm_pyart_version: Literal["2.2.5"] = "2.2.5"
@@ -226,9 +275,17 @@ class OpenSourceQCProfile(FrozenConfig):
     wradlib: WradlibConfig = Field(default_factory=WradlibConfig)
     rfi: RFIConfig = Field(default_factory=RFIConfig)
     rfi_objects: RFIObjectConfig | None = None
+    rfi_refinement: RFIRefinementConfig | None = None
     phase: PhaseConfig = Field(default_factory=PhaseConfig)
     context: ContextConfig = Field(default_factory=ContextConfig)
     _flag_masks: dict[str, np.uint32] = PrivateAttr(default_factory=dict)
+
+    @model_serializer(mode="wrap")
+    def serialize_legacy_identity(self, handler):
+        data = handler(self)
+        if self.rfi_refinement is None:
+            data.pop("rfi_refinement", None)
+        return data
 
     @property
     def flag_masks(self) -> dict[str, np.uint32]:
@@ -245,18 +302,22 @@ class OpenSourceQCProfile(FrozenConfig):
 
     @model_validator(mode="after")
     def validate_profile(self):
-        version2 = self.pipeline_version == "qc-opensource-2.0.0"
-        if version2 != (self.decision_version == "rfi-objects-v2") or version2 != (
-            self.rfi_objects is not None
-        ):
-            raise ValueError("object evidence requires a coordinated v2 pipeline/decision profile")
-        if (
-            version2
-            and self.rfi_objects.quarantine_quality >= self.quality_index.quantitative_minimum
+        object_version = self.pipeline_version in {"qc-opensource-2.0.0", "qc-opensource-3.0.0"}
+        expected = {
+            "qc-opensource-1.0.0": "type-specific-v1",
+            "qc-opensource-2.0.0": "rfi-objects-v2",
+            "qc-opensource-3.0.0": "rfi-multivariate-v3",
+        }[self.pipeline_version]
+        if self.decision_version != expected or object_version != (self.rfi_objects is not None):
+            raise ValueError("object evidence requires coordinated pipeline/decision versions")
+        if (self.pipeline_version == "qc-opensource-3.0.0") != (self.rfi_refinement is not None):
+            raise ValueError("V3 refinement requires the explicit V3 pipeline and decision")
+        if object_version and (
+            self.rfi_objects.quarantine_quality >= self.quality_index.quantitative_minimum
         ):
             raise ValueError("quarantine quality must be below quantitative eligibility")
-        if version2 and self.rfi.enabled:
-            raise ValueError("v1 seed detector cannot be mixed with the v2 object engine")
+        if object_version and self.rfi.enabled:
+            raise ValueError("v1 seed detector cannot be mixed with the object engine")
         if self.echo.dbzh_valid_range_dbz[0] >= self.echo.dbzh_valid_range_dbz[1]:
             raise ValueError("reflectivity bounds must increase")
         if not self.rfi.azimuth_offsets_deg or any(

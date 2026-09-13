@@ -39,3 +39,25 @@ it('switches candidate fields without confusing quarantine with rejection', asyn
   fireEvent.change(screen.getByLabelText('检查算法'), { target: { value: 'open_source_fusion' } })
   expect(screen.queryByText('疑似隔离 · 不用于 QPE')).toBeNull()
 })
+
+
+it('shows V3 original-core/periphery and blocker fields without borrowing V2 values', async () => {
+  render(<QCReviewWorkspace />)
+  const extended = structuredClone(report)
+  const ray = extended.cases[0].sweeps[0].radials[0] as typeof report.cases[0]['sweeps'][0]['radials'][0] & { variants?: Record<string, unknown> }
+  ray.variants = {
+    open_source_fusion: ray.fields,
+    rfi_objects_v2: { ...ray.fields, RFI_RISK_STATE: [1, 0] },
+    rfi_multivariate_v3: { ...ray.fields, QC_ACTION: [2, 3], DBZH_USABLE: [null, null],
+      RFI_CORE_SEED_MASK: [1, 0], RFI_PERIPHERY_MASK: [0, 0], RFI_SEARCH_MASK: [1, 0],
+      RFI_RISK_STATE: [3, 0], RFI_V3_DECISION_PATH: [3, 0],
+      RFI_V3_BLOCKER_BITS: [0, 1], RFI_PHASE_NOISE_FRACTION: [.75, null] }
+  }
+  upload(extended)
+  await waitFor(() => expect(screen.getByText('核心：相位与 ZDR 联合')).toBeTruthy())
+  expect(screen.getByText('1 / 0 / 1')).toBeTruthy()
+  expect(screen.getByText('0.75')).toBeTruthy()
+  fireEvent.change(screen.getByLabelText('检查算法'), { target: { value: 'rfi_objects_v2' } })
+  expect(screen.queryByText('核心：相位与 ZDR 联合')).toBeNull()
+  expect(screen.queryByText('0.75')).toBeNull()
+})

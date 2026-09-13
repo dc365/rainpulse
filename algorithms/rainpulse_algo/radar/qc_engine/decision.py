@@ -57,6 +57,7 @@ def decide(
     temporal_persistence: np.ndarray | None = None,
     temporal_samples: np.ndarray | None = None,
 ) -> Decision:
+    v3_diagnostics = {}
     shape = native.shape
     data = evidence.arrays
     observed = native.field_available["DBZH"]
@@ -95,7 +96,24 @@ def decide(
     temporal_used = np.zeros(shape, bool)
     temporal_count = np.zeros(shape, dtype="uint8")
     persistence = np.full(shape, np.nan, dtype="float32")
-    if profile.rfi_objects is not None:
+    if profile.rfi_refinement is not None:
+        from .refinement import refine_rfi
+
+        if object_evidence is None:
+            raise ValueError("V3 requires explicit versioned structural and joint evidence")
+        result = refine_rfi(
+            native, object_evidence, profile, weather, temporal_persistence, temporal_samples
+        )
+        radial = object_evidence.candidate
+        radial_reject = result["confirmed"]
+        quarantine = result["quarantine"]
+        residual = result["residual"]
+        temporal_used = result["temporal"]
+        temporal_count = result["count"]
+        persistence = result["persistence"]
+        v3_diagnostics = result["arrays"]
+        severe_rho = rho_available & (rho < profile.rfi_objects.severe_rhohv)
+    elif profile.rfi_objects is not None:
         if object_evidence is None:
             raise ValueError("v2 decisions require explicit native object evidence")
         cfg = profile.rfi_objects
@@ -157,6 +175,14 @@ def decide(
     weak_noise = small & low_snr & severe_rho & (dbzh < profile.echo.strong_echo_dbz) & ~weather
     reject = rain & (generic_reject | radial_reject | ground_reject | weak_noise)
     quarantine &= rain & ~reject
+    if v3_diagnostics:
+        from .refinement import V3Blocker, V3Path
+
+        other_cause = reject & ~radial_reject & radial
+        v3_diagnostics["RFI_V3_DECISION_PATH"][other_cause] = V3Path.OTHER_CAUSE_REJECTED
+        v3_diagnostics["RFI_V3_BLOCKER_BITS"][other_cause] &= np.uint16(
+            65535 ^ int(V3Blocker.QUARANTINED_NOT_CONFIRMED)
+        )
     uncertain = rain & (structure | low_meteo | radial | severe_rho | small) & ~reject
     capability_incomplete = rain & (data["METEO_SCORE_AVAILABLE_MASK"] == 0)
     action = np.full(shape, Action.KEEP, dtype="uint8")
@@ -237,6 +263,7 @@ def decide(
                 "TEMPORAL_CANDIDATE_PERSISTENCE": persistence,
             }
         )
+    arrays.update(v3_diagnostics)
     for field in ("RHOHV", "ZDR", "PHIDP", "VR", "SW", "SNR"):
         field_valid = native.field_available.get(field, np.zeros(shape, bool)) & trusted
         if field in ("RHOHV", "ZDR", "PHIDP"):

@@ -131,6 +131,8 @@ def replay_task(manifest_path: Path, output_path: Path):
             "published": False,
         }
     )
+    if manifest.get("offline_experiment") is not None:
+        receipt["offline_experiment"] = manifest["offline_experiment"]
     output_path.parent.mkdir(parents=True, exist_ok=True)
     lock = output_path.with_name(output_path.name + ".lock")
     with lock.open("x"):
@@ -148,6 +150,22 @@ def replay_task(manifest_path: Path, output_path: Path):
         (temporary / "receipt.json").write_text(
             json.dumps(receipt, ensure_ascii=False, allow_nan=False)
         )
+        if profile.rfi_refinement is not None:
+            # Compact deterministic audit alongside the full immutable numerical artifact.
+            audit = {
+                "schema_version": "rainpulse.qc-replay-audit.v1",
+                "input_sha256": receipt["input_sha256"],
+                "output_sha256": receipt["output_sha256"],
+                "profile_file_sha256": sha,
+                "qc_pipeline_version": profile.pipeline_version,
+                "acceptance": "no_labels_no_weather_skill_claim",
+                "sweeps": {
+                    name: data["rfi_v3_audit"] for name, data in result.summary["sweeps"].items()
+                },
+            }
+            (temporary / "residual-audit.json").write_text(
+                json.dumps(_safe_json(audit), ensure_ascii=False, allow_nan=False, indent=2)
+            )
         os.rename(temporary, output_path)
     finally:
         if temporary.exists():

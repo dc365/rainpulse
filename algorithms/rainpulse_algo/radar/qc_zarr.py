@@ -232,7 +232,11 @@ def _build_qc_zarr_store_objects(
                 write_empty_chunks=settings.write_empty_chunks,
             )
             array.attrs.update(_field_attributes(name))
-            if name == "QC_DECISION_REASON" and result.profile.decision_version == "rfi-objects-v2":
+            if name == "QC_DECISION_REASON" and result.profile.decision_version in {
+                "rfi-objects-v2",
+                "rfi-multivariate-v3",
+            }:
+                # Cause meanings are unchanged.
                 array.attrs["definition"] = "rfi-objects-v2-reason-bits"
 
     output_store["qc/summary.json"] = result.summary_bytes()
@@ -411,6 +415,39 @@ def _environment_flag(name: str, *, default: bool) -> bool:
 
 
 def _field_attributes(name: str) -> dict[str, Any]:
+    if name in {"RFI_V3_EVIDENCE_BITS", "RFI_V3_BLOCKER_BITS", "RFI_V3_DECISION_PATH"}:
+        from .qc_engine.multivariate import PolarEvidence
+        from .qc_engine.refinement import V3Blocker, V3Path
+
+        enumeration = {
+            "RFI_V3_EVIDENCE_BITS": PolarEvidence,
+            "RFI_V3_BLOCKER_BITS": V3Blocker,
+            "RFI_V3_DECISION_PATH": V3Path,
+        }[name]
+        return {
+            "units": "1",
+            "definition_version": "rfi-multivariate-v3",
+            "codes": {str(int(code)): code.name for code in enumeration},
+        }
+    if name == "RFI_PHASE_CURVATURE_DEG":
+        return {
+            "units": "degree",
+            "missing_value": "NaN",
+            "definition": "absolute_wrapped_second_difference_at_configured_physical_lag",
+        }
+    if name in {"RFI_PHASE_NOISE_FRACTION", "RFI_ZDR_OUTLIER_FRACTION"}:
+        return {
+            "units": "1",
+            "valid_range": [0, 1],
+            "missing_value": "NaN",
+            "score_semantics": "measured_local_fraction_not_probability",
+        }
+    if name == "TEMPORAL_RFI_VOTE_COUNT":
+        return {
+            "units": "1",
+            "valid_range": [0, 3],
+            "meaning": "structural_hypothesis_votes_not_truth",
+        }
     if name == "RFI_RISK_STATE":
         return {
             "units": "1",

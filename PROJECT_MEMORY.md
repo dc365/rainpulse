@@ -250,3 +250,8 @@ operational data here.
 已核验交付包并整合对象引擎，保留门级上下文修复。完整 Python/Go 与前端 74 测试通过。初次连接超时，用户恢复网络后已部署到 105 并开展真实重算。详见 docs/radar-qc-opensource/RFI_OBJECTS_V2_INTEGRATION_20260913.md；不能将 V1 部署记录视为 V2 已上线。
 
 105 V2 三组重算现已全部 PUBLISHED/SUCCEEDED（49 次 QC）；08:15/25/30 改善有限，08:35–45 仍残留，不通过径向效果验收。详情见 docs/radar-qc-opensource/RFI_OBJECTS_V2_105_RESULTS_20260913.md。
+
+
+## 2026-09-13 RFI V3 候选实现
+
+V3 基于 main@1251ea8，新增联合相位/ZDR证据、粗糙结构、有界核心/外围复核、精确时间票数、固定原始域审计和独立离线候选任务准备。配置 fujian-qc-rfi-multivariate-v3，pipeline qc-opensource-3.0.0；旧配置与 V1/V2 参数身份保留。见 docs/radar-qc-opensource/RFI_MULTIVARIATE_V3.md。软件回归与真实效果验收分开；本轮未部署、未获得105原始资料、未训练模型或运行原生SPIKE/bRopo，不把此前V2的真实部署记录当作V3效果证据。

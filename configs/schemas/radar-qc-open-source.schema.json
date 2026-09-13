@@ -692,6 +692,169 @@
       "title": "RFIObjectConfig",
       "type": "object"
     },
+    "RFIRefinementConfig": {
+      "additionalProperties": false,
+      "description": "V3 candidate parameters, not learned/calibrated probabilities.\n\nNone on legacy profiles keeps both their numerical behaviour and parameter\nidentities frozen. All windows and propagation bounds use physical units.",
+      "properties": {
+        "phase_lag_m": {
+          "default": 750.0,
+          "exclusiveMinimum": 0,
+          "maximum": 3000,
+          "title": "Phase Lag M",
+          "type": "number"
+        },
+        "phase_window_m": {
+          "default": 3000.0,
+          "exclusiveMinimum": 0,
+          "maximum": 10000,
+          "title": "Phase Window M",
+          "type": "number"
+        },
+        "phase_curvature_deg": {
+          "default": 25.0,
+          "exclusiveMaximum": 180,
+          "exclusiveMinimum": 0,
+          "title": "Phase Curvature Deg",
+          "type": "number"
+        },
+        "phase_noise_fraction": {
+          "default": 0.4,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Phase Noise Fraction",
+          "type": "number"
+        },
+        "phase_minimum_pairs": {
+          "default": 3,
+          "maximum": 31,
+          "minimum": 3,
+          "title": "Phase Minimum Pairs",
+          "type": "integer"
+        },
+        "phase_minimum_support": {
+          "default": 0.8,
+          "exclusiveMinimum": 0.5,
+          "maximum": 1,
+          "title": "Phase Minimum Support",
+          "type": "number"
+        },
+        "zdr_plausible_range_db": {
+          "default": [
+            -2.0,
+            6.0
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Zdr Plausible Range Db",
+          "type": "array"
+        },
+        "zdr_anomaly_fraction": {
+          "default": 0.6,
+          "exclusiveMinimum": 0.5,
+          "maximum": 1,
+          "title": "Zdr Anomaly Fraction",
+          "type": "number"
+        },
+        "rough_minimum_span_m": {
+          "default": 20000.0,
+          "exclusiveMinimum": 0,
+          "title": "Rough Minimum Span M",
+          "type": "number"
+        },
+        "rough_minimum_anomaly_fraction": {
+          "default": 0.65,
+          "exclusiveMinimum": 0.5,
+          "maximum": 1,
+          "title": "Rough Minimum Anomaly Fraction",
+          "type": "number"
+        },
+        "rough_maximum_corrected_iqr_db": {
+          "default": 14.0,
+          "exclusiveMinimum": 0,
+          "maximum": 30,
+          "title": "Rough Maximum Corrected Iqr Db",
+          "type": "number"
+        },
+        "search_range_m": {
+          "default": 4000.0,
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Search Range M",
+          "type": "number"
+        },
+        "search_azimuth_deg": {
+          "default": 2.0,
+          "maximum": 5,
+          "minimum": 0,
+          "title": "Search Azimuth Deg",
+          "type": "number"
+        },
+        "confirm_range_m": {
+          "default": 1500.0,
+          "maximum": 5000,
+          "minimum": 0,
+          "title": "Confirm Range M",
+          "type": "number"
+        },
+        "confirm_azimuth_deg": {
+          "default": 1.5,
+          "maximum": 3,
+          "minimum": 0,
+          "title": "Confirm Azimuth Deg",
+          "type": "number"
+        },
+        "maximum_search_steps": {
+          "default": 128,
+          "maximum": 512,
+          "minimum": 1,
+          "title": "Maximum Search Steps",
+          "type": "integer"
+        },
+        "temporal_vote_numerator": {
+          "default": 2,
+          "maximum": 3,
+          "minimum": 1,
+          "title": "Temporal Vote Numerator",
+          "type": "integer"
+        },
+        "temporal_vote_denominator": {
+          "default": 3,
+          "maximum": 3,
+          "minimum": 1,
+          "title": "Temporal Vote Denominator",
+          "type": "integer"
+        },
+        "temporal_minimum_votes": {
+          "default": 2,
+          "maximum": 3,
+          "minimum": 2,
+          "title": "Temporal Minimum Votes",
+          "type": "integer"
+        },
+        "audit_echo_threshold_dbz": {
+          "default": 5.0,
+          "title": "Audit Echo Threshold Dbz",
+          "type": "number"
+        },
+        "audit_maximum_rays": {
+          "default": 24,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Audit Maximum Rays",
+          "type": "integer"
+        }
+      },
+      "title": "RFIRefinementConfig",
+      "type": "object"
+    },
     "SeaConfig": {
       "additionalProperties": false,
       "properties": {
@@ -828,7 +991,8 @@
       "default": "qc-opensource-1.0.0",
       "enum": [
         "qc-opensource-1.0.0",
-        "qc-opensource-2.0.0"
+        "qc-opensource-2.0.0",
+        "qc-opensource-3.0.0"
       ],
       "title": "Pipeline Version",
       "type": "string"
@@ -837,7 +1001,8 @@
       "default": "type-specific-v1",
       "enum": [
         "type-specific-v1",
-        "rfi-objects-v2"
+        "rfi-objects-v2",
+        "rfi-multivariate-v3"
       ],
       "title": "Decision Version",
       "type": "string"
@@ -897,6 +1062,17 @@
       "anyOf": [
         {
           "$ref": "#/$defs/RFIObjectConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "rfi_refinement": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RFIRefinementConfig"
         },
         {
           "type": "null"

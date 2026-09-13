@@ -20,7 +20,7 @@ from ..qc_input import open_qc_input
 from .adapters import adapt_sweep
 from .algorithms import library_evidence
 from .decision import decide
-from .objects import radial_objects
+from .objects import objects_for_profile
 from .radial import local_radial_candidates
 from .temporal import aggregate_temporal_rfi
 
@@ -147,7 +147,7 @@ def prepare_open_source_inputs(
                     sweep = adapt_sweep(context_root, name, profile)
                     evidence = library_evidence(sweep, profile)
                     objects_evidence = (
-                        radial_objects(sweep, profile.rfi_objects)
+                        objects_for_profile(sweep, profile)
                         if profile.rfi_objects is not None
                         else None
                     )
