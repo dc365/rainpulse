@@ -18,28 +18,27 @@ jobs:
           mkdir -p "$RUNNER_TEMP/qc-comparison"
           git bundle create "$RUNNER_TEMP/qc-comparison/source.bundle" HEAD
           git rev-parse HEAD > "$RUNNER_TEMP/qc-comparison/head.txt"
-      - name: Read public publisher fallback endpoints
+      - name: Read public publisher full text
         shell: python
         run: |
           import concurrent.futures, json, os, pathlib, urllib.request
           root = pathlib.Path(os.environ['RUNNER_TEMP']) / 'qc-comparison'
           urls = {
-              'rdd-fallback-home': 'http://rdqx.ijournals.cn/',
-              'rdd-fallback-article': 'http://rdqx.ijournals.cn/ch/reader/view_abstract.aspx?file_no=20220606&flag=1',
-              'rdd-old-publisher': 'https://www.itmm.org.cn/rdqxxb/ch/reader/view_abstract.aspx?file_no=20220606&flag=1',
-              'rdd-pdf': 'https://rdqxxb.itmm.org.cn/fileRDQXXB_CN/journal/article/rdqxxb/2022/6/rdqxxb-38-6-787.pdf',
+              'rdd-article': 'http://rdqx.ijournals.cn/ch/reader/view_abstract.aspx?file_no=20220607&flag=1',
+              'rdd-full': 'http://rdqx.ijournals.cn/html/2022/6/20220607.htm',
+              'rdd-pdf': 'http://rdqx.ijournals.cn/ch/reader/create_pdf.aspx?file_no=20220607&flag=1&year_id=2022&quarter_id=6',
           }
           def read(item):
               name, url = item
               try:
                   req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                  with urllib.request.urlopen(req, timeout=15) as response:
+                  with urllib.request.urlopen(req, timeout=20) as response:
                       body = response.read(10000000)
                       (root / (name + ('.pdf' if body.startswith(b'%PDF') else '.html'))).write_bytes(body)
                       return {'name': name, 'url': url, 'final_url': response.url, 'bytes': len(body)}
               except Exception as error:
                   return {'name': name, 'url': url, 'error': str(error)}
-          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
               results = list(pool.map(read, urls.items()))
           (root / 'publisher-receipts.json').write_text(json.dumps(results, indent=2))
       - uses: actions/upload-artifact@v4
