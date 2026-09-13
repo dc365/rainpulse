@@ -1,0 +1,24 @@
+{
+  "schema_version": "rainpulse.qc-task-replay.v1",
+  "source_revision": "REPLACE_WITH_REVIEWED_COMMIT",
+  "target_cycle_time_utc": "2026-08-28T00:40:00Z",
+  "task": {
+    "path": "task.json",
+    "sha256": "REPLACE_WITH_TASK_FILE_SHA256"
+  },
+  "profile": {
+    "path": "configs/fujian-qc-rfi-objects-v2.yaml",
+    "sha256": "REPLACE_WITH_PROFILE_FILE_SHA256"
+  },
+  "flags": {
+    "path": "configs/flag-definitions-v2.yaml",
+    "sha256": "REPLACE_WITH_FLAGS_FILE_SHA256"
+  },
+  "artifacts": [
+    {
+      "uri": "REPLACE_WITH_EXACT_TASK_INPUT_URI",
+      "path": "native/current.zarr",
+      "sha256": "REPLACE_WITH_ARTIFACT_SHA256"
+    }
+  ]
+}

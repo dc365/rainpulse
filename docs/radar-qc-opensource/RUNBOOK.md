@@ -19,7 +19,7 @@
 
 ## 构建
 
-使用完整仓库及锁文件执行既有 `make build-worker-linux` 和 `algorithms/worker.Dockerfile` 构建。Py-ART、wradlib 使用对应 Linux CPU wheel/依赖；既有目标环境对某些气象依赖有特别暂存规则，必须运行镜像内导入测试和 `make test-qc-opensource`。本次已在 Linux Python 3.13 安装后的真实库上运行测试，**未在内网完成 Docker 镜像构建/硬件性能验收**。镜像构建后应记录 digest、依赖清单和镜像内测试结果，勿将工具准备 artifact 当成可部署镜像。
+使用完整仓库及锁文件执行既有 `make build-worker-linux` 和 `algorithms/worker.Dockerfile` 构建。Py-ART、wradlib 使用对应 Linux CPU wheel/依赖；既有目标环境对某些气象依赖有特别暂存规则，必须运行镜像内导入测试和 `make test-qc-opensource`。2026-09-12 已在 105 完成候选镜像构建和镜像内导入测试，并完成三次抽样端到端回放；镜像 digest、run ID、耗时和限制见 `VALIDATION.md`。这仍不等于真实天气准入。
 
 ## 接入隔离测试环境
 

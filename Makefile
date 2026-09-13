@@ -400,3 +400,8 @@ test-prelaunch:
 .PHONY: test-qc-opensource
 test-qc-opensource:
 	uv run --project algorithms pytest algorithms/tests/test_qc_opensource.py algorithms/tests/test_qc_opensource_delivery.py
+
+.PHONY: test-qc-rfi-objects
+# Genuine pinned library regressions, not independent real-weather acceptance.
+test-qc-rfi-objects:
+	uv run --project algorithms pytest algorithms/tests/test_rfi_objects_v2.py algorithms/tests/test_rfi_objects_context.py algorithms/tests/test_rfi_objects_replay.py

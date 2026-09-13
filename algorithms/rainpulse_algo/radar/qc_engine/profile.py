@@ -133,6 +133,58 @@ class RFIConfig(FrozenConfig):
     minimum_measured_support: float = Field(default=0.85, gt=0, le=1)
 
 
+class RFIObjectConfig(FrozenConfig):
+    """Candidate limits in physical units; no station IDs or azimuth deletion lists."""
+
+    minimum_range_m: float = Field(default=15000.0, ge=0)
+    minimum_segment_m: float = Field(default=12000.0, gt=0)
+    maximum_gap_m: float = Field(default=1000.0, ge=0)
+    maximum_gap_fraction: float = Field(default=0.15, ge=0, lt=0.5)
+    local_window_m: float = Field(default=8000.0, gt=0)
+    minimum_measured_support: float = Field(default=0.8, gt=0.5, le=1)
+    minimum_echo_dbz: float = 5.0
+    minimum_contrast_db: float = Field(default=10.0, gt=0)
+    minimum_background_fraction: float = Field(default=0.5, gt=0, le=1)
+    self_signature_minimum_low_rho_fraction: float = Field(default=0.8, gt=0, le=1)
+    quarantine_quality: float = Field(default=0.25, ge=0, lt=1)
+    azimuth_offsets_deg: tuple[float, ...] = (2.0, 5.0, 12.0, 25.0, 45.0, 60.0)
+    maximum_axial_std_db: float = Field(default=4.0, gt=0)
+    self_signature_minimum_span_m: float = Field(default=25000.0, gt=0)
+    self_signature_minimum_growth_db: float = Field(default=3.0, gt=0)
+    self_signature_maximum_std_db: float = Field(default=6.0, gt=0)
+    maximum_object_width_deg: float = Field(default=65.0, gt=0, lt=180)
+    minimum_radial_aspect: float = Field(default=2.0, gt=1)
+    minimum_overlap_m: float = Field(default=1000.0, gt=0)
+    severe_rhohv: float = Field(default=0.8, gt=0, lt=1)
+    suspect_rhohv: float = Field(default=0.9, gt=0, lt=1)
+    protected_rhohv: float = Field(default=0.95, gt=0, le=1)
+    minimum_polarimetric_snr_db: float = 8.0
+    minimum_raw_pol_moments: int = Field(default=2, ge=2, le=3)
+    temporal_minimum_samples: int = Field(default=2, ge=2, le=3)
+    temporal_minimum_fraction: float = Field(default=0.67, gt=0.5, le=1)
+    boundary_extension_m: float = Field(default=4000.0, ge=0, le=8000)
+    boundary_maximum_deviation_db: float = Field(default=4.0, gt=0, le=10)
+    residual_range_m: float = Field(default=1000.0, ge=0, le=3000)
+    residual_azimuth_deg: float = Field(default=1.5, ge=0, le=3)
+    residual_maximum_rhohv: float = Field(default=0.85, gt=0, lt=1)
+    maximum_segments: int = Field(default=20000, ge=1, le=100000)
+    maximum_objects: int = Field(default=2000, ge=1, le=10000)
+
+    @model_validator(mode="after")
+    def validate_object_limits(self):
+        if not self.azimuth_offsets_deg or any(
+            not np.isfinite(x) or not 0 < x < 180 for x in self.azimuth_offsets_deg
+        ):
+            raise ValueError("object background offsets must be finite angles in (0,180)")
+        if not self.severe_rhohv <= self.residual_maximum_rhohv < self.suspect_rhohv:
+            raise ValueError("severe/residual/suspect correlation limits are not ordered")
+        if self.suspect_rhohv >= self.protected_rhohv:
+            raise ValueError("suspect correlation must be below protected correlation")
+        if self.maximum_gap_m >= self.minimum_segment_m:
+            raise ValueError("a link cannot be as long as a candidate segment")
+        return self
+
+
 class PhaseConfig(FrozenConfig):
     enabled: bool = True
     band: Literal["S", "C", "X"] = "S"
@@ -158,8 +210,8 @@ class OpenSourceQCProfile(FrozenConfig):
     schema_version: Literal["1.1"] = "1.1"
     engine: Literal["open_source"] = "open_source"
     profile_version: str = "fujian-qc-opensource-v1"
-    pipeline_version: Literal["qc-opensource-1.0.0"] = "qc-opensource-1.0.0"
-    decision_version: Literal["type-specific-v1"] = "type-specific-v1"
+    pipeline_version: Literal["qc-opensource-1.0.0", "qc-opensource-2.0.0"] = "qc-opensource-1.0.0"
+    decision_version: Literal["type-specific-v1", "rfi-objects-v2"] = "type-specific-v1"
     flag_definition_version: Literal["qc-flags-v2"] = "qc-flags-v2"
     operational_eligible: Literal[False] = False
     arm_pyart_version: Literal["2.2.5"] = "2.2.5"
@@ -173,6 +225,7 @@ class OpenSourceQCProfile(FrozenConfig):
     pyart: PyArtConfig = Field(default_factory=PyArtConfig)
     wradlib: WradlibConfig = Field(default_factory=WradlibConfig)
     rfi: RFIConfig = Field(default_factory=RFIConfig)
+    rfi_objects: RFIObjectConfig | None = None
     phase: PhaseConfig = Field(default_factory=PhaseConfig)
     context: ContextConfig = Field(default_factory=ContextConfig)
     _flag_masks: dict[str, np.uint32] = PrivateAttr(default_factory=dict)
@@ -183,11 +236,27 @@ class OpenSourceQCProfile(FrozenConfig):
 
     @property
     def parameters_hash(self) -> str:
-        data = json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+        value = self.model_dump(mode="json")
+        # Preserve the frozen v1 semantic identity when the new engine is absent.
+        if self.rfi_objects is None:
+            value.pop("rfi_objects", None)
+        data = json.dumps(value, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(data.encode()).hexdigest()
 
     @model_validator(mode="after")
     def validate_profile(self):
+        version2 = self.pipeline_version == "qc-opensource-2.0.0"
+        if version2 != (self.decision_version == "rfi-objects-v2") or version2 != (
+            self.rfi_objects is not None
+        ):
+            raise ValueError("object evidence requires a coordinated v2 pipeline/decision profile")
+        if (
+            version2
+            and self.rfi_objects.quarantine_quality >= self.quality_index.quantitative_minimum
+        ):
+            raise ValueError("quarantine quality must be below quantitative eligibility")
+        if version2 and self.rfi.enabled:
+            raise ValueError("v1 seed detector cannot be mixed with the v2 object engine")
         if self.echo.dbzh_valid_range_dbz[0] >= self.echo.dbzh_valid_range_dbz[1]:
             raise ValueError("reflectivity bounds must increase")
         if not self.rfi.azimuth_offsets_deg or any(

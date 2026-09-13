@@ -225,6 +225,16 @@ def adapt_sweep(root, name: str, profile: OpenSourceQCProfile) -> NativeSweep:
         {
             "fields": audit,
             "source_cut": name,
+            "cut_metadata": {
+                key: group.attrs.get(key)
+                for key in (
+                    "cut_index",
+                    "source_cut_index",
+                    "waveform",
+                    "waveform_type",
+                    "moment_family",
+                )
+            },
             "full_ppi": full,
             "duplicate_ray_count": int(np.count_nonzero(~good)),
             "gap_count": int(np.count_nonzero(gap_after)),

@@ -1,0 +1,186 @@
+# Engineering candidate. Explicitly select with the coordinated v2 runbook.
+schema_version: '1.1'
+engine: open_source
+profile_version: fujian-qc-rfi-objects-v2
+pipeline_version: qc-opensource-2.0.0
+decision_version: rfi-objects-v2
+flag_definition_version: qc-flags-v2
+operational_eligible: false
+arm_pyart_version: 2.2.5
+wradlib_version: 2.9.5
+health_gate:
+  reject_states:
+  - UNAVAILABLE
+  degraded_quality_multiplier: 0.8
+echo:
+  dbzh_valid_range_dbz:
+  - -32.0
+  - 80.0
+  no_rain_below_dbz: -10.0
+  low_snr_db: 3.0
+  strong_echo_dbz: 35.0
+quality_index:
+  aggregation: minimum
+  components:
+  - QI_METEO
+  - QI_INTERFERENCE
+  low_quality_threshold: 0.5
+  quantitative_minimum: 0.5
+  suspect_quality: 0.6
+  incomplete_capability_quality: 0.7
+  low_snr_quality: 0.3
+  unavailable_component_policy: penalize_and_record
+static_ground_clutter:
+  asset_uri: null
+  asset_version: null
+  asset_sha256: null
+  flag_probability: 0.9
+sea_ap:
+  coastline_asset_uri: null
+  asset_version: null
+geometry:
+  maximum_azimuth_gap_factor: 1.8
+  duplicate_tolerance_deg: 0.01
+  maximum_elevation_spread_deg: 0.3
+  maximum_ray_count: 2400
+  maximum_gate_count: 5000
+  phase_period_deg: 360.0
+pyart:
+  texture_window_m: 1750.0
+  max_textrefl: 8.0
+  max_textzdr: 2.85
+  max_textphi: 20.0
+  max_textrhv: 0.3
+  min_rhv: 0.6
+  object_threshold_dbz: 0.0
+  small_object_gates: 10
+wradlib:
+  gabella_window: 5
+  gabella_thrsnorain: 0.0
+  gabella_tr1: 6.0
+  gabella_n_p: 6
+  gabella_tr2: 1.3
+  low_meteo_score: 0.25
+  minimum_pol_moments: 2
+  fuzzy_weights:
+    zdr: 0.4
+    rho: 0.4
+    phi: 0.1
+    dop: 0.1
+    map: 0.5
+    rho2: 0.4
+    dr: 0.4
+    cpa: 0.4
+  fuzzy_trapezoids:
+    zdr:
+    - 0.7
+    - 1.0
+    - 9999.0
+    - 9999.0
+    rho:
+    - 0.1
+    - 0.15
+    - 9999.0
+    - 9999.0
+    phi:
+    - 15.0
+    - 20.0
+    - 10000.0
+    - 10000.0
+    dop:
+    - -0.2
+    - -0.1
+    - 0.1
+    - 0.2
+    map:
+    - 1.0
+    - 1.0
+    - 9999.0
+    - 9999.0
+    rho2:
+    - -9999.0
+    - -9999.0
+    - 0.95
+    - 0.98
+    dr:
+    - -20.0
+    - -12.0
+    - 9999.0
+    - 9999.0
+    cpa:
+    - 0.6
+    - 0.9
+    - 9999.0
+    - 9999.0
+rfi:
+  enabled: false
+  minimum_segment_m: 12000.0
+  local_window_m: 8000.0
+  azimuth_offsets_deg:
+  - 2.0
+  - 5.0
+  - 12.0
+  - 25.0
+  - 45.0
+  minimum_echo_dbz: 10.0
+  minimum_contrast_db: 10.0
+  maximum_axial_std_db: 4.0
+  severe_rhohv: 0.8
+  minimum_measured_support: 0.85
+phase:
+  enabled: true
+  band: S
+  window_gates: 7
+  minimum_segment_m: 5000.0
+  minimum_rhohv: 0.9
+  niter: 2
+  attenuation_enabled: false
+  maximum_correction_db: 10.0
+context:
+  enabled: true
+  max_age_seconds: 900
+  max_cross_offset_seconds: 300
+  past_only: true
+  echo_threshold_dbz: 10.0
+  strong_support: 0.7
+  max_temporal_scans: 3
+rfi_objects:
+  boundary_extension_m: 4000.0
+  boundary_maximum_deviation_db: 4.0
+  minimum_background_fraction: 0.5
+  self_signature_minimum_low_rho_fraction: 0.8
+  quarantine_quality: 0.25
+  minimum_range_m: 15000.0
+  minimum_segment_m: 12000.0
+  maximum_gap_m: 1000.0
+  maximum_gap_fraction: 0.15
+  local_window_m: 8000.0
+  minimum_measured_support: 0.8
+  minimum_echo_dbz: 5.0
+  minimum_contrast_db: 10.0
+  azimuth_offsets_deg:
+  - 2.0
+  - 5.0
+  - 12.0
+  - 25.0
+  - 45.0
+  - 60.0
+  maximum_axial_std_db: 4.0
+  self_signature_minimum_span_m: 25000.0
+  self_signature_minimum_growth_db: 3.0
+  self_signature_maximum_std_db: 6.0
+  maximum_object_width_deg: 65.0
+  minimum_radial_aspect: 2.0
+  minimum_overlap_m: 1000.0
+  severe_rhohv: 0.8
+  suspect_rhohv: 0.9
+  protected_rhohv: 0.95
+  minimum_polarimetric_snr_db: 8.0
+  minimum_raw_pol_moments: 2
+  temporal_minimum_samples: 2
+  temporal_minimum_fraction: 0.67
+  residual_range_m: 1000.0
+  residual_azimuth_deg: 1.5
+  residual_maximum_rhohv: 0.85
+  maximum_segments: 20000
+  maximum_objects: 2000

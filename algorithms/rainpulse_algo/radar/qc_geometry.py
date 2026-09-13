@@ -531,9 +531,14 @@ def build_trusted_cross_radar_support(
                 ),
                 dtype=bool,
             )
-            if hard_rays.shape != (len(neighbour_group["azimuth"]),):
-                hard_rays = np.zeros(len(neighbour_group["azimuth"]), dtype=bool)
-            supported &= ~hard_rays[nearest_rays]
+            if hard_rays.shape == neighbour_dbzh.shape:
+                supported &= ~hard_rays[nearest_rays, nearest_gates]
+            elif hard_rays.shape == (len(neighbour_group["azimuth"]),):
+                # Legacy profiles exclude whole rays; native-cut QC can exclude
+                # individual gates without discarding clean observations nearby.
+                supported &= ~hard_rays[nearest_rays]
+            else:
+                raise ValueError("reference exclusion mask differs from native geometry")
             if not np.any(supported):
                 continue
 

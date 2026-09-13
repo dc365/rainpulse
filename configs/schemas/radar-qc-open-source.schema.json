@@ -460,6 +460,238 @@
       "title": "RFIConfig",
       "type": "object"
     },
+    "RFIObjectConfig": {
+      "additionalProperties": false,
+      "description": "Candidate limits in physical units; no station IDs or azimuth deletion lists.",
+      "properties": {
+        "minimum_range_m": {
+          "default": 15000.0,
+          "minimum": 0,
+          "title": "Minimum Range M",
+          "type": "number"
+        },
+        "minimum_segment_m": {
+          "default": 12000.0,
+          "exclusiveMinimum": 0,
+          "title": "Minimum Segment M",
+          "type": "number"
+        },
+        "maximum_gap_m": {
+          "default": 1000.0,
+          "minimum": 0,
+          "title": "Maximum Gap M",
+          "type": "number"
+        },
+        "maximum_gap_fraction": {
+          "default": 0.15,
+          "exclusiveMaximum": 0.5,
+          "minimum": 0,
+          "title": "Maximum Gap Fraction",
+          "type": "number"
+        },
+        "local_window_m": {
+          "default": 8000.0,
+          "exclusiveMinimum": 0,
+          "title": "Local Window M",
+          "type": "number"
+        },
+        "minimum_measured_support": {
+          "default": 0.8,
+          "exclusiveMinimum": 0.5,
+          "maximum": 1,
+          "title": "Minimum Measured Support",
+          "type": "number"
+        },
+        "minimum_echo_dbz": {
+          "default": 5.0,
+          "title": "Minimum Echo Dbz",
+          "type": "number"
+        },
+        "minimum_contrast_db": {
+          "default": 10.0,
+          "exclusiveMinimum": 0,
+          "title": "Minimum Contrast Db",
+          "type": "number"
+        },
+        "minimum_background_fraction": {
+          "default": 0.5,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Minimum Background Fraction",
+          "type": "number"
+        },
+        "self_signature_minimum_low_rho_fraction": {
+          "default": 0.8,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Self Signature Minimum Low Rho Fraction",
+          "type": "number"
+        },
+        "quarantine_quality": {
+          "default": 0.25,
+          "exclusiveMaximum": 1,
+          "minimum": 0,
+          "title": "Quarantine Quality",
+          "type": "number"
+        },
+        "azimuth_offsets_deg": {
+          "default": [
+            2.0,
+            5.0,
+            12.0,
+            25.0,
+            45.0,
+            60.0
+          ],
+          "items": {
+            "type": "number"
+          },
+          "title": "Azimuth Offsets Deg",
+          "type": "array"
+        },
+        "maximum_axial_std_db": {
+          "default": 4.0,
+          "exclusiveMinimum": 0,
+          "title": "Maximum Axial Std Db",
+          "type": "number"
+        },
+        "self_signature_minimum_span_m": {
+          "default": 25000.0,
+          "exclusiveMinimum": 0,
+          "title": "Self Signature Minimum Span M",
+          "type": "number"
+        },
+        "self_signature_minimum_growth_db": {
+          "default": 3.0,
+          "exclusiveMinimum": 0,
+          "title": "Self Signature Minimum Growth Db",
+          "type": "number"
+        },
+        "self_signature_maximum_std_db": {
+          "default": 6.0,
+          "exclusiveMinimum": 0,
+          "title": "Self Signature Maximum Std Db",
+          "type": "number"
+        },
+        "maximum_object_width_deg": {
+          "default": 65.0,
+          "exclusiveMaximum": 180,
+          "exclusiveMinimum": 0,
+          "title": "Maximum Object Width Deg",
+          "type": "number"
+        },
+        "minimum_radial_aspect": {
+          "default": 2.0,
+          "exclusiveMinimum": 1,
+          "title": "Minimum Radial Aspect",
+          "type": "number"
+        },
+        "minimum_overlap_m": {
+          "default": 1000.0,
+          "exclusiveMinimum": 0,
+          "title": "Minimum Overlap M",
+          "type": "number"
+        },
+        "severe_rhohv": {
+          "default": 0.8,
+          "exclusiveMaximum": 1,
+          "exclusiveMinimum": 0,
+          "title": "Severe Rhohv",
+          "type": "number"
+        },
+        "suspect_rhohv": {
+          "default": 0.9,
+          "exclusiveMaximum": 1,
+          "exclusiveMinimum": 0,
+          "title": "Suspect Rhohv",
+          "type": "number"
+        },
+        "protected_rhohv": {
+          "default": 0.95,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Protected Rhohv",
+          "type": "number"
+        },
+        "minimum_polarimetric_snr_db": {
+          "default": 8.0,
+          "title": "Minimum Polarimetric Snr Db",
+          "type": "number"
+        },
+        "minimum_raw_pol_moments": {
+          "default": 2,
+          "maximum": 3,
+          "minimum": 2,
+          "title": "Minimum Raw Pol Moments",
+          "type": "integer"
+        },
+        "temporal_minimum_samples": {
+          "default": 2,
+          "maximum": 3,
+          "minimum": 2,
+          "title": "Temporal Minimum Samples",
+          "type": "integer"
+        },
+        "temporal_minimum_fraction": {
+          "default": 0.67,
+          "exclusiveMinimum": 0.5,
+          "maximum": 1,
+          "title": "Temporal Minimum Fraction",
+          "type": "number"
+        },
+        "boundary_extension_m": {
+          "default": 4000.0,
+          "maximum": 8000,
+          "minimum": 0,
+          "title": "Boundary Extension M",
+          "type": "number"
+        },
+        "boundary_maximum_deviation_db": {
+          "default": 4.0,
+          "exclusiveMinimum": 0,
+          "maximum": 10,
+          "title": "Boundary Maximum Deviation Db",
+          "type": "number"
+        },
+        "residual_range_m": {
+          "default": 1000.0,
+          "maximum": 3000,
+          "minimum": 0,
+          "title": "Residual Range M",
+          "type": "number"
+        },
+        "residual_azimuth_deg": {
+          "default": 1.5,
+          "maximum": 3,
+          "minimum": 0,
+          "title": "Residual Azimuth Deg",
+          "type": "number"
+        },
+        "residual_maximum_rhohv": {
+          "default": 0.85,
+          "exclusiveMaximum": 1,
+          "exclusiveMinimum": 0,
+          "title": "Residual Maximum Rhohv",
+          "type": "number"
+        },
+        "maximum_segments": {
+          "default": 20000,
+          "maximum": 100000,
+          "minimum": 1,
+          "title": "Maximum Segments",
+          "type": "integer"
+        },
+        "maximum_objects": {
+          "default": 2000,
+          "maximum": 10000,
+          "minimum": 1,
+          "title": "Maximum Objects",
+          "type": "integer"
+        }
+      },
+      "title": "RFIObjectConfig",
+      "type": "object"
+    },
     "SeaConfig": {
       "additionalProperties": false,
       "properties": {
@@ -593,14 +825,20 @@
       "type": "string"
     },
     "pipeline_version": {
-      "const": "qc-opensource-1.0.0",
       "default": "qc-opensource-1.0.0",
+      "enum": [
+        "qc-opensource-1.0.0",
+        "qc-opensource-2.0.0"
+      ],
       "title": "Pipeline Version",
       "type": "string"
     },
     "decision_version": {
-      "const": "type-specific-v1",
       "default": "type-specific-v1",
+      "enum": [
+        "type-specific-v1",
+        "rfi-objects-v2"
+      ],
       "title": "Decision Version",
       "type": "string"
     },
@@ -654,6 +892,17 @@
     },
     "rfi": {
       "$ref": "#/$defs/RFIConfig"
+    },
+    "rfi_objects": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RFIObjectConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "phase": {
       "$ref": "#/$defs/PhaseConfig"

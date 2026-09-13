@@ -113,6 +113,13 @@ def compare_case(
             objects, candidate, input_view=view, created_at=created_at
         )
         runtimes["experimental_local_rfi"] = (time.perf_counter() - started) * 1000
+    if case.get("rfi_objects") is True:
+        candidate = load_qc_profile(ROOT / "configs/qc/fujian-qc-rfi-objects-v2.yaml", flags_path)
+        started = time.perf_counter()
+        outputs["rfi_objects_v2"] = apply_basic_qc(
+            objects, candidate, input_view=view, created_at=created_at
+        )
+        runtimes["rfi_objects_v2"] = (time.perf_counter() - started) * 1000
     if legacy_profile is not None:
         legacy = load_qc_profile(legacy_profile, ROOT / "configs/qc/flag-definitions.yaml")
         started = time.perf_counter()
@@ -131,6 +138,14 @@ def compare_case(
         "context_mode": "single_volume_vertical_only_no_external_context",
         "profile_hashes": {
             name: value.summary.get("parameters_hash") for name, value in outputs.items()
+        },
+        "profiles": {
+            name: {
+                "profile_version": value.profile.profile_version,
+                "pipeline_version": value.profile.pipeline_version,
+                "parameters_hash": value.summary.get("parameters_hash"),
+            }
+            for name, value in outputs.items()
         },
         "sweeps": [],
         "operational_eligible": False,
@@ -184,6 +199,38 @@ def compare_case(
                 entry["measurement_metrics"] = compare_measurement_actions(
                     labels, observed, mask, base.dbzh_raw
                 )
+            if method in outputs and method != "legacy":
+                actual_sweep = outputs[method].sweeps[index]
+                arrays = actual_sweep.optional_qc_fields
+                quarantine = arrays.get("RFI_QUARANTINE_MASK", np.zeros(shape, "uint8")) == 1
+                eligible = arrays["QPE_ELIGIBLE_MASK"] == 1
+                entry["quarantined_observed_gates"] = int((quarantine & observed).sum())
+                entry["quantitative_eligible_gates"] = int((eligible & observed).sum())
+                entry["quantitative_coverage_fraction"] = (
+                    float(eligible.sum() / observed.sum()) if observed.any() else None
+                )
+                if labels is not None:
+                    withheld = compare_measurement_actions(
+                        labels, observed, ~eligible, base.dbzh_raw
+                    )
+                    entry["trusted_weather_quantitative_withheld_rate"] = withheld[
+                        "trusted_weather_false_reject_rate"
+                    ]
+                diagnostic = outputs[method].summary["sweeps"][name]
+                entry["object_diagnostics"] = diagnostic.get("radial", {})
+                if "RFI_OBJECT_ID" in arrays:
+                    entry["retained_candidate_gates"] = int(
+                        ((arrays["RFI_OBJECT_ID"] > 0) & eligible).sum()
+                    )
+                    rows = (arrays["RFI_OBJECT_ID"] > 0) & eligible
+                    longest = 0
+                    for row in rows:
+                        edges = np.diff(np.r_[False, row, False].astype("int8"))
+                        lengths = np.flatnonzero(edges == -1) - np.flatnonzero(edges == 1)
+                        longest = max(longest, int(lengths.max()) if lengths.size else 0)
+                    entry["retained_candidate_maximum_continuous_m"] = longest * float(
+                        np.median(np.diff(view.root[name]["range"][:]))
+                    )
             record["methods"][method] = entry
         reference = case.get("spike_reference", {}).get(name)
         if reference:
@@ -228,6 +275,40 @@ def compare_case(
                     "azimuth_deg": float(group["azimuth"][ray]),
                     "range_m": group["range"][:],
                     "fields": fields,
+                    "variants": {
+                        method: {
+                            "DBZH_RAW": out.sweeps[index].dbzh_raw[ray],
+                            **{
+                                key: value[ray]
+                                for key, value in out.sweeps[index].optional_qc_fields.items()
+                                if key
+                                in {
+                                    "DBZH_USABLE",
+                                    "QC_ACTION",
+                                    "QC_DECISION_REASON",
+                                    "METEO_SCORE",
+                                    "RHOHV_RAW",
+                                    "ZDR_RAW",
+                                    "PHIDP_RAW",
+                                    "KDP_OS",
+                                    "QPE_ELIGIBLE_MASK",
+                                    "RFI_OBJECT_ID",
+                                    "RFI_RISK_STATE",
+                                    "RFI_QUARANTINE_MASK",
+                                    "RFI_BOUNDARY_OBSERVATION_MASK",
+                                    "RFI_LINKED_OBSERVATION_MASK",
+                                    "OS_POL_RAW_MOMENT_COUNT",
+                                    "OS_POL_AXIAL_MOMENT_COUNT",
+                                    "OS_POL_TEXTURE_MOMENT_COUNT",
+                                    "RFI_TEMPORAL_USED_MASK",
+                                    "RFI_RESIDUAL_PROMOTED_MASK",
+                                    "TEMPORAL_RFI_SAMPLE_COUNT",
+                                }
+                            },
+                        }
+                        for method, out in outputs.items()
+                        if method != "legacy"
+                    },
                 }
             )
         report["sweeps"].append(record)

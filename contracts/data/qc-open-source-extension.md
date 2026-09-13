@@ -25,3 +25,17 @@ Native coordinates/indices/cuts remain unchanged in serialized products. Algorit
 New-engine `radar-qc-requested` payloads require `qc_profile_sha256`, checked against the exact mounted YAML bytes. Job identity includes the input URI, config hash and ordered context manifest; object paths include the resulting job identity. Worker content fingerprints additionally include input/context content, assets and dependency versions. New-engine results never silently masquerade as legacy success.
 
 RadarGrid propagates engine, parameter digest and library versions. New-engine mosaic requires equal pipeline/parameter/library identities; missing or mixed identities are rejected. Therefore old and new QC, or fusion and experimental-RFI candidates, cannot silently coexist in the same analysis. Candidate operational eligibility remains false through Hybrid/mosaic/QPE.
+
+## RFI object engine v2 (explicit candidate only)
+
+`qc-opensource-2.0.0` uses `rfi-objects-v2`. The additive per-gate fields and reason
+bits are specified in `docs/radar-qc-opensource/RFI_OBJECTS_V2.md`.
+`RFI_QUARANTINE_MASK=1` requires `QC_ACTION=DOWNWEIGHT`, forbids confirmed
+`NON_METEOROLOGICAL` solely for quarantine, and forces all measurement-trust and
+QPE-eligibility masks to zero. The v2 trust invariant is therefore
+`observed AND NOT (REJECT OR quarantine)`, while v1 retains its previous invariant.
+Missing is never converted to quarantine or no-rain. Review reports distinguish
+confirmed rejection, quarantine and quantitative coverage using the SAME original
+observations/labels. Temporal votes have per-gate counts; unavailable context is not
+negative evidence and duplicate physical scans must not supply multiple votes.
+Object IDs are local, deterministic within one native sweep, not persistent tracks.

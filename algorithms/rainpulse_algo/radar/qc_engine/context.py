@@ -20,7 +20,9 @@ from ..qc_input import open_qc_input
 from .adapters import adapt_sweep
 from .algorithms import library_evidence
 from .decision import decide
+from .objects import radial_objects
 from .radial import local_radial_candidates
+from .temporal import aggregate_temporal_rfi
 
 
 def utc_time(value: str) -> datetime:
@@ -70,6 +72,12 @@ def prepare_open_source_inputs(
     from ..qc_worker import _load_qc_geometry_resources
 
     view = open_qc_input(normalized)
+    if profile.rfi_objects is not None:
+        for field in ("scan_id", "radar_id", "radar_config_version"):
+            if str(view.root.attrs.get(field)) != str(getattr(request.payload, field)):
+                raise ValueError(f"current {field} differs from frozen QC task")
+        if utc_time(view.root.attrs["volume_end_time_utc"]) > request.occurred_at.astimezone(UTC):
+            raise ValueError("current observation is after the frozen decision cutoff")
     beam, terrain, config_dir, dem_version = _load_qc_geometry_resources(request, profile)
     load = reader or ArtifactObjectReader(client)
     artifacts = [
@@ -81,6 +89,8 @@ def prepare_open_source_inputs(
     temporal = []
     cutoff = request.occurred_at.astimezone(UTC)
     seen = {str(request.payload.scan_id)}
+    seen_sources = {artifact_sha256(normalized)}
+    seen_scans = {str(request.payload.scan_id)}
     if profile.context.enabled:
         for role, items in (
             ("temporal", request.payload.temporal_context),
@@ -106,8 +116,10 @@ def prepare_open_source_inputs(
                 context_root = open_qc_input(obj).root
                 entry["sha256"] = artifact_sha256(obj)
                 entry["scan_id"] = str(context_root.attrs.get("scan_id"))
-                if entry["scan_id"] == str(request.payload.scan_id):
-                    raise ValueError("current scan cannot be its own context")
+                if entry["scan_id"] in seen_scans or entry["sha256"] in seen_sources:
+                    raise ValueError("duplicate physical context observation")
+                seen_scans.add(entry["scan_id"])
+                seen_sources.add(entry["sha256"])
                 reason = validate_context_identity(
                     context_root,
                     item,
@@ -129,18 +141,33 @@ def prepare_open_source_inputs(
                     ingest_time_verified=bool(context_root.attrs.get("ingest_available_at_utc")),
                 )
                 first_pass = {}
+                object_pass = {}
                 for number in context_root["sweep_number"][:]:
                     name = f"sweep_{int(number):03d}"
                     sweep = adapt_sweep(context_root, name, profile)
                     evidence = library_evidence(sweep, profile)
-                    radial, _ = local_radial_candidates(sweep, profile.rfi)
-                    result = decide(sweep, evidence, profile, rfi_candidate=radial)
-                    # Geometry helper accepts per-ray exclusion. Withhold uncertain
-                    # reference rays rather than treating them as negative rainfall truth.
+                    objects_evidence = (
+                        radial_objects(sweep, profile.rfi_objects)
+                        if profile.rfi_objects is not None
+                        else None
+                    )
+                    if objects_evidence is None:
+                        radial, _ = local_radial_candidates(sweep, profile.rfi)
+                    else:
+                        radial = objects_evidence.candidate
+                        object_pass[name] = (sweep, objects_evidence)
+                    result = decide(
+                        sweep,
+                        evidence,
+                        profile,
+                        rfi_candidate=radial,
+                        object_evidence=objects_evidence,
+                    )
+                    # Withhold only uncertain gates; a noisy edge must not discard a clean ray.
                     untrusted = result.arrays["QC_ACTION"] != 0
-                    first_pass[name] = sweep.restore(untrusted).any(axis=1)
+                    first_pass[name] = sweep.restore(untrusted)
                 if role == "temporal":
-                    temporal.append((context_root, first_pass))
+                    temporal.append((context_root, first_pass, object_pass))
                 elif config_dir is not None:
                     cfg = load_radar_config(config_dir / f"{item.radar_id.lower()}.yaml")
                     references.append(
@@ -181,10 +208,16 @@ def prepare_open_source_inputs(
                 cross.available_mask == 1, cross.support_fraction, np.nan
             ).astype("float32")
         }
-        # Temporal evidence is diagnostic only and requires exactly matching
+        if profile.rfi_objects is not None:
+            current = adapt_sweep(view.root, name, profile)
+            samples = [objects[name] for _, _, objects in temporal if name in objects]
+            values = aggregate_temporal_rfi(current, samples)
+            contexts[name].update({key: current.restore(value) for key, value in values.items()})
+            continue
+        # V1 temporal evidence is diagnostic only and requires exactly matching
         # native-cut geometry. A same-angle split cut is not merged by similarity.
         samples = []
-        for other, masks in temporal:
+        for other, masks, _ in temporal:
             if name not in other or name not in masks:
                 continue
             compare = other[name]
@@ -192,7 +225,7 @@ def prepare_open_source_inputs(
                 np.array_equal(group[k][:], compare[k][:])
                 for k in ("range", "azimuth", "elevation")
             ):
-                samples.append(np.broadcast_to(masks[name][:, None], dbzh.shape).astype("float32"))
+                samples.append(masks[name].astype("float32"))
         if samples:
             contexts[name]["TEMPORAL_CANDIDATE_PERSISTENCE"] = np.mean(samples, axis=0).astype(
                 "float32"

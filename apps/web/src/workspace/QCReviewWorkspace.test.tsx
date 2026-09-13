@@ -27,3 +27,15 @@ describe('QC local review', () => {
     expect(screen.queryByRole('table')).toBeNull()
   })
 })
+
+it('switches candidate fields without confusing quarantine with rejection', async () => {
+  render(<QCReviewWorkspace />)
+  const extended = structuredClone(report) as typeof report & { cases: unknown[] }
+  const ray = extended.cases[0].sweeps[0].radials[0] as typeof report.cases[0]['sweeps'][0]['radials'][0] & { variants?: Record<string, unknown> }
+  ray.variants = { open_source_fusion: ray.fields, rfi_objects_v2: { ...ray.fields, QC_ACTION: [1, 3], DBZH_USABLE: [null, null], RFI_RISK_STATE: [2, 0], QC_DECISION_REASON: [1024, 1], RFI_OBJECT_ID: [1, 0] } }
+  upload(extended)
+  await waitFor(() => expect(screen.getByText('疑似隔离 · 不用于 QPE')).toBeTruthy())
+  expect(screen.getByText('高风险隔离')).toBeTruthy()
+  fireEvent.change(screen.getByLabelText('检查算法'), { target: { value: 'open_source_fusion' } })
+  expect(screen.queryByText('疑似隔离 · 不用于 QPE')).toBeNull()
+})

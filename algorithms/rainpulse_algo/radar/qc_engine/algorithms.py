@@ -257,6 +257,19 @@ def library_evidence(
     arrays["METEO_SCORE"] = np.where(supported, score, np.nan).astype("float32")
     arrays["METEO_SCORE_AVAILABLE_MASK"] = supported.astype("uint8")
     arrays["OS_POL_MOMENT_COUNT"] = pol_count
+    if profile.rfi_objects is not None:
+        raw_count = np.zeros(shape, dtype="uint8")
+        axial_count = np.zeros(shape, dtype="uint8")
+        for field in ("RHOHV", "ZDR", "PHIDP"):
+            raw = native.field_available.get(field, np.zeros(shape, bool)) & observed
+            axial = arrays[f"OS_{field}_TEXTURE_AVAILABLE_MASK"] == 1
+            raw_count += raw.astype("uint8")
+            axial_count += axial.astype("uint8")
+            arrays[f"OS_{field}_RAW_AVAILABLE_MASK"] = raw.astype("uint8")
+            arrays[f"OS_{field}_AXIAL_AVAILABLE_MASK"] = axial.astype("uint8")
+        arrays["OS_POL_RAW_MOMENT_COUNT"] = raw_count
+        arrays["OS_POL_AXIAL_MOMENT_COUNT"] = axial_count
+        arrays["OS_POL_TEXTURE_MOMENT_COUNT"] = pol_count.copy()
     records.append(
         {
             "algorithm": "wradlib.classify.classify_echo_fuzzy",

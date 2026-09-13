@@ -573,7 +573,7 @@ def _load_qc_geometry_resources(
     Path | None,
     str | None,
 ]:
-    if profile.decision_version not in {"evidence-v2", "type-specific-v1"}:
+    if profile.decision_version not in {"evidence-v2", "type-specific-v1", "rfi-objects-v2"}:
         return None, None, None, None
     radar_config_dir = _optional_directory("RAINPULSE_RADAR_CONFIG_DIR")
     if radar_config_dir is None:

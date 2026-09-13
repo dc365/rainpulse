@@ -140,7 +140,8 @@ def test_vertical_consistency_diagnostics_record_height_difference_when_beams_ov
     assert diagnostics.metrics["available_gate_count"] == 2.0
 
 
-def test_trusted_cross_radar_support_excludes_reference_hard_rays() -> None:
+@pytest.mark.parametrize("gate_level", [False, True])
+def test_trusted_cross_radar_support_excludes_reference_hard_rays(gate_level) -> None:
     current_sweep = {
         "dbzh": np.full((2, 4), 20.0, dtype="float32"),
         "azimuth": np.array([0.0, 180.0], dtype="float32"),
@@ -181,7 +182,12 @@ def test_trusted_cross_radar_support_excludes_reference_hard_rays() -> None:
                 beam_context=reference_beam,
                 health_available=True,
                 dem_compatible=True,
-                hard_interference_by_sweep={"sweep_000": np.array([True, False], dtype=bool)},
+                hard_interference_by_sweep={
+                    "sweep_000": (
+                        np.array([[True, False, True, False], [False] * 4], dtype=bool)
+                        if gate_level else np.array([True, False], dtype=bool)
+                    )
+                },
             ),
         ),
         terrain=FlatTerrain(),
@@ -190,7 +196,16 @@ def test_trusted_cross_radar_support_excludes_reference_hard_rays() -> None:
         valid_range_dbz=(-32.0, 80.0),
     )
 
-    assert np.count_nonzero(diagnostics.available_mask[0]) == 0
+    if gate_level:
+        # An unavailable edge and a corrupted interior gate do not suppress
+        # the two clean observations on the same ray.
+        assert diagnostics.available_mask[0, 0] == 0
+        assert diagnostics.available_mask[0, 2] == 0
+        assert diagnostics.available_mask[0, 1] == 1
+        assert diagnostics.available_mask[0, 3] == 1
+    else:
+        assert np.count_nonzero(diagnostics.available_mask[0]) == 0
     assert np.count_nonzero(diagnostics.available_mask[1]) >= 3
-    assert np.isnan(diagnostics.consistency_by_ray[0])
+    if not gate_level:
+        assert np.isnan(diagnostics.consistency_by_ray[0])
     assert diagnostics.consistency_by_ray[1] == pytest.approx(1.0)

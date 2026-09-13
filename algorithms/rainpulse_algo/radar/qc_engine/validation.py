@@ -37,7 +37,66 @@ def validate_sweep(group, attrs) -> None:
     reject = action == Action.REJECT
     if np.any(action > Action.MISSING) or not np.array_equal(action == Action.MISSING, ~valid):
         raise ValueError("QC actions and original observation support disagree")
-    if not np.array_equal(trusted, valid & ~reject) or np.any(eligible & ~trusted):
+    quarantine = np.zeros(shape, bool)
+    if attrs.get("qc_pipeline_version") == "qc-opensource-2.0.0":
+        for field, dtype in {
+            "RFI_OBJECT_ID": "uint32",
+            "RFI_RISK_STATE": "uint8",
+            "RFI_QUARANTINE_MASK": "uint8",
+            "TEMPORAL_RFI_SAMPLE_COUNT": "uint8",
+            "TEMPORAL_CANDIDATE_PERSISTENCE": "float32",
+            "RFI_LINKED_OBSERVATION_MASK": "uint8",
+            "RFI_BOUNDARY_OBSERVATION_MASK": "uint8",
+            "OS_POL_RAW_MOMENT_COUNT": "uint8",
+            "OS_POL_AXIAL_MOMENT_COUNT": "uint8",
+            "OS_POL_TEXTURE_MOMENT_COUNT": "uint8",
+        }.items():
+            if (
+                field not in group
+                or group[field].shape != shape
+                or group[field].dtype != np.dtype(dtype)
+            ):
+                raise ValueError(f"invalid RFI v2 field {field}")
+        quarantine = group["RFI_QUARANTINE_MASK"][:] == 1
+        state = group["RFI_RISK_STATE"][:]
+        object_id = group["RFI_OBJECT_ID"][:]
+        if np.any(state > 3) or not np.array_equal(state == 2, quarantine):
+            raise ValueError("RFI risk states differ from quarantine")
+        if np.any(quarantine & (reject | ~valid | eligible | (action != Action.DOWNWEIGHT))):
+            raise ValueError("quarantined RFI must be withheld, not reported as a rejection")
+        if np.any((state == 3) & ~reject) or np.any((state > 0) & (object_id == 0)):
+            raise ValueError("RFI object/risk/rejection identity is inconsistent")
+        if np.any(
+            (group["RFI_BOUNDARY_OBSERVATION_MASK"][:] == 1)
+            & (group["RFI_LINKED_OBSERVATION_MASK"][:] == 0)
+        ):
+            raise ValueError("boundary hypotheses cannot become original confirmed seeds")
+        count = group["TEMPORAL_RFI_SAMPLE_COUNT"][:]
+        persistence = group["TEMPORAL_CANDIDATE_PERSISTENCE"][:]
+        if np.any(count > 3) or np.any(~np.isnan(persistence[count == 0])):
+            raise ValueError("temporal support with zero samples cannot imply evidence")
+        if (
+            np.any(~np.isfinite(persistence[count > 0]))
+            or np.any(persistence < 0)
+            or np.any(persistence > 1)
+        ):
+            raise ValueError("invalid supported temporal persistence")
+        if np.any((object_id > 0) & ~valid) or not np.array_equal(
+            object_id > 0, group["RFI_CANDIDATE_MASK"][:] == 1
+        ):
+            raise ValueError("candidate identity cannot create observations")
+        if np.any((group["RFI_LINKED_OBSERVATION_MASK"][:] == 1) & (object_id == 0)):
+            raise ValueError("linked observations require a bounded object")
+        for field in (
+            "OS_POL_RAW_MOMENT_COUNT",
+            "OS_POL_AXIAL_MOMENT_COUNT",
+            "OS_POL_TEXTURE_MOMENT_COUNT",
+        ):
+            if np.any(group[field][:] > 3):
+                raise ValueError("invalid polarization moment counts")
+        if np.any((state == 3) & ((flags & np.uint32(8)) == 0)):
+            raise ValueError("confirmed RFI lacks a radial cause flag")
+    if not np.array_equal(trusted, valid & ~reject & ~quarantine) or np.any(eligible & ~trusted):
         raise ValueError("QC measurement trust is inconsistent with decisions")
     if np.any(reject & ((flags & np.uint32(32768)) == 0)):
         raise ValueError("rejected values must carry a downstream hard-reject flag")

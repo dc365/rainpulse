@@ -1,6 +1,6 @@
 # RainPulse Project Memory
 
-Updated: 2026-09-11 (Asia/Taipei)
+Updated: 2026-09-12 (Asia/Taipei)
 
 This file is the concise handoff for a new Codex session. Stable engineering
 rules remain in `AGENTS.md`; implementation details remain in the referenced RP
@@ -24,6 +24,16 @@ operational data here.
   unless the user explicitly asks.
 
 ## Prelaunch convergence
+
+- 2026-09-12: `fujian-qc-rfi-objects-v2` / `qc-opensource-2.0.0` adds bounded
+  native-polar objects, raw/axial/2D availability separation, per-gate causal
+  RFI votes, unresolved-RFI quantitative quarantine and bounded residual checks.
+  See `docs/radar-qc-opensource/RFI_OBJECTS_V2.md`. Frozen v1 profiles/parameter
+  identity are unchanged. New compose override is a full coordinated candidate
+  set; native planner must select the same QC config/SHA on drained queues.
+  Added exact frozen-task offline replay and algorithm-specific /qc-review data.
+  Genuine-library synthetic and Worker-path tests are NOT real screenshot-case
+  acceptance. No deployment, historic regeneration, raw-data changes or promotion.
 
 - Open-source QC candidate engine and review tools are implemented on
   `feature/radar-qc-opensource-20260911`; see `docs/radar-qc-opensource/README.md`.
@@ -171,9 +181,17 @@ operational data here.
   NowcastInput, pySTEPS-LK and application products. pySTEPS-STEPS and
   NowcastNet remain comparison/controlled paths rather than blockers for the
   baseline product.
-- Radar QC has been expanded for the visible 08/28 artifacts and history was
-  replayed. Preserve raw and normalized radar inputs; QC is performed in polar
-  space and cause flags/QI/provenance must remain traceable.
+- Radar QC has been expanded for the visible 08/28 artifacts and the open-source
+  candidate is now deployed on 105 in shadow/candidate mode. The candidate image
+  is `rainpulse-cpu-worker:qc-opensource-1.0.0` with Py-ART 2.2.5 and wradlib
+  2.9.5. Three serial replays (08:20, 08:25, 08:30 Beijing time) completed
+  QC→grid→mosaic→QPE→diagnostics; the 08:15 analysis frame was refreshed as a
+  prerequisite and the workspace no longer uses the old fallback for that time.
+  Preserve raw and normalized radar inputs; QC remains polar and cause
+  flags/QI/provenance must stay traceable. The candidate is still not
+  operationally eligible: static ground/sea assets are skipped and the default
+  profile leaves the experimental local RFI supplement disabled. Use
+  `docs/radar-qc-opensource/VALIDATION.md` for the exact run IDs and metrics.
 - The public-weight NowcastNet comparison path uses tiled inference/stitching to
   cover the Fujian target grid. It can be regenerated through the existing
   controlled offline path.
@@ -189,10 +207,13 @@ operational data here.
 - PostgreSQL migrations `0016_manual_regeneration.sql` and
   `0017_full_pipeline_regeneration.sql` support repeatable lineage and the
   full-pipeline regeneration state machine.
-- Last end-to-end server proof used 08/28 14:25 CST: regeneration request
-  `4bfb3099-1f34-4e9c-a0bc-459623d22efb`, target run
-  `5c13c4bb-4d87-5ebb-914a-84a2afcc0544`; QC, grid, mosaic, QPE, diagnostics,
-  NowcastInput, pySTEPS-LK and product publication all completed successfully.
+- The latest end-to-end server proof is the 2026-09-12 candidate replay. Target
+  runs are `8562fe7f-9ac7-582c-9fa3-5ac12b13d315`,
+  `b77771a0-3490-5058-ae65-3ca41246c74d`, and
+  `7da8a66c-20c6-530c-80de-dab6081832d7`; all requested QC, grid, mosaic, QPE,
+  diagnostics and downstream stages succeeded. The older 105 replay record in
+  `docs/雷达质控_105重算与测试交接_20260911.md` remains historical evidence and
+  must not be read as the status of this candidate deployment.
 
 ## Data-version and retention intent
 
@@ -223,3 +244,7 @@ operational data here.
 - Before debugging data visibility, distinguish CST display time from UTC storage
   and verify the exact cycle/run lineage rather than matching only the displayed
   minute.
+
+## 2026-09-13 RFI Objects V2 整合
+
+已核验交付包并整合对象引擎，保留门级上下文修复。完整 Python/Go 与前端 74 测试通过。105 SSH/网页直连超时，本次尚未部署或重算。详见 docs/radar-qc-opensource/RFI_OBJECTS_V2_INTEGRATION_20260913.md；不能将 V1 部署记录视为 V2 已上线。

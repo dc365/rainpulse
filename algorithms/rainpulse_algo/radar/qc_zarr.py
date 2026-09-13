@@ -232,6 +232,8 @@ def _build_qc_zarr_store_objects(
                 write_empty_chunks=settings.write_empty_chunks,
             )
             array.attrs.update(_field_attributes(name))
+            if name == "QC_DECISION_REASON" and result.profile.decision_version == "rfi-objects-v2":
+                array.attrs["definition"] = "rfi-objects-v2-reason-bits"
 
     output_store["qc/summary.json"] = result.summary_bytes()
     zarr.consolidate_metadata(output_store)
@@ -409,6 +411,34 @@ def _environment_flag(name: str, *, default: bool) -> bool:
 
 
 def _field_attributes(name: str) -> dict[str, Any]:
+    if name == "RFI_RISK_STATE":
+        return {
+            "units": "1",
+            "codes": {
+                "0": "NONE",
+                "1": "CANDIDATE",
+                "2": "QUARANTINED_NOT_QPE_ELIGIBLE",
+                "3": "CONFIRMED_RFI",
+            },
+        }
+    if name == "RFI_OBJECT_ID":
+        return {"units": "1", "no_object_value": 0, "identity_scope": "native_sweep_only"}
+    if name == "RFI_AXIAL_STD_DB":
+        return {"units": "dB", "missing_value": "NaN", "minimum_value": 0.0}
+    if name in {"RFI_AXIAL_SUPPORT", "TEMPORAL_CANDIDATE_PERSISTENCE"}:
+        return {
+            "units": "1",
+            "valid_range": [0.0, 1.0],
+            "missing_value": "NaN",
+            "score_semantics": "measured_support_fraction_not_probability",
+        }
+    if name in {
+        "OS_POL_RAW_MOMENT_COUNT",
+        "OS_POL_AXIAL_MOMENT_COUNT",
+        "OS_POL_TEXTURE_MOMENT_COUNT",
+        "TEMPORAL_RFI_SAMPLE_COUNT",
+    }:
+        return {"units": "1", "valid_range": [0, 3]}
     if name == "QC_ACTION":
         return {
             "units": "1",

@@ -9,6 +9,7 @@ import numpy as np
 
 from .adapters import NativeSweep
 from .algorithms import EvidenceSet
+from .objects import ObjectEvidence, bounded_residual
 from .profile import OpenSourceQCProfile
 
 
@@ -31,6 +32,10 @@ class Reason(IntFlag):
     SINGLE_FAMILY_CANDIDATE = 128
     INCOMPLETE_CAPABILITY = 256
     LOW_SNR = 512
+    RFI_QUARANTINED = 1024
+    TEMPORAL_RFI_CONFIRMED = 2048
+    BOUNDED_RESIDUAL_CONFIRMED = 4096
+    RAW_POLARIMETRY_CONFIRMED = 8192
 
 
 @dataclass(frozen=True)
@@ -48,6 +53,9 @@ def decide(
     weather_support: np.ndarray | None = None,
     rfi_candidate: np.ndarray | None = None,
     clutter_prior: np.ndarray | None = None,
+    object_evidence: ObjectEvidence | None = None,
+    temporal_persistence: np.ndarray | None = None,
+    temporal_samples: np.ndarray | None = None,
 ) -> Decision:
     shape = native.shape
     data = evidence.arrays
@@ -82,6 +90,60 @@ def decide(
         raise ValueError("radial candidate geometry mismatch")
     # No global P_METEO threshold is required for this independent anomaly type.
     radial_reject = radial & severe_rho & (data["OS_POL_MOMENT_COUNT"] >= 2)
+    quarantine = np.zeros(shape, bool)
+    residual = np.zeros(shape, bool)
+    temporal_used = np.zeros(shape, bool)
+    temporal_count = np.zeros(shape, dtype="uint8")
+    persistence = np.full(shape, np.nan, dtype="float32")
+    if profile.rfi_objects is not None:
+        if object_evidence is None:
+            raise ValueError("v2 decisions require explicit native object evidence")
+        cfg = profile.rfi_objects
+        radial = object_evidence.candidate
+        if radial.shape != shape:
+            raise ValueError("object evidence geometry mismatch")
+        severe_rho = rho_available & (rho < cfg.severe_rhohv)
+        suspect_rho = rho_available & (rho < cfg.suspect_rhohv)
+        reliable = data["OS_POL_RAW_MOMENT_COUNT"] >= cfg.minimum_raw_pol_moments
+        reliable &= native.field_available.get("SNR", np.zeros(shape, bool))
+        reliable &= snr >= cfg.minimum_polarimetric_snr_db
+        if temporal_samples is not None:
+            count = np.asarray(temporal_samples)
+            if (
+                count.shape != shape
+                or not np.isfinite(count).all()
+                or np.any(count < 0)
+                or np.any(count > profile.context.max_temporal_scans)
+                or np.any(count != np.floor(count))
+            ):
+                raise ValueError("invalid per-gate temporal RFI sample counts")
+            temporal_count = count.astype("uint8")
+        if temporal_persistence is not None:
+            persistence = np.asarray(temporal_persistence, dtype="float32")
+            if (
+                persistence.shape != shape
+                or np.isinf(persistence).any()
+                or np.any(persistence < 0)
+                or np.any(persistence > 1)
+            ):
+                raise ValueError("invalid temporal RFI persistence")
+            persistence = np.where(temporal_count > 0, persistence, np.nan).astype("float32")
+        core = radial & (object_evidence.arrays["RFI_LINKED_OBSERVATION_MASK"] == 0)
+        time_support = temporal_count >= cfg.temporal_minimum_samples
+        time_support &= np.isfinite(persistence) & (persistence >= cfg.temporal_minimum_fraction)
+        if not profile.context.enabled:
+            time_support[:] = False
+        # Time alone never creates a candidate or cancels a new severe anomaly.
+        temporal_used = core & suspect_rho & reliable & time_support & ~weather & ~severe_rho
+        radial_reject = core & severe_rho & reliable
+        radial_reject |= temporal_used
+        residual_allowed = radial & reliable & rho_available & (rho < cfg.residual_maximum_rhohv)
+        residual = bounded_residual(native, object_evidence, radial_reject, residual_allowed, cfg)
+        radial_reject |= residual
+        # Do not label an uncertain measurement as confirmed non-meteorological.
+        quarantine = radial & (suspect_rho | (~rho_available & time_support)) & ~radial_reject
+    elif object_evidence is not None:
+        raise ValueError("v2 object evidence cannot be passed to a v1 profile")
     ground_reject = np.zeros(shape, bool)
     if clutter_prior is not None:
         if clutter_prior.shape != shape:
@@ -94,10 +156,11 @@ def decide(
         )
     weak_noise = small & low_snr & severe_rho & (dbzh < profile.echo.strong_echo_dbz) & ~weather
     reject = rain & (generic_reject | radial_reject | ground_reject | weak_noise)
+    quarantine &= rain & ~reject
     uncertain = rain & (structure | low_meteo | radial | severe_rho | small) & ~reject
     capability_incomplete = rain & (data["METEO_SCORE_AVAILABLE_MASK"] == 0)
     action = np.full(shape, Action.KEEP, dtype="uint8")
-    action[uncertain | low_snr | capability_incomplete] = Action.DOWNWEIGHT
+    action[uncertain | low_snr | capability_incomplete | quarantine] = Action.DOWNWEIGHT
     action[reject] = Action.REJECT
     action[~observed] = Action.MISSING
     reason = np.zeros(shape, dtype="uint16")
@@ -112,12 +175,23 @@ def decide(
         (uncertain, Reason.SINGLE_FAMILY_CANDIDATE),
         (capability_incomplete, Reason.INCOMPLETE_CAPABILITY),
         (low_snr, Reason.LOW_SNR),
+        (quarantine, Reason.RFI_QUARANTINED),
+        (temporal_used & rain, Reason.TEMPORAL_RFI_CONFIRMED),
+        (residual & rain, Reason.BOUNDED_RESIDUAL_CONFIRMED),
+        (
+            radial_reject & rain & (profile.rfi_objects is not None),
+            Reason.RAW_POLARIMETRY_CONFIRMED,
+        ),
     ):
         reason[mask] |= np.uint16(code)
     quality = np.ones(shape, dtype="float32")
     quality[capability_incomplete] = profile.quality_index.incomplete_capability_quality
     quality[uncertain] = np.minimum(quality[uncertain], profile.quality_index.suspect_quality)
     quality[low_snr] = np.minimum(quality[low_snr], profile.quality_index.low_snr_quality)
+    if profile.rfi_objects is not None:
+        quality[quarantine] = np.minimum(
+            quality[quarantine], profile.rfi_objects.quarantine_quality
+        )
     quality[reject] = 0
     quality[~observed] = np.nan
     flags = np.zeros(shape, dtype="uint32")
@@ -135,7 +209,7 @@ def decide(
     flags[observed & (quality < profile.quality_index.low_quality_threshold)] |= definitions[
         "LOW_QUALITY"
     ]
-    trusted = observed & ~reject
+    trusted = observed & ~reject & ~quarantine
     eligible = trusted & (quality >= profile.quality_index.quantitative_minimum)
     arrays = {
         "QC_ACTION": action,
@@ -148,6 +222,21 @@ def decide(
         "RFI_CANDIDATE_MASK": radial.astype("uint8"),
         "DBZH_USABLE": np.where(eligible, dbzh, np.nan).astype("float32"),
     }
+    if object_evidence is not None:
+        arrays.update(object_evidence.arrays)
+        arrays.update(
+            {
+                "RFI_RISK_STATE": np.where(
+                    radial_reject & rain, 3, np.where(quarantine, 2, radial.astype("uint8"))
+                ).astype("uint8"),
+                "RFI_QUARANTINE_MASK": quarantine.astype("uint8"),
+                "RFI_RESIDUAL_PROMOTED_MASK": (residual & rain).astype("uint8"),
+                "RFI_TEMPORAL_USED_MASK": (temporal_used & rain).astype("uint8"),
+                "RFI_MIXED_MASK": (weather & (radial_reject | quarantine) & rain).astype("uint8"),
+                "TEMPORAL_RFI_SAMPLE_COUNT": temporal_count,
+                "TEMPORAL_CANDIDATE_PERSISTENCE": persistence,
+            }
+        )
     for field in ("RHOHV", "ZDR", "PHIDP", "VR", "SW", "SNR"):
         field_valid = native.field_available.get(field, np.zeros(shape, bool)) & trusted
         if field in ("RHOHV", "ZDR", "PHIDP"):
