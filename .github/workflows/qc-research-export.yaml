@@ -17,7 +17,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/qc-export"
           git archive --format=zip --output="$RUNNER_TEMP/qc-export/source.zip" 1251ea8fc8b628e48baf9ccaf28fd9349d3fb991
-          git bundle create "$RUNNER_TEMP/qc-export/source.bundle" HEAD main
+          git bundle create "$RUNNER_TEMP/qc-export/source.bundle" HEAD
           git rev-parse HEAD > "$RUNNER_TEMP/qc-export/export-head.txt"
       - name: Read publicly accessible paper supplements
         continue-on-error: true
