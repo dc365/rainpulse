@@ -25,6 +25,16 @@ operational data here.
 
 ## Prelaunch convergence
 
+- 2026-09-13 latest test deployment: RFI Objects V3 is on local main and 105,
+  superseding the V2 deployment below. Commits: 9d47305 integration, b42ad55
+  Worker contract/geometry fixes, fa8c03b failed-scan regeneration recovery,
+  ed8d3e4 unified BDP heartbeat lifecycle. Two reruns SUCCEEDED/PUBLISHED,
+  38 QC executions succeeded; seven checked history times read new assets.
+  08:30 improves, but 08:15 and 08:35–45 retain radial artifacts: effects NOT
+  accepted, operational_eligible=false. See
+  `docs/radar-qc-opensource/RFI_OBJECTS_V3_105_RESULTS_20260913.md`.
+  V3 package directory/ZIP are user inputs and excluded from commits.
+
 - 2026-09-12: `fujian-qc-rfi-objects-v2` / `qc-opensource-2.0.0` adds bounded
   native-polar objects, raw/axial/2D availability separation, per-gate causal
   RFI votes, unresolved-RFI quantitative quarantine and bounded residual checks.
