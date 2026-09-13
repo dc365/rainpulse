@@ -10,37 +10,43 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-      - name: Export exact source for isolated comparison review
-        run: |
-          mkdir -p "$RUNNER_TEMP/qc-comparison"
-          git bundle create "$RUNNER_TEMP/qc-comparison/source.bundle" HEAD
-          git rev-parse HEAD > "$RUNNER_TEMP/qc-comparison/head.txt"
-      - name: Read public publisher full text
+      - name: Read public journal table of contents and resolve exact title
         shell: python
         run: |
-          import concurrent.futures, json, os, pathlib, urllib.request
+          import concurrent.futures, json, os, pathlib, re, urllib.request, urllib.parse
           root = pathlib.Path(os.environ['RUNNER_TEMP']) / 'qc-comparison'
-          urls = {
-              'rdd-article': 'http://rdqx.ijournals.cn/ch/reader/view_abstract.aspx?file_no=20220607&flag=1',
-              'rdd-full': 'http://rdqx.ijournals.cn/html/2022/6/20220607.htm',
-              'rdd-pdf': 'http://rdqx.ijournals.cn/ch/reader/create_pdf.aspx?file_no=20220607&flag=1&year_id=2022&quarter_id=6',
-          }
-          def read(item):
-              name, url = item
+          root.mkdir()
+          receipts = []
+          base = 'http://rdqx.ijournals.cn/'
+          def get(url):
+              req = urllib.request.Request(url, headers={'User-Agent':'Mozilla/5.0'})
+              with urllib.request.urlopen(req, timeout=20) as response:
+                  body = response.read(10000000)
+                  receipts.append({'url':url,'final_url':response.url,'bytes':len(body)})
+                  return body
+          def entry(number):
+              url = base+'ch/reader/view_abstract.aspx?file_no=202206%02d&flag=1'%number
               try:
-                  req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                  with urllib.request.urlopen(req, timeout=20) as response:
-                      body = response.read(10000000)
-                      (root / (name + ('.pdf' if body.startswith(b'%PDF') else '.html'))).write_bytes(body)
-                      return {'name': name, 'url': url, 'final_url': response.url, 'bytes': len(body)}
-              except Exception as error:
-                  return {'name': name, 'url': url, 'error': str(error)}
+                  body = get(url)
+                  text = body.decode('utf-8',errors='replace')
+                  title = re.search(r'<title>(.*?)</title>',text,re.S)
+                  title = title.group(1) if title else ''
+                  if '基于数据特征' in title:
+                      (root/'rdd-article.html').write_bytes(body)
+                      links = re.findall(r'href\s*=\s*[\"\x27]([^\"\x27]+)',text,re.I)
+                      for i, link in enumerate(links):
+                          if 'create_pdf' in link or ('2022/6' in link and '.htm' in link):
+                              target=urllib.parse.urljoin(url,link.replace('&amp;','&'))
+                              try:
+                                  content=get(target)
+                                  (root/('rdd-full-%s'%i+('.pdf' if content.startswith(b'%PDF') else '.html'))).write_bytes(content)
+                              except Exception as error: receipts.append({'url':target,'error':str(error)})
+                  return {'number':number,'title':title}
+              except Exception as error: return {'number':number,'error':str(error)}
           with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
-              results = list(pool.map(read, urls.items()))
-          (root / 'publisher-receipts.json').write_text(json.dumps(results, indent=2))
+              titles=list(pool.map(entry,range(1,17)))
+          (root/'titles.json').write_text(json.dumps(titles,ensure_ascii=False,indent=2))
+          (root/'publisher-receipts.json').write_text(json.dumps(receipts,indent=2))
       - uses: actions/upload-artifact@v4
         with:
           name: rainpulse-qc-comparison-source
