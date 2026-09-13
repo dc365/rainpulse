@@ -1,0 +1,106 @@
+name: qc-v3-materialize
+on:
+  push:
+    branches: ['feature/qc-v3-20260913']
+    paths: ['.github/workflows/qc-v3-materialize.yaml']
+permissions:
+  contents: write
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Materialize and verify exact source tree
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PYCODE'
+          import base64
+          import hashlib
+          import json
+          import lzma
+          import os
+          from pathlib import Path
+          import subprocess
+          import urllib.request
+          
+          EXPECTED_TREE = 'be8155f8f5962bea7818fd9b6a16ee8a0e612e41'
+          BASE_TREE = '24c7138c1e574da41b0310da178b87124a5e93cf'
+          PATCH_SHA = '1fcad105d87224d11c1d7c187e946f2fcb814b26b1ac7c20691391f101944dea'
+          XZ_SHA = '8bc0043077c72c4a28b51b7abf392e448d64397488e21857a9eb6f736c7b69d6'
+          assert os.environ['GITHUB_REPOSITORY'] == 'dc365/rainpulse'
+          assert os.environ['GITHUB_REF'] == 'refs/heads/feature/qc-v3-20260913'
+          
+          def git(*args):
+              return subprocess.check_output(['git', *args])
+          
+          parts = sorted(Path('.handoff/qc-v3').glob('*.b64'))
+          assert [p.name for p in parts] == [f'{i:02}.b64' for i in range(11)]
+          encoded = ''.join(p.read_text() for p in parts)
+          assert len(encoded) == 46864
+          compressed = base64.b64decode(encoded, validate=True)
+          assert hashlib.sha256(compressed).hexdigest() == XZ_SHA
+          patch = lzma.decompress(compressed, memlimit=268435456)
+          assert hashlib.sha256(patch).hexdigest() == PATCH_SHA
+          patch_path = Path(os.environ['RUNNER_TEMP']) / 'v3.patch'
+          patch_path.write_bytes(patch)
+          git('apply', '--check', '--index', str(patch_path))
+          git('apply', '--index', str(patch_path))
+          helper_paths = ['.github/workflows/qc-v3-source.yaml', '.github/workflows/qc-v3-materialize.yaml']
+          git('rm', '--', *helper_paths, *[str(p) for p in parts])
+          assert git('write-tree').decode().strip() == EXPECTED_TREE
+          # Only Git objects are created. The reviewer moves the branch after checking the receipt.
+          changes = git('diff', '--cached', '--name-status', '-z', 'HEAD').split(b'\0')
+          entries = []
+          for status, raw_path in zip(changes[0::2], changes[1::2]):
+              path = raw_path.decode()
+              if path in helper_paths or path.startswith('.handoff/qc-v3/'):
+                  continue
+              assert status in (b'A', b'M'), (status, path)
+              entries.append((path, git('show', ':' + path)))
+          assert len(entries) == 29
+          
+          def post(endpoint, payload):
+              req = urllib.request.Request(
+                  'https://api.github.com/repos/dc365/rainpulse/git/' + endpoint,
+                  data=json.dumps(payload).encode(), method='POST',
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                           'Accept': 'application/vnd.github+json',
+                           'X-GitHub-Api-Version': '2022-11-28',
+                           'Content-Type': 'application/json'})
+              with urllib.request.urlopen(req, timeout=40) as response:
+                  return json.load(response)
+          
+          tree_entries = []
+          for path, data in entries:
+              expected_blob = hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
+              blob = post('blobs', {'content': base64.b64encode(data).decode(), 'encoding': 'base64'})
+              assert blob['sha'] == expected_blob, path
+              mode = git('ls-files', '--stage', '--', path).decode().split()[0]
+              assert mode in ('100644', '100755'), path
+              tree_entries.append({'path': path, 'type': 'blob', 'mode': mode, 'sha': blob['sha']})
+              print('Verified blob:', path, blob['sha'], flush=True)
+          tree = post('trees', {'base_tree': BASE_TREE, 'tree': tree_entries})
+          assert tree['sha'] == EXPECTED_TREE
+          commit = post('commits', {
+              'message': 'feat(qc): implement V3 multivariate RFI refinement and residual audit\n\nPreserve frozen V1/V2 profiles; add rough-object hypotheses, circular phase/ZDR evidence, bounded original-core refinement, exact temporal votes, read-only audit and separately identified offline experiments. Local validation: 748 Python/config/contract tests, 75 Web tests, Go test/vet/build. Real-weather acceptance remains pending.',
+              'tree': tree['sha'], 'parents': [os.environ['GITHUB_SHA']]})
+          receipt = {'commit_sha': commit['sha'], 'tree_sha': tree['sha'],
+                     'parent_sha': os.environ['GITHUB_SHA'], 'patch_sha256': PATCH_SHA,
+                     'baseline_commit': '1251ea8fc8b628e48baf9ccaf28fd9349d3fb991',
+                     'changed_files': len(tree_entries), 'branch_updated': False}
+          output = Path(os.environ['RUNNER_TEMP']) / 'v3-submit-receipt.json'
+          output.write_text(json.dumps(receipt, indent=2) + '\n')
+          print(json.dumps(receipt, indent=2))
+          PYCODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rainpulse-v3-submit-receipt
+          path: ${{ runner.temp }}/v3-submit-receipt.json
+          retention-days: 7
+          if-no-files-found: error
