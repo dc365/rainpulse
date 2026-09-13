@@ -16,7 +16,7 @@
 
 ## 105 状态
 
-本次 SSH 22 端口多次连接超时；4173 直连也超时。尚未部署、尚未发起重算、尚无 V2 真实数据效果结论。历史 V1 截图不能当成本次验收证据。
+首次连接因网络超时中断；用户恢复网络后，于 2026-09-13 完成部署。五类 worker 使用 qc-opensource-2.0.0，原生 Go planner 已切换相同 V2 配置，前端 V2 bundle 已核验。真实重算及效果记录见 RFI_OBJECTS_V2_105_RESULTS_20260913.md。
 
 恢复连通后先读服务器当前配置、镜像、作业和队列状态，排空旧任务，保留回退文件及旧镜像；统一切换五类 worker 与原生 Go 的 RAINPULSE_PIPELINE_QC_CONFIG。已有 Go 源码未修改，前端为磁盘 dist，需同步新的 dist。不得直接运行面向旧 evidence-v3 的 deploy_qc_z9598.sh。
 
