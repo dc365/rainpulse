@@ -32,9 +32,15 @@ operational data here.
   unspecified AFL thresholds are explicit assumptions, not official SWAN code.
   Same frozen V3 task/context comparison, per-case labeling, duplicate-scan and
   split-leakage checks, QC-review JSON and optional same-palette PPI export.
-  Default deployment and promotion remain unchanged; real-weather replay pending.
+  Integrated on main as 9fdff7e and deployed to 105 with qc-opensource-4.0.0.
+  Two real reruns SUCCEEDED/PUBLISHED (38 QC executions, about 19.2 minutes);
+  seven checked times read new assets, raw PNGs unchanged. 08:30 southern strong
+  stripe improves markedly; 08:15 and 08:35–45 retain artifacts. Overall effects
+  NOT accepted, operational_eligible=false. Deployment/evidence:
+  `docs/radar-qc-opensource/PAPER_FUSION_V4_105_RESULTS_20260913.md`.
+  V4 package directory/ZIP are user inputs excluded from normal commits.
 
-- 2026-09-13 latest test deployment: RFI Objects V3 is on local main and 105,
+- 2026-09-13 preceding test deployment (now superseded by V4): RFI Objects V3,
   superseding the V2 deployment below. Commits: 9d47305 integration, b42ad55
   Worker contract/geometry fixes, fa8c03b failed-scan regeneration recovery,
   ed8d3e4 unified BDP heartbeat lifecycle. Two reruns SUCCEEDED/PUBLISHED,
