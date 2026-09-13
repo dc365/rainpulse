@@ -223,3 +223,19 @@ func TestClosestRegenerationMosaicScansAcceptsRestartableStates(t *testing.T) {
 		}
 	}
 }
+
+func TestRegenerationRetriesFailedScanOnlyWithNormalizedInput(t *testing.T) {
+	at := time.Date(2026, time.August, 28, 0, 15, 0, 0, time.UTC)
+	uri := "s3://rainpulse/normalized/volume.zarr"
+	id := uuid.New()
+	planner := &pipelinePlanner{settings: pipelineSettings{
+		radarIDs: map[string]struct{}{"z9598": {}}, maximumMosaicOffset: 5 * time.Minute,
+	}}
+	selected := planner.closestRegenerationMosaicScans([]workflow.RadarScan{
+		{ID: id, RadarID: "z9598", Status: workflow.RadarScanFailed, NormalizedURI: &uri, VolumeEndTime: at.Add(-time.Minute)},
+		{ID: uuid.New(), RadarID: "z9598", Status: workflow.RadarScanFailed, VolumeEndTime: at},
+	}, at)
+	if len(selected) != 1 || selected[0].ID != id {
+		t.Fatalf("failed-stage retry lost its valid normalized input: %#v", selected)
+	}
+}

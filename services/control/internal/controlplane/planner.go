@@ -791,6 +791,11 @@ func (planner *pipelinePlanner) closestRegenerationMosaicScans(
 	for _, scan := range scans {
 		switch scan.Status {
 		case workflow.RadarScanNormalized, workflow.RadarScanQCReady, workflow.RadarScanGridReady:
+		case workflow.RadarScanFailed:
+			// A failed QC/grid stage does not invalidate its immutable normalized input.
+			if scan.NormalizedURI == nil || strings.TrimSpace(*scan.NormalizedURI) == "" {
+				continue
+			}
 		default:
 			continue
 		}

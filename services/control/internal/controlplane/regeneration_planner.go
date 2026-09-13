@@ -120,6 +120,7 @@ func (planner *pipelinePlanner) listRegenerationRadarScans(
 		workflow.RadarScanNormalized,
 		workflow.RadarScanQCReady,
 		workflow.RadarScanGridReady,
+		workflow.RadarScanFailed,
 	}
 	items := make([]workflow.RadarScan, 0)
 	for _, state := range states {
