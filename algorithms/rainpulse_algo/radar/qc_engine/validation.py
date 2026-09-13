@@ -38,7 +38,8 @@ def validate_sweep(group, attrs) -> None:
     if np.any(action > Action.MISSING) or not np.array_equal(action == Action.MISSING, ~valid):
         raise ValueError("QC actions and original observation support disagree")
     quarantine = np.zeros(shape, bool)
-    if attrs.get("qc_pipeline_version") == "qc-opensource-2.0.0":
+    version3 = attrs.get("qc_pipeline_version") == "qc-opensource-3.0.0"
+    if attrs.get("qc_pipeline_version") in {"qc-opensource-2.0.0", "qc-opensource-3.0.0"}:
         for field, dtype in {
             "RFI_OBJECT_ID": "uint32",
             "RFI_RISK_STATE": "uint8",
@@ -64,7 +65,22 @@ def validate_sweep(group, attrs) -> None:
             raise ValueError("RFI risk states differ from quarantine")
         if np.any(quarantine & (reject | ~valid | eligible | (action != Action.DOWNWEIGHT))):
             raise ValueError("quarantined RFI must be withheld, not reported as a rejection")
-        if np.any((state == 3) & ~reject) or np.any((state > 0) & (object_id == 0)):
+        peripheral = np.zeros(shape, bool)
+        if version3:
+            for field, dtype in {
+                "RFI_PERIPHERAL_REVIEW_MASK": "uint8",
+                "RFI_V3_EVIDENCE_SCORE": "float32",
+                "RFI_V3_CONFIRMATION_MASK": "uint8",
+                "RFI_V3_PERIPHERAL_USED_MASK": "uint8",
+            }.items():
+                if field not in group or group[field].shape != shape or group[field].dtype != np.dtype(dtype):
+                    raise ValueError(f"invalid RFI v3 field {field}")
+            peripheral = group["RFI_PERIPHERAL_REVIEW_MASK"][:] == 1
+            if np.any(peripheral & (~valid | (object_id > 0))):
+                raise ValueError("peripheral review must be observed and outside object membership")
+            if np.any((group["RFI_V3_CONFIRMATION_MASK"][:] == 1) & (state != 3)):
+                raise ValueError("V3 confirmation must have confirmed radial state")
+        if np.any((state == 3) & ~reject) or np.any((state > 0) & (object_id == 0) & ~peripheral):
             raise ValueError("RFI object/risk/rejection identity is inconsistent")
         if np.any(
             (group["RFI_BOUNDARY_OBSERVATION_MASK"][:] == 1)

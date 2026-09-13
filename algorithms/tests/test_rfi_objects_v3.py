@@ -65,3 +65,25 @@ def test_v2_identity_is_not_mutated_by_v3_profile_support():
     assert old.decision_version == "rfi-objects-v2"
     assert old.rfi_objects.rough_candidate_enabled is False
     assert old.rfi_objects.peripheral_review_enabled is False
+
+
+def test_v3_quarantine_survives_worker_serialization():
+    from rainpulse_algo.radar.qc import apply_basic_qc
+    from rainpulse_algo.radar.qc_zarr import build_qc_zarr_store, validate_qc_zarr_store
+
+    obj, _ = scene(missing_background=True, rho=0.92)
+    result = apply_basic_qc(obj, profile_v3())
+    assert result.sweeps[0].optional_qc_fields['RFI_QUARANTINE_MASK'].any()
+    stored = build_qc_zarr_store(obj, result, asset_id='v3-review', normalized_volume_uri='local')
+    assert validate_qc_zarr_store(stored)['valid_gate_count'] > 0
+
+
+def test_v3_loads_radar_geometry(monkeypatch):
+    from types import SimpleNamespace
+    from rainpulse_algo.radar import qc_worker
+
+    monkeypatch.setenv('RAINPULSE_RADAR_CONFIG_DIR', str(ROOT / 'configs/radars'))
+    request = SimpleNamespace(payload=SimpleNamespace(radar_id='z9598'))
+    beam, _, directory, _ = qc_worker._load_qc_geometry_resources(request, profile_v3())
+    assert directory is not None
+    assert beam is not None

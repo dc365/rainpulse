@@ -232,8 +232,8 @@ def _build_qc_zarr_store_objects(
                 write_empty_chunks=settings.write_empty_chunks,
             )
             array.attrs.update(_field_attributes(name))
-            if name == "QC_DECISION_REASON" and result.profile.decision_version == "rfi-objects-v2":
-                array.attrs["definition"] = "rfi-objects-v2-reason-bits"
+            if name == "QC_DECISION_REASON" and result.profile.decision_version in {"rfi-objects-v2", "rfi-objects-v3"}:
+                array.attrs["definition"] = f"{result.profile.decision_version}-reason-bits"
 
     output_store["qc/summary.json"] = result.summary_bytes()
     zarr.consolidate_metadata(output_store)
