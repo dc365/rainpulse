@@ -175,7 +175,8 @@ def library_evidence(
             **({} if native.full_ppi else {"constant_values": np.nan}),
         )
         with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always", RuntimeWarning)
+            # Stable provenance independent of process-global warning registries.
+            warnings.simplefilter("always")
             raw = wrl.classify.filter_gabella(
                 working,
                 wsize=config.gabella_window,
@@ -243,7 +244,8 @@ def library_evidence(
     if data["map"] is not None and data["map"].shape != shape:
         raise ValueError("clutter prior geometry mismatch")
     with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always", RuntimeWarning)
+        # Capture deterministic library diagnostics, including missing-input warnings.
+        warnings.simplefilter("always")
         score, _ = wrl.classify.classify_echo_fuzzy(
             data,
             weights=dict(config.fuzzy_weights),

@@ -12,6 +12,7 @@ from .adapters import adapt_sweep
 from .algorithms import library_evidence
 from .decision import Action, decide
 from .objects import radial_objects
+from .paper_fusion import fuse_paper_decision, paper_evidence
 from .phase import process_phase
 from .radial import local_radial_candidates
 
@@ -36,6 +37,7 @@ def run_open_source_qc(
     radial_context=None,
     radar_beam_context=None,
     created_at=None,
+    paper_references_by_sweep=None,
     **kwargs,
 ):
     if kwargs.get("phase_processing_profile") or kwargs.get("attenuation_profile"):
@@ -59,6 +61,10 @@ def run_open_source_qc(
     if not native:
         raise QCInputError("normalized radar volume contains no usable sweep")
     # Stage 1 is independent of neighbouring final QC: no circular dependencies.
+    if paper_references_by_sweep and profile.literature is None:
+        raise QCInputError("paper references require the paper fusion profile")
+    if set(paper_references_by_sweep or {}) - {s.name for s in native}:
+        raise QCInputError("reference sweep absent from current volume")
     independent = []
     for sweep in native:
         prior = (ancillary_maps or {}).get(sweep.name, {}).get("ground_clutter")
@@ -80,7 +86,14 @@ def run_open_source_qc(
             clutter_prior=prior,
             object_evidence=objects_evidence,
         )
-        independent.append((evidence, radial, radial_record, first, prior, objects_evidence))
+        papers = None
+        if profile.literature is not None:
+            papers = paper_evidence(
+                sweep, profile, (paper_references_by_sweep or {}).get(sweep.name)
+            )
+        independent.append(
+            (evidence, radial, radial_record, first, prior, objects_evidence, papers)
+        )
     vertical = build_vertical_consistency_diagnostics(
         tuple(
             {
@@ -102,7 +115,7 @@ def run_open_source_qc(
     )
     results, sweep_records = [], {}
     for index, (sweep, item) in enumerate(zip(native, independent, strict=True)):
-        evidence, radial, radial_record, _, prior, objects_evidence = item
+        evidence, radial, radial_record, _, prior, objects_evidence, papers = item
         weather = vertical.probabilities[index].copy()
         context = (radial_context or {}).get(sweep.name, {})
         cross = context.get("WEATHER_SUPPORT_SCORE")
@@ -131,6 +144,25 @@ def run_open_source_qc(
                 else None
             ),
         )
+        if papers is not None:
+            decision = fuse_paper_decision(
+                sweep,
+                evidence,
+                decision,
+                papers,
+                profile,
+                weather_support=weather,
+                temporal_persistence=(
+                    np.asarray(persistence)[sweep.original_indices]
+                    if persistence is not None
+                    else None
+                ),
+                temporal_samples=(
+                    np.asarray(temporal_count)[sweep.original_indices]
+                    if temporal_count is not None
+                    else None
+                ),
+            )
         phase, phase_record = process_phase(
             sweep, decision.arrays, profile, context.get("environment")
         )
@@ -204,6 +236,19 @@ def run_open_source_qc(
             )
         )
         sweep_records[sweep.name] = {
+            **(
+                {
+                    "literature": papers.metadata,
+                    "paper_confirmed_additions": int(
+                        decision.arrays["PAPER_CONFIRMED_ADDITION_MASK"].sum()
+                    ),
+                    "paper_quarantined_additions": int(
+                        decision.arrays["PAPER_QUARANTINED_ADDITION_MASK"].sum()
+                    ),
+                }
+                if papers is not None
+                else {}
+            ),
             "input_audit": sweep.audit,
             "evidence": [
                 {key: value for key, value in record.items() if key != "elapsed_ms"}

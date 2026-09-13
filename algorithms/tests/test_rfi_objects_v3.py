@@ -80,6 +80,7 @@ def test_v3_quarantine_survives_worker_serialization():
 
 def test_v3_loads_radar_geometry(monkeypatch):
     from types import SimpleNamespace
+
     from rainpulse_algo.radar import qc_worker
 
     monkeypatch.setenv('RAINPULSE_RADAR_CONFIG_DIR', str(ROOT / 'configs/radars'))

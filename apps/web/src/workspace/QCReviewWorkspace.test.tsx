@@ -39,3 +39,24 @@ it('switches candidate fields without confusing quarantine with rejection', asyn
   fireEvent.change(screen.getByLabelText('检查算法'), { target: { value: 'open_source_fusion' } })
   expect(screen.queryByText('疑似隔离 · 不用于 QPE')).toBeNull()
 })
+
+it('shows missing RDD as not executed and keeps AFL candidates separate from final actions', async () => {
+  render(<QCReviewWorkspace />)
+  const sample = structuredClone(report)
+  const sweep = sample.cases[0].sweeps[0]
+  Object.assign(sweep.methods, {
+    rdd_reference: { status: 'not_executed_no_verified_reference', marked_observed_gates: null, measurement_metrics: null, mask_semantics: 'raw_candidate_not_final_rejection' },
+    afl_parameterized: { status: 'computed', marked_observed_gates: 1, mask_semantics: 'raw_candidate_not_final_rejection' },
+  })
+  Object.assign(sweep.radials[0], { variants: {
+    paper_fusion_v4: sweep.radials[0].fields,
+    afl_parameterized: { DBZH_RAW: [20, null], CANDIDATE_PREVIEW_DBZH: [null, null], CANDIDATE_MASK: [1, 0] },
+  } })
+  upload(sample)
+  await waitFor(() => expect(screen.getByText('未运行，不评分')).toBeTruthy())
+  expect(screen.getByText('未运行 · 无核验参考')).toBeTruthy()
+  fireEvent.change(screen.getByLabelText('检查算法'), { target: { value: 'afl_parameterized' } })
+  expect(screen.getAllByText('候选，不生成最终动作')).toHaveLength(2)
+  expect(screen.getByText('候选掩码预览', { exact: false })).toBeTruthy()
+  expect(screen.queryByText('原始缺测')).toBeNull()
+})

@@ -193,6 +193,7 @@ def test_v1_parameter_identity_is_unchanged():
     old = load_qc_profile(ROOT / "configs/qc/fujian-qc-opensource-v1.yaml", FLAGS)
     data = old.model_dump(mode="json")
     data.pop("rfi_objects", None)
+    data.pop("literature", None)
     assert (
         old.parameters_hash
         == hashlib.sha256(

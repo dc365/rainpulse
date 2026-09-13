@@ -35,7 +35,7 @@ rg --quiet 'CREATE TABLE radar_scan_runs' deploy/postgres/migrations/0005_radar_
 rg --quiet 'CREATE TABLE analysis_cycles' deploy/postgres/migrations/0005_radar_workflows.sql
 rg --quiet '/radar-scans' contracts/openapi.yaml
 rg --quiet '/analysis-cycles' contracts/openapi.yaml
-rg --quiet 'simulate-workflows' services/control/cmd/orchestrator/main.go
+rg --quiet 'simulate-workflows' services/control/internal/controlplane/main.go
 rg --quiet 'RAINPULSE_ADMIN_TOKEN is required' scripts/control_plane_smoke_test.sh
 rg --quiet 'Authorization: Bearer %s' scripts/control_plane_smoke_test.sh
 rg --quiet 'curl .*--header @-' scripts/control_plane_smoke_test.sh

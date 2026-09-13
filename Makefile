@@ -405,3 +405,8 @@ test-qc-opensource:
 # Genuine pinned library regressions, not independent real-weather acceptance.
 test-qc-rfi-objects:
 	uv run --project algorithms pytest algorithms/tests/test_rfi_objects_v2.py algorithms/tests/test_rfi_objects_v3.py algorithms/tests/test_rfi_objects_context.py algorithms/tests/test_rfi_objects_replay.py
+
+.PHONY: test-qc-paper-comparison
+# Native library adapters and full frozen-input comparison, not mock-only tests.
+test-qc-paper-comparison:
+	uv run --project algorithms pytest algorithms/tests/test_qc_paper_algorithms.py algorithms/tests/test_qc_paper_comparison.py

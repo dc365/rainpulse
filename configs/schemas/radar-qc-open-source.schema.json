@@ -1,5 +1,249 @@
 {
   "$defs": {
+    "AFLConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "method": {
+          "const": "afl-parameterized-2020-v1",
+          "default": "afl-parameterized-2020-v1",
+          "title": "Method",
+          "type": "string"
+        },
+        "source_doi": {
+          "const": "10.11676/qxxb2020.010",
+          "default": "10.11676/qxxb2020.010",
+          "title": "Source Doi",
+          "type": "string"
+        },
+        "fidelity": {
+          "const": "published_formulas_digitized_knots_explicit_assumptions",
+          "default": "published_formulas_digitized_knots_explicit_assumptions",
+          "title": "Fidelity",
+          "type": "string"
+        },
+        "spin_jump_db": {
+          "default": 2.0,
+          "exclusiveMinimum": 0,
+          "maximum": 30,
+          "title": "Spin Jump Db",
+          "type": "number"
+        },
+        "decision_threshold": {
+          "default": 0.6,
+          "exclusiveMaximum": 1,
+          "exclusiveMinimum": 0,
+          "title": "Decision Threshold",
+          "type": "number"
+        },
+        "rough_texture_db2": {
+          "default": 3.0,
+          "exclusiveMinimum": 0,
+          "title": "Rough Texture Db2",
+          "type": "number"
+        },
+        "tail_fraction": {
+          "default": 0.1,
+          "exclusiveMinimum": 0,
+          "maximum": 0.5,
+          "title": "Tail Fraction",
+          "type": "number"
+        },
+        "minimum_tail_support": {
+          "default": 0.8,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Minimum Tail Support",
+          "type": "number"
+        },
+        "tail_policy": {
+          "const": "last_geometric_bins_valid_mean",
+          "default": "last_geometric_bins_valid_mean",
+          "title": "Tail Policy",
+          "type": "string"
+        },
+        "stencil_policy": {
+          "const": "complete_11_pairs_no_gap_filling",
+          "default": "complete_11_pairs_no_gap_filling",
+          "title": "Stencil Policy",
+          "type": "string"
+        },
+        "smooth_weights": {
+          "default": [
+            2,
+            2,
+            1,
+            0
+          ],
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Smooth Weights",
+          "type": "array"
+        },
+        "rough_weights": {
+          "default": [
+            1,
+            2,
+            1,
+            1
+          ],
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Rough Weights",
+          "type": "array"
+        },
+        "smooth_rref": {
+          "$ref": "#/$defs/Curve",
+          "default": {
+            "x": [
+              90.0,
+              95.0
+            ],
+            "y": [
+              0.0,
+              1.0
+            ]
+          }
+        },
+        "rough_rref": {
+          "$ref": "#/$defs/Curve",
+          "default": {
+            "x": [
+              80.0,
+              95.0
+            ],
+            "y": [
+              0.0,
+              1.0
+            ]
+          }
+        },
+        "smooth_db": {
+          "$ref": "#/$defs/Curve",
+          "default": {
+            "x": [
+              -90.0,
+              -20.0,
+              50.0
+            ],
+            "y": [
+              0.0,
+              1.0,
+              0.0
+            ]
+          }
+        },
+        "rough_db": {
+          "$ref": "#/$defs/Curve",
+          "default": {
+            "x": [
+              -150.0,
+              -20.0,
+              110.0
+            ],
+            "y": [
+              0.0,
+              1.0,
+              0.0
+            ]
+          }
+        },
+        "smooth_texture": {
+          "$ref": "#/$defs/Curve",
+          "default": {
+            "x": [
+              0.0,
+              3.0
+            ],
+            "y": [
+              1.0,
+              0.0
+            ]
+          }
+        },
+        "rough_texture": {
+          "$ref": "#/$defs/Curve",
+          "default": {
+            "x": [
+              0.0,
+              5.0,
+              30.0
+            ],
+            "y": [
+              0.0,
+              1.0,
+              0.0
+            ]
+          }
+        },
+        "smooth_spin": {
+          "$ref": "#/$defs/Curve",
+          "default": {
+            "x": [
+              0.0,
+              4.0,
+              11.0
+            ],
+            "y": [
+              1.0,
+              0.5,
+              0.0
+            ]
+          }
+        },
+        "rough_spin": {
+          "$ref": "#/$defs/Curve",
+          "default": {
+            "x": [
+              0.0,
+              10.0,
+              11.0
+            ],
+            "y": [
+              0.0,
+              1.0,
+              0.0
+            ]
+          }
+        },
+        "local_window_m": {
+          "default": 50000.0,
+          "maximum": 200000,
+          "minimum": 10000,
+          "title": "Local Window M",
+          "type": "number"
+        }
+      },
+      "title": "AFLConfig",
+      "type": "object"
+    },
     "ClutterConfig": {
       "additionalProperties": false,
       "properties": {
@@ -100,6 +344,31 @@
       "title": "ContextConfig",
       "type": "object"
     },
+    "Curve": {
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "items": {
+            "type": "number"
+          },
+          "title": "X",
+          "type": "array"
+        },
+        "y": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Y",
+          "type": "array"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "title": "Curve",
+      "type": "object"
+    },
     "EchoConfig": {
       "additionalProperties": false,
       "properties": {
@@ -138,6 +407,117 @@
         }
       },
       "title": "EchoConfig",
+      "type": "object"
+    },
+    "FusionConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "quarantine_quality": {
+          "default": 0.25,
+          "exclusiveMaximum": 1,
+          "minimum": 0,
+          "title": "Quarantine Quality",
+          "type": "number"
+        },
+        "minimum_echo_dbz": {
+          "default": 5.0,
+          "title": "Minimum Echo Dbz",
+          "type": "number"
+        },
+        "minimum_range_m": {
+          "default": 15000.0,
+          "minimum": 0,
+          "title": "Minimum Range M",
+          "type": "number"
+        },
+        "minimum_segment_m": {
+          "default": 12000.0,
+          "exclusiveMinimum": 0,
+          "title": "Minimum Segment M",
+          "type": "number"
+        },
+        "minimum_snr_db": {
+          "default": 8.0,
+          "minimum": 0,
+          "title": "Minimum Snr Db",
+          "type": "number"
+        },
+        "low_rhohv": {
+          "default": 0.8,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Low Rhohv",
+          "type": "number"
+        },
+        "protected_rhohv": {
+          "default": 0.95,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Protected Rhohv",
+          "type": "number"
+        },
+        "phase_pair_jump_deg": {
+          "default": 25.0,
+          "exclusiveMaximum": 180,
+          "exclusiveMinimum": 0,
+          "title": "Phase Pair Jump Deg",
+          "type": "number"
+        },
+        "phase_window_gates": {
+          "default": 11,
+          "maximum": 51,
+          "minimum": 3,
+          "title": "Phase Window Gates",
+          "type": "integer"
+        },
+        "phase_minimum_pair_fraction": {
+          "default": 0.8,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Phase Minimum Pair Fraction",
+          "type": "number"
+        },
+        "phase_bad_pair_fraction": {
+          "default": 0.4,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Phase Bad Pair Fraction",
+          "type": "number"
+        },
+        "zdr_outlier_db": {
+          "default": [
+            -3.0,
+            6.0
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Zdr Outlier Db",
+          "type": "array"
+        },
+        "temporal_minimum_samples": {
+          "default": 2,
+          "maximum": 3,
+          "minimum": 2,
+          "title": "Temporal Minimum Samples",
+          "type": "integer"
+        },
+        "temporal_minimum_hits": {
+          "default": 2,
+          "maximum": 3,
+          "minimum": 2,
+          "title": "Temporal Minimum Hits",
+          "type": "integer"
+        }
+      },
+      "title": "FusionConfig",
       "type": "object"
     },
     "GeometryConfig": {
@@ -208,6 +588,31 @@
         }
       },
       "title": "HealthConfig",
+      "type": "object"
+    },
+    "LiteratureConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "method": {
+          "const": "v3-afl-rdd-fusion-v1",
+          "default": "v3-afl-rdd-fusion-v1",
+          "title": "Method",
+          "type": "string"
+        },
+        "afl": {
+          "$ref": "#/$defs/AFLConfig"
+        },
+        "fusion": {
+          "$ref": "#/$defs/FusionConfig"
+        },
+        "rdd_policy": {
+          "const": "external_reference_only_record_absence",
+          "default": "external_reference_only_record_absence",
+          "title": "Rdd Policy",
+          "type": "string"
+        }
+      },
+      "title": "LiteratureConfig",
       "type": "object"
     },
     "PhaseConfig": {
@@ -962,7 +1367,8 @@
       "enum": [
         "qc-opensource-1.0.0",
         "qc-opensource-2.0.0",
-        "qc-opensource-3.0.0"
+        "qc-opensource-3.0.0",
+        "qc-opensource-4.0.0"
       ],
       "title": "Pipeline Version",
       "type": "string"
@@ -972,7 +1378,8 @@
       "enum": [
         "type-specific-v1",
         "rfi-objects-v2",
-        "rfi-objects-v3"
+        "rfi-objects-v3",
+        "paper-fusion-v4"
       ],
       "title": "Decision Version",
       "type": "string"
@@ -1032,6 +1439,17 @@
       "anyOf": [
         {
           "$ref": "#/$defs/RFIObjectConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "literature": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/LiteratureConfig"
         },
         {
           "type": "null"

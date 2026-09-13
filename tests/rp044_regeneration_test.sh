@@ -37,7 +37,7 @@ rg --quiet --fixed-strings 'REGEN_LK_CONFIG:-configs/nowcast/prelaunch-pysteps-l
 rg --quiet -- "--output-root '\{staging_root\}'" scripts/regenerate_forecasts.sh
 rg --quiet '^    RegenerationRequest:' contracts/openapi.yaml
 rg --quiet 'manual-regeneration/' services/control/internal/orchestration/service.go
-rg --quiet 'outsideForecastLookback' services/control/cmd/orchestrator/planner.go
+rg --quiet 'outsideForecastLookback' services/control/internal/controlplane/planner.go
 rg --quiet -- '--force' scripts/backfill_historical_steps.py
 rg --quiet 'prune_cycle_versions' scripts/backfill_fujian_nowcastnet_shadow.py
 rg --quiet 'DROP CONSTRAINT IF EXISTS nowcast_input_runs_issue_time_grid_id_preprocess_version_ga_key' \

@@ -9,6 +9,8 @@ import numpy as np
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
+from .paper_profile import LiteratureConfig
+
 
 class FrozenConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
@@ -209,7 +211,10 @@ class RFIObjectConfig(FrozenConfig):
         if self.peripheral_confirm_score < self.peripheral_quarantine_score:
             raise ValueError("peripheral confirmation score must not be below quarantine score")
         if self.high_rho_confirm_requires_independent_score < self.peripheral_confirm_score:
-            raise ValueError("high-correlation confirmation must be at least as strict as peripheral confirmation")
+            raise ValueError(
+                "high-correlation confirmation must be at least as strict as "
+                "peripheral confirmation"
+            )
         return self
 
 
@@ -238,8 +243,12 @@ class OpenSourceQCProfile(FrozenConfig):
     schema_version: Literal["1.1"] = "1.1"
     engine: Literal["open_source"] = "open_source"
     profile_version: str = "fujian-qc-opensource-v1"
-    pipeline_version: Literal["qc-opensource-1.0.0", "qc-opensource-2.0.0", "qc-opensource-3.0.0"] = "qc-opensource-1.0.0"
-    decision_version: Literal["type-specific-v1", "rfi-objects-v2", "rfi-objects-v3"] = "type-specific-v1"
+    pipeline_version: Literal[
+        "qc-opensource-1.0.0", "qc-opensource-2.0.0", "qc-opensource-3.0.0", "qc-opensource-4.0.0"
+    ] = "qc-opensource-1.0.0"
+    decision_version: Literal[
+        "type-specific-v1", "rfi-objects-v2", "rfi-objects-v3", "paper-fusion-v4"
+    ] = "type-specific-v1"
     flag_definition_version: Literal["qc-flags-v2"] = "qc-flags-v2"
     operational_eligible: Literal[False] = False
     arm_pyart_version: Literal["2.2.5"] = "2.2.5"
@@ -254,6 +263,7 @@ class OpenSourceQCProfile(FrozenConfig):
     wradlib: WradlibConfig = Field(default_factory=WradlibConfig)
     rfi: RFIConfig = Field(default_factory=RFIConfig)
     rfi_objects: RFIObjectConfig | None = None
+    literature: LiteratureConfig | None = None
     phase: PhaseConfig = Field(default_factory=PhaseConfig)
     context: ContextConfig = Field(default_factory=ContextConfig)
     _flag_masks: dict[str, np.uint32] = PrivateAttr(default_factory=dict)
@@ -268,6 +278,8 @@ class OpenSourceQCProfile(FrozenConfig):
         # Preserve the frozen v1 semantic identity when the new engine is absent.
         if self.rfi_objects is None:
             value.pop("rfi_objects", None)
+        if self.literature is None:
+            value.pop("literature", None)
         data = json.dumps(value, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(data.encode()).hexdigest()
 
@@ -277,6 +289,7 @@ class OpenSourceQCProfile(FrozenConfig):
             "qc-opensource-1.0.0": None,
             "qc-opensource-2.0.0": "rfi-objects-v2",
             "qc-opensource-3.0.0": "rfi-objects-v3",
+            "qc-opensource-4.0.0": "paper-fusion-v4",
         }[self.pipeline_version]
         if object_version is None:
             if self.decision_version != "type-specific-v1" or self.rfi_objects is not None:
@@ -288,6 +301,12 @@ class OpenSourceQCProfile(FrozenConfig):
                 raise ValueError("quarantine quality must be below quantitative eligibility")
             if self.rfi.enabled:
                 raise ValueError("v1 seed detector cannot be mixed with the object engine")
+        if (self.pipeline_version == "qc-opensource-4.0.0") != (self.literature is not None):
+            raise ValueError("paper fusion requires its own versioned configuration")
+        if self.literature is not None and (
+            self.literature.fusion.quarantine_quality >= self.quality_index.quantitative_minimum
+        ):
+            raise ValueError("paper quarantine cannot enter quantitative precipitation")
         if self.echo.dbzh_valid_range_dbz[0] >= self.echo.dbzh_valid_range_dbz[1]:
             raise ValueError("reflectivity bounds must increase")
         if not self.rfi.azimuth_offsets_deg or any(

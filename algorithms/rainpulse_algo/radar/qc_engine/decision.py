@@ -157,13 +157,15 @@ def decide(
         moderate_meteo = (data["METEO_SCORE_AVAILABLE_MASK"] == 1) & (
             data["METEO_SCORE"] <= getattr(cfg, "moderate_meteo_score", 0.55)
         )
-        if profile.decision_version == "rfi-objects-v3":
+        if profile.decision_version in {"rfi-objects-v3", "paper-fusion-v4"}:
             # Scores combine independent evidence families. They do not create observations;
             # they only decide how to handle measured gates already inside an object/review zone.
             v3_score += review_domain.astype("float32")
             v3_score += suspect_rho.astype("float32")
             v3_score += severe_rho.astype("float32") * 0.5
-            v3_score += (rough_structure & review_domain).astype("float32") * cfg.rough_structure_weight
+            v3_score += (rough_structure & review_domain).astype(
+                "float32"
+            ) * cfg.rough_structure_weight
             v3_score += (high_rho_self & review_domain).astype("float32") * 0.75
             v3_score += (contrast_structure & review_domain).astype("float32") * 0.5
             v3_score += (phase_texture & review_domain).astype("float32") * cfg.phase_texture_weight
@@ -171,28 +173,43 @@ def decide(
             v3_score += (rho_texture & review_domain).astype("float32") * cfg.rho_texture_weight
             v3_score += (time_support & review_domain).astype("float32") * cfg.time_support_weight
             v3_score += (moderate_meteo & review_domain).astype("float32") * cfg.meteo_score_weight
-            v3_score -= (weather & review_domain & ~severe_rho).astype("float32") * cfg.weather_conflict_penalty
+            v3_score -= (weather & review_domain & ~severe_rho).astype(
+                "float32"
+            ) * cfg.weather_conflict_penalty
             v3_score = np.maximum(v3_score, 0)
         # Time alone never creates a candidate or cancels a new severe anomaly.
         temporal_used = core & suspect_rho & reliable & time_support & ~weather & ~severe_rho
         radial_reject = core & severe_rho & reliable
         radial_reject |= temporal_used
-        if profile.decision_version == "rfi-objects-v3":
+        if profile.decision_version in {"rfi-objects-v3", "paper-fusion-v4"}:
             high_correlation = rho_available & (rho >= cfg.suspect_rhohv)
-            v3_multivariate = review_domain & reliable & ~weather & (
-                ((~high_correlation) & (v3_score >= cfg.peripheral_confirm_score))
-                | (high_correlation & (v3_score >= cfg.high_rho_confirm_requires_independent_score))
+            v3_multivariate = (
+                review_domain
+                & reliable
+                & ~weather
+                & (
+                    ((~high_correlation) & (v3_score >= cfg.peripheral_confirm_score))
+                    | (
+                        high_correlation
+                        & (v3_score >= cfg.high_rho_confirm_requires_independent_score)
+                    )
+                )
             )
             radial_reject |= v3_multivariate
-        residual_allowed = (radial | v3_peripheral_review) & reliable & rho_available & (
-            rho < cfg.residual_maximum_rhohv
+        residual_allowed = (
+            (radial | v3_peripheral_review)
+            & reliable
+            & rho_available
+            & (rho < cfg.residual_maximum_rhohv)
         )
         residual = bounded_residual(native, object_evidence, radial_reject, residual_allowed, cfg)
         radial_reject |= residual
         # Do not label an uncertain measurement as confirmed non-meteorological.
         quarantine = radial & (suspect_rho | (~rho_available & time_support)) & ~radial_reject
-        if profile.decision_version == "rfi-objects-v3":
-            quarantine |= review_domain & ~radial_reject & (v3_score >= cfg.peripheral_quarantine_score)
+        if profile.decision_version in {"rfi-objects-v3", "paper-fusion-v4"}:
+            quarantine |= (
+                review_domain & ~radial_reject & (v3_score >= cfg.peripheral_quarantine_score)
+            )
     elif object_evidence is not None:
         raise ValueError("v2 object evidence cannot be passed to a v1 profile")
     ground_reject = np.zeros(shape, bool)

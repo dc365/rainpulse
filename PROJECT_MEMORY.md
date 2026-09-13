@@ -25,6 +25,15 @@ operational data here.
 
 ## Prelaunch convergence
 
+- Paper-comparison V4 candidate (2026-09-13) builds on merged V3 `50781c2`.
+  See `docs/radar-qc-opensource/PAPER_COMPARISON_V4.md`. It adds parameterized
+  AFL/full-ray and AFL-local, a strict external RDD result boundary (native RDD
+  is NOT implemented), and additive measurement fusion. Figure knots and
+  unspecified AFL thresholds are explicit assumptions, not official SWAN code.
+  Same frozen V3 task/context comparison, per-case labeling, duplicate-scan and
+  split-leakage checks, QC-review JSON and optional same-palette PPI export.
+  Default deployment and promotion remain unchanged; real-weather replay pending.
+
 - 2026-09-13 latest test deployment: RFI Objects V3 is on local main and 105,
   superseding the V2 deployment below. Commits: 9d47305 integration, b42ad55
   Worker contract/geometry fixes, fa8c03b failed-scan regeneration recovery,

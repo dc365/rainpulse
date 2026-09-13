@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Externally computed RDD gate reference (not author-code authentication)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "algorithm",
+    "source_doi",
+    "input_sha256",
+    "geometry_sha256",
+    "sweep",
+    "ordering",
+    "granularity",
+    "interpolated",
+    "implementation_revision",
+    "parameters_sha256",
+    "review_record",
+    "mask_file",
+    "mask_sha256"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "rainpulse.rdd-reference.v1"
+    },
+    "algorithm": {
+      "const": "RDD"
+    },
+    "source_doi": {
+      "const": "10.16032/j.issn.1004-4965.2022.073"
+    },
+    "input_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "geometry_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "sweep": {
+      "type": "string",
+      "pattern": "^sweep_[0-9]+$"
+    },
+    "ordering": {
+      "const": "source_ray_gate"
+    },
+    "granularity": {
+      "const": "gate"
+    },
+    "interpolated": {
+      "const": false
+    },
+    "implementation_revision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "parameters_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "review_record": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mask_file": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mask_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  }
+}

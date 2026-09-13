@@ -680,6 +680,7 @@ def apply_basic_qc(
     phase_processing_profile: PhaseProcessingProfile | None = None,
     attenuation_profile: AttenuationProfile | None = None,
     created_at: datetime | None = None,
+    paper_references_by_sweep: dict[str, Any] | None = None,
 ) -> QCResult:
     if getattr(profile, "engine", None) == "open_source":
         from .qc_engine.runner import run_open_source_qc
@@ -690,7 +691,10 @@ def apply_basic_qc(
             radial_context=radial_context, radar_beam_context=radar_beam_context,
             phase_processing_profile=phase_processing_profile,
             attenuation_profile=attenuation_profile, created_at=created_at,
+            paper_references_by_sweep=paper_references_by_sweep,
         )
+    if paper_references_by_sweep:
+        raise QCInputError("paper references cannot be mixed with legacy QC")
     if "health/summary.json" not in normalized_objects:
         raise QCInputError("normalized volume has no RP-007 health summary")
     health = json.loads(normalized_objects["health/summary.json"])

@@ -88,3 +88,7 @@ uv run --project algorithms python -m rainpulse_algo.radar.qc_engine.review \
 原冻结身份测试仍引用已移动的 `cmd/orchestrator/planner.go`，改为当前 `internal/controlplane/planner.go`，保留原断言。若干既有 Python 超长行只做格式整理。累计量 hook 去掉效果中的同步状态清零，并将一次请求的完成计数限定在该请求，避免 StrictMode/重新启用时累积旧计数。旧 NowcastNet 时间适配新增纯格式换行，不改数值。
 
 测试和构建记录见最终交付报告；软件回归通过不取代真实雷达与内网验收。
+
+## Paper comparison candidate V4
+
+See [PAPER_COMPARISON_V4.md](PAPER_COMPARISON_V4.md). AFL formulas are implemented with explicit parameter uncertainty; RDD is a verified external-result interface, not a native reproduction. No deployment or real-weather promotion is implied.

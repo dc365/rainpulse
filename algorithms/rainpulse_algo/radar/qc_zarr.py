@@ -232,8 +232,16 @@ def _build_qc_zarr_store_objects(
                 write_empty_chunks=settings.write_empty_chunks,
             )
             array.attrs.update(_field_attributes(name))
-            if name == "QC_DECISION_REASON" and result.profile.decision_version in {"rfi-objects-v2", "rfi-objects-v3"}:
-                array.attrs["definition"] = f"{result.profile.decision_version}-reason-bits"
+            if name == "QC_DECISION_REASON" and result.profile.decision_version in {
+                "rfi-objects-v2",
+                "rfi-objects-v3",
+                "paper-fusion-v4",
+            }:
+                array.attrs["definition"] = (
+                    "rfi-objects-v3-reason-bits"
+                    if result.profile.decision_version == "paper-fusion-v4"
+                    else f"{result.profile.decision_version}-reason-bits"
+                )
 
     output_store["qc/summary.json"] = result.summary_bytes()
     zarr.consolidate_metadata(output_store)
@@ -411,6 +419,31 @@ def _environment_flag(name: str, *, default: bool) -> bool:
 
 
 def _field_attributes(name: str) -> dict[str, Any]:
+    if name == "PAPER_DECISION_REASON":
+        from .qc_engine.paper_fusion import LiteratureReason
+
+        return {
+            "units": "1",
+            "definition": "paper-fusion-v1-reason-bits",
+            "bits": {flag.name: int(flag) for flag in LiteratureReason},
+        }
+    if name in {"AFL_SCORE", "AFL_LOCAL_SCORE"}:
+        return {
+            "units": "1",
+            "valid_range": [0, 1],
+            "missing_value": "NaN",
+            "score_semantics": "parameterized_membership_not_calibrated_probability",
+        }
+    if name in {"AFL_R_REF_PCT", "AFL_LOCAL_R_REF_PCT"}:
+        return {"units": "%", "valid_range": [0, 100], "missing_value": "NaN"}
+    if name == "AFL_T_DBZ_DB2":
+        return {"units": "dB2", "definition": "mean_11_adjacent_squared_differences"}
+    if name in {"AFL_D_B_DB", "AFL_LOCAL_D_B_DB"}:
+        return {"units": "dB", "definition": "signed_B_minus_tail_mean"}
+    if name == "AFL_S_PIN":
+        return {"units": "1", "valid_range": [0, 11]}
+    if name == "PAPER_PHASE_BAD_PAIR_FRACTION":
+        return {"units": "1", "valid_range": [0, 1], "missing_value": "NaN"}
     if name == "RFI_RISK_STATE":
         return {
             "units": "1",

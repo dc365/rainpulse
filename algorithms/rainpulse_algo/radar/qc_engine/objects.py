@@ -152,7 +152,9 @@ def radial_objects(native: NativeSweep, config: RFIObjectConfig) -> ObjectEviden
                 >= config.self_signature_minimum_growth_db
             )
             low_fraction = float(low[ray, idx].mean())
-            rough_fraction = float(rough[ray, idx].mean()) if config.rough_candidate_enabled else 0.0
+            rough_fraction = (
+                float(rough[ray, idx].mean()) if config.rough_candidate_enabled else 0.0
+            )
             classic_self_signature = bool(
                 base_self and low_fraction >= config.self_signature_minimum_low_rho_fraction
             )
@@ -173,7 +175,18 @@ def radial_objects(native: NativeSweep, config: RFIObjectConfig) -> ObjectEviden
             if len(intervals) >= config.maximum_segments:
                 raise ValueError("RFI object segment budget exceeded; no partial QC is published")
             by_ray[ray].append(len(intervals))
-            intervals.append((ray, start, end, count, self_signature, has_contrast, rough_segment, high_rho_self_signature))
+            intervals.append(
+                (
+                    ray,
+                    start,
+                    end,
+                    count,
+                    self_signature,
+                    has_contrast,
+                    rough_segment,
+                    high_rho_self_signature,
+                )
+            )
     parents = list(range(len(intervals)))
 
     def find(i):
@@ -326,7 +339,9 @@ def radial_objects(native: NativeSweep, config: RFIObjectConfig) -> ObjectEviden
                     record["range_end_m"] = max(record["range_end_m"], float(native.ranges[gate]))
     if config.peripheral_review_enabled and np.any(ids > 0):
         range_radius = max(1, int(np.floor(config.peripheral_range_m / dr)))
-        ray_radius = max(0, int(np.ceil(config.peripheral_azimuth_deg / native.audit["azimuth_spacing_deg"])))
+        ray_radius = max(
+            0, int(np.ceil(config.peripheral_azimuth_deg / native.audit["azimuth_spacing_deg"]))
+        )
         structure = np.ones((2 * ray_radius + 1, 2 * range_radius + 1), dtype=bool)
         halo = ndimage.binary_dilation(ids > 0, structure=structure) if structure.size else ids > 0
         peripheral_mask = halo & (ids == 0) & echo & axial & ~protected
