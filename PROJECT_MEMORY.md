@@ -1,6 +1,6 @@
 # RainPulse Project Memory
 
-Updated: 2026-09-13 (Asia/Taipei)
+Updated: 2026-09-14 (Asia/Taipei)
 
 This file is the concise handoff for a new Codex session. Stable engineering
 rules remain in `AGENTS.md`; implementation details remain in the referenced RP
@@ -24,6 +24,14 @@ operational data here.
   unless the user explicitly asks.
 
 ## Prelaunch convergence
+
+- 2026-09-14: Residual V6 integrated on main as `0614a62` and deployed to 105.
+  QC `qc-opensource-6.0.0` and diagnostics renderer `1.2.0` switched together
+  in the native planner and 14 workers. 08:30 rerun SUCCEEDED/PUBLISHED
+  (665 seconds); 08:45 queued in the same background script. Partial fragment
+  reduction observed at 08:15, major radial artifacts remain; not accepted.
+  See `docs/radar-qc-opensource/RESIDUAL_V6_105_RESULTS_20260914.md`.
+  V6 source package/ZIP remain untracked user inputs, excluded from commits.
 
 - V6 residual candidate package is based on upstream e7a835f (V5 integrated).
   See `docs/radar-qc-opensource/RESIDUAL_V6.md`. Frozen V5 decisions are embedded;
