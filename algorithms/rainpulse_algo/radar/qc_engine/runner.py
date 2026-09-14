@@ -10,11 +10,13 @@ from ..qc_geometry import build_vertical_consistency_diagnostics
 from ..qc_input import open_qc_input
 from .adapters import adapt_sweep
 from .algorithms import library_evidence
+from .crossradar import fuse_crossradar, sweep_funnel
 from .decision import Action, decide
 from .objects import radial_objects
 from .paper_fusion import fuse_paper_decision, paper_evidence
 from .phase import process_phase
 from .radial import local_radial_candidates
+from .range_signature import range_signatures
 
 QI_NAMES = (
     "QI_METEO",
@@ -163,12 +165,25 @@ def run_open_source_qc(
                     else None
                 ),
             )
+        range_evidence = None
+        baseline_quality = decision.quality.copy() if profile.cross_radar is not None else None
+        if profile.cross_radar is not None:
+            range_evidence = range_signatures(sweep, profile.cross_radar)
+            decision = fuse_crossradar(
+                sweep, decision, range_evidence, profile, weather_support=weather
+            )
         phase, phase_record = process_phase(
             sweep, decision.arrays, profile, context.get("environment")
         )
         quality = decision.quality.copy()
         if health["health"] == "DEGRADED":
             quality *= profile.health_gate.degraded_quality_multiplier
+            if baseline_quality is not None:
+                baseline_quality *= profile.health_gate.degraded_quality_multiplier
+        if baseline_quality is not None:
+            decision.arrays["V5_BASELINE_ELIGIBLE_MASK"] &= (
+                baseline_quality >= profile.quality_index.quantitative_minimum
+            ).astype("uint8")
         observed = sweep.field_available["DBZH"]
         low = observed & (quality < profile.quality_index.low_quality_threshold)
         flags = decision.flags.copy()
@@ -247,6 +262,14 @@ def run_open_source_qc(
                     ),
                 }
                 if papers is not None
+                else {}
+            ),
+            **(
+                {
+                    "cross_radar": range_evidence.summary,
+                    "decision_funnel": sweep_funnel(sweep, decision.arrays, profile.cross_radar),
+                }
+                if range_evidence is not None
                 else {}
             ),
             "input_audit": sweep.audit,

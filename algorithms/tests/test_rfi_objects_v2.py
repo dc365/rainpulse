@@ -194,6 +194,7 @@ def test_v1_parameter_identity_is_unchanged():
     data = old.model_dump(mode="json")
     data.pop("rfi_objects", None)
     data.pop("literature", None)
+    data.pop("cross_radar", None)  # Absent future extensions are not a frozen V1 input.
     assert (
         old.parameters_hash
         == hashlib.sha256(

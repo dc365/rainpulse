@@ -344,6 +344,223 @@
       "title": "ContextConfig",
       "type": "object"
     },
+    "CrossRadarConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "method": {
+          "const": "capability-range-signature-v5",
+          "default": "capability-range-signature-v5",
+          "title": "Method",
+          "type": "string"
+        },
+        "minimum_range_m": {
+          "default": 20000,
+          "minimum": 1000,
+          "title": "Minimum Range M",
+          "type": "number"
+        },
+        "minimum_echo_dbz": {
+          "default": 10.0,
+          "title": "Minimum Echo Dbz",
+          "type": "number"
+        },
+        "minimum_span_m": {
+          "default": 100000,
+          "minimum": 30000,
+          "title": "Minimum Span M",
+          "type": "number"
+        },
+        "minimum_measured_length_m": {
+          "default": 80000,
+          "minimum": 20000,
+          "title": "Minimum Measured Length M",
+          "type": "number"
+        },
+        "minimum_growth_db": {
+          "default": 10,
+          "minimum": 3,
+          "title": "Minimum Growth Db",
+          "type": "number"
+        },
+        "minimum_log_range_span_db": {
+          "default": 8,
+          "minimum": 3,
+          "title": "Minimum Log Range Span Db",
+          "type": "number"
+        },
+        "minimum_high_dbz": {
+          "default": 45.0,
+          "title": "Minimum High Dbz",
+          "type": "number"
+        },
+        "minimum_high_fraction": {
+          "default": 0.6,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Minimum High Fraction",
+          "type": "number"
+        },
+        "maximum_gap_m": {
+          "default": 1000,
+          "maximum": 5000,
+          "minimum": 0,
+          "title": "Maximum Gap M",
+          "type": "number"
+        },
+        "maximum_gap_fraction": {
+          "default": 0.1,
+          "maximum": 0.25,
+          "minimum": 0,
+          "title": "Maximum Gap Fraction",
+          "type": "number"
+        },
+        "residual_p90_db": {
+          "default": 2.5,
+          "exclusiveMinimum": 0,
+          "maximum": 8,
+          "title": "Residual P90 Db",
+          "type": "number"
+        },
+        "gate_residual_db": {
+          "default": 3.5,
+          "exclusiveMinimum": 0,
+          "maximum": 12,
+          "title": "Gate Residual Db",
+          "type": "number"
+        },
+        "minimum_fit_span_m": {
+          "default": 50000,
+          "minimum": 10000,
+          "title": "Minimum Fit Span M",
+          "type": "number"
+        },
+        "minimum_fit_samples": {
+          "default": 30,
+          "minimum": 10,
+          "title": "Minimum Fit Samples",
+          "type": "integer"
+        },
+        "minimum_plateau_length_m": {
+          "default": 20000,
+          "minimum": 5000,
+          "title": "Minimum Plateau Length M",
+          "type": "number"
+        },
+        "plateau_tolerance_db": {
+          "default": 0.26,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Plateau Tolerance Db",
+          "type": "number"
+        },
+        "numeric_plateau_spread_db": {
+          "default": 0.02,
+          "exclusiveMinimum": 0,
+          "maximum": 0.1,
+          "title": "Numeric Plateau Spread Db",
+          "type": "number"
+        },
+        "plateau_minimum_dbz": {
+          "default": 60,
+          "minimum": 40,
+          "title": "Plateau Minimum Dbz",
+          "type": "number"
+        },
+        "maximum_width_deg": {
+          "default": 70,
+          "exclusiveMaximum": 180,
+          "exclusiveMinimum": 0,
+          "title": "Maximum Width Deg",
+          "type": "number"
+        },
+        "minimum_aspect": {
+          "default": 2,
+          "exclusiveMinimum": 1,
+          "title": "Minimum Aspect",
+          "type": "number"
+        },
+        "maximum_segments": {
+          "default": 20000,
+          "maximum": 100000,
+          "minimum": 1,
+          "title": "Maximum Segments",
+          "type": "integer"
+        },
+        "minimum_snr_db": {
+          "default": 8,
+          "minimum": 0,
+          "title": "Minimum Snr Db",
+          "type": "number"
+        },
+        "quarantine_quality": {
+          "default": 0.2,
+          "exclusiveMaximum": 1,
+          "minimum": 0,
+          "title": "Quarantine Quality",
+          "type": "number"
+        },
+        "single_field_action": {
+          "default": "quarantine",
+          "enum": [
+            "quarantine",
+            "research_reject"
+          ],
+          "title": "Single Field Action",
+          "type": "string"
+        },
+        "single_field_validation_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Single Field Validation Sha256"
+        },
+        "verified_ceilings": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/VerifiedCeiling"
+          },
+          "title": "Verified Ceilings",
+          "type": "array"
+        },
+        "paper_gap_m": {
+          "default": 1000,
+          "maximum": 3000,
+          "minimum": 0,
+          "title": "Paper Gap M",
+          "type": "number"
+        },
+        "paper_gap_fraction": {
+          "default": 0.15,
+          "maximum": 0.25,
+          "minimum": 0,
+          "title": "Paper Gap Fraction",
+          "type": "number"
+        },
+        "distance_bands_m": {
+          "default": [
+            0,
+            100000,
+            200000,
+            300000,
+            500000
+          ],
+          "items": {
+            "type": "number"
+          },
+          "title": "Distance Bands M",
+          "type": "array"
+        }
+      },
+      "title": "CrossRadarConfig",
+      "type": "object"
+    },
     "Curve": {
       "additionalProperties": false,
       "properties": {
@@ -1261,6 +1478,52 @@
       "title": "SeaConfig",
       "type": "object"
     },
+    "VerifiedCeiling": {
+      "additionalProperties": false,
+      "properties": {
+        "radar_config_version": {
+          "minLength": 1,
+          "title": "Radar Config Version",
+          "type": "string"
+        },
+        "sweep": {
+          "pattern": "^sweep_\\d{3}$",
+          "title": "Sweep",
+          "type": "string"
+        },
+        "value_dbz": {
+          "maximum": 80,
+          "minimum": 40,
+          "title": "Value Dbz",
+          "type": "number"
+        },
+        "source_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Sha256",
+          "type": "string"
+        },
+        "evidence_uri": {
+          "minLength": 1,
+          "title": "Evidence Uri",
+          "type": "string"
+        },
+        "semantics": {
+          "const": "verified_reflectivity_output_ceiling",
+          "title": "Semantics",
+          "type": "string"
+        }
+      },
+      "required": [
+        "radar_config_version",
+        "sweep",
+        "value_dbz",
+        "source_sha256",
+        "evidence_uri",
+        "semantics"
+      ],
+      "title": "VerifiedCeiling",
+      "type": "object"
+    },
     "WradlibConfig": {
       "additionalProperties": false,
       "properties": {
@@ -1368,7 +1631,8 @@
         "qc-opensource-1.0.0",
         "qc-opensource-2.0.0",
         "qc-opensource-3.0.0",
-        "qc-opensource-4.0.0"
+        "qc-opensource-4.0.0",
+        "qc-opensource-5.0.0"
       ],
       "title": "Pipeline Version",
       "type": "string"
@@ -1379,7 +1643,8 @@
         "type-specific-v1",
         "rfi-objects-v2",
         "rfi-objects-v3",
-        "paper-fusion-v4"
+        "paper-fusion-v4",
+        "crossradar-v5"
       ],
       "title": "Decision Version",
       "type": "string"
@@ -1450,6 +1715,17 @@
       "anyOf": [
         {
           "$ref": "#/$defs/LiteratureConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "cross_radar": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CrossRadarConfig"
         },
         {
           "type": "null"

@@ -1,0 +1,133 @@
+{
+  "$defs": {
+    "FrozenArtifact": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "uri": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Uri",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "uri"
+      ],
+      "title": "FrozenArtifact",
+      "type": "object"
+    },
+    "FrozenFile": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "title": "FrozenFile",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "rainpulse.qc-network-case.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "case_id": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Case Id",
+      "type": "string"
+    },
+    "partition": {
+      "enum": [
+        "development",
+        "validation"
+      ],
+      "title": "Partition",
+      "type": "string"
+    },
+    "process_id": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Process Id",
+      "type": "string"
+    },
+    "data_kind": {
+      "enum": [
+        "real",
+        "synthetic"
+      ],
+      "title": "Data Kind",
+      "type": "string"
+    },
+    "task": {
+      "$ref": "#/$defs/FrozenFile"
+    },
+    "baseline_profile": {
+      "$ref": "#/$defs/FrozenFile"
+    },
+    "candidate_profile": {
+      "$ref": "#/$defs/FrozenFile"
+    },
+    "flags": {
+      "$ref": "#/$defs/FrozenFile"
+    },
+    "artifacts": {
+      "items": {
+        "$ref": "#/$defs/FrozenArtifact"
+      },
+      "maxItems": 7,
+      "minItems": 1,
+      "title": "Artifacts",
+      "type": "array"
+    },
+    "labels": {
+      "additionalProperties": {
+        "$ref": "#/$defs/FrozenFile"
+      },
+      "title": "Labels",
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "case_id",
+    "partition",
+    "process_id",
+    "data_kind",
+    "task",
+    "baseline_profile",
+    "candidate_profile",
+    "flags",
+    "artifacts"
+  ],
+  "title": "NetworkCaseManifest",
+  "type": "object"
+}

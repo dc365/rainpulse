@@ -60,3 +60,28 @@ it('shows missing RDD as not executed and keeps AFL candidates separate from fin
   expect(screen.getByText('候选掩码预览', { exact: false })).toBeTruthy()
   expect(screen.queryByText('原始缺测')).toBeNull()
 })
+
+it('shows v5 uncertainty and insufficient network evidence without promoting it', async () => {
+  render(<QCReviewWorkspace />)
+  const sample = structuredClone(report)
+  const sweep = sample.cases[0].sweeps[0]
+  Object.assign(sample, { network_gate: { status: 'INSUFFICIENT', missing_radars: ['Z_TEST'], groups: [] } })
+  Object.assign(sweep.radials[0], { variants: {
+    v4: sweep.radials[0].fields,
+    v5: { ...sweep.radials[0].fields, QC_ACTION: [1, 3], DBZH_USABLE: [null, null],
+      V5_CAPABILITY_CODE: [3, 0], V5_RANGE_MODEL_CODE: [3, 0],
+      V5_QUARANTINED_ADDITION_MASK: [1, 0], RFI_RISK_STATE: [2, 0] },
+  } })
+  upload(sample)
+  await waitFor(() => expect(screen.getByText('新增疑似隔离 · 非确认')).toBeTruthy())
+  expect(screen.getByText('未核实数值平台')).toBeTruthy()
+  expect(screen.getByText('逐站最差组检查：资料不足，不能通过')).toBeTruthy()
+  fireEvent.change(screen.getByLabelText('检查算法'), { target: { value: 'v4' } })
+  expect(screen.queryByText('新增疑似隔离 · 非确认')).toBeNull()
+})
+
+it('rejects malformed network metadata instead of crashing the review page', async () => {
+  render(<QCReviewWorkspace />)
+  upload({ ...report, network_gate: { status: 'PASS', missing_radars: null, groups: [] } })
+  await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('跨站验收摘要'))
+})

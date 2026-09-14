@@ -1,0 +1,129 @@
+{
+  "$defs": {
+    "FrozenFile": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "title": "FrozenFile",
+      "type": "object"
+    },
+    "NetworkLimits": {
+      "additionalProperties": false,
+      "properties": {
+        "minimum_weather_gates": {
+          "default": 100,
+          "minimum": 1,
+          "title": "Minimum Weather Gates",
+          "type": "integer"
+        },
+        "minimum_interference_gates": {
+          "default": 100,
+          "minimum": 1,
+          "title": "Minimum Interference Gates",
+          "type": "integer"
+        },
+        "minimum_processes": {
+          "default": 2,
+          "minimum": 1,
+          "title": "Minimum Processes",
+          "type": "integer"
+        },
+        "minimum_recall": {
+          "default": 0.9,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Minimum Recall",
+          "type": "number"
+        },
+        "maximum_false_reject": {
+          "default": 0.01,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Maximum False Reject",
+          "type": "number"
+        },
+        "maximum_strong_weather_loss": {
+          "default": 0.005,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Maximum Strong Weather Loss",
+          "type": "number"
+        },
+        "maximum_weather_withheld": {
+          "default": 0.02,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Maximum Weather Withheld",
+          "type": "number"
+        },
+        "maximum_recall_regression": {
+          "default": 0,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Maximum Recall Regression",
+          "type": "number"
+        },
+        "maximum_weather_loss_increase": {
+          "default": 0.001,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Maximum Weather Loss Increase",
+          "type": "number"
+        }
+      },
+      "title": "NetworkLimits",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "rainpulse.qc-network.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "cases": {
+      "items": {
+        "$ref": "#/$defs/FrozenFile"
+      },
+      "maxItems": 32,
+      "minItems": 1,
+      "title": "Cases",
+      "type": "array"
+    },
+    "expected_radars": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 128,
+      "minItems": 1,
+      "title": "Expected Radars",
+      "type": "array"
+    },
+    "limits": {
+      "$ref": "#/$defs/NetworkLimits"
+    }
+  },
+  "required": [
+    "schema_version",
+    "cases",
+    "expected_radars"
+  ],
+  "title": "NetworkManifest",
+  "type": "object"
+}

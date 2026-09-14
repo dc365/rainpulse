@@ -410,3 +410,7 @@ test-qc-rfi-objects:
 # Native library adapters and full frozen-input comparison, not mock-only tests.
 test-qc-paper-comparison:
 	uv run --project algorithms pytest algorithms/tests/test_qc_paper_algorithms.py algorithms/tests/test_qc_paper_comparison.py
+
+.PHONY: test-qc-crossradar-v5
+test-qc-crossradar-v5:
+	uv run --project algorithms pytest algorithms/tests/test_crossradar_v5.py algorithms/tests/test_crossradar_network.py

@@ -9,6 +9,7 @@ import numpy as np
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
+from .crossradar_profile import CrossRadarConfig
 from .paper_profile import LiteratureConfig
 
 
@@ -244,10 +245,14 @@ class OpenSourceQCProfile(FrozenConfig):
     engine: Literal["open_source"] = "open_source"
     profile_version: str = "fujian-qc-opensource-v1"
     pipeline_version: Literal[
-        "qc-opensource-1.0.0", "qc-opensource-2.0.0", "qc-opensource-3.0.0", "qc-opensource-4.0.0"
+        "qc-opensource-1.0.0",
+        "qc-opensource-2.0.0",
+        "qc-opensource-3.0.0",
+        "qc-opensource-4.0.0",
+        "qc-opensource-5.0.0",
     ] = "qc-opensource-1.0.0"
     decision_version: Literal[
-        "type-specific-v1", "rfi-objects-v2", "rfi-objects-v3", "paper-fusion-v4"
+        "type-specific-v1", "rfi-objects-v2", "rfi-objects-v3", "paper-fusion-v4", "crossradar-v5"
     ] = "type-specific-v1"
     flag_definition_version: Literal["qc-flags-v2"] = "qc-flags-v2"
     operational_eligible: Literal[False] = False
@@ -264,6 +269,7 @@ class OpenSourceQCProfile(FrozenConfig):
     rfi: RFIConfig = Field(default_factory=RFIConfig)
     rfi_objects: RFIObjectConfig | None = None
     literature: LiteratureConfig | None = None
+    cross_radar: CrossRadarConfig | None = None
     phase: PhaseConfig = Field(default_factory=PhaseConfig)
     context: ContextConfig = Field(default_factory=ContextConfig)
     _flag_masks: dict[str, np.uint32] = PrivateAttr(default_factory=dict)
@@ -280,6 +286,8 @@ class OpenSourceQCProfile(FrozenConfig):
             value.pop("rfi_objects", None)
         if self.literature is None:
             value.pop("literature", None)
+        if self.cross_radar is None:
+            value.pop("cross_radar", None)
         data = json.dumps(value, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(data.encode()).hexdigest()
 
@@ -290,6 +298,7 @@ class OpenSourceQCProfile(FrozenConfig):
             "qc-opensource-2.0.0": "rfi-objects-v2",
             "qc-opensource-3.0.0": "rfi-objects-v3",
             "qc-opensource-4.0.0": "paper-fusion-v4",
+            "qc-opensource-5.0.0": "crossradar-v5",
         }[self.pipeline_version]
         if object_version is None:
             if self.decision_version != "type-specific-v1" or self.rfi_objects is not None:
@@ -301,12 +310,21 @@ class OpenSourceQCProfile(FrozenConfig):
                 raise ValueError("quarantine quality must be below quantitative eligibility")
             if self.rfi.enabled:
                 raise ValueError("v1 seed detector cannot be mixed with the object engine")
-        if (self.pipeline_version == "qc-opensource-4.0.0") != (self.literature is not None):
+        if (self.pipeline_version in {"qc-opensource-4.0.0", "qc-opensource-5.0.0"}) != (
+            self.literature is not None
+        ):
             raise ValueError("paper fusion requires its own versioned configuration")
         if self.literature is not None and (
             self.literature.fusion.quarantine_quality >= self.quality_index.quantitative_minimum
         ):
             raise ValueError("paper quarantine cannot enter quantitative precipitation")
+        if (self.pipeline_version == "qc-opensource-5.0.0") != (self.cross_radar is not None):
+            raise ValueError("cross-radar evidence requires its own coordinated V5 profile")
+        if (
+            self.cross_radar
+            and self.cross_radar.quarantine_quality >= self.quality_index.quantitative_minimum
+        ):
+            raise ValueError("V5 quarantine cannot enter quantitative precipitation")
         if self.echo.dbzh_valid_range_dbz[0] >= self.echo.dbzh_valid_range_dbz[1]:
             raise ValueError("reflectivity bounds must increase")
         if not self.rfi.azimuth_offsets_deg or any(

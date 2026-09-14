@@ -236,10 +236,11 @@ def _build_qc_zarr_store_objects(
                 "rfi-objects-v2",
                 "rfi-objects-v3",
                 "paper-fusion-v4",
+                "crossradar-v5",
             }:
                 array.attrs["definition"] = (
                     "rfi-objects-v3-reason-bits"
-                    if result.profile.decision_version == "paper-fusion-v4"
+                    if result.profile.decision_version in {"paper-fusion-v4", "crossradar-v5"}
                     else f"{result.profile.decision_version}-reason-bits"
                 )
 
@@ -419,6 +420,30 @@ def _environment_flag(name: str, *, default: bool) -> bool:
 
 
 def _field_attributes(name: str) -> dict[str, Any]:
+    if name == "V5_CAPABILITY_CODE":
+        return {
+            "units": "1",
+            "comment": "0:unobserved,1:reflectivity_only,2:partial_pol,3:reliable_pol_snr",
+        }
+    if name == "V5_RANGE_MODEL_CODE":
+        return {
+            "units": "1",
+            "comment": "0:none,1:log_distance,2:verified_ceiling,3:unverified_numeric_plateau",
+        }
+    if name == "V5_DECISION_REASON":
+        from .qc_engine.crossradar import Reason
+
+        return {
+            "units": "1",
+            "flag_masks": [int(x) for x in Reason],
+            "flag_meanings": " ".join(x.name.lower() for x in Reason),
+        }
+    if name.startswith("V5_RANGE_") and name.endswith("_DB"):
+        return {"units": "dB", "comment": "measurement signature diagnostic, not a correction"}
+    if name == "V5_RANGE_SPAN_M":
+        return {"units": "m"}
+    if name == "V5_RANGE_OBJECT_ID":
+        return {"units": "1", "comment": "sweep-local hypothesis ID; zero denotes no membership"}
     if name == "PAPER_DECISION_REASON":
         from .qc_engine.paper_fusion import LiteratureReason
 

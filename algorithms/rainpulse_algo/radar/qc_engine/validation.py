@@ -38,12 +38,14 @@ def validate_sweep(group, attrs) -> None:
     if np.any(action > Action.MISSING) or not np.array_equal(action == Action.MISSING, ~valid):
         raise ValueError("QC actions and original observation support disagree")
     quarantine = np.zeros(shape, bool)
-    version4 = attrs.get("qc_pipeline_version") == "qc-opensource-4.0.0"
+    version5 = attrs.get("qc_pipeline_version") == "qc-opensource-5.0.0"
+    version4 = version5 or attrs.get("qc_pipeline_version") == "qc-opensource-4.0.0"
     version3 = version4 or attrs.get("qc_pipeline_version") == "qc-opensource-3.0.0"
     if attrs.get("qc_pipeline_version") in {
         "qc-opensource-2.0.0",
         "qc-opensource-3.0.0",
         "qc-opensource-4.0.0",
+        "qc-opensource-5.0.0",
     }:
         for field, dtype in {
             "RFI_OBJECT_ID": "uint32",
@@ -93,7 +95,21 @@ def validate_sweep(group, attrs) -> None:
         if version4:
             from .paper_validation import validate_paper_fields
 
-            paper_domain = validate_paper_fields(group, valid, reject, quarantine)
+            if version5:
+                from .crossradar_validation import validate_crossradar_fields
+
+                extra_domain = validate_crossradar_fields(group, valid, reject, quarantine)
+                paper_domain = (
+                    validate_paper_fields(
+                        group,
+                        valid,
+                        group["V5_BASELINE_REJECT_MASK"][:] == 1,
+                        group["V5_BASELINE_QUARANTINE_MASK"][:] == 1,
+                    )
+                    | extra_domain
+                )
+            else:
+                paper_domain = validate_paper_fields(group, valid, reject, quarantine)
         if np.any((state == 3) & ~reject) or np.any(
             (state > 0) & (object_id == 0) & ~peripheral & ~paper_domain
         ):

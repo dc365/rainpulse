@@ -243,7 +243,10 @@ def test_frozen_flag_layout_cannot_be_redefined(tmp_path):
         load_qc_profile(PROFILE, bad)
 
 
-def test_new_qc_grid_mosaic_qpe_chain_preserves_generation_and_missing(tmp_path):
+@pytest.mark.parametrize(
+    "profile_name", ["fujian-qc-opensource-v1.yaml", "fujian-qc-crossradar-v5.yaml"]
+)
+def test_new_qc_grid_mosaic_qpe_chain_preserves_generation_and_missing(tmp_path, profile_name):
     from datetime import UTC, datetime
 
     from rainpulse_algo.radar.grid_zarr import build_radar_grid_zarr_store
@@ -278,7 +281,7 @@ def test_new_qc_grid_mosaic_qpe_chain_preserves_generation_and_missing(tmp_path)
         "ray_time", data=np.full(360, np.datetime64("2026-08-25T12:00:00", "ns"))
     )
     objects = {str(k): bytes(v) for k, v in store.items()}
-    qc_profile = load_qc_profile(PROFILE, FLAGS)
+    qc_profile = load_qc_profile(ROOT / "configs/qc" / profile_name, FLAGS)
     flags = qc_profile.flag_masks
     qc = apply_basic_qc(objects, qc_profile)
     qco = build_qc_zarr_store(

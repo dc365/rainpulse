@@ -25,6 +25,16 @@ operational data here.
 
 ## Prelaunch convergence
 
+- 2026-09-14: V5 cross-station capability/range-signature candidate implemented
+  on a verified snapshot of main 51ed346d (tree a18b5f11); not deployed or
+  promoted. See `docs/radar-qc-opensource/CROSSRADAR_V5.md`. Frozen V1–V4
+  profiles/hashes retained. Default new long-strong radial path quarantines
+  uncertain measurements (not confirmed truth), including unverified numeric
+  plateaus. Fixed V4-context multi-station replay rejects duplicate/split-leaked
+  inputs and distinguishes confirmed recall from withheld weather coverage.
+  Actual Z9591/Z9598 labeled replay and station resource acceptance are pending.
+
+
 - Paper-comparison V4 candidate (2026-09-13) builds on merged V3 `50781c2`.
   See `docs/radar-qc-opensource/PAPER_COMPARISON_V4.md`. It adds parameterized
   AFL/full-ray and AFL-local, a strict external RDD result boundary (native RDD

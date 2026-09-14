@@ -157,7 +157,7 @@ def decide(
         moderate_meteo = (data["METEO_SCORE_AVAILABLE_MASK"] == 1) & (
             data["METEO_SCORE"] <= getattr(cfg, "moderate_meteo_score", 0.55)
         )
-        if profile.decision_version in {"rfi-objects-v3", "paper-fusion-v4"}:
+        if profile.decision_version in {"rfi-objects-v3", "paper-fusion-v4", "crossradar-v5"}:
             # Scores combine independent evidence families. They do not create observations;
             # they only decide how to handle measured gates already inside an object/review zone.
             v3_score += review_domain.astype("float32")
@@ -181,7 +181,7 @@ def decide(
         temporal_used = core & suspect_rho & reliable & time_support & ~weather & ~severe_rho
         radial_reject = core & severe_rho & reliable
         radial_reject |= temporal_used
-        if profile.decision_version in {"rfi-objects-v3", "paper-fusion-v4"}:
+        if profile.decision_version in {"rfi-objects-v3", "paper-fusion-v4", "crossradar-v5"}:
             high_correlation = rho_available & (rho >= cfg.suspect_rhohv)
             v3_multivariate = (
                 review_domain
@@ -206,7 +206,7 @@ def decide(
         radial_reject |= residual
         # Do not label an uncertain measurement as confirmed non-meteorological.
         quarantine = radial & (suspect_rho | (~rho_available & time_support)) & ~radial_reject
-        if profile.decision_version in {"rfi-objects-v3", "paper-fusion-v4"}:
+        if profile.decision_version in {"rfi-objects-v3", "paper-fusion-v4", "crossradar-v5"}:
             quarantine |= (
                 review_domain & ~radial_reject & (v3_score >= cfg.peripheral_quarantine_score)
             )

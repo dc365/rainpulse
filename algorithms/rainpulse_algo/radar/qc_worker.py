@@ -579,6 +579,7 @@ def _load_qc_geometry_resources(
         "rfi-objects-v2",
         "rfi-objects-v3",
         "paper-fusion-v4",
+        "crossradar-v5",
     }:
         return None, None, None, None
     radar_config_dir = _optional_directory("RAINPULSE_RADAR_CONFIG_DIR")
