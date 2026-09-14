@@ -282,6 +282,7 @@ def test_version_coherence_and_old_parameter_hash():
     v3 = load_qc_profile(V3, FLAGS)
     data = v3.model_dump(mode="json")
     data.pop("literature")
+    data.pop("residual", None)  # Absent V6 extension is not an old parameter.
     data.pop("cross_radar", None)
     digest = hashlib.sha256(
         json.dumps(data, sort_keys=True, separators=(",", ":")).encode()

@@ -414,3 +414,7 @@ test-qc-paper-comparison:
 .PHONY: test-qc-crossradar-v5
 test-qc-crossradar-v5:
 	uv run --project algorithms pytest algorithms/tests/test_crossradar_v5.py algorithms/tests/test_crossradar_network.py
+
+.PHONY: test-qc-residual-v6
+test-qc-residual-v6:
+	uv run --project algorithms pytest algorithms/tests/test_residual_v6.py algorithms/tests/test_residual_network_v6.py algorithms/tests/test_polar_sampling_v6.py

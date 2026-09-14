@@ -92,3 +92,11 @@ uv run --project algorithms python -m rainpulse_algo.radar.qc_engine.review \
 ## Paper comparison candidate V4
 
 See [PAPER_COMPARISON_V4.md](PAPER_COMPARISON_V4.md). AFL formulas are implemented with explicit parameter uncertainty; RDD is a verified external-result interface, not a native reproduction. No deployment or real-weather promotion is implied.
+
+## Residual V6 candidate
+
+See [RESIDUAL_V6.md](RESIDUAL_V6.md) for bounded inlier association, native narrow
+objects, raw-supported speckle review, versioned PPI footprints and frozen V5/V6
+comparison. Default and frozen V1--V5 profiles are unchanged. The optional native
+bRopo caller is not a successful native execution claim; real-weather replay and
+independent acceptance remain pending. No deployment was performed in delivery.

@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [test, lint, build, test-prelaunch, test-qc-opensource, test-qc-rfi-objects, test-qc-paper-comparison, test-qc-crossradar-v5]
+        target: [test, lint, build, test-prelaunch, test-qc-opensource, test-qc-rfi-objects, test-qc-paper-comparison, test-qc-crossradar-v5, test-qc-residual-v6]
     steps:
       - uses: actions/checkout@v5
       - name: Install system test tools

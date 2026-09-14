@@ -42,7 +42,15 @@ def counts(labels, domain, reject, eligible, dr, reflectivity_dbz=None):
     )
     residual = interference & eligible
     max_length = max((int(b - a) * dr for row in residual for a, b in runs(row)), default=0.0)
+    fragments = sum(len(runs(row)) for row in residual)
+    maximum_dbz = (
+        float(np.max(reflectivity_dbz[residual]))
+        if reflectivity_dbz is not None and residual.any()
+        else None
+    )
     return dict(
+        residual_fragment_count=int(fragments),
+        maximum_residual_dbz=maximum_dbz,
         weather=int(weather.sum()),
         interference=int(interference.sum()),
         mixed=int(mixed.sum()),
@@ -75,10 +83,17 @@ def rates(c):
 def assess_network(cases, expected_radars, limits: NetworkLimits):
     if not expected_radars or len(set(expected_radars)) != len(expected_radars):
         raise ValueError("declare distinct required radars; an empty network cannot pass")
+    pairs = {tuple(c.get("comparison_methods", ("v4", "v5"))) for c in cases}
+    if len(pairs) > 1:
+        raise ValueError("network assessment cannot mix baseline/candidate versions")
+    pair = next(iter(pairs), ("v4", "v5"))
+    if pair not in {("v4", "v5"), ("v5", "v6")}:
+        raise ValueError("unsupported network comparison versions")
+    baseline_name, candidate_name = pair
     aggregate = defaultdict(
         lambda: {
-            "v4": defaultdict(float),
-            "v5": defaultdict(float),
+            baseline_name: defaultdict(float),
+            candidate_name: defaultdict(float),
             "processes": set(),
             "weather_processes": set(),
             "interference_processes": set(),
@@ -98,18 +113,24 @@ def assess_network(cases, expected_radars, limits: NetworkLimits):
             entry = aggregate[group]
             entry["processes"].add(case["process_id"])
             for kind in ("weather", "interference"):
-                if row["v5"][kind] > 0:
+                if row[candidate_name][kind] > 0:
                     entry[kind + "_processes"].add(case["process_id"])
             entry["rows"] += 1
-            for method in ("v4", "v5"):
+            for method in pair:
                 for key, val in row[method].items():
-                    if key == "longest_residual_m":
+                    if key == "maximum_residual_dbz":
+                        before = entry[method].get(key)
+                        if val is not None:
+                            entry[method][key] = val if before is None else max(before, val)
+                        elif key not in entry[method]:
+                            entry[method][key] = None
+                    elif key == "longest_residual_m":
                         entry[method][key] = max(entry[method][key], val)
                     else:
                         entry[method][key] += val
     groups = []
     for (radar, band, cap), value in sorted(aggregate.items()):
-        old, new = rates(value["v4"]), rates(value["v5"])
+        old, new = rates(value[baseline_name]), rates(value[candidate_name])
         failures = []
         if new["weather_false_reject"] is not None:
             if new["weather_false_reject"] > limits.maximum_false_reject:
@@ -135,8 +156,8 @@ def assess_network(cases, expected_radars, limits: NetworkLimits):
         ):
             failures.append("strong_weather_coverage_loss")
         enough = (
-            value["v5"]["weather"] >= limits.minimum_weather_gates
-            and value["v5"]["interference"] >= limits.minimum_interference_gates
+            value[candidate_name]["weather"] >= limits.minimum_weather_gates
+            and value[candidate_name]["interference"] >= limits.minimum_interference_gates
             and len(value["weather_processes"]) >= limits.minimum_processes
             and len(value["interference_processes"]) >= limits.minimum_processes
         )
@@ -151,10 +172,12 @@ def assess_network(cases, expected_radars, limits: NetworkLimits):
                 process_count=len(value["processes"]),
                 weather_process_count=len(value["weather_processes"]),
                 interference_process_count=len(value["interference_processes"]),
-                v4_counts=dict(value["v4"]),
-                v5_counts=dict(value["v5"]),
-                v4=old,
-                v5=new,
+                **{
+                    baseline_name + "_counts": dict(value[baseline_name]),
+                    candidate_name + "_counts": dict(value[candidate_name]),
+                    baseline_name: old,
+                    candidate_name: new,
+                },
             )
         )
     missing = sorted(set(expected_radars) - {x["radar_id"] for x in groups})
@@ -172,6 +195,7 @@ def assess_network(cases, expected_radars, limits: NetworkLimits):
         status=status,
         operational_eligible=False,
         groups=groups,
+        comparison_methods=list(pair),
         missing_radars=missing,
         limits=limits.model_dump(),
         note="Only declared real validation cases enter gates. "

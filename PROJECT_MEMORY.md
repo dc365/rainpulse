@@ -25,6 +25,14 @@ operational data here.
 
 ## Prelaunch convergence
 
+- V6 residual candidate package is based on upstream e7a835f (V5 integrated).
+  See `docs/radar-qc-opensource/RESIDUAL_V6.md`. Frozen V5 decisions are embedded;
+  measured outlier association, narrow/interrupted candidates and original-domain
+  speckle review add traceable decisions only. Renderer 1.2.0 uses native sampling
+  footprints; earlier renderer semantics remain frozen. No source-data changes,
+  deployment, history reruns or operational promotion. Native bRopo is optional
+  and not executed locally. Real-weather / multi-station acceptance is pending.
+
 - 2026-09-14: V5 cross-station capability/range-signature candidate implemented
   on a verified snapshot of main 51ed346d (tree a18b5f11); not deployed or
   promoted. See `docs/radar-qc-opensource/CROSSRADAR_V5.md`. Frozen V1–V4

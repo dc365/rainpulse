@@ -38,7 +38,8 @@ def validate_sweep(group, attrs) -> None:
     if np.any(action > Action.MISSING) or not np.array_equal(action == Action.MISSING, ~valid):
         raise ValueError("QC actions and original observation support disagree")
     quarantine = np.zeros(shape, bool)
-    version5 = attrs.get("qc_pipeline_version") == "qc-opensource-5.0.0"
+    version6 = attrs.get("qc_pipeline_version") == "qc-opensource-6.0.0"
+    version5 = version6 or attrs.get("qc_pipeline_version") == "qc-opensource-5.0.0"
     version4 = version5 or attrs.get("qc_pipeline_version") == "qc-opensource-4.0.0"
     version3 = version4 or attrs.get("qc_pipeline_version") == "qc-opensource-3.0.0"
     if attrs.get("qc_pipeline_version") in {
@@ -46,6 +47,7 @@ def validate_sweep(group, attrs) -> None:
         "qc-opensource-3.0.0",
         "qc-opensource-4.0.0",
         "qc-opensource-5.0.0",
+        "qc-opensource-6.0.0",
     }:
         for field, dtype in {
             "RFI_OBJECT_ID": "uint32",
@@ -98,7 +100,18 @@ def validate_sweep(group, attrs) -> None:
             if version5:
                 from .crossradar_validation import validate_crossradar_fields
 
-                extra_domain = validate_crossradar_fields(group, valid, reject, quarantine)
+                if version6:
+                    from .residual_validation import validate_residual_fields
+
+                    extra_domain = validate_residual_fields(group, valid, reject, quarantine)
+                    extra_domain |= validate_crossradar_fields(
+                        group,
+                        valid,
+                        group["V6_BASELINE_REJECT_MASK"][:] == 1,
+                        group["V6_BASELINE_QUARANTINE_MASK"][:] == 1,
+                    )
+                else:
+                    extra_domain = validate_crossradar_fields(group, valid, reject, quarantine)
                 paper_domain = (
                     validate_paper_fields(
                         group,

@@ -85,3 +85,33 @@ it('rejects malformed network metadata instead of crashing the review page', asy
   upload({ ...report, network_gate: { status: 'PASS', missing_radars: null, groups: [] } })
   await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('跨站验收摘要'))
 })
+
+it('prefers v6 and traces residual decisions without substituting v5 arrays', async () => {
+  render(<QCReviewWorkspace />)
+  const sample = structuredClone(report)
+  const sweep = sample.cases[0].sweeps[0]
+  Object.assign(sweep.radials[0], { variants: {
+    v5: sweep.radials[0].fields,
+    v6: { ...sweep.radials[0].fields, QC_ACTION: [1, 3], DBZH_USABLE: [null, null],
+      V6_DECISION_REASON: [516, 0], V6_NARROW_OBJECT_ID: [7, 0], V6_NARROW_TYPE: [2, 0],
+      V6_PARENT_RAY: [0, -1], V6_PARENT_GATE: [0, -1],
+      V6_QUARANTINED_ADDITION_MASK: [1, 0], V6_CANDIDATE_MASK: [1, 0], RFI_RISK_STATE: [2, 0] },
+  } })
+  upload(sample)
+  await waitFor(() => expect(screen.getByText('V6 新增隔离 · 非确认')).toBeTruthy())
+  expect(screen.getByText('7 / 断续细线')).toBeTruthy()
+  expect(screen.getByText('0 / 0')).toBeTruthy()
+  expect(screen.getByText('窄线/断续结构；新增隔离 · 非确认')).toBeTruthy()
+  fireEvent.change(screen.getByLabelText('检查算法'), { target: { value: 'v5' } })
+  expect(screen.queryByText('V6 新增隔离 · 非确认')).toBeNull()
+  expect(screen.queryByText('V6 残留判据')).toBeNull()
+})
+
+it('rejects malformed v6 fields instead of rendering a false source trace', async () => {
+  render(<QCReviewWorkspace />)
+  const sample = structuredClone(report)
+  Object.assign(sample.cases[0].sweeps[0].radials[0], { variants: { v6: { V6_DECISION_REASON: [1] } } })
+  upload(sample)
+  await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('不一致'))
+  expect(screen.queryByRole('table')).toBeNull()
+})

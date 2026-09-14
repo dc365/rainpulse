@@ -420,12 +420,28 @@ def _environment_flag(name: str, *, default: bool) -> bool:
 
 
 def _field_attributes(name: str) -> dict[str, Any]:
-    if name == "V5_CAPABILITY_CODE":
+    if name == "V6_DECISION_REASON":
+        from .qc_engine.residual import ResidualReason
+        return {"units": "1", "flag_masks": [int(x) for x in ResidualReason],
+                "flag_meanings": " ".join(x.name.lower() for x in ResidualReason)}
+    if name in {"V6_PARENT_RAY", "V6_PARENT_GATE"}:
+        return {"units": "1", "missing_value": -1,
+                "comment": "original source index, not a filled observation"}
+    if name == "V6_NARROW_TYPE":
+        return {"units": "1", "codes": {"0":"none", "1":"continuous",
+                "2":"interrupted", "3":"short", "4":"remote"}}
+    if name.startswith("V6_") and name.endswith("_KM2"):
+        return {"units": "km2", "comment":"horizontal sampling area, not beam volume"}
+    if name.startswith("V6_") and name.endswith("_M"):
+        return {"units":"m"}
+    if name.startswith("V6_") and name.endswith("_DB"):
+        return {"units":"dB"}
+    if name in {"V5_CAPABILITY_CODE", "V6_CAPABILITY_CODE"}:
         return {
             "units": "1",
             "comment": "0:unobserved,1:reflectivity_only,2:partial_pol,3:reliable_pol_snr",
         }
-    if name == "V5_RANGE_MODEL_CODE":
+    if name in {"V5_RANGE_MODEL_CODE", "V6_RANGE_MODEL_CODE"}:
         return {
             "units": "1",
             "comment": "0:none,1:log_distance,2:verified_ceiling,3:unverified_numeric_plateau",

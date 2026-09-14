@@ -17,6 +17,7 @@ from .paper_fusion import fuse_paper_decision, paper_evidence
 from .phase import process_phase
 from .radial import local_radial_candidates
 from .range_signature import range_signatures
+from .residual import residual_decision
 
 QI_NAMES = (
     "QI_METEO",
@@ -172,6 +173,13 @@ def run_open_source_qc(
             decision = fuse_crossradar(
                 sweep, decision, range_evidence, profile, weather_support=weather
             )
+        residual_record = None
+        v5_quality = None
+        if profile.residual is not None:
+            v5_quality = decision.quality.copy()
+            decision, residual_record = residual_decision(
+                sweep, decision, profile, weather_support=weather
+            )
         phase, phase_record = process_phase(
             sweep, decision.arrays, profile, context.get("environment")
         )
@@ -183,6 +191,12 @@ def run_open_source_qc(
         if baseline_quality is not None:
             decision.arrays["V5_BASELINE_ELIGIBLE_MASK"] &= (
                 baseline_quality >= profile.quality_index.quantitative_minimum
+            ).astype("uint8")
+        if v5_quality is not None:
+            if health["health"] == "DEGRADED":
+                v5_quality *= profile.health_gate.degraded_quality_multiplier
+            decision.arrays["V6_BASELINE_ELIGIBLE_MASK"] &= (
+                v5_quality >= profile.quality_index.quantitative_minimum
             ).astype("uint8")
         observed = sweep.field_available["DBZH"]
         low = observed & (quality < profile.quality_index.low_quality_threshold)
@@ -251,6 +265,7 @@ def run_open_source_qc(
             )
         )
         sweep_records[sweep.name] = {
+            **({"residual_v6": residual_record} if residual_record is not None else {}),
             **(
                 {
                     "literature": papers.metadata,

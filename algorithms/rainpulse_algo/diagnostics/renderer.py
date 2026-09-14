@@ -80,7 +80,7 @@ BUSINESS_HARD_REJECT_FLAG_NAMES = (
     "BIOLOGICAL_ECHO",
 )
 BUSINESS_REFLECTIVITY_MASK_RENDERERS = frozenset(
-    {"radar-diagnostic-renderer-1.1.0"}
+    {"radar-diagnostic-renderer-1.1.0", "radar-diagnostic-renderer-1.2.0"}
 )
 
 
@@ -202,6 +202,9 @@ def build_diagnostic_bundle(
         )
     )
 
+    measured_footprint = profile.renderer_version == "radar-diagnostic-renderer-1.2.0"
+    projector = _polar_to_ppi if measured_footprint else _polar_to_ppi_legacy
+    sampling_version = "native-footprint-v2" if measured_footprint else None
     seen_radars: set[str] = set()
     for radar_id, scan_id, qc_objects in radar_inputs:
         normalized_id = _slug(radar_id)
@@ -258,7 +261,7 @@ def build_diagnostic_bundle(
                         raise DiagnosticInputError("v2 QC lacks quantitative eligibility")
                     field_valid &= group["QPE_ELIGIBLE_MASK"][:] == 1
             rgba = _scalar_rgba(group[field][:], field_valid, stops)
-            projected = _polar_to_ppi(
+            projected = projector(
                 rgba,
                 group["azimuth"][:],
                 group["range"][:],
@@ -270,6 +273,7 @@ def build_diagnostic_bundle(
                     layer_id=f"radar-{normalized_id}-{suffix}",
                     title=f"{radar_id.upper()} · {title}",
                     scope="polar",
+                    sampling_version=sampling_version,
                     field=field,
                     rendering=rendering,
                     unit=unit,
@@ -290,10 +294,11 @@ def build_diagnostic_bundle(
                 layer_id=f"radar-{normalized_id}-qc-flags",
                 title=f"{radar_id.upper()} · 质控标志",
                 scope="polar",
+                sampling_version=sampling_version,
                 field="QC_FLAGS",
                 rendering="flags",
                 unit=None,
-                rgba=_polar_to_ppi(
+                rgba=projector(
                     _flag_rgba(group["QC_FLAGS"][:], polar_valid, flag_definitions),
                     group["azimuth"][:],
                     group["range"][:],
@@ -326,9 +331,7 @@ def build_diagnostic_bundle(
         "layers": layers,
         "created_at": created_at,
     }
-    objects["manifest.json"] = json.dumps(
-        manifest, separators=(",", ":"), sort_keys=True
-    ).encode()
+    objects["manifest.json"] = json.dumps(manifest, separators=(",", ":"), sort_keys=True).encode()
     validate_diagnostic_bundle(objects)
     return objects
 
@@ -460,6 +463,20 @@ def _polar_to_ppi(
     ranges: np.ndarray,
     size: int,
 ) -> np.ndarray:
+    from .polar_sampling import project_rgba
+
+    try:
+        return project_rgba(polar_rgba, azimuth, ranges, size)
+    except ValueError as error:
+        raise DiagnosticInputError(str(error)) from error
+
+
+def _polar_to_ppi_legacy(
+    polar_rgba: np.ndarray,
+    azimuth: np.ndarray,
+    ranges: np.ndarray,
+    size: int,
+) -> np.ndarray:
     if polar_rgba.shape[:2] != (len(azimuth), len(ranges)):
         raise DiagnosticInputError("polar field geometry differs from coordinates")
     coordinate = np.linspace(-1.0, 1.0, size, dtype=np.float32)
@@ -517,6 +534,7 @@ def _store_layer(
     sweep_number: int | None = None,
     elevation_deg: float | None = None,
     maximum_range_km: float | None = None,
+    sampling_version: str | None = None,
 ) -> dict[str, Any]:
     object_path = f"layers/{layer_id}.png"
     objects[object_path] = encode_rgba_png(rgba)
@@ -542,15 +560,14 @@ def _store_layer(
         "maximum_range_km": maximum_range_km,
     }
     layer.update({key: value for key, value in optional.items() if value is not None})
+    if sampling_version is not None:
+        layer["sampling_version"] = sampling_version
     return layer
 
 
-def _numeric_legend(
-    stops: Sequence[tuple[float, str]], unit: str
-) -> list[dict[str, Any]]:
+def _numeric_legend(stops: Sequence[tuple[float, str]], unit: str) -> list[dict[str, Any]]:
     return [
-        {"label": f"≥ {value:g} {unit}", "color": color, "value": value}
-        for value, color in stops
+        {"label": f"≥ {value:g} {unit}", "color": color, "value": value} for value, color in stops
     ]
 
 

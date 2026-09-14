@@ -88,7 +88,9 @@ def _fit(ranges, values, config, ceiling):
     ), None
 
 
-def range_signatures(native, config: CrossRadarConfig) -> RangeEvidence:
+def range_signatures(
+    native, config: CrossRadarConfig, *, association=None, protected=None
+) -> RangeEvidence:
     observed = native.field_available["DBZH"] & native.geometry_good[:, None]
     z, ranges, dr = native.fields["DBZH"], native.ranges, native.gate_spacing_m
     echo = observed & (z >= config.minimum_echo_dbz) & (ranges[None, :] >= config.minimum_range_m)
@@ -99,6 +101,10 @@ def range_signatures(native, config: CrossRadarConfig) -> RangeEvidence:
         and x.sweep == native.name
     ]
     ceiling = ceilings[0] if ceilings else None
+    if protected is None:
+        protected = np.zeros(native.shape, bool)
+    if np.shape(protected) != native.shape:
+        raise ValueError("range association weather geometry differs")
     reasons = Counter()
     parts, by_ray = [], [[] for _ in native.azimuth]
     for ray in range(len(z)):
@@ -118,9 +124,17 @@ def range_signatures(native, config: CrossRadarConfig) -> RangeEvidence:
             # Incompatible measured gates are not swallowed by the object.
             good = np.zeros(len(ranges), bool)
             good[idx[fit["inliers"]]] = True
-            for a, b, measured in intervals(
-                good, ~observed[ray], dr, config.maximum_gap_m, config.maximum_gap_fraction
-            ):
+            bridgeable = ~observed[ray]
+            gap_m, gap_fraction = config.maximum_gap_m, config.maximum_gap_fraction
+            if association is not None:
+                # Only identity crosses a bounded UNDECIDED measured outlier.
+                # The outlier does not enter the fit/inlier candidate or acquire a value.
+                bridgeable = bridgeable.copy()
+                bridgeable[idx] |= fit["residual"] <= association.link_maximum_residual_db
+                bridgeable &= ~np.asarray(protected[ray], bool)
+                gap_m = association.link_maximum_gap_m
+                gap_fraction = association.link_maximum_fraction
+            for a, b, measured in intervals(good, bridgeable, dr, gap_m, gap_fraction):
                 if measured * dr < config.minimum_measured_length_m:
                     reasons["short_inlier_segment"] += 1
                     continue
@@ -128,7 +142,13 @@ def range_signatures(native, config: CrossRadarConfig) -> RangeEvidence:
                     raise ValueError("V5 range segment budget exceeded; no partial result")
                 locations = np.flatnonzero(good[a:b]) + a
                 by_ray[ray].append(len(parts))
-                parts.append((ray, a, b, locations, fit))
+                part_fit = dict(fit)
+                part_fit["linked_locations"] = (
+                    np.flatnonzero(observed[ray, a:b] & bridgeable[a:b] & ~good[a:b]) + a
+                    if association is not None
+                    else np.array([], dtype=int)
+                )
+                parts.append((ray, a, b, locations, part_fit))
     parent = list(range(len(parts)))
 
     def find(i):
@@ -162,6 +182,7 @@ def range_signatures(native, config: CrossRadarConfig) -> RangeEvidence:
         groups.setdefault(find(i), []).append(i)
     ids = np.zeros(native.shape, "uint32")
     mode = np.zeros(native.shape, "uint8")
+    linked_ids = np.zeros(native.shape, "uint32")
     fit_quality = np.full(native.shape, np.nan, "float32")
     growth = fit_quality.copy()
     spans = fit_quality.copy()
@@ -181,6 +202,7 @@ def range_signatures(native, config: CrossRadarConfig) -> RangeEvidence:
         for i in group:
             ray, a, b, idx, fit = parts[i]
             ids[ray, idx] = identity
+            linked_ids[ray, fit["linked_locations"]] = identity
             mode[ray, idx] = fit["mode"]
             fit_quality[ray, idx] = fit["p90"]
             growth[ray, idx] = fit["growth"]
@@ -208,9 +230,17 @@ def range_signatures(native, config: CrossRadarConfig) -> RangeEvidence:
             "V5_RANGE_RESIDUAL_P90_DB": fit_quality,
             "V5_RANGE_GROWTH_DB": growth,
             "V5_RANGE_SPAN_M": spans,
+            **(
+                {
+                    "V6_RANGE_LINKED_REVIEW_MASK": (linked_ids > 0).astype("uint8"),
+                    "V6_RANGE_LINK_PARENT_ID": linked_ids,
+                }
+                if association is not None
+                else {}
+            ),
         },
         dict(
-            method=config.method,
+            method=("range-inlier-association-v6" if association is not None else config.method),
             objects=records,
             object_count=len(records),
             candidate_gates=int(candidate.sum()),

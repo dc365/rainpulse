@@ -1,6 +1,6 @@
-"""Read-only V4/V5 network comparison on frozen tasks; no publication or remote I/O.
+"""Read-only adjacent V4/V5 or V5/V6 comparison; no publication or remote I/O.
 
-Same precomputed V4 raw context for both cores. Native legacy/AFL previews remain
+Same precomputed baseline raw context for both cores. Native legacy/AFL previews remain
 available in the existing review tools; their masks are not promoted to truth.
 """
 
@@ -36,7 +36,7 @@ def case_identity(path):
     path = Path(path).resolve()
     spec = NetworkCaseManifest.model_validate_json(path.read_text()).model_dump(mode="json")
     if spec.get("schema_version") != "rainpulse.qc-network-case.v1":
-        raise ValueError("not a v5 network case")
+        raise ValueError("not a supported frozen network case")
     if spec.get("partition") not in {"development", "validation"} or not spec.get("process_id"):
         raise ValueError("declare weather process and evaluation partition")
     if spec.get("data_kind") not in {"real", "synthetic"}:
@@ -59,11 +59,14 @@ def compare_case(path, *, inspect_rays=(0,), bundle_dir=None):
     flags = _frozen(root, spec["flags"])
     baseline = load_qc_profile(_frozen(root, spec["baseline_profile"]), flags)
     candidate = load_qc_profile(_frozen(root, spec["candidate_profile"]), flags)
-    if (
-        baseline.pipeline_version != "qc-opensource-4.0.0"
-        or candidate.pipeline_version != "qc-opensource-5.0.0"
-    ):
-        raise ValueError("network comparison requires coordinated V4 and V5")
+    pair = (baseline.pipeline_version, candidate.pipeline_version)
+    if pair == ("qc-opensource-4.0.0", "qc-opensource-5.0.0"):
+        baseline_name, candidate_name, addition = "v4", "v5", "cross_radar"
+    elif pair == ("qc-opensource-5.0.0", "qc-opensource-6.0.0"):
+        baseline_name, candidate_name, addition = "v5", "v6", "residual"
+    else:
+        raise ValueError("network comparison requires adjacent frozen V4/V5 or V5/V6")
+    baseline_field = candidate_name.upper()
     for key, value in [
         ("qc_profile", baseline.profile_version),
         ("qc_pipeline_version", baseline.pipeline_version),
@@ -71,9 +74,9 @@ def compare_case(path, *, inspect_rays=(0,), bundle_dir=None):
         ("qc_profile_sha256", spec["baseline_profile"]["sha256"]),
     ]:
         if getattr(request.payload, key) != value:
-            raise ValueError("task does not select frozen V4 baseline")
+            raise ValueError("task does not select the frozen baseline")
     left, right = baseline.model_dump(), candidate.model_dump()
-    for key in ("profile_version", "pipeline_version", "decision_version", "cross_radar"):
+    for key in ("profile_version", "pipeline_version", "decision_version", addition):
         left.pop(key, None)
         right.pop(key, None)
     if left != right:
@@ -100,7 +103,7 @@ def compare_case(path, *, inspect_rays=(0,), bundle_dir=None):
     out = {}
     elapsed = {}
     bundle_receipts = {}
-    for method, profile in [("v4", baseline), ("v5", candidate)]:
+    for method, profile in [(baseline_name, baseline), (candidate_name, candidate)]:
         start = time.perf_counter()
         out[method] = apply_basic_qc(raw, profile, **prepared, created_at=request.occurred_at)
         elapsed[method] = (time.perf_counter() - start) * 1000
@@ -127,7 +130,8 @@ def compare_case(path, *, inspect_rays=(0,), bundle_dir=None):
         data_kind=spec["data_kind"],
         observation_time_utc=view.root.attrs.get("volume_end_time_utc"),
         elapsed_ms=elapsed,
-        context_mode="identical_frozen_v4_worker_context",
+        context_mode=f"identical_frozen_{baseline_name}_worker_context",
+        comparison_methods=[baseline_name, candidate_name],
         context=context,
         outputs=bundle_receipts,
         profiles={
@@ -142,23 +146,29 @@ def compare_case(path, *, inspect_rays=(0,), bundle_dir=None):
         evaluation_rows=[],
     )
     budget = 0
-    for old, new in zip(out["v4"].sweeps, out["v5"].sweeps, strict=True):
+    for old, new in zip(out[baseline_name].sweeps, out[candidate_name].sweeps, strict=True):
         if old.name != new.name:
             raise ValueError("different native cut order")
         name = old.name
         observed = old.valid_mask == 1
         shape = old.dbzh_raw.shape
         if not np.array_equal(
-            new.optional_qc_fields["V5_BASELINE_REJECT_MASK"],
+            new.optional_qc_fields[f"{baseline_field}_BASELINE_REJECT_MASK"],
             old.optional_qc_fields["QC_ACTION"] == 2,
         ):
-            raise ValueError("embedded baseline differs from frozen V4")
+            raise ValueError("embedded baseline differs from frozen baseline")
         for key, expected in (
-            ("V5_BASELINE_QUARANTINE_MASK", old.optional_qc_fields["RFI_QUARANTINE_MASK"]),
-            ("V5_BASELINE_ELIGIBLE_MASK", old.optional_qc_fields["QPE_ELIGIBLE_MASK"]),
+            (
+                f"{baseline_field}_BASELINE_QUARANTINE_MASK",
+                old.optional_qc_fields["RFI_QUARANTINE_MASK"],
+            ),
+            (
+                f"{baseline_field}_BASELINE_ELIGIBLE_MASK",
+                old.optional_qc_fields["QPE_ELIGIBLE_MASK"],
+            ),
         ):
             if not np.array_equal(new.optional_qc_fields[key], expected):
-                raise ValueError("embedded baseline qualification differs from frozen V4")
+                raise ValueError("embedded baseline qualification differs from frozen baseline")
         if not np.array_equal(old.valid_mask, new.valid_mask) or not np.array_equal(
             old.dbzh_raw, new.dbzh_raw, equal_nan=True
         ):
@@ -174,10 +184,11 @@ def compare_case(path, *, inspect_rays=(0,), bundle_dir=None):
             label_status="available" if labels is not None else "unlabeled_no_skill_claim",
             methods={},
             radials=[],
-            decision_funnel=out["v5"].summary["sweeps"][name]["decision_funnel"],
-            range_signatures=out["v5"].summary["sweeps"][name]["cross_radar"],
+            decision_funnel=out[candidate_name].summary["sweeps"][name]["decision_funnel"],
+            range_signatures=out[candidate_name].summary["sweeps"][name]["cross_radar"],
+            residual_v6=out[candidate_name].summary["sweeps"][name].get("residual_v6"),
         )
-        for method, sweep in [("v4", old), ("v5", new)]:
+        for method, sweep in [(baseline_name, old), (candidate_name, new)]:
             f = sweep.optional_qc_fields
             reject = f["QC_ACTION"] == 2
             eligible = f["QPE_ELIGIBLE_MASK"] == 1
@@ -192,6 +203,9 @@ def compare_case(path, *, inspect_rays=(0,), bundle_dir=None):
             if labels is not None:
                 entry["measurement_metrics"] = compare_measurement_actions(
                     labels, observed, reject, sweep.dbzh_raw
+                )
+                entry["residual_measurement_counts"] = counts(
+                    labels, observed, reject, eligible, dr, reflectivity_dbz=sweep.dbzh_raw
                 )
                 entry["withheld_measurement_metrics"] = compare_measurement_actions(
                     labels, observed, ~eligible, sweep.dbzh_raw
@@ -213,7 +227,7 @@ def compare_case(path, *, inspect_rays=(0,), bundle_dir=None):
                     if not domain.any():
                         continue
                     row = dict(sweep=name, range_band=f"{lo:g}-{hi:g}m", capability_code=capability)
-                    for method, sweep in [("v4", old), ("v5", new)]:
+                    for method, sweep in [(baseline_name, old), (candidate_name, new)]:
                         f = sweep.optional_qc_fields
                         row[method] = counts(
                             labels,
@@ -228,14 +242,14 @@ def compare_case(path, *, inspect_rays=(0,), bundle_dir=None):
             if not 0 <= ray < shape[0]:
                 raise ValueError("inspect-ray outside this native sweep")
             variants = {}
-            for method, sweep in [("v4", old), ("v5", new)]:
+            for method, sweep in [(baseline_name, old), (candidate_name, new)]:
                 f = sweep.optional_qc_fields
                 fields = {
                     "DBZH_RAW": sweep.dbzh_raw[ray],
                     **{
                         k: v[ray]
                         for k, v in f.items()
-                        if k.startswith(("V5_", "RFI_", "PAPER_", "AFL_", "OS_POL_"))
+                        if k.startswith(("V5_", "V6_", "RFI_", "PAPER_", "AFL_", "OS_POL_"))
                         or k
                         in {
                             "DBZH_USABLE",
@@ -259,7 +273,7 @@ def compare_case(path, *, inspect_rays=(0,), bundle_dir=None):
                     ray_index=ray,
                     azimuth_deg=float(group["azimuth"][ray]),
                     range_m=ranges,
-                    fields=variants["v5"],
+                    fields=variants[candidate_name],
                     variants=variants,
                 )
             )
@@ -334,7 +348,7 @@ def run_network(manifest_path, output, *, inspect_rays=(0,), save_bundles=False)
             network_gate=gate,
             limitations=[
                 "Engineering comparison, not automatic operational promotion.",
-                "Same frozen V4 context; no new skill from future data or repeated scan labels.",
+                "Same frozen baseline context; no future data or repeated physical scans.",
                 "AFL retains explicit engineering approximations; native RDD/SWAN not implemented.",
                 "Unverified plateau is quarantined, never declared a verified saturation source.",
             ],
