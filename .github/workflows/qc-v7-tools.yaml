@@ -1,0 +1,33 @@
+name: qc-v7-tools
+on:
+  push:
+    branches: [review/qc-v7-build-tools-20260915]
+permissions:
+  contents: read
+jobs:
+  tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.x'
+          cache: false
+      - name: Stage pinned public source and generator
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/qc-tools"
+          cd "$RUNNER_TEMP/qc-tools"
+          for spec in bropo:c330b05ff55d4075a4d9e8fb404f17b3e459e049 rave:88458bc72bf6a3e2bdb0ae0856d4fba3a2550f0e hlhdf:9799d228a7a58654a6da4af6cf7124990ddb4d14; do
+            name=${spec%%:*}; rev=${spec#*:}
+            curl --fail --location --retry 2 "https://codeload.github.com/baltrad/$name/tar.gz/$rev" -o "$name.tar.gz"
+          done
+          GOBIN="$RUNNER_TEMP/qc-tools" CGO_ENABLED=0 go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.0
+          sha256sum *.gz oapi-codegen > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rainpulse-v7-pinned-tools
+          path: ${{ runner.temp }}/qc-tools
+          retention-days: 7
+          if-no-files-found: error
