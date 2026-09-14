@@ -10,6 +10,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
 from .crossradar_profile import CrossRadarConfig
+from .evidence_profile import EvidenceGraphConfig
 from .paper_profile import LiteratureConfig
 from .repair_profile import ResidualRepairConfig
 from .residual_profile import ResidualConfig
@@ -254,6 +255,7 @@ class OpenSourceQCProfile(FrozenConfig):
         "qc-opensource-5.0.0",
         "qc-opensource-6.0.0",
         "qc-opensource-6.1.0",
+        "qc-opensource-7.0.0",
     ] = "qc-opensource-1.0.0"
     decision_version: Literal[
         "type-specific-v1",
@@ -263,6 +265,7 @@ class OpenSourceQCProfile(FrozenConfig):
         "crossradar-v5",
         "residual-v6",
         "residual-v6.1",
+        "evidence-graph-v7",
     ] = "type-specific-v1"
     flag_definition_version: Literal["qc-flags-v2"] = "qc-flags-v2"
     operational_eligible: Literal[False] = False
@@ -282,6 +285,7 @@ class OpenSourceQCProfile(FrozenConfig):
     cross_radar: CrossRadarConfig | None = None
     residual: ResidualConfig | None = None
     residual_repair: ResidualRepairConfig | None = None
+    evidence_graph: EvidenceGraphConfig | None = None
     phase: PhaseConfig = Field(default_factory=PhaseConfig)
     context: ContextConfig = Field(default_factory=ContextConfig)
     _flag_masks: dict[str, np.uint32] = PrivateAttr(default_factory=dict)
@@ -304,6 +308,8 @@ class OpenSourceQCProfile(FrozenConfig):
             value.pop("residual", None)
         if self.residual_repair is None:
             value.pop("residual_repair", None)
+        if self.evidence_graph is None:
+            value.pop("evidence_graph", None)
         data = json.dumps(value, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(data.encode()).hexdigest()
 
@@ -317,6 +323,7 @@ class OpenSourceQCProfile(FrozenConfig):
             "qc-opensource-5.0.0": "crossradar-v5",
             "qc-opensource-6.0.0": "residual-v6",
             "qc-opensource-6.1.0": "residual-v6.1",
+            "qc-opensource-7.0.0": "evidence-graph-v7",
         }[self.pipeline_version]
         if object_version is None:
             if self.decision_version != "type-specific-v1" or self.rfi_objects is not None:
@@ -335,6 +342,7 @@ class OpenSourceQCProfile(FrozenConfig):
                 "qc-opensource-5.0.0",
                 "qc-opensource-6.0.0",
                 "qc-opensource-6.1.0",
+                "qc-opensource-7.0.0",
             }
         ) != (self.literature is not None):
             raise ValueError("paper fusion requires its own versioned configuration")
@@ -344,7 +352,7 @@ class OpenSourceQCProfile(FrozenConfig):
             raise ValueError("paper quarantine cannot enter quantitative precipitation")
         if (
             self.pipeline_version
-            in {"qc-opensource-5.0.0", "qc-opensource-6.0.0", "qc-opensource-6.1.0"}
+            in {"qc-opensource-5.0.0", "qc-opensource-6.0.0", "qc-opensource-6.1.0", "qc-opensource-7.0.0"}
         ) != (self.cross_radar is not None):
             raise ValueError("cross-radar evidence requires its own coordinated V5 profile")
         if (
@@ -352,7 +360,7 @@ class OpenSourceQCProfile(FrozenConfig):
             and self.cross_radar.quarantine_quality >= self.quality_index.quantitative_minimum
         ):
             raise ValueError("V5 quarantine cannot enter quantitative precipitation")
-        if (self.pipeline_version in {"qc-opensource-6.0.0", "qc-opensource-6.1.0"}) != (
+        if (self.pipeline_version in {"qc-opensource-6.0.0", "qc-opensource-6.1.0", "qc-opensource-7.0.0"}) != (
             self.residual is not None
         ):
             raise ValueError("residual modules require the coordinated V6 profile")
@@ -361,8 +369,12 @@ class OpenSourceQCProfile(FrozenConfig):
             and self.residual.quarantine_quality >= self.quality_index.quantitative_minimum
         ):
             raise ValueError("V6 quarantine cannot be quantitatively eligible")
-        if (self.pipeline_version == "qc-opensource-6.1.0") != (self.residual_repair is not None):
+        if (self.pipeline_version in {"qc-opensource-6.1.0", "qc-opensource-7.0.0"}) != (self.residual_repair is not None):
             raise ValueError("topology repair requires its own coordinated 6.1 profile")
+        if (self.pipeline_version == "qc-opensource-7.0.0") != (self.evidence_graph is not None):
+            raise ValueError("V7 evidence graph requires its own coordinated profile")
+        if self.evidence_graph and self.evidence_graph.quarantine_quality >= self.quality_index.quantitative_minimum:
+            raise ValueError("V7 quarantine cannot be quantitatively eligible")
         if self.echo.dbzh_valid_range_dbz[0] >= self.echo.dbzh_valid_range_dbz[1]:
             raise ValueError("reflectivity bounds must increase")
         if not self.rfi.azimuth_offsets_deg or any(

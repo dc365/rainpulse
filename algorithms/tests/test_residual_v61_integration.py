@@ -221,7 +221,8 @@ def test_forensic_reads_all_fields_and_deduplicates_same_scan(worker_bundle, tmp
         for k in ("RHOHV_RAW", "ZDR_RAW", "SNR_RAW", "QC_FLAGS", "V61_REVIEW_OUTCOME")
     )
     assert not point["display_contradiction"]
-    assert point["sampling_verified_against_png"] and point["truth_label"] is None
+    assert point["identity_verified"] and point["selected_pixel_eligibility_checked"]
+    assert point["full_rerender_bytes_equal"] is None and point["truth_label"] is None
     with pytest.raises(ValueError, match="exists"):
         export(manifest, tmp_path / "evidence")
 

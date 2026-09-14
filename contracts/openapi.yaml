@@ -2137,6 +2137,22 @@ components:
           type: number
           format: float
           nullable: true
+        sampling_version:
+          type: string
+          description: Actual native sampler identity; omitted for historical products that did not record it.
+        qc_asset_id:
+          type: string
+        qc_pipeline_version:
+          type: string
+        qc_parameters_sha256:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+        qc_content_sha256:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+        png_sha256:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
     DiagnosticBundle:
       type: object
       additionalProperties: false

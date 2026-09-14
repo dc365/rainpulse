@@ -24,6 +24,7 @@ from .fingerprints import context_arrays_identity
 from .objects import radial_objects
 from .radial import local_radial_candidates
 from .temporal import aggregate_temporal_rfi
+from .standalone_evidence import stage_a, aggregate_stage_a_temporal
 
 
 def utc_time(value: str) -> datetime:
@@ -88,6 +89,21 @@ def prepare_open_source_inputs(
     artifacts = [
         {"role": "current", "uri": request.payload.input_uri, "sha256": artifact_sha256(normalized)}
     ]
+    unified = profile.evidence_graph is not None and profile.evidence_graph.unified_stage_a
+    independent_records = []
+    current_standalone = {}
+    # Prepare local current evidence once for both temporal matching and the runner.
+    current_priors = ancillary_maps or {}
+    if unified and profile.static_ground_clutter.asset_uri and ancillary_maps is None:
+        current_priors = _load_clutter(profile, client, view.root)
+    if unified:
+        for number in view.root["sweep_number"][:]:
+            cut = f"sweep_{int(number):03d}"
+            current_native = adapt_sweep(view.root, cut, profile)
+            prior = current_priors.get(cut, {}).get("ground_clutter")
+            if prior is not None:
+                prior = prior[current_native.original_indices]
+            current_standalone[cut] = stage_a(current_native, profile, prior)
     contexts: dict = {}
     counts = {"temporal_available_count": 0, "cross_radar_available_count": 0}
     references = []
@@ -150,6 +166,14 @@ def prepare_open_source_inputs(
                 for number in context_root["sweep_number"][:]:
                     name = f"sweep_{int(number):03d}"
                     sweep = adapt_sweep(context_root, name, profile)
+                    if unified:
+                        independent = stage_a(sweep, profile)
+                        # Only uncertain GATES abstain; preserve unrelated healthy echoes.
+                        first_pass[name] = sweep.restore(~independent.donor_usable)
+                        object_pass[name] = (sweep, independent)
+                        independent_records.append({"scan_id": entry["scan_id"], "sweep": name,
+                                                    **independent.summary})
+                        continue
                     evidence = library_evidence(sweep, profile)
                     objects_evidence = (
                         radial_objects(sweep, profile.rfi_objects)
@@ -235,7 +259,8 @@ def prepare_open_source_inputs(
         if profile.rfi_objects is not None:
             current = adapt_sweep(view.root, name, profile)
             samples = [objects[name] for _, _, objects in temporal if name in objects]
-            values = aggregate_temporal_rfi(current, samples)
+            values = (aggregate_stage_a_temporal(current, samples) if unified
+                      else aggregate_temporal_rfi(current, samples))
             contexts[name].update({key: current.restore(value) for key, value in values.items()})
             continue
         # V1 temporal evidence is diagnostic only and requires exactly matching
@@ -254,8 +279,8 @@ def prepare_open_source_inputs(
             contexts[name]["TEMPORAL_CANDIDATE_PERSISTENCE"] = np.mean(samples, axis=0).astype(
                 "float32"
             )
-    ancillary = ancillary_maps or {}
-    if profile.static_ground_clutter.asset_uri and ancillary_maps is None:
+    ancillary = current_priors if unified else (ancillary_maps or {})
+    if profile.static_ground_clutter.asset_uri and ancillary_maps is None and not unified:
         ancillary = _load_clutter(profile, client, view.root)
     identity = {
         "parameters_hash": profile.parameters_hash,
@@ -277,12 +302,21 @@ def prepare_open_source_inputs(
             },
             "interpretation": "available_is_not_weather_or_clear_air_truth",
         }
+    if unified:
+        identity["stage_a"] = {
+            "current": {name: {k: v for k, v in a.summary.items() if k != "elapsed_ms"}
+                        for name, a in current_standalone.items()},
+            "references": [{k: v for k, v in a.items() if k != "elapsed_ms"}
+                           for a in independent_records],
+            "recurrence_semantics": "structural_repetition_not_truth",
+        }
     fingerprint = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
     return {
         "input_view": view,
         "ancillary_maps": ancillary,
         "radial_context": contexts,
         "radar_beam_context": beam,
+        **({"standalone_by_sweep": current_standalone} if unified else {}),
     }, {
         **identity,
         **counts,

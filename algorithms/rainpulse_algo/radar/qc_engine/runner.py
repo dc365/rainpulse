@@ -18,6 +18,9 @@ from .phase import process_phase
 from .radial import local_radial_candidates
 from .range_signature import range_signatures
 from .residual import residual_decision
+from .standalone_evidence import stage_a, stage_a_key
+from .stage_audit import Decider, StageAudit
+from .hypotheses import build_hypotheses, arbitrate_hypotheses
 
 QI_NAMES = (
     "QI_METEO",
@@ -41,6 +44,7 @@ def run_open_source_qc(
     radar_beam_context=None,
     created_at=None,
     paper_references_by_sweep=None,
+    standalone_by_sweep=None,
     **kwargs,
 ):
     if kwargs.get("phase_processing_profile") or kwargs.get("attenuation_profile"):
@@ -69,10 +73,30 @@ def run_open_source_qc(
     if set(paper_references_by_sweep or {}) - {s.name for s in native}:
         raise QCInputError("reference sweep absent from current volume")
     independent = []
+    v7 = profile.evidence_graph
+    unified = v7 is not None and v7.unified_stage_a
+    standalones = {}
     for sweep in native:
         prior = (ancillary_maps or {}).get(sweep.name, {}).get("ground_clutter")
         if prior is not None:
             prior = prior[sweep.original_indices]
+        if unified:
+            if paper_references_by_sweep:
+                raise QCInputError("V7 unified stage A does not silently mix external references")
+            prepared = (standalone_by_sweep or {}).get(sweep.name)
+            if prepared is not None and prepared.identity != stage_a_key(sweep, profile, prior):
+                raise QCInputError("prepared stage A belongs to different raw/config/resource inputs")
+            prepared = prepared or stage_a(sweep, profile, prior)
+            standalones[sweep.name] = prepared
+            first = prepared.decision
+            # Vertical support is evaluated using the same donor policy as other references.
+            donor_arrays = dict(first.arrays)
+            donor_arrays["REFLECTIVITY_TRUST_MASK"] = prepared.donor_usable.astype("uint8")
+            from .decision import Decision
+            first = Decision(donor_arrays, first.flags, first.quality)
+            independent.append((prepared.library, prepared.radial, prepared.radial_record,
+                                first, prior, prepared.objects, prepared.papers))
+            continue
         evidence = library_evidence(sweep, profile, prior)
         objects_evidence = (
             radial_objects(sweep, profile.rfi_objects) if profile.rfi_objects is not None else None
@@ -128,6 +152,8 @@ def run_open_source_qc(
         if profile.rfi_objects is not None and not profile.context.enabled:
             weather[:] = np.nan
             context = {}
+        tracker = StageAudit(sweep.shape) if v7 is not None and v7.audit_enabled else None
+        graph_record = None
         persistence = context.get("TEMPORAL_CANDIDATE_PERSISTENCE")
         temporal_count = context.get("TEMPORAL_RFI_SAMPLE_COUNT")
         decision = decide(
@@ -147,6 +173,8 @@ def run_open_source_qc(
                 else None
             ),
         )
+        if tracker is not None:
+            tracker.observe(Decider.BASE_MOMENT_OBJECT, decision)
         if papers is not None:
             decision = fuse_paper_decision(
                 sweep,
@@ -166,13 +194,18 @@ def run_open_source_qc(
                     else None
                 ),
             )
+        if tracker is not None:
+            tracker.observe(Decider.PAPER_FUSION, decision)
         range_evidence = None
         baseline_quality = decision.quality.copy() if profile.cross_radar is not None else None
         if profile.cross_radar is not None:
-            range_evidence = range_signatures(sweep, profile.cross_radar)
+            range_evidence = (standalones[sweep.name].range_evidence if unified
+                              else range_signatures(sweep, profile.cross_radar))
             decision = fuse_crossradar(
                 sweep, decision, range_evidence, profile, weather_support=weather
             )
+        if tracker is not None:
+            tracker.observe(Decider.RANGE_SIGNATURE, decision)
         residual_record = None
         v5_quality = None
         if profile.residual is not None:
@@ -180,6 +213,23 @@ def run_open_source_qc(
             decision, residual_record = residual_decision(
                 sweep, decision, profile, weather_support=weather
             )
+
+        if tracker is not None:
+            tracker.observe(Decider.RESIDUAL, decision)
+        v7_baseline_quality = decision.quality.copy() if v7 is not None else None
+        if v7 is not None:
+            decision.arrays["V7_BASELINE_REJECT_MASK"] = (decision.arrays["QC_ACTION"] == Action.REJECT).astype("uint8")
+            decision.arrays["V7_BASELINE_QUARANTINE_MASK"] = decision.arrays["RFI_QUARANTINE_MASK"].copy()
+            decision.arrays["V7_BASELINE_ELIGIBLE_MASK"] = decision.arrays["QPE_ELIGIBLE_MASK"].copy()
+            if v7.graph_enabled:
+                graph = build_hypotheses(sweep, decision, profile, weather_support=weather)
+                decision = arbitrate_hypotheses(sweep, decision, graph, profile, weather_support=weather)
+                graph_record = graph.summary
+            if tracker is not None:
+                tracker.observe(Decider.GRAPH, decision)
+            if unified:
+                decision.arrays["V7_STAGE_A_DONOR_USABLE_MASK"] = standalones[sweep.name].donor_usable.astype("uint8")
+                decision.arrays["V7_STAGE_A_DONOR_UNKNOWN_MASK"] = standalones[sweep.name].donor_unknown.astype("uint8")
         phase, phase_record = process_phase(
             sweep, decision.arrays, profile, context.get("environment")
         )
@@ -210,6 +260,15 @@ def run_open_source_qc(
         decision.arrays["DBZH_USABLE"] = np.where(eligible, sweep.fields["DBZH"], np.nan).astype(
             "float32"
         )
+        if v7 is not None:
+            if health["health"] == "DEGRADED":
+                v7_baseline_quality *= profile.health_gate.degraded_quality_multiplier
+            decision.arrays["V7_BASELINE_ELIGIBLE_MASK"] &= (v7_baseline_quality >= profile.quality_index.quantitative_minimum).astype("uint8")
+        if tracker is not None:
+            tracker.observe(Decider.HEALTH_QUALITY, decision)
+            decision.arrays.update(tracker.arrays())
+            decision.arrays["V7_VERTICAL_SUPPORT_SCORE"] = vertical.probabilities[index].copy()
+            decision.arrays["V7_CROSS_RADAR_SUPPORT_SCORE"] = (cross.copy() if cross is not None else np.full(sweep.shape, np.nan, "float32"))
         optional = {**evidence.arrays, **decision.arrays, **phase}
         optional["P_VERTICAL_CONSISTENCY_AVAILABLE_MASK"] = vertical.available_masks[index]
         optional["VERTICAL_HEIGHT_DIFFERENCE_M"] = vertical.height_differences_m[index]
@@ -265,6 +324,9 @@ def run_open_source_qc(
             )
         )
         sweep_records[sweep.name] = {
+            **({"v7_audit": tracker.summary()} if tracker is not None else {}),
+            **({"v7_graph": graph_record} if graph_record is not None else {}),
+            **({"v7_stage_a": {k: v for k, v in standalones[sweep.name].summary.items() if k != "elapsed_ms"}} if unified else {}),
             **({"residual_v6": residual_record} if residual_record is not None else {}),
             **(
                 {

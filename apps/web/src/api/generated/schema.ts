@@ -1166,6 +1166,13 @@ export interface components {
             elevation_deg?: number | null;
             /** Format: float */
             maximum_range_km?: number | null;
+            /** @description Actual native sampler identity; omitted for historical products that did not record it. */
+            sampling_version?: string;
+            qc_asset_id?: string;
+            qc_pipeline_version?: string;
+            qc_parameters_sha256?: string;
+            qc_content_sha256?: string;
+            png_sha256?: string;
         };
         DiagnosticBundle: {
             contract_version: string;

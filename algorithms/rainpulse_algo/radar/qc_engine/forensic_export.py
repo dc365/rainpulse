@@ -19,6 +19,7 @@ from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field
 
 from ...diagnostics.polar_sampling import SAMPLING_VERSION
+from .context import artifact_sha256
 from .fingerprints import array_digest
 from .forensic_io import directory_digest, verified_path
 from .narrow_local import NarrowStage
@@ -121,6 +122,20 @@ def panel_evidence(base, panel):
         raise ValueError("layer sweep mismatch")
     if panel.sweep not in root:
         raise ValueError("unknown cut")
+    binding_checks = {
+        "qc_asset_id": root.attrs.get("asset_id"),
+        "qc_pipeline_version": root.attrs.get("qc_pipeline_version"),
+        "qc_parameters_sha256": root.attrs.get("qc_parameters_sha256"),
+        "png_sha256": hashlib.sha256(png.read_bytes()).hexdigest(),
+    }
+    for key, expected in binding_checks.items():
+        if key in layer and layer[key] != expected:
+            raise ValueError(f"diagnostic binding mismatch: {key}")
+    if "qc_content_sha256" in layer:
+        loaded = {str(path.relative_to(q)): path.read_bytes() for path in q.rglob("*")
+                  if path.is_file()}
+        if artifact_sha256(loaded) != layer["qc_content_sha256"]:
+            raise ValueError("diagnostic QC content checksum differs")
     with Image.open(png) as image:
         if image.mode != "RGBA" or image.size != (640, 640):
             raise ValueError("only original 640x640 RGBA source PNGs are supported")
@@ -134,7 +149,10 @@ def panel_evidence(base, panel):
             label=item.label,
             review_role=item.role,
             actual_png_rgba=rgba[item.row, item.column].tolist(),
-            sampling_verified_against_png=True,
+            identity_verified=True,
+            selected_pixel_eligibility_checked=True,
+            full_rerender_bytes_equal=None,
+            full_rerender_status="not_executed",
             truth_label=None,
         )
         alpha = int(rgba[item.row, item.column, 3])
@@ -147,6 +165,8 @@ def panel_evidence(base, panel):
             )
         )
         if value["measured_footprint"]:
+            ray, gate = value["ray_index"], value["gate_index"]
+            value["fields"].update({k: group[k][ray, gate] for k in fields})
             ray, gate = value["ray_index"], value["gate_index"]
             lo = max(0, gate - item.radius_gates)
             hi = min(group["DBZH_RAW"].shape[1], gate + item.radius_gates + 1)

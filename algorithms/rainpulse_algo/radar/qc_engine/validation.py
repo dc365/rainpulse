@@ -38,7 +38,16 @@ def validate_sweep(group, attrs) -> None:
     if np.any(action > Action.MISSING) or not np.array_equal(action == Action.MISSING, ~valid):
         raise ValueError("QC actions and original observation support disagree")
     quarantine = np.zeros(shape, bool)
-    version61 = attrs.get("qc_pipeline_version") == "qc-opensource-6.1.0"
+    version7 = attrs.get("qc_pipeline_version") == "qc-opensource-7.0.0"
+    version61 = version7 or attrs.get("qc_pipeline_version") == "qc-opensource-6.1.0"
+    baseline7_reject, baseline7_quarantine = reject, quarantine
+    graph_domain = np.zeros(shape, bool)
+    if version7:
+        from .evidence_validation import validate_evidence_fields
+
+        graph_domain = validate_evidence_fields(group, valid, reject)
+        baseline7_reject = group["V7_BASELINE_REJECT_MASK"][:] == 1
+        baseline7_quarantine = group["V7_BASELINE_QUARANTINE_MASK"][:] == 1
     version6 = version61 or attrs.get("qc_pipeline_version") == "qc-opensource-6.0.0"
     version5 = version6 or attrs.get("qc_pipeline_version") == "qc-opensource-5.0.0"
     version4 = version5 or attrs.get("qc_pipeline_version") == "qc-opensource-4.0.0"
@@ -50,6 +59,7 @@ def validate_sweep(group, attrs) -> None:
         "qc-opensource-5.0.0",
         "qc-opensource-6.0.0",
         "qc-opensource-6.1.0",
+        "qc-opensource-7.0.0",
     }:
         for field, dtype in {
             "RFI_OBJECT_ID": "uint32",
@@ -105,7 +115,11 @@ def validate_sweep(group, attrs) -> None:
                 if version6:
                     from .residual_validation import validate_residual_fields
 
-                    extra_domain = validate_residual_fields(group, valid, reject, quarantine)
+                    extra_domain = validate_residual_fields(
+                        group, valid,
+                        baseline7_reject if version7 else reject,
+                        baseline7_quarantine if version7 else quarantine,
+                    ) | graph_domain
                     extra_domain |= validate_crossradar_fields(
                         group,
                         valid,
@@ -170,7 +184,9 @@ def validate_sweep(group, attrs) -> None:
         outcome = group["V61_REVIEW_OUTCOME"][:]
         if np.any(outcome > 5) or not np.array_equal(outcome == 5, ~valid):
             raise ValueError("6.1 outcome changed original missing semantics")
-        if np.any((outcome == 3) & ~quarantine) or np.any((outcome == 4) & ~reject):
+        if np.any((outcome == 3) & ~(baseline7_quarantine if version7 else quarantine)) or np.any(
+            (outcome == 4) & ~(baseline7_reject if version7 else reject)
+        ):
             raise ValueError("6.1 outcome disagrees with final measurement disposition")
     if not np.array_equal(trusted, valid & ~reject & ~quarantine) or np.any(eligible & ~trusted):
         raise ValueError("QC measurement trust is inconsistent with decisions")

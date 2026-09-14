@@ -1964,6 +1964,9 @@ func toAPIDiagnostics(value workflow.AnalysisDiagnostics) apiv1.DiagnosticBundle
 			maximumRange = &converted
 		}
 		layers = append(layers, apiv1.DiagnosticLayer{
+			SamplingVersion: layer.SamplingVersion, QcAssetId: layer.QCAssetID,
+			QcPipelineVersion: layer.QCPipelineVersion, QcParametersSha256: layer.QCParametersSHA256,
+			QcContentSha256: layer.QCContentSHA256, PngSha256: layer.PNGSHA256,
 			LayerId: layer.LayerID, Title: layer.Title,
 			Scope: apiv1.DiagnosticLayerScope(layer.Scope), Field: layer.Field,
 			Rendering: apiv1.DiagnosticLayerRendering(layer.Rendering), Unit: layer.Unit,

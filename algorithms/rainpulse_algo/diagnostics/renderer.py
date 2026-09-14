@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from collections.abc import Mapping, Sequence
@@ -10,6 +11,8 @@ from uuid import UUID
 import numpy as np
 import zarr
 from zarr.storage import MemoryStore
+
+from rainpulse_algo.radar.qc_engine.context import artifact_sha256
 
 from rainpulse_algo.radar.analysis_zarr import validate_radar_analysis_zarr_store
 from rainpulse_algo.radar.qc_zarr import validate_qc_zarr_store
@@ -217,6 +220,13 @@ def build_diagnostic_bundle(
             raise DiagnosticInputError("QCRadarVolume identity differs from diagnostic request")
         if qc.attrs.get("contract_version") != profile.qc_radar_volume_contract_version:
             raise DiagnosticInputError("QCRadarVolume contract differs from diagnostic profile")
+        # Bind the actual loaded QC bytes, never infer QC identity from a URI or renderer.
+        qc_binding = {
+            "qc_asset_id": qc.attrs.get("asset_id"),
+            "qc_pipeline_version": qc.attrs.get("qc_pipeline_version"),
+            "qc_parameters_sha256": qc.attrs.get("qc_parameters_sha256"),
+            "qc_content_sha256": artifact_sha256(qc_objects),
+        }
         group, sweep_number = _lowest_dbzh_sweep(qc)
         maximum_range_km = float(np.max(group["range"][:]) / 1000.0)
         elevation_deg = float(np.nanmedian(group["elevation"][:]))
@@ -274,6 +284,7 @@ def build_diagnostic_bundle(
                     title=f"{radar_id.upper()} · {title}",
                     scope="polar",
                     sampling_version=sampling_version,
+                qc_binding=qc_binding,
                     field=field,
                     rendering=rendering,
                     unit=unit,
@@ -295,6 +306,7 @@ def build_diagnostic_bundle(
                 title=f"{radar_id.upper()} · 质控标志",
                 scope="polar",
                 sampling_version=sampling_version,
+                qc_binding=qc_binding,
                 field="QC_FLAGS",
                 rendering="flags",
                 unit=None,
@@ -359,6 +371,10 @@ def validate_diagnostic_bundle(objects: Mapping[str, bytes]) -> dict[str, Any]:
             or object_path not in objects
         ):
             raise DiagnosticInputError("diagnostic layer identity or path is invalid")
+        if layer.get("png_sha256") is not None and layer["png_sha256"] != hashlib.sha256(
+            objects[object_path]
+        ).hexdigest():
+            raise DiagnosticInputError("diagnostic PNG checksum differs from manifest")
         layer_ids.add(layer_id)
         width, height = png_dimensions(objects[object_path])
         if [width, height] != [layer.get("width"), layer.get("height")]:
@@ -535,6 +551,7 @@ def _store_layer(
     elevation_deg: float | None = None,
     maximum_range_km: float | None = None,
     sampling_version: str | None = None,
+    qc_binding: Mapping[str, str | None] | None = None,
 ) -> dict[str, Any]:
     object_path = f"layers/{layer_id}.png"
     objects[object_path] = encode_rgba_png(rgba)
@@ -562,6 +579,9 @@ def _store_layer(
     layer.update({key: value for key, value in optional.items() if value is not None})
     if sampling_version is not None:
         layer["sampling_version"] = sampling_version
+    if qc_binding is not None:
+        layer.update({key: value for key, value in qc_binding.items() if value is not None})
+    layer["png_sha256"] = hashlib.sha256(objects[object_path]).hexdigest()
     return layer
 
 

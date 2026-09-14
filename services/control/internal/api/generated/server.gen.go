@@ -1297,23 +1297,31 @@ type DiagnosticBundle struct {
 
 // DiagnosticLayer defines model for DiagnosticLayer.
 type DiagnosticLayer struct {
-	Bounds         *[]float32               `json:"bounds,omitempty"`
-	ElevationDeg   *float32                 `json:"elevation_deg,omitempty"`
-	Field          string                   `json:"field"`
-	Height         int                      `json:"height"`
-	ImageUrl       string                   `json:"image_url"`
-	LayerId        string                   `json:"layer_id"`
-	Legend         []DiagnosticLegendEntry  `json:"legend"`
-	MaximumRangeKm *float32                 `json:"maximum_range_km,omitempty"`
-	PaletteVersion string                   `json:"palette_version"`
-	RadarId        *string                  `json:"radar_id,omitempty"`
-	Rendering      DiagnosticLayerRendering `json:"rendering"`
-	ScanId         *openapi_types.UUID      `json:"scan_id,omitempty"`
-	Scope          DiagnosticLayerScope     `json:"scope"`
-	SweepNumber    *int                     `json:"sweep_number,omitempty"`
-	Title          string                   `json:"title"`
-	Unit           *string                  `json:"unit,omitempty"`
-	Width          int                      `json:"width"`
+	Bounds             *[]float32               `json:"bounds,omitempty"`
+	ElevationDeg       *float32                 `json:"elevation_deg,omitempty"`
+	Field              string                   `json:"field"`
+	Height             int                      `json:"height"`
+	ImageUrl           string                   `json:"image_url"`
+	LayerId            string                   `json:"layer_id"`
+	Legend             []DiagnosticLegendEntry  `json:"legend"`
+	MaximumRangeKm     *float32                 `json:"maximum_range_km,omitempty"`
+	PaletteVersion     string                   `json:"palette_version"`
+	PngSha256          *string                  `json:"png_sha256,omitempty"`
+	QcAssetId          *string                  `json:"qc_asset_id,omitempty"`
+	QcContentSha256    *string                  `json:"qc_content_sha256,omitempty"`
+	QcParametersSha256 *string                  `json:"qc_parameters_sha256,omitempty"`
+	QcPipelineVersion  *string                  `json:"qc_pipeline_version,omitempty"`
+	RadarId            *string                  `json:"radar_id,omitempty"`
+	Rendering          DiagnosticLayerRendering `json:"rendering"`
+
+	// SamplingVersion Actual native sampler identity; omitted for historical products that did not record it.
+	SamplingVersion *string              `json:"sampling_version,omitempty"`
+	ScanId          *openapi_types.UUID  `json:"scan_id,omitempty"`
+	Scope           DiagnosticLayerScope `json:"scope"`
+	SweepNumber     *int                 `json:"sweep_number,omitempty"`
+	Title           string               `json:"title"`
+	Unit            *string              `json:"unit,omitempty"`
+	Width           int                  `json:"width"`
 }
 
 // DiagnosticLayerRendering defines model for DiagnosticLayer.Rendering.

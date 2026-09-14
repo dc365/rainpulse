@@ -359,23 +359,29 @@ type DiagnosticLegendEntry struct {
 }
 
 type DiagnosticLayer struct {
-	LayerID        string                  `json:"layer_id"`
-	Title          string                  `json:"title"`
-	Scope          string                  `json:"scope"`
-	Field          string                  `json:"field"`
-	Rendering      string                  `json:"rendering"`
-	Unit           *string                 `json:"unit"`
-	ObjectPath     string                  `json:"object_path"`
-	Width          int                     `json:"width"`
-	Height         int                     `json:"height"`
-	PaletteVersion string                  `json:"palette_version"`
-	Legend         []DiagnosticLegendEntry `json:"legend"`
-	Bounds         []float64               `json:"bounds,omitempty"`
-	RadarID        *string                 `json:"radar_id,omitempty"`
-	ScanID         *uuid.UUID              `json:"scan_id,omitempty"`
-	SweepNumber    *int                    `json:"sweep_number,omitempty"`
-	ElevationDeg   *float64                `json:"elevation_deg,omitempty"`
-	MaximumRangeKM *float64                `json:"maximum_range_km,omitempty"`
+	SamplingVersion    *string                 `json:"sampling_version,omitempty"`
+	QCAssetID          *string                 `json:"qc_asset_id,omitempty"`
+	QCPipelineVersion  *string                 `json:"qc_pipeline_version,omitempty"`
+	QCParametersSHA256 *string                 `json:"qc_parameters_sha256,omitempty"`
+	QCContentSHA256    *string                 `json:"qc_content_sha256,omitempty"`
+	PNGSHA256          *string                 `json:"png_sha256,omitempty"`
+	LayerID            string                  `json:"layer_id"`
+	Title              string                  `json:"title"`
+	Scope              string                  `json:"scope"`
+	Field              string                  `json:"field"`
+	Rendering          string                  `json:"rendering"`
+	Unit               *string                 `json:"unit"`
+	ObjectPath         string                  `json:"object_path"`
+	Width              int                     `json:"width"`
+	Height             int                     `json:"height"`
+	PaletteVersion     string                  `json:"palette_version"`
+	Legend             []DiagnosticLegendEntry `json:"legend"`
+	Bounds             []float64               `json:"bounds,omitempty"`
+	RadarID            *string                 `json:"radar_id,omitempty"`
+	ScanID             *uuid.UUID              `json:"scan_id,omitempty"`
+	SweepNumber        *int                    `json:"sweep_number,omitempty"`
+	ElevationDeg       *float64                `json:"elevation_deg,omitempty"`
+	MaximumRangeKM     *float64                `json:"maximum_range_km,omitempty"`
 }
 
 type DiagnosticManifest struct {
