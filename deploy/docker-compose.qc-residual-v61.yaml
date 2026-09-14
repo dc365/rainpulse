@@ -14,6 +14,11 @@ services:
       RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/fujian-qc-residual-v61.yaml
       RAINPULSE_RADAR_PHASE_PROCESSING_PROFILE: ''
       RAINPULSE_RADAR_ATTENUATION_PROFILE: ''
+      RAINPULSE_RADAR_CONFIG_DIR: "${RAINPULSE_RADAR_CONFIG_DIR:-/opt/rainpulse/configs/radars}"
+      RAINPULSE_ANCILLARY_CONFIG: /opt/rainpulse/configs/ancillary/fujian-taiwan-v1.yaml
+      RAINPULSE_ANCILLARY_ROOT: /opt/rainpulse/ancillary
+    volumes:
+      - ${RAINPULSE_ANCILLARY_ROOT:-../runtime/ancillary/assets}:/opt/rainpulse/ancillary:ro
   radar-grid-worker:
     image: rainpulse-cpu-worker:${RAINPULSE_QC_CANDIDATE_IMAGE_TAG:-qc-opensource-6.1.0}
     environment:
