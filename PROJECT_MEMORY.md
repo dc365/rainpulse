@@ -25,7 +25,15 @@ operational data here.
 
 ## Prelaunch convergence
 
-- 2026-09-14: V6.1 packaged repair candidate (not deployed/pushed). Capability-based
+- 2026-09-14: V6.1 integrated and pushed as `414d241`; `2e522e3` supplies
+  missing radar/terrain environment and read-only mounts to QC workers.
+  Deployed on 105 as qc-opensource-6.1.0, renderer unchanged at 1.2.0.
+  First 08:45 rerun SUCCEEDED/PUBLISHED (776 seconds), second 08:30 running.
+  08:40 Z9591 strong north/west lines disappear, but 08:45 retains them despite
+  sharing a scan: context/asset linkage requires investigation, not accepted.
+  See `docs/radar-qc-opensource/RESIDUAL_V61_105_RESULTS_20260914.md`.
+
+- 2026-09-14 package baseline (deployment superseded by entry above): Capability-based
   geometry loading fixes the missing residual-v6 branch; optional local narrow
   branch rescue and footprint-edge peripheral review retain original measurement
   gates and weather/missing barriers. Frozen old YAML remains unchanged, but old
