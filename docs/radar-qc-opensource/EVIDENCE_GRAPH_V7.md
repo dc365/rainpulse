@@ -11,3 +11,5 @@
 测试部署使用 `deploy/docker-compose.qc-evidence-graph-v7.yaml`，镜像 `rainpulse-cpu-worker:qc-opensource-7.0.0`，QC 配置 `configs/qc/fujian-qc-evidence-graph-v7.yaml`。保持 `operational_eligible=false`；原生规划器与 QC/Grid/Mosaic/QPE/Diagnostics 在队列排空后协调切换。诊断采样版本不变，元数据新增字段用于直接确认每张图的 QC 版本。
 
 现场脚本和结果位于 `runtime/reports/qc-evidence-v7-20260915/`。不改原始/标准化体扫；已有成功产品保留至新结果发布。回退使用该目录中受限的环境配置、旧二进制、已改文件备份及 V6.1 镜像。
+
+105 首轮真实任务发现 V7 图节点明细使完成事件超过 NATS 上限（result_publish / MaxPayloadError）。修复为完成事件只发有界标量和 `qc/summary.json` 定位；完整取证明细仍在受摘要校验的 QC 资产中，不改变算法动作或提高消息上限。运行镜像修订为 `qc-opensource-7.0.0-r1`，算法配置版本仍为 7.0.0。

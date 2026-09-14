@@ -163,7 +163,7 @@ def _execute_basic_qc(request: RadarQCRequested, client: Minio) -> WorkerResult:
     summary = result.summary
     return WorkerResult(
         objects=objects,
-        diagnostics={"radar_qc": summary},
+        diagnostics={"radar_qc": _completion_qc_summary(summary)},
         metrics={
             "output_size_bytes": float(validation["size_bytes"]),
             "zarr_object_count": float(validation["object_count"]),
@@ -189,6 +189,23 @@ def _execute_basic_qc(request: RadarQCRequested, client: Minio) -> WorkerResult:
         },
         observability=observability,
     )
+
+
+def _completion_qc_summary(summary):
+    """V7 graph details belong to the validated QC artifact, not the event bus."""
+    if summary.get("qc_pipeline_version") != "qc-opensource-7.0.0":
+        return summary
+    keys = (
+        "schema_version", "engine", "qc_pipeline_version", "qc_profile",
+        "decision_version", "flag_definition_version", "parameters_hash",
+        "radar_id", "scan_id", "health_state", "operational_eligible",
+        "valid_gate_count", "missing_gate_count", "low_quality_gate_count",
+        "no_rain_gate_count", "mean_quality_index", "radial_interference_ray_count",
+        "radial_interference_gate_count", "radial_interference_area_km2",
+    )
+    return {**{key: summary[key] for key in keys if key in summary},
+            "summary_object_path": "qc/summary.json",
+            "summary_detail_storage": "completed_qc_asset"}
 
 
 def prepare_qc_inputs(request, normalized, profile, client, *, reader=None, ancillary_maps=None):

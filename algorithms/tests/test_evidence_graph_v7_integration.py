@@ -1,5 +1,6 @@
 """V7 must pass the actual Worker serialization path, including quarantine."""
 import numpy as np
+import json
 import zarr
 from zarr.storage import MemoryStore
 
@@ -33,3 +34,15 @@ def test_v7_worker_serializes_stage_a_and_action_audit(tmp_path, monkeypatch):
     eligible = sweep["QPE_ELIGIBLE_MASK"][:] == 1
     assert not np.any(eligible & ~observed)
     assert np.all(np.isnan(sweep["DBZH_USABLE"][:][~eligible]))
+
+
+def test_v7_completion_event_does_not_embed_graph_nodes():
+    from rainpulse_algo.radar.qc_worker import _completion_qc_summary
+    summary = {"qc_pipeline_version": "qc-opensource-7.0.0", "scan_id": "scan",
+               "mean_quality_index": 0.5,
+               "sweeps": {"sweep_000": {"v7_graph": {"nodes": [{"ray": 1}] * 100000}}}}
+    compact = _completion_qc_summary(summary)
+    assert len(json.dumps(compact).encode()) < 65536
+    assert compact["summary_object_path"] == "qc/summary.json"
+    assert compact["mean_quality_index"] == 0.5
+    assert len(summary["sweeps"]["sweep_000"]["v7_graph"]["nodes"]) == 100000

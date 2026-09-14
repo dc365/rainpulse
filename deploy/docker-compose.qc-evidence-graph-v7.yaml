@@ -8,7 +8,7 @@ x-qc-env: &qc-env
   MKL_NUM_THREADS: '1'
 services:
   radar-qc-worker:
-    image: rainpulse-cpu-worker:${RAINPULSE_QC_CANDIDATE_IMAGE_TAG:-qc-opensource-7.0.0}
+    image: rainpulse-cpu-worker:${RAINPULSE_QC_CANDIDATE_IMAGE_TAG:-qc-opensource-7.0.0-r1}
     environment:
       <<: *qc-env
       RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/fujian-qc-evidence-graph-v7.yaml
@@ -20,22 +20,22 @@ services:
     volumes:
       - ${RAINPULSE_ANCILLARY_ROOT:-../runtime/ancillary/assets}:/opt/rainpulse/ancillary:ro
   radar-grid-worker:
-    image: rainpulse-cpu-worker:${RAINPULSE_QC_CANDIDATE_IMAGE_TAG:-qc-opensource-7.0.0}
+    image: rainpulse-cpu-worker:${RAINPULSE_QC_CANDIDATE_IMAGE_TAG:-qc-opensource-7.0.0-r1}
     environment:
       <<: *qc-env
       RAINPULSE_RADAR_GRID_CONFIG: /opt/rainpulse/configs/gridding/qc-opensource-hybrid-v1.yaml
   radar-mosaic-worker:
-    image: rainpulse-cpu-worker:${RAINPULSE_QC_CANDIDATE_IMAGE_TAG:-qc-opensource-7.0.0}
+    image: rainpulse-cpu-worker:${RAINPULSE_QC_CANDIDATE_IMAGE_TAG:-qc-opensource-7.0.0-r1}
     environment:
       <<: *qc-env
       RAINPULSE_RADAR_MOSAIC_CONFIG: /opt/rainpulse/configs/mosaic/qc-opensource-mosaic-v1.yaml
   analysis-qpe-worker:
-    image: rainpulse-cpu-worker:${RAINPULSE_QC_CANDIDATE_IMAGE_TAG:-qc-opensource-7.0.0}
+    image: rainpulse-cpu-worker:${RAINPULSE_QC_CANDIDATE_IMAGE_TAG:-qc-opensource-7.0.0-r1}
     environment:
       <<: *qc-env
       RAINPULSE_QPE_CONFIG: /opt/rainpulse/configs/qpe/qc-opensource-zr-v1.yaml
   analysis-diagnostics-worker:
-    image: rainpulse-cpu-worker:${RAINPULSE_QC_CANDIDATE_IMAGE_TAG:-qc-opensource-7.0.0}
+    image: rainpulse-cpu-worker:${RAINPULSE_QC_CANDIDATE_IMAGE_TAG:-qc-opensource-7.0.0-r1}
     environment:
       <<: *qc-env
       RAINPULSE_DIAGNOSTIC_CONFIG: /opt/rainpulse/configs/diagnostics/qc-residual-diagnostics-v6.yaml
