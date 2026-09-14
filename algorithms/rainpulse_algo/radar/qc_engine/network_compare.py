@@ -1,7 +1,7 @@
-"""Read-only adjacent V4/V5 or V5/V6 comparison; no publication or remote I/O.
+"""Read-only adjacent V4/V5, V5/V6 or V6/V6.1 comparison; no publication.
 
-Same precomputed baseline raw context for both cores. Native legacy/AFL previews remain
-available in the existing review tools; their masks are not promoted to truth.
+Explicitly choose shared baseline/candidate evidence or per-profile preparation.
+Geometry resources are checksum-bound, not implicitly inherited from the host.
 """
 
 from __future__ import annotations
@@ -25,6 +25,8 @@ from ..qc_input import open_qc_input
 from ..qc_metrics import compare_measurement_actions
 from ..qc_zarr import build_validated_qc_zarr_store
 from .context import prepare_open_source_inputs
+from .fingerprints import context_arrays_identity
+from .forensic_io import frozen_resources
 from .network_gate import NetworkLimits, assess_network, counts
 from .network_manifest import NetworkCaseManifest, NetworkManifest
 from .paper_compare import _frozen
@@ -52,7 +54,19 @@ def case_identity(path):
     return spec, request, source[0]["sha256"], hashes
 
 
-def compare_case(path, *, inspect_rays=(0,), bundle_dir=None):
+def compare_case(path, *, inspect_rays=(0,), bundle_dir=None, context_mode="shared_baseline"):
+    spec, _, _, _ = case_identity(path)
+    with frozen_resources(Path(path).resolve().parent, spec["resource_environment"]) as resources:
+        result = _compare_case(
+            path, inspect_rays=inspect_rays, bundle_dir=bundle_dir, context_mode=context_mode
+        )
+        result["frozen_resources"] = resources
+        return result
+
+
+def _compare_case(path, *, inspect_rays, bundle_dir, context_mode):
+    if context_mode not in {"shared_baseline", "shared_candidate", "each_profile"}:
+        raise ValueError("explicit supported context comparison mode required")
     path = Path(path).resolve()
     root = path.parent
     spec, request, digest, _ = case_identity(path)
@@ -64,8 +78,10 @@ def compare_case(path, *, inspect_rays=(0,), bundle_dir=None):
         baseline_name, candidate_name, addition = "v4", "v5", "cross_radar"
     elif pair == ("qc-opensource-5.0.0", "qc-opensource-6.0.0"):
         baseline_name, candidate_name, addition = "v5", "v6", "residual"
+    elif pair == ("qc-opensource-6.0.0", "qc-opensource-6.1.0"):
+        baseline_name, candidate_name, addition = "v6", "v61", "residual_repair"
     else:
-        raise ValueError("network comparison requires adjacent frozen V4/V5 or V5/V6")
+        raise ValueError("network comparison requires adjacent frozen V4/V5, V5/V6 or V6/V6.1")
     baseline_field = candidate_name.upper()
     for key, value in [
         ("qc_profile", baseline.profile_version),
@@ -97,24 +113,50 @@ def compare_case(path, *, inspect_rays=(0,), bundle_dir=None):
     names = {f"sweep_{int(x):03d}" for x in view.root["sweep_number"][:]}
     if set(spec["labels"]) - names:
         raise ValueError("label references an absent native sweep")
-    prepared, context = prepare_open_source_inputs(
-        request, raw, baseline, NoNetwork(), reader=reader
+    profiles = {baseline_name: baseline, candidate_name: candidate}
+    prepared_by_method, contexts, context_elapsed = {}, {}, {}
+    prep_names = (
+        list(profiles)
+        if context_mode == "each_profile"
+        else [baseline_name if context_mode == "shared_baseline" else candidate_name]
     )
+    for name in prep_names:
+        started = time.perf_counter()
+        prepared_by_method[name], contexts[name] = prepare_open_source_inputs(
+            request, raw, profiles[name], NoNetwork(), reader=reader
+        )
+        context_elapsed[name] = (time.perf_counter() - started) * 1000
+    if len(prep_names) == 1:
+        for name in profiles:
+            prepared_by_method[name] = prepared_by_method[prep_names[0]]
+            contexts[name] = contexts[prep_names[0]]
+    context = contexts[baseline_name]
     out = {}
     elapsed = {}
     bundle_receipts = {}
     for method, profile in [(baseline_name, baseline), (candidate_name, candidate)]:
         start = time.perf_counter()
-        out[method] = apply_basic_qc(raw, profile, **prepared, created_at=request.occurred_at)
+        out[method] = apply_basic_qc(
+            raw, profile, **prepared_by_method[method], created_at=request.occurred_at
+        )
         elapsed[method] = (time.perf_counter() - start) * 1000
+        serialize_start = time.perf_counter()
         bundle, receipt = build_validated_qc_zarr_store(
             raw,
             out[method],
             asset_id=f"network-{method}-{request.job_id}",
             normalized_volume_uri=request.payload.input_uri,
-            provenance={"context_fingerprint": context["context_fingerprint"]},
+            provenance={
+                "context_fingerprint": contexts[method]["context_fingerprint"],
+                "radial_context": json.dumps(contexts[method], sort_keys=True),
+                "comparison_context_mode": context_mode,
+            },
         )
-        bundle_receipts[method] = dict(sha256=artifact_sha256(bundle), validation=receipt)
+        bundle_receipts[method] = dict(
+            sha256=artifact_sha256(bundle),
+            validation=receipt,
+            serialize_validate_ms=(time.perf_counter() - serialize_start) * 1000,
+        )
         if bundle_dir is not None:
             for key, value in bundle.items():
                 target = Path(bundle_dir) / method / "qc.zarr" / key
@@ -130,7 +172,17 @@ def compare_case(path, *, inspect_rays=(0,), bundle_dir=None):
         data_kind=spec["data_kind"],
         observation_time_utc=view.root.attrs.get("volume_end_time_utc"),
         elapsed_ms=elapsed,
-        context_mode=f"identical_frozen_{baseline_name}_worker_context",
+        context_mode=(
+            f"identical_frozen_{baseline_name}_worker_context"
+            if context_mode == "shared_baseline"
+            else context_mode
+        ),
+        context_elapsed_ms=context_elapsed,
+        context_by_method=contexts,
+        context_arrays_by_method={
+            name: context_arrays_identity(prepared_by_method[name]["radial_context"])
+            for name in profiles
+        },
         comparison_methods=[baseline_name, candidate_name],
         context=context,
         outputs=bundle_receipts,
@@ -152,23 +204,33 @@ def compare_case(path, *, inspect_rays=(0,), bundle_dir=None):
         name = old.name
         observed = old.valid_mask == 1
         shape = old.dbzh_raw.shape
-        if not np.array_equal(
-            new.optional_qc_fields[f"{baseline_field}_BASELINE_REJECT_MASK"],
-            old.optional_qc_fields["QC_ACTION"] == 2,
-        ):
-            raise ValueError("embedded baseline differs from frozen baseline")
-        for key, expected in (
-            (
-                f"{baseline_field}_BASELINE_QUARANTINE_MASK",
-                old.optional_qc_fields["RFI_QUARANTINE_MASK"],
-            ),
-            (
-                f"{baseline_field}_BASELINE_ELIGIBLE_MASK",
-                old.optional_qc_fields["QPE_ELIGIBLE_MASK"],
-            ),
-        ):
-            if not np.array_equal(new.optional_qc_fields[key], expected):
-                raise ValueError("embedded baseline qualification differs from frozen baseline")
+        if candidate_name == "v61":
+            if context_mode != "each_profile":
+                old_rejected = old.optional_qc_fields["QC_ACTION"] == 2
+                new_rejected = new.optional_qc_fields["QC_ACTION"] == 2
+                if np.any(old_rejected & ~new_rejected) or np.any(
+                    (new.optional_qc_fields["QPE_ELIGIBLE_MASK"] == 1)
+                    & (old.optional_qc_fields["QPE_ELIGIBLE_MASK"] == 0)
+                ):
+                    raise ValueError("repair unexpectedly restored a frozen V6 measurement")
+        elif context_mode != "each_profile":
+            if not np.array_equal(
+                new.optional_qc_fields[f"{baseline_field}_BASELINE_REJECT_MASK"],
+                old.optional_qc_fields["QC_ACTION"] == 2,
+            ):
+                raise ValueError("embedded baseline differs from frozen baseline")
+            for key, expected in (
+                (
+                    f"{baseline_field}_BASELINE_QUARANTINE_MASK",
+                    old.optional_qc_fields["RFI_QUARANTINE_MASK"],
+                ),
+                (
+                    f"{baseline_field}_BASELINE_ELIGIBLE_MASK",
+                    old.optional_qc_fields["QPE_ELIGIBLE_MASK"],
+                ),
+            ):
+                if not np.array_equal(new.optional_qc_fields[key], expected):
+                    raise ValueError("embedded baseline qualification differs from frozen baseline")
         if not np.array_equal(old.valid_mask, new.valid_mask) or not np.array_equal(
             old.dbzh_raw, new.dbzh_raw, equal_nan=True
         ):
@@ -197,6 +259,9 @@ def compare_case(path, *, inspect_rays=(0,), bundle_dir=None):
                 mask_semantics="final_reject",
                 marked_observed_gates=int(reject.sum()),
                 quarantined_observed_gates=int(f["RFI_QUARANTINE_MASK"].sum()),
+                quarantine_fraction_of_observed=(
+                    float(f["RFI_QUARANTINE_MASK"][observed].mean()) if observed.any() else None
+                ),
                 quantitative_eligible_gates=int(eligible.sum()),
                 measurement_metrics=None,
             )
@@ -249,7 +314,7 @@ def compare_case(path, *, inspect_rays=(0,), bundle_dir=None):
                     **{
                         k: v[ray]
                         for k, v in f.items()
-                        if k.startswith(("V5_", "V6_", "RFI_", "PAPER_", "AFL_", "OS_POL_"))
+                        if k.startswith(("V5_", "V6_", "V61_", "RFI_", "PAPER_", "AFL_", "OS_POL_"))
                         or k
                         in {
                             "DBZH_USABLE",
@@ -283,7 +348,9 @@ def compare_case(path, *, inspect_rays=(0,), bundle_dir=None):
     return _safe_json(case)
 
 
-def run_network(manifest_path, output, *, inspect_rays=(0,), save_bundles=False):
+def run_network(
+    manifest_path, output, *, inspect_rays=(0,), save_bundles=False, context_mode="shared_baseline"
+):
     manifest_path = Path(manifest_path).resolve()
     root = manifest_path.parent
     spec = NetworkManifest.model_validate_json(manifest_path.read_text()).model_dump(mode="json")
@@ -336,6 +403,7 @@ def run_network(manifest_path, output, *, inspect_rays=(0,), save_bundles=False)
                 p,
                 inspect_rays=inspect_rays,
                 bundle_dir=tmp / f"case-{i:02}" if save_bundles else None,
+                context_mode=context_mode,
             )
             for i, p in enumerate(paths)
         ]
@@ -348,7 +416,10 @@ def run_network(manifest_path, output, *, inspect_rays=(0,), save_bundles=False)
             network_gate=gate,
             limitations=[
                 "Engineering comparison, not automatic operational promotion.",
-                "Same frozen baseline context; no future data or repeated physical scans.",
+                (
+                    f"Explicit context mode: {context_mode}; current code path, "
+                    "not proof of historical equivalence."
+                ),
                 "AFL retains explicit engineering approximations; native RDD/SWAN not implemented.",
                 "Unverified plateau is quarantined, never declared a verified saturation source.",
             ],
@@ -374,9 +445,18 @@ def main():
     p.add_argument("--output", required=True, type=Path)
     p.add_argument("--inspect-ray", type=int, action="append")
     p.add_argument("--save-bundles", action="store_true")
+    p.add_argument(
+        "--context-mode",
+        choices=["shared_baseline", "shared_candidate", "each_profile"],
+        default="shared_baseline",
+    )
     a = p.parse_args()
     report = run_network(
-        a.manifest, a.output, inspect_rays=a.inspect_ray or (0,), save_bundles=a.save_bundles
+        a.manifest,
+        a.output,
+        inspect_rays=a.inspect_ray or (0,),
+        save_bundles=a.save_bundles,
+        context_mode=a.context_mode,
     )
     print(
         json.dumps(

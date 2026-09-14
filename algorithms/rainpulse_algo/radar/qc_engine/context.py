@@ -20,6 +20,7 @@ from ..qc_input import open_qc_input
 from .adapters import adapt_sweep
 from .algorithms import library_evidence
 from .decision import decide
+from .fingerprints import context_arrays_identity
 from .objects import radial_objects
 from .radial import local_radial_candidates
 from .temporal import aggregate_temporal_rfi
@@ -78,7 +79,11 @@ def prepare_open_source_inputs(
                 raise ValueError(f"current {field} differs from frozen QC task")
         if utc_time(view.root.attrs["volume_end_time_utc"]) > request.occurred_at.astimezone(UTC):
             raise ValueError("current observation is after the frozen decision cutoff")
-    beam, terrain, config_dir, dem_version = _load_qc_geometry_resources(request, profile)
+    geometry_audit = {}
+    audited = getattr(profile, "residual_repair", None) is not None
+    beam, terrain, config_dir, dem_version = _load_qc_geometry_resources(
+        request, profile, **({"audit": geometry_audit} if audited else {})
+    )
     load = reader or ArtifactObjectReader(client)
     artifacts = [
         {"role": "current", "uri": request.payload.input_uri, "sha256": artifact_sha256(normalized)}
@@ -169,7 +174,26 @@ def prepare_open_source_inputs(
                 if role == "temporal":
                     temporal.append((context_root, first_pass, object_pass))
                 elif config_dir is not None:
-                    cfg = load_radar_config(config_dir / f"{item.radar_id.lower()}.yaml")
+                    try:
+                        cfg_path = config_dir / f"{item.radar_id.lower()}.yaml"
+                        config_bytes = cfg_path.read_bytes()
+                        cfg = load_radar_config(cfg_path)
+                        if cfg_path.read_bytes() != config_bytes:
+                            raise ValueError("cross-radar config changed during preparation")
+                        if cfg.radar_id.lower() != item.radar_id.lower():
+                            raise ValueError("cross-radar config identity differs")
+                    except (OSError, ValueError) as error:
+                        if not audited:
+                            raise
+                        entry.update(
+                            support_status="config_unavailable", error_type=type(error).__name__
+                        )
+                        continue
+                    if audited:
+                        entry.update(
+                            geometry_config_sha256=hashlib.sha256(config_bytes).hexdigest(),
+                            support_status="reference_prepared_not_yet_comparable",
+                        )
                     references.append(
                         CrossRadarSupportReference(
                             item.radar_id,
@@ -241,6 +265,18 @@ def prepare_open_source_inputs(
         "dem_version": dem_version,
         "clutter_sha256": profile.static_ground_clutter.asset_sha256,
     }
+    if audited:
+        identity["geometry_resources"] = geometry_audit
+        identity["prepared_context"] = context_arrays_identity(contexts)
+        identity["support_statistics"] = {
+            "cross_radar_raw_available_count": counts["cross_radar_available_count"],
+            "cross_radar_reference_count": len(references),
+            "comparable_gate_count_by_sweep": {
+                name: int(np.isfinite(fields["WEATHER_SUPPORT_SCORE"]).sum())
+                for name, fields in contexts.items()
+            },
+            "interpretation": "available_is_not_weather_or_clear_air_truth",
+        }
     fingerprint = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
     return {
         "input_view": view,

@@ -245,7 +245,12 @@ def test_frozen_flag_layout_cannot_be_redefined(tmp_path):
 
 @pytest.mark.parametrize(
     "profile_name",
-    ["fujian-qc-opensource-v1.yaml", "fujian-qc-crossradar-v5.yaml", "fujian-qc-residual-v6.yaml"],
+    [
+        "fujian-qc-opensource-v1.yaml",
+        "fujian-qc-crossradar-v5.yaml",
+        "fujian-qc-residual-v6.yaml",
+        "fujian-qc-residual-v61.yaml",
+    ],
 )
 def test_new_qc_grid_mosaic_qpe_chain_preserves_generation_and_missing(tmp_path, profile_name):
     from datetime import UTC, datetime

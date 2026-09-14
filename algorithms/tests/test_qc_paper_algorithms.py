@@ -283,6 +283,7 @@ def test_version_coherence_and_old_parameter_hash():
     data = v3.model_dump(mode="json")
     data.pop("literature")
     data.pop("residual", None)  # Absent V6 extension is not an old parameter.
+    data.pop("residual_repair", None)  # Absent 6.1 extension is not a frozen input.
     data.pop("cross_radar", None)
     digest = hashlib.sha256(
         json.dumps(data, sort_keys=True, separators=(",", ":")).encode()

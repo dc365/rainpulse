@@ -195,6 +195,7 @@ def test_v1_parameter_identity_is_unchanged():
     data.pop("rfi_objects", None)
     data.pop("literature", None)
     data.pop("residual", None)  # Absent V6 extension is not an old parameter.
+    data.pop("residual_repair", None)  # Absent 6.1 extension is not a frozen input.
     data.pop("cross_radar", None)  # Absent future extensions are not a frozen V1 input.
     assert (
         old.parameters_hash

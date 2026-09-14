@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 
-def peripheral_review(native, cfg, *, confirmed, model_anchor, protected):
+def peripheral_review(native, cfg, *, confirmed, model_anchor, protected, footprint=False):
     shape = native.shape
     observed = native.field_available["DBZH"] & native.geometry_good[:, None]
     z, dr = native.fields["DBZH"], native.gate_spacing_m
@@ -17,8 +17,23 @@ def peripheral_review(native, cfg, *, confirmed, model_anchor, protected):
     source_model = np.zeros(shape, bool)
     parent_ray = np.full(shape, -1, "int32")
     parent_gate = np.full(shape, -1, "int32")
+    center_distance = np.full(shape, np.nan, "float32")
+    footprint_gap = np.full(shape, np.nan, "float32")
+    nominal = float(native.audit["azimuth_spacing_deg"])
+    gaps = (np.roll(native.azimuth, -1) - native.azimuth) % 360
+    # Finite sampling cells: a missing ray never acquires the whole absent wedge.
+    after = np.where(native.gap_after, nominal, np.minimum(gaps, nominal * 1.8)) / 2
+    before = np.roll(after, 1)
     if not source.any():
-        return _result(inspected, compatible, source_model, parent_ray, parent_gate)
+        return _result(
+            inspected,
+            compatible,
+            source_model,
+            parent_ray,
+            parent_gate,
+            center_distance if footprint else None,
+            footprint_gap,
+        )
     nr, ng = shape
     ray_offsets = int(np.floor(cfg.peripheral_angle_deg / native.audit["azimuth_spacing_deg"]))
     gate_offsets = int(np.floor(cfg.peripheral_range_m / dr))
@@ -61,7 +76,14 @@ def peripheral_review(native, cfg, *, confirmed, model_anchor, protected):
                 via = targetg - step * np.sign(go)
                 valid &= observed[:, via] & ~protected[:, via]
             cross = native.ranges[a:b][None, :] * np.deg2rad(delta)[:, None]
-            valid &= cross <= cfg.peripheral_cross_range_m + 1e-6
+            gap_angle = delta
+            if footprint:
+                signed = (native.azimuth - native.azimuth[origin] + 180) % 360 - 180
+                source_half = np.where(signed >= 0, after[origin], before[origin])
+                target_half = np.where(signed >= 0, before, after)
+                gap_angle = np.maximum(0, delta - source_half - target_half)
+            edge_gap = native.ranges[a:b][None, :] * np.deg2rad(gap_angle)[:, None]
+            valid &= edge_gap <= cfg.peripheral_cross_range_m + 1e-6
             az = z[origin[:, None], srcg]
             is_model = model_anchor[origin[:, None], srcg]
             adjustment = 20 * np.log10(
@@ -71,21 +93,50 @@ def peripheral_review(native, cfg, *, confirmed, model_anchor, protected):
             match = valid & (np.abs(z[:, a:b] - prediction) <= cfg.peripheral_difference_db)
             inspected[:, a:b] |= valid
             # Deterministic nearest-first source, prioritise compatible witnesses.
-            chosen = match & ~compatible[:, a:b]
+            # In footprint mode keep a model witness if ANY admissible original
+            # model supports this gate. A newly reachable non-model witness must
+            # not hide the model route previously used by V6.
+            chosen = match & (~compatible[:, a:b] | (footprint & is_model & ~source_model[:, a:b]))
             compatible[:, a:b] |= match
+            center_distance[:, a:b][chosen] = np.broadcast_to(cross, chosen.shape)[chosen]
+            footprint_gap[:, a:b][chosen] = np.broadcast_to(edge_gap, chosen.shape)[chosen]
             source_model[:, a:b][chosen] = is_model[chosen]
             pr = np.broadcast_to(native.original_indices[origin, None], chosen.shape)
             pg = np.broadcast_to(srcg[None, :], chosen.shape)
             parent_ray[:, a:b][chosen] = pr[chosen]
             parent_gate[:, a:b][chosen] = pg[chosen]
-    return _result(inspected, compatible, source_model, parent_ray, parent_gate)
+    return _result(
+        inspected,
+        compatible,
+        source_model,
+        parent_ray,
+        parent_gate,
+        center_distance if footprint else None,
+        footprint_gap,
+    )
 
 
-def _result(inspected, compatible, source_model, parent_ray, parent_gate):
-    return {
+def _result(
+    inspected,
+    compatible,
+    source_model,
+    parent_ray,
+    parent_gate,
+    center_distance=None,
+    footprint_gap=None,
+):
+    fields = {
         "V6_PERIPHERAL_REVIEW_MASK": inspected.astype("uint8"),
         "V6_PERIPHERAL_COMPATIBLE_MASK": compatible.astype("uint8"),
         "V6_PERIPHERAL_MODEL_SOURCE_MASK": source_model.astype("uint8"),
         "V6_PARENT_RAY": parent_ray,
         "V6_PARENT_GATE": parent_gate,
     }
+    if center_distance is not None:
+        fields.update(
+            {
+                "V61_PERIPHERAL_CENTER_DISTANCE_M": center_distance,
+                "V61_PERIPHERAL_FOOTPRINT_GAP_M": footprint_gap,
+            }
+        )
+    return fields

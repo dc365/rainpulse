@@ -1,0 +1,19 @@
+{
+  "configs/qc/flag-definitions-v2.yaml": "0424e405ce6c9374af3fd63aa02b504358983a68ebfa5285184c184a7e90f19f",
+  "configs/qc/flag-definitions.yaml": "5dfa0fb4013b1b04b07836348165f4c6a1e535f4b6c003045dd86708672d701a",
+  "configs/qc/fujian-qc-crossradar-v5.yaml": "7e35a57ab6f466065972e42766744eb8f95eac909742c1b3bbfd4ab609f6ed9c",
+  "configs/qc/fujian-qc-evidence-v2.yaml": "e14c4eca3121d2734d8388fd57bd3affc5e05540e2ac76b559b2710d21d95f0a",
+  "configs/qc/fujian-qc-evidence-v3.yaml": "1c3f6549575c8a7a57f0e2be21f647575dcfafd21c00424ca1fbad055ab4273c",
+  "configs/qc/fujian-qc-opensource-rfi-v1.yaml": "3c75e74637b68778182e55777679140b3374875e4a4bf0b93c981b01a279f1e8",
+  "configs/qc/fujian-qc-opensource-v1.yaml": "fb5a471994c1b09f905146afc4f88fbccfb27a25ce0a30f05aa8eff4e32bfac8",
+  "configs/qc/fujian-qc-paper-fusion-v4.yaml": "4296b53107fc693ef4f9255a24626e653a487a8ed27b43e870c1f5159de6ecbe",
+  "configs/qc/fujian-qc-residual-v6.yaml": "8c51f5c3091be0f5c22f140af471a8fe320af40eb62004a0af61e9bc08a4f291",
+  "configs/qc/fujian-qc-rfi-objects-v2.yaml": "7d0915d3d1b571d504b0c8d2310c63a9cfe7e3962069940437dbe3e01e052f3a",
+  "configs/qc/fujian-qc-rfi-objects-v3.yaml": "743f614d81576d16abef9de00dc6710dfc8f151d83b0741225140b8d913a0716",
+  "configs/qc/rp008-basic-v1.yaml": "d9bc3921f43850630df4c0c5fcc8368de34b4ccd64445e2eda1416741b7b4d39",
+  "configs/qc/rp040-fujian-radial-v2.yaml": "444e6ae3c6c785117af68f58537f3246e7154f1eb9a7d3fad1ee4578469790aa",
+  "configs/qc/rp040-fujian-radial-v3.yaml": "b2497e766507bbcc19e261aa636a1488f9f7df1ef6f70bc469a59246ad75aba5",
+  "configs/qc/rp042-fujian-evidence-v1.yaml": "e28b0207cebdc05d26586d5ac15af3f64daf0e8455f5caf773ef0329ed8e202c",
+  "configs/qc/rp043-fujian-radial-closure-v1.yaml": "036c2f299283a0087f3b4196eded8fc526866e83343039ccc3097b27a49b6e4d",
+  "configs/qc/rp047-fujian-radial-evidence-v1.yaml": "806c4171de3fa97507f6b6806d16d1321a86029ead5ab7bdb8be4b8d04ccd5ab"
+}

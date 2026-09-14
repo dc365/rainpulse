@@ -39,24 +39,30 @@ def trace(root, *, sweep, row, column, size):
         return result
     for name in sorted(g.array_keys()):
         array = g[name]
-        if array.shape == p_source_shape(g) and (
-            name
-            in {
-                "DBZH_RAW",
-                "DBZH_QC",
-                "DBZH_USABLE",
-                "QC_ACTION",
-                "QC_FLAGS",
-                "QUALITY_INDEX",
-                "QPE_ELIGIBLE_MASK",
-                "RFI_QUARANTINE_MASK",
-            }
-            or name.startswith(("V5_", "V6_", "PAPER_", "RFI_"))
-        ):
+        if array.shape == p_source_shape(g):
             v = array[ray, gate].item()
             result["fields"][name] = None if isinstance(v, float) and not np.isfinite(v) else v
     result["source_azimuth_deg"] = float(g["azimuth"][ray])
     result["source_range_m"] = float(g["range"][gate])
+    result["source_elevation_deg"] = float(g["elevation"][ray])
+    result["source_ray_time"] = None
+    if "ray_time" in g:
+        timestamp = np.asarray(g["ray_time"][ray])
+        result["source_ray_time_dtype"] = timestamp.dtype.str
+        result["source_ray_time_attributes"] = dict(g["ray_time"].attrs)
+        if timestamp.dtype.kind == "M":
+            result["source_ray_time"] = (
+                None
+                if np.isnat(timestamp)
+                else np.datetime_as_string(
+                    timestamp.astype("datetime64[ns]"), unit="ns", timezone="UTC"
+                )
+            )
+        elif timestamp.dtype.kind in "iuf":
+            result["source_ray_time"] = timestamp.item() if np.isfinite(timestamp) else None
+        else:
+            raise ValueError("unsupported source ray time encoding")
+    result["sampling_verified_against_png"] = False
     result["eligible"] = bool(g["QPE_ELIGIBLE_MASK"][ray, gate])
     result["reason"] = "source_gate_traced; compare PNG sampling/version and configured mask"
     return result
@@ -72,7 +78,7 @@ def main():
     p.add_argument("--sweep", default="sweep_000")
     p.add_argument("--row", type=int, required=True)
     p.add_argument("--column", type=int, required=True)
-    p.add_argument("--size", type=int, default=512)
+    p.add_argument("--size", type=int, default=640)
     p.add_argument("--output", type=Path, required=True)
     a = p.parse_args()
     if not a.qc_zarr.is_dir() or a.output.exists():

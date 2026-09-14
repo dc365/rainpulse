@@ -1,0 +1,150 @@
+{
+  "$defs": {
+    "FrozenFile": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "title": "FrozenFile",
+      "type": "object"
+    },
+    "Panel": {
+      "additionalProperties": false,
+      "properties": {
+        "panel_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Panel Id",
+          "type": "string"
+        },
+        "analysis_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Analysis Id",
+          "type": "string"
+        },
+        "expected_qc_asset_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Expected Qc Asset Id",
+          "type": "string"
+        },
+        "qc_zarr": {
+          "$ref": "#/$defs/FrozenFile"
+        },
+        "png": {
+          "$ref": "#/$defs/FrozenFile"
+        },
+        "layer": {
+          "$ref": "#/$defs/FrozenFile"
+        },
+        "sweep": {
+          "pattern": "^sweep_[0-9]{3}$",
+          "title": "Sweep",
+          "type": "string"
+        },
+        "samples": {
+          "items": {
+            "$ref": "#/$defs/Sample"
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "title": "Samples",
+          "type": "array"
+        }
+      },
+      "required": [
+        "panel_id",
+        "analysis_id",
+        "expected_qc_asset_id",
+        "qc_zarr",
+        "png",
+        "layer",
+        "sweep",
+        "samples"
+      ],
+      "title": "Panel",
+      "type": "object"
+    },
+    "Sample": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "row": {
+          "exclusiveMaximum": 640,
+          "minimum": 0,
+          "title": "Row",
+          "type": "integer"
+        },
+        "column": {
+          "exclusiveMaximum": 640,
+          "minimum": 0,
+          "title": "Column",
+          "type": "integer"
+        },
+        "radius_gates": {
+          "default": 2,
+          "maximum": 20,
+          "minimum": 0,
+          "title": "Radius Gates",
+          "type": "integer"
+        },
+        "role": {
+          "default": "unlabeled_review",
+          "maxLength": 200,
+          "title": "Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "row",
+        "column"
+      ],
+      "title": "Sample",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "rainpulse.qc-forensic.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "panels": {
+      "items": {
+        "$ref": "#/$defs/Panel"
+      },
+      "maxItems": 24,
+      "minItems": 1,
+      "title": "Panels",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "panels"
+  ],
+  "title": "Manifest",
+  "type": "object"
+}

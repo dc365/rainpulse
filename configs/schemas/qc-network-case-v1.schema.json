@@ -114,6 +114,13 @@
       },
       "title": "Labels",
       "type": "object"
+    },
+    "resource_environment": {
+      "additionalProperties": {
+        "$ref": "#/$defs/FrozenFile"
+      },
+      "title": "Resource Environment",
+      "type": "object"
     }
   },
   "required": [

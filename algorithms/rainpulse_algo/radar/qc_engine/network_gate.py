@@ -71,7 +71,11 @@ def rates(c):
     def ratio(a, b):
         return c[a] / c[b] if c[b] else None
 
+    confirmed_labeled = c["interference_rejected"] + c["weather_rejected"]
     return dict(
+        confirmed_precision_on_trusted_binary_labels=(
+            c["interference_rejected"] / confirmed_labeled if confirmed_labeled else None
+        ),
         interference_recall=ratio("interference_rejected", "interference"),
         interference_withheld_rate=ratio("interference_withheld", "interference"),
         weather_false_reject=ratio("weather_rejected", "weather"),
@@ -87,7 +91,7 @@ def assess_network(cases, expected_radars, limits: NetworkLimits):
     if len(pairs) > 1:
         raise ValueError("network assessment cannot mix baseline/candidate versions")
     pair = next(iter(pairs), ("v4", "v5"))
-    if pair not in {("v4", "v5"), ("v5", "v6")}:
+    if pair not in {("v4", "v5"), ("v5", "v6"), ("v6", "v61")}:
         raise ValueError("unsupported network comparison versions")
     baseline_name, candidate_name = pair
     aggregate = defaultdict(

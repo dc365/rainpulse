@@ -25,6 +25,17 @@ operational data here.
 
 ## Prelaunch convergence
 
+- 2026-09-14: V6.1 packaged repair candidate (not deployed/pushed). Capability-based
+  geometry loading fixes the missing residual-v6 branch; optional local narrow
+  branch rescue and footprint-edge peripheral review retain original measurement
+  gates and weather/missing barriers. Frozen old YAML remains unchanged, but old
+  buggy V6 execution requires its original source commit. New read-only forensic
+  export binds native 640x640 PNG/QC identity and ns timestamps; explicit context
+  modes and resource hashes support controlled comparisons. Local validation:
+  881 Python tests, 79 Web tests, Go test/vet/build pass. No real-case skill claim.
+  See `docs/radar-qc-opensource/RESIDUAL_V61_REPAIR.md` and
+  `docs/radar-qc-opensource/RESIDUAL_V61_VALIDATION.md`.
+
 - 2026-09-14: Residual V6 integrated on main as `0614a62` and deployed to 105.
   QC `qc-opensource-6.0.0` and diagnostics renderer `1.2.0` switched together
   in the native planner and 14 workers. 08:30 rerun SUCCEEDED/PUBLISHED

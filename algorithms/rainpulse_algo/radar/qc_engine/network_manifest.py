@@ -32,9 +32,16 @@ class NetworkCaseManifest(BaseModel):
     flags: FrozenFile
     artifacts: list[FrozenArtifact] = Field(min_length=1, max_length=7)
     labels: dict[str, FrozenFile] = Field(default_factory=dict)
+    resource_environment: dict[str, FrozenFile] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def unique_artifacts(self):
+        if set(self.resource_environment) - {
+            "RAINPULSE_RADAR_CONFIG_DIR",
+            "RAINPULSE_ANCILLARY_CONFIG",
+            "RAINPULSE_ANCILLARY_ROOT",
+        }:
+            raise ValueError("only frozen geometry resource keys are permitted")
         if len({x.uri for x in self.artifacts}) != len(self.artifacts):
             raise ValueError("duplicate frozen artifact URI")
         if not self.process_id.strip() or not self.case_id.strip():

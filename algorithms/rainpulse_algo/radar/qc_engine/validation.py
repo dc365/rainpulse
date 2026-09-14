@@ -38,7 +38,8 @@ def validate_sweep(group, attrs) -> None:
     if np.any(action > Action.MISSING) or not np.array_equal(action == Action.MISSING, ~valid):
         raise ValueError("QC actions and original observation support disagree")
     quarantine = np.zeros(shape, bool)
-    version6 = attrs.get("qc_pipeline_version") == "qc-opensource-6.0.0"
+    version61 = attrs.get("qc_pipeline_version") == "qc-opensource-6.1.0"
+    version6 = version61 or attrs.get("qc_pipeline_version") == "qc-opensource-6.0.0"
     version5 = version6 or attrs.get("qc_pipeline_version") == "qc-opensource-5.0.0"
     version4 = version5 or attrs.get("qc_pipeline_version") == "qc-opensource-4.0.0"
     version3 = version4 or attrs.get("qc_pipeline_version") == "qc-opensource-3.0.0"
@@ -48,6 +49,7 @@ def validate_sweep(group, attrs) -> None:
         "qc-opensource-4.0.0",
         "qc-opensource-5.0.0",
         "qc-opensource-6.0.0",
+        "qc-opensource-6.1.0",
     }:
         for field, dtype in {
             "RFI_OBJECT_ID": "uint32",
@@ -157,6 +159,19 @@ def validate_sweep(group, attrs) -> None:
                 raise ValueError("invalid polarization moment counts")
         if np.any((state == 3) & ((flags & np.uint32(8)) == 0)):
             raise ValueError("confirmed RFI lacks a radial cause flag")
+    if version61:
+        for name in ("V61_POL_RELIABLE_MASK", "V61_SNR_AVAILABLE_MASK", "V61_REVIEW_OUTCOME"):
+            if (
+                name not in group
+                or group[name].shape != shape
+                or group[name].dtype != np.dtype("uint8")
+            ):
+                raise ValueError(f"invalid 6.1 diagnostic field {name}")
+        outcome = group["V61_REVIEW_OUTCOME"][:]
+        if np.any(outcome > 5) or not np.array_equal(outcome == 5, ~valid):
+            raise ValueError("6.1 outcome changed original missing semantics")
+        if np.any((outcome == 3) & ~quarantine) or np.any((outcome == 4) & ~reject):
+            raise ValueError("6.1 outcome disagrees with final measurement disposition")
     if not np.array_equal(trusted, valid & ~reject & ~quarantine) or np.any(eligible & ~trusted):
         raise ValueError("QC measurement trust is inconsistent with decisions")
     if np.any(reject & ((flags & np.uint32(32768)) == 0)):
