@@ -1,6 +1,6 @@
 # RainPulse Project Memory
 
-Updated: 2026-09-14 (Asia/Taipei)
+Updated: 2026-09-15 (Asia/Taipei)
 
 This file is the concise handoff for a new Codex session. Stable engineering
 rules remain in `AGENTS.md`; implementation details remain in the referenced RP
@@ -24,6 +24,21 @@ operational data here.
   unless the user explicitly asks.
 
 ## Prelaunch convergence
+
+- 2026-09-15: V7 interrupted work package integrated and pushed as `76e60c4`.
+  Actual Worker serialization required V7 action-validation integration; fixed.
+  51 focused Python tests, Go API/workflow tests, Web and Linux BDP build passed.
+  105 now uses qc-opensource-7.0.0 on native planner and 14 healthy workers.
+  Completion-event payload overflow fixed in `bebb660`; runtime image revised
+  to qc-opensource-7.0.0-r1. First 08:45 rerun SUCCEEDED/PUBLISHED in 1072s;
+  20 QC/20 Grid/6 Mosaic/6 QPE/6 Diagnostics succeeded. 08:50 running and
+  08:30 queued in the serial background script. 08:30/40/45 four-station raw
+  PNGs are unchanged; QC changes only 0–83 displayed pixels per image. Major
+  westward Z9591 and multiray Z9598 residuals persist; effects NOT accepted.
+  See docs/radar-qc-opensource/EVIDENCE_GRAPH_V7_105_RESULTS_20260915.md. Native bRopo Emitter
+  remains unverified and is not enabled. See docs/radar-qc-opensource/EVIDENCE_GRAPH_V7.md.
+  Subsequent four-station V6.1 sheets still show westward Z9591 residuals;
+  the earlier V6.1 report's “west line disappears” observation is not generalizable.
 
 - 2026-09-14: V6.1 integrated and pushed as `414d241`; `2e522e3` supplies
   missing radar/terrain environment and read-only mounts to QC workers.
