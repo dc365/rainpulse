@@ -12,6 +12,7 @@ from .adapters import adapt_sweep
 from .algorithms import library_evidence
 from .crossradar import fuse_crossradar, sweep_funnel
 from .decision import Action, decide
+from .support import weather_support as select_weather_support
 from .objects import radial_objects
 from .paper_fusion import fuse_paper_decision, paper_evidence
 from .phase import process_phase
@@ -148,7 +149,9 @@ def run_open_source_qc(
         cross = context.get("WEATHER_SUPPORT_SCORE")
         if cross is not None:
             cross = np.asarray(cross)[sweep.original_indices]
-            weather = np.fmax(weather, cross)
+        weather = select_weather_support(
+            weather, cross, radial, split=profile.context.split_radial_weather_support
+        )
         if profile.rfi_objects is not None and not profile.context.enabled:
             weather[:] = np.nan
             context = {}

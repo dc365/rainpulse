@@ -350,3 +350,10 @@ operational data here.
 已核验交付包并整合对象引擎，保留门级上下文修复。完整 Python/Go 与前端 74 测试通过。初次连接超时，用户恢复网络后已部署到 105 并开展真实重算。详见 docs/radar-qc-opensource/RFI_OBJECTS_V2_INTEGRATION_20260913.md；不能将 V1 部署记录视为 V2 已上线。
 
 105 V2 三组重算现已全部 PUBLISHED/SUCCEEDED（49 次 QC）；08:15/25/30 改善有限，08:35–45 仍残留，不通过径向效果验收。详情见 docs/radar-qc-opensource/RFI_OBJECTS_V2_105_RESULTS_20260913.md。
+
+- 2026-09-15 support audit: 29 lowest-cut frozen scans audited and paired
+  initial decide experiments completed, zero action changes. 208,690 visible
+  gates already quarantined. All 29 V8 native detectors returned
+  unsupported_angular_geometry with zero calls (feature completion was NOT
+  native execution). Default-off source-aware support switch added; online
+  remains unchanged. See measurement-v8/SUPPORT_AUDIT_20260915.md.

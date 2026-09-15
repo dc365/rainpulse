@@ -234,6 +234,7 @@ class PhaseConfig(FrozenConfig):
 
 
 class ContextConfig(FrozenConfig):
+    split_radial_weather_support: bool = False
     max_temporal_scans: int = Field(default=3, ge=0, le=3)
     enabled: bool = True
     max_age_seconds: int = Field(default=900, gt=0)
@@ -297,6 +298,8 @@ class OpenSourceQCProfile(FrozenConfig):
     @property
     def parameters_hash(self) -> str:
         value = self.model_dump(mode="json")
+        if not self.context.split_radial_weather_support:
+            value["context"].pop("split_radial_weather_support", None)
         # Preserve the frozen v1 semantic identity when the new engine is absent.
         if self.rfi_objects is None:
             value.pop("rfi_objects", None)
