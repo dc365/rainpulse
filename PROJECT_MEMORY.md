@@ -391,3 +391,8 @@ operational data here.
 - 三项实际核心回归通过。见 docs/radar-qc-opensource/measurement-v8/SPARSE_EMITTER_20260915.md；后续区分共同观测不足与实际方位对比不足，不能填缺测造阳性。
 - 稀疏 Emitter 后续逐门归因：08:35 已计算1617门对比<8dB、3门≥8dB，2704缺肩部/几何、2080共同段短；08:45分别101/0/1182/445。±1/2/4/8/16射线尺度均无ROI内≥8dB连续4km段。扩大肩部不能解决本次残留，后续应做断续对象证据，勿补缺测或据此宣称算法已改善。
 - 已实现默认关闭的 interrupted_objects_enabled：同射线有界断续对象、冻结干扰锚点、目标局部双偏振确认及邻站冲突保护。18项相关测试通过。105 两时次对象候选 ROI 731/1077，新增业务去除均0，未上线；见 INTERRUPTED_OBJECTS_20260915.md。识别推进不等于质控效果改善。
+
+### 2026-09-16 OC1 test-site activation
+- Pipeline qc-opensource-7.1.0 / decision object-consensus-oc1 now appends OC1 quarantine with separate baseline/addition provenance and first-decider code8. New worker serialization checks passed; no confirmed-pollution additions.
+- 105 uses rainpulse-cpu-worker:qc-opensource-7.1.0-oc1 across QC/grid/mosaic/QPE/diagnostics; control.env points to fujian-qc-object-consensus-oc1.yaml. Append deploy/docker-compose.qc-object-consensus.yaml after existing overrides for future compose actions.
+- 4173 HTTP200. Background runtime/reports/oc1-online-20260916/refresh.py serially regenerates 08:35 and08:45 forecasts (preceding frames cover08:15/35/40/45). First request d8890a9d-1804-52ea-ba58-1aabfbe8aa4a observed QC_RUNNING. This is not completion evidence; inspect refresh.log before resubmitting. Raw data preserved. Old derived disk cleanup not yet verified.
