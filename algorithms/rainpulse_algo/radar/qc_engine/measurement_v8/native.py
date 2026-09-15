@@ -10,7 +10,7 @@ import math
 import subprocess
 import tempfile
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -27,6 +27,55 @@ class NativeResult:
 def spans(mask):
     edge = np.diff(np.r_[False, mask, False].astype("int8"))
     return zip(np.flatnonzero(edge == 1), np.flatnonzero(edge == -1), strict=True)
+
+
+def angular_mapping(native, fraction, nominal_step=1.0):
+    """Injective nearest observation assignment. No interpolation or filling."""
+    spacing = float(native.audit["azimuth_spacing_deg"])
+    count = int(round(360 / nominal_step))
+    if not native.full_ppi or count < 4 or count > 4000:
+        raise ValueError("angular mapping requires a full supported PPI")
+    step = 360.0 / count
+    # Estimate lattice phase using circular residuals; avoids the 0/360 seam.
+    phases = native.azimuth * (2 * np.pi / step)
+    phase = np.angle(np.mean(np.exp(1j * phases))) * step / (2 * np.pi)
+    target = (phase + np.arange(count) * step) % 360
+    target.sort()
+    distance = abs((target[:, None] - native.azimuth[None, :] + 180) % 360 - 180)
+    source = distance.argmin(axis=1)
+    error = distance[np.arange(count), source]
+    good = (error <= fraction * step) & native.geometry_good[source]
+    # Defensive injectivity: reject all ambiguous assignments, never duplicate data.
+    multiplicity = np.bincount(source[good], minlength=native.shape[0])
+    good &= multiplicity[source] == 1
+    return target, source, good, error
+
+
+def mapped_native(native, cfg, binary, expected_sha256):
+    target, source, good, error = angular_mapping(native, cfg.maximum_angular_offset_fraction, cfg.angular_step_deg)
+    mapped = replace(native, azimuth=target,
+        elevation=native.elevation[source], ray_time=native.ray_time[source],
+        original_indices=np.arange(len(target)),
+        fields={k: v[source].copy() for k,v in native.fields.items()},
+        field_available={k: v[source] & good[:, None] for k,v in native.field_available.items()},
+        geometry_good=good, gap_after=~good | ~np.roll(good, -1),
+        audit={**native.audit, "azimuth_spacing_deg": 360 / len(target)})
+    # Mapping is performed once; unavailable rays are excluded by tile planning.
+    result = run_native(mapped, cfg.model_copy(update={"angular_mapping": False}), binary, expected_sha256)
+    restored = {k: np.full(native.shape, np.nan, "float32") for k in result.scores}
+    for key in restored:
+        restored[key][source[good]] = result.scores[key][good]
+    result.summary["angular_mapping"] = {
+        "method": "injective_nearest_observation_v1", "target_rays": len(target),
+        "matched_rays": int(good.sum()), "source_rays": native.shape[0],
+        "maximum_offset_deg": float(error[good].max()) if good.any() else None,
+        "source_indices": np.where(good, source, -1).tolist(),
+        "unmatched_source_policy": "NaN", "interpolated": False,
+    }
+    result.summary["config"] = cfg.model_dump(mode="json")
+    result.summary["semantic_identity"] = digest({"config": result.summary["config"],
+        "mapping": result.summary["angular_mapping"], "binary_sha256": expected_sha256})
+    return NativeResult(restored, result.summary)
 
 
 def run_native(native, cfg, binary=None, expected_sha256=None):
@@ -64,6 +113,8 @@ def run_native(native, cfg, binary=None, expected_sha256=None):
     step = (np.roll(native.azimuth, -1) - native.azimuth) % 360
     usable_edges = ~native.gap_after
     if not np.allclose(step[usable_edges], spacing, atol=0.05, rtol=0):
+        if cfg.angular_mapping and native.full_ppi:
+            return mapped_native(native, cfg, binary, expected_sha256)
         if cfg.required:
             raise ValueError("native core requires uniform supported angular sampling")
         summary["status"] = "unsupported_angular_geometry"

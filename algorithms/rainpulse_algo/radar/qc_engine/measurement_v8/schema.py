@@ -16,6 +16,9 @@ class Ref(Frozen):
 
 
 class NativeConfig(Frozen):
+    angular_mapping: bool = False
+    angular_step_deg: float = Field(default=1.0, ge=0.1, le=3.0)
+    maximum_angular_offset_fraction: float = Field(default=0.25, gt=0, le=0.25)
     enabled: bool = True
     required: bool = False
     minimum_dbz: float = Field(default=-10, ge=-31, le=80)
