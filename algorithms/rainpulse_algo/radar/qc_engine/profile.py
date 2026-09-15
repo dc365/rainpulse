@@ -256,7 +256,7 @@ class OpenSourceQCProfile(FrozenConfig):
         "qc-opensource-5.0.0",
         "qc-opensource-6.0.0",
         "qc-opensource-6.1.0",
-        "qc-opensource-7.0.0",
+        "qc-opensource-7.0.0", "qc-opensource-7.1.0",
     ] = "qc-opensource-1.0.0"
     decision_version: Literal[
         "type-specific-v1",
@@ -266,7 +266,7 @@ class OpenSourceQCProfile(FrozenConfig):
         "crossradar-v5",
         "residual-v6",
         "residual-v6.1",
-        "evidence-graph-v7",
+        "evidence-graph-v7", "object-consensus-oc1",
     ] = "type-specific-v1"
     flag_definition_version: Literal["qc-flags-v2"] = "qc-flags-v2"
     operational_eligible: Literal[False] = False
@@ -327,6 +327,7 @@ class OpenSourceQCProfile(FrozenConfig):
             "qc-opensource-6.0.0": "residual-v6",
             "qc-opensource-6.1.0": "residual-v6.1",
             "qc-opensource-7.0.0": "evidence-graph-v7",
+            "qc-opensource-7.1.0": "object-consensus-oc1",
         }[self.pipeline_version]
         if object_version is None:
             if self.decision_version != "type-specific-v1" or self.rfi_objects is not None:
@@ -345,7 +346,7 @@ class OpenSourceQCProfile(FrozenConfig):
                 "qc-opensource-5.0.0",
                 "qc-opensource-6.0.0",
                 "qc-opensource-6.1.0",
-                "qc-opensource-7.0.0",
+                "qc-opensource-7.0.0", "qc-opensource-7.1.0",
             }
         ) != (self.literature is not None):
             raise ValueError("paper fusion requires its own versioned configuration")
@@ -355,7 +356,7 @@ class OpenSourceQCProfile(FrozenConfig):
             raise ValueError("paper quarantine cannot enter quantitative precipitation")
         if (
             self.pipeline_version
-            in {"qc-opensource-5.0.0", "qc-opensource-6.0.0", "qc-opensource-6.1.0", "qc-opensource-7.0.0"}
+            in {"qc-opensource-5.0.0", "qc-opensource-6.0.0", "qc-opensource-6.1.0", "qc-opensource-7.0.0", "qc-opensource-7.1.0"}
         ) != (self.cross_radar is not None):
             raise ValueError("cross-radar evidence requires its own coordinated V5 profile")
         if (
@@ -363,7 +364,7 @@ class OpenSourceQCProfile(FrozenConfig):
             and self.cross_radar.quarantine_quality >= self.quality_index.quantitative_minimum
         ):
             raise ValueError("V5 quarantine cannot enter quantitative precipitation")
-        if (self.pipeline_version in {"qc-opensource-6.0.0", "qc-opensource-6.1.0", "qc-opensource-7.0.0"}) != (
+        if (self.pipeline_version in {"qc-opensource-6.0.0", "qc-opensource-6.1.0", "qc-opensource-7.0.0", "qc-opensource-7.1.0"}) != (
             self.residual is not None
         ):
             raise ValueError("residual modules require the coordinated V6 profile")
@@ -372,9 +373,9 @@ class OpenSourceQCProfile(FrozenConfig):
             and self.residual.quarantine_quality >= self.quality_index.quantitative_minimum
         ):
             raise ValueError("V6 quarantine cannot be quantitatively eligible")
-        if (self.pipeline_version in {"qc-opensource-6.1.0", "qc-opensource-7.0.0"}) != (self.residual_repair is not None):
+        if (self.pipeline_version in {"qc-opensource-6.1.0", "qc-opensource-7.0.0", "qc-opensource-7.1.0"}) != (self.residual_repair is not None):
             raise ValueError("topology repair requires its own coordinated 6.1 profile")
-        if (self.pipeline_version == "qc-opensource-7.0.0") != (self.evidence_graph is not None):
+        if (self.pipeline_version in {"qc-opensource-7.0.0", "qc-opensource-7.1.0"}) != (self.evidence_graph is not None):
             raise ValueError("V7 evidence graph requires its own coordinated profile")
         if self.evidence_graph and self.evidence_graph.quarantine_quality >= self.quality_index.quantitative_minimum:
             raise ValueError("V7 quarantine cannot be quantitatively eligible")

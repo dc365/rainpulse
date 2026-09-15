@@ -1,0 +1,14 @@
+# Test-server OC1 integration; raw observations and original causes remain intact.
+services:
+  radar-qc-worker:
+    image: rainpulse-cpu-worker:qc-opensource-7.1.0-oc1
+    environment:
+      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/fujian-qc-object-consensus-oc1.yaml
+  radar-grid-worker:
+    image: rainpulse-cpu-worker:qc-opensource-7.1.0-oc1
+  radar-mosaic-worker:
+    image: rainpulse-cpu-worker:qc-opensource-7.1.0-oc1
+  analysis-qpe-worker:
+    image: rainpulse-cpu-worker:qc-opensource-7.1.0-oc1
+  analysis-diagnostics-worker:
+    image: rainpulse-cpu-worker:qc-opensource-7.1.0-oc1

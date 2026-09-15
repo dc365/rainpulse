@@ -38,10 +38,12 @@ def validate_sweep(group, attrs) -> None:
     if np.any(action > Action.MISSING) or not np.array_equal(action == Action.MISSING, ~valid):
         raise ValueError("QC actions and original observation support disagree")
     quarantine = np.zeros(shape, bool)
-    version7 = attrs.get("qc_pipeline_version") == "qc-opensource-7.0.0"
+    version7 = attrs.get("qc_pipeline_version") in {"qc-opensource-7.0.0", "qc-opensource-7.1.0", "qc-opensource-7.1.0"}
     version61 = version7 or attrs.get("qc_pipeline_version") == "qc-opensource-6.1.0"
     baseline7_reject, baseline7_quarantine = reject, quarantine
     graph_domain = np.zeros(shape, bool)
+    if attrs.get("qc_pipeline_version") == "qc-opensource-7.1.0" and "OC1_ADDED_QUARANTINE_MASK" not in group:
+        raise ValueError("OC1 provenance missing")
     if version7:
         from .evidence_validation import validate_evidence_fields
 
@@ -59,7 +61,7 @@ def validate_sweep(group, attrs) -> None:
         "qc-opensource-5.0.0",
         "qc-opensource-6.0.0",
         "qc-opensource-6.1.0",
-        "qc-opensource-7.0.0",
+        "qc-opensource-7.0.0", "qc-opensource-7.1.0",
     }:
         for field, dtype in {
             "RFI_OBJECT_ID": "uint32",

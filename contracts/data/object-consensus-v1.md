@@ -16,3 +16,14 @@
 - audit 模式原 baseline 所有数值、掩码、动作逐数组相同。experiment 模式保留所有既有拒绝/隔离，禁止新增有效门，禁止修改原始字段，禁止恢复原值。总新增资格损失超预算时回退整个切面，不部分截断为达预算。
 
 所有输出只写新目录，临时目录验证后原子重命名；使用确定性 NPY/ZIP 序列化。详细 folds/domains/逐门字段只存文件，不放 NATS。默认关闭且无规划器选择。旧 V7 资产不得写入本实验动作后继续标为原来的 V7。
+
+## Test-server pipeline integration (7.1.0)
+
+Pipeline `qc-opensource-7.1.0`, decision `object-consensus-oc1` adds OC1 after
+V7 graph decisions. OC1_BASELINE_QUARANTINE_MASK and
+OC1_ADDED_QUARANTINE_MASK record its exact monotone projection; validators
+check both the pre-OC1 V7 ledger and final union. First decider code 8 is
+OBJECT_CONSENSUS. No new confirmed-pollution flags are created. The pipeline
+remains operational_eligible=false and uses the acknowledged experimental
+10% whole-cut eligibility-loss budget. Successful derived publications replace
+prior visible products through the existing regeneration flow; raw assets stay immutable.

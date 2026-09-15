@@ -13,6 +13,7 @@ class Decider(IntEnum):
     RESIDUAL = 5
     GRAPH = 6
     HEALTH_QUALITY = 7
+    OBJECT_CONSENSUS = 8
 
 
 class StageAudit:

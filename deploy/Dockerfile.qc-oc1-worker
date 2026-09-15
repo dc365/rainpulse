@@ -1,0 +1,3 @@
+FROM rainpulse-cpu-worker:qc-opensource-7.0.0-r2
+COPY algorithms/rainpulse_algo /opt/rainpulse/rainpulse_algo
+COPY configs/qc/fujian-qc-object-consensus-oc1.yaml /opt/rainpulse/configs/qc/fujian-qc-object-consensus-oc1.yaml

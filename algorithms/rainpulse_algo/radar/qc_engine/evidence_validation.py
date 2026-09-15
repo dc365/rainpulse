@@ -22,6 +22,17 @@ def validate_evidence_fields(group, observed, reject):
     old = mask("V7_BASELINE_REJECT_MASK")
     oldq = mask("V7_BASELINE_QUARANTINE_MASK")
     quarantine = mask("RFI_QUARANTINE_MASK")
+    oc_added = np.zeros(observed.shape, bool)
+    if "OC1_ADDED_QUARANTINE_MASK" in group:
+        for name in ("OC1_ADDED_QUARANTINE_MASK", "OC1_BASELINE_QUARANTINE_MASK"):
+            if name not in group or group[name].shape != observed.shape or group[name].dtype != np.dtype("uint8"):
+                raise ValueError("invalid OC1 action provenance")
+        oc_added = mask("OC1_ADDED_QUARANTINE_MASK")
+        oc_base = mask("OC1_BASELINE_QUARANTINE_MASK")
+        if np.any(oc_added & (~observed | reject | oc_base)) or not np.array_equal(quarantine, oc_base | oc_added):
+            raise ValueError("OC1 final quarantine differs from baseline plus additions")
+        quarantine = oc_base
+
     domain = np.zeros(observed.shape, bool)
     add = domain.copy()
     withheld = domain.copy()
@@ -38,4 +49,4 @@ def validate_evidence_fields(group, observed, reject):
         raise ValueError("V7 final actions differ from recorded baseline plus additions")
     if np.any(mask("QPE_ELIGIBLE_MASK") & ~mask("V7_BASELINE_ELIGIBLE_MASK")):
         raise ValueError("V7 restored a withheld baseline measurement")
-    return domain
+    return domain | oc_added

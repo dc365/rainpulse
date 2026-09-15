@@ -245,6 +245,24 @@ def run_open_source_qc(
                 graph_record = {**(graph_record or {}), "fragment_radials": fragment_record}
             if tracker is not None:
                 tracker.observe(Decider.GRAPH, decision)
+            if profile.pipeline_version == "qc-opensource-7.1.0":
+                from .object_consensus.adapter import evaluate_native, scalar_completion
+                from .object_consensus.config import Policy
+                oldq = decision.arrays["RFI_QUARANTINE_MASK"].copy()
+                decision, oc_evidence, oc_outcome = evaluate_native(
+                    sweep, decision, phase_period=profile.geometry.phase_period_deg,
+                    low_quality_flag=profile.flag_masks["LOW_QUALITY"],
+                    policy=Policy(mode="experiment_quarantine", allow_coherent_quarantine=True,
+                                  acknowledge_uncalibrated_model=True),
+                )
+                decision.arrays["OC1_BASELINE_QUARANTINE_MASK"] = oldq
+                decision.arrays["OC1_ADDED_QUARANTINE_MASK"] = oc_outcome.added_quarantine.astype("uint8")
+                for name in ("state", "family_code", "reason", "fold_id"):
+                    if name in oc_evidence.arrays:
+                        decision.arrays["OC1_" + name.upper()] = oc_evidence.arrays[name]
+                graph_record = {**(graph_record or {}), "object_consensus": scalar_completion(oc_evidence, oc_outcome)}
+                if tracker is not None:
+                    tracker.observe(Decider.OBJECT_CONSENSUS, decision)
             if unified:
                 decision.arrays["V7_STAGE_A_DONOR_USABLE_MASK"] = standalones[sweep.name].donor_usable.astype("uint8")
                 decision.arrays["V7_STAGE_A_DONOR_UNKNOWN_MASK"] = standalones[sweep.name].donor_unknown.astype("uint8")

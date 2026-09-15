@@ -193,7 +193,7 @@ def _execute_basic_qc(request: RadarQCRequested, client: Minio) -> WorkerResult:
 
 def _completion_qc_summary(summary):
     """V7 graph details belong to the validated QC artifact, not the event bus."""
-    if summary.get("qc_pipeline_version") != "qc-opensource-7.0.0":
+    if summary.get("qc_pipeline_version") not in {"qc-opensource-7.0.0", "qc-opensource-7.1.0"}:
         return summary
     keys = (
         "schema_version", "engine", "qc_pipeline_version", "qc_profile",
