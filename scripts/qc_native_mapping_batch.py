@@ -11,7 +11,8 @@ from rainpulse_algo.radar.qc_engine.measurement_v8.io import file_hash
 
 root=Path(sys.argv[1]); output=Path(sys.argv[2]); output.mkdir(parents=True,exist_ok=True)
 binary='/usr/local/bin/emitter-core'; sha=file_hash(binary)
-cfg=NativeConfig(angular_mapping=True,angular_step_deg=1.0,tile_rays=8)
+cfg=NativeConfig(angular_mapping=True,angular_step_deg=1.0,tile_rays=8,
+    emitter1_minimum_contrast_db=float(sys.argv[3]) if len(sys.argv)>3 else None)
 reports=[]
 for path in sorted(root.glob('*/case.json')):
     target=output/path.parent.name;target.mkdir(exist_ok=True)

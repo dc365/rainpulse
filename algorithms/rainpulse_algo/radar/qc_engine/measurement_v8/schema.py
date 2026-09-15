@@ -21,6 +21,7 @@ class NativeConfig(Frozen):
     maximum_angular_offset_fraction: float = Field(default=0.25, gt=0, le=0.25)
     enabled: bool = True
     required: bool = False
+    emitter1_minimum_contrast_db: float | None = Field(default=None, ge=0.5, le=127)
     minimum_dbz: float = Field(default=-10, ge=-31, le=80)
     minimum_length_m: float = Field(default=4000, gt=0, le=100000)
     width_rays: int = Field(default=3, ge=1, le=8)

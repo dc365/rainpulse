@@ -164,7 +164,8 @@ def run_native(native, cfg, binary=None, expected_sha256=None):
                     str(len(rows)),
                     str(hi - lo),
                     str(det),
-                    str(threshold),
+                    str(int(round(cfg.emitter1_minimum_contrast_db / 0.5))
+                        if det == 1 and cfg.emitter1_minimum_contrast_db is not None else threshold),
                     str(length),
                     str(cfg.width_rays),
                 ]
