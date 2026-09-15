@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import logging
+from time import perf_counter
 from datetime import UTC, datetime
 
 import numpy as np
@@ -12,6 +14,7 @@ from .adapters import adapt_sweep
 from .algorithms import library_evidence
 from .crossradar import fuse_crossradar, sweep_funnel
 from .decision import Action, decide
+from .finalize import finalize_decision
 from .support import weather_support as select_weather_support
 from .objects import radial_objects
 from .paper_fusion import fuse_paper_decision, paper_evidence
@@ -48,6 +51,8 @@ def run_open_source_qc(
     standalone_by_sweep=None,
     **kwargs,
 ):
+    started = checkpoint = perf_counter()
+    timings = {}
     if kwargs.get("phase_processing_profile") or kwargs.get("attenuation_profile"):
         raise QCInputError(
             "legacy phase/attenuation profiles cannot be mixed with the new QC engine"
@@ -68,6 +73,8 @@ def run_open_source_qc(
     native = [adapt_sweep(root, f"sweep_{int(i):03d}", profile) for i in root["sweep_number"][:]]
     if not native:
         raise QCInputError("normalized radar volume contains no usable sweep")
+    timings["input_adaptation_ms"] = (perf_counter() - checkpoint) * 1000
+    checkpoint = perf_counter()
     # Stage 1 is independent of neighbouring final QC: no circular dependencies.
     if paper_references_by_sweep and profile.literature is None:
         raise QCInputError("paper references require the paper fusion profile")
@@ -122,6 +129,8 @@ def run_open_source_qc(
         independent.append(
             (evidence, radial, radial_record, first, prior, objects_evidence, papers)
         )
+    timings["independent_evidence_ms"] = (perf_counter() - checkpoint) * 1000
+    checkpoint = perf_counter()
     vertical = build_vertical_consistency_diagnostics(
         tuple(
             {
@@ -141,8 +150,10 @@ def run_open_source_qc(
         maximum_azimuth_offset_deg=0.75,
         radar_beam_context=radar_beam_context,
     )
+    timings["vertical_support_ms"] = (perf_counter() - checkpoint) * 1000
     results, sweep_records = [], {}
     for index, (sweep, item) in enumerate(zip(native, independent, strict=True)):
+        checkpoint = perf_counter()
         evidence, radial, radial_record, _, prior, objects_evidence, papers = item
         weather = vertical.probabilities[index].copy()
         context = (radial_context or {}).get(sweep.name, {})
@@ -233,45 +244,23 @@ def run_open_source_qc(
             if unified:
                 decision.arrays["V7_STAGE_A_DONOR_USABLE_MASK"] = standalones[sweep.name].donor_usable.astype("uint8")
                 decision.arrays["V7_STAGE_A_DONOR_UNKNOWN_MASK"] = standalones[sweep.name].donor_unknown.astype("uint8")
+        timings[sweep.name + ".decision_fusion_ms"] = (perf_counter() - checkpoint) * 1000
+        checkpoint = perf_counter()
         phase, phase_record = process_phase(
             sweep, decision.arrays, profile, context.get("environment")
         )
-        quality = decision.quality.copy()
-        if health["health"] == "DEGRADED":
-            quality *= profile.health_gate.degraded_quality_multiplier
-            if baseline_quality is not None:
-                baseline_quality *= profile.health_gate.degraded_quality_multiplier
-        if baseline_quality is not None:
-            decision.arrays["V5_BASELINE_ELIGIBLE_MASK"] &= (
-                baseline_quality >= profile.quality_index.quantitative_minimum
-            ).astype("uint8")
-        if v5_quality is not None:
-            if health["health"] == "DEGRADED":
-                v5_quality *= profile.health_gate.degraded_quality_multiplier
-            decision.arrays["V6_BASELINE_ELIGIBLE_MASK"] &= (
-                v5_quality >= profile.quality_index.quantitative_minimum
-            ).astype("uint8")
-        observed = sweep.field_available["DBZH"]
-        low = observed & (quality < profile.quality_index.low_quality_threshold)
-        flags = decision.flags.copy()
-        flags[low] |= profile.flag_masks["LOW_QUALITY"]
-        # Health may lower quantitative eligibility even when a local field was trusted.
-        eligible = (decision.arrays["QPE_ELIGIBLE_MASK"] == 1) & (
-            quality >= profile.quality_index.quantitative_minimum
+        timings[sweep.name + ".phase_ms"] = (perf_counter() - checkpoint) * 1000
+        checkpoint = perf_counter()
+        quality, observed, low, flags = finalize_decision(
+            sweep, decision, profile, health, baseline_quality=baseline_quality,
+            v5_quality=v5_quality, v7_baseline_quality=v7_baseline_quality,
         )
-        decision.arrays["QPE_ELIGIBLE_MASK"] = eligible.astype("uint8")
-        decision.arrays["DBZH_USABLE"] = np.where(eligible, sweep.fields["DBZH"], np.nan).astype(
-            "float32"
-        )
-        if v7 is not None:
-            if health["health"] == "DEGRADED":
-                v7_baseline_quality *= profile.health_gate.degraded_quality_multiplier
-            decision.arrays["V7_BASELINE_ELIGIBLE_MASK"] &= (v7_baseline_quality >= profile.quality_index.quantitative_minimum).astype("uint8")
         if tracker is not None:
             tracker.observe(Decider.HEALTH_QUALITY, decision)
             decision.arrays.update(tracker.arrays())
             decision.arrays["V7_VERTICAL_SUPPORT_SCORE"] = vertical.probabilities[index].copy()
             decision.arrays["V7_CROSS_RADAR_SUPPORT_SCORE"] = (cross.copy() if cross is not None else np.full(sweep.shape, np.nan, "float32"))
+        timings[sweep.name + ".finalize_ms"] = (perf_counter() - checkpoint) * 1000
         optional = {**evidence.arrays, **decision.arrays, **phase}
         optional["P_VERTICAL_CONSISTENCY_AVAILABLE_MASK"] = vertical.available_masks[index]
         optional["VERTICAL_HEIGHT_DIFFERENCE_M"] = vertical.height_differences_m[index]
@@ -362,7 +351,7 @@ def run_open_source_qc(
             "rfi_quarantined_gates": int(
                 decision.arrays.get("RFI_QUARANTINE_MASK", np.zeros(sweep.shape)).sum()
             ),
-            "quantitative_eligible_gates": int(eligible.sum()),
+            "quantitative_eligible_gates": int((decision.arrays["QPE_ELIGIBLE_MASK"] == 1).sum()),
             "rfi_temporal_confirmed_gates": int(
                 decision.arrays.get("RFI_TEMPORAL_USED_MASK", np.zeros(sweep.shape)).sum()
             ),
@@ -435,6 +424,11 @@ def run_open_source_qc(
         "module_records": [m.value() for m in modules],
         "vertical_context": vertical.metrics,
     }
+    timings["total_compute_ms"] = (perf_counter() - started) * 1000
+    # Runtime telemetry must not alter immutable artifact hashes.
+    if kwargs.get("timing_sink") is not None:
+        kwargs["timing_sink"].update(timings)
+    logging.getLogger(__name__).info("qc_compute_timing scan_id=%s timings=%s", root.attrs.get("scan_id"), json.dumps(timings, sort_keys=True))
     return QCResult(
         profile, tuple(results), tuple(modules), health, summary, created_at or datetime.now(UTC)
     )
