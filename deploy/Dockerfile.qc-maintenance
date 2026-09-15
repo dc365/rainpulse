@@ -1,0 +1,10 @@
+# V7 maintenance only; no V8 experiment/model promotion.
+FROM rainpulse-cpu-worker:qc-opensource-7.0.0-r1
+COPY algorithms/rainpulse_algo/radar/qc_engine/algorithms.py \
+     algorithms/rainpulse_algo/radar/qc_engine/runner.py \
+     algorithms/rainpulse_algo/radar/qc_engine/finalize.py \
+     algorithms/rainpulse_algo/radar/qc_engine/hypotheses.py \
+     algorithms/rainpulse_algo/radar/qc_engine/standalone_evidence.py \
+     algorithms/rainpulse_algo/radar/qc_engine/support.py \
+     algorithms/rainpulse_algo/radar/qc_engine/profile.py \
+     /opt/rainpulse/rainpulse_algo/radar/qc_engine/

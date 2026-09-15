@@ -25,6 +25,13 @@ operational data here.
 
 ## Prelaunch convergence
 
+- 2026-09-15: V7 maintenance r2 deployed on 105 (4 healthy QC workers only).
+  Final projection refactor, graph capacity fallback, stage timing and texture
+  reuse included; V8 and weather split remain disabled. 08:45 run
+  7422e03a-b259-5ab2-bf7f-55df4b475e37 started with 20 QC tasks RUNNING;
+  background script then submits 08:30. See
+  docs/radar-qc-opensource/measurement-v8/MAINTENANCE_R2_DEPLOY_20260915.md.
+
 - 2026-09-15: V8 real extraction started on 105 in rainpulse-v8-real-20260915,
   29 existing V7 scans, lowest cut only, 2 CPU/6 GiB. First two succeeded;
   no inference or online product switch. Admin regeneration now accepts

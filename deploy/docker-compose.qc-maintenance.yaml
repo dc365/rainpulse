@@ -1,0 +1,4 @@
+# Append after the V7 override. Rollback: RAINPULSE_QC_MAINTENANCE_TAG=qc-opensource-7.0.0-r1.
+services:
+  radar-qc-worker:
+    image: rainpulse-cpu-worker:${RAINPULSE_QC_MAINTENANCE_TAG:-qc-opensource-7.0.0-r2}
