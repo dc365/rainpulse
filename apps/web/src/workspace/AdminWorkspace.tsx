@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 
+import { HistoricalQCPanel } from './HistoricalQCPanel'
 import type { CycleSummary } from './model'
 import { readCycleCatalog } from './readCycleCatalog'
 
@@ -109,6 +110,7 @@ export function AdminWorkspace() {
         <article><span>活动告警</span><strong>{evidenceCount(snapshot.alerts)}</strong><small>Prometheus / Alertmanager</small></article>
       </section>
 
+      <HistoricalQCPanel cycles={snapshot.cycles} />
       <RegenerationPanel cycles={snapshot.cycles} />
 
       <section className="admin-panel">

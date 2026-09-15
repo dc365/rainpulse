@@ -1489,3 +1489,16 @@ button, select { min-height: 40px; }
 .admin-regeneration-time-list { display: grid; gap: 6px; max-height: 180px; overflow-y: auto; }
 .admin-regeneration-time-list label { display: flex; align-items: center; gap: 8px; }
 .admin-regeneration-time-list input { width: auto; min-height: auto; }
+
+.history-qc-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 16px; }
+.history-qc-controls label { display: grid; gap: 8px; font-weight: 600; }
+.history-qc-controls select { padding: 10px; border: 1px solid var(--rp-line); border-radius: 6px; background: white; color: var(--rp-ink); }
+.history-qc-controls p { flex: 1; min-width: 200px; }
+.history-qc-controls button { padding: 12px 18px; border: 0; border-radius: 6px; background: var(--rp-teal); color: white; cursor: pointer; }
+.history-qc-controls button:disabled { opacity: .5; cursor: not-allowed; }
+.history-qc-panel progress { display: block; width: 100%; margin: 12px 0; accent-color: var(--rp-teal); }
+.history-qc-table { overflow: auto; max-height: 420px; }
+.history-qc-table table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.history-qc-table th, .history-qc-table td { text-align: left; padding: 10px; border-bottom: 1px solid var(--rp-line); }
+.history-qc-table th { position: sticky; top: 0; background: var(--rp-paper, white); }
+.history-qc-table td:last-child { font-family: monospace; overflow-wrap: anywhere; }
