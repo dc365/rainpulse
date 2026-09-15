@@ -1,0 +1,45 @@
+# Offline experiment only. Every threshold needs local calibration and approval.
+schema_version: rainpulse.measurement-experiment-config.v1
+native:
+  enabled: true
+  required: false
+  minimum_dbz: -10.0
+  minimum_length_m: 4000.0
+  width_rays: 3
+  tile_rays: 32
+  minimum_tile_gates: 64
+  maximum_calls: 160
+  timeout_seconds: 20.0
+features:
+  radial_windows_m:
+  - 1750.0
+  - 7000.0
+  shoulder_offsets_deg:
+  - 1.0
+  - 2.0
+  - 4.0
+  - 8.0
+  minimum_support_fraction: 0.8
+  phase_period_deg: 360.0
+training:
+  n_estimators: 64
+  max_depth: 8
+  min_samples_leaf: 5
+  random_state: 20260915
+  min_processes_per_split: 2
+  min_class_samples: 10
+  maximum_samples: 500000
+state:
+  enabled: true
+  transition_cost: 1.5
+  minimum_supported_m: 1000.0
+policy:
+  mode: audit
+  confirm_probability: 0.99
+  quarantine_probability: 0.85
+  mixed_probability: 0.7
+  maximum_missing_feature_fraction: 0.5
+  no_echo_below_dbz: -10.0
+  strong_weather_support: 0.7
+  quarantine_quality: 0.2
+  restore_baseline_rejection: false

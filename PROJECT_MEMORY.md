@@ -25,6 +25,15 @@ operational data here.
 
 ## Prelaunch convergence
 
+- 2026-09-15: V8 measurement package applied as 71 checksum-bound paths, plus
+  standalone experiment Dockerfile. 105 has rainpulse-qc-measurement:8.0.0 with
+  compiled original bRopo Emitter/Emitter2 core and scikit-learn 1.8.0. All 83
+  focused tests passed on 105 with no skips; installed-image synthetic full
+  chain passed without network. This is OFFLINE AUDIT tooling: no real weights,
+  no online V8 Worker, no planner switch or new history rerun. Online remains
+  V7 r1; its three previous replays are now ALL_DONE. See
+  docs/radar-qc-opensource/measurement-v8/DEPLOYMENT_105_20260915.md.
+
 - 2026-09-15: V7 interrupted work package integrated and pushed as `76e60c4`.
   Actual Worker serialization required V7 action-validation integration; fixed.
   51 focused Python tests, Go API/workflow tests, Web and Linux BDP build passed.

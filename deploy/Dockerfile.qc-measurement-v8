@@ -1,0 +1,18 @@
+# Offline experiment image for 105; never selected by the online QC planner.
+FROM rainpulse-cpu-worker:qc-opensource-7.0.0-r1
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+COPY configs/qc-experiments/measurement-v8-requirements.txt /tmp/v8-requirements.txt
+RUN python -m pip install --no-cache-dir -r /tmp/v8-requirements.txt pytest==8.4.2
+COPY algorithms/rainpulse_algo/radar/qc_engine/measurement_v8 /opt/rainpulse/rainpulse_algo/radar/qc_engine/measurement_v8
+COPY tools/radar_native /opt/rainpulse-v8/tools/radar_native
+COPY third_party/radar_native /opt/rainpulse-v8/third_party/radar_native
+COPY scripts/qc_measurement_v8.py /opt/rainpulse-v8/scripts/qc_measurement_v8.py
+COPY scripts/demo_qc_measurement_v8.py /opt/rainpulse-v8/scripts/demo_qc_measurement_v8.py
+COPY configs/qc-experiments /opt/rainpulse-v8/configs/qc-experiments
+COPY configs/qc/fujian-qc-evidence-graph-v7.yaml /opt/rainpulse-v8/configs/qc/fujian-qc-evidence-graph-v7.yaml
+COPY configs/qc/flag-definitions-v2.yaml /opt/rainpulse-v8/configs/qc/flag-definitions-v2.yaml
+RUN python /opt/rainpulse-v8/tools/radar_native/build.py --output /usr/local/bin/emitter-core
+WORKDIR /workspace
+ENTRYPOINT ["python", "/opt/rainpulse-v8/scripts/qc_measurement_v8.py"]

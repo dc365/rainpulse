@@ -285,6 +285,8 @@ def test_version_coherence_and_old_parameter_hash():
     data.pop("residual", None)  # Absent V6 extension is not an old parameter.
     data.pop("residual_repair", None)  # Absent 6.1 extension is not a frozen input.
     data.pop("cross_radar", None)
+    assert v3.evidence_graph is None
+    data.pop("evidence_graph", None)  # Absent V7 extension is not part of frozen V3 identity.
     digest = hashlib.sha256(
         json.dumps(data, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
