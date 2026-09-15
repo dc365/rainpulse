@@ -3,6 +3,6 @@ FROM rainpulse-qc-measurement:8.0.0
 COPY algorithms/rainpulse_algo/radar/qc_engine/object_consensus /opt/rainpulse/rainpulse_algo/radar/qc_engine/object_consensus
 COPY configs/qc/object-consensus-v1-*.json /opt/oc1/configs/
 COPY scripts/qc_object_consensus.py scripts/verify_object_consensus_cases.py /opt/oc1/scripts/
-ENV PYTHONPATH=/opt/rainpulse
+ENV PYTHONPATH=/opt/rainpulse/site-packages:/opt/rainpulse
 WORKDIR /opt/oc1
 ENTRYPOINT ["python", "/opt/oc1/scripts/qc_object_consensus.py"]
