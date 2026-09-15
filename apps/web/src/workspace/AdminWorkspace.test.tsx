@@ -13,10 +13,11 @@ afterEach(() => {
 })
 
 describe('AdminWorkspace regeneration control', () => {
-  it.each(['forecast_all', 'nowcastnet'])('tracks %s without browser credentials', async (preset) => {
+  it.each(['forecast_all', 'nowcastnet', 'batch'])('tracks %s without browser credentials', async (preset) => {
     let regenerationRequest: RequestInit | undefined
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input)
+      if (path.includes('/api/v1/admin/runs/second-run/')) return jsonResponse({ message: 'already running', code: 'regeneration_active' }, 409)
       if (path.includes('/api/v1/admin/runs/')) {
         regenerationRequest = init
         return jsonResponse({
@@ -41,7 +42,7 @@ describe('AdminWorkspace regeneration control', () => {
             freshness_seconds: 0,
             run_id: sourceRunID,
             capabilities: { radar: true, lk: true, steps: true, nowcastnet: true },
-          }],
+          }, ...(preset === 'batch' ? [{ cycle_id: 'cycle-second', issue_time: '2026-08-28T02:35:00Z', grid_id: 'fuzhou_118_123_25_27_0p01deg_v1', run_id: 'second-run', execution_mode: 'realtime_shadow', freshness_seconds: 0, capabilities: { radar: true, lk: true, steps: true, nowcastnet: true } }] : [])],
         })
       }
       if (path.endsWith('/radars/status')) return jsonResponse([])
@@ -55,6 +56,7 @@ describe('AdminWorkspace regeneration control', () => {
     expect(await screen.findByRole('heading', { name: '数据重算' })).toBeTruthy()
     expect(screen.getByText('质控 → QPE → LK → 产品')).toBeTruthy()
     if (preset === 'nowcastnet') fireEvent.click(screen.getByRole('button', { name: /NowcastNet已有 QPE/ }))
+    if (preset === 'batch') fireEvent.click(await screen.findByRole('checkbox'))
     fireEvent.click(screen.getByRole('button', { name: '准备重算' }))
 
     expect(screen.getByText('确认提交这次重算？')).toBeTruthy()
@@ -62,16 +64,20 @@ describe('AdminWorkspace regeneration control', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '确认执行' }))
 
-    expect(await screen.findByText(/已受理：a21e5143…d5b1/)).toBeTruthy()
+    expect((await screen.findAllByText(/已受理：a21e5143…d5b1/)).length).toBeGreaterThan(0)
     expect(await screen.findByText(/NowcastNet：已完成/)).toBeTruthy()
     if (preset === 'nowcastnet') expect(await screen.findByText(/工作台已切换本次新结果/)).toBeTruthy()
+    if (preset === 'batch') {
+      expect(await screen.findByText(/未受理：/)).toBeTruthy()
+      expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/api/v1/admin/runs/'))).toHaveLength(2)
+    }
     await waitFor(() => {
       const request = fetchMock.mock.calls.find(([input]) => String(input).includes('/api/v1/admin/runs/'))
       expect(request).toBeTruthy()
       expect(String(request?.[0])).toBe(`/api/v1/admin/runs/${sourceRunID}/rerun`)
       expect(new Headers(regenerationRequest?.headers).get('Authorization')).toBeNull()
       expect(JSON.parse(String(regenerationRequest?.body))).toEqual({
-        preset,
+        preset: preset === 'batch' ? 'forecast_all' : preset,
         reason: '验证更新后的算法配置',
       })
     })

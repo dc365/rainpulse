@@ -1484,3 +1484,8 @@ button, select { min-height: 40px; }
 .selectable-timeline button[data-selected="true"] { background: var(--rp-teal-soft); border-radius: 0; color: var(--rp-teal); }
 .selectable-timeline button[data-selected="true"] .workspace-timeline-node { background: var(--rp-teal); }
 .selectable-timeline button { cursor: pointer; }
+
+.admin-regeneration-times { border: 1px solid var(--border, #d7e2df); border-radius: 8px; padding: 10px; }
+.admin-regeneration-time-list { display: grid; gap: 6px; max-height: 180px; overflow-y: auto; }
+.admin-regeneration-time-list label { display: flex; align-items: center; gap: 8px; }
+.admin-regeneration-time-list input { width: auto; min-height: auto; }

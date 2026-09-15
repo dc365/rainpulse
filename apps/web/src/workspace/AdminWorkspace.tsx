@@ -198,6 +198,8 @@ const jobState = (value?: string) => ({ SUCCEEDED: '已完成', FAILED: '失败'
 function RegenerationPanel({ cycles }: { cycles: CycleSummary[] }) {
   const runnableCycles = cycles.filter((cycle) => cycle.run_id)
   const [cycleID, setCycleID] = useState('')
+  const [additionalIDs, setAdditionalIDs] = useState<string[]>([])
+  const [receipts, setReceipts] = useState<Array<{ cycle: CycleSummary, result?: RegenerationResult, error?: string }>>([])
   const [preset, setPreset] = useState<RegenerationPreset>('forecast_all')
   const [reason, setReason] = useState('验证更新后的算法配置')
   const [confirming, setConfirming] = useState(false)
@@ -248,6 +250,7 @@ function RegenerationPanel({ cycles }: { cycles: CycleSummary[] }) {
     ? cycleID
     : runnableCycles[0]?.cycle_id ?? ''
   const selectedCycle = runnableCycles.find((cycle) => cycle.cycle_id === effectiveCycleID)
+  const selectedCycles = runnableCycles.filter((cycle) => cycle.cycle_id === effectiveCycleID || additionalIDs.includes(cycle.cycle_id))
   const selectedPreset = regenerationPresets.find((option) => option.value === preset) ?? regenerationPresets[0]
   const reasonLength = Array.from(reason.trim()).length
   const ready = Boolean(selectedCycle?.run_id && reasonLength >= 3 && reasonLength <= 240)
@@ -276,26 +279,28 @@ function RegenerationPanel({ cycles }: { cycles: CycleSummary[] }) {
     setSubmitting(true)
     setError(null)
     setResult(null)
-    try {
-      const response = await fetch(`/api/v1/admin/runs/${encodeURIComponent(selectedCycle.run_id)}/rerun`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ preset, reason: reason.trim() }),
-      })
-      const payload = await response.json() as RegenerationResult
-      if (!response.ok) {
-        throw new Error(regenerationError(payload, response.status))
+    setReceipts([])
+    // Only submission is sequential. Each accepted request is persisted by Go;
+    // computation continues in the existing bounded worker queue after closing UI.
+    for (const cycle of selectedCycles) {
+      try {
+        const response = await fetch(`/api/v1/admin/runs/${encodeURIComponent(cycle.run_id!)}/rerun`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ preset, reason: reason.trim() }),
+        })
+        const payload = await response.json() as RegenerationResult
+        if (!response.ok) throw new Error(regenerationError(payload, response.status))
+        const tracked = { ...payload, cycle_id: cycle.cycle_id }
+        setReceipts((items) => [...items, { cycle, result: tracked }])
+        setResult(tracked)
+        sessionStorage.setItem('rainpulse-regeneration', JSON.stringify(tracked))
+      } catch (requestError) {
+        setReceipts((items) => [...items, { cycle, error: requestError instanceof Error ? requestError.message : '提交失败，请查询任务列表后再重试' }])
       }
-      const tracked = { ...payload, cycle_id: selectedCycle.cycle_id }
-      setResult(tracked)
-      sessionStorage.setItem('rainpulse-regeneration', JSON.stringify(tracked))
-      setConfirming(false)
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : '重算请求提交失败')
-      setConfirming(false)
-    } finally {
-      setSubmitting(false)
     }
+    setConfirming(false)
+    setSubmitting(false)
   }
 
   return (
@@ -322,6 +327,20 @@ function RegenerationPanel({ cycles }: { cycles: CycleSummary[] }) {
               ))}
             </select>
           </label>
+          <fieldset className="admin-regeneration-times" disabled={submitting}>
+            <legend>追加时次（北京时间）· 共选 {selectedCycles.length} 个</legend>
+            <div className="admin-regeneration-time-list">
+              {runnableCycles.filter((cycle) => cycle.cycle_id !== effectiveCycleID).map((cycle) => (
+                <label key={cycle.cycle_id}>
+                  <input type="checkbox" checked={additionalIDs.includes(cycle.cycle_id)} onChange={(event) => {
+                    setAdditionalIDs((ids) => event.target.checked ? [...ids, cycle.cycle_id] : ids.filter((id) => id !== cycle.cycle_id))
+                    resetDecision()
+                  }} />
+                  {formatTime(cycle.issue_time)}
+                </label>
+              ))}
+            </div>
+          </fieldset>
           <label>
             <span>重算原因 <small>{reasonLength}/240</small></span>
             <input
@@ -361,7 +380,7 @@ function RegenerationPanel({ cycles }: { cycles: CycleSummary[] }) {
           {confirming ? (
             <div className="admin-regeneration-confirm">
               <strong>确认提交这次重算？</strong>
-              <span>同一周期、同一预设正在运行时会被拒绝。</span>
+              <span>共 {selectedCycles.length} 个时次。请等全部提交完成再关闭页面；已受理任务会在后台继续。重复运行的时次会被拒绝。</span>
               <div>
                 <button type="button" onClick={() => setConfirming(false)}>取消</button>
                 <button type="submit" disabled={submitting}>{submitting ? '提交中…' : '确认执行'}</button>
@@ -372,6 +391,12 @@ function RegenerationPanel({ cycles }: { cycles: CycleSummary[] }) {
               {submitting ? '提交中…' : '准备重算'}
             </button>
           )}
+          {receipts.length > 1 || receipts.some((item) => item.error) ? <ul aria-label="各时次提交结果">
+            {receipts.map((item) => <li key={item.cycle.cycle_id}>
+              {formatTime(item.cycle.issue_time)} · {item.error ? `未受理：${item.error}` : `已受理：${shortID(item.result?.run_id)}`}
+              {item.result ? <button type="button" onClick={() => { setResult(item.result!); setJobs([]); setRunState(''); setCurrentBundle('') }}>查看任务状态</button> : null}
+            </li>)}
+          </ul> : null}
           {result ? <p className="admin-regeneration-success">已受理：{shortID(result.run_id)} · 以下方任务状态为准</p> : null}
           {result ? <div aria-live="polite">
             <p>主链路：{jobState(runState)}（不代表所有算法已完成）</p>

@@ -25,6 +25,12 @@ operational data here.
 
 ## Prelaunch convergence
 
+- 2026-09-15: V8 real extraction started on 105 in rainpulse-v8-real-20260915,
+  29 existing V7 scans, lowest cut only, 2 CPU/6 GiB. First two succeeded;
+  no inference or online product switch. Admin regeneration now accepts
+  multiple selected times through existing persisted rerun requests. See
+  docs/radar-qc-opensource/measurement-v8/BATCH_105_20260915.md.
+
 - 2026-09-15: V8 measurement package applied as 71 checksum-bound paths, plus
   standalone experiment Dockerfile. 105 has rainpulse-qc-measurement:8.0.0 with
   compiled original bRopo Emitter/Emitter2 core and scikit-learn 1.8.0. All 83
