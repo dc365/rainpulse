@@ -185,7 +185,8 @@ def test_trusted_cross_radar_support_excludes_reference_hard_rays(gate_level) ->
                 hard_interference_by_sweep={
                     "sweep_000": (
                         np.array([[True, False, True, False], [False] * 4], dtype=bool)
-                        if gate_level else np.array([True, False], dtype=bool)
+                        if gate_level
+                        else np.array([True, False], dtype=bool)
                     )
                 },
             ),
@@ -209,3 +210,63 @@ def test_trusted_cross_radar_support_excludes_reference_hard_rays(gate_level) ->
     if not gate_level:
         assert np.isnan(diagnostics.consistency_by_ray[0])
     assert diagnostics.consistency_by_ray[1] == pytest.approx(1.0)
+    audit = diagnostics.availability_audit
+    assert audit["status"] == "comparable"
+    record = audit["references"][0]
+    assert record["status"] == "comparable"
+    assert record["comparable_gate_count"] == int(diagnostics.available_mask.sum())
+    counts = list(record["gate_evaluations"].values())
+    assert counts == sorted(counts, reverse=True)
+    assert record["gate_evaluations"]["donor_qc"] < record["gate_evaluations"]["terrain"]
+
+
+def test_cross_support_reports_unverified_datum_without_using_neighbours():
+    beam = RadarBeamContext("z9598", 117.0, 27.0, 1740.0, 1.0, "unverified_engineering")
+    d = build_trusted_cross_radar_support(
+        {"dbzh": np.ones((2, 4))},
+        beam,
+        (),
+        terrain=FlatTerrain(),
+        echo_threshold_dbzh=10.0,
+        minimum_overlap_gates=1,
+    )
+    assert d.availability_audit["blocking_reasons"] == ["current_vertical_datum_unverified"]
+    assert d.availability_audit["status"] == "blocked_before_matching"
+    assert not d.available_mask.any()
+    assert np.isnan(d.support_fraction).all()
+
+
+def test_cross_support_reports_all_missing_prerequisites():
+    d = build_trusted_cross_radar_support(
+        {"dbzh": np.ones((2, 4))},
+        None,
+        (),
+        terrain=None,
+        echo_threshold_dbzh=10.0,
+        minimum_overlap_gates=1,
+    )
+    assert d.availability_audit["blocking_reasons"] == ["current_beam_missing", "terrain_missing"]
+
+
+def test_confirmed_1985_configs_do_not_claim_egm2008():
+    from pathlib import Path
+    from rainpulse_algo.radar.config import load_radar_config
+    from rainpulse_algo.radar.qc_geometry import radar_beam_context_from_config
+
+    root = Path(__file__).resolve().parents[2] / "configs/radars/fujian-1985-20260915"
+    configs = sorted(root.glob("*.yaml"))
+    assert len(configs) == 4
+    for path in configs:
+        cfg = load_radar_config(path)
+        assert cfg.site["altitude_datum"] == "EPSG:5737"
+        beam = radar_beam_context_from_config(cfg)
+        d = build_trusted_cross_radar_support(
+            {"dbzh": np.ones((1, 1))},
+            beam,
+            (),
+            terrain=FlatTerrain(),
+            echo_threshold_dbzh=10.0,
+            minimum_overlap_gates=1,
+        )
+        assert d.availability_audit["blocking_reasons"] == ["current_vertical_datum_incompatible"]
+        assert not d.available_mask.any()

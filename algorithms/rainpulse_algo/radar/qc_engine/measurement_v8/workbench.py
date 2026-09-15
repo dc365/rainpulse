@@ -21,6 +21,25 @@ from .schema import Ref
 from .states import decode
 
 
+
+def native_coverage(native, baseline, reference, profile):
+    """Count evaluated original gates; execution is not coverage or detection skill."""
+    from ....diagnostics.renderer import BUSINESS_HARD_REJECT_FLAG_NAMES
+    hard = np.bitwise_or.reduce([profile.flag_masks[k] for k in BUSINESS_HARD_REJECT_FLAG_NAMES])
+    observed = native.field_available["DBZH"]
+    business = observed & (native.fields["DBZH"] >= 10)
+    business &= (baseline["QPE_ELIGIBLE_MASK"] == 1) & ((baseline["QC_FLAGS"] & hard) == 0)
+    evaluated = np.isfinite(reference.scores["1"]) & np.isfinite(reference.scores["2"])
+    if evaluated.shape != observed.shape:
+        raise ValueError("native score geometry differs from original gates")
+    return {"observed_gates": int(observed.sum()),
+            "evaluated_observed_gates": int((observed & evaluated).sum()),
+            "business_ge10_gates": int(business.sum()),
+            "evaluated_business_ge10_gates": int((business & evaluated).sum()),
+            "unevaluated_business_ge10_gates": int((business & ~evaluated).sum()),
+            "meaning": "finite_scores_are_evaluation_not_pollution_confirmation"}
+
+
 def _features(case, cut, cfg, binary, binary_sha):
     start = time.perf_counter()
     native, baseline, context = case.sweep(cut)
@@ -113,6 +132,7 @@ def extract_case(manifest, cfg, output, *, binary=None, binary_sha=None):
                     "n_observed": int(native.field_available["DBZH"].sum()),
                     "baseline_qpe_eligible": int((baseline["QPE_ELIGIBLE_MASK"] == 1).sum()),
                     "native": reference.summary,
+                    "native_original_gate_coverage": native_coverage(native, baseline, reference, case.profile),
                     "timing": timing,
                 }
             )

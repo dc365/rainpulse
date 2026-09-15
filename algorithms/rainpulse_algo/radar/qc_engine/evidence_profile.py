@@ -1,7 +1,10 @@
 """Versioned V7 experiment switches; values are project hypotheses, not standards."""
+
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
+
+from .fragment_radials import FragmentConfig
 
 
 class EvidenceGraphConfig(BaseModel):
@@ -23,9 +26,17 @@ class EvidenceGraphConfig(BaseModel):
     maximum_nodes: int = Field(default=20000, ge=1, le=100000)
     maximum_edges: int = Field(default=40000, ge=1, le=200000)
     quarantine_quality: float = Field(default=0.25, ge=0, lt=0.5)
+    fragment_radials: FragmentConfig | None = None
     native_reference_required: Literal[False] = False
     # Native references are independent experiments, not an implicit fallback
     # or a dependency of production QC. The strict CLI can require them.
+
+    @model_serializer(mode="wrap")
+    def preserve_disabled_identity(self, handler):
+        value = handler(self)
+        if self.fragment_radials is None:
+            value.pop("fragment_radials", None)
+        return value
 
     @model_validator(mode="after")
     def check_limits(self):

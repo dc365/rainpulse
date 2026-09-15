@@ -25,6 +25,26 @@ operational data here.
 
 ## Prelaunch convergence
 
+- 2026-09-15: Height experiment completed (98 pairs; third frozen donor missing).
+  Stable positive support 2511 gates. Paired lowest-cut QC replay on 105 completed:
+  zero action/visibility changes, Z9598 08:35 SW window remains 6404 gates;
+  stable support has zero overlap there. Do not promote or pursue height support
+  as this case's residual-removal fix. See HEIGHT_SENSITIVITY_20260915.md.
+
+- 2026-09-15: Offline height sensitivity launched on 105 as
+  rainpulse-height-sensitivity-20260915 (2 CPU/6GiB), Z9598 08:35 scan
+  5172b858-0406-5498-89fd-16db363507d1. First donor completed two of 49
+  height pairs; second pair has 1635 comparable / 1290 echo-support gates.
+  These are scenario counts, not stable/accepted gates. Production untouched.
+  See docs/radar-qc-opensource/measurement-v8/HEIGHT_SENSITIVITY_20260915.md.
+
+- 2026-09-15: User confirmed all four station/antenna heights use China's
+  1985 national height datum (EPSG:5737), not EGM2008. New local versioned
+  configs are under configs/radars/fujian-1985-20260915; not selected online.
+  Trusted cross-radar support remains blocked until a traceable conversion to
+  DEM EGM2008 is available. Availability audit fix is local/uncommitted.
+  See docs/radar-qc-opensource/measurement-v8/CROSS_SUPPORT_HEIGHT1985_20260915.md.
+
 - 2026-09-15: V7 maintenance r2 deployed on 105 (4 healthy QC workers only).
   Final projection refactor, graph capacity fallback, stage timing and texture
   reuse included; V8 and weather split remain disabled. 08:45 run
@@ -364,3 +384,10 @@ operational data here.
   unsupported_angular_geometry with zero calls (feature completion was NOT
   native execution). Default-off source-aware support switch added; online
   remains unchanged. See measurement-v8/SUPPORT_AUDIT_20260915.md.
+
+### 2026-09-15 原生 Emitter1 稀疏适配
+- 新增离线 sparse_emitter.py：实际相邻三射线共同有效连续段调用原版核心，无插值/缺测填充；Emitter2 未改，生产未切换。
+- 105 两个 Z9598 ROI：08:35 6404 门中计算1620、阳性0；08:45 1728门中计算101、阳性0。旧适配两处计算均0。覆盖提升≠残留改善，不应上线或全站重算。
+- 三项实际核心回归通过。见 docs/radar-qc-opensource/measurement-v8/SPARSE_EMITTER_20260915.md；后续区分共同观测不足与实际方位对比不足，不能填缺测造阳性。
+- 稀疏 Emitter 后续逐门归因：08:35 已计算1617门对比<8dB、3门≥8dB，2704缺肩部/几何、2080共同段短；08:45分别101/0/1182/445。±1/2/4/8/16射线尺度均无ROI内≥8dB连续4km段。扩大肩部不能解决本次残留，后续应做断续对象证据，勿补缺测或据此宣称算法已改善。
+- 已实现默认关闭的 interrupted_objects_enabled：同射线有界断续对象、冻结干扰锚点、目标局部双偏振确认及邻站冲突保护。18项相关测试通过。105 两时次对象候选 ROI 731/1077，新增业务去除均0，未上线；见 INTERRUPTED_OBJECTS_20260915.md。识别推进不等于质控效果改善。

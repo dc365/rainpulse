@@ -15,6 +15,7 @@ from .algorithms import library_evidence
 from .crossradar import fuse_crossradar, sweep_funnel
 from .decision import Action, decide
 from .finalize import finalize_decision
+from .fragment_radials import apply_fragment_decision
 from .support import weather_support as select_weather_support
 from .objects import radial_objects
 from .paper_fusion import fuse_paper_decision, paper_evidence
@@ -237,6 +238,11 @@ def run_open_source_qc(
             decision.arrays["V7_BASELINE_ELIGIBLE_MASK"] = decision.arrays["QPE_ELIGIBLE_MASK"].copy()
             if v7.graph_enabled:
                 decision, graph_record = graph_with_fallback(sweep, decision, profile, weather_support=weather)
+            if v7.fragment_radials is not None:
+                decision, fragment_record = apply_fragment_decision(
+                    sweep, decision, v7.fragment_radials, profile, weather_support=weather, cross_support=cross
+                )
+                graph_record = {**(graph_record or {}), "fragment_radials": fragment_record}
             if tracker is not None:
                 tracker.observe(Decider.GRAPH, decision)
             if unified:

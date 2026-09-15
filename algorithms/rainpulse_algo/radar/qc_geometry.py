@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
@@ -83,6 +83,7 @@ class CrossRadarTrustedSupportDiagnostics:
     consistency_by_ray: np.ndarray
     reference_used_mask: tuple[bool, ...]
     metrics: dict[str, float]
+    availability_audit: dict[str, Any] = field(default_factory=dict)
 
 
 def vertical_datum_status(
@@ -402,6 +403,7 @@ def build_trusted_cross_radar_support(
     blockage_threshold: float = QC_TRUSTED_MAX_BLOCKAGE_FRACTION,
     maximum_height_difference_m: float = QC_VERTICAL_MAX_HEIGHT_DIFFERENCE_M,
     blockage_cache: dict[tuple[str, str], Any] | None = None,
+    experimental_datum_assumption: bool = False,
 ) -> CrossRadarTrustedSupportDiagnostics:
     current_dbzh = np.asarray(current_sweep["dbzh"], dtype="float32")
     if current_dbzh.ndim != 2:
@@ -415,12 +417,31 @@ def build_trusted_cross_radar_support(
         current_beam_context is not None
         and current_beam_context.altitude_datum_status == "verified_egm2008"
     )
-    if not geometry_verified or terrain is None:
+    reasons = []
+    if current_beam_context is None:
+        reasons.append("current_beam_missing")
+    elif not geometry_verified:
+        reasons.append(
+            "current_vertical_datum_incompatible"
+            if current_beam_context.altitude_datum_status.startswith("incompatible_")
+            else "current_vertical_datum_unverified"
+        )
+    if terrain is None:
+        reasons.append("terrain_missing")
+    audit = {"status": "matching", "blocking_reasons": reasons, "references": []}
+    audit["experimental_datum_assumption"] = experimental_datum_assumption
+    audit["operational_eligible"] = not experimental_datum_assumption
+    effective_reasons = [reason for reason in reasons if not (
+        experimental_datum_assumption and reason.startswith("current_vertical_datum_")
+    )]
+    if effective_reasons:
+        audit["status"] = "blocked_before_matching"
         return CrossRadarTrustedSupportDiagnostics(
             support_fraction=support_fraction,
             available_mask=available_mask,
             consistency_by_ray=consistency_by_ray,
             reference_used_mask=tuple(reference_used),
+            availability_audit=audit,
             metrics={
                 "reference_count": float(len(references)),
                 "available_gate_count": 0.0,
@@ -465,12 +486,37 @@ def build_trusted_cross_radar_support(
     echo_count = np.zeros(shape, dtype="int16")
     cache = blockage_cache if blockage_cache is not None else {}
     for index, reference in enumerate(references):
-        if (
-            reference.beam_context is None
-            or reference.beam_context.altitude_datum_status != "verified_egm2008"
-            or not reference.health_available
-            or not reference.dem_compatible
-        ):
+        blocked = []
+        if reference.beam_context is None:
+            blocked.append("reference_beam_missing")
+        elif reference.beam_context.altitude_datum_status != "verified_egm2008":
+            blocked.append("reference_vertical_datum_unverified")
+        if not reference.health_available:
+            blocked.append("reference_health_unavailable")
+        if not reference.dem_compatible:
+            blocked.append("reference_dem_incompatible")
+        record = {
+            "radar_id": reference.radar_id,
+            "blocking_reasons": blocked,
+            "status": "blocked_before_matching" if blocked else "no_comparable_gates",
+            "gate_evaluations": {
+                k: 0
+                for k in (
+                    "horizontal",
+                    "valid_measurement",
+                    "terrain",
+                    "donor_qc",
+                    "height_overlap",
+                )
+            },
+            "unmatchable_sweeps": 0,
+            "comparable_gate_count": 0,
+        }
+        audit["references"].append(record)
+        effective_blocked = [reason for reason in blocked if not (
+            experimental_datum_assumption and reason == "reference_vertical_datum_unverified"
+        )]
+        if effective_blocked:
             continue
         best_values = np.full(shape, np.nan, dtype="float32")
         best_supported = np.zeros(shape, dtype=bool)
@@ -492,7 +538,9 @@ def build_trusted_cross_radar_support(
                     neighbour_group,
                 )
             except ValueError:
+                record["unmatchable_sweeps"] += 1
                 continue
+            record["gate_evaluations"]["horizontal"] += int(horizontal_supported.sum())
             if not np.any(horizontal_supported):
                 continue
             neighbour_dbzh = neighbour_group["DBZH"][:].astype("float32", copy=False)
@@ -502,6 +550,7 @@ def build_trusted_cross_radar_support(
                 reference_valid &= neighbour_dbzh <= float(valid_range_dbz[1])
             matched_values = neighbour_dbzh[nearest_rays, nearest_gates]
             supported = horizontal_supported & reference_valid[nearest_rays, nearest_gates]
+            record["gate_evaluations"]["valid_measurement"] += int(supported.sum())
             if not np.any(supported):
                 continue
             cache_key = (reference.radar_id, sweep_name)
@@ -524,6 +573,7 @@ def build_trusted_cross_radar_support(
                 blockage.cumulative[nearest_rays, nearest_gates] <= blockage_threshold
             )
             supported &= blockage_supported
+            record["gate_evaluations"]["terrain"] += int(supported.sum())
             hard_rays = np.asarray(
                 reference.hard_interference_by_sweep.get(
                     sweep_name,
@@ -539,6 +589,7 @@ def build_trusted_cross_radar_support(
                 supported &= ~hard_rays[nearest_rays]
             else:
                 raise ValueError("reference exclusion mask differs from native geometry")
+            record["gate_evaluations"]["donor_qc"] += int(supported.sum())
             if not np.any(supported):
                 continue
 
@@ -556,6 +607,7 @@ def build_trusted_cross_radar_support(
                 maximum_height_difference_m=maximum_height_difference_m,
             )
             supported &= overlap
+            record["gate_evaluations"]["height_overlap"] += int(supported.sum())
             if not np.any(supported):
                 continue
             update = supported & (height_difference < best_height_difference)
@@ -565,10 +617,16 @@ def build_trusted_cross_radar_support(
         if not np.any(best_supported):
             continue
         reference_used[index] = True
+        record["status"] = "comparable"
+        record["comparable_gate_count"] = int(best_supported.sum())
         observed_count[best_supported] += 1
         echo_count[best_supported & (best_values >= echo_threshold_dbzh)] += 1
 
     available = observed_count > 0
+    audit["status"] = "comparable" if available.any() else "no_comparable_gates"
+    audit["count_semantics"] = (
+        "gate_evaluations_sum_over_reference_sweeps; comparable_gate_count_is_unique"
+    )
     support_fraction[available] = echo_count[available] / observed_count[available]
     available_mask[available] = 1
     for ray_index in range(shape[0]):
@@ -583,6 +641,7 @@ def build_trusted_cross_radar_support(
         available_mask=available_mask,
         consistency_by_ray=consistency_by_ray,
         reference_used_mask=tuple(reference_used),
+        availability_audit=audit,
         metrics={
             "reference_count": float(len(references)),
             "available_gate_count": float(np.count_nonzero(available)),
@@ -590,7 +649,7 @@ def build_trusted_cross_radar_support(
             "maximum_supporting_neighbour_count": float(observed_count.max())
             if observed_count.size
             else 0.0,
-            "verified_current_vertical_datum": 1.0,
+            "verified_current_vertical_datum": float(geometry_verified),
         },
     )
 

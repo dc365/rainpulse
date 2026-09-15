@@ -107,6 +107,8 @@ def prepare_open_source_inputs(
     contexts: dict = {}
     counts = {"temporal_available_count": 0, "cross_radar_available_count": 0}
     references = []
+    reference_entries = []
+    cross_availability = {}
     temporal = []
     cutoff = request.occurred_at.astimezone(UTC)
     seen = {str(request.payload.scan_id)}
@@ -171,8 +173,9 @@ def prepare_open_source_inputs(
                         # Only uncertain GATES abstain; preserve unrelated healthy echoes.
                         first_pass[name] = sweep.restore(~independent.donor_usable)
                         object_pass[name] = (sweep, independent)
-                        independent_records.append({"scan_id": entry["scan_id"], "sweep": name,
-                                                    **independent.summary})
+                        independent_records.append(
+                            {"scan_id": entry["scan_id"], "sweep": name, **independent.summary}
+                        )
                         continue
                     evidence = library_evidence(sweep, profile)
                     objects_evidence = (
@@ -218,6 +221,7 @@ def prepare_open_source_inputs(
                             geometry_config_sha256=hashlib.sha256(config_bytes).hexdigest(),
                             support_status="reference_prepared_not_yet_comparable",
                         )
+                    reference_entries.append(entry)
                     references.append(
                         CrossRadarSupportReference(
                             item.radar_id,
@@ -251,6 +255,15 @@ def prepare_open_source_inputs(
             minimum_overlap_gates=1,
             terrain=terrain,
         )
+        if audited:
+            cross_availability[name] = cross.availability_audit
+            for entry, used in zip(reference_entries, cross.reference_used_mask, strict=True):
+                entry.setdefault("comparable_sweeps", [])
+                if used:
+                    entry["comparable_sweeps"].append(name)
+                entry["support_status"] = (
+                    "comparable" if entry["comparable_sweeps"] else "no_comparable_gates"
+                )
         contexts[name] = {
             "WEATHER_SUPPORT_SCORE": np.where(
                 cross.available_mask == 1, cross.support_fraction, np.nan
@@ -259,8 +272,11 @@ def prepare_open_source_inputs(
         if profile.rfi_objects is not None:
             current = adapt_sweep(view.root, name, profile)
             samples = [objects[name] for _, _, objects in temporal if name in objects]
-            values = (aggregate_stage_a_temporal(current, samples) if unified
-                      else aggregate_temporal_rfi(current, samples))
+            values = (
+                aggregate_stage_a_temporal(current, samples)
+                if unified
+                else aggregate_temporal_rfi(current, samples)
+            )
             contexts[name].update({key: current.restore(value) for key, value in values.items()})
             continue
         # V1 temporal evidence is diagnostic only and requires exactly matching
@@ -296,6 +312,7 @@ def prepare_open_source_inputs(
         identity["support_statistics"] = {
             "cross_radar_raw_available_count": counts["cross_radar_available_count"],
             "cross_radar_reference_count": len(references),
+            "availability_by_sweep": cross_availability,
             "comparable_gate_count_by_sweep": {
                 name: int(np.isfinite(fields["WEATHER_SUPPORT_SCORE"]).sum())
                 for name, fields in contexts.items()
@@ -304,10 +321,13 @@ def prepare_open_source_inputs(
         }
     if unified:
         identity["stage_a"] = {
-            "current": {name: {k: v for k, v in a.summary.items() if k != "elapsed_ms"}
-                        for name, a in current_standalone.items()},
-            "references": [{k: v for k, v in a.items() if k != "elapsed_ms"}
-                           for a in independent_records],
+            "current": {
+                name: {k: v for k, v in a.summary.items() if k != "elapsed_ms"}
+                for name, a in current_standalone.items()
+            },
+            "references": [
+                {k: v for k, v in a.items() if k != "elapsed_ms"} for a in independent_records
+            ],
             "recurrence_semantics": "structural_repetition_not_truth",
         }
     fingerprint = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()

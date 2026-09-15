@@ -21,9 +21,10 @@ class RangeEvidence:
     summary: dict
 
 
-def _fit(ranges, values, config, ceiling):
+def _fit(ranges, values, config, ceiling, *, range_term_db_per_km=0.0):
     """Use actual metres (normalized to 1 km), not gate index. Never fill missing."""
-    x = 20 * np.log10(ranges / 1000.0)
+    log_range = 20 * np.log10(ranges / 1000.0)
+    x = log_range + range_term_db_per_km * ranges / 1000.0
     mode, cap = 1, None
     if ceiling is not None:
         cap = ceiling.value_dbz
@@ -56,7 +57,7 @@ def _fit(ranges, values, config, ceiling):
     fit = ~censored
     if fit.sum() < config.minimum_fit_samples:
         return None, "insufficient_uncensored_samples"
-    if np.ptp(ranges[fit]) < config.minimum_fit_span_m or np.ptp(x[fit]) < (
+    if np.ptp(ranges[fit]) < config.minimum_fit_span_m or np.ptp(log_range[fit]) < (
         config.minimum_log_range_span_db
     ):
         return None, "insufficient_measured_range_ratio"
@@ -89,8 +90,10 @@ def _fit(ranges, values, config, ceiling):
 
 
 def range_signatures(
-    native, config: CrossRadarConfig, *, association=None, protected=None
+    native, config: CrossRadarConfig, *, association=None, protected=None, range_term_db_per_km=0.0
 ) -> RangeEvidence:
+    if not np.isfinite(range_term_db_per_km) or not 0 <= range_term_db_per_km <= 0.03:
+        raise ValueError("invalid measured range term")
     observed = native.field_available["DBZH"] & native.geometry_good[:, None]
     z, ranges, dr = native.fields["DBZH"], native.ranges, native.gate_spacing_m
     echo = observed & (z >= config.minimum_echo_dbz) & (ranges[None, :] >= config.minimum_range_m)
@@ -117,7 +120,9 @@ def range_signatures(
                 reasons["short_measured_segment"] += 1
                 continue
             idx = np.flatnonzero(echo[ray, lo:hi]) + lo
-            fit, why = _fit(ranges[idx], z[ray, idx], config, ceiling)
+            fit, why = _fit(
+                ranges[idx], z[ray, idx], config, ceiling, range_term_db_per_km=range_term_db_per_km
+            )
             if fit is None:
                 reasons[why] += 1
                 continue
