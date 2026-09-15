@@ -115,7 +115,7 @@ func (store *Store) ListActivePipelineRegenerations(
 SELECT request_id, source_run_id, target_run_id, issue_time, grid_id,
        preset, reason, status, error_message, created_at, updated_at
 FROM pipeline_regeneration_requests
-WHERE status NOT IN ('SUCCEEDED', 'FAILED')
+WHERE preset = 'forecast_all' AND status NOT IN ('SUCCEEDED', 'FAILED')
 ORDER BY created_at
 LIMIT 10`)
 	if err != nil {

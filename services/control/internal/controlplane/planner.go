@@ -333,6 +333,9 @@ func (planner *pipelinePlanner) Run(ctx context.Context) {
 }
 
 func (planner *pipelinePlanner) PlanOnce(ctx context.Context) error {
+	if err := planner.planQCBatch(ctx); err != nil {
+		return err
+	}
 	if err := planner.planPipelineRegenerations(ctx); err != nil {
 		return err
 	}
@@ -360,6 +363,13 @@ func (planner *pipelinePlanner) planRadarStage(ctx context.Context, status workf
 		return err
 	}
 	for _, scan := range scans {
+		qcOnly, err := planner.store.IsQCOnlyScan(ctx, scan.ID)
+		if err != nil {
+			return err
+		}
+		if qcOnly {
+			continue
+		}
 		if _, allowed := planner.settings.radarIDs[strings.ToLower(scan.RadarID)]; !allowed {
 			continue
 		}

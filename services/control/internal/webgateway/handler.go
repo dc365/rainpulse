@@ -56,6 +56,8 @@ func NewHandler(options Options) (http.Handler, error) {
 			}
 			request.Header.Set("Authorization", "Bearer "+options.AdminToken)
 			proxy.ServeHTTP(response, request)
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/admin/qc-batches":
+			proxy.ServeHTTP(response, request)
 		case strings.HasPrefix(request.URL.Path, "/api/v1/admin/"):
 			http.NotFound(response, request)
 		case strings.HasPrefix(request.URL.Path, "/api/"):
@@ -71,7 +73,7 @@ func NewHandler(options Options) (http.Handler, error) {
 }
 
 func isAdministrativeMutation(request *http.Request) bool {
-	return isForecastRegenerationRequest(request) || isRegenerationCancellation(request)
+	return (request.Method == http.MethodPost && request.URL.Path == "/api/v1/admin/qc-batches") || isForecastRegenerationRequest(request) || isRegenerationCancellation(request)
 }
 
 func isForecastRegenerationRequest(request *http.Request) bool {

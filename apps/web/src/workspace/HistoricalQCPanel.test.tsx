@@ -1,38 +1,18 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { HistoricalQCPanel, historyScope } from './HistoricalQCPanel'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { afterEach, expect, it, vi } from 'vitest'
+import { HistoricalQCPanel } from './HistoricalQCPanel'
 import type { CycleSummary } from './model'
-const cycles = ['one', 'two', 'missing'].map((id, i) => ({ cycle_id: id, run_id: i < 2 ? id : undefined, issue_time: `2026-08-27T16:${String(i * 5).padStart(2, '0')}:00Z`, grid_id: 'grid', execution_mode: 'historical', freshness_seconds: 0, capabilities: { radar: true, lk: true, steps: false, nowcastnet: false } } as CycleSummary))
-const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
-beforeEach(() => {
-  const values = new Map<string, string>()
-  vi.stubGlobal('localStorage', { getItem: (k: string) => values.get(k) ?? null, setItem: (k: string, v: string) => values.set(k, v), clear: () => values.clear() })
+afterEach(()=>vi.unstubAllGlobals())
+it('submits one durable QC-only batch without forecast requests',async()=>{
+ const fetcher=vi.fn().mockResolvedValue({ok:true,json:async()=>null});vi.stubGlobal('fetch',fetcher)
+ render(<HistoricalQCPanel cycles={[{issue_time:'2026-08-28T00:40:00Z'} as CycleSummary]}/> )
+ fireEvent.click(screen.getByText('重算当日全部雷达质控'))
+ await waitFor(()=>expect(fetcher).toHaveBeenCalledWith('/api/v1/admin/qc-batches',expect.objectContaining({method:'POST',body:'{"date":"2026-08-28"}'})))
+ expect(fetcher.mock.calls.some(c=>String(c[0]).includes('/rerun'))).toBe(false)
 })
-afterEach(() => { cleanup(); window.localStorage.clear(); vi.unstubAllGlobals() })
-it('groups Beijing dates, deduplicates runs and exposes unavailable cycles', () => {
-  const scope = historyScope([...cycles, cycles[0]], '2026-08-28')
-  expect(scope.runs).toHaveLength(2)
-  expect(scope.unavailable).toHaveLength(1)
-})
-it('submits all available cycles, counts publication and restores without reposting', async () => {
-  const fetcher = vi.fn(async (url: string, options?: RequestInit) => {
-    if (options?.method === 'POST') return json({ run_id: url.includes('/one/') ? 'new-one' : 'new-two' }, 202)
-    return url.endsWith('/jobs') ? json([{ job_type: 'product', status: 'SUCCEEDED' }]) : json({ status: 'PUBLISHED' })
-  })
-  vi.stubGlobal('fetch', fetcher)
-  const page = render(<HistoricalQCPanel cycles={cycles} />)
-  fireEvent.click(screen.getByRole('button', { name: '重算本案例全部可用时次' }))
-  await waitFor(() => expect(screen.getByText(/已发布 2 \/ 2/)).toBeTruthy())
-  expect(fetcher.mock.calls.filter(c => c[1]?.method === 'POST')).toHaveLength(2)
-  page.unmount(); render(<HistoricalQCPanel cycles={cycles} />)
-  expect(screen.getByText(/已发布 2 \/ 2/)).toBeTruthy()
-  expect(fetcher.mock.calls.filter(c => c[1]?.method === 'POST')).toHaveLength(2)
-})
-it('does not count rejection as completion and stops on uncertain submission', async () => {
-  vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('connection lost') }))
-  render(<HistoricalQCPanel cycles={cycles} />)
-  fireEvent.click(screen.getByRole('button', { name: '重算本案例全部可用时次' }))
-  await waitFor(() => expect(screen.getByText(/受理结果不确定：connection lost/)).toBeTruthy())
-  expect(screen.getByText(/已发布 0 \/ 2/)).toBeTruthy()
-  expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1)
+it('shows QC failures and display progress independently',async()=>{
+ vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:true,json:async()=>({request_id:'x',status:'QC_RUNNING',items:[{kind:'qc',id:'1',time:'2026-08-28T00:40:00Z',radar:'Z9591',status:'FAILED',error:'缺少解码数据'}]})}))
+ render(<HistoricalQCPanel cycles={[{issue_time:'2026-08-28T00:40:00Z'} as CycleSummary]}/> )
+ expect(await screen.findByText('缺少解码数据')).toBeTruthy()
+ expect((screen.getByText('后台正在重算') as HTMLButtonElement).disabled).toBe(true)
 })

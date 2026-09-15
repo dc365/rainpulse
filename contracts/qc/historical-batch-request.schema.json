@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"Historical QC-only batch request","type":"object","additionalProperties":false,"required":["date"],"properties":{"date":{"type":"string","format":"date","description":"Beijing calendar date"}}}

@@ -36,3 +36,22 @@ func TestInProcessAPIKeepsAdminBoundary(t *testing.T) {
 		t.Fatalf("calls %d", calls)
 	}
 }
+
+func TestQCBatchRoutes(t *testing.T) {
+	for _, method := range []string{"GET", "POST"} {
+		h, err := NewHandler(Options{APIHandler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "POST" && r.Header.Get("Authorization") != "Bearer private" {
+				t.Error("missing token")
+			}
+			w.WriteHeader(204)
+		}), AdminToken: "private"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest(method, "/api/v1/admin/qc-batches?date=2026-08-28", nil))
+		if w.Code != 204 {
+			t.Fatalf("%s %d", method, w.Code)
+		}
+	}
+}

@@ -25,6 +25,12 @@ operational data here.
 
 ## Prelaunch convergence
 
+- 2026-09-16: Historical admin recomputation now uses durable QC-only batches
+  (migration 0020, `/api/v1/admin/qc-batches`). Old forecast_all panel requests
+  cancelled; 105 batch 3389d299-6a7f-4dde-b7ad-d67e96c57218 covers 452 scans
+  and 123 display times. QC and diagnostics only, no grid/QPE/forecast.
+  See docs/HISTORICAL_QC_ADMIN.md. Completion/effect not yet accepted.
+
 - 2026-09-15: Height experiment completed (98 pairs; third frozen donor missing).
   Stable positive support 2511 gates. Paired lowest-cut QC replay on 105 completed:
   zero action/visibility changes, Z9598 08:35 SW window remains 6404 gates;

@@ -106,6 +106,9 @@ func NewRuntimeHandler(core http.Handler, options RuntimeOptions) http.Handler {
 
 func (handler *runtimeHandler) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 	switch {
+	case request.URL.Path == "/api/v1/admin/qc-batches":
+		handler.qcBatch(response, request)
+		return
 	case request.URL.Path == verificationPath+"/compare" && request.Method == http.MethodPost:
 		handler.compareVerification(response, request)
 		return
