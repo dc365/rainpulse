@@ -9,6 +9,7 @@ import hashlib
 import json
 from pathlib import Path
 import time
+import logging
 
 import numpy as np
 
@@ -17,7 +18,7 @@ from .algorithms import library_evidence
 from .crossradar import fuse_crossradar
 from .decision import Action, decide
 from .fingerprints import array_digest
-from .hypotheses import arbitrate_hypotheses, build_hypotheses
+from .hypotheses import graph_with_fallback
 from .objects import radial_objects
 from .paper_fusion import fuse_paper_decision, paper_evidence
 from .radial import local_radial_candidates
@@ -66,28 +67,43 @@ def stage_a_key(native, profile, local_prior=None):
 
 def stage_a(native, profile, local_prior=None):
     started = time.perf_counter()
+    checkpoint = started
+    timings = {}
+    def mark(name):
+        nonlocal checkpoint
+        now = time.perf_counter()
+        timings[name] = (now - checkpoint) * 1000
+        checkpoint = now
     key = stage_a_key(native, profile, local_prior)
+    mark("identity_ms")
     evidence = library_evidence(native, profile, local_prior)
+    mark("library_ms")
     objects = radial_objects(native, profile.rfi_objects) if profile.rfi_objects is not None else None
     if objects is None:
         radial, record = local_radial_candidates(native, profile.rfi)
     else:
         radial, record = objects.candidate, objects.summary()
+    mark("radial_objects_ms")
     result = decide(native, evidence, profile, rfi_candidate=radial,
                     clutter_prior=local_prior, object_evidence=objects)
+    mark("initial_decision_ms")
     papers = paper_evidence(native, profile) if profile.literature is not None else None
     if papers is not None:
         result = fuse_paper_decision(native, evidence, result, papers, profile)
+    mark("paper_evidence_fusion_ms")
     signatures = None
     if profile.cross_radar is not None:
         signatures = range_signatures(native, profile.cross_radar)
         result = fuse_crossradar(native, result, signatures, profile)
+    mark("range_crossradar_ms")
     if profile.residual is not None:
         result, _ = residual_decision(native, result, profile)
-    graph = None
+    mark("residual_ms")
+    graph_record = {}
     if profile.evidence_graph is not None and profile.evidence_graph.graph_enabled:
-        graph = build_hypotheses(native, result, profile)
-        result = arbitrate_hypotheses(native, result, graph, profile)
+        result, graph_record = graph_with_fallback(native, result, profile)
+    mark("graph_ms")
+    graph_degraded = graph_record.get("status") == "degraded_budget"
     observed = native.field_available["DBZH"] & native.geometry_good[:, None]
     proposed = radial.copy()
     for name in ("PAPER_CANDIDATE_MASK", "V5_RANGE_CANDIDATE_MASK", "V6_NARROW_CANDIDATE_MASK",
@@ -96,17 +112,24 @@ def stage_a(native, profile, local_prior=None):
     # Shape-only unresolved observations ABSTAIN; they do not vote for clear air.
     uncertain = (proposed | (result.arrays["QC_ACTION"] != Action.KEEP)) & observed
     usable = observed & ~uncertain & (result.arrays["QPE_ELIGIBLE_MASK"] == 1)
+    if graph_degraded:
+        usable[:] = False  # Incomplete Stage A cannot supply trusted weather votes.
     unknown = observed & ~usable & (result.arrays["QC_ACTION"] != Action.REJECT)
     # Negative recurrence votes require actual evaluability. Missing RHOHV and
     # shoulders cannot create a false "no interference" vote.
     background = result.arrays.get("RFI_BACKGROUND_AVAILABLE_MASK", np.zeros(native.shape)) == 1
     temporal_available = observed & (background | native.field_available.get("RHOHV", False) | proposed)
+    if graph_degraded:
+        temporal_available &= proposed  # No negative recurrence vote from incomplete evidence.
+    logging.getLogger(__name__).info("qc_stage_a_timing cut=%s timings=%s", native.name, json.dumps(timings, sort_keys=True))
     summary = {"method": "independent-stage-a-v7", "identity": key,
                "donor_usable_gates": int(usable.sum()), "donor_unknown_gates": int(unknown.sum()),
                "rejected_gates": int((result.arrays["QC_ACTION"] == Action.REJECT).sum()),
                "local_prior_status": "available" if local_prior is not None else "not_supplied",
                "temporal_meaning": "shape_recurrence_not_independent_confirmation",
                "elapsed_ms": (time.perf_counter()-started)*1000}
+    if graph_degraded:
+        summary["graph_degradation"] = graph_record
     # Reused within a frozen task; never cache a Stage B result across cutoffs.
     for a in (usable, unknown, proposed, temporal_available):
         a.setflags(write=False)

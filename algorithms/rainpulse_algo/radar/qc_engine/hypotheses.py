@@ -17,6 +17,10 @@ from .narrow_local import local_widths
 from .segments import intervals
 
 
+class GraphBudgetExceeded(ValueError):
+    """Only explicit graph capacity exhaustion permits baseline fallback."""
+
+
 class GraphReason(IntFlag):
     PROTECTED = 1
     NO_EVIDENCE = 2
@@ -135,7 +139,7 @@ def build_hypotheses(native, baseline, profile, *, weather_support=None):
                 reasons[ray, lo:hi] |= int(GraphReason.SHORT_ATOM)
                 continue
             if len(nodes) >= cfg.maximum_nodes:
-                raise ValueError("V7 node budget exceeded; no partial result")
+                raise GraphBudgetExceeded("V7 node budget exceeded; no partial result")
             node = {"node_id": len(nodes) + 1, "ray": int(native.original_indices[ray]),
                     "gate_start": int(lo), "gate_end_exclusive": int(hi),
                     "measured_m": float((hi-lo)*dr)}
@@ -159,7 +163,7 @@ def build_hypotheses(native, baseline, profile, *, weather_support=None):
             compatible &= (span - measured) / max(span, dr) <= cfg.maximum_structure_gap_fraction
             if compatible:
                 if len(edges) >= cfg.maximum_edges:
-                    raise ValueError("V7 edge budget exceeded; no partial result")
+                    raise GraphBudgetExceeded("V7 edge budget exceeded; no partial result")
                 edges.append({"from": prev[2], "to": atom[2], "type": "structure_link",
                               "gap_m": float(gap), "action_propagation": False})
                 batches[-1].append(atom)
@@ -264,3 +268,13 @@ def arbitrate_hypotheses(native, baseline: Decision, graph: Hypotheses, profile,
     arrays["V7_CONFIRMED_ADDITION_MASK"] = (confirm & ~old_reject).astype("uint8")
     arrays["V7_QUARANTINED_ADDITION_MASK"] = (isolate & ~old_reject & ~old_q).astype("uint8")
     return Decision(arrays, flags, quality)
+
+
+def graph_with_fallback(native, decision, profile, **kwargs):
+    """Never publish a partial graph; input/arbitration errors remain fatal."""
+    try:
+        graph = build_hypotheses(native, decision, profile, **kwargs)
+    except GraphBudgetExceeded as error:
+        return decision, {"status": "degraded_budget", "reason": str(error),
+                          "baseline_preserved": True, "partial_graph_used": False}
+    return arbitrate_hypotheses(native, decision, graph, profile, **kwargs), graph.summary

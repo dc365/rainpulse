@@ -24,7 +24,7 @@ from .range_signature import range_signatures
 from .residual import residual_decision
 from .standalone_evidence import stage_a, stage_a_key
 from .stage_audit import Decider, StageAudit
-from .hypotheses import build_hypotheses, arbitrate_hypotheses
+from .hypotheses import graph_with_fallback
 
 QI_NAMES = (
     "QI_METEO",
@@ -236,9 +236,7 @@ def run_open_source_qc(
             decision.arrays["V7_BASELINE_QUARANTINE_MASK"] = decision.arrays["RFI_QUARANTINE_MASK"].copy()
             decision.arrays["V7_BASELINE_ELIGIBLE_MASK"] = decision.arrays["QPE_ELIGIBLE_MASK"].copy()
             if v7.graph_enabled:
-                graph = build_hypotheses(sweep, decision, profile, weather_support=weather)
-                decision = arbitrate_hypotheses(sweep, decision, graph, profile, weather_support=weather)
-                graph_record = graph.summary
+                decision, graph_record = graph_with_fallback(sweep, decision, profile, weather_support=weather)
             if tracker is not None:
                 tracker.observe(Decider.GRAPH, decision)
             if unified:
