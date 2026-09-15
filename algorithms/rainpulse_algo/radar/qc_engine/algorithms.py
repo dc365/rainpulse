@@ -62,11 +62,14 @@ def library_evidence(
         "PHIDP": profile.pyart.max_textphi,
         "RHOHV": profile.pyart.max_textrhv,
     }
+    raw_textures = {}
     for field, threshold in thresholds.items():
         values = np.full(shape, np.nan, dtype="float32")
         available = np.zeros(shape, dtype=bool)
         if field in native.fields and texture_ready:
-            values = _values(pyart.util.texture_along_ray(radar, FIELD_NAMES[field][0], window))
+            raw_texture = pyart.util.texture_along_ray(radar, FIELD_NAMES[field][0], window)
+            raw_textures[field] = raw_texture
+            values = _values(raw_texture).copy()
             available = native.support(native.field_available[field], 0, window // 2)
             if field == "PHIDP":
                 # A phase branch-cut is not proof of noise. Vulpiani gets a separately
@@ -101,19 +104,21 @@ def library_evidence(
     # Retain the published combined filter as a comparison baseline; never count
     # it as an independent vote alongside its component tests.
     if texture_ready and observed.any():
-        baseline = pyart.filters.moment_and_texture_based_gate_filter(
-            radar,
-            refl_field="reflectivity",
-            zdr_field="differential_reflectivity",
-            rhv_field="cross_correlation_ratio",
-            phi_field="differential_phase",
-            wind_size=window,
-            max_textrefl=profile.pyart.max_textrefl,
-            max_textzdr=profile.pyart.max_textzdr,
-            max_textrhv=profile.pyart.max_textrhv,
-            max_textphi=profile.pyart.max_textphi,
-            min_rhv=profile.pyart.min_rhv,
-        )
+        # The pinned combined helper recomputes all four textures and deep-copies
+        # Radar. Apply its identical public GateFilter operations to cached RAW
+        # textures, before our stricter geometry/phase availability masking.
+        baseline = pyart.filters.GateFilter(radar)
+        baseline.exclude_transition()
+        if "cross_correlation_ratio" in radar.fields:
+            baseline.exclude_below("cross_correlation_ratio", profile.pyart.min_rhv)
+            baseline.exclude_masked("cross_correlation_ratio")
+            baseline.exclude_invalid("cross_correlation_ratio")
+        for field, raw_texture in raw_textures.items():
+            name = "rainpulse_baseline_texture_" + field
+            radar.add_field(name, {"data": raw_texture})
+            baseline.exclude_above(name, thresholds[field])
+            baseline.exclude_masked(name)
+            baseline.exclude_invalid(name)
         arrays["OS_PYART_BASELINE_CANDIDATE_MASK"] = (baseline.gate_excluded & echo).astype("uint8")
     else:
         arrays["OS_PYART_BASELINE_CANDIDATE_MASK"] = np.zeros(shape, dtype="uint8")
