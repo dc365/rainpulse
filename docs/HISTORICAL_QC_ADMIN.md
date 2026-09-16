@@ -23,3 +23,5 @@
 迁移 0021 取消 diagnostic_runs 的 analysis/config/renderer 唯一约束；同一分析的 QC 输入可更新，重算幂等由包含 regeneration ID 的 job_id 保证。旧已成功诊断保留至新图发布。
 
 105 使用 diagnostics 镜像 qc-opensource-7.1.0-oc1-display1。补图批次 38f8ca9a-bb2f-4e80-a3c1-64e58a529a61 复用原 452 个成功 QC job，仅重新排队 123 个 display。优先09:05与09:10已经成功；09:10 Z9598 参考体扫的新图绑定 qc-opensource-7.1.0，PNG 非透明像素由15087降为11097，3990像素有变化。这是显示差异证据，不是气象误删率或完整效果验收。
+
+后续修复：出图请求输出前缀必须包含 regeneration ID，避免新任务命中旧任务的原子完成标记；新图成功后目录索引指向最新发布。回归测试核对重算 job 与发布目录均独立。最终接续批次 a3ac4b79-e438-465c-94ca-f34f24bc7d3d 复用成功的质控及图片，仅补齐其余出图；前批次停止继续调度。

@@ -870,6 +870,10 @@ func (service *Service) CreateAnalysisDiagnostics(
 		input.AnalysisID,
 		url.PathEscape(input.RendererVersion),
 	)
+	if input.RegenerationID != uuid.Nil {
+		outputPrefix += "regenerations/" + input.RegenerationID.String() + "/"
+	}
+
 	request := AnalysisDiagnosticsRequested{
 		SchemaVersion: SchemaVersion,
 		EventID:       eventID,

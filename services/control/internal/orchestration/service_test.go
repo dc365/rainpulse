@@ -504,6 +504,19 @@ func TestCreateAnalysisDiagnosticsUsesReadyAnalysisAndExactQCRadars(t *testing.T
 	if err != nil || second.ID != job.ID {
 		t.Fatalf("diagnostic replay = %#v, %v", second, err)
 	}
+	input.RegenerationID = uuid.New()
+	regenerated, err := service.CreateAnalysisDiagnostics(context.Background(), input)
+	if err != nil || regenerated.ID == job.ID {
+		t.Fatalf("regenerated identity: %v", err)
+	}
+	if err := json.Unmarshal(repository.analysisDiagnostics.Outbox.Payload, &requested); err != nil {
+		t.Fatal(err)
+	}
+	want := "s3://rainpulse/diagnostics/" + input.AnalysisID.String() + "/radar-diagnostic-renderer-1.0.0/regenerations/" + input.RegenerationID.String() + "/"
+	if requested.Payload.OutputPrefix != want {
+		t.Fatalf("regeneration must not reuse an old completion marker: %s", requested.Payload.OutputPrefix)
+	}
+
 }
 
 func TestDispatchOnceMarksPublishedOnlyAfterPublish(t *testing.T) {
