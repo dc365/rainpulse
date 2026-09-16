@@ -1,36 +1,99 @@
-name: QC P012 offline review assets
+name: QC P012 verified branch delivery
 on:
   push:
     branches: [review/qc-p012-build-assets-20260916]
     paths: [.github/workflows/qc-p012-review-assets.yml]
 permissions:
-  contents: read
+  contents: write
 jobs:
-  package:
+  verify-and-deliver:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    env:
+      PYART_QUIET: '1'
+      MPLBACKEND: Agg
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: c3e7680478c3df3fe7a609b267e10a7bcccce455
-          persist-credentials: false
+          ref: review/qc-p012-build-assets-20260916
+          persist-credentials: true
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Source and review dependencies (no private observations)
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.11.10'
+      - name: Verify and reconstruct exact reviewed source tree
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p offline-assets
-          git archive --format=tar.gz --output=offline-assets/source.tar.gz HEAD
-          git rev-parse HEAD HEAD^{tree} > offline-assets/source-identity.txt
-          python -m pip install --target /tmp/qc-site 'arm-pyart==2.2.5' 'wradlib==2.9.5' 'zarr==2.18.7' 'pydantic>=2.13,<3' 'numpy<3' 'scipy<2' 'minio>=7.2.20,<8' 'nats-py>=2.15,<3' 'pysteps==1.21.5' 'opencv-python-headless==5.0.0.93' 'pytest>=8.3,<9' 'jsonschema>=4.25,<5' 'ruff' 'rasterio>=1.4.3,<2' 'pyshp>=2.3.1,<3' 'shapely>=2.1,<3'
-          PYTHONPATH=/tmp/qc-site python -c "import sys,pyart,wradlib,zarr,numpy,scipy; print(sys.version); print(pyart.__version__,wradlib.__version__,zarr.__version__,numpy.__version__,scipy.__version__)" > offline-assets/import-proof.txt
-          tar -czf offline-assets/python-site.tar.gz -C /tmp/qc-site .
-          sha256sum offline-assets/*.tar.gz > offline-assets/SHA256SUMS
+          mkdir -p "$RUNNER_TEMP/p012-receipts"
+          cp .review/p012-part*.b64 "$RUNNER_TEMP/p012-receipts/"
+          git fetch --depth=1 origin c3e7680478c3df3fe7a609b267e10a7bcccce455
+          git checkout --detach c3e7680478c3df3fe7a609b267e10a7bcccce455
+          python - <<'PY'
+          import base64, hashlib, json, lzma, os, subprocess
+          from pathlib import Path
+          receipts = Path(os.environ['RUNNER_TEMP'])/'p012-receipts'
+          encoded = ''.join((receipts/f'p012-part{i}.b64').read_text().strip() for i in (1,2,3))
+          data = lzma.decompress(base64.b64decode(encoded, validate=True))
+          assert hashlib.sha256(data).hexdigest() == '734c936213f79105f448e2acab683374ab312ffd18c90a4148a0b1ddec0dc921'
+          payload = json.loads(data)
+          assert payload['schema'] == 'line-delta-v1'
+          assert payload['base_commit'] == 'c3e7680478c3df3fe7a609b267e10a7bcccce455'
+          assert payload['target_tree'] == '51338da97be3dbbc5f4961ef88c58feb69815905'
+          assert len(payload['files']) == 34
+          seen = set()
+          for entry in payload['files']:
+              path = Path(entry['path'])
+              assert not path.is_absolute() and '..' not in path.parts and str(path) not in seen
+              assert path.parts[0] in {'Makefile','PROJECT_MEMORY.md','algorithms','configs','contracts','deploy','docs','scripts'}
+              assert entry['mode'] in {'100644','100755'}
+              seen.add(str(path))
+              old = path.read_bytes() if path.exists() else None
+              assert (hashlib.sha256(old).hexdigest() if old is not None else None) == entry['before'], str(path)
+              lines = old.decode('utf-8').splitlines(keepends=True) if old is not None else []
+              pieces = []
+              for p in entry['pieces']:
+                  if isinstance(p,str):
+                      pieces.append(p)
+                  else:
+                      assert len(p)==2 and all(type(i) is int for i in p) and 0<=p[0]<=p[1]<=len(lines)
+                      pieces.append(''.join(lines[p[0]:p[1]]))
+              new = ''.join(pieces).encode('utf-8')
+              assert hashlib.sha256(new).hexdigest()==entry['after'], str(path)
+              path.parent.mkdir(parents=True,exist_ok=True)
+              path.write_bytes(new)
+              path.chmod(0o755 if entry['mode']=='100755' else 0o644)
+          subprocess.run(['git','add','--',*sorted(seen)],check=True)
+          subprocess.run(['git','diff','--cached','--check'],check=True)
+          tree = subprocess.check_output(['git','write-tree'],text=True).strip()
+          assert tree == payload['target_tree'], tree
+          (receipts/'tree-verification.json').write_text(json.dumps({'base':payload['base_commit'],'tree':tree,'changed_files':len(seen),'sha256_and_tree_verified':True},indent=2))
+          for p in receipts.glob('*.b64'):p.unlink()
+          PY
+      - name: Locked Python, contract and configuration tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv sync --project algorithms --locked --group dev
+          uv run --project algorithms python -m pytest algorithms/tests configs/tests contracts/tests -q -ra --junitxml="$RUNNER_TEMP/p012-receipts/python.xml" 2>&1 | tee "$RUNNER_TEMP/p012-receipts/python.log"
+      - name: Commit and push implementation only (never main)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git write-tree)" = 51338da97be3dbbc5f4961ef88c58feb69815905
+          git -c user.name='RainPulse Review' -c user.email='review@local.invalid' commit -m 'fix(qc): separate administrative health and wide-source evidence with P0-P2 regression gates'
+          test "$(git rev-parse HEAD^)" = c3e7680478c3df3fe7a609b267e10a7bcccce455
+          test "$(git rev-parse HEAD^{tree})" = 51338da97be3dbbc5f4961ef88c58feb69815905
+          git push origin HEAD:refs/heads/review/qc-p012-generalization-20260916
+          git rev-parse HEAD HEAD^ HEAD^{tree} > "$RUNNER_TEMP/p012-receipts/delivered-git-identity.txt"
+          git diff --stat HEAD^ HEAD > "$RUNNER_TEMP/p012-receipts/diff-stat.txt"
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: rainpulse-p012-offline-review
-          path: offline-assets/
-          retention-days: 3
-          compression-level: 0
+          name: rainpulse-p012-branch-validation
+          path: ${{ runner.temp }}/p012-receipts/
+          retention-days: 7
