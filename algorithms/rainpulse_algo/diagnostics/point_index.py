@@ -46,10 +46,16 @@ def attach_analysis_point_index(
         raise ValueError("RadarAnalysis coordinates differ from point-query fields")
     if latitude.size < 2 or longitude.size < 2:
         raise ValueError("RadarAnalysis point-query grid is too small")
-    latitude_step = float(latitude[1] - latitude[0])
-    longitude_step = float(longitude[1] - longitude[0])
+    # Float32 lon/lat have metre-scale quantization near 120 degrees. Recover
+    # the regular pitch from the full span, then verify every coordinate below.
+    latitude_step = round(float(latitude[-1] - latitude[0]) / (latitude.size - 1), 5)
+    longitude_step = round(float(longitude[-1] - longitude[0]) / (longitude.size - 1), 5)
     if latitude_step <= 0 or longitude_step <= 0:
         raise ValueError("RadarAnalysis point-query coordinates must increase")
+    for coordinates, step in ((latitude, latitude_step), (longitude, longitude_step)):
+        expected = coordinates[0] + np.arange(coordinates.size) * step
+        if not np.allclose(coordinates, expected, rtol=0, atol=1e-5):
+            raise ValueError("RadarAnalysis point-query coordinates must form a regular grid")
 
     payload = encode_point_query_index(
         rate[np.newaxis, ...],

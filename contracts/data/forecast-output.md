@@ -21,10 +21,10 @@ The canonical dimension order for member-dependent forecast fields is
 | `lat` | `float32` | Identical to the selected `NowcastInput` grid |
 | `lon` | `float32` | Identical to the selected `NowcastInput` grid |
 
-Phase 1 deterministic output has one member and exactly 24 lead times:
-`5, 10, …, 120` minutes.
+Phase 1 deterministic output has one member and exactly 30 lead times:
+`6, 12, …, 180` minutes.
 
-RP-022 ensemble output has at least two members and the same 24 lead times.
+RP-022 ensemble output has at least two members and the same 30 lead times.
 Member identifiers are stable integer indices, and the frozen random seed is
 recorded in both Zarr attributes and `forecast/summary.json`.
 
@@ -75,9 +75,9 @@ after missing-data boundaries and holes are buffered. It does not replace
 trusted, while the latter remains the authoritative forecast support after the
 original observation mask is advected.
 
-Accumulations use the fixed five-minute integration interval. `accum_60`
-integrates lead times 5–60 minutes and `accum_120` integrates lead times
-5–120 minutes. Their values are non-negative where valid and `NaN` where the
+Accumulations use the fixed six-minute integration interval. `accum_60`
+integrates lead times 6–60 minutes and `accum_120` integrates lead times
+6–120 minutes. Their values are non-negative where valid and `NaN` where the
 required output support is invalid.
 
 ## Required dataset attributes
@@ -147,7 +147,7 @@ older committed RP-014 artifacts that predate these optional diagnostics.
 - `operational_enabled=false` remains mandatory for the RP-022 product profile;
   this foundation cannot replace the deterministic LK publication path.
 - The persistence and whole-field translation arrays are diagnostic baselines,
-  not extra ensemble members. All three deterministic paths use the same 24
+  not extra ensemble members. All three deterministic paths use the same 30
   lead times, source mask and accumulation convention.
 - Missing input support is advected separately from the working precipitation
   copy. Invalid output cells must remain `NaN` and must never become zero rainfall.

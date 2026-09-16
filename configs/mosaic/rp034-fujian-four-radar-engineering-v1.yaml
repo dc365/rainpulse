@@ -1,5 +1,5 @@
 schema_version: "1.0"
-profile_version: rp034-fujian-four-radar-engineering-v1
+profile_version: rp034-fujian-four-radar-engineering-v1-6m180
 algorithm_version: qi-mosaic-1.1.0
 analysis_cycle_version: analysis-cycle-rp010-v1
 flag_definition_version: qc-flags-v1
@@ -8,7 +8,7 @@ grid_id: fuzhou_118_123_25_27_0p01deg_v1
 grid_config_version: fuzhou-grid-0p01deg-v1
 
 alignment:
-  step_seconds: 300
+  step_seconds: 360
   selection: closest_volume_end_to_analysis_time
   maximum_absolute_offset_seconds: 150
   minimum_contributors: 1

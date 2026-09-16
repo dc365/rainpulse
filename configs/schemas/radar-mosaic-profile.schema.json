@@ -18,7 +18,7 @@
       "additionalProperties": false,
       "required": ["step_seconds", "selection", "maximum_absolute_offset_seconds", "minimum_contributors", "minimum_operational_contributors", "expected_radar_ids"],
       "properties": {
-        "step_seconds": { "const": 300 },
+        "step_seconds": { "const": 360 },
         "selection": { "const": "closest_volume_end_to_analysis_time" },
         "maximum_absolute_offset_seconds": { "type": "integer", "minimum": 1, "maximum": 300 },
         "minimum_time_quality": { "$ref": "#/$defs/probability" },

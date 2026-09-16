@@ -45,8 +45,12 @@ JOB_EVENT_NAMES = (
 
 @pytest.mark.parametrize("event_name", EVENT_NAMES)
 def test_event_example_conforms_to_schema(event_name: str) -> None:
-    schema = json.loads((CONTRACTS_ROOT / "events" / f"{event_name}.schema.json").read_text())
-    example = json.loads((CONTRACTS_ROOT / "examples" / f"{event_name}.json").read_text())
+    schema = json.loads(
+        (CONTRACTS_ROOT / "events" / f"{event_name}.schema.json").read_text()
+    )
+    example = json.loads(
+        (CONTRACTS_ROOT / "examples" / f"{event_name}.json").read_text()
+    )
 
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema, format_checker=FormatChecker()).validate(example)
@@ -54,13 +58,19 @@ def test_event_example_conforms_to_schema(event_name: str) -> None:
 
 @pytest.mark.parametrize("event_name", JOB_EVENT_NAMES)
 def test_event_envelope_rejects_missing_job_identity(event_name: str) -> None:
-    schema = json.loads((CONTRACTS_ROOT / "events" / f"{event_name}.schema.json").read_text())
-    example = json.loads((CONTRACTS_ROOT / "examples" / f"{event_name}.json").read_text())
+    schema = json.loads(
+        (CONTRACTS_ROOT / "events" / f"{event_name}.schema.json").read_text()
+    )
+    example = json.loads(
+        (CONTRACTS_ROOT / "examples" / f"{event_name}.json").read_text()
+    )
     invalid_example = copy.deepcopy(example)
     del invalid_example["job_id"]
 
     with pytest.raises(ValidationError):
-        Draft202012Validator(schema, format_checker=FormatChecker()).validate(invalid_example)
+        Draft202012Validator(schema, format_checker=FormatChecker()).validate(
+            invalid_example
+        )
 
 
 def test_openapi_exposes_the_planned_v1_operations() -> None:
@@ -143,7 +153,9 @@ def test_data_contracts_keep_missing_distinct_from_no_rain() -> None:
     assert "must never be silently converted to zero rainfall" in nowcast_input
 
 
-def test_radar_qc_label_manifest_contract_freezes_holdout_and_label_vocabulary() -> None:
+def test_radar_qc_label_manifest_contract_freezes_holdout_and_label_vocabulary() -> (
+    None
+):
     contract = (CONTRACTS_ROOT / "data" / "radar-qc-label-manifest.md").read_text()
 
     assert "0 = confirmed meteorological" in contract
@@ -153,7 +165,9 @@ def test_radar_qc_label_manifest_contract_freezes_holdout_and_label_vocabulary()
     assert "same weather process" in contract
 
 
-def test_radar_qc_replay_manifest_contract_freezes_manifest_only_replay_boundary() -> None:
+def test_radar_qc_replay_manifest_contract_freezes_manifest_only_replay_boundary() -> (
+    None
+):
     contract = (CONTRACTS_ROOT / "data" / "radar-qc-replay-manifest.md").read_text()
 
     assert "radial_audit.py --manifest" in contract
@@ -166,8 +180,12 @@ def test_radar_qc_replay_manifest_contract_freezes_manifest_only_replay_boundary
     assert "canonical manifest SHA" in contract
 
 
-def test_radar_phase_processing_artifact_contract_freezes_shadow_only_c1_boundary() -> None:
-    contract = (CONTRACTS_ROOT / "data" / "radar-phase-processing-artifact.md").read_text()
+def test_radar_phase_processing_artifact_contract_freezes_shadow_only_c1_boundary() -> (
+    None
+):
+    contract = (
+        CONTRACTS_ROOT / "data" / "radar-phase-processing-artifact.md"
+    ).read_text()
 
     assert "raw `PHIDP`" in contract
     assert "`KDP = 0.5 * dPHIDP/dr`" in contract
@@ -209,7 +227,9 @@ def test_radar_attenuation_artifact_contract_freezes_shadow_only_c2_boundary() -
     assert "Worker integration remains disabled" in contract
 
 
-def test_radar_relative_bias_artifact_contract_freezes_c2_shadow_pair_boundary() -> None:
+def test_radar_relative_bias_artifact_contract_freezes_c2_shadow_pair_boundary() -> (
+    None
+):
     contract = (CONTRACTS_ROOT / "data" / "radar-relative-bias-artifact.md").read_text()
 
     assert "primary minus reference" in contract
@@ -219,7 +239,9 @@ def test_radar_relative_bias_artifact_contract_freezes_c2_shadow_pair_boundary()
     assert "Worker integration remains disabled" in contract
 
 
-def test_radar_calibration_reference_manifest_contract_freezes_c2_p3_split_boundary() -> None:
+def test_radar_calibration_reference_manifest_contract_freezes_c2_p3_split_boundary() -> (
+    None
+):
     contract = (
         CONTRACTS_ROOT / "data" / "radar-calibration-reference-manifest.md"
     ).read_text()
@@ -231,7 +253,9 @@ def test_radar_calibration_reference_manifest_contract_freezes_c2_p3_split_bound
     assert "Worker integration remains disabled" in contract
 
 
-def test_radar_attenuation_coefficient_table_contract_freezes_shadow_table_boundary() -> None:
+def test_radar_attenuation_coefficient_table_contract_freezes_shadow_table_boundary() -> (
+    None
+):
     contract = (
         CONTRACTS_ROOT / "data" / "radar-attenuation-coefficient-table.md"
     ).read_text()
@@ -275,7 +299,10 @@ def test_v11_radar_contract_chain_is_frozen() -> None:
         assert "uint32" in contracts[name]
         assert "uint16` | Versioned bit set" not in contracts[name]
 
-    assert "An unavailable prerequisite is represented by `NaN`" in contracts["qc-radar-volume"]
+    assert (
+        "An unavailable prerequisite is represented by `NaN`"
+        in contracts["qc-radar-volume"]
+    )
 
 
 def test_phase1_grid_contract_is_equal_lat_lon_end_to_end() -> None:
@@ -357,8 +384,12 @@ def test_rp012_diagnostics_are_pre_rendered_and_preserve_three_states() -> None:
     assert "arbitrary object-store keys" in diagnostics
 
 
-def test_algorithm_verification_maps_are_pre_rendered_and_not_scientific_inputs() -> None:
-    contract = (CONTRACTS_ROOT / "data" / "algorithm-verification-map-bundle.md").read_text()
+def test_algorithm_verification_maps_are_pre_rendered_and_not_scientific_inputs() -> (
+    None
+):
+    contract = (
+        CONTRACTS_ROOT / "data" / "algorithm-verification-map-bundle.md"
+    ).read_text()
 
     assert "presentation-only" in contract
     assert "Valid no-rain cells remain visible" in contract
@@ -369,7 +400,7 @@ def test_algorithm_verification_maps_are_pre_rendered_and_not_scientific_inputs(
 def test_rp014_forecast_output_freezes_deterministic_baseline_diagnostics() -> None:
     forecast = (CONTRACTS_ROOT / "data" / "forecast-output.md").read_text()
 
-    assert "24 lead times" in forecast
+    assert "30 lead times" in forecast
     assert "persistence_rain_rate" in forecast
     assert "translation_rain_rate" in forecast
     assert "latitude-aware" in forecast

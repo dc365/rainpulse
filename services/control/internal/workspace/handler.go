@@ -604,7 +604,7 @@ func (handler *Handler) getCycle(response http.ResponseWriter, request *http.Req
 	writeJSON(response, http.StatusOK, detail)
 }
 
-// addRadarReferencePanels keeps the five-minute analysis clock honest while
+// addRadarReferencePanels keeps the six-minute analysis clock honest while
 // still giving an operator the nearest real radar evidence when that radar was
 // not a contributor to the mosaic.  It reuses an immutable diagnostic layer
 // for the exact scan from a neighbouring analysis; it never interpolates an
@@ -1001,13 +1001,13 @@ func (handler *Handler) addObservedTimeline(
 		time     time.Time
 		analyses []analysisCycle
 	}
-	candidates := make([]candidate, 0, 24)
+	candidates := make([]candidate, 0, 40)
 	for _, entry := range catalog {
 		if entry.analysis == nil || entry.analysis.GridID != selected.GridID {
 			continue
 		}
 		validTime, valid := normalizedTime(entry.analysis.AnalysisTime)
-		if !valid || !validTime.After(issueTime) || validTime.After(issueTime.Add(2*time.Hour)) {
+		if !valid || validTime.Equal(issueTime) || validTime.Before(issueTime.Add(-time.Hour)) || validTime.After(issueTime.Add(3*time.Hour)) || int(validTime.Sub(issueTime)/time.Second)%360 != 0 {
 			continue
 		}
 		candidates = append(candidates, candidate{time: validTime, analyses: analysisCandidates(entry)})
@@ -1099,7 +1099,7 @@ func diagnosticPanel(layer diagnosticLayer, validTime string) (panelView, bool) 
 		frame.Bounds = &bounds
 	}
 	return panelView{PanelID: panelID, AlgorithmID: "radar-analysis", DisplayName: display,
-		Role: role, Lifecycle: "analysis", DataKind: dataKind, CadenceMinutes: 5,
+		Role: role, Lifecycle: "analysis", DataKind: dataKind, CadenceMinutes: 6,
 		Status: "ready", RadarID: layer.RadarID, LegendUnit: frame.Unit,
 		Legend: legend, Frames: []frameView{frame}}, true
 }
@@ -1122,7 +1122,7 @@ func (handler *Handler) addForecastProducts(ctx context.Context, detail *cycleDe
 		}
 		panelID, displayName, lifecycle := deterministicPanelIdentity(item.ModelID)
 		panel := panelView{PanelID: panelID, AlgorithmID: item.ModelID, DisplayName: displayName,
-			Role: "forecast", Lifecycle: lifecycle, DataKind: "rain_rate", CadenceMinutes: 5,
+			Role: "forecast", Lifecycle: lifecycle, DataKind: "rain_rate", CadenceMinutes: 6,
 			Status: "ready", LegendUnit: "mm/h", Legend: rainfallLegend()}
 		if item.ProductType != "rain_rate" {
 			panel.PanelID += ":" + item.ProductType
@@ -1203,7 +1203,7 @@ func addEnsembleLayer(detail *cycleDetail, bundle ensembleBundle, layer *ensembl
 	}
 	panel := panelView{PanelID: "steps", AlgorithmID: "pysteps-steps",
 		DisplayName: "pySTEPS-STEPS", Role: "forecast", Lifecycle: "offline",
-		DataKind: layer.ProductType, CadenceMinutes: 5, Status: "ready"}
+		DataKind: layer.ProductType, CadenceMinutes: 6, Status: "ready"}
 	if strings.HasPrefix(layer.ProductType, "accumulation_") {
 		panel.PanelID += ":" + layer.ProductType
 		panel.CadenceMinutes = 60
@@ -1366,16 +1366,16 @@ func ensureStablePanels(detail *cycleDetail) {
 	stable := []panelView{
 		{PanelID: "qpe", AlgorithmID: "radar-analysis", DisplayName: "雷达 QPE",
 			Role: "observation", Lifecycle: "analysis", DataKind: "rain_rate",
-			CadenceMinutes: 5, Status: "unavailable", UnavailableReason: "radar_qpe_unavailable", Frames: []frameView{}},
+			CadenceMinutes: 6, Status: "unavailable", UnavailableReason: "radar_qpe_unavailable", Frames: []frameView{}},
 		{PanelID: "lk", AlgorithmID: "pysteps-lk", DisplayName: "pySTEPS-LK",
 			Role: "forecast", Lifecycle: "shadow", DataKind: "rain_rate",
-			CadenceMinutes: 5, Status: "unavailable", UnavailableReason: "lk_product_unavailable", Frames: []frameView{}},
+			CadenceMinutes: 6, Status: "unavailable", UnavailableReason: "lk_product_unavailable", Frames: []frameView{}},
 		{PanelID: "steps", AlgorithmID: "pysteps-steps", DisplayName: "pySTEPS-STEPS",
 			Role: "forecast", Lifecycle: "offline", DataKind: "quantile",
-			CadenceMinutes: 5, Status: "unavailable", UnavailableReason: "steps_product_unavailable", Frames: []frameView{}},
+			CadenceMinutes: 6, Status: "unavailable", UnavailableReason: "steps_product_unavailable", Frames: []frameView{}},
 		{PanelID: "nowcastnet", AlgorithmID: "nowcastnet", DisplayName: "NowcastNet",
 			Role: "forecast", Lifecycle: "shadow", DataKind: "rain_rate",
-			CadenceMinutes: 10, Status: "unavailable",
+			CadenceMinutes: 6, Status: "unavailable",
 			UnavailableReason: "shadow_input_or_product_unavailable", Frames: []frameView{}},
 	}
 	for _, panel := range stable {
@@ -1440,14 +1440,14 @@ func shadowStatusReason(status nowcastNetShadowStatus, fallback string) string {
 }
 
 func finalizeTimeline(detail *cycleDetail) {
-	values := map[string]struct{}{detail.IssueTime: {}}
-	for _, panel := range detail.Panels {
-		for _, frame := range panel.Frames {
-			if parsed, ok := normalizedTime(frame.ValidTime); ok {
-				values[parsed.Format(time.RFC3339)] = struct{}{}
-			}
+	values := map[string]struct{}{}
+	issue, ok := normalizedTime(detail.IssueTime)
+	if ok {
+		for lead := -60; lead <= 180; lead += 6 {
+			values[issue.Add(time.Duration(lead)*time.Minute).Format(time.RFC3339)] = struct{}{}
 		}
 	}
+	detail.Timeline = nil
 	for value := range values {
 		detail.Timeline = append(detail.Timeline, value)
 	}

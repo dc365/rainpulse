@@ -332,16 +332,16 @@ class NowcastNetShadowPayload(ContractModel):
     algorithm_run_id: UUID
     issue_time: datetime
     grid_id: str = Field(min_length=1)
-    input_frames: list[NowcastNetShadowInput] = Field(min_length=9, max_length=9)
+    input_frames: list[NowcastNetShadowInput] = Field(min_length=15, max_length=15)
     model_id: Literal["nowcastnet"]
     model_version: Literal["official-codeocean-v1-cc0"]
-    config_version: Literal["fujian-nowcastnet-shadow-v2"]
+    config_version: Literal["fujian-nowcastnet-shadow-v2-6m180"]
     source_model_config_version: Literal["rp026-nowcastnet-offline-v1"]
     tile_atlas_version: Literal["fujian-nowcastnet-tile-atlas-v1"]
-    issue_cadence_minutes: Literal[5]
+    issue_cadence_minutes: Literal[6]
     input_timestep_minutes: Literal[10]
     native_output_timestep_minutes: Literal[10]
-    product_timestep_minutes: Literal[5]
+    product_timestep_minutes: Literal[6]
     random_seed: int = Field(ge=0, le=2**32 - 1)
 
     @field_validator("output_prefix")
@@ -354,14 +354,14 @@ class NowcastNetShadowPayload(ContractModel):
     @model_validator(mode="after")
     def validate_frame_sequence(self) -> NowcastNetShadowPayload:
         issue_time = self.issue_time.astimezone(UTC)
-        if issue_time.second or issue_time.microsecond or issue_time.minute % 5:
-            raise ValueError("NowcastNet shadow issue time must be on a five-minute UTC boundary")
-        expected = [
-            issue_time - timedelta(minutes=80 - index * 10) for index in range(9)
-        ]
+        if issue_time.second or issue_time.microsecond or issue_time.minute % 6:
+            raise ValueError("NowcastNet shadow issue time must be on a six-minute UTC boundary")
+        expected = [issue_time - timedelta(minutes=84 - index * 6) for index in range(15)]
         actual = [item.analysis_time.astimezone(UTC) for item in self.input_frames]
         if actual != expected:
-            raise ValueError("NowcastNet shadow inputs must be nine exact ten-minute frames")
+            raise ValueError(
+                "NowcastNet shadow inputs must be fifteen exact six-minute source frames"
+            )
         identities = [item.analysis_id for item in self.input_frames]
         if len(set(identities)) != len(identities):
             raise ValueError("NowcastNet shadow analysis IDs must be unique")
@@ -421,9 +421,7 @@ class ForecastVerificationTruthFrame(ContractModel):
 class ForecastVerificationPayload(ContractModel):
     forecast_uri: str
     forecast_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
-    truth_frames: list[ForecastVerificationTruthFrame] = Field(
-        min_length=24, max_length=24
-    )
+    truth_frames: list[ForecastVerificationTruthFrame] = Field(min_length=30, max_length=30)
     output_prefix: str
     issue_time: datetime
     grid_id: str = Field(min_length=1)
@@ -445,7 +443,7 @@ class ForecastVerificationPayload(ContractModel):
         ids = [frame.analysis_id for frame in self.truth_frames]
         times = [frame.valid_time for frame in self.truth_frames]
         uris = [frame.input_uri for frame in self.truth_frames]
-        if len(set(ids)) != 24 or len(set(times)) != 24 or len(set(uris)) != 24:
+        if len(set(ids)) != 30 or len(set(times)) != 30 or len(set(uris)) != 30:
             raise ValueError("verification truth frames must have unique identities")
         return self
 

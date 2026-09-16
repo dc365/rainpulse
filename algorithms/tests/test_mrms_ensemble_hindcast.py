@@ -71,7 +71,7 @@ def _profile() -> MRMSEnsembleProfile:
         grid=grid,
         issue_times=(datetime(2023, 6, 10, 12, 0, tzinfo=UTC),),
     )
-    steps = REPOSITORY_ROOT / "configs/nowcast/rp022-pysteps-steps-v1.yaml"
+    steps = REPOSITORY_ROOT / "configs/nowcast/rp024-pysteps-steps-v1.yaml"
     lk = REPOSITORY_ROOT / "configs/nowcast/rp016-pysteps-lk-v1.yaml"
     return MRMSEnsembleProfile(
         profile_version="rp024-test-v1",

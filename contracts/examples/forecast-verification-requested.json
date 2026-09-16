@@ -10,30 +10,186 @@
     "forecast_uri": "s3://rainpulse/products/dc2d64bd-cf78-4d74-ad6b-b34716ba098c/pysteps-lk/forecast.zarr",
     "forecast_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "truth_frames": [
-      {"analysis_id":"00000000-0000-4000-8000-000000000005","valid_time":"2026-08-30T08:05:00Z","input_uri":"s3://rainpulse/analysis/fuzhou/2026/08/30/0805/analysis.zarr","input_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
-      {"analysis_id":"00000000-0000-4000-8000-000000000010","valid_time":"2026-08-30T08:10:00Z","input_uri":"s3://rainpulse/analysis/fuzhou/2026/08/30/0810/analysis.zarr","input_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
-      {"analysis_id":"00000000-0000-4000-8000-000000000015","valid_time":"2026-08-30T08:15:00Z","input_uri":"s3://rainpulse/analysis/fuzhou/2026/08/30/0815/analysis.zarr","input_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
-      {"analysis_id":"00000000-0000-4000-8000-000000000020","valid_time":"2026-08-30T08:20:00Z","input_uri":"s3://rainpulse/analysis/fuzhou/2026/08/30/0820/analysis.zarr","input_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
-      {"analysis_id":"00000000-0000-4000-8000-000000000025","valid_time":"2026-08-30T08:25:00Z","input_uri":"s3://rainpulse/analysis/fuzhou/2026/08/30/0825/analysis.zarr","input_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
-      {"analysis_id":"00000000-0000-4000-8000-000000000030","valid_time":"2026-08-30T08:30:00Z","input_uri":"s3://rainpulse/analysis/fuzhou/2026/08/30/0830/analysis.zarr","input_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
-      {"analysis_id":"00000000-0000-4000-8000-000000000035","valid_time":"2026-08-30T08:35:00Z","input_uri":"s3://rainpulse/analysis/fuzhou/2026/08/30/0835/analysis.zarr","input_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
-      {"analysis_id":"00000000-0000-4000-8000-000000000040","valid_time":"2026-08-30T08:40:00Z","input_uri":"s3://rainpulse/analysis/fuzhou/2026/08/30/0840/analysis.zarr","input_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
-      {"analysis_id":"00000000-0000-4000-8000-000000000045","valid_time":"2026-08-30T08:45:00Z","input_uri":"s3://rainpulse/analysis/fuzhou/2026/08/30/0845/analysis.zarr","input_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
-      {"analysis_id":"00000000-0000-4000-8000-000000000050","valid_time":"2026-08-30T08:50:00Z","input_uri":"s3://rainpulse/analysis/fuzhou/2026/08/30/0850/analysis.zarr","input_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
-      {"analysis_id":"00000000-0000-4000-8000-000000000055","valid_time":"2026-08-30T08:55:00Z","input_uri":"s3://rainpulse/analysis/fuzhou/2026/08/30/0855/analysis.zarr","input_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
-      {"analysis_id":"00000000-0000-4000-8000-000000000060","valid_time":"2026-08-30T09:00:00Z","input_uri":"s3://rainpulse/analysis/fuzhou/2026/08/30/0900/analysis.zarr","input_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
-      {"analysis_id":"00000000-0000-4000-8000-000000000065","valid_time":"2026-08-30T09:05:00Z","input_uri":"s3://rainpulse/analysis/fuzhou/2026/08/30/0905/analysis.zarr","input_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
-      {"analysis_id":"00000000-0000-4000-8000-000000000070","valid_time":"2026-08-30T09:10:00Z","input_uri":"s3://rainpulse/analysis/fuzhou/2026/08/30/0910/analysis.zarr","input_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
-      {"analysis_id":"00000000-0000-4000-8000-000000000075","valid_time":"2026-08-30T09:15:00Z","input_uri":"s3://rainpulse/analysis/fuzhou/2026/08/30/0915/analysis.zarr","input_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
-      {"analysis_id":"00000000-0000-4000-8000-000000000080","valid_time":"2026-08-30T09:20:00Z","input_uri":"s3://rainpulse/analysis/fuzhou/2026/08/30/0920/analysis.zarr","input_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
-      {"analysis_id":"00000000-0000-4000-8000-000000000085","valid_time":"2026-08-30T09:25:00Z","input_uri":"s3://rainpulse/analysis/fuzhou/2026/08/30/0925/analysis.zarr","input_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
-      {"analysis_id":"00000000-0000-4000-8000-000000000090","valid_time":"2026-08-30T09:30:00Z","input_uri":"s3://rainpulse/analysis/fuzhou/2026/08/30/0930/analysis.zarr","input_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
-      {"analysis_id":"00000000-0000-4000-8000-000000000095","valid_time":"2026-08-30T09:35:00Z","input_uri":"s3://rainpulse/analysis/fuzhou/2026/08/30/0935/analysis.zarr","input_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
-      {"analysis_id":"00000000-0000-4000-8000-000000000100","valid_time":"2026-08-30T09:40:00Z","input_uri":"s3://rainpulse/analysis/fuzhou/2026/08/30/0940/analysis.zarr","input_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
-      {"analysis_id":"00000000-0000-4000-8000-000000000105","valid_time":"2026-08-30T09:45:00Z","input_uri":"s3://rainpulse/analysis/fuzhou/2026/08/30/0945/analysis.zarr","input_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
-      {"analysis_id":"00000000-0000-4000-8000-000000000110","valid_time":"2026-08-30T09:50:00Z","input_uri":"s3://rainpulse/analysis/fuzhou/2026/08/30/0950/analysis.zarr","input_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
-      {"analysis_id":"00000000-0000-4000-8000-000000000115","valid_time":"2026-08-30T09:55:00Z","input_uri":"s3://rainpulse/analysis/fuzhou/2026/08/30/0955/analysis.zarr","input_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
-      {"analysis_id":"00000000-0000-4000-8000-000000000120","valid_time":"2026-08-30T10:00:00Z","input_uri":"s3://rainpulse/analysis/fuzhou/2026/08/30/1000/analysis.zarr","input_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000006",
+        "valid_time": "2026-08-30T08:06:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/0806/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000012",
+        "valid_time": "2026-08-30T08:12:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/0812/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000018",
+        "valid_time": "2026-08-30T08:18:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/0818/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000024",
+        "valid_time": "2026-08-30T08:24:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/0824/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000030",
+        "valid_time": "2026-08-30T08:30:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/0830/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000036",
+        "valid_time": "2026-08-30T08:36:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/0836/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000042",
+        "valid_time": "2026-08-30T08:42:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/0842/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000048",
+        "valid_time": "2026-08-30T08:48:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/0848/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000054",
+        "valid_time": "2026-08-30T08:54:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/0854/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000060",
+        "valid_time": "2026-08-30T09:00:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/0900/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000066",
+        "valid_time": "2026-08-30T09:06:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/0906/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000072",
+        "valid_time": "2026-08-30T09:12:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/0912/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000078",
+        "valid_time": "2026-08-30T09:18:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/0918/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000084",
+        "valid_time": "2026-08-30T09:24:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/0924/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000090",
+        "valid_time": "2026-08-30T09:30:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/0930/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000096",
+        "valid_time": "2026-08-30T09:36:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/0936/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000102",
+        "valid_time": "2026-08-30T09:42:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/0942/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000108",
+        "valid_time": "2026-08-30T09:48:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/0948/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000114",
+        "valid_time": "2026-08-30T09:54:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/0954/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000120",
+        "valid_time": "2026-08-30T10:00:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/1000/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000126",
+        "valid_time": "2026-08-30T10:06:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/1006/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000132",
+        "valid_time": "2026-08-30T10:12:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/1012/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000138",
+        "valid_time": "2026-08-30T10:18:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/1018/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000144",
+        "valid_time": "2026-08-30T10:24:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/1024/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000150",
+        "valid_time": "2026-08-30T10:30:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/1030/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000156",
+        "valid_time": "2026-08-30T10:36:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/1036/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000162",
+        "valid_time": "2026-08-30T10:42:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/1042/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000168",
+        "valid_time": "2026-08-30T10:48:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/1048/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000174",
+        "valid_time": "2026-08-30T10:54:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/1054/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "analysis_id": "00000000-0000-4000-8000-000000000180",
+        "valid_time": "2026-08-30T11:00:00Z",
+        "input_uri": "s3://rainpulse/analysis/fuzhou/2026/08/30/1100/analysis.zarr",
+        "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
     ],
     "output_prefix": "s3://rainpulse/verification/dc2d64bd-cf78-4d74-ad6b-b34716ba098c/rp031-operational-deterministic-v1/",
     "issue_time": "2026-08-30T08:00:00Z",
@@ -41,7 +197,7 @@
     "model_id": "pysteps-lk",
     "model_version": "pysteps-lk-1.1.0",
     "forecast_contract_version": "1.1",
-    "verification_config_version": "rp031-operational-deterministic-v1",
+    "verification_config_version": "rp031-operational-deterministic-v1-6m180",
     "result_contract_version": "1.0"
   }
 }

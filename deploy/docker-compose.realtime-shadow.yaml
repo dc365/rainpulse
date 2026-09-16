@@ -39,7 +39,7 @@ services:
       RAINPULSE_PIPELINE_MOSAIC_CONFIG: /opt/rainpulse/configs/mosaic/rp043-fujian-realtime-shadow-v1.yaml
       RAINPULSE_PIPELINE_QPE_CONFIG: "${RAINPULSE_PIPELINE_QPE_CONFIG:-/opt/rainpulse/configs/qpe/rp011-basic-zr-v1.yaml}"
       RAINPULSE_PIPELINE_DIAGNOSTIC_CONFIG: /opt/rainpulse/configs/diagnostics/rp012-operational-diagnostics-v2.yaml
-      RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG: /opt/rainpulse/configs/nowcast/rp043-realtime-shadow-5min-v2.yaml
+      RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG: /opt/rainpulse/configs/nowcast/rp043-realtime-shadow-6min-v2.yaml
 
   radar-qc-worker:
     environment:
@@ -66,7 +66,7 @@ services:
 
   nowcast-input-worker:
     environment:
-      RAINPULSE_NOWCAST_INPUT_CONFIG: /opt/rainpulse/configs/nowcast/rp043-realtime-shadow-5min-v2.yaml
+      RAINPULSE_NOWCAST_INPUT_CONFIG: /opt/rainpulse/configs/nowcast/rp043-realtime-shadow-6min-v2.yaml
 
   radar-ingest:
     image: rainpulse-radar-ingest

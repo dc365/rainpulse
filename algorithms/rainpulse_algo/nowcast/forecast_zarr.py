@@ -60,8 +60,8 @@ def build_forecast_output_zarr_store(
         "input_asset_ids": [str(value) for value in input_asset_ids],
         "lead_count": profile.extrapolation.lead_count,
         "lead_step_minutes": profile.extrapolation.lead_step_minutes,
-        "valid_from": (issue_time + timedelta(minutes=5)).isoformat(),
-        "valid_to": (issue_time + timedelta(minutes=120)).isoformat(),
+        "valid_from": (issue_time + timedelta(minutes=int(lead_minutes[0]))).isoformat(),
+        "valid_to": (issue_time + timedelta(minutes=int(lead_minutes[-1]))).isoformat(),
         "motion_fallback_used": result.motion_fallback_used,
         "motion_fallback_reason": result.motion_fallback_reason,
         "motion_feature_count": result.motion_feature_count,
@@ -96,6 +96,8 @@ def build_forecast_output_zarr_store(
             "input_uri": input_uri,
             "input_asset_ids": [str(value) for value in input_asset_ids],
             "issue_time": issue_time.isoformat(),
+            "lead_count": profile.extrapolation.lead_count,
+            "lead_step_minutes": profile.extrapolation.lead_step_minutes,
             "grid_id": grid.grid_id,
             "grid_config_version": grid.config_version,
             "coordinate_sha256": grid.coordinate_sha256,
@@ -173,9 +175,13 @@ def validate_forecast_output_zarr_store(
     if root.attrs.get("contract_version") != CONTRACT_VERSION:
         raise PystepsLKInputError("ForecastOutput contract version is invalid")
     lead = root["lead_time"][:]
-    expected_lead = np.arange(5, 125, 5, dtype="int32")
+    step = int(root.attrs.get("lead_step_minutes", 0))
+    count = int(root.attrs.get("lead_count", 0))
+    if (step, count) not in {(6, 30), (5, 24)}:
+        raise PystepsLKInputError("ForecastOutput cadence/count is invalid")
+    expected_lead = np.arange(step, step * (count + 1), step, dtype="int32")
     if lead.dtype != np.dtype("int32") or not np.array_equal(lead, expected_lead):
-        raise PystepsLKInputError("ForecastOutput lead times must be 5..120 minutes")
+        raise PystepsLKInputError("ForecastOutput lead times must be 6..180 minutes")
     if root["member"].dtype != np.dtype("int16") or not np.array_equal(
         root["member"][:], np.asarray([0], dtype="int16")
     ):
@@ -191,7 +197,7 @@ def validate_forecast_output_zarr_store(
     longitude = root["lon"][:]
     if latitude.dtype != np.dtype("float32") or longitude.dtype != np.dtype("float32"):
         raise PystepsLKInputError("ForecastOutput coordinates must be float32")
-    shape = (24, len(latitude), len(longitude))
+    shape = (count, len(latitude), len(longitude))
     expected = {
         "rain_rate": ((1, *shape), np.dtype("float32")),
         "accum_60": ((1, len(latitude), len(longitude)), np.dtype("float32")),
@@ -252,14 +258,14 @@ def validate_forecast_output_zarr_store(
         raise PystepsLKInputError("ForecastOutput confidence semantic is invalid")
     if np.any(~np.isfinite(root["motion_u"][:])) or np.any(~np.isfinite(root["motion_v"][:])):
         raise PystepsLKInputError("ForecastOutput motion vectors must be finite")
-    for name, count in (("accum_60", 12), ("accum_120", 24)):
+    for name, count in (("accum_60", 60 // step), ("accum_120", 120 // step)):
         values = root[name][0]
         required_valid = np.all(output_valid[:count], axis=0)
         if np.any(~np.isnan(values[~required_valid])) or np.any(
             ~np.isfinite(values[required_valid])
         ):
             raise PystepsLKInputError(f"ForecastOutput {name} support is invalid")
-        expected_accum = np.sum(root["rain_rate"][0, :count], axis=0) * (5.0 / 60.0)
+        expected_accum = np.sum(root["rain_rate"][0, :count], axis=0) * (step / 60.0)
         if not np.allclose(
             values[required_valid], expected_accum[required_valid], rtol=1e-5, atol=1e-6
         ):
@@ -271,8 +277,8 @@ def validate_forecast_output_zarr_store(
         or summary.get("model_id") != root.attrs.get("model_id")
         or summary.get("model_version") != root.attrs.get("model_version")
         or summary.get("config_version") != root.attrs.get("config_version")
-        or summary.get("lead_count") != 24
-        or summary.get("lead_step_minutes") != 5
+        or summary.get("lead_count") != len(lead)
+        or summary.get("lead_step_minutes") != step
     ):
         raise PystepsLKInputError("ForecastOutput summary identity is invalid")
     if "motion_valid_mask" in root:
@@ -283,7 +289,7 @@ def validate_forecast_output_zarr_store(
             raise PystepsLKInputError("ForecastOutput confidence kind differs from contract")
     return {
         "shape": (1, *shape),
-        "lead_count": 24,
+        "lead_count": len(lead),
         "first_lead_valid_coverage_ratio": float(np.mean(output_valid[0])),
         "last_lead_valid_coverage_ratio": float(np.mean(output_valid[-1])),
         "maximum_forecast_rate_mm_h": _finite_max(root["rain_rate"][:]),

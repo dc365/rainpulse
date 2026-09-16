@@ -30,7 +30,7 @@ type analysisJobInput struct {
 }
 
 func (i analysisJobInput) valid() bool {
-	if len(i.CycleIDs) < 1 || len(i.CycleIDs) > 128 || len(i.Leads) < 1 || len(i.Leads) > 24 || !validAlgorithms(i.Algorithms) || !slices.Contains([]int{1, 5, 10, 20, 50}, i.Threshold) || !slices.Contains([]int{1, 5, 10, 20, 40}, i.WindowKM) {
+	if len(i.CycleIDs) < 1 || len(i.CycleIDs) > 128 || len(i.Leads) < 1 || len(i.Leads) > 30 || !validAlgorithms(i.Algorithms) || !slices.Contains([]int{1, 5, 10, 20, 50}, i.Threshold) || !slices.Contains([]int{1, 5, 10, 20, 40}, i.WindowKM) {
 		return false
 	}
 	seen := map[string]bool{}
@@ -42,7 +42,7 @@ func (i analysisJobInput) valid() bool {
 	}
 	leads := map[int]bool{}
 	for _, lead := range i.Leads {
-		if lead < 5 || lead > 120 || lead%5 != 0 || leads[lead] {
+		if lead < 6 || lead > 180 || lead%6 != 0 || leads[lead] {
 			return false
 		}
 		leads[lead] = true
@@ -167,7 +167,7 @@ func (h *runtimeHandler) verificationJobs(w http.ResponseWriter, r *http.Request
 			return
 		}
 		if !input.valid() {
-			runtimeWriteError(w, 400, "invalid_analysis", "最多选择 128 个周期、24 个时效，使用有效算法、阈值和邻域")
+			runtimeWriteError(w, 400, "invalid_analysis", "最多选择 128 个周期、30 个时效，使用有效算法、阈值和邻域")
 			return
 		}
 		sort.Strings(input.CycleIDs)

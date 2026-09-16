@@ -62,7 +62,7 @@ def mosaic_fixture(*, operational_eligible: bool = True) -> dict[str, bytes]:
             "coordinate_sha256": "synthetic-coordinate-sha256",
             "crs": "EPSG:4326",
             "registration": "point",
-            "profile_version": "rp016-qi-mosaic-v1",
+            "profile_version": "rp016-qi-mosaic-v1-6m180",
             "mosaic_algorithm_version": "qi-mosaic-1.1.0",
             "analysis_cycle_version": "analysis-cycle-rp010-v1",
             "flag_definition_version": "qc-flags-v1",
@@ -133,7 +133,7 @@ def vpr_mosaic_fixture(*, include_explicit_inputs: bool = True) -> dict[str, byt
             "coordinate_sha256": "synthetic-coordinate-sha256-vpr",
             "crs": "EPSG:4326",
             "registration": "point",
-            "profile_version": "rp016-qi-mosaic-v1",
+            "profile_version": "rp016-qi-mosaic-v1-6m180",
             "mosaic_algorithm_version": "qi-mosaic-1.1.0",
             "analysis_cycle_version": "analysis-cycle-rp010-v1",
             "flag_definition_version": "qc-flags-v1",
@@ -169,12 +169,8 @@ def vpr_mosaic_fixture(*, include_explicit_inputs: bool = True) -> dict[str, byt
         "DATA_AGE": np.full(shape, 0.3, dtype="float32"),
     }
     if include_explicit_inputs:
-        float_fields["MELTING_LAYER_BOTTOM_HEIGHT"] = np.full(
-            shape, 1500.0, dtype="float32"
-        )
-        float_fields["MELTING_LAYER_TOP_HEIGHT"] = np.full(
-            shape, 2500.0, dtype="float32"
-        )
+        float_fields["MELTING_LAYER_BOTTOM_HEIGHT"] = np.full(shape, 1500.0, dtype="float32")
+        float_fields["MELTING_LAYER_TOP_HEIGHT"] = np.full(shape, 2500.0, dtype="float32")
     for name, values in float_fields.items():
         root.create_dataset(name, data=values)
     if include_explicit_inputs:
@@ -369,7 +365,7 @@ def test_qpe_worker_requires_flag_definitions_for_vpr_profile(
                 "grid_config_version": "fuzhou-grid-0p01deg-v1",
                 "input_uri": "s3://rainpulse/analysis/mosaic/fixture-vpr/mosaic.zarr",
                 "output_prefix": "s3://rainpulse/analysis/qpe/fixture-vpr/",
-                "mosaic_config_version": "rp016-qi-mosaic-v1",
+                "mosaic_config_version": "rp016-qi-mosaic-v1-6m180",
                 "mosaic_algorithm_version": "qi-mosaic-1.1.0",
                 "qpe_config_version": "rp017-stratiform-vpr-v1",
                 "qpe_algorithm_version": "stratiform-vpr-qpe-1.0.1",
@@ -409,7 +405,8 @@ def test_vpr_overshoot_analysis_is_consumable_by_nowcast_input() -> None:
             case_id="vpr-integration",
             analysis_id=analysis_id,
             input_data={
-                "lat": grid.latitude.tolist(), "lon": grid.longitude.tolist(),
+                "lat": grid.latitude.tolist(),
+                "lon": grid.longitude.tolist(),
                 "DBZH_QC": [[30, 30], [30, 30]],
                 "BEAM_HEIGHT": [[1200, 2000], [3000, 4300]],
                 "PRECIP_TYPE": [[1, 1], [1, 1]],
@@ -421,25 +418,37 @@ def test_vpr_overshoot_analysis_is_consumable_by_nowcast_input() -> None:
         store = MemoryStore()
         store.update(mosaic)
         root = zarr.open_group(store=store, mode="a")
-        root.attrs.update({
-            "grid_id": grid.grid_id, "grid_config_version": grid.config_version,
-            "coordinate_sha256": grid.coordinate_sha256,
-            "analysis_time": (ISSUE_TIME - timedelta(minutes=(2 - index) * 5)).isoformat(),
-        })
+        root.attrs.update(
+            {
+                "grid_id": grid.grid_id,
+                "grid_config_version": grid.config_version,
+                "coordinate_sha256": grid.coordinate_sha256,
+                "analysis_time": (ISSUE_TIME - timedelta(minutes=(2 - index) * 6)).isoformat(),
+            }
+        )
         zarr.consolidate_metadata(store)
         inputs = dict(store)
         original_hash = artifact_sha256(inputs)
-        frames.append(build_radar_analysis_zarr_store(
-            inputs, mosaic_uri=f"s3://rainpulse/mosaic/{analysis_id}",
-            analysis_id=analysis_id, profile=configured, asset_id=str(analysis_id),
-            flag_masks=VPR_FLAG_MASKS,
-        ))
+        frames.append(
+            build_radar_analysis_zarr_store(
+                inputs,
+                mosaic_uri=f"s3://rainpulse/mosaic/{analysis_id}",
+                analysis_id=analysis_id,
+                profile=configured,
+                asset_id=str(analysis_id),
+                flag_masks=VPR_FLAG_MASKS,
+            )
+        )
         assert artifact_sha256(inputs) == original_hash
 
     objects = build_nowcast_input_zarr_store(
-        frames, analysis_ids=ANALYSIS_IDS,
+        frames,
+        analysis_ids=ANALYSIS_IDS,
         input_uris=[f"s3://rainpulse/analysis/{value}" for value in ANALYSIS_IDS],
-        issue_time=ISSUE_TIME, profile=input_profile(), grid=grid, asset_id="vpr-nowcast-test",
+        issue_time=ISSUE_TIME,
+        profile=input_profile(),
+        grid=grid,
+        asset_id="vpr-nowcast-test",
     )
     store = MemoryStore()
     store.update(objects)
@@ -451,14 +460,24 @@ def test_vpr_overshoot_analysis_is_consumable_by_nowcast_input() -> None:
     assert np.all(np.isfinite(root["RATE_QPE"][:, 0, 0]))
 
 
-@pytest.mark.parametrize("field,value", [
-    ("DBZH_QC", 30.0), ("QUALITY_INDEX", 0.8), ("DATA_AGE", 0.3),
-    ("LOW_QUALITY_MASK", 1), ("SOURCE_RADAR", 1), ("VALID_MASK", 2),
-])
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("DBZH_QC", 30.0),
+        ("QUALITY_INDEX", 0.8),
+        ("DATA_AGE", 0.3),
+        ("LOW_QUALITY_MASK", 1),
+        ("SOURCE_RADAR", 1),
+        ("VALID_MASK", 2),
+    ],
+)
 def test_analysis_validator_rejects_inconsistent_missing_cells(field, value) -> None:
     objects = build_radar_analysis_zarr_store(
-        mosaic_fixture(), mosaic_uri="s3://rainpulse/mosaic/test",
-        analysis_id=ANALYSIS_ID, profile=profile(), asset_id="validator-test",
+        mosaic_fixture(),
+        mosaic_uri="s3://rainpulse/mosaic/test",
+        analysis_id=ANALYSIS_ID,
+        profile=profile(),
+        asset_id="validator-test",
     )
     store = MemoryStore()
     store.update(objects)

@@ -20,12 +20,12 @@ from rainpulse_algo.nowcast.nowcastnet_shadow_service import (
 
 def profile() -> NowcastNetShadowProfile:
     return NowcastNetShadowProfile(
-        profile_version="fujian-nowcastnet-shadow-v1",
+        profile_version="fujian-nowcastnet-shadow-v1-6m180",
         source_model_profile="rp026-nowcastnet-offline-v1",
         grid_id="fuzhou_118_123_25_27_0p01deg_v1",
         grid_config_version="fuzhou-grid-0p01deg-v1",
         input_frames=9,
-        issue_cadence_minutes=5,
+        issue_cadence_minutes=6,
         timestep_minutes=10,
         output_lead_minutes=tuple(range(10, 121, 10)),
         missing_policy="reject_any_missing",
@@ -49,7 +49,7 @@ def references(
     issue = issue or datetime(2026, 9, 1, 2, 0, tzinfo=UTC)
     missing = missing_minutes or set()
     result = []
-    for offset in range(0, 85, 5):
+    for offset in range(0, 85, 6):
         if offset in missing:
             continue
         at = issue - timedelta(minutes=offset)
@@ -64,28 +64,20 @@ def references(
     return result
 
 
-def test_selects_latest_nine_exact_ten_minute_frames() -> None:
+def test_selects_fifteen_six_minute_source_frames() -> None:
     issue, selected = select_latest_complete_sequence(
         references(),
         profile=profile(),
     )
     assert issue == datetime(2026, 9, 1, 2, 0, tzinfo=UTC)
-    assert len(selected) == 9
-    assert [item.analysis_time.minute for item in selected] == [
-        40,
-        50,
-        0,
-        10,
-        20,
-        30,
-        40,
-        50,
-        0,
+    assert len(selected) == 15
+    assert [item.analysis_time for item in selected] == [
+        issue - timedelta(minutes=offset) for offset in range(84, -1, -6)
     ]
 
 
-def test_selects_five_minute_issue_without_changing_input_stride() -> None:
-    expected = datetime(2026, 9, 1, 2, 5, tzinfo=UTC)
+def test_selects_six_minute_issue_for_native_input_adapter() -> None:
+    expected = datetime(2026, 9, 1, 2, 6, tzinfo=UTC)
     issue, selected = select_latest_complete_sequence(
         references(issue=expected),
         profile=profile(),
@@ -93,14 +85,14 @@ def test_selects_five_minute_issue_without_changing_input_stride() -> None:
     assert issue == expected
     assert selected[-1].analysis_time == expected
     assert all(
-        right.analysis_time - left.analysis_time == timedelta(minutes=10)
+        right.analysis_time - left.analysis_time == timedelta(minutes=6)
         for left, right in zip(selected[:-1], selected[1:], strict=True)
     )
 
 
 def test_missing_required_frame_stays_ineligible() -> None:
     status = probe_sequence(
-        references(missing_minutes={40}),
+        references(missing_minutes={42}),
         profile=profile(),
         loader=lambda _reference: (
             np.ones((64, 96), dtype="float32"),
@@ -126,7 +118,7 @@ def test_complete_input_reports_shape_validation_gate() -> None:
     assert status.reason == "spatial_shape_not_validated"
     assert status.frame_count == 9
     assert status.common_valid_ratio == 1
-    assert status.issue_cadence_minutes == 5
+    assert status.issue_cadence_minutes == 6
     assert status.input_timestep_minutes == 10
 
 

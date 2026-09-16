@@ -1,0 +1,34 @@
+# Temporary 105 reconciliation: the 2026-08-28 scans were quality-controlled
+# with fujian-qc-object-consensus-oc1 / qc-flags-v2, so the analysis chain
+# workers must mount the qc-opensource (v2) profiles instead of the rp043 (v1)
+# defaults.  Images stay at rainpulse-cpu-worker:latest, which already executes
+# the OC1 profile and the six-minute contracts.
+#   docker compose --env-file .env -f docker-compose.yaml \
+#     -f docker-compose.realtime-shadow.yaml -f docker-compose.unified.yaml \
+#     -f docker-compose.sixmin-worker-configs.yaml \
+#     up -d --no-deps radar-qc-worker radar-grid-worker radar-mosaic-worker \
+#       analysis-qpe-worker analysis-diagnostics-worker
+x-qc-flags-v2: &qc-flags-v2
+  RAINPULSE_QC_FLAG_DEFINITIONS: /opt/rainpulse/configs/qc/flag-definitions-v2.yaml
+
+services:
+  radar-qc-worker:
+    environment:
+      <<: *qc-flags-v2
+      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/fujian-qc-object-consensus-oc1.yaml
+  radar-grid-worker:
+    environment:
+      <<: *qc-flags-v2
+      RAINPULSE_RADAR_GRID_CONFIG: /opt/rainpulse/configs/gridding/qc-opensource-hybrid-v1.yaml
+  radar-mosaic-worker:
+    environment:
+      <<: *qc-flags-v2
+      RAINPULSE_RADAR_MOSAIC_CONFIG: /opt/rainpulse/configs/mosaic/qc-opensource-mosaic-v1.yaml
+  analysis-qpe-worker:
+    environment:
+      <<: *qc-flags-v2
+      RAINPULSE_QPE_CONFIG: /opt/rainpulse/configs/qpe/qc-opensource-zr-v1.yaml
+  analysis-diagnostics-worker:
+    environment:
+      <<: *qc-flags-v2
+      RAINPULSE_DIAGNOSTIC_CONFIG: /opt/rainpulse/configs/diagnostics/qc-residual-diagnostics-v6.yaml

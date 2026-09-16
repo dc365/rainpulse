@@ -19,7 +19,7 @@ service or worker code.
   the historical configuration hashes.
 - `schemas/nowcast-input-profile.schema.json` and the versioned RP-013 profiles
   freeze the 3–6-frame, five-minute sequence and pre-model quality gates;
-  `nowcast/rp013-fixed-5min-v1.1.yaml` is the provenance-complete patch profile.
+  `nowcast/rp013-fixed-6min-v1.1.yaml` is the provenance-complete patch profile.
 - `nowcast/rp014-pysteps-lk-v1.yaml` remains the immutable first LK baseline;
   `nowcast/rp016-pysteps-lk-v1.yaml` is the active missing-boundary-safe profile
   and publishes model version `pysteps-lk-1.1.0`.

@@ -124,7 +124,7 @@ def build_application_product_bundle(
             extra={
                 "contract_version": profile.point_query_contract_version,
                 "lead_count": len(lead_minutes),
-                "lead_step_minutes": 5,
+                "lead_step_minutes": 6,
                 "header_bytes": 64,
                 "record_bytes": 5,
             },
@@ -277,7 +277,7 @@ def validate_application_product_bundle(objects: Mapping[str, bytes]) -> dict[st
         if not isinstance(valid_times, list) or not valid_times or not isinstance(assets, list):
             raise ProductBuildInputError("application product valid times or assets are invalid")
         expected_valid_count, expected_asset_count = {
-            "rain_rate": (24, 73),
+            "rain_rate": (30, 91),
             "accumulation_60": (2, 7),
             "accumulation_120": (1, 4),
         }[product["product_type"]]

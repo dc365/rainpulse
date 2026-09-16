@@ -70,7 +70,7 @@ def load_operational_verification_profile(
         raise OperationalVerificationInputError(
             f"invalid operational verification profile {path}: {error}"
         ) from error
-    expected_leads = tuple(range(5, 125, 5))
+    expected_leads = tuple(range(6, 181, 6))
     if raw.get("schema_version") != "1.0" or raw.get("lifecycle") != "automatic_verification":
         raise OperationalVerificationInputError("unsupported verification profile identity")
     if (
@@ -106,8 +106,8 @@ def build_operational_verification_result(
     validate_forecast_output_zarr_store(forecast_objects)
     forecast = _open(forecast_objects)
     _validate_forecast_identity(forecast, profile, run_id)
-    if len(truth_object_sets) != 24 or len(truth_uris) != 24:
-        raise OperationalVerificationInputError("verification requires exactly 24 truth frames")
+    if len(truth_object_sets) != 30 or len(truth_uris) != 30:
+        raise OperationalVerificationInputError("verification requires exactly 30 truth frames")
 
     latitude = np.asarray(forecast["lat"][:], dtype="float32")
     longitude = np.asarray(forecast["lon"][:], dtype="float32")
@@ -130,7 +130,7 @@ def build_operational_verification_result(
         truth_operational &= operational
         truth_rates.append(np.asarray(truth["RATE_QPE"][:], dtype="float32"))
         truth_masks.append(np.asarray(truth["VALID_MASK"][:], dtype="uint8"))
-    if len(set(truth_ids)) != 24:
+    if len(set(truth_ids)) != 30:
         raise OperationalVerificationInputError("truth analysis IDs must be unique")
 
     truth_rate = np.stack(truth_rates)
@@ -258,9 +258,8 @@ def _validate_truth(
         raise OperationalVerificationInputError(
             "RadarAnalysis truth time differs from forecast lead"
         )
-    if (
-        not np.array_equal(truth["lat"][:], latitude)
-        or not np.array_equal(truth["lon"][:], longitude)
+    if not np.array_equal(truth["lat"][:], latitude) or not np.array_equal(
+        truth["lon"][:], longitude
     ):
         raise OperationalVerificationInputError("RadarAnalysis coordinates differ from forecast")
     rate = np.asarray(truth["RATE_QPE"][:], dtype="float32")
@@ -303,9 +302,7 @@ def _headline(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         and float(row["window_target_km"]) == 10.0
     ]
     fss = {
-        model: _finite_mean(
-            [float(row["fss"]) for row in selected if row["model"] == model]
-        )
+        model: _finite_mean([float(row["fss"]) for row in selected if row["model"] == model])
         for model in ("lk", "persistence", "translation")
     }
     return {

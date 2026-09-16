@@ -29,12 +29,8 @@ from .test_pysteps_lk import profile as lk_profile
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PROFILE_PATH = REPOSITORY_ROOT / "configs" / "nowcast" / "rp022-pysteps-steps-v1.yaml"
-RP024_PROFILE_PATH = (
-    REPOSITORY_ROOT / "configs" / "nowcast" / "rp024-pysteps-steps-v1.yaml"
-)
-RP039_PROFILE_PATH = (
-    REPOSITORY_ROOT / "configs" / "nowcast" / "rp039-pysteps-steps-history-v1.yaml"
-)
+RP024_PROFILE_PATH = REPOSITORY_ROOT / "configs" / "nowcast" / "rp024-pysteps-steps-v1.yaml"
+RP039_PROFILE_PATH = REPOSITORY_ROOT / "configs" / "nowcast" / "rp039-pysteps-steps-history-v1.yaml"
 RP039_V2_PROFILE_PATH = (
     REPOSITORY_ROOT / "configs" / "nowcast" / "rp039-pysteps-steps-history-v2.yaml"
 )
@@ -44,13 +40,9 @@ RP039_V3_PROFILE_PATH = (
 RP039_V4_PROFILE_PATH = (
     REPOSITORY_ROOT / "configs" / "nowcast" / "rp039-pysteps-steps-history-v4.yaml"
 )
-RP049_PROFILE_PATH = (
-    REPOSITORY_ROOT / "configs" / "nowcast" / "rp049-pysteps-steps-history-v5.yaml"
-)
+RP049_PROFILE_PATH = REPOSITORY_ROOT / "configs" / "nowcast" / "rp049-pysteps-steps-history-v5.yaml"
 SCHEMA_PATH = REPOSITORY_ROOT / "configs" / "schemas" / "pysteps-steps-profile.schema.json"
-PRODUCT_PROFILE_PATH = (
-    REPOSITORY_ROOT / "configs" / "products" / "rp022-ensemble-products-v1.yaml"
-)
+PRODUCT_PROFILE_PATH = REPOSITORY_ROOT / "configs" / "products" / "rp022-ensemble-products-v1.yaml"
 PRODUCT_SCHEMA_PATH = (
     REPOSITORY_ROOT / "configs" / "schemas" / "ensemble-product-profile.schema.json"
 )
@@ -61,6 +53,7 @@ def steps_profile():
     grid = tiny_grid()
     return replace(
         configured,
+        sequence=replace(configured.sequence, timestep_minutes=6),
         grid_id=grid.grid_id,
         grid_config_version=grid.config_version,
     )
@@ -182,7 +175,7 @@ def test_seeded_ensemble_is_reproducible_and_derives_probabilities() -> None:
         backend=seeded_backend(calls),
     )
 
-    assert first.rain_rate.shape == (12, 24, 64, 64)
+    assert first.rain_rate.shape == (12, 30, 64, 64)
     assert first.member_valid_mask.shape == first.rain_rate.shape
     np.testing.assert_array_equal(
         first.output_valid_mask,
@@ -195,12 +188,12 @@ def test_seeded_ensemble_is_reproducible_and_derives_probabilities() -> None:
     assert calls[0]["noise_method"] == "nonparametric"
     assert calls[0]["vel_pert_method"] == "bps"
     assert calls[0]["mask_method"] == "incremental"
-    assert first.probability_exceedance[1.0].shape == (24, 64, 64)
+    assert first.probability_exceedance[1.0].shape == (30, 64, 64)
     valid = first.output_valid_mask == 1
     assert np.all(first.probability_exceedance[1.0][valid] >= 0.0)
     assert np.all(first.probability_exceedance[1.0][valid] <= 1.0)
     assert np.all(np.isnan(first.probability_exceedance[1.0][~valid]))
-    assert first.quantiles[0.1].shape == (24, 64, 64)
+    assert first.quantiles[0.1].shape == (30, 64, 64)
     assert first.accum_60.shape == (12, 64, 64)
     assert first.accum_120.shape == (12, 64, 64)
 
@@ -228,7 +221,7 @@ def test_writes_and_validates_forecast_output_v12() -> None:
 
     validation = validate_ensemble_forecast_output_zarr_store(objects)
 
-    assert validation["shape"] == (12, 24, 64, 64)
+    assert validation["shape"] == (12, 30, 64, 64)
     assert validation["member_count"] == 12
     assert validation["random_seed"] == 20260829
     assert validation["probability_calibration_status"].endswith("_uncalibrated")
@@ -248,7 +241,7 @@ def test_frozen_pysteps_steps_backend_runs_without_an_injected_stub() -> None:
         grid=tiny_grid(),
     )
 
-    assert result.rain_rate.shape == (2, 24, 64, 64)
+    assert result.rain_rate.shape == (2, 30, 64, 64)
     assert np.any(result.member_valid_mask == 1)
     assert np.all(np.isnan(result.rain_rate[result.member_valid_mask == 0]))
     assert result.ensemble_fallback_used is False
@@ -318,7 +311,7 @@ def test_historical_missing_policy_runs_frozen_backend_on_partial_radar_domain()
         grid=tiny_grid(),
     )
 
-    assert result.rain_rate.shape == (2, 24, 64, 64)
+    assert result.rain_rate.shape == (2, 30, 64, 64)
     assert np.all(np.isnan(result.rain_rate[result.member_valid_mask == 0]))
 
 
@@ -365,9 +358,7 @@ def test_minimum_member_support_keeps_probabilistic_products_inside_deterministi
         runtime_ms=321,
     )
     validation = validate_ensemble_forecast_output_zarr_store(objects)
-    all_member_coverage = np.mean(
-        np.all(result.member_valid_mask[:, 0] == 1, axis=0)
-    )
+    all_member_coverage = np.mean(np.all(result.member_valid_mask[:, 0] == 1, axis=0))
     assert validation["first_lead_valid_coverage_ratio"] > all_member_coverage
 
 
@@ -414,6 +405,7 @@ def test_sparse_precipitation_uses_persistence_ensemble_without_stochastic_backe
     grid = tiny_grid()
     configured = replace(
         configured,
+        sequence=replace(configured.sequence, timestep_minutes=6),
         grid_id=grid.grid_id,
         grid_config_version=grid.config_version,
     )

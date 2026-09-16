@@ -16,7 +16,7 @@
       {"radar_id": "fixture_radar_b", "scan_id": "30000000-0000-4000-8000-000000000007", "grid_uri": "s3://rainpulse/fixtures/rp016/radar-b/grid.zarr", "time_offset_seconds": 15, "hybrid_scan_version": "hybrid-scan-1.1.0"}
     ],
     "output_prefix": "s3://rainpulse/analysis/mosaic/fuzhou_118_123_25_27_0p01deg_v1/2026/08/25/063500Z/qi-mosaic-1.1.0/",
-    "mosaic_config_version": "rp016-qi-mosaic-v1",
+    "mosaic_config_version": "rp016-qi-mosaic-v1-6m180",
     "mosaic_algorithm_version": "qi-mosaic-1.1.0",
     "flag_definition_version": "qc-flags-v1"
   }

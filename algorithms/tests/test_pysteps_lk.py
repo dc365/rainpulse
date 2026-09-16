@@ -33,7 +33,7 @@ from .test_object_store import FakeMinio
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PROFILE_PATH = REPOSITORY_ROOT / "configs" / "nowcast" / "rp016-pysteps-lk-v1.yaml"
-ISSUE_TIME = datetime(2026, 8, 25, 12, 10, tzinfo=UTC)
+ISSUE_TIME = datetime(2026, 8, 25, 12, 12, tzinfo=UTC)
 INPUT_ASSET_IDS = [
     UUID("91000000-0000-4000-8000-000000000001"),
     UUID("91000000-0000-4000-8000-000000000002"),
@@ -68,6 +68,8 @@ def profile():
     grid = tiny_grid()
     return replace(
         configured,
+        sequence=replace(configured.sequence, timestep_minutes=6),
+        extrapolation=replace(configured.extrapolation, lead_count=30, lead_step_minutes=6),
         grid_id=grid.grid_id,
         grid_config_version=grid.config_version,
     )
@@ -95,18 +97,18 @@ def nowcast_input(*, rain: bool = True) -> dict[str, bytes]:
     for values in (dbzh, rate, quality, age):
         values[missing] = np.nan
 
-    times = [ISSUE_TIME - timedelta(minutes=10), ISSUE_TIME - timedelta(minutes=5), ISSUE_TIME]
+    times = [ISSUE_TIME - timedelta(minutes=12), ISSUE_TIME - timedelta(minutes=6), ISSUE_TIME]
     summary = {
         "schema_version": "1.0",
         "issue_time_utc": ISSUE_TIME.isoformat(),
         "grid_id": grid.grid_id,
-        "profile_version": "rp013-fixed-5min-v1",
+        "profile_version": "rp013-fixed-6min-v1-6m180",
         "preprocess_version": "nowcast-input-builder-1.0.0",
         "analysis_ids": [str(value) for value in ANALYSIS_IDS],
         "input_asset_ids": [str(value) for value in INPUT_ASSET_IDS],
         "input_uris": [f"s3://rainpulse/analysis/{value}/analysis.zarr" for value in ANALYSIS_IDS],
         "frame_count": frame_count,
-        "timestep_minutes": 5,
+        "timestep_minutes": 6,
         "valid_coverage_ratio": float(np.mean(valid)),
         "mean_quality_index": float(np.mean(quality[~missing])),
         "max_data_age_minutes": float(np.max(age[~missing])),
@@ -129,7 +131,7 @@ def nowcast_input(*, rain: bool = True) -> dict[str, bytes]:
             "grid_config_version": grid.config_version,
             "coordinate_sha256": grid.coordinate_sha256,
             "grid_metric_version": grid.metric().version,
-            "timestep_minutes": 5,
+            "timestep_minutes": 6,
             "issue_time_utc": ISSUE_TIME.isoformat(),
             "input_asset_ids": [str(value) for value in INPUT_ASSET_IDS],
             "analysis_ids": [str(value) for value in ANALYSIS_IDS],
@@ -170,7 +172,7 @@ def test_runs_real_lucas_kanade_and_writes_forecast_output() -> None:
     assert result.motion_feature_count >= configured.motion.minimum_motion_features
     assert np.median(result.velocity_pixels_per_step[0][storm]) == pytest.approx(2.0, abs=0.35)
     assert np.median(result.velocity_pixels_per_step[1][storm]) == pytest.approx(0.0, abs=0.35)
-    assert result.rain_rate.shape == (1, 24, 64, 64)
+    assert result.rain_rate.shape == (1, 30, 64, 64)
     assert result.motion_u[30, 30] > 5.0
     assert result.motion_valid_mask[30, 30] == 1
     assert np.all(result.motion_valid_mask[:5] == 0)
@@ -195,8 +197,8 @@ def test_runs_real_lucas_kanade_and_writes_forecast_output() -> None:
     )
     validation = validate_forecast_output_zarr_store(objects)
 
-    assert validation["shape"] == (1, 24, 64, 64)
-    assert validation["lead_count"] == 24
+    assert validation["shape"] == (1, 30, 64, 64)
+    assert validation["lead_count"] == 30
     assert validation["motion_fallback_used"] is False
     assert validation["motion_fallback_reason"] is None
     assert validation["motion_feature_count"] >= configured.motion.minimum_motion_features
@@ -263,7 +265,7 @@ def test_array_entrypoint_runs_the_same_core_without_claiming_operational_input(
 
     assert result.motion_fallback_used is True
     assert result.motion_fallback_reason == "insufficient_trackable_rain"
-    assert result.rain_rate.shape == (1, 24, 64, 64)
+    assert result.rain_rate.shape == (1, 30, 64, 64)
     assert np.all(result.rain_rate[0, :, :, :-5] == 0.0)
     assert np.all(np.isnan(result.rain_rate[0, :, :, -5:]))
 
@@ -368,7 +370,7 @@ def test_real_worker_reads_verified_input_and_returns_forecast_bundle(
             "schema_version": "1.0",
             "event_id": "95000000-0000-4000-8000-000000000001",
             "event_type": "forecast.pysteps_lk.requested.v1",
-            "occurred_at": "2026-08-25T12:10:01Z",
+            "occurred_at": "2026-08-25T12:12:01Z",
             "run_id": "95000000-0000-4000-8000-000000000002",
             "job_id": "95000000-0000-4000-8000-000000000003",
             "trace_id": "95000000-0000-4000-8000-000000000004",
@@ -390,7 +392,7 @@ def test_real_worker_reads_verified_input_and_returns_forecast_bundle(
     worker_result = _execute_pysteps_lk(request, client)  # type: ignore[arg-type]
     validation = validate_forecast_output_zarr_store(worker_result.objects or {})
 
-    assert validation["lead_count"] == 24
+    assert validation["lead_count"] == 30
     assert validation["motion_feature_count"] >= profile().motion.minimum_motion_features
     assert worker_result.metrics["model_runtime_ms"] >= 0
     assert worker_result.diagnostics["pysteps_lk"]["input_uri"] == request.payload.input_uri

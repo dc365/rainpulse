@@ -1,6 +1,6 @@
 # RainPulse Project Memory
 
-Updated: 2026-09-15 (Asia/Taipei)
+Updated: 2026-09-16 (Asia/Taipei)
 
 This file is the concise handoff for a new Codex session. Stable engineering
 rules remain in `AGENTS.md`; implementation details remain in the referenced RP
@@ -24,6 +24,16 @@ operational data here.
   unless the user explicitly asks.
 
 ## Prelaunch convergence
+
+- 2026-09-16: Local timeline/data-chain implementation now uses 6-minute cadence:
+  observed -60..0, forecast +6..+180 (41 fixed slots). LK/STEPS 30 leads;
+  NowcastNet retains native 10-minute protocol and adapts to 20 display leads
+  through +120 only. Cross-origin accumulation combines past QPE with future
+  model output; no missing-as-zero. Migration 0022 required on deployment.
+  Not yet deployed or regenerated on 105. See `docs/TIMELINE_6MIN_3H_20260916.md`.
+  Changed runtime profiles have distinct `-6m180` identities; five-minute input
+  filenames were renamed to `6min`. Frozen RP016/RP024 scientific profiles remain
+  unchanged for MRMS reproducibility, not as parallel live product versions.
 
 - 2026-09-16: Historical admin recomputation now uses durable QC-only batches
   (migration 0020, `/api/v1/admin/qc-batches`). Old forecast_all panel requests
@@ -243,6 +253,16 @@ operational data here.
   proportionate checks, then direct visual validation in the browser.
 
 ## Current product and UI behavior
+
+- 2026-09-16 质控排查四图第 3 格默认改为雷达拼图（RP-010 网格 `DBZH_QC` 诊断层
+  `analysis:dbzh_qc`），工具栏「证据图层」两个按钮可在拼图与质控标志间手动切换；周期缺拼图层时
+  自动降级到标志并隐藏切换。见 `docs/质控排查_拼图面板设计_20260916.md`。
+- 2026-09-16 历史案例面板恢复 6 分钟档位：一档一行、档内取最接近该档的案例，5 分钟旧结果的实际
+  起报时间以小字保留；此前“按实际起报时间逐条列出”的改法使用户看到 5 分钟一行，已按用户确认
+  回退。见 `docs/TIMELINE_6MIN_3H_20260916.md`。
+- 105 前端产物当天两次发布（本地构建后上传 dist）：回退目录
+  `apps/web/dist.pre-mosaic-20260916162154`、`apps/web/dist.pre-picker-20260916164914`；
+  两次发布后均核对 index 引用、资源 200 与关键文案。
 
 - 2026-09-10 verification replay now computes native-frame whole-field CSI, FSS,
   event-any neighborhood CSI, MAE/RMSE through Go and the existing product worker.

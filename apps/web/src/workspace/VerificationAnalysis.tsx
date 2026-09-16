@@ -47,7 +47,7 @@ function AnalysisChart({series,xLabel,yLabel,log=false,onPick,selected}:{series:
   if(!values.length)return <p role="status">暂无可绘制数值（无事件、零谱功率或有效样本不足）。</p>
   const tx=(x:number)=>log?Math.log10(x):x
   const ty=(y:number)=>log?Math.log10(y):y
-  const minX=log?Math.min(...values.map(p=>tx(p.x))):0,maxX=log?Math.max(...values.map(p=>tx(p.x))):120
+  const minX=log?Math.min(...values.map(p=>tx(p.x))):0,maxX=log?Math.max(...values.map(p=>tx(p.x))):180
   const minY=log?Math.min(...values.map(p=>ty(p.y!))):0,maxY=log?Math.max(...values.map(p=>ty(p.y!))):Math.max(1,...values.map(p=>p.y!))
   const x=(v:number)=>52+(tx(v)-minX)/(maxX-minX||1)*650
   const y=(v:number)=>170-(ty(v)-minY)/(maxY-minY||1)*145
@@ -55,7 +55,7 @@ function AnalysisChart({series,xLabel,yLabel,log=false,onPick,selected}:{series:
     <svg viewBox="0 0 740 208" className="verification-chart" aria-label={`${yLabel}随${xLabel}变化`}>
       {[0,.5,1].map(f=><g key={f}><line x1="52" x2="702" y1={170-f*145} y2={170-f*145} stroke="var(--rp-line)"/><text x="45" y={174-f*145} textAnchor="end">{log?Math.pow(10,minY+f*(maxY-minY)).toExponential(1):(f*maxY).toFixed(2)}</text></g>)}
       <text x="52" y="14">{yLabel}</text><text x="702" y="204" textAnchor="end">{xLabel}{log?'（对数）':''}</text>
-      {(log?[Math.pow(10,minX),Math.pow(10,(minX+maxX)/2),Math.pow(10,maxX)]:[0,30,60,90,120]).map(v=><text key={v} x={x(v)} y="188" textAnchor="middle">{log?v.toFixed(1):`+${v}`}</text>)}
+      {(log?[Math.pow(10,minX),Math.pow(10,(minX+maxX)/2),Math.pow(10,maxX)]:[0,30,60,90,120,150,180]).map(v=><text key={v} x={x(v)} y="188" textAnchor="middle">{log?v.toFixed(1):`+${v}`}</text>)}
       {!log&&selected!=null&&<line x1={x(selected)} x2={x(selected)} y1="22" y2="172" stroke="var(--rp-teal)" strokeDasharray="2 3"/>}
       {series.map((s,index)=>{let path='';let drawing=false;for(const p of s.points){if(p.y==null||(log&&p.y<=0)){drawing=false;continue}path+=`${drawing?'L':'M'}${x(p.x)},${y(p.y)} `;drawing=true}
         return <g key={s.name} style={{color:colors[s.name]}}><path d={path} fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray={index===1?'6 3':index===2?'2 3':undefined}/>
@@ -96,8 +96,8 @@ export function VerificationAnalysis({detail,cycles,validTime,threshold,windowKM
   const signature=JSON.stringify([detail.cycle_id,algorithms,detail.panels.map(p=>p.frames.map(f=>[f.image_url,f.sha256]))])
   const psdKey=JSON.stringify([signature,lead,psdRevision])
   const requestedCurve=useRef('')
-  const interval=algorithms.includes('nowcastnet')?10:5
-  const leads=Array.from({length:120/interval},(_,i)=>(i+1)*interval)
+  const interval=6
+  const leads=Array.from({length:180/interval},(_,i)=>(i+1)*interval)
   const curveInput:JobInput={cycle_ids:[detail.cycle_id],algorithms,leads,threshold,window_km:windowKM}
   const curveKey=JSON.stringify([signature,threshold,windowKM])
   useEffect(()=>{

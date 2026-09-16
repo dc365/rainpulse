@@ -193,9 +193,9 @@ def validate_nowcast_input_zarr_store(
     times = root["time"][:].astype("datetime64[ns]")
     if not 3 <= len(times) <= 6:
         raise NowcastInputError("NowcastInput must contain 3-6 frames")
-    expected_step = np.timedelta64(5, "m")
+    expected_step = np.timedelta64(6, "m")
     if np.any(np.diff(times) != expected_step):
-        raise NowcastInputError("NowcastInput time coordinate is not fixed at five minutes")
+        raise NowcastInputError("NowcastInput time coordinate is not fixed at six minutes")
     issue_time = np.datetime64(
         _parse_time(str(root.attrs["issue_time_utc"])).replace(tzinfo=None), "ns"
     )
@@ -242,9 +242,7 @@ def validate_nowcast_input_zarr_store(
     operational_reasons = summary.get("operational_reasons")
     if execution_mode not in {"operational", "historical_replay"}:
         raise NowcastInputError("NowcastInput execution mode is invalid")
-    if not isinstance(operational_eligible, bool) or not isinstance(
-        operational_reasons, list
-    ):
+    if not isinstance(operational_eligible, bool) or not isinstance(operational_reasons, list):
         raise NowcastInputError("NowcastInput operational provenance is invalid")
     if operational_eligible == bool(operational_reasons):
         raise NowcastInputError("NowcastInput operational state contradicts reasons")
@@ -339,7 +337,7 @@ def _validate_sequence_identity(
                 )
         if _analysis_time(root) != expected_time:
             raise NowcastInputError(
-                "RadarAnalysis frames are not an exact contiguous five-minute sequence"
+                "RadarAnalysis frames are not an exact contiguous six-minute sequence"
             )
         if not np.array_equal(root["lat"][:], grid.latitude) or not np.array_equal(
             root["lon"][:], grid.longitude

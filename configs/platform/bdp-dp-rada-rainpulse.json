@@ -53,7 +53,7 @@
       "RAINPULSE_PIPELINE_MOSAIC_CONFIG": "/opt/rainpulse/configs/mosaic/rp043-fujian-realtime-shadow-v1.yaml",
       "RAINPULSE_PIPELINE_QPE_CONFIG": "/opt/rainpulse/configs/qpe/rp011-basic-zr-v1.yaml",
       "RAINPULSE_PIPELINE_DIAGNOSTIC_CONFIG": "/opt/rainpulse/configs/diagnostics/rp012-operational-diagnostics-v2.yaml",
-      "RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG": "/opt/rainpulse/configs/nowcast/rp043-realtime-shadow-5min-v2.yaml",
+      "RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG": "/opt/rainpulse/configs/nowcast/rp043-realtime-shadow-6min-v2.yaml",
       "RAINPULSE_PIPELINE_PYSTEPS_CONFIG": "/opt/rainpulse/configs/nowcast/rp016-pysteps-lk-v1.yaml",
       "RAINPULSE_PIPELINE_PRODUCT_CONFIG": "/opt/rainpulse/configs/products/rp015-application-products-v1.yaml",
       "RAINPULSE_PIPELINE_VERIFICATION_CONFIG": "/opt/rainpulse/configs/verification/rp031-operational-deterministic-v1.yaml"

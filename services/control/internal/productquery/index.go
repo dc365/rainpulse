@@ -63,7 +63,7 @@ func ParseHeader(data []byte) (Header, error) {
 		LongitudeInterval: math.Float64frombits(binary.BigEndian.Uint64(data[32:40])),
 		LatitudeInterval:  math.Float64frombits(binary.BigEndian.Uint64(data[40:48])),
 	}
-	if header.Width <= 0 || header.Height <= 0 || header.LeadCount != 24 ||
+	if header.Width <= 0 || header.Height <= 0 || header.LeadCount != 30 ||
 		header.RecordBytes != RecordBytes || header.LongitudeInterval <= 0 ||
 		header.LatitudeInterval <= 0 || !finite(header.West) || !finite(header.South) {
 		return Header{}, fmt.Errorf("point index grid metadata is invalid")
@@ -152,15 +152,15 @@ func (header Header) SummarizeRows(
 	window Window,
 	leadMinutes int,
 ) (Statistics, error) {
-	if leadMinutes < 5 || leadMinutes > 120 || leadMinutes%5 != 0 {
-		return Statistics{}, fmt.Errorf("lead time must be one of 5 through 120 minutes")
+	if leadMinutes < 6 || leadMinutes > 180 || leadMinutes%6 != 0 {
+		return Statistics{}, fmt.Errorf("lead time must be one of 6 through 180 minutes")
 	}
 	width := window.ColumnEnd - window.ColumnStart + 1
 	height := window.RowEnd - window.RowStart + 1
 	if len(rows) != height {
 		return Statistics{}, fmt.Errorf("point index window row count differs")
 	}
-	leadIndex := leadMinutes/5 - 1
+	leadIndex := leadMinutes/6 - 1
 	var statistics Statistics
 	statistics.Maximum = 0
 	var sum float64

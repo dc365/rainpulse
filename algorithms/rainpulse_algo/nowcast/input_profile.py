@@ -51,12 +51,8 @@ def load_nowcast_input_profile(path: str | Path) -> NowcastInputProfile:
             profile_version=str(raw["profile_version"]),
             builder_version=str(raw["builder_version"]),
             execution_mode=str(raw.get("execution_mode", "operational")),
-            nowcast_input_contract_version=str(
-                raw["nowcast_input_contract_version"]
-            ),
-            radar_analysis_contract_version=str(
-                raw["radar_analysis_contract_version"]
-            ),
+            nowcast_input_contract_version=str(raw["nowcast_input_contract_version"]),
+            radar_analysis_contract_version=str(raw["radar_analysis_contract_version"]),
             grid_id=str(raw["grid_id"]),
             grid_config_version=str(raw["grid_config_version"]),
             sequence=SequenceConfig(
@@ -66,12 +62,8 @@ def load_nowcast_input_profile(path: str | Path) -> NowcastInputProfile:
                 selection=str(sequence["selection"]),
             ),
             gates=GateConfig(
-                minimum_valid_coverage_ratio=float(
-                    gates["minimum_valid_coverage_ratio"]
-                ),
-                minimum_mean_quality_index=float(
-                    gates["minimum_mean_quality_index"]
-                ),
+                minimum_valid_coverage_ratio=float(gates["minimum_valid_coverage_ratio"]),
+                minimum_mean_quality_index=float(gates["minimum_mean_quality_index"]),
                 maximum_data_age_minutes=float(gates["maximum_data_age_minutes"]),
                 require_all_frames_operational_eligible=bool(
                     gates["require_all_frames_operational_eligible"]
@@ -93,9 +85,9 @@ def _validate(profile: NowcastInputProfile) -> None:
         raise NowcastInputConfigError("unsupported NowcastInput execution mode")
     if profile.radar_analysis_contract_version != "1.2":
         raise NowcastInputConfigError("RP-013 requires RadarAnalysis contract 1.2")
-    if profile.sequence != SequenceConfig(3, 6, 5, "latest_contiguous"):
+    if profile.sequence != SequenceConfig(3, 6, 6, "latest_contiguous"):
         raise NowcastInputConfigError(
-            "Phase-1 requires 3-6 latest contiguous frames at five-minute steps"
+            "Phase-1 requires 3-6 latest contiguous frames at six-minute steps"
         )
     for name, value in (
         (

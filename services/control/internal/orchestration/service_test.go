@@ -66,7 +66,7 @@ func TestRerunForecastCreatesFreshNowcastInputFromCommittedLineage(t *testing.T)
 	regenerationID := uuid.MustParse("0894481f-c096-49af-8d32-e9c531a66772")
 	candidates := make([]NowcastInputCandidate, 0, 3)
 	for index := 0; index < 3; index++ {
-		analysisTime := issueTime.Add(time.Duration(index-2) * 5 * time.Minute)
+		analysisTime := issueTime.Add(time.Duration(index-2) * 6 * time.Minute)
 		candidates = append(candidates, NowcastInputCandidate{
 			AnalysisID:   uuid.NewSHA1(uuid.NameSpaceURL, []byte(analysisTime.String())),
 			AnalysisTime: analysisTime, GridID: "fujian-grid",
@@ -82,7 +82,7 @@ func TestRerunForecastCreatesFreshNowcastInputFromCommittedLineage(t *testing.T)
 			IssueTime: issueTime, GridID: "fujian-grid", GridConfigVersion: "grid-v1",
 			PreprocessVersion: "builder-v1", GateConfigVersion: "gate-v1",
 			ExecutionMode: "historical_replay", RequireAllFramesOperationalEligible: false,
-			MinimumFrames: 3, MaximumFrames: 6, Timestep: 5 * time.Minute,
+			MinimumFrames: 3, MaximumFrames: 6, Timestep: 6 * time.Minute,
 			MinimumValidCoverageRatio: 0.3, MinimumMeanQualityIndex: 0.1,
 			Candidates: candidates, Config: json.RawMessage(`{"profile_version":"gate-v1"}`),
 			ConfigSHA256: strings.Repeat("a", 64),
@@ -339,7 +339,7 @@ func TestCreateRadarGridUsesQCInputAndVersionIsolatedOutput(t *testing.T) {
 func TestCreateAnalysisMosaicAlignsClosestReadyGridAndUsesV2Contract(t *testing.T) {
 	repository := &fakeRepository{}
 	now := time.Date(2026, 8, 25, 12, 6, 0, 0, time.UTC)
-	analysisTime := time.Date(2026, 8, 25, 12, 5, 0, 0, time.UTC)
+	analysisTime := time.Date(2026, 8, 25, 12, 6, 0, 0, time.UTC)
 	service := NewService(repository, Options{Now: func() time.Time { return now }})
 	nearScan := uuid.MustParse("10000000-0000-4000-8000-000000000005")
 	farScan := uuid.MustParse("10000000-0000-4000-8000-000000000006")
@@ -347,7 +347,7 @@ func TestCreateAnalysisMosaicAlignsClosestReadyGridAndUsesV2Contract(t *testing.
 		AnalysisTime:           analysisTime,
 		GridID:                 "fuzhou_118_123_25_27_0p01deg_v1",
 		GridConfigVersion:      "fuzhou-grid-0p01deg-v1",
-		MosaicConfigVersion:    "rp016-qi-mosaic-v1",
+		MosaicConfigVersion:    "rp016-qi-mosaic-v1-6m180",
 		MosaicAlgorithmVersion: "qi-mosaic-1.1.0",
 		FlagDefinitionVersion:  "qc-flags-v1",
 		MaximumAbsoluteOffset:  150 * time.Second,
@@ -368,7 +368,7 @@ func TestCreateAnalysisMosaicAlignsClosestReadyGridAndUsesV2Contract(t *testing.
 				HybridScanVersion: "hybrid-scan-1.1.0",
 			},
 		},
-		MosaicConfig:       json.RawMessage(`{"profile_version":"rp016-qi-mosaic-v1"}`),
+		MosaicConfig:       json.RawMessage(`{"profile_version":"rp016-qi-mosaic-v1-6m180"}`),
 		MosaicConfigSHA256: "63266c7c72321262a01b945281060abd84153a8f3ad64a95c5b73b9fd510f678",
 	}
 
@@ -393,7 +393,7 @@ func TestCreateAnalysisMosaicAlignsClosestReadyGridAndUsesV2Contract(t *testing.
 	}
 	if requested.Payload.MosaicAlgorithm != input.MosaicAlgorithmVersion ||
 		requested.Payload.OutputPrefix != "s3://rainpulse/analysis/mosaic/"+
-			input.GridID+"/2026/08/25/120500Z/qi-mosaic-1.1.0/"+analysis.ID.String()+"/" {
+			input.GridID+"/2026/08/25/120600Z/qi-mosaic-1.1.0/"+analysis.ID.String()+"/" {
 		t.Fatalf("unexpected mosaic request: %#v", requested.Payload)
 	}
 	secondAnalysis, secondJob, err := service.CreateAnalysisMosaic(context.Background(), input)
@@ -407,8 +407,8 @@ func TestCreateAnalysisMosaicAlignsClosestReadyGridAndUsesV2Contract(t *testing.
 
 func TestCreateAnalysisQPEUsesCommittedMosaicAndDeterministicIDs(t *testing.T) {
 	repository := &fakeRepository{}
-	now := time.Date(2026, 8, 25, 12, 5, 3, 0, time.UTC)
-	analysisTime := now.Truncate(5 * time.Minute)
+	now := time.Date(2026, 8, 25, 12, 6, 3, 0, time.UTC)
+	analysisTime := now.Truncate(6 * time.Minute)
 	service := NewService(repository, Options{Now: func() time.Time { return now }})
 	input := AnalysisQPEInput{
 		AnalysisID:             uuid.MustParse("75000000-0000-4000-8000-000000000001"),
@@ -416,7 +416,7 @@ func TestCreateAnalysisQPEUsesCommittedMosaicAndDeterministicIDs(t *testing.T) {
 		AnalysisTime:           analysisTime,
 		GridID:                 "fuzhou_118_123_25_27_0p01deg_v1",
 		GridConfigVersion:      "fuzhou-grid-0p01deg-v1",
-		MosaicConfigVersion:    "rp016-qi-mosaic-v1",
+		MosaicConfigVersion:    "rp016-qi-mosaic-v1-6m180",
 		MosaicAlgorithmVersion: "qi-mosaic-1.1.0",
 		FlagDefinitionVersion:  "qc-flags-v1",
 		MosaicURI:              "s3://rainpulse/analysis/mosaic/fixture/mosaic.zarr",
@@ -441,7 +441,7 @@ func TestCreateAnalysisQPEUsesCommittedMosaicAndDeterministicIDs(t *testing.T) {
 	}
 	if requested.Payload.InputURI != input.MosaicURI ||
 		requested.Payload.OutputPrefix != "s3://rainpulse/analysis/"+input.GridID+
-			"/2026/08/25/120500Z/basic-zr-qpe-1.0.0/"+input.AnalysisID.String()+"/" ||
+			"/2026/08/25/120600Z/basic-zr-qpe-1.0.0/"+input.AnalysisID.String()+"/" ||
 		requested.Payload.QPEConfigVersion != input.QPEConfigVersion {
 		t.Fatalf("unexpected QPE request: %#v", requested.Payload)
 	}
@@ -461,7 +461,7 @@ func TestCreateAnalysisDiagnosticsUsesReadyAnalysisAndExactQCRadars(t *testing.T
 	input := AnalysisDiagnosticsInput{
 		AnalysisID:    uuid.MustParse("75000000-0000-4000-8000-000000000001"),
 		RunID:         uuid.MustParse("72000000-0000-4000-8000-000000000001"),
-		AnalysisTime:  now.Truncate(5 * time.Minute),
+		AnalysisTime:  now.Truncate(6 * time.Minute),
 		GridID:        "fuzhou_118_123_25_27_0p01deg_v1",
 		AnalysisURI:   "s3://rainpulse/analysis/fixture/analysis.zarr",
 		CurrentStatus: workflow.AnalysisReady,
@@ -626,11 +626,11 @@ func TestHandleResultDispatchesStrictFailureEvent(t *testing.T) {
 func TestCreateNowcastInputSelectsLatestContiguousOperationalFrames(t *testing.T) {
 	repository := &fakeRepository{}
 	now := time.Date(2026, 8, 25, 12, 11, 0, 0, time.UTC)
-	issueTime := time.Date(2026, 8, 25, 12, 10, 0, 0, time.UTC)
+	issueTime := time.Date(2026, 8, 25, 12, 12, 0, 0, time.UTC)
 	service := NewService(repository, Options{Now: func() time.Time { return now }})
 	candidates := make([]NowcastInputCandidate, 3)
 	for index := range candidates {
-		analysisTime := issueTime.Add(time.Duration(index-2) * 5 * time.Minute)
+		analysisTime := issueTime.Add(time.Duration(index-2) * 6 * time.Minute)
 		candidates[index] = NowcastInputCandidate{
 			AnalysisID:    uuid.MustParse(fmt.Sprintf("81000000-0000-4000-8000-%012d", index+1)),
 			AnalysisTime:  analysisTime,
@@ -644,10 +644,10 @@ func TestCreateNowcastInputSelectsLatestContiguousOperationalFrames(t *testing.T
 		IssueTime: issueTime, GridID: "fuzhou_118_123_25_27_0p01deg_v1",
 		GridConfigVersion: "fuzhou-grid-0p01deg-v1",
 		PreprocessVersion: "nowcast-input-builder-1.0.0",
-		GateConfigVersion: "rp013-fixed-5min-v1",
-		MinimumFrames:     3, MaximumFrames: 6, Timestep: 5 * time.Minute,
+		GateConfigVersion: "rp013-fixed-6min-v1-6m180",
+		MinimumFrames:     3, MaximumFrames: 6, Timestep: 6 * time.Minute,
 		MinimumValidCoverageRatio: 0.7, MinimumMeanQualityIndex: 0.45,
-		Candidates: candidates, Config: json.RawMessage(`{"profile_version":"rp013-fixed-5min-v1"}`),
+		Candidates: candidates, Config: json.RawMessage(`{"profile_version":"rp013-fixed-6min-v1-6m180"}`),
 		ConfigSHA256: "63266c7c72321262a01b945281060abd84153a8f3ad64a95c5b73b9fd510f678",
 	}
 
@@ -670,7 +670,7 @@ func TestCreateNowcastInputSelectsLatestContiguousOperationalFrames(t *testing.T
 		repository.nowcastInput.Outbox.Subject != NowcastInputRequestedSubject ||
 		len(requested.Payload.AnalysisIDs) != 3 ||
 		requested.Payload.OutputPrefix != "s3://rainpulse/nowcast-input/"+input.GridID+
-			"/2026/08/25/121000Z/nowcast-input-builder-1.0.0/"+run.ID.String()+"/" {
+			"/2026/08/25/121200Z/nowcast-input-builder-1.0.0/"+run.ID.String()+"/" {
 		t.Fatalf("unexpected RP-013 request: %#v", requested)
 	}
 	secondRun, secondJob, err := service.CreateNowcastInput(context.Background(), input)
@@ -678,11 +678,11 @@ func TestCreateNowcastInputSelectsLatestContiguousOperationalFrames(t *testing.T
 		t.Fatalf("NowcastInput identity is not deterministic: %v", err)
 	}
 
-	input.Candidates[1].AnalysisTime = issueTime.Add(-15 * time.Minute)
+	input.Candidates[1].AnalysisTime = issueTime.Add(-16 * time.Minute)
 	if _, _, err := service.CreateNowcastInput(context.Background(), input); err == nil {
 		t.Fatal("gapped RadarAnalysis sequence must be rejected")
 	}
-	input.Candidates[1].AnalysisTime = issueTime.Add(-5 * time.Minute)
+	input.Candidates[1].AnalysisTime = issueTime.Add(-6 * time.Minute)
 	input.Candidates[2].MeanQualityIndex = 0.2
 	if _, _, err := service.CreateNowcastInput(context.Background(), input); err == nil {
 		t.Fatal("below-gate RadarAnalysis must be rejected")
@@ -691,7 +691,7 @@ func TestCreateNowcastInputSelectsLatestContiguousOperationalFrames(t *testing.T
 
 func TestCreateHistoricalNowcastInputAcceptsExplicitEngineeringFrames(t *testing.T) {
 	repository := &fakeRepository{}
-	issueTime := time.Date(2026, 8, 28, 10, 20, 0, 0, time.UTC)
+	issueTime := time.Date(2026, 8, 28, 10, 18, 0, 0, time.UTC)
 	service := NewService(repository, Options{Now: func() time.Time {
 		return time.Date(2026, 8, 31, 4, 0, 0, 0, time.UTC)
 	}})
@@ -699,7 +699,7 @@ func TestCreateHistoricalNowcastInputAcceptsExplicitEngineeringFrames(t *testing
 	for index := range candidates {
 		candidates[index] = NowcastInputCandidate{
 			AnalysisID:    uuid.MustParse(fmt.Sprintf("91000000-0000-4000-8000-%012d", index+1)),
-			AnalysisTime:  issueTime.Add(time.Duration(index-2) * 5 * time.Minute),
+			AnalysisTime:  issueTime.Add(time.Duration(index-2) * 6 * time.Minute),
 			GridID:        "fuzhou_118_123_25_27_0p01deg_v1",
 			AnalysisURI:   fmt.Sprintf("s3://rainpulse/history/%d/analysis.zarr", index),
 			CurrentStatus: workflow.AnalysisReady, OperationalEligible: false,
@@ -710,13 +710,13 @@ func TestCreateHistoricalNowcastInputAcceptsExplicitEngineeringFrames(t *testing
 		IssueTime: issueTime, GridID: "fuzhou_118_123_25_27_0p01deg_v1",
 		GridConfigVersion:                   "fuzhou-grid-0p01deg-v1",
 		PreprocessVersion:                   "nowcast-input-builder-1.1.0",
-		GateConfigVersion:                   "rp039-historical-replay-v1",
+		GateConfigVersion:                   "rp039-historical-replay-v1-6m180",
 		ExecutionMode:                       "historical_replay",
 		RequireAllFramesOperationalEligible: false,
-		MinimumFrames:                       3, MaximumFrames: 6, Timestep: 5 * time.Minute,
+		MinimumFrames:                       3, MaximumFrames: 6, Timestep: 6 * time.Minute,
 		MinimumValidCoverageRatio: 0.30, MinimumMeanQualityIndex: 0.10,
 		Candidates:   candidates,
-		Config:       json.RawMessage(`{"profile_version":"rp039-historical-replay-v1","execution_mode":"historical_replay"}`),
+		Config:       json.RawMessage(`{"profile_version":"rp039-historical-replay-v1-6m180","execution_mode":"historical_replay"}`),
 		ConfigSHA256: "73266c7c72321262a01b945281060abd84153a8f3ad64a95c5b73b9fd510f679",
 	}
 
@@ -724,7 +724,7 @@ func TestCreateHistoricalNowcastInputAcceptsExplicitEngineeringFrames(t *testing
 	if err != nil {
 		t.Fatalf("CreateNowcastInput(historical) error = %v", err)
 	}
-	if run.ConfigVersion != "rp039-historical-replay-v1" ||
+	if run.ConfigVersion != "rp039-historical-replay-v1-6m180" ||
 		repository.nowcastInput.ExecutionMode != "historical_replay" ||
 		repository.nowcastInput.RequireAllFramesOperationalEligible {
 		t.Fatalf("historical replay identity was not preserved: %#v", repository.nowcastInput)
@@ -734,7 +734,7 @@ func TestCreateHistoricalNowcastInputAcceptsExplicitEngineeringFrames(t *testing
 func TestCreatePystepsLKSchedulesOnlyCommittedInputReadyRun(t *testing.T) {
 	repository := &fakeRepository{}
 	now := time.Date(2026, 8, 25, 12, 12, 0, 0, time.UTC)
-	issueTime := time.Date(2026, 8, 25, 12, 10, 0, 0, time.UTC)
+	issueTime := time.Date(2026, 8, 25, 12, 12, 0, 0, time.UTC)
 	service := NewService(repository, Options{Now: func() time.Time { return now }})
 	input := PystepsLKInput{
 		RunID:             uuid.MustParse("a78aa324-0832-59e1-b9ea-d97933b2821e"),
@@ -797,13 +797,13 @@ func TestCreatePystepsLKSchedulesOnlyCommittedInputReadyRun(t *testing.T) {
 
 func TestCreateNowcastNetShadowSchedulesIndependentAlgorithmRun(t *testing.T) {
 	repository := &fakeRepository{}
-	issueTime := time.Date(2026, 8, 28, 2, 25, 0, 0, time.UTC)
+	issueTime := time.Date(2026, 8, 28, 2, 24, 0, 0, time.UTC)
 	service := NewService(repository, Options{Now: func() time.Time { return issueTime.Add(time.Minute) }})
-	frames := make([]workflow.NowcastNetShadowInputFrame, 9)
+	frames := make([]workflow.NowcastNetShadowInputFrame, 15)
 	for index := range frames {
 		frames[index] = workflow.NowcastNetShadowInputFrame{
 			AnalysisID:   uuid.NewSHA1(uuid.NameSpaceURL, []byte(fmt.Sprintf("analysis-%d", index))),
-			AnalysisTime: issueTime.Add(time.Duration(-80+index*10) * time.Minute),
+			AnalysisTime: issueTime.Add(time.Duration(-84+index*6) * time.Minute),
 			AnalysisURI:  fmt.Sprintf("s3://rainpulse/analysis/%02d.zarr", index),
 		}
 	}
@@ -812,10 +812,10 @@ func TestCreateNowcastNetShadowSchedulesIndependentAlgorithmRun(t *testing.T) {
 		IssueTime: issueTime, GridID: "fuzhou_118_123_25_27_0p01deg_v1",
 		CurrentStatus: workflow.RunInputReady, InputFrames: frames,
 		ModelID: NowcastNetShadowModelID, ModelVersion: NowcastNetShadowModelVersion,
-		ConfigVersion:            "fujian-nowcastnet-shadow-v2",
+		ConfigVersion:            "fujian-nowcastnet-shadow-v2-6m180",
 		SourceModelConfigVersion: "rp026-nowcastnet-offline-v1",
 		TileAtlasVersion:         "fujian-nowcastnet-tile-atlas-v1",
-		Config:                   json.RawMessage(`{"profile_version":"fujian-nowcastnet-shadow-v2"}`),
+		Config:                   json.RawMessage(`{"profile_version":"fujian-nowcastnet-shadow-v2-6m180"}`),
 		ConfigSHA256:             strings.Repeat("a", 64),
 	}
 	job, err := service.CreateNowcastNetShadow(context.Background(), input)
@@ -831,8 +831,8 @@ func TestCreateNowcastNetShadowSchedulesIndependentAlgorithmRun(t *testing.T) {
 	}
 	if requested.EventType != NowcastNetShadowRequestedEventType ||
 		repository.nowcastNetShadow.Outbox.Subject != NowcastNetShadowRequestedSubject ||
-		requested.Payload.AlgorithmRunID == uuid.Nil || len(requested.Payload.InputFrames) != 9 ||
-		requested.Payload.ProductTimestepMinutes != 5 || requested.Payload.NativeOutputTimestepMinutes != 10 {
+		requested.Payload.AlgorithmRunID == uuid.Nil || len(requested.Payload.InputFrames) != 15 ||
+		requested.Payload.ProductTimestepMinutes != 6 || requested.Payload.NativeOutputTimestepMinutes != 10 {
 		t.Fatalf("unexpected NowcastNet shadow request: %#v", requested)
 	}
 	second, err := service.CreateNowcastNetShadow(context.Background(), input)
@@ -866,12 +866,12 @@ func TestCreateNowcastNetShadowSchedulesIndependentAlgorithmRun(t *testing.T) {
 
 func TestCreateProductBuildSchedulesThreeProductsFromCommittedBaseline(t *testing.T) {
 	repository := &fakeRepository{}
-	now := time.Date(2026, 8, 25, 12, 10, 2, 0, time.UTC)
+	now := time.Date(2026, 8, 25, 12, 12, 2, 0, time.UTC)
 	service := NewService(repository, Options{Now: func() time.Time { return now }})
 	input := ProductBuildInput{
 		RunID:                 uuid.MustParse("97000000-0000-4000-8000-000000000001"),
 		ModelRunID:            uuid.MustParse("97000000-0000-4000-8000-000000000002"),
-		IssueTime:             now.Truncate(5 * time.Minute),
+		IssueTime:             now.Truncate(6 * time.Minute),
 		GridID:                "fuzhou_118_123_25_27_0p01deg_v1",
 		CurrentStatus:         workflow.RunBaselineReady,
 		ForecastURI:           "s3://rainpulse/products/run/pysteps-lk/pysteps-lk-1.1.0/forecast.zarr",
@@ -925,13 +925,13 @@ func TestCreateForecastVerificationRequiresCompleteFutureTruth(t *testing.T) {
 	repository := &fakeRepository{}
 	issueTime := time.Date(2026, 8, 30, 8, 0, 0, 0, time.UTC)
 	service := NewService(repository, Options{Now: func() time.Time {
-		return issueTime.Add(125 * time.Minute)
+		return issueTime.Add(126 * time.Minute)
 	}})
-	truth := make([]ForecastVerificationTruth, 24)
+	truth := make([]ForecastVerificationTruth, 30)
 	for index := range truth {
 		truth[index] = ForecastVerificationTruth{
 			AnalysisID: uuid.NewSHA1(uuid.NameSpaceURL, []byte(fmt.Sprintf("truth-%d", index))),
-			ValidTime:  issueTime.Add(time.Duration(index+1) * 5 * time.Minute),
+			ValidTime:  issueTime.Add(time.Duration(index+1) * 6 * time.Minute),
 			URI:        fmt.Sprintf("s3://rainpulse/analysis/%02d/analysis.zarr", index+1),
 			SHA256:     strings.Repeat(fmt.Sprintf("%x", (index%15)+1), 64),
 		}
@@ -947,9 +947,9 @@ func TestCreateForecastVerificationRequiresCompleteFutureTruth(t *testing.T) {
 		ModelVersion:              PystepsLKModelVersion,
 		ForecastContractVersion:   "1.1",
 		Truth:                     truth,
-		VerificationConfigVersion: "rp031-operational-deterministic-v1",
+		VerificationConfigVersion: "rp031-operational-deterministic-v1-6m180",
 		ResultContractVersion:     "1.0",
-		VerificationConfig:        json.RawMessage(`{"profile_version":"rp031-operational-deterministic-v1"}`),
+		VerificationConfig:        json.RawMessage(`{"profile_version":"rp031-operational-deterministic-v1-6m180"}`),
 		VerificationConfigSHA256:  strings.Repeat("b", 64),
 	}
 
@@ -966,8 +966,8 @@ func TestCreateForecastVerificationRequiresCompleteFutureTruth(t *testing.T) {
 	}
 	if requested.EventType != ForecastVerificationRequestedEventType ||
 		repository.forecastVerification.Outbox.Subject != ForecastVerificationRequestedSubject ||
-		len(requested.Payload.TruthFrames) != 24 ||
-		requested.Payload.TruthFrames[23].ValidTime != issueTime.Add(120*time.Minute) {
+		len(requested.Payload.TruthFrames) != 30 ||
+		requested.Payload.TruthFrames[29].ValidTime != issueTime.Add(180*time.Minute) {
 		t.Fatalf("unexpected verification request: %#v", requested)
 	}
 	secondRun, secondJob, err := service.CreateForecastVerification(context.Background(), input)

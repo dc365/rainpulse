@@ -58,7 +58,7 @@ FROM (
       AND qpe.analysis_uri IS NOT NULL
       AND qpe.analysis_sha256 IS NOT NULL
       AND cycle.analysis_time > $2
-      AND cycle.analysis_time <= $2 + INTERVAL '120 minutes'
+      AND cycle.analysis_time <= $2 + INTERVAL '180 minutes'
     ORDER BY cycle.analysis_time, cycle.created_at DESC
 ) AS preferred
 ORDER BY analysis_time`, input.GridID, input.IssueTime)
@@ -277,14 +277,14 @@ SELECT lead.value,
            FROM analysis_cycles AS cycle
            JOIN qpe_runs AS qpe ON qpe.analysis_id = cycle.analysis_id
            WHERE cycle.grid_id = forecast.grid_id
-             AND cycle.analysis_time = forecast.issue_time + lead.value * INTERVAL '5 minutes'
+             AND cycle.analysis_time = forecast.issue_time + lead.value * INTERVAL '6 minutes'
              AND cycle.status = 'ANALYSIS_READY'
              AND qpe.status = 'SUCCEEDED'
              AND qpe.analysis_uri IS NOT NULL
              AND qpe.analysis_sha256 IS NOT NULL
        )
 FROM forecast_runs AS forecast
-CROSS JOIN generate_series(1, 24) AS lead(value)
+CROSS JOIN generate_series(1, 30) AS lead(value)
 WHERE forecast.run_id = $1
 ORDER BY lead.value`, runID)
 	if err != nil {
@@ -304,7 +304,7 @@ ORDER BY lead.value`, runID)
 		if exists {
 			result.TruthFrameCount++
 		} else {
-			result.MissingLeadMinutes = append(result.MissingLeadMinutes, leadIndex*5)
+			result.MissingLeadMinutes = append(result.MissingLeadMinutes, leadIndex*6)
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -420,8 +420,8 @@ FOR UPDATE OF verification, forecast`, event.JobID, event.RunID).Scan(
 		summary.ModelID != modelID || summary.ModelVersion != modelVersion ||
 		!summary.IssueTime.Equal(issueTime) || summary.GridID != gridID ||
 		summary.TruthKind != "radar_analysis_rate_qpe" || summary.TruthContractVersion != "1.2" ||
-		summary.TruthFrameCount != 24 || !slices.Equal(summary.TruthAnalysisIDs, truthIDs) ||
-		!slices.Equal(summary.TruthURIs, truthURIs) || summary.LeadCount != 24 ||
+		summary.TruthFrameCount != 30 || !slices.Equal(summary.TruthAnalysisIDs, truthIDs) ||
+		!slices.Equal(summary.TruthURIs, truthURIs) || summary.LeadCount != 30 ||
 		!slices.Equal(summary.LeadMinutes, verificationLeadMinutes()) ||
 		!slices.Equal(summary.Models, []string{"lk", "persistence", "translation"}) ||
 		summary.MetricRowCount != 2160 || summary.AccumulationMetricRowCount != 150 ||
@@ -444,9 +444,9 @@ WHERE job_id = $1`, event.JobID, resultDataURI, resultAsset.SHA256,
 }
 
 func verificationLeadMinutes() []int {
-	leads := make([]int, 24)
+	leads := make([]int, 30)
 	for index := range leads {
-		leads[index] = (index + 1) * 5
+		leads[index] = (index + 1) * 6
 	}
 	return leads
 }

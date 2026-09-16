@@ -165,8 +165,8 @@ def test_nowcastnet_offline_contract_is_isolated_and_single_delivery() -> None:
     assert handler.artifact_name == "nowcastnet-output.zarr"
 
 
-def test_nowcastnet_shadow_contract_freezes_five_minute_product_semantics() -> None:
-    issue_time = datetime(2026, 8, 28, 2, 25, tzinfo=UTC)
+def test_nowcastnet_shadow_contract_freezes_six_minute_product_semantics() -> None:
+    issue_time = datetime(2026, 8, 28, 2, 24, tzinfo=UTC)
     value = {
         "schema_version": "1.0",
         "event_id": "a0000000-0000-4000-8000-000000000001",
@@ -183,20 +183,20 @@ def test_nowcastnet_shadow_contract_freezes_five_minute_product_semantics() -> N
             "input_frames": [
                 {
                     "analysis_id": f"a0000000-0000-4000-8000-{index + 10:012d}",
-                    "analysis_time": (issue_time - timedelta(minutes=80 - index * 10)).isoformat(),
+                    "analysis_time": (issue_time - timedelta(minutes=84 - index * 6)).isoformat(),
                     "analysis_uri": f"s3://rainpulse/analysis/{index}.zarr",
                 }
-                for index in range(9)
+                for index in range(15)
             ],
             "model_id": "nowcastnet",
             "model_version": "official-codeocean-v1-cc0",
-            "config_version": "fujian-nowcastnet-shadow-v2",
+            "config_version": "fujian-nowcastnet-shadow-v2-6m180",
             "source_model_config_version": "rp026-nowcastnet-offline-v1",
             "tile_atlas_version": "fujian-nowcastnet-tile-atlas-v1",
-            "issue_cadence_minutes": 5,
+            "issue_cadence_minutes": 6,
             "input_timestep_minutes": 10,
             "native_output_timestep_minutes": 10,
-            "product_timestep_minutes": 5,
+            "product_timestep_minutes": 6,
             "random_seed": 20260828,
         },
     }

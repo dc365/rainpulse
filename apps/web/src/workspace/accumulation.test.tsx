@@ -38,7 +38,7 @@ it('hourly timeline selects two intervals, total timeline has no playback', () =
     values={accumulationTimes(issue, 'hourly')} selectedTime={accumulationTimes(issue, 'hourly')[0]} />)
   fireEvent.click(screen.getByRole('button', { name: '后一时刻' }))
   expect(onSelect).toHaveBeenCalledWith('2026-08-28T10:30:00.000Z')
-  fireEvent.click(screen.getByRole('button', { name: '5分钟雨强' }))
+  fireEvent.click(screen.getByRole('button', { name: '6分钟雨强' }))
   expect(onMode).toHaveBeenCalledWith('rain_rate')
   rerender(<SharedTimeline {...props} productMode="total_2h" values={accumulationTimes(issue, 'total_2h')} selectedTime={null} />)
   expect(screen.queryByRole('button', { name: '播放' })).toBeNull()

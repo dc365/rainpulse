@@ -65,8 +65,8 @@ func (handler *runtimeHandler) calculateInterval(w http.ResponseWriter, r *http.
 	var input intervalRequest
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2048))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&input) != nil || input.Start < 0 || input.End > 120 || input.Start >= input.End || input.Start%5 != 0 || input.End%5 != 0 || strings.ContainsAny(input.CycleID, "/?%") || len(input.CycleID) > 256 || input.CycleID == "" {
-		runtimeWriteError(w, 400, "invalid_interval", "请选择 0–120 分钟内、以 5 分钟对齐的起止区间")
+	if decoder.Decode(&input) != nil || input.Start < -60 || input.End > 180 || input.Start >= input.End || input.Start%6 != 0 || input.End%6 != 0 || strings.ContainsAny(input.CycleID, "/?%") || len(input.CycleID) > 256 || input.CycleID == "" {
+		runtimeWriteError(w, 400, "invalid_interval", "请选择 -60–180 分钟内、以 6 分钟对齐的起止区间")
 		return
 	}
 	if input.Algorithm != "qpe" && input.Algorithm != "lk" && input.Algorithm != "steps" && input.Algorithm != "nowcastnet" {
@@ -123,9 +123,21 @@ func (handler *runtimeHandler) calculateInterval(w http.ResponseWriter, r *http.
 }
 
 func (handler *runtimeHandler) intervalSources(ctx context.Context, detail cycleDetail, panel panelView, start, end int) ([]intervalSource, error) {
+	if panel.PanelID != "qpe" && start < 0 {
+		index := panelIndex(detail.Panels, "qpe")
+		if index < 0 {
+			return nil, fmt.Errorf("observed history unavailable")
+		}
+		history, err := handler.intervalSources(ctx, detail, detail.Panels[index], start, min(end, 0))
+		if err != nil || end <= 0 {
+			return history, err
+		}
+		future, err := handler.intervalSources(ctx, detail, panel, 0, end)
+		return append(history, future...), err
+	}
 	fail := fmt.Errorf("complete numerical sources unavailable")
 	frames := []frameView{}
-	for lead := start + 5; lead <= end; lead += 5 {
+	for lead := start + 6; lead <= end; lead += 6 {
 		found := false
 		for _, frame := range panel.Frames {
 			if frame.LeadMinutes == lead {

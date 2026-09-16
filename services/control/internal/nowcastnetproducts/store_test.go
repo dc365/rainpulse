@@ -156,12 +156,12 @@ func TestFileStoreAcceptsFiveMinuteNativeAndDerivedFrames(t *testing.T) {
 		ContractName: "rainpulse.nowcastnet-shadow-product-bundle", ContractVersion: "1.2",
 		BundleID: bundleID, IssueTime: issueTime, GridID: "fujian-grid", GridConfigVersion: "grid-v1",
 		ModelID: "nowcastnet", ModelVersion: "public-v1", ProfileVersion: "shadow-v2",
-		MemberCount: 4, CadenceMinutes: 5, Lifecycle: "shadow", Width: width, Height: height,
+		MemberCount: 4, CadenceMinutes: 6, Lifecycle: "shadow", Width: width, Height: height,
 		Bounds: bounds, LegendUnit: "mm/h",
 		Legend:    []LegendEntry{{Minimum: 0.1, Color: "#9dd9ff"}, {Minimum: 1, Color: "#4ba3f2"}},
 		CreatedAt: issueTime.Add(time.Hour),
 	}
-	for lead := 5; lead <= 120; lead += 5 {
+	for lead := 6; lead <= 120; lead += 6 {
 		objectPath := fmt.Sprintf("rain_rate/lead-%03d/layer.png", lead)
 		assetPath := filepath.Join(directory, filepath.FromSlash(objectPath))
 		if err := os.MkdirAll(filepath.Dir(assetPath), 0o755); err != nil {
@@ -182,7 +182,7 @@ func TestFileStoreAcceptsFiveMinuteNativeAndDerivedFrames(t *testing.T) {
 		} else {
 			frame.FrameKind = "derived"
 			frame.Derivation = "bidirectional-dense-optical-flow-advection-v1"
-			frame.SourceLeads = []int{lead - 5, lead + 5}
+			frame.SourceLeads = []int{lead / 10 * 10, (lead/10 + 1) * 10}
 		}
 		bundle.Frames = append(bundle.Frames, frame)
 	}
@@ -196,8 +196,8 @@ func TestFileStoreAcceptsFiveMinuteNativeAndDerivedFrames(t *testing.T) {
 
 	store := NewFileStore(root)
 	cycles, err := store.ListCycles(context.Background())
-	if err != nil || len(cycles) != 1 || len(cycles[0].Frames) != 24 ||
-		cycles[0].Frames[0].FrameKind != "derived" || cycles[0].Frames[1].FrameKind != "native" {
+	if err != nil || len(cycles) != 1 || len(cycles[0].Frames) != 20 ||
+		cycles[0].Frames[0].FrameKind != "derived" || cycles[0].Frames[4].FrameKind != "native" {
 		t.Fatalf("five-minute cycle = %+v, error = %v", cycles, err)
 	}
 	asset, err := store.ReadAsset(context.Background(), bundleID.String(), bundle.Frames[0].AssetID)

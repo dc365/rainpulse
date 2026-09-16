@@ -49,7 +49,7 @@ func TestFileStoreReturnsLatestBundleAndChecksAssetIntegrity(t *testing.T) {
 		t.Fatalf("expected missing cycle to be not found, got %v", err)
 	}
 	asset, err := store.ReadAsset(
-		context.Background(), newer, "probability-gt-1-lead-005-png",
+		context.Background(), newer, "probability-gt-1-lead-006-png",
 	)
 	if err != nil {
 		t.Fatalf("read ensemble asset: %v", err)
@@ -69,13 +69,13 @@ func TestFileStoreFailsClosedForTraversalAndChecksumDrift(t *testing.T) {
 		t.Fatalf("expected traversal to be hidden, got %v", err)
 	}
 	path := filepath.Join(
-		root, bundleID, "probability-gt-1", "lead-005", "layer.png",
+		root, bundleID, "probability-gt-1", "lead-006", "layer.png",
 	)
 	if err := os.WriteFile(path, []byte("\x89PNG\r\n\x1a\nchanged"), 0o644); err != nil {
 		t.Fatalf("tamper fixture: %v", err)
 	}
 	if _, err := store.ReadAsset(
-		context.Background(), bundleID, "probability-gt-1-lead-005-png",
+		context.Background(), bundleID, "probability-gt-1-lead-006-png",
 	); !errors.Is(err, ErrInvalidBundle) {
 		t.Fatalf("expected checksum drift to fail closed, got %v", err)
 	}
@@ -135,7 +135,7 @@ func writeBundleFixture(
 			ThresholdMMH: threshold, Quantile: quantile, Unit: unit,
 			Legend: []LegendEntry{{Minimum: 0.01, Color: "#d6eef7"}, {Minimum: 0.5, Color: "#2d8ea8"}},
 		}
-		for lead := 5; lead <= 120; lead += 5 {
+		for lead := 6; lead <= 180; lead += 6 {
 			validTime := issueTime.Add(time.Duration(lead) * time.Minute)
 			layer.ValidTimes = append(layer.ValidTimes, validTime)
 			for _, format := range []struct {
@@ -153,7 +153,7 @@ func writeBundleFixture(
 					CoverageRatio:  4096.0 / 100701.0,
 					ValidCellCount: 4096, MissingCellCount: 96605,
 				}
-				if assetID == "probability-gt-1-lead-005-png" {
+				if assetID == "probability-gt-1-lead-006-png" {
 					asset.SHA256 = pngDigest
 					asset.SizeBytes = int64(len(png))
 					path := filepath.Join(directory, filepath.FromSlash(objectPath))
@@ -181,7 +181,7 @@ func writeBundleFixture(
 			URI: "s3://rainpulse/forecast.zarr", SHA256: dummyDigest, ContractVersion: "1.2",
 		},
 		ModelID: "pysteps-steps", ModelVersion: "pysteps-steps-1.0.0",
-		ModelConfigVersion:   "rp022-pysteps-steps-v1",
+		ModelConfigVersion:   "rp022-pysteps-steps-v1-6m180",
 		ProductConfigVersion: "rp023-ensemble-application-products-v1",
 		MemberCount:          12,
 		CalibrationStatus:    "raw_ensemble_relative_frequency_uncalibrated",

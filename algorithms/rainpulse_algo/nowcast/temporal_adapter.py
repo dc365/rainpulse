@@ -1,8 +1,8 @@
-"""Traceable five-minute adaptation for native ten-minute NowcastNet output.
+"""Traceable six-minute adaptation for native ten-minute NowcastNet output.
 
 The public NowcastNet weights retain their original ten-minute protocol.  This
-module never changes an even (native) lead; it derives only the odd five-minute
-leads after the native member fields have been stitched to the target grid.
+module preserves coincident native leads (30, 60, 90, 120 minutes) and derives
+the other six-minute leads after member fields are stitched to the target grid.
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ class AdaptedForecast:
 DenseMotionEstimator = Callable[[np.ndarray, np.ndarray, np.ndarray], np.ndarray]
 
 
-def adapt_members_to_five_minutes(
+def adapt_members_to_six_minutes(
     analysis_rate: np.ndarray,
     analysis_valid: np.ndarray,
     native_members: np.ndarray,
@@ -47,7 +47,7 @@ def adapt_members_to_five_minutes(
     motion_estimator: DenseMotionEstimator | None = None,
     midpoint_space: str = "log",
 ) -> AdaptedForecast:
-    """Add odd leads by bidirectional dense-flow advection in log-rain space.
+    """Resample leads by bidirectional dense-flow advection in log-rain space.
 
     A motion field is estimated from the ensemble mean for each interval and
     reused for each member.  This keeps the member spread intact while avoiding
@@ -75,7 +75,7 @@ def adapt_members_to_five_minutes(
     _validate_rate_and_mask(analysis, analysis_mask, "analysis")
     _validate_rate_and_mask(members, member_valid, "native")
 
-    output_leads = tuple(range(5, leads[-1] + 1, 5))
+    output_leads = tuple(range(6, leads[-1] + 1, 6))
     output = np.full(
         (members.shape[0], len(output_leads), *analysis.shape),
         np.nan,
@@ -130,6 +130,7 @@ def adapt_members_to_five_minutes(
                     forward_motion,
                     backward_motion,
                     midpoint_space=midpoint_space,
+                    fraction=(lead - left_lead) / (right_lead - left_lead),
                 )
                 output[member_index, output_index] = value
                 output_valid[member_index, output_index] = valid
@@ -206,15 +207,20 @@ def _bidirectional_midpoint(
     backward_motion: np.ndarray,
     *,
     midpoint_space: str = "log",
+    fraction: float = 0.5,
 ) -> tuple[np.ndarray, np.ndarray]:
-    left_value, left_support = _warp_log_field(left, left_valid, forward_motion, 0.5)
-    right_value, right_support = _warp_log_field(right, right_valid, backward_motion, 0.5)
+    left_value, left_support = _warp_log_field(left, left_valid, forward_motion, fraction)
+    right_value, right_support = _warp_log_field(right, right_valid, backward_motion, 1 - fraction)
     valid = left_support & right_support & np.isfinite(left_value) & np.isfinite(right_value)
     result = np.full(left.shape, np.nan, dtype="float32")
     if midpoint_space == "rain":
-        result[valid] = (np.expm1(left_value[valid]) + np.expm1(right_value[valid])) * 0.5
+        result[valid] = (
+            np.expm1(left_value[valid]) * (1 - fraction) + np.expm1(right_value[valid]) * fraction
+        )
     else:
-        result[valid] = np.expm1((left_value[valid] + right_value[valid]) * 0.5).astype("float32")
+        result[valid] = np.expm1(
+            left_value[valid] * (1 - fraction) + right_value[valid] * fraction
+        ).astype("float32")
     result[valid] = np.maximum(result[valid], 0.0)
     return result, valid.astype("uint8")
 

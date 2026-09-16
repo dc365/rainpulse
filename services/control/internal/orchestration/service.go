@@ -716,8 +716,8 @@ func validateAnalysisMosaicInput(input AnalysisMosaicInput) error {
 		return fmt.Errorf("analysis mosaic identity and version fields are required")
 	}
 	analysisTime := input.AnalysisTime.UTC()
-	if !analysisTime.Equal(analysisTime.Truncate(5 * time.Minute)) {
-		return fmt.Errorf("analysis time must be on a five-minute UTC boundary")
+	if !analysisTime.Equal(analysisTime.Truncate(6 * time.Minute)) {
+		return fmt.Errorf("analysis time must be on a six-minute UTC boundary")
 	}
 	if input.MaximumAbsoluteOffset <= 0 || input.MinimumContributors <= 0 {
 		return fmt.Errorf("analysis alignment tolerance and contributor minimum are required")
@@ -832,8 +832,8 @@ func validateAnalysisQPEInput(input AnalysisQPEInput) error {
 		input.QPEConfigVersion == "" || input.QPEAlgorithmVersion == "" {
 		return fmt.Errorf("analysis QPE identity and version fields are required")
 	}
-	if !input.AnalysisTime.UTC().Equal(input.AnalysisTime.UTC().Truncate(5 * time.Minute)) {
-		return fmt.Errorf("analysis QPE time must be on a five-minute UTC boundary")
+	if !input.AnalysisTime.UTC().Equal(input.AnalysisTime.UTC().Truncate(6 * time.Minute)) {
+		return fmt.Errorf("analysis QPE time must be on a six-minute UTC boundary")
 	}
 	if input.CurrentStatus != workflow.AnalysisQPE &&
 		input.CurrentStatus != workflow.AnalysisReady {
@@ -1151,8 +1151,8 @@ func validatePystepsLKInput(input PystepsLKInput) error {
 	if input.CurrentStatus != workflow.RunInputReady {
 		return fmt.Errorf("pySTEPS-LK requires forecast run state INPUT_READY")
 	}
-	if !input.IssueTime.UTC().Equal(input.IssueTime.UTC().Truncate(5 * time.Minute)) {
-		return fmt.Errorf("pySTEPS-LK issue time must be on a five-minute UTC boundary")
+	if !input.IssueTime.UTC().Equal(input.IssueTime.UTC().Truncate(6 * time.Minute)) {
+		return fmt.Errorf("pySTEPS-LK issue time must be on a six-minute UTC boundary")
 	}
 	if input.ModelID != PystepsLKModelID || !supportedPystepsLKVersion(input.ModelVersion) ||
 		input.ConfigVersion == "" || input.ForecastContractVersion != "1.1" {
@@ -1219,9 +1219,9 @@ func (service *Service) CreateNowcastNetShadow(
 			AlgorithmRunID: algorithmRunID, OutputPrefix: outputPrefix, IssueTime: issueTime, GridID: input.GridID,
 			InputFrames: frames, ModelID: input.ModelID, ModelVersion: input.ModelVersion,
 			ConfigVersion: input.ConfigVersion, SourceModelConfigVersion: input.SourceModelConfigVersion,
-			TileAtlasVersion: input.TileAtlasVersion, IssueCadenceMinutes: 5,
+			TileAtlasVersion: input.TileAtlasVersion, IssueCadenceMinutes: 6,
 			InputTimestepMinutes: 10, NativeOutputTimestepMinutes: 10,
-			ProductTimestepMinutes: 5, RandomSeed: 20260828,
+			ProductTimestepMinutes: 6, RandomSeed: 20260828,
 		},
 	}
 	payload, err := json.Marshal(request)
@@ -1253,11 +1253,11 @@ func validateNowcastNetShadowInput(input NowcastNetShadowInput) error {
 			!((input.HistoricalRegeneration || input.RegenerationID != uuid.Nil) && input.CurrentStatus == workflow.RunPublished)) {
 		return fmt.Errorf("NowcastNet shadow requires an INPUT_READY forecast run")
 	}
-	if !input.IssueTime.UTC().Equal(input.IssueTime.UTC().Truncate(5 * time.Minute)) {
-		return fmt.Errorf("NowcastNet shadow issue time must be on a five-minute UTC boundary")
+	if !input.IssueTime.UTC().Equal(input.IssueTime.UTC().Truncate(6 * time.Minute)) {
+		return fmt.Errorf("NowcastNet shadow issue time must be on a six-minute UTC boundary")
 	}
 	if input.ModelID != NowcastNetShadowModelID || input.ModelVersion != NowcastNetShadowModelVersion ||
-		input.ConfigVersion != "fujian-nowcastnet-shadow-v2" ||
+		input.ConfigVersion != "fujian-nowcastnet-shadow-v2-6m180" ||
 		input.SourceModelConfigVersion != "rp026-nowcastnet-offline-v1" ||
 		input.TileAtlasVersion != "fujian-nowcastnet-tile-atlas-v1" {
 		return fmt.Errorf("NowcastNet shadow identity differs from the active profile")
@@ -1265,19 +1265,19 @@ func validateNowcastNetShadowInput(input NowcastNetShadowInput) error {
 	if len(input.Config) == 0 || !json.Valid(input.Config) || !sha256Pattern.MatchString(input.ConfigSHA256) {
 		return fmt.Errorf("NowcastNet shadow configuration and SHA-256 are required")
 	}
-	if len(input.InputFrames) != 9 {
+	if len(input.InputFrames) != 15 {
 		return fmt.Errorf(
-			"NowcastNet shadow requires exactly nine direct analysis frames, got %d",
+			"NowcastNet shadow requires exactly fifteen six-minute source analysis frames, got %d",
 			len(input.InputFrames),
 		)
 	}
 	seen := make(map[uuid.UUID]struct{}, len(input.InputFrames))
 	for index, frame := range input.InputFrames {
 		parsed, err := url.ParseRequestURI(frame.AnalysisURI)
-		expected := input.IssueTime.UTC().Add(time.Duration(-80+index*10) * time.Minute)
+		expected := input.IssueTime.UTC().Add(time.Duration(-84+index*6) * time.Minute)
 		if frame.AnalysisID == uuid.Nil || err != nil || parsed.Scheme != "s3" ||
 			!frame.AnalysisTime.UTC().Equal(expected) {
-			return fmt.Errorf("NowcastNet shadow input frame %d is not the required T%+d analysis", index, -80+index*10)
+			return fmt.Errorf("NowcastNet shadow input frame %d is not the required T%+d analysis", index, -84+index*6)
 		}
 		if _, exists := seen[frame.AnalysisID]; exists {
 			return fmt.Errorf("NowcastNet shadow analysis IDs must be unique")
@@ -1387,8 +1387,8 @@ func validateProductBuildInput(input ProductBuildInput) error {
 	if input.CurrentStatus != workflow.RunBaselineReady {
 		return fmt.Errorf("product build requires forecast run state BASELINE_READY")
 	}
-	if !input.IssueTime.UTC().Equal(input.IssueTime.UTC().Truncate(5 * time.Minute)) {
-		return fmt.Errorf("product build issue time must be on a five-minute UTC boundary")
+	if !input.IssueTime.UTC().Equal(input.IssueTime.UTC().Truncate(6 * time.Minute)) {
+		return fmt.Errorf("product build issue time must be on a six-minute UTC boundary")
 	}
 	if input.ModelID != PystepsLKModelID || !supportedPystepsLKVersion(input.ModelVersion) ||
 		input.ModelConfigVersion == "" || input.ProductConfigVersion == "" ||
@@ -1485,18 +1485,18 @@ func validateForecastVerificationInput(input ForecastVerificationInput) error {
 	if input.CurrentStatus != workflow.RunPublished {
 		return fmt.Errorf("verification requires forecast run state PUBLISHED")
 	}
-	if !input.IssueTime.UTC().Equal(input.IssueTime.UTC().Truncate(5*time.Minute)) ||
+	if !input.IssueTime.UTC().Equal(input.IssueTime.UTC().Truncate(6*time.Minute)) ||
 		input.ModelID != PystepsLKModelID || !supportedPystepsLKVersion(input.ModelVersion) ||
 		input.ForecastContractVersion != "1.1" || input.ResultContractVersion != "1.0" {
 		return fmt.Errorf("verification model, time, or contract identity differs from RP-031")
 	}
-	if len(input.Truth) != 24 {
-		return fmt.Errorf("verification requires 24 five-minute truth frames")
+	if len(input.Truth) != 30 {
+		return fmt.Errorf("verification requires 30 six-minute truth frames")
 	}
 	seenIDs := make(map[uuid.UUID]struct{}, len(input.Truth))
 	seenURIs := make(map[string]struct{}, len(input.Truth))
 	for index, frame := range input.Truth {
-		expectedTime := input.IssueTime.UTC().Add(time.Duration(index+1) * 5 * time.Minute)
+		expectedTime := input.IssueTime.UTC().Add(time.Duration(index+1) * 6 * time.Minute)
 		parsed, uriErr := url.ParseRequestURI(frame.URI)
 		if frame.AnalysisID == uuid.Nil || !frame.ValidTime.UTC().Equal(expectedTime) ||
 			uriErr != nil || parsed.Scheme != "s3" || !sha256Pattern.MatchString(frame.SHA256) {
@@ -1537,11 +1537,11 @@ func validateAndSelectNowcastFrames(
 		return nil, fmt.Errorf("historical replay must retain engineering analysis frames")
 	}
 	if input.MinimumFrames != 3 || input.MaximumFrames != 6 ||
-		input.Timestep != 5*time.Minute {
-		return nil, fmt.Errorf("Phase-1 NowcastInput requires 3-6 frames at five-minute steps")
+		input.Timestep != 6*time.Minute {
+		return nil, fmt.Errorf("Phase-1 NowcastInput requires 3-6 frames at six-minute steps")
 	}
 	if !issueTime.Equal(issueTime.Truncate(input.Timestep)) {
-		return nil, fmt.Errorf("NowcastInput issue time must be on a five-minute UTC boundary")
+		return nil, fmt.Errorf("NowcastInput issue time must be on a six-minute UTC boundary")
 	}
 	if input.MinimumValidCoverageRatio < 0 || input.MinimumValidCoverageRatio > 1 ||
 		input.MinimumMeanQualityIndex < 0 || input.MinimumMeanQualityIndex > 1 {

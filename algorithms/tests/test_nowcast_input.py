@@ -21,9 +21,7 @@ from rainpulse_algo.nowcast.input_zarr import (
 from rainpulse_algo.radar.mosaic_zarr import REQUIRED_FIELDS as MOSAIC_FIELDS
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-PROFILE_PATH = (
-    REPOSITORY_ROOT / "configs" / "nowcast" / "rp013-fixed-5min-v1.yaml"
-)
+PROFILE_PATH = REPOSITORY_ROOT / "configs" / "nowcast" / "rp013-fixed-6min-v1.yaml"
 HISTORICAL_PROFILE_PATH = (
     REPOSITORY_ROOT / "configs" / "nowcast" / "rp039-historical-replay-v1.yaml"
 )
@@ -99,7 +97,7 @@ def analysis_fixture(
             "coordinate_sha256": grid.coordinate_sha256,
             "crs": "EPSG:4326",
             "registration": "point",
-            "profile_version": "rp016-qi-mosaic-v1",
+            "profile_version": "rp016-qi-mosaic-v1-6m180",
             "mosaic_algorithm_version": "qi-mosaic-1.1.0",
             "flag_definition_version": "qc-flags-v1",
             "input_mosaic_uri": f"s3://rainpulse/mosaic/{analysis_id}/mosaic.zarr",
@@ -152,7 +150,7 @@ def analysis_fixture(
 
 
 def sequence(*, gap: bool = False, **frame_values):
-    times = [ISSUE_TIME - timedelta(minutes=10), ISSUE_TIME - timedelta(minutes=5), ISSUE_TIME]
+    times = [ISSUE_TIME - timedelta(minutes=12), ISSUE_TIME - timedelta(minutes=6), ISSUE_TIME]
     if gap:
         times[1] -= timedelta(minutes=5)
     return [
@@ -191,7 +189,7 @@ def test_builds_fixed_step_nowcast_input_and_preserves_three_states() -> None:
 
 
 def test_rejects_missing_fixed_time_step() -> None:
-    with pytest.raises(NowcastInputError, match="contiguous five-minute"):
+    with pytest.raises(NowcastInputError, match="contiguous six-minute"):
         build(sequence(gap=True))
 
 
@@ -204,10 +202,7 @@ def test_historical_replay_preserves_degraded_provenance_and_builds_input() -> N
     objects = build_nowcast_input_zarr_store(
         sequence(operational_eligible=False, quality=0.38),
         analysis_ids=ANALYSIS_IDS,
-        input_uris=[
-            f"s3://rainpulse/analysis/{value}/analysis.zarr"
-            for value in ANALYSIS_IDS
-        ],
+        input_uris=[f"s3://rainpulse/analysis/{value}/analysis.zarr" for value in ANALYSIS_IDS],
         issue_time=ISSUE_TIME,
         profile=historical_profile(),
         grid=tiny_grid(),

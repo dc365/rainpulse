@@ -29,9 +29,7 @@ from rainpulse_algo.worker.object_store import artifact_sha256
 from .test_pysteps_lk import INPUT_ASSET_IDS, ISSUE_TIME, nowcast_input, profile, tiny_grid
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-PRODUCT_CONFIG = (
-    REPOSITORY_ROOT / "configs" / "products" / "rp015-application-products-v1.yaml"
-)
+PRODUCT_CONFIG = REPOSITORY_ROOT / "configs" / "products" / "rp015-application-products-v1.yaml"
 RUN_ID = UUID("96000000-0000-4000-8000-000000000001")
 MODEL_JOB_ID = UUID("96000000-0000-4000-8000-000000000002")
 PRODUCT_JOB_ID = UUID("96000000-0000-4000-8000-000000000003")
@@ -93,10 +91,10 @@ def test_builds_atomic_three_product_distribution_suite() -> None:
     products = {item["product_type"]: item for item in manifest["products"]}
 
     assert validation["product_count"] == 3
-    assert validation["asset_count"] == 84
-    assert validation["object_count"] == 85
-    assert len(products["rain_rate"]["valid_times"]) == 24
-    assert len(products["rain_rate"]["assets"]) == 73
+    assert validation["asset_count"] == 102
+    assert validation["object_count"] == 103
+    assert len(products["rain_rate"]["valid_times"]) == 30
+    assert len(products["rain_rate"]["assets"]) == 91
     assert len(products["accumulation_60"]["assets"]) == 7
     assert len(products["accumulation_60"]["valid_times"]) == 2
     assert len(products["accumulation_120"]["assets"]) == 4
@@ -105,7 +103,7 @@ def test_builds_atomic_three_product_distribution_suite() -> None:
     png_asset = next(
         asset
         for asset in products["rain_rate"]["assets"]
-        if asset["media_type"] == "image/png" and asset["lead_time_minutes"] == 5
+        if asset["media_type"] == "image/png" and asset["lead_time_minutes"] == 6
     )
     assert png_dimensions(objects[png_asset["object_path"]]) == (64, 64)
     assert png_asset["coverage_ratio"] < 1
@@ -117,9 +115,7 @@ def test_distribution_formats_preserve_geolocation_and_missing_state() -> None:
     manifest = json.loads(objects["manifest.json"])
     rain = next(item for item in manifest["products"] if item["product_type"] == "rain_rate")
     by_media = {
-        asset["media_type"]: asset
-        for asset in rain["assets"]
-        if asset["lead_time_minutes"] == 5
+        asset["media_type"]: asset for asset in rain["assets"] if asset["lead_time_minutes"] == 6
     }
 
     with MemoryFile(objects[by_media[COG_MEDIA_TYPE]["object_path"]]) as memory:
@@ -151,8 +147,8 @@ def test_point_index_is_fixed_record_and_keeps_invalid_as_nan() -> None:
     data = objects[asset["object_path"]]
     index = validate_point_query_index(data)
 
-    assert index["lead_count"] == 24
-    assert index["cell_bytes"] == 120
+    assert index["lead_count"] == 30
+    assert index["cell_bytes"] == 150
     last_cell = HEADER.size + (64 * 64 - 1) * int(index["cell_bytes"])
     first_rate = np.frombuffer(data[last_cell : last_cell + 4], dtype=">f4")[0]
     assert np.isnan(first_rate)

@@ -25,18 +25,22 @@ import { accumulationLabel, type ProductMode } from './accumulation'
 import { intervalLabel, useIntervalPanels, type Interval } from './IntervalTimeline'
 import {
   analysisCycleAt,
+  availableQCEvidenceLayers,
   availabilityAt,
   displayFrameAt,
   formatCycleTime,
   formatValidTime,
   frameAt,
   leadLabel,
+  mosaicPanelID,
   panelsForPreset,
+  qcEvidenceLabels,
   qcFlagLabel,
   radarIDs,
   reasonLabel,
   timelineForPreset,
   type CycleSummary,
+  type QCEvidenceLayer,
   type WorkspaceCycleDetail,
   type WorkspacePanel,
   type WorkspacePreset,
@@ -46,6 +50,13 @@ const presetLabels: Record<WorkspacePreset, string> = {
   forecast: '预报对比',
   qc: '质控排查',
   verification: '检验回放',
+}
+
+// The slot answers "is the fused field damaged?" with the mosaic by default;
+// one button flips it to the flags that explain why a gate was removed.
+const qcEvidenceTitles: Record<QCEvidenceLayer, string> = {
+  mosaic: 'RP-010 质量感知多雷达反射率拼图（DBZH_QC）',
+  flags: '门级质控标志与剔除原因',
 }
 
 export function visibleWorkspaceWarnings(warnings: string[] = []) {
@@ -68,6 +79,7 @@ export function MainWorkspace() {
   const [verificationThreshold, setVerificationThreshold] = useState(20)
   const [verificationWindow, setVerificationWindow] = useState(10)
   const [verificationPoint, setVerificationPoint] = useState<MapCoordinate | null>(null)
+  const [qcEvidence, setQCEvidence] = useState<QCEvidenceLayer>('mosaic')
   const [mobilePanelID, setMobilePanelID] = useState<string>('qpe')
   const [focusedPanelID, setFocusedPanelID] = useState<string | null>(() => (
     focusedPanelFromSearch(typeof window === 'undefined' ? '' : window.location.search)
@@ -89,13 +101,23 @@ export function MainWorkspace() {
     setLayerErrors((current) => updateLayerErrorState(current, panelID, failed))
   }, [])
 
+  const qcEvidenceChoices = useMemo(
+    () => detail && preset === 'qc' ? availableQCEvidenceLayers(detail, selectedRadarID ?? '') : [],
+    [detail, preset, selectedRadarID],
+  )
+  // The evidence slot survives a cycle that lost a layer: it falls back to the
+  // first layer the cycle can actually draw instead of leaving a dead button.
+  const activeQCEvidence: QCEvidenceLayer = qcEvidenceChoices.includes(qcEvidence)
+    ? qcEvidence
+    : qcEvidenceChoices[0] ?? 'mosaic'
+
   const panels = useMemo(
-    () => detail ? activeProductMode === 'rain_rate' ? panelsForPreset(detail, preset, selectedRadarID, verificationAlgorithm)
-      : panelsForPreset(detail, 'forecast', selectedRadarID, verificationAlgorithm).map(panel => accumulation.panels?.find(result => result.panel_id === panel.panel_id) ?? ({
+    () => detail ? activeProductMode === 'rain_rate' ? panelsForPreset(detail, preset, selectedRadarID, verificationAlgorithm, activeQCEvidence)
+      : panelsForPreset(detail, 'forecast', selectedRadarID, verificationAlgorithm, activeQCEvidence).map(panel => accumulation.panels?.find(result => result.panel_id === panel.panel_id) ?? ({
         ...panel, data_kind: 'accumulation_interval', frames: [], legend_unit: 'mm', legend: [], status: 'unavailable' as const,
         unavailable_reason: accumulation.error || '正在累计所选区间…',
       })) : [],
-    [detail, preset, selectedRadarID, verificationAlgorithm, activeProductMode, accumulation.panels, accumulation.error],
+    [detail, preset, selectedRadarID, verificationAlgorithm, activeQCEvidence, activeProductMode, accumulation.panels, accumulation.error],
   )
 
   const timelineValues = useMemo(
@@ -276,7 +298,7 @@ export function MainWorkspace() {
       {error ? <div className="workspace-warning" role="status">{error} <button type="button" onClick={refresh}>重试</button></div> : null}
       {loading && detail ? <div className="workspace-pending" role="status">正在读取所选周期；当前仍显示 {formatLocalCycleTime(detail.issue_time)} 起报结果。</div> : null}
 
-      <section className="workspace-controls" aria-label="工作台控制">
+      <section className={`workspace-controls${preset === 'qc' ? ' qc-controls' : ''}`} aria-label="工作台控制">
         <div className="preset-tabs" role="tablist" aria-label="工作台预设">
           {(Object.keys(presetLabels) as WorkspacePreset[]).map((key) => (
             <button
@@ -303,6 +325,27 @@ export function MainWorkspace() {
               {radarIDs(detail).map((radarID) => <option key={radarID} value={radarID}>{radarID.toUpperCase()}</option>)}
             </select>
           </label>
+        ) : null}
+        {preset === 'qc' && detail && qcEvidenceChoices.length > 1 ? (
+          <div className="qc-evidence-switch">
+            <span>证据图层</span>
+            <div className="map-style-switch" role="group" aria-label="质控证据图层">
+              {qcEvidenceChoices.map((layer) => (
+                <button
+                  type="button"
+                  key={layer}
+                  className={activeQCEvidence === layer ? 'active' : ''}
+                  aria-pressed={activeQCEvidence === layer}
+                  title={qcEvidenceTitles[layer]}
+                  onClick={() => {
+                    setQCEvidence(layer)
+                    setProbe(null)
+                    setLayerErrors({})
+                  }}
+                >{qcEvidenceLabels[layer]}</button>
+              ))}
+            </div>
+          </div>
         ) : null}
         {preset === 'verification' && <label className="verification-algorithm">对照预报
           <select aria-label="检验算法" value={verificationAlgorithm} onChange={event => { setVerificationAlgorithm(event.target.value); setPlaying(false) }}>
@@ -440,7 +483,7 @@ export function MainWorkspace() {
           detail={detail}
           issueTime={detail.issue_time}
           values={timelineValues}
-          panels={panelsForPreset(detail, preset, selectedRadarID, verificationAlgorithm)}
+          panels={panelsForPreset(detail, preset, selectedRadarID, verificationAlgorithm, activeQCEvidence)}
           selectedTime={selectedTime}
           playing={playing}
           onTogglePlaying={() => { setProductMode('rain_rate'); setPlaying((value) => !value) }}
@@ -503,7 +546,7 @@ function MapPanel({
   const { frame, usesAnalysisBaseline } = detail
     ? displayFrameAt(detail, panel, selectedTime)
     : { frame: frameAt(panel, selectedTime), usesAnalysisBaseline: false }
-  const displayName = panelDisplayName(panel)
+  const displayName = usesAnalysisBaseline && selectedTime && detail && Date.parse(selectedTime) < Date.parse(detail.issue_time) ? '历史实况（雷达 QPE）' : panelDisplayName(panel)
   const radarSite = panel.data_kind === 'reflectivity' ? radarSiteFor(panel.radar_id) : undefined
   const analysisRadar = radarSite
     ? detail?.radars.find((radar) => radar.radar_id.toLowerCase() === radarSite.radarID)
@@ -517,6 +560,8 @@ function MapPanel({
     : undefined
   const isQCFlagsPanel = panel.panel_id === 'analysis:qc_flags'
     || panel.panel_id.startsWith('qc_flags:')
+  const isMosaicPanel = panel.panel_id === mosaicPanelID
+  const participatingRadars = detail?.radars.filter((radar) => radar.state === 'PARTICIPATING').length ?? 0
   const imageExtent: GISMapExtent = radarSite
     ? radarDisplayExtent(radarSite, radarSite.maximumRangeKM)
     : validExtent(frame?.bounds)
@@ -537,7 +582,7 @@ function MapPanel({
     ? panel.unavailable_reason === 'observation_accumulation_unavailable' ? '观测累计产品暂不可用，不使用预报或零值填补。'
       : panel.unavailable_reason === 'accumulation_not_generated' ? '本起报累计产品尚未生成，需重新生成数据。' : reasonLabel(panel.unavailable_reason)
     : panel.data_kind.startsWith('accumulation_') && frame == null ? '该区间累计数据不完整或尚未生成。'
-    : frame == null ? '当前算法无原生该有效时刻，未进行插值。' : undefined
+    : frame == null ? panel.panel_id === 'qpe' ? '该时刻实况尚未到达或缺测。' : isMosaicPanel ? '该分析时次尚未生成雷达拼图。' : panel.panel_id === 'nowcastnet' && detail && selectedTime && Date.parse(selectedTime)-Date.parse(detail.issue_time) > 120*60_000 ? '超出当前模型预报范围（120 分钟）。' : '该时刻预报尚未生成或缺测。' : undefined
   const lifecycle = panel.lifecycle === 'shadow'
     ? '影子'
     : panel.lifecycle === 'offline'
@@ -549,12 +594,14 @@ function MapPanel({
         : '业务'
   const frameContext = panel.data_kind.startsWith('accumulation_') && detail && selectedTime
     ? panel.data_kind === 'accumulation_interval' && frame?.source_leads?.length
-      ? intervalLabel(detail.issue_time, { start: frame.source_leads[0]-5, end: frame.lead_time_minutes })
+      ? intervalLabel(detail.issue_time, { start: frame.source_leads[0]-6, end: frame.lead_time_minutes })
       : accumulationLabel(detail.issue_time, selectedTime, panel.data_kind === 'accumulation_60' ? 'hourly' : 'total_2h')
     : usesAnalysisBaseline
-    ? 'T0 分析场'
+    ? selectedTime && detail && Date.parse(selectedTime) < Date.parse(detail.issue_time) ? `历史实况 · ${formatValidTime(selectedTime)}` : '起报实况'
     : frame?.reference_observation && frame.observation_time
     ? `参考体扫 ${formatValidTime(frame.observation_time)}（${formatObservationOffset(frame.observation_offset_seconds)}，未参与本时次拼图）`
+    : isMosaicPanel
+    ? `多雷达拼图 · 质控反射率 · ${participatingRadars} 站参与`
     : frame
     ? leadLabel(detail?.issue_time ?? frame.valid_time, frame.valid_time)
     : `每 ${panel.cadence_minutes} 分钟`
@@ -573,8 +620,8 @@ function MapPanel({
         aria-label={`${displayName}，${roleLabel(panel)}，${lifecycle}，${frameContext}`}
       >
         <strong>{displayName}</strong>
-        <span>{roleLabel(panel)}</span>
-        <b>{lifecycle}</b>
+        <span>{usesAnalysisBaseline ? '雷达实况' : roleLabel(panel)}</span>
+        <b>{usesAnalysisBaseline ? '分析' : lifecycle}</b>
         <small>{frameContext}{frame?.frame_kind === 'derived' ? ' · 派生帧' : ''}{panel.panel_id === 'steps' ? ' · 未校准集合' : ''}</small>
       </div>
       <button
@@ -599,7 +646,7 @@ function MapPanel({
         legend={legend}
         legendMode={panel.legend_unit ? 'scale' : 'categorical'}
         legendUnit={panel.legend_unit ?? frame?.unit ?? ''}
-        footerNote={panel.data_kind === 'probability_exceedance' ? '原始集合频率，未校准；空白不代表零风险，请查询有效覆盖' : '空白不代表无雨；点值区分有效零雨量与缺测'}
+        footerNote={isMosaicPanel ? '拼图按 QI 融合单站质控结果；空白为缺测或低质量剔除，不代表无雨' : panel.data_kind === 'probability_exceedance' ? '原始集合频率，未校准；空白不代表零风险，请查询有效覆盖' : '空白不代表无雨；点值区分有效零雨量与缺测'}
         mapLabel={`${displayName}同步地图，EPSG:4326`}
         resetViewLabel="复位同步地图范围"
         emptyStateHint={unavailable}
@@ -686,7 +733,7 @@ export function SharedTimeline({
     }, null)?.dataset.lead
   }
   const cancelGesture = () => { gesture.current = null; setDraftInterval(null) }
-  const selectedIndex = values.indexOf(selectedTime ?? issueTime)
+  const selectedIndex = values.findIndex(value => Date.parse(value) === Date.parse(selectedTime ?? issueTime))
   const activeIndex = selectedIndex >= 0 ? selectedIndex : 0
   const activeValue = values[activeIndex] ?? selectedTime ?? issueTime
   const intervalMinutes = values.length > 1
@@ -701,9 +748,14 @@ export function SharedTimeline({
     const active = rail?.querySelector<HTMLElement>('[aria-current="step"]')
       ?? rail?.querySelector<HTMLElement>(`[data-lead="${selectedInterval?.end}"]`)
     if (!rail || !active) return
-    const left = active.offsetLeft - (rail.clientWidth - active.clientWidth) / 2
-    if (typeof rail.scrollTo === 'function') rail.scrollTo({ left, behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
-    else rail.scrollLeft = left
+    const center = () => {
+      const left = active.offsetLeft - (rail.clientWidth - active.clientWidth) / 2
+      rail.scrollLeft = left
+    }
+    center()
+    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(center)
+    observer?.observe(rail)
+    return () => observer?.disconnect()
   }, [activeIndex, selectedInterval?.end])
 
   const move = (step: number) => {
@@ -738,14 +790,14 @@ export function SharedTimeline({
     >
       <div className="workspace-timeline-context">
         {onInterval && <div className="interval-shortcuts" role="group" aria-label="累计快捷区间">
-          {[[0,60],[60,120],[0,120]].map(([start,end]) => <button type="button" key={`${start}-${end}`}
+          {[[-60,0],[0,60],[60,120],[120,180],[0,120],[0,180]].map(([start,end]) => <button type="button" key={`${start}-${end}`}
             aria-pressed={selectedInterval?.start === start && selectedInterval.end === end}
-            onClick={() => onInterval({start,end})}>{start/60}–{end/60} 时</button>)}
+            onClick={() => onInterval({start,end})}>{start === -60 ? '过去1时' : `${start/60}–${end/60} 时`}</button>)}
         </div>}
         {!onInterval && onProductMode && <div className="workspace-product-modes" role="group" aria-label="降水产品">
           {(['rain_rate', 'hourly'] as ProductMode[]).map(mode => <button type="button" key={mode}
             className={productMode === mode ? 'active' : ''} aria-pressed={productMode === mode}
-            onClick={() => onProductMode(mode)}>{mode === 'rain_rate' ? '5分钟雨强' : '区间累计'}</button>)}
+            onClick={() => onProductMode(mode)}>{mode === 'rain_rate' ? '6分钟雨强' : '区间累计'}</button>)}
         </div>}
         {productMode !== 'total_2h' && <div className="workspace-timeline-playback">
           <button
@@ -790,12 +842,13 @@ export function SharedTimeline({
         </div>
       </div>
 
+      {onInterval && <div className="timeline-period-heading"><span>过去 1 小时 · 实况</span><span>未来 3 小时 · 预报</span></div>}
       <div className={`workspace-timeline-rail${onInterval ? ' selectable-timeline' : ''}${productMode !== 'rain_rate' ? ' accumulation-rail' : ''}`} ref={railRef}
         onPointerDown={event => {
           if (!onInterval || event.button !== 0 || event.isPrimary === false) return
           const node = (event.target as HTMLElement).closest<HTMLElement>('[data-lead]')
           const lead = Number(node?.dataset.lead ?? pointerLead(event.clientX))
-          if (!Number.isFinite(lead) || lead < 0 || lead > 120) return
+          if (!Number.isFinite(lead) || lead < -60 || lead > 180) return
           gesture.current = {lead, end:lead, x:event.clientX, moved:false}
           event.currentTarget.setPointerCapture?.(event.pointerId)
         }}
@@ -805,7 +858,7 @@ export function SharedTimeline({
           current.moved ||= Math.abs(event.clientX-current.x) >= 5
           if (!current.moved) return
           const lead = Number(pointerLead(event.clientX))
-          if (!Number.isFinite(lead) || lead < 0 || lead > 120) return
+          if (!Number.isFinite(lead) || lead < -60 || lead > 180) return
           current.end = lead
           setDraftInterval(lead === current.lead ? null : {start:Math.min(lead,current.lead),end:Math.max(lead,current.lead)})
         }}
@@ -822,7 +875,7 @@ export function SharedTimeline({
         {values.map((value, index) => {
           const leadMinutes = Math.round((Date.parse(value) - Date.parse(issueTime)) / 60_000)
           const active = !highlighted && index === activeIndex
-          const major = leadMinutes === 0 || leadMinutes === 60 || leadMinutes === 120
+          const major = leadMinutes % 30 === 0
           return (
             <button
               type="button"
@@ -830,15 +883,18 @@ export function SharedTimeline({
               key={value}
               onClick={event => { if (!onInterval || event.detail === 0) onSelect(value) }}
               data-lead={leadMinutes}
+              data-period={leadMinutes < 0 ? 'past' : leadMinutes === 0 ? 'issue' : 'future'}
+              data-available={panels.some(panel => isDisplayAvailable(panel, value))}
               data-selected={Boolean(highlighted && leadMinutes >= highlighted.start && leadMinutes <= highlighted.end)}
               aria-current={active ? 'step' : undefined}
               aria-label={productMode === 'rain_rate' ? `${leadLabel(issueTime, value)}，${formatValidTime(value)}` : accumulationLabel(issueTime, value, productMode)}
               title={`${formatValidTime(value)} · ${panels.filter((panel) => isDisplayAvailable(panel, value)).length}/${panels.length} 面板可用`}
               data-major={major}
             >
+              {leadMinutes === 0 && <span className="timeline-origin">起报时刻</span>}
               <i className="workspace-timeline-node" aria-hidden="true" />
               <span className="workspace-timeline-lead">{productMode === 'rain_rate'
-                ? leadMinutes === 0 ? 'T0' : `${leadMinutes > 0 ? '+' : ''}${leadMinutes}`
+                ? leadMinutes === 0 ? '0' : major || active ? `${leadMinutes > 0 ? '+' : ''}${leadMinutes}` : '·'
                 : `${productMode === 'total_2h' ? 0 : leadMinutes / 60 - 1}–${leadMinutes / 60} 小时`}</span>
               <span className="workspace-timeline-lanes" aria-hidden="true">
                 {panels.map((panel) => (
@@ -906,6 +962,7 @@ function formatUTCCycleTime(value: string) {
 }
 
 function roleLabel(panel: WorkspacePanel) {
+  if (panel.panel_id === mosaicPanelID) return '多雷达拼图'
   if (panel.role === 'observation') return '实况分析'
   if (panel.role === 'qc') return panel.radar_id ? `${panel.radar_id.toUpperCase()} 质控` : '质控证据'
   if (panel.role === 'diagnostic') return '分析诊断'
@@ -913,6 +970,7 @@ function roleLabel(panel: WorkspacePanel) {
 }
 
 function panelDisplayName(panel: WorkspacePanel) {
+  if (panel.panel_id === mosaicPanelID) return '雷达拼图'
   if (panel.panel_id === 'steps') {
     return panel.data_kind === 'probability_exceedance' ? 'STEPS 概率' : 'STEPS P50'
   }

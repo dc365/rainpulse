@@ -13,8 +13,8 @@
     "model_id": "pysteps-lk",
     "model_version": "pysteps-lk-1.1.0",
     "config_version": "rp016-pysteps-lk-v1",
-    "lead_count": 24,
-    "lead_step_minutes": 5,
+    "lead_count": 30,
+    "lead_step_minutes": 6,
     "valid_from": "2026-08-25T10:05:00Z",
     "valid_to": "2026-08-25T12:00:00Z"
   }

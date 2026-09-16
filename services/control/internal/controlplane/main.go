@@ -1464,8 +1464,8 @@ func pystepsLK(
 	if err := yaml.Unmarshal(configBytes, &config); err != nil {
 		return fmt.Errorf("decode pySTEPS-LK configuration: %w", err)
 	}
-	if config.GridConfigVersion == "" || config.Extrapolation.LeadCount != 24 ||
-		config.Extrapolation.LeadStepMinutes != 5 {
+	if config.GridConfigVersion == "" || config.Extrapolation.LeadCount != 30 ||
+		config.Extrapolation.LeadStepMinutes != 6 {
 		return fmt.Errorf("pySTEPS-LK configuration differs from RP-014")
 	}
 	var configValue map[string]any
@@ -1520,14 +1520,14 @@ func nowcastNetShadow(
 	if err := yaml.Unmarshal(configBytes, &config); err != nil {
 		return fmt.Errorf("decode NowcastNet shadow configuration: %w", err)
 	}
-	if config.ProfileVersion != "fujian-nowcastnet-shadow-v2" ||
+	if config.ProfileVersion != "fujian-nowcastnet-shadow-v2-6m180" ||
 		config.SourceModelProfile != "rp026-nowcastnet-offline-v1" ||
 		config.GridID == "" || config.GridConfigVersion == "" ||
 		config.TileAtlasVersion != "fujian-nowcastnet-tile-atlas-v1" ||
-		config.Protocol.InputFrames != 9 || config.Protocol.IssueCadenceMinutes != 5 ||
+		config.Protocol.InputFrames != 9 || config.Protocol.IssueCadenceMinutes != 6 ||
 		config.Protocol.InputTimestepMinutes != 10 ||
 		config.Protocol.NativeOutputTimestepMinutes != 10 ||
-		config.Protocol.ProductTimestepMinutes != 5 {
+		config.Protocol.ProductTimestepMinutes != 6 {
 		return fmt.Errorf("NowcastNet shadow configuration differs from the active profile")
 	}
 	var configValue map[string]any
@@ -1668,9 +1668,9 @@ func forecastVerification(
 }
 
 func validateForecastVerificationConfiguration(config forecastVerificationConfiguration) error {
-	expectedLeads := make([]int, 24)
+	expectedLeads := make([]int, 30)
 	for index := range expectedLeads {
-		expectedLeads[index] = (index + 1) * 5
+		expectedLeads[index] = (index + 1) * 6
 	}
 	if config.SchemaVersion != "1.0" || config.ProfileVersion == "" ||
 		config.Lifecycle != "automatic_verification" ||
@@ -1884,7 +1884,7 @@ func dispatchLoop(ctx context.Context, service *orchestration.Service, publisher
 }
 
 func simulate(ctx context.Context, service *orchestration.Service, forceFailure bool) error {
-	issueTime := time.Now().UTC().Truncate(5 * time.Minute)
+	issueTime := time.Now().UTC().Truncate(6 * time.Minute)
 	var run workflow.Run
 	var job workflow.Job
 	var err error

@@ -26,10 +26,10 @@ func TestValidatePystepsLKMetricsAcceptsActiveMissingPolicy(t *testing.T) {
 		InputAssetIDs: []uuid.UUID{
 			uuid.MustParse("81300000-0000-4000-8000-000000000001"),
 		},
-		LeadCount:                       24,
-		LeadStepMinutes:                 5,
-		ValidFrom:                       issueTime.Add(5 * time.Minute),
-		ValidTo:                         issueTime.Add(120 * time.Minute),
+		LeadCount:                       30,
+		LeadStepMinutes:                 6,
+		ValidFrom:                       issueTime.Add(6 * time.Minute),
+		ValidTo:                         issueTime.Add(180 * time.Minute),
 		MotionFeatureCount:              4,
 		MotionValidFraction:             0.7,
 		MissingBufferPixels:             5,
@@ -75,7 +75,7 @@ func TestValidatePystepsLKMetricsAcceptsActiveMissingPolicy(t *testing.T) {
 	metrics.ConfidenceKind = orchestration.PystepsLKConfidenceKind
 
 	metrics.ModelVersion = "pysteps-lk-1.0.0"
-	metrics.ConfigVersion = "rp014-pysteps-lk-v1"
+	metrics.ConfigVersion = "rp014-pysteps-lk-v1-6m180"
 	metrics.MissingPolicy = "dry_floor_working_copy_preserve_advected_mask"
 	metrics.MotionFeatureCount = 0
 	metrics.MotionValidFraction = 0

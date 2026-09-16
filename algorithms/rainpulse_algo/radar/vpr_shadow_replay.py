@@ -79,13 +79,9 @@ def _validate_manifest_profile_boundary(manifest: dict[str, Any], profile: Any) 
     if manifest.get("qpe_profile_version") != profile.profile_version:
         raise ValueError("manifest qpe_profile_version differs from the mounted QPE profile")
     if manifest.get("qpe_algorithm_version") != profile.algorithm_version:
-        raise ValueError(
-            "manifest qpe_algorithm_version differs from the mounted QPE profile"
-        )
+        raise ValueError("manifest qpe_algorithm_version differs from the mounted QPE profile")
     if manifest.get("flag_definition_version") != profile.flag_definition_version:
-        raise ValueError(
-            "manifest flag_definition_version differs from the mounted QPE profile"
-        )
+        raise ValueError("manifest flag_definition_version differs from the mounted QPE profile")
     if profile.vpr_correction is None:
         raise ValueError("mounted QPE profile does not enable VPR correction")
 
@@ -94,10 +90,7 @@ def _load_flag_masks(path: Path) -> dict[str, np.uint32]:
     value = yaml.safe_load(path.read_text(encoding="utf-8"))
     if value.get("storage_dtype") != "uint32":
         raise ValueError("QC flag storage dtype must be uint32")
-    return {
-        str(item["name"]): np.uint32(item["mask"])
-        for item in value.get("flags", [])
-    }
+    return {str(item["name"]): np.uint32(item["mask"]) for item in value.get("flags", [])}
 
 
 def _run_case(
@@ -232,9 +225,7 @@ def _validate_positive_case(
 
     for key, value in _require_mapping(expected, "validation").items():
         if validation.get(key) != value:
-            raise AssertionError(
-                f"validation field {key} differs from the fixed replay manifest"
-            )
+            raise AssertionError(f"validation field {key} differs from the fixed replay manifest")
 
     rate_expectations = _require_mapping(expected, "rate_expectations")
     rate = root["RATE_QPE"][:]
@@ -290,7 +281,7 @@ def _build_mosaic_objects(
             "coordinate_sha256": f"rp017-shadow-replay-{case_id}",
             "crs": "EPSG:4326",
             "registration": "point",
-            "profile_version": "rp016-qi-mosaic-v1",
+            "profile_version": "rp016-qi-mosaic-v1-6m180",
             "mosaic_algorithm_version": "qi-mosaic-1.1.0",
             "analysis_cycle_version": "analysis-cycle-rp010-v1",
             "flag_definition_version": "qc-flags-v1",

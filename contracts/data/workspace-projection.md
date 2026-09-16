@@ -41,7 +41,10 @@ The first four panel identities are stable even when products are absent:
 Missing products keep their slot with `status` and `unavailable_reason`. A
 client must never substitute another algorithm's frame or interpolate a model
 onto an unsupported cadence. For historical cycles, later RadarAnalysis QPE
-frames through +120 minutes are appended to `qpe` as verification truth.
+frames from -60 through +180 minutes are appended to `qpe` as observations/truth.
+The timeline always has 41 timestamps at six-minute intervals, including missing
+slots; T0 is the issue boundary. Forecast panels before and at T0 show explicitly
+labelled QPE observations. No future observation is substituted for a forecast.
 
 ## Safety semantics
 

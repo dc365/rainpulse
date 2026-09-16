@@ -20,9 +20,9 @@ def execute(request: JobRequested) -> tuple[bytes, dict[str, float]]:
             "run_id": str(request.run_id),
             "job_id": str(request.job_id),
             "issue_time": request.payload.issue_time.isoformat(),
-            "lead_minutes": list(range(5, 125, 5)),
+            "lead_minutes": list(range(6, 181, 6)),
         },
         separators=(",", ":"),
         sort_keys=True,
     ).encode()
-    return result, {"simulation": 1.0, "lead_count": 24.0}
+    return result, {"simulation": 1.0, "lead_count": 30.0}

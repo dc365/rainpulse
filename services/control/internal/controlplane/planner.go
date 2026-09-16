@@ -145,7 +145,7 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 		mosaicConfig:              environmentOrDefault("RAINPULSE_PIPELINE_MOSAIC_CONFIG", "/opt/rainpulse/configs/mosaic/rp016-qi-mosaic-v1.yaml"),
 		qpeConfig:                 environmentOrDefault("RAINPULSE_PIPELINE_QPE_CONFIG", "/opt/rainpulse/configs/qpe/rp011-basic-zr-v1.yaml"),
 		diagnosticConfig:          environmentOrDefault("RAINPULSE_PIPELINE_DIAGNOSTIC_CONFIG", "/opt/rainpulse/configs/diagnostics/rp012-operational-diagnostics-v1.yaml"),
-		nowcastConfig:             environmentOrDefault("RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG", "/opt/rainpulse/configs/nowcast/rp013-fixed-5min-v1.1.yaml"),
+		nowcastConfig:             environmentOrDefault("RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG", "/opt/rainpulse/configs/nowcast/rp013-fixed-6min-v1.1.yaml"),
 		pystepsConfig:             environmentOrDefault("RAINPULSE_PIPELINE_PYSTEPS_CONFIG", "/opt/rainpulse/configs/nowcast/prelaunch-pysteps-lk-v2.yaml"),
 		nowcastNetShadowConfig:    environmentOrDefault("RAINPULSE_PIPELINE_NOWCASTNET_SHADOW_CONFIG", "/opt/rainpulse/configs/nowcast/fujian-nowcastnet-shadow-v2.yaml"),
 		productConfig:             environmentOrDefault("RAINPULSE_PIPELINE_PRODUCT_CONFIG", "/opt/rainpulse/configs/products/rp015-application-products-v1.yaml"),
@@ -218,7 +218,7 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 	if nowcast.GridID == "" || nowcast.GridConfigVersion == "" ||
 		nowcast.Sequence.MinimumFrames < 3 ||
 		nowcast.Sequence.MaximumFrames < nowcast.Sequence.MinimumFrames ||
-		nowcast.Sequence.TimestepMinutes != 5 {
+		nowcast.Sequence.TimestepMinutes != 6 {
 		return nil, fmt.Errorf("pipeline NowcastInput config has invalid grid or frame limits")
 	}
 	if !pipelineModeCompatible(mode, executionModeOrOperational(nowcast.ExecutionMode)) {
@@ -239,21 +239,21 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 			return nil, fmt.Errorf("pipeline %s config uses a different grid identity", label)
 		}
 	}
-	if pysteps.Extrapolation.LeadCount != 24 ||
-		pysteps.Extrapolation.LeadStepMinutes != 5 {
-		return nil, fmt.Errorf("pipeline pySTEPS-LK config must publish 24 five-minute leads")
+	if pysteps.Extrapolation.LeadCount != 30 ||
+		pysteps.Extrapolation.LeadStepMinutes != 6 {
+		return nil, fmt.Errorf("pipeline pySTEPS-LK config must publish 30 six-minute leads")
 	}
 	if settings.nowcastNetShadowEnabled &&
-		(nowcastNetShadow.ProfileVersion != "fujian-nowcastnet-shadow-v2" ||
+		(nowcastNetShadow.ProfileVersion != "fujian-nowcastnet-shadow-v2-6m180" ||
 			nowcastNetShadow.SourceModelProfile != "rp026-nowcastnet-offline-v1" ||
 			nowcastNetShadow.GridID != nowcast.GridID ||
 			nowcastNetShadow.GridConfigVersion != nowcast.GridConfigVersion ||
 			nowcastNetShadow.TileAtlasVersion != "fujian-nowcastnet-tile-atlas-v1" ||
 			nowcastNetShadow.Protocol.InputFrames != 9 ||
-			nowcastNetShadow.Protocol.IssueCadenceMinutes != 5 ||
+			nowcastNetShadow.Protocol.IssueCadenceMinutes != 6 ||
 			nowcastNetShadow.Protocol.InputTimestepMinutes != 10 ||
 			nowcastNetShadow.Protocol.NativeOutputTimestepMinutes != 10 ||
-			nowcastNetShadow.Protocol.ProductTimestepMinutes != 5) {
+			nowcastNetShadow.Protocol.ProductTimestepMinutes != 6) {
 		return nil, fmt.Errorf("pipeline NowcastNet shadow config has an incompatible lineage or cadence")
 	}
 	if err := validateForecastVerificationConfiguration(verification); err != nil {
@@ -412,7 +412,7 @@ func (planner *pipelinePlanner) planMosaics(ctx context.Context) error {
 		if planner.outsideLookback(scan.VolumeEndTime) {
 			continue
 		}
-		analysisTime := scan.VolumeEndTime.UTC().Round(5 * time.Minute)
+		analysisTime := scan.VolumeEndTime.UTC().Round(6 * time.Minute)
 		if absoluteDuration(scan.VolumeEndTime.Sub(analysisTime)) > planner.settings.maximumMosaicOffset {
 			continue
 		}
@@ -678,7 +678,7 @@ func (planner *pipelinePlanner) planForecasts(ctx context.Context) error {
 			slog.Error("inspect forecast verification truth", "run_id", run.ID, "error", inputErr)
 			continue
 		}
-		if len(input.Truth) != 24 {
+		if len(input.Truth) != 30 {
 			continue
 		}
 		if err := forecastVerification(

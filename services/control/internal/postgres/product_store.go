@@ -383,7 +383,7 @@ func validateApplicationProductManifest(
 		seenProducts[product.ProductType] = struct{}{}
 		expectedTimes, expectedAssets := 1, 3
 		if product.ProductType == workflow.ProductRainRate {
-			expectedTimes, expectedAssets = 24, 73
+			expectedTimes, expectedAssets = 30, 91
 		} else if product.ProductType == workflow.ProductAccumulation60 && len(product.Assets) == 7 {
 			expectedTimes, expectedAssets = 2, 7
 		} else if product.ProductType == workflow.ProductAccumulation120 && len(product.Assets) == 4 {
@@ -395,7 +395,7 @@ func validateApplicationProductManifest(
 		for index, validTime := range product.ValidTimes {
 			expectedLead := (index + 1) * 60
 			if product.ProductType == workflow.ProductRainRate {
-				expectedLead = (index + 1) * 5
+				expectedLead = (index + 1) * 6
 			} else if product.ProductType == workflow.ProductAccumulation120 {
 				expectedLead = 120
 			}
@@ -407,10 +407,13 @@ func validateApplicationProductManifest(
 			return err
 		}
 	}
-	if len(seenProducts) != 3 || (len(seenPaths) != 79 && len(seenPaths) != 84) {
+	// 102 unique paths is the six-minute RP-015 suite: 30 rain-rate leads with
+	// PNG/COG/NetCDF plus one point index, two hourly windows and one two-hour
+	// window. The 79/84 counts stay accepted for the five-minute releases.
+	if len(seenProducts) != 3 || (len(seenPaths) != 79 && len(seenPaths) != 84 && len(seenPaths) != 102) {
 		return fmt.Errorf("%w: incomplete RP-015 product suite", orchestration.ErrInvalidEvent)
 	}
-	if (len(seenPaths) == 84 && manifest.AccumulationVersion != "1.0") ||
+	if ((len(seenPaths) == 102 || len(seenPaths) == 84) && manifest.AccumulationVersion != "1.0") ||
 		(len(seenPaths) == 79 && manifest.AccumulationVersion != "") {
 		return fmt.Errorf("%w: accumulation extension version differs", orchestration.ErrInvalidEvent)
 	}
@@ -491,7 +494,7 @@ func validateProductAssets(
 		}
 	}
 	if product.ProductType == workflow.ProductRainRate &&
-		(len(mediaCounts) != 24 || pointIndexes != 1) {
+		(len(mediaCounts) != 30 || pointIndexes != 1) {
 		return fmt.Errorf("%w: rain-rate asset suite is incomplete", orchestration.ErrInvalidEvent)
 	}
 	if product.ProductType != workflow.ProductRainRate &&
@@ -508,10 +511,10 @@ func manifestValidTime(product workflow.ProductManifestEntry, leadMinutes int) t
 		return product.ValidTimes[leadMinutes/60-1]
 	}
 	if product.ProductType == workflow.ProductRainRate {
-		if leadMinutes < 5 || leadMinutes > 120 || leadMinutes%5 != 0 {
+		if leadMinutes < 6 || leadMinutes > 180 || leadMinutes%6 != 0 {
 			return time.Time{}
 		}
-		return product.ValidTimes[(leadMinutes/5)-1]
+		return product.ValidTimes[(leadMinutes/6)-1]
 	}
 	if len(product.ValidTimes) == 1 &&
 		((product.ProductType == workflow.ProductAccumulation60 && leadMinutes == 60) ||

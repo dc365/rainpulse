@@ -33,9 +33,7 @@ def _execute_forecast_verification(
     request: ForecastVerificationRequested,
     client: Minio,
 ) -> WorkerResult:
-    profile = load_operational_verification_profile(
-        _required_file("RAINPULSE_VERIFICATION_CONFIG")
-    )
+    profile = load_operational_verification_profile(_required_file("RAINPULSE_VERIFICATION_CONFIG"))
     _validate_request(request, profile.profile_version)
     reader = ArtifactObjectReader(client)
     forecast_objects = reader.load(request.payload.forecast_uri)
@@ -72,9 +70,7 @@ def _execute_forecast_verification(
             "object_count": float(len(objects)),
             "truth_frame_count": float(summary["truth_frame_count"]),
             "metric_row_count": float(summary["metric_row_count"]),
-            "accumulation_metric_row_count": float(
-                summary["accumulation_metric_row_count"]
-            ),
+            "accumulation_metric_row_count": float(summary["accumulation_metric_row_count"]),
         },
     )
 
@@ -89,18 +85,18 @@ def _validate_request(
         )
     if (
         request.payload.issue_time.utcoffset() is None
-        or request.payload.issue_time.timestamp() % 300
+        or request.payload.issue_time.timestamp() % 360
     ):
         raise OperationalVerificationInputError(
             "verification issue time is not on a five-minute UTC boundary"
         )
     expected_times = [
-        request.payload.issue_time.timestamp() + lead * 60 for lead in range(5, 125, 5)
+        request.payload.issue_time.timestamp() + lead * 60 for lead in range(6, 181, 6)
     ]
     actual_times = [frame.valid_time.timestamp() for frame in request.payload.truth_frames]
     if actual_times != expected_times:
         raise OperationalVerificationInputError(
-            "verification truth frames must cover issue+5 through issue+120 in order"
+            "verification truth frames must cover issue+6 through issue+180 in order"
         )
 
 

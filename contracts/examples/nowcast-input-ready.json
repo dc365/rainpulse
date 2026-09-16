@@ -16,7 +16,7 @@
       "70000000-0000-4000-8000-000000000007"
     ],
     "frame_count": 3,
-    "timestep_minutes": 5,
+    "timestep_minutes": 6,
     "valid_coverage_ratio": 0.92,
     "mean_quality_index": 0.81,
     "max_data_age_minutes": 2.0,

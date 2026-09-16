@@ -38,7 +38,7 @@ from .nowcastnet_tile_atlas import (
     prepare_atlas_tiles,
     stitch_member_tiles,
 )
-from .temporal_adapter import adapt_members_to_five_minutes
+from .temporal_adapter import adapt_members_to_six_minutes
 
 
 class NowcastNetShadowWorkerError(ValueError):
@@ -179,10 +179,10 @@ def load_shadow_task_configuration(path: str | Path) -> ShadowTaskConfiguration:
         not configuration.profile_version
         or configuration.source_model_profile != "rp026-nowcastnet-offline-v1"
         or configuration.input_frames != 9
-        or configuration.issue_cadence_minutes != 5
+        or configuration.issue_cadence_minutes != 6
         or configuration.input_timestep_minutes != 10
         or configuration.native_output_timestep_minutes != 10
-        or configuration.product_timestep_minutes != 5
+        or configuration.product_timestep_minutes != 6
         or configuration.native_output_lead_minutes != tuple(range(10, 121, 10))
         or configuration.gpu_batch_size < 1
         or configuration.batch_fallback != "serial"
@@ -218,6 +218,9 @@ def _execute_nowcastnet_shadow(
         raise NowcastNetShadowWorkerError(f"load NowcastNet shadow inputs: {error}") from error
     rates = np.stack([item[0] for item in loaded], axis=0)
     valid = np.stack([item[1] for item in loaded], axis=0)
+    from .nowcastnet_shadow import resample_six_minute_inputs
+
+    rates, valid = resample_six_minute_inputs(rates, valid)
     started = time.perf_counter()
     native_members, native_valid, atlas_summary = run_fixed_tile_atlas(
         rates,
@@ -226,7 +229,7 @@ def _execute_nowcastnet_shadow(
         backend_factory=backend_factory,
         random_seed=request.payload.random_seed,
     )
-    adapted = adapt_members_to_five_minutes(
+    adapted = adapt_members_to_six_minutes(
         rates[-1],
         valid[-1],
         native_members,
@@ -237,6 +240,7 @@ def _execute_nowcastnet_shadow(
     info = dict(atlas_summary)
     info["runtime_ms"] = runtime_ms
     info["temporal_adapter"] = runtime.task.temporal_adapter
+    info["input_temporal_adapter"] = "six-to-ten-linear-common-support-v1"
     info["native_frame_count"] = len(runtime.task.native_output_lead_minutes)
     info["derived_frame_count"] = sum(frame.frame_kind == "derived" for frame in adapted.frames)
     objects = build_nowcastnet_shadow_product_bundle(

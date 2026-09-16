@@ -1,5 +1,5 @@
 schema_version: "1.0"
-profile_version: prelaunch-pysteps-steps-v6
+profile_version: prelaunch-pysteps-steps-v6-6m180
 model_id: pysteps-steps
 model_version: pysteps-steps-0.5.0-history
 pysteps_version: 1.21.5
@@ -12,7 +12,7 @@ grid_config_version: fuzhou-grid-0p01deg-v1
 sequence:
   minimum_frames: 3
   maximum_frames: 6
-  timestep_minutes: 5
+  timestep_minutes: 6
 
 ensemble:
   member_count: 12

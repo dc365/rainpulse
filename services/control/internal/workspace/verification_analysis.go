@@ -93,7 +93,7 @@ func (h *runtimeHandler) compareDetail(ctx context.Context, d cycleDetail, input
 	if !hasNativeLead(truth, input.Lead, true) {
 		return nil, fmt.Errorf("该时效无匹配雷达 QPE")
 	}
-	observed, err := h.intervalSources(ctx, d, truth, input.Lead-5, input.Lead)
+	observed, err := h.intervalSources(ctx, d, truth, input.Lead-6, input.Lead)
 	if err != nil {
 		return nil, fmt.Errorf("雷达 QPE 数值源不可用")
 	}
@@ -103,7 +103,7 @@ func (h *runtimeHandler) compareDetail(ctx context.Context, d cycleDetail, input
 		if !hasNativeLead(p, input.Lead, false) {
 			return nil, fmt.Errorf("%s 无原生该时效，整组不参与比较", a)
 		}
-		sources, err := h.intervalSources(ctx, d, p, input.Lead-5, input.Lead)
+		sources, err := h.intervalSources(ctx, d, p, input.Lead-6, input.Lead)
 		if err != nil {
 			return nil, fmt.Errorf("%s 数值源不可用", a)
 		}
@@ -116,7 +116,7 @@ func (h *runtimeHandler) compareVerification(w http.ResponseWriter, r *http.Requ
 	if !decodeAnalysisInput(w, r, &input) {
 		return
 	}
-	if !validCycleID(input.CycleID) || !validAlgorithms(input.Algorithms) || input.Lead < 5 || input.Lead > 120 || input.Lead%5 != 0 {
+	if !validCycleID(input.CycleID) || !validAlgorithms(input.Algorithms) || input.Lead < 6 || input.Lead > 180 || input.Lead%6 != 0 {
 		runtimeWriteError(w, 400, "invalid_analysis", "请选择有效周期、算法和时效")
 		return
 	}

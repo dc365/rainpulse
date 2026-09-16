@@ -147,8 +147,10 @@ def _validate(profile: PystepsLKProfile) -> None:
         raise PystepsLKConfigError("pySTEPS-LK requires NowcastInput contract 1.2")
     if profile.forecast_output_contract_version != "1.1":
         raise PystepsLKConfigError("pySTEPS-LK requires ForecastOutput contract 1.1")
-    if profile.sequence != ModelSequenceConfig(3, 6, 5):
-        raise PystepsLKConfigError("pySTEPS-LK requires 3-6 frames at five-minute steps")
+    if profile.sequence not in (ModelSequenceConfig(3, 6, 5), ModelSequenceConfig(3, 6, 6)):
+        raise PystepsLKConfigError(
+            "pySTEPS-LK requires 3-6 frames at configured five/six-minute steps"
+        )
     if profile.motion.input_field != "DBZH_QC":
         raise PystepsLKConfigError("pySTEPS-LK motion must consume DBZH_QC")
     if profile.motion.method != "dense_lucaskanade":
@@ -189,8 +191,8 @@ def _validate(profile: PystepsLKProfile) -> None:
     if profile.extrapolation != ExtrapolationConfig(
         "semilagrangian",
         profile.extrapolation.interpolation_order,
-        24,
-        5,
+        30 if profile.sequence.timestep_minutes == 6 else 24,
+        profile.sequence.timestep_minutes,
         ("persistence", "translation"),
         profile.extrapolation.support_policy,
     ):

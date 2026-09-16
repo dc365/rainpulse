@@ -79,9 +79,7 @@ def load_nowcastnet_shadow_profile(path: str | Path) -> NowcastNetShadowProfile:
                 protocol.get("issue_cadence_minutes", protocol["timestep_minutes"])
             ),
             timestep_minutes=int(protocol["timestep_minutes"]),
-            output_lead_minutes=tuple(
-                int(value) for value in protocol["output_lead_minutes"]
-            ),
+            output_lead_minutes=tuple(int(value) for value in protocol["output_lead_minutes"]),
             missing_policy=str(protocol["missing_policy"]),
             spatial_multiple=int(protocol["spatial_multiple"]),
             roi=FixedROI(
@@ -93,13 +91,9 @@ def load_nowcastnet_shadow_profile(path: str | Path) -> NowcastNetShadowProfile:
             activation=ShadowActivation(
                 input_probe_enabled=bool(activation["input_probe_enabled"]),
                 inference_enabled=bool(activation["inference_enabled"]),
-                product_publication_enabled=bool(
-                    activation["product_publication_enabled"]
-                ),
+                product_publication_enabled=bool(activation["product_publication_enabled"]),
                 operational_eligible=bool(activation["operational_eligible"]),
-                spatial_shape_validated=bool(
-                    activation["spatial_shape_validated"]
-                ),
+                spatial_shape_validated=bool(activation["spatial_shape_validated"]),
             ),
         )
     except (OSError, KeyError, TypeError, ValueError, yaml.YAMLError) as exc:
@@ -113,75 +107,70 @@ def load_nowcastnet_shadow_profile(path: str | Path) -> NowcastNetShadowProfile:
 
 
 def _validate_profile(profile: NowcastNetShadowProfile) -> None:
-    if (
-        not profile.profile_version
-        or profile.source_model_profile != "rp026-nowcastnet-offline-v1"
-    ):
-        raise NowcastNetShadowConfigError(
-            "shadow profile must retain the frozen RP-026 parent"
-        )
+    if not profile.profile_version or profile.source_model_profile != "rp026-nowcastnet-offline-v1":
+        raise NowcastNetShadowConfigError("shadow profile must retain the frozen RP-026 parent")
     if (
         profile.grid_id != "fuzhou_118_123_25_27_0p01deg_v1"
         or profile.grid_config_version != "fuzhou-grid-0p01deg-v1"
     ):
-        raise NowcastNetShadowConfigError(
-            "shadow profile must bind the frozen Fujian grid"
-        )
+        raise NowcastNetShadowConfigError("shadow profile must bind the frozen Fujian grid")
     if profile.input_frames != 9 or profile.timestep_minutes != 10:
-        raise NowcastNetShadowConfigError(
-            "NowcastNet shadow input must remain 9 x 10 minutes"
-        )
-    if (
-        profile.issue_cadence_minutes < 1
-        or 60 % profile.issue_cadence_minutes
-        or profile.timestep_minutes % profile.issue_cadence_minutes
-    ):
-        raise NowcastNetShadowConfigError(
-            "issue cadence must divide both one hour and the model input stride"
-        )
+        raise NowcastNetShadowConfigError("NowcastNet shadow input must remain 9 x 10 minutes")
+    if profile.issue_cadence_minutes < 1 or 60 % profile.issue_cadence_minutes:
+        raise NowcastNetShadowConfigError("issue cadence must divide one hour")
     if profile.output_lead_minutes != tuple(range(10, 121, 10)):
-        raise NowcastNetShadowConfigError(
-            "main-workspace shadow leads must be +10..+120 minutes"
-        )
+        raise NowcastNetShadowConfigError("main-workspace shadow leads must be +10..+120 minutes")
     if profile.missing_policy != "reject_any_missing":
-        raise NowcastNetShadowConfigError(
-            "shadow input cannot fill missing radar coverage"
-        )
+        raise NowcastNetShadowConfigError("shadow input cannot fill missing radar coverage")
     if profile.spatial_multiple < 1:
         raise NowcastNetShadowConfigError("spatial multiple must be positive")
     roi = profile.roi
     if min(roi.y_start, roi.x_start) < 0 or min(roi.height, roi.width) < 1:
         raise NowcastNetShadowConfigError("fixed ROI coordinates are invalid")
     if roi.height % profile.spatial_multiple or roi.width % profile.spatial_multiple:
-        raise NowcastNetShadowConfigError(
-            "fixed ROI must use the configured spatial multiple"
-        )
-    if (
-        profile.activation.product_publication_enabled
-        or profile.activation.operational_eligible
-    ):
+        raise NowcastNetShadowConfigError("fixed ROI must use the configured spatial multiple")
+    if profile.activation.product_publication_enabled or profile.activation.operational_eligible:
         raise NowcastNetShadowConfigError(
             "Fujian NowcastNet shadow cannot publish operational products"
         )
-    if (
-        not profile.activation.input_probe_enabled
-        and not profile.activation.inference_enabled
-    ):
+    if not profile.activation.input_probe_enabled and not profile.activation.inference_enabled:
         raise NowcastNetShadowConfigError("shadow profile has no enabled action")
-    if (
-        profile.activation.inference_enabled
-        and not profile.activation.input_probe_enabled
-    ):
-        raise NowcastNetShadowConfigError(
-            "shadow inference requires the input probe gate"
+    if profile.activation.inference_enabled and not profile.activation.input_probe_enabled:
+        raise NowcastNetShadowConfigError("shadow inference requires the input probe gate")
+    if profile.activation.inference_enabled and not profile.activation.spatial_shape_validated:
+        raise NowcastNetShadowConfigError("inference requires a GPU-validated fixed spatial shape")
+
+
+def resample_six_minute_inputs(
+    rate: np.ndarray, valid: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Map 15 observed six-minute frames [-84,0] to the frozen 9x10 model input.
+
+    Linear interpolation in rain-rate space uses only bracketing observations
+    at or before issue time. Both anchors must be valid; never fill missing cells.
+    The original 15 assets remain the task's provenance.
+    """
+    rate, valid = np.asarray(rate, dtype=np.float32), np.asarray(valid)
+    if rate.ndim != 3 or rate.shape[0] != 15 or valid.shape != rate.shape:
+        raise NowcastNetShadowConfigError("expected 15 six-minute source frames")
+    if np.any((valid != 0) & (valid != 1)):
+        raise NowcastNetShadowConfigError("source valid mask must be binary")
+    fields, masks = [], []
+    for lead in range(-80, 1, 10):
+        position = (lead + 84) / 6
+        left, right = int(np.floor(position)), int(np.ceil(position))
+        fraction = position - left
+        support = (valid[left] == 1) & (valid[right] == 1)
+        support &= (
+            np.isfinite(rate[left])
+            & np.isfinite(rate[right])
+            & (rate[left] >= 0)
+            & (rate[right] >= 0)
         )
-    if (
-        profile.activation.inference_enabled
-        and not profile.activation.spatial_shape_validated
-    ):
-        raise NowcastNetShadowConfigError(
-            "inference requires a GPU-validated fixed spatial shape"
-        )
+        value = rate[left] * (1 - fraction) + rate[right] * fraction
+        fields.append(np.where(support, value, np.nan))
+        masks.append(support.astype(np.uint8))
+    return np.stack(fields).astype(np.float32), np.stack(masks)
 
 
 def cadence_aligned(value: datetime, cadence_minutes: int) -> bool:
@@ -200,21 +189,13 @@ def required_frame_times(
     issue_cadence_minutes: int | None = None,
 ) -> tuple[datetime, ...]:
     issue = _utc(issue_time)
-    issue_cadence = (
-        timestep_minutes
-        if issue_cadence_minutes is None
-        else issue_cadence_minutes
-    )
+    issue_cadence = timestep_minutes if issue_cadence_minutes is None else issue_cadence_minutes
     if input_frames < 1 or timestep_minutes < 1:
-        raise NowcastNetShadowConfigError(
-            "input frame count and timestep must be positive"
-        )
+        raise NowcastNetShadowConfigError("input frame count and timestep must be positive")
     if not cadence_aligned(issue, issue_cadence):
         raise NowcastNetShadowConfigError("issue time is not on the issue cadence")
     step = timedelta(minutes=timestep_minutes)
-    return tuple(
-        issue - step * offset for offset in range(input_frames - 1, -1, -1)
-    )
+    return tuple(issue - step * offset for offset in range(input_frames - 1, -1, -1))
 
 
 def prepare_shadow_input(
@@ -230,15 +211,11 @@ def prepare_shadow_input(
     valid = np.asarray(valid_mask)
     issue = _utc(issue_time)
     if rate.ndim != 3 or valid.shape != rate.shape or len(times) != rate.shape[0]:
-        raise NowcastNetShadowConfigError(
-            "shadow source arrays must be time x y x"
-        )
+        raise NowcastNetShadowConfigError("shadow source arrays must be time x y x")
     if np.any((valid != 0) & (valid != 1)):
         raise NowcastNetShadowConfigError("shadow valid mask is not binary")
     if len(set(times)) != len(times):
-        raise NowcastNetShadowConfigError(
-            "shadow source times must be unique"
-        )
+        raise NowcastNetShadowConfigError("shadow source times must be unique")
 
     required = required_frame_times(
         issue,
@@ -246,11 +223,15 @@ def prepare_shadow_input(
         timestep_minutes=profile.timestep_minutes,
         issue_cadence_minutes=profile.issue_cadence_minutes,
     )
+    source_times = required_frame_times(
+        issue, input_frames=15, timestep_minutes=6, issue_cadence_minutes=6
+    )
+    if times == source_times:
+        rate, valid = resample_six_minute_inputs(rate, valid)
+        times = required
     index = {value: position for position, value in enumerate(times)}
     if any(value not in index for value in required):
-        return _ineligible(
-            profile, issue, required, "missing_required_frame"
-        )
+        return _ineligible(profile, issue, required, "missing_required_frame")
 
     selected = np.asarray([index[value] for value in required], dtype="int64")
     chosen_rate = rate[selected]
@@ -259,23 +240,18 @@ def prepare_shadow_input(
     y_end = roi.y_start + roi.height
     x_end = roi.x_start + roi.width
     if y_end > chosen_rate.shape[1] or x_end > chosen_rate.shape[2]:
-        return _ineligible(
-            profile, issue, required, "fixed_roi_outside_grid"
-        )
+        return _ineligible(profile, issue, required, "fixed_roi_outside_grid")
     cropped_rate = np.ascontiguousarray(
-        chosen_rate[:, roi.y_start:y_end, roi.x_start:x_end],
+        chosen_rate[:, roi.y_start : y_end, roi.x_start : x_end],
         dtype="float32",
     )
     cropped_valid = np.ascontiguousarray(
-        chosen_valid[:, roi.y_start:y_end, roi.x_start:x_end],
+        chosen_valid[:, roi.y_start : y_end, roi.x_start : x_end],
         dtype="uint8",
     )
     common_valid = np.all(cropped_valid == 1, axis=0)
     common_ratio = float(np.mean(common_valid))
-    if (
-        profile.missing_policy == "reject_any_missing"
-        and not np.all(cropped_valid == 1)
-    ):
+    if profile.missing_policy == "reject_any_missing" and not np.all(cropped_valid == 1):
         return ShadowInput(
             eligible=False,
             reason="fixed_roi_has_missing_cells",
@@ -338,9 +314,7 @@ def probe_fixed_roi(
 ) -> dict[str, float | int | bool]:
     valid = np.asarray(valid_mask)
     if valid.ndim != 3 or np.any((valid != 0) & (valid != 1)):
-        raise NowcastNetShadowConfigError(
-            "ROI probe requires a binary time x y x mask"
-        )
+        raise NowcastNetShadowConfigError("ROI probe requires a binary time x y x mask")
     y_end = roi.y_start + roi.height
     x_end = roi.x_start + roi.width
     if y_end > valid.shape[1] or x_end > valid.shape[2]:
@@ -350,7 +324,7 @@ def probe_fixed_roi(
             "common_valid_ratio": 0.0,
             "missing_cell_count": roi.height * roi.width * valid.shape[0],
         }
-    cropped = valid[:, roi.y_start:y_end, roi.x_start:x_end]
+    cropped = valid[:, roi.y_start : y_end, roi.x_start : x_end]
     common = np.all(cropped == 1, axis=0)
     missing = int(np.count_nonzero(cropped == 0))
     return {
@@ -388,14 +362,10 @@ def _coerce_time(value: datetime | np.datetime64) -> datetime:
             int(nanoseconds) / 1_000_000_000,
             tz=UTC,
         )
-    raise NowcastNetShadowConfigError(
-        "shadow frame time type is unsupported"
-    )
+    raise NowcastNetShadowConfigError("shadow frame time type is unsupported")
 
 
 def _utc(value: datetime) -> datetime:
     if value.tzinfo is None:
-        raise NowcastNetShadowConfigError(
-            "shadow times must include a UTC offset"
-        )
+        raise NowcastNetShadowConfigError("shadow times must include a UTC offset")
     return value.astimezone(UTC).replace(microsecond=0)

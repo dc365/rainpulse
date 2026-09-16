@@ -88,7 +88,7 @@ export function workspaceReducer(state: WorkspaceDataState, action: WorkspaceAct
     case 'loaded': {
       if (action.id !== state.requestedID || action.detail.cycle_id !== action.id) return state
       const preferred = state.requestedTime ?? state.selectedTime
-      const selectedTime = preferred && action.detail.timeline.includes(preferred)
+      const selectedTime = preferred && action.detail.timeline.some(value => Date.parse(value) === Date.parse(preferred))
         ? preferred : action.detail.issue_time
       return { ...state, detail: action.detail, selectedTime, requestedTime: null,
         loading: false, detailError: null, stale: action.stale }
@@ -98,7 +98,7 @@ export function workspaceReducer(state: WorkspaceDataState, action: WorkspaceAct
       // The displayed cycle, valid time and images remain one committed snapshot.
       return { ...state, loading: false, detailError: action.message }
     case 'time':
-      if (action.time && !state.detail?.timeline.includes(action.time)) return state
+      if (action.time && !state.detail?.timeline.some(value => Date.parse(value) === Date.parse(action.time!))) return state
       return { ...state, selectedTime: action.time }
   }
 }

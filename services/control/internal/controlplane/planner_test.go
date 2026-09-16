@@ -35,8 +35,8 @@ func TestPipelineSettingsRejectMixedGridConfigurations(t *testing.T) {
 	qcPath := write("qc", "profile_version: qc-v1\npipeline_version: qc-pipeline-v1\n")
 	mosaicPath := write("mosaic", "grid_id: "+grid+"\ngrid_config_version: "+version+"\nalignment:\n  maximum_absolute_offset_seconds: 300\n  expected_radar_ids: []\n")
 	qpePath := write("qpe", "grid_id: "+grid+"\ngrid_config_version: "+version+"\n")
-	nowcastPath := write("nowcast", "grid_id: "+grid+"\ngrid_config_version: "+version+"\nsequence:\n  minimum_frames: 3\n  maximum_frames: 6\n  timestep_minutes: 5\n")
-	pystepsPath := write("pysteps", "grid_id: "+grid+"\ngrid_config_version: "+version+"\nextrapolation:\n  lead_count: 24\n  lead_step_minutes: 5\n")
+	nowcastPath := write("nowcast", "grid_id: "+grid+"\ngrid_config_version: "+version+"\nsequence:\n  minimum_frames: 3\n  maximum_frames: 6\n  timestep_minutes: 6\n")
+	pystepsPath := write("pysteps", "grid_id: "+grid+"\ngrid_config_version: "+version+"\nextrapolation:\n  lead_count: 30\n  lead_step_minutes: 6\n")
 	productPath := write("product", "grid_id: other-grid\ngrid_config_version: "+version+"\n")
 	verificationPath := write("verification", `schema_version: "1.0"
 profile_version: rp031-test
@@ -44,7 +44,7 @@ lifecycle: automatic_verification
 forecast_contract_version: "1.1"
 truth_contract_version: "1.2"
 result_contract_version: "1.0"
-lead_minutes: [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120]
+lead_minutes: [6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90, 96, 102, 108, 114, 120, 126, 132, 138, 144, 150, 156, 162, 168, 174, 180]
 models: [lk, persistence, translation]
 thresholds_mm_h: [0.1, 1, 5]
 fss_windows_km: [1, 5, 10]

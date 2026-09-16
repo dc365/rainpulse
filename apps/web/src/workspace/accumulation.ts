@@ -2,7 +2,7 @@ import type { WorkspaceCycleDetail, WorkspacePanel } from './model'
 
 export type ProductMode = 'rain_rate' | 'hourly' | 'total_2h'
 export const productModes: Record<ProductMode, string> = {
-  rain_rate: '5分钟雨强', hourly: '逐小时累计', total_2h: '0–2小时累计',
+  rain_rate: '6分钟雨强', hourly: '逐小时累计', total_2h: '0–2小时累计',
 }
 
 export function accumulationTimes(issueTime: string, mode: ProductMode) {

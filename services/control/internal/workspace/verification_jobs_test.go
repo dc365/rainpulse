@@ -12,7 +12,7 @@ import (
 )
 
 func TestVerificationJobValidation(t *testing.T) {
-	good := analysisJobInput{CycleIDs: []string{"case"}, Algorithms: []string{"lk"}, Leads: []int{10}, Threshold: 5, WindowKM: 10}
+	good := analysisJobInput{CycleIDs: []string{"case"}, Algorithms: []string{"lk"}, Leads: []int{12}, Threshold: 5, WindowKM: 10}
 	if !good.valid() {
 		t.Fatal("valid rejected")
 	}
@@ -39,7 +39,7 @@ func TestVerificationJobRunsPersistsAndReplacesSameRequest(t *testing.T) {
 	h := &runtimeHandler{intervalProjection: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		analysisJSON(w, 200, map[string]any{"cycle_id": "case", "issue_time": "2026-08-28T08:30:00Z", "panels": []any{}})
 	})}
-	body := `{"cycle_ids":["case"],"algorithms":["lk"],"leads":[10,20],"threshold":5,"window_km":10}`
+	body := `{"cycle_ids":["case"],"algorithms":["lk"],"leads":[6,12],"threshold":5,"window_km":10}`
 	var previous string
 	for attempt := 0; attempt < 2; attempt++ {
 		w := httptest.NewRecorder()

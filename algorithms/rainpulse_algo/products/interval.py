@@ -49,12 +49,12 @@ def integrate(rates, valid, leads, start, end, *, quantile=None):
     if (
         type(start) is not int
         or type(end) is not int
-        or not 0 <= start < end <= 120
-        or start % 5
-        or end % 5
+        or not -60 <= start < end <= 180
+        or start % 6
+        or end % 6
     ):
-        raise ValueError("interval must be within 0–120 minutes and snap to five minutes")
-    wanted = list(range(start + 5, end + 1, 5))
+        raise ValueError("interval must be within -60–180 minutes and snap to six minutes")
+    wanted = list(range(start + 6, end + 1, 6))
     if len(set(leads)) != len(leads) or any(lead not in leads for lead in wanted):
         raise ValueError("missing or duplicate source time")
     indices = [leads.index(lead) for lead in wanted]
@@ -64,7 +64,7 @@ def integrate(rates, valid, leads, start, end, *, quantile=None):
     values = rates[:, indices].astype(np.float64)
     support = valid[:, indices] & np.isfinite(values) & (values >= 0)
     member_valid = np.all(support, axis=1)
-    amounts = np.sum(np.where(support, values, 0), axis=1) / 12
+    amounts = np.sum(np.where(support, values, 0), axis=1) / 10
     complete = np.all(member_valid, axis=0)
     result = (
         np.mean(amounts, axis=0) if quantile is None else np.quantile(amounts, quantile, axis=0)
@@ -146,9 +146,9 @@ class IntervalService:
         if (
             type(start) is not int
             or type(end) is not int
-            or not 0 <= start < end <= 120
-            or start % 5
-            or end % 5
+            or not -60 <= start < end <= 180
+            or start % 6
+            or end % 6
         ):
             raise ValueError("invalid interval")
         key = hashlib.sha256(json.dumps(request, sort_keys=True).encode()).hexdigest()
@@ -159,12 +159,12 @@ class IntervalService:
                     del self.cache[old]
             if key in self.cache:
                 return self.cache[key][1]
-            if request["algorithm"] == "steps":
+            if request["algorithm"] == "steps" and end > 0:
                 from .ensemble_builder import _open_group
 
                 if self.client is None:
                     self.client = minio_client_from_environment()
-                source = request["sources"][0]
+                source = request["sources"][-1]
                 objects = ArtifactObjectReader(self.client, max_size_bytes=512 * 1024**2).load(
                     source["uri"]
                 )
@@ -190,6 +190,36 @@ class IntervalService:
                 leads = [int(v) for v in group["lead_time"][:]]
                 rates = group["rain_rate"][:]
                 valid = group["member_valid_mask"][:] == 1
+                if start < 0:
+                    history_rates, history_masks, history_leads = [], [], []
+                    for observation in request["sources"][:-1]:
+                        values, mask, history_grid = self._point(observation)
+                        if values.shape[1:] != rates.shape[2:] or not np.allclose(
+                            [
+                                history_grid["west"],
+                                history_grid["south"],
+                                history_grid["longitude_interval"],
+                                history_grid["latitude_interval"],
+                            ],
+                            [lon[0], lat[0], dx, dy],
+                            rtol=0,
+                            atol=1e-5,
+                        ):
+                            raise ValueError("observed and ensemble grids differ")
+                        for lead, index in zip(
+                            observation["leads"], observation["indices"], strict=True
+                        ):
+                            history_rates.append(values[index])
+                            history_masks.append(mask[index])
+                            history_leads.append(lead)
+                    history_shape = (rates.shape[0], len(history_leads), *rates.shape[2:])
+                    rates = np.concatenate(
+                        (np.broadcast_to(np.array(history_rates), history_shape), rates), axis=1
+                    )
+                    valid = np.concatenate(
+                        (np.broadcast_to(np.array(history_masks), history_shape), valid), axis=1
+                    )
+                    leads = history_leads + leads
                 amount, support = integrate(rates, valid, leads, start, end, quantile=0.5)
             else:
                 rates, masks, leads, expected_grid = [], [], [], None
@@ -261,7 +291,7 @@ class IntervalService:
                 bounds=bounds,
                 frame_kind="derived",
                 derivation=f"interval-{start}-{end}-right-endpoint-v1",
-                source_leads=list(range(start + 5, end + 1, 5)),
+                source_leads=list(range(start + 6, end + 1, 6)),
                 sha256=hashlib.sha256(png).hexdigest(),
                 valid_cell_count=count,
                 missing_cell_count=int(support.size - count),

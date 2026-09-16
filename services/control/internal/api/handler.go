@@ -1500,7 +1500,7 @@ func (service *server) GetPointForecast(
 	result := make([]apiv1.PointForecastValue, len(values))
 	for index, value := range values {
 		result[index] = apiv1.PointForecastValue{
-			ValidTime: product.ValidTimes[index].UTC(), LeadTimeMinutes: (index + 1) * 5,
+			ValidTime: product.ValidTimes[index].UTC(), LeadTimeMinutes: (index + 1) * 6,
 			RainRate: value.RainRate, Confidence: value.Confidence, Valid: value.Valid,
 		}
 	}

@@ -6,7 +6,9 @@ export function intervalLabel(issue: string, range: Interval) {
   const clock = (lead: number) => new Intl.DateTimeFormat('zh-CN', {
     timeZone: 'Asia/Taipei', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
   }).format(new Date(Date.parse(issue) + lead * 60_000))
-  return `+${range.start} 至 +${range.end} 分钟 · ${clock(range.start)}–${clock(range.end)} · 累计 ${range.end-range.start} 分钟 · mm`
+  const lead = (value: number) => `${value > 0 ? '+' : ''}${value}`
+  const kind = range.end <= 0 ? '实况累计' : range.start < 0 ? '实况＋预报累计' : '预报累计'
+  return `${kind} · ${lead(range.start)} 至 ${lead(range.end)} 分钟 · ${clock(range.start)}–${clock(range.end)} · 累计 ${range.end-range.start} 分钟 · mm`
 }
 
 export function useIntervalPanels(detail: WorkspaceCycleDetail | null, enabled: boolean, range: Interval) {

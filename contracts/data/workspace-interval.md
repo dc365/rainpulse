@@ -7,23 +7,22 @@ worker. No numerical arrays cross REST and no model/GPU job is submitted.
 `POST /api/v1/workspace/accumulations`
 
 ```json
-{"cycle_id":"<catalog cycle ID>","algorithm":"lk","start_minutes":15,"end_minutes":45}
+{"cycle_id":"<catalog cycle ID>","algorithm":"lk","start_minutes":-30,"end_minutes":60}
 ```
 
 Allowed algorithms: `qpe`, `lk`, `steps`, `nowcastnet`. Required start/end are integer
-multiples of 5 with `0 <= start < end <= 120`. Unknown fields and client source URIs
+multiples of 6 with `-60 <= start < end <= 180`. Unknown fields and client source URIs
 are rejected. Four maps request independently, so unavailable STEPS/NowcastNet does
 not suppress available QPE/LK. The response echoes cycle/start/end and contains one
 standard workspace panel with `data_kind=accumulation_interval`, unit `mm` and a single
 frame at the interval end. Missing inputs return an unavailable panel, never a rate
 image or an old precomputed accumulation. Invalid requests return 400.
 
-Each right-endpoint rate R(t), t=start+5,...,end, contributes R(t)*5/60 mm.
+Each right-endpoint rate R(t), t=start+6,...,end, contributes R(t)*6/60 mm.
 Every contributing cell must be valid. Missing is not dry. STEPS integrates each
 member first, then computes P50 with complete member support. NowcastNet integrates
 the existing ensemble mean (a linear operation on its retained common-support mean);
-this is not an ensemble accumulation percentile. QPE uses the future observed frames,
-not T0 or a forecast substitute.
+this is not an ensemble accumulation percentile. QPE uses observed frames. Forecast panels use QPE for endpoints at or before T0 and the selected model for positive endpoints. STEPS broadcasts observed history into every member before integration and P50. Missing observations never become zero.
 
 `GET /api/v1/workspace/accumulations/<64-hex-key>/image` returns north-up RGBA PNG.
 The existing `/api/v1/workspace/sample?asset_url=...&longitude=...&latitude=...`

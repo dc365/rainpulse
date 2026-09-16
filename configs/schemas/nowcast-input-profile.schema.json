@@ -21,7 +21,7 @@
       "properties": {
         "minimum_frames": { "const": 3 },
         "maximum_frames": { "const": 6 },
-        "timestep_minutes": { "const": 5 },
+        "timestep_minutes": { "const": 6 },
         "selection": { "const": "latest_contiguous" }
       }
     },

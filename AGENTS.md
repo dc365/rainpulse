@@ -16,7 +16,7 @@
 
 - Start with Phase 0 radar inventory/contracts and repository scaffolding, then deliver the Phase 1A trusted-radar field before Phase 1B nowcasting.
 - Phase 1A is: immutable raw radar ingest -> decode on original polar geometry -> polar QC -> DEM blockage and Hybrid Scan -> time-aligned QI mosaic -> basic QPE.
-- Phase 1B is: continuous RadarAnalysis -> fixed-step NowcastInput -> pySTEPS-LK -> 24 five-minute forecasts covering 0-120 minutes -> 0-1 h and 0-2 h accumulations -> Go API -> React display -> automatic verification.
+- Phase 1B is: continuous RadarAnalysis -> fixed-step NowcastInput -> pySTEPS-LK -> 30 six-minute forecasts covering 0-180 minutes -> 0-1 h and 0-2 h accumulations -> Go API -> React display -> automatic verification.
 - Do not put STEPS ensembles, NowcastNet production inference, numerical-model fusion, online training, or Kubernetes on the Phase 1 critical path.
 - Compare pySTEPS-LK with persistence and whole-field translation baselines before declaring skill.
 
@@ -44,7 +44,7 @@
 - Keep confirmed non-meteorological QC causes as diagnostics in polar data, but hard-reject them at both Hybrid Scan and mosaic eligibility gates through the shared Phase 1 flag set.
 - Every correction retains its cause flag, correction diagnostic, QI component, and algorithm/configuration version.
 - Never delete all marine echoes based only on a land/sea mask, amplify severe blockage, or average dBZ directly across radars.
-- Use fixed five-minute Phase 1 steps and do not mix incompatible input intervals inside one model adapter.
+- Use fixed six-minute Phase 1 steps and do not mix incompatible input intervals inside one model adapter.
 - All internal timestamps use UTC.
 - Every run and product remains traceable to `run_id`, `job_id`, input assets, model version, and config version.
 - Assume at-least-once delivery: workers and product publication must be idempotent.

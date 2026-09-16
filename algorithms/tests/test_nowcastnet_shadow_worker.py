@@ -52,7 +52,7 @@ def _runtime() -> LoadedShadowRuntime:
         ),
     )
     task = ShadowTaskConfiguration(
-        profile_version="fujian-nowcastnet-shadow-v2",
+        profile_version="fujian-nowcastnet-shadow-v2-6m180",
         source_model_profile="rp026-nowcastnet-offline-v1",
         grid_id=grid.grid_id,
         grid_config_version=grid.config_version,

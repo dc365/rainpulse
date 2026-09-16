@@ -1,3 +1,4 @@
+import { isTimelineGridTime } from './cadence'
 import { verificationTimes } from './verification'
 export type WorkspacePreset = 'forecast' | 'qc' | 'verification'
 
@@ -148,10 +149,60 @@ export function timelineForPreset(
     return values.length ? values : [detail.issue_time]
   }
   if (preset !== 'qc') return detail.timeline
+  // The selected cycle always keeps its own T0. Other QC slots need both the
+  // six-minute clock and a complete radar analysis cycle, so an imported
+  // five-minute result cannot add a slot the new cadence never produced.
   return detail.timeline.filter((value) => (
     Date.parse(value) === Date.parse(detail.issue_time)
-    || analysisCycleAt(cycles, detail.grid_id, value) != null
+    || (isTimelineGridTime(value)
+      && analysisCycleAt(cycles, detail.grid_id, value) != null)
   ))
+}
+
+// Two evidence layers only: the fused result and the flags that explain it.
+export type QCEvidenceLayer = 'mosaic' | 'flags'
+
+// The RP-010 quality-aware reflectivity mosaic reaches the workspace as the
+// mandatory grid diagnostic layer for DBZH_QC, so the QC preset keeps the fused
+// field next to the two single-radar polar panels instead of a flag bitmap.
+export const mosaicPanelID = 'analysis:dbzh_qc'
+
+export const qcEvidenceLabels: Record<QCEvidenceLayer, string> = {
+  mosaic: '雷达拼图',
+  flags: '质控标志',
+}
+
+const qcEvidenceLayerIDs: QCEvidenceLayer[] = ['mosaic', 'flags']
+
+function primaryQCEvidencePanelID(
+  detail: WorkspaceCycleDetail,
+  layer: QCEvidenceLayer,
+  radarID: string,
+) {
+  const candidates = layer === 'mosaic'
+    ? [mosaicPanelID]
+    : [`qc_flags:${radarID}`, 'analysis:qc_flags']
+  return candidates.find((panelID) => panelByID(detail, panelID) != null) ?? null
+}
+
+// The mosaic slot degrades to the flag layer so an operator still sees where QC
+// acted; the map caption keeps naming the layer that is really drawn.
+export function qcEvidencePanelID(
+  detail: WorkspaceCycleDetail,
+  layer: QCEvidenceLayer,
+  radarID: string,
+) {
+  return primaryQCEvidencePanelID(detail, layer, radarID)
+    ?? (layer === 'mosaic' ? primaryQCEvidencePanelID(detail, 'flags', radarID) : null)
+}
+
+// Only offer evidence the analysed cycle can actually draw: a switch labelled
+// 雷达拼图 must never render a flag bitmap.
+export function availableQCEvidenceLayers(
+  detail: WorkspaceCycleDetail,
+  radarID: string,
+): QCEvidenceLayer[] {
+  return qcEvidenceLayerIDs.filter((layer) => primaryQCEvidencePanelID(detail, layer, radarID) != null)
 }
 
 export function panelsForPreset(
@@ -159,6 +210,7 @@ export function panelsForPreset(
   preset: WorkspacePreset,
   radarID: string | null,
   verificationAlgorithm = 'lk',
+  qcEvidence: QCEvidenceLayer = 'mosaic',
 ) {
   if (preset === 'verification') {
     return ['qpe', verificationAlgorithm].map(id => panelByID(detail, id))
@@ -170,13 +222,12 @@ export function panelsForPreset(
       .filter((panel): panel is WorkspacePanel => panel != null)
   }
   const selectedRadar = radarID ?? radarIDs(detail)[0] ?? ''
-  const radarFlagsPanelID = `qc_flags:${selectedRadar}`
   const candidates = [
     `dbzh_raw:${selectedRadar}`,
     `dbzh_qc:${selectedRadar}`,
-    panelByID(detail, radarFlagsPanelID) ? radarFlagsPanelID : 'analysis:qc_flags',
+    qcEvidencePanelID(detail, qcEvidence, selectedRadar),
     'qpe',
-  ]
+  ].filter((panelID): panelID is string => panelID != null)
   const selected = candidates
     .map((panelID) => panelByID(detail, panelID))
     .filter((panel): panel is WorkspacePanel => panel != null)
@@ -203,14 +254,14 @@ export function displayFrameAt(
   if (frame) return { frame, usesAnalysisBaseline: false }
 
   const atIssueTime = validTime != null
-    && Date.parse(validTime) === Date.parse(detail.issue_time)
+    && Date.parse(validTime) <= Date.parse(detail.issue_time)
   if (panel.role !== 'forecast' || !atIssueTime || panel.data_kind.startsWith('accumulation_')) {
     return { frame: null, usesAnalysisBaseline: false }
   }
 
   const qpePanel = panelByID(detail, 'qpe')
   const analysisFrame = qpePanel?.frames.find(
-    (candidate) => Date.parse(candidate.valid_time) === Date.parse(detail.issue_time),
+    (candidate) => Date.parse(candidate.valid_time) === Date.parse(validTime!),
   ) ?? null
   return {
     frame: analysisFrame,

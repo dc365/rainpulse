@@ -40,7 +40,9 @@ def build_ensemble_forecast_output_zarr_store(
     if result.random_seed != profile.ensemble.random_seed:
         raise PystepsStepsInputError("ensemble result seed differs from the frozen profile")
     member_count = profile.ensemble.member_count
-    lead_minutes = np.arange(5, 125, 5, dtype="int32")
+    step = profile.sequence.timestep_minutes
+    count = result.rain_rate.shape[1]
+    lead_minutes = np.arange(step, step * (count + 1), step, dtype="int32")
     valid_times = np.asarray(
         [issue_time.replace(tzinfo=None) + timedelta(minutes=int(value)) for value in lead_minutes],
         dtype="datetime64[ns]",
@@ -61,8 +63,8 @@ def build_ensemble_forecast_output_zarr_store(
         "member_count": member_count,
         "output_support_policy": profile.support.output_support_policy,
         "minimum_valid_members": profile.support.minimum_valid_members,
-        "lead_count": 24,
-        "lead_step_minutes": 5,
+        "lead_count": count,
+        "lead_step_minutes": step,
         "random_seed": result.random_seed,
         "ensemble_fallback_used": result.ensemble_fallback_used,
         "ensemble_fallback_reason": result.ensemble_fallback_reason,
@@ -93,6 +95,8 @@ def build_ensemble_forecast_output_zarr_store(
             "input_uri": input_uri,
             "input_asset_ids": [str(value) for value in input_asset_ids],
             "issue_time": issue_time.isoformat(),
+            "lead_count": count,
+            "lead_step_minutes": step,
             "grid_id": grid.grid_id,
             "grid_config_version": grid.config_version,
             "coordinate_sha256": grid.coordinate_sha256,
@@ -192,10 +196,14 @@ def validate_ensemble_forecast_output_zarr_store(
     ):
         raise PystepsStepsInputError("ensemble ForecastOutput members are invalid")
     leads = root["lead_time"][:]
+    step = int(root.attrs.get("lead_step_minutes", 0))
+    count = int(root.attrs.get("lead_count", 0))
+    if (step, count) not in {(6, 30), (5, 24)}:
+        raise PystepsStepsInputError("ensemble ForecastOutput cadence/count is invalid")
     if leads.dtype != np.dtype("int32") or not np.array_equal(
-        leads, np.arange(5, 125, 5, dtype="int32")
+        leads, np.arange(step, step * (count + 1), step, dtype="int32")
     ):
-        raise PystepsStepsInputError("ensemble ForecastOutput leads must be 5..120 minutes")
+        raise PystepsStepsInputError("ensemble ForecastOutput leads must be 6..180 minutes")
     issue_time = _parse_time(str(root.attrs.get("issue_time")))
     expected_times = np.asarray(
         [issue_time.replace(tzinfo=None) + timedelta(minutes=int(value)) for value in leads],
@@ -208,7 +216,7 @@ def validate_ensemble_forecast_output_zarr_store(
     if latitude.dtype != np.dtype("float32") or longitude.dtype != np.dtype("float32"):
         raise PystepsStepsInputError("ensemble ForecastOutput coordinates must be float32")
 
-    lead_shape = (24, len(latitude), len(longitude))
+    lead_shape = (count, len(latitude), len(longitude))
     member_shape = (len(members), *lead_shape)
     expected = {
         "rain_rate": (member_shape, np.dtype("float32")),
@@ -272,12 +280,12 @@ def validate_ensemble_forecast_output_zarr_store(
     if np.any(~np.isfinite(rates[member_valid])) or np.any(rates[member_valid] < 0.0):
         raise PystepsStepsInputError("valid ensemble cells contain invalid rain rates")
 
-    for name, count in (("accum_60", 12), ("accum_120", 24)):
+    for name, count in (("accum_60", 60 // step), ("accum_120", 120 // step)):
         values = root[name][:]
         valid = np.all(member_valid[:, :count], axis=1)
         expected_values = np.sum(
             np.where(member_valid[:, :count], rates[:, :count], 0.0), axis=1
-        ) * np.float32(5.0 / 60.0)
+        ) * np.float32(step / 60.0)
         if np.any(~np.isnan(values[~valid])) or not np.allclose(
             values[valid], expected_values[valid], rtol=1e-5, atol=1e-6
         ):
@@ -333,13 +341,13 @@ def validate_ensemble_forecast_output_zarr_store(
         or summary.get("job_id") != root.attrs.get("job_id")
         or summary.get("member_count") != len(members)
         or summary.get("random_seed") != root.attrs.get("random_seed")
-        or summary.get("lead_count") != 24
+        or summary.get("lead_count") != len(leads)
     ):
         raise PystepsStepsInputError("ensemble ForecastOutput summary identity is invalid")
     return {
         "shape": member_shape,
         "member_count": len(members),
-        "lead_count": 24,
+        "lead_count": len(leads),
         "random_seed": int(root.attrs["random_seed"]),
         "probability_calibration_status": root.attrs["probability_calibration_status"],
         "first_lead_valid_coverage_ratio": float(np.mean(output_valid[0])),

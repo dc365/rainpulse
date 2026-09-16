@@ -1,10 +1,7 @@
+# Six-minute operational analysis clock.
 schema_version: "1.0"
-profile_version: rp041-realtime-shadow-5min-v1
-builder_version: nowcast-input-builder-1.2.0-shadow
-# NowcastInput contract 1.2 only distinguishes operational and non-operational
-# replay inputs. The enclosing RP-041 pipeline is realtime_shadow; this value
-# keeps the artifact fail-closed until a future contract revision removes the
-# legacy two-value transport enum.
+profile_version: rp043-realtime-shadow-6min-v2-6m180
+builder_version: nowcast-input-builder-1.2.3-rp043
 execution_mode: historical_replay
 nowcast_input_contract_version: "1.2"
 radar_analysis_contract_version: "1.2"
@@ -15,7 +12,7 @@ grid_config_version: fuzhou-grid-0p01deg-v1
 sequence:
   minimum_frames: 3
   maximum_frames: 6
-  timestep_minutes: 5
+  timestep_minutes: 6
   selection: latest_contiguous
 
 gates:

@@ -28,7 +28,7 @@
           "items": { "type": "string", "format": "uuid" }
         },
         "frame_count": { "type": "integer", "minimum": 3, "maximum": 6 },
-        "timestep_minutes": { "const": 5 },
+        "timestep_minutes": { "const": 6 },
         "valid_coverage_ratio": { "type": "number", "minimum": 0, "maximum": 1 },
         "mean_quality_index": { "type": "number", "minimum": 0, "maximum": 1 },
         "max_data_age_minutes": { "type": "number", "minimum": 0 },

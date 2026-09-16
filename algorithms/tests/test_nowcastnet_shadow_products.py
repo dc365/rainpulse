@@ -40,11 +40,11 @@ def test_shadow_product_keeps_native_and_derived_frame_lineage() -> None:
             lead_minutes=lead,
             frame_kind="native" if lead % 10 == 0 else "derived",
             derivation=None if lead % 10 == 0 else "bidirectional-dense-optical-flow-advection-v1",
-            source_leads=(lead,) if lead % 10 == 0 else (lead - 5, lead + 5),
+            source_leads=(lead,) if lead % 10 == 0 else (lead // 10 * 10, (lead // 10 + 1) * 10),
         )
-        for lead in range(5, 121, 5)
+        for lead in range(6, 121, 6)
     )
-    values = np.full((4, 24, 32, 32), 2.0, dtype="float32")
+    values = np.full((4, 20, 32, 32), 2.0, dtype="float32")
     forecast = AdaptedForecast(
         rain_rate_mm_h=values,
         valid_mask=np.ones_like(values, dtype="uint8"),
@@ -61,7 +61,7 @@ def test_shadow_product_keeps_native_and_derived_frame_lineage() -> None:
         model_profile=load_nowcastnet_profile(
             ROOT / "configs/nowcast/rp026-nowcastnet-offline-v1.yaml"
         ),
-        shadow_profile_version="fujian-nowcastnet-shadow-v2",
+        shadow_profile_version="fujian-nowcastnet-shadow-v2-6m180",
         atlas_version="fujian-nowcastnet-tile-atlas-v1",
         product_profile=load_product_builder_profile(
             ROOT / "configs/products/rp015-application-products-v1.yaml"
@@ -71,15 +71,15 @@ def test_shadow_product_keeps_native_and_derived_frame_lineage() -> None:
     )
 
     manifest = json.loads(objects["manifest.json"])
-    assert manifest["cadence_minutes"] == 5
-    assert len(manifest["frames"]) == 24
+    assert manifest["cadence_minutes"] == 6
+    assert len(manifest["frames"]) == 20
     assert manifest["frames"][0]["frame_kind"] == "derived"
-    assert manifest["frames"][1]["frame_kind"] == "native"
+    assert manifest["frames"][4]["frame_kind"] == "native"
     assert manifest["point_queries"]["nowcastnet"]["frame_kinds"][:2] == [
         "derived",
-        "native",
+        "derived",
     ]
-    assert validate_point_query_index(objects[POINT_QUERY_PATH])["lead_count"] == 24
+    assert validate_point_query_index(objects[POINT_QUERY_PATH])["lead_count"] == 20
     assert [f["window_id"] for f in manifest["accumulations"]] == ["hour_1", "hour_2", "total_2h"]
     for frame, expected in zip(manifest["accumulations"], (2, 2, 4), strict=True):
         assert frame["unit"] == "mm"

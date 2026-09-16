@@ -66,7 +66,7 @@ def _execute_product_build(
             "object_count": float(validation["object_count"]),
             "product_count": float(validation["product_count"]),
             "asset_count": float(validation["asset_count"]),
-            "rain_rate_lead_count": 24.0,
+            "rain_rate_lead_count": 30.0,
         },
     )
 
@@ -97,7 +97,7 @@ def _validate_request(
     if request.payload.model_run_id.int == 0:
         raise ProductBuildInputError("product build model-run ID cannot be nil")
     issue_time = request.payload.issue_time
-    if issue_time.utcoffset() is None or issue_time.timestamp() % 300:
+    if issue_time.utcoffset() is None or issue_time.timestamp() % 360:
         raise ProductBuildInputError("product issue time is not on a five-minute UTC boundary")
 
 

@@ -275,9 +275,9 @@ func validateBundle(bundle Bundle, directoryID string) error {
 	}
 	cellCount := int64(bundle.Width) * int64(bundle.Height)
 	for _, layer := range bundle.Layers {
-		leads := make([]int, 24)
+		leads := make([]int, 30)
 		for i := range leads {
-			leads[i] = (i + 1) * 5
+			leads[i] = (i + 1) * 6
 		}
 		accumulation := layer.ProductType == "accumulation_60" || layer.ProductType == "accumulation_120"
 		if layer.ProductType == "accumulation_60" {
@@ -327,8 +327,8 @@ func validateBundle(bundle Bundle, directoryID string) error {
 				objectPaths[asset.ObjectPath] || !validObjectPath(asset.ObjectPath) ||
 				!validSHA(asset.SHA256) ||
 				asset.SizeBytes < 4 || asset.SizeBytes > maximumAssetBytes ||
-				asset.LeadMinutes < 5 || asset.LeadMinutes > 120 ||
-				asset.LeadMinutes%5 != 0 ||
+				asset.LeadMinutes < 6 || asset.LeadMinutes > 180 ||
+				asset.LeadMinutes%6 != 0 ||
 				!asset.ValidTime.Equal(
 					bundle.IssueTime.Add(time.Duration(asset.LeadMinutes)*time.Minute),
 				) || asset.Unit != layer.Unit ||

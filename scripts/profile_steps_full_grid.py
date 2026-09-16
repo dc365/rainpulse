@@ -111,7 +111,7 @@ def main() -> None:
         "profile": "rp023-full-grid-resource-v1",
         "member_count": arguments.member_count,
         "grid_shape": list(grid.shape),
-        "lead_count": 24,
+        "lead_count": int(result.rain_rate.shape[1]),
         "algorithm_seconds": round(algorithm_seconds, 3),
         "forecast_zarr_seconds": round(forecast_seconds, 3),
         "application_product_seconds": round(product_seconds, 3),

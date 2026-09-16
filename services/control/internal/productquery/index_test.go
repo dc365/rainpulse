@@ -11,7 +11,7 @@ func fixtureHeader() []byte {
 	copy(data[:8], magic[:])
 	binary.BigEndian.PutUint16(data[8:10], 3)
 	binary.BigEndian.PutUint16(data[10:12], 2)
-	binary.BigEndian.PutUint16(data[12:14], 24)
+	binary.BigEndian.PutUint16(data[12:14], 30)
 	binary.BigEndian.PutUint16(data[14:16], RecordBytes)
 	binary.BigEndian.PutUint64(data[16:24], math.Float64bits(118))
 	binary.BigEndian.PutUint64(data[24:32], math.Float64bits(25))
@@ -60,7 +60,7 @@ func TestPointIndexSummarizesOneLeadWithoutChangingMissing(t *testing.T) {
 	for row := range rows {
 		rows[row] = make([]byte, 3*int(header.CellBytes()))
 		for column := range 3 {
-			for lead := range 24 {
+			for lead := range 30 {
 				offset := column*int(header.CellBytes()) + lead*RecordBytes
 				binary.BigEndian.PutUint32(
 					rows[row][offset:offset+4],
@@ -72,7 +72,7 @@ func TestPointIndexSummarizesOneLeadWithoutChangingMissing(t *testing.T) {
 	}
 	binary.BigEndian.PutUint32(rows[1][0:4], math.Float32bits(float32(math.NaN())))
 	rows[1][4] = 255
-	statistics, err := header.SummarizeRows(rows, window, 5)
+	statistics, err := header.SummarizeRows(rows, window, 6)
 	if err != nil {
 		t.Fatalf("SummarizeRows() error = %v", err)
 	}

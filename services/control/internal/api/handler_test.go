@@ -347,7 +347,7 @@ func TestForecastVerificationSummaryExposesTruthReadinessAndHeadline(t *testing.
 	lk := 0.71
 	persistence := 0.63
 	difference := 0.08
-	profile := "rp031-operational-deterministic-v1"
+	profile := "rp031-operational-deterministic-v1-6m180"
 	verifiedAt := issueTime.Add(125 * time.Minute)
 	store := &fakeForecastVerificationStore{status: workflow.ForecastVerificationStatus{
 		RunID: runID, IssueTime: issueTime, RunStatus: workflow.RunVerified,
@@ -538,7 +538,7 @@ func TestOfflineEnsembleProductEndpointsExposeGISAssetsWithoutPublishing(t *test
 				URI: "s3://rainpulse/forecast.zarr", SHA256: strings.Repeat("a", 64),
 			},
 			ModelID: "pysteps-steps", ModelVersion: "pysteps-steps-1.0.0",
-			ModelConfigVersion:   "rp022-pysteps-steps-v1",
+			ModelConfigVersion:   "rp022-pysteps-steps-v1-6m180",
 			ProductConfigVersion: "rp023-ensemble-application-products-v1",
 			MemberCount:          12,
 			CalibrationStatus:    "raw_ensemble_relative_frequency_uncalibrated",
@@ -770,7 +770,7 @@ func TestRadarAndAnalysisQueriesPreservePartialRadarFailure(t *testing.T) {
 			GridConfigVersion:      "fuzhou-0p01-v1",
 			QPEConfigVersion:       "rp011-basic-qpe-v1",
 			QPEAlgorithmVersion:    "basic-zr-qpe-1.0.0",
-			MosaicConfigVersion:    "rp016-qi-mosaic-v1",
+			MosaicConfigVersion:    "rp016-qi-mosaic-v1-6m180",
 			MosaicAlgorithmVersion: "qi-mosaic-1.1.0",
 			FlagDefinitionVersion:  "qc-flags-v1",
 			InputMosaicURI:         "s3://rainpulse/mosaic.zarr", InputField: "DBZH_QC",
@@ -921,9 +921,9 @@ func TestProductCatalogContentAndIndexedQueries(t *testing.T) {
 	productID := uuid.MustParse("98000000-0000-4000-8000-000000000001")
 	pngID := uuid.MustParse("98000000-0000-4000-8000-000000000002")
 	indexID := uuid.MustParse("98000000-0000-4000-8000-000000000003")
-	validTimes := make([]time.Time, 24)
+	validTimes := make([]time.Time, 30)
 	for index := range validTimes {
-		validTimes[index] = now.Add(time.Duration(index+1) * 5 * time.Minute)
+		validTimes[index] = now.Add(time.Duration(index+1) * 6 * time.Minute)
 	}
 	product := workflow.Product{
 		ID: productID, RunID: uuid.New(), ModelRunID: uuid.New(),
@@ -1006,7 +1006,7 @@ func TestProductCatalogContentAndIndexedQueries(t *testing.T) {
 	)
 	area := assert(
 		"/api/v1/area-statistics?product_id="+productID.String()+
-			"&bbox=118,25,118.02,25.01&lead_time_minutes=5",
+			"&bbox=118,25,118.02,25.01&lead_time_minutes=6",
 		http.StatusOK,
 		`"missing_pixel_count":1`,
 	)
@@ -1019,7 +1019,7 @@ func TestProductCatalogContentAndIndexedQueries(t *testing.T) {
 }
 
 func pointIndexFixture() []byte {
-	const width, height, leads, recordBytes, headerBytes = 3, 2, 24, 5, 64
+	const width, height, leads, recordBytes, headerBytes = 3, 2, 30, 5, 64
 	data := make([]byte, headerBytes+width*height*leads*recordBytes)
 	copy(data[:8], []byte{'R', 'P', 'P', 'N', 'T', 'V', '1', 0})
 	binary.BigEndian.PutUint16(data[8:10], width)

@@ -257,8 +257,9 @@ def run_pysteps_lk_fields(
         extrapolate,
     )
     confidence[~output_valid] = np.nan
-    accum_60 = _accumulate(rain_rate[:12], output_valid[:12])
-    accum_120 = _accumulate(rain_rate, output_valid)
+    step = profile.sequence.timestep_minutes
+    accum_60 = _accumulate(rain_rate[: 60 // step], output_valid[: 60 // step], step)
+    accum_120 = _accumulate(rain_rate[: 120 // step], output_valid[: 120 // step], step)
     metric = grid.metric()
     seconds_per_step = profile.sequence.timestep_minutes * 60.0
     motion_u = (
@@ -307,7 +308,7 @@ def _validate_identity(
         ("grid_config_version", root.attrs.get("grid_config_version"), grid.config_version),
         ("coordinate_sha256", root.attrs.get("coordinate_sha256"), grid.coordinate_sha256),
         ("grid_metric_version", root.attrs.get("grid_metric_version"), grid.metric().version),
-        ("timestep_minutes", root.attrs.get("timestep_minutes"), 5),
+        ("timestep_minutes", root.attrs.get("timestep_minutes"), profile.sequence.timestep_minutes),
     )
     for name, actual, configured in expected:
         if actual != configured:
@@ -558,9 +559,9 @@ def _global_translation(
     return float(np.median(velocity[0][selection])), float(np.median(velocity[1][selection]))
 
 
-def _accumulate(rates: np.ndarray, valid_masks: np.ndarray) -> np.ndarray:
+def _accumulate(rates: np.ndarray, valid_masks: np.ndarray, step: int = 6) -> np.ndarray:
     valid = np.all(valid_masks, axis=0)
-    values = np.sum(np.where(valid_masks, rates, 0.0), axis=0) * np.float32(5.0 / 60.0)
+    values = np.sum(np.where(valid_masks, rates, 0.0), axis=0) * np.float32(step / 60.0)
     values = values.astype("float32")
     values[~valid] = np.nan
     return values

@@ -28,18 +28,29 @@ def test_deployment_example_only_exposes_consumed_compose_parameters() -> None:
     platform = json.loads(
         (CONFIG_ROOT / "platform/bdp-dp-rada-rainpulse.json").read_text()
     )
-    override = yaml.safe_load((deploy / "docker-compose.realtime-shadow.yaml").read_text())
-    assert platform["environment"]["orchestrator"]["RAINPULSE_PIPELINE_QC_CONFIG"] == (
-        override["services"]["radar-qc-worker"]["environment"]["RAINPULSE_RADAR_QC_CONFIG"]
+    override = yaml.safe_load(
+        (deploy / "docker-compose.realtime-shadow.yaml").read_text()
+    )
+    assert (
+        platform["environment"]["orchestrator"]["RAINPULSE_PIPELINE_QC_CONFIG"]
+        == (
+            override["services"]["radar-qc-worker"]["environment"][
+                "RAINPULSE_RADAR_QC_CONFIG"
+            ]
+        )
     )
 
 
 def load_schema() -> dict:
-    return json.loads((CONFIG_ROOT / "schemas" / "radar-config.schema.json").read_text())
+    return json.loads(
+        (CONFIG_ROOT / "schemas" / "radar-config.schema.json").read_text()
+    )
 
 
 def load_inventory_template() -> dict:
-    return yaml.safe_load((CONFIG_ROOT / "radars" / "radar-inventory-template.yaml").read_text())
+    return yaml.safe_load(
+        (CONFIG_ROOT / "radars" / "radar-inventory-template.yaml").read_text()
+    )
 
 
 def validate(config: dict) -> None:
@@ -206,7 +217,9 @@ def test_fujian_four_radar_history_configs_are_valid_drafts() -> None:
 
 
 def test_qc_flag_definition_is_a_unique_uint32_bitset() -> None:
-    definition = yaml.safe_load((CONFIG_ROOT / "qc" / "flag-definitions.yaml").read_text())
+    definition = yaml.safe_load(
+        (CONFIG_ROOT / "qc" / "flag-definitions.yaml").read_text()
+    )
     flags = definition["flags"]
     bits = [entry["bit"] for entry in flags]
     names = [entry["name"] for entry in flags]
@@ -217,11 +230,15 @@ def test_qc_flag_definition_is_a_unique_uint32_bitset() -> None:
     assert len(names) == len(set(names))
     assert all(0 <= bit <= 31 for bit in bits)
     assert masks == [1 << bit for bit in bits]
-    assert {"MISSING", "LOW_QUALITY", "RADIAL_INTERFERENCE", "BEAM_BLOCKED"} <= set(names)
+    assert {"MISSING", "LOW_QUALITY", "RADIAL_INTERFERENCE", "BEAM_BLOCKED"} <= set(
+        names
+    )
 
 
 def test_rp007_health_profile_is_valid_and_versioned() -> None:
-    schema = json.loads((CONFIG_ROOT / "schemas" / "radar-health.schema.json").read_text())
+    schema = json.loads(
+        (CONFIG_ROOT / "schemas" / "radar-health.schema.json").read_text()
+    )
     profile = yaml.safe_load(
         (CONFIG_ROOT / "health" / "rp007-integrity-v1.yaml").read_text()
     )
@@ -316,7 +333,7 @@ def test_realtime_shadow_versions_the_full_reprocessing_chain() -> None:
         ),
         (
             "schemas/nowcast-input-profile.schema.json",
-            "nowcast/rp043-realtime-shadow-5min-v2.yaml",
+            "nowcast/rp043-realtime-shadow-6min-v2.yaml",
         ),
     )
     for schema_name, profile_name in profiles:
@@ -331,26 +348,41 @@ def test_realtime_shadow_versions_the_full_reprocessing_chain() -> None:
         "RAINPULSE_RADAR_QC_CONFIG"
     ].endswith("qc/fujian-qc-evidence-v3.yaml")
     orchestrator = override["orchestrator"]["environment"]
-    assert orchestrator["RAINPULSE_PIPELINE_QC_CONFIG"] == override[
-        "radar-qc-worker"
-    ]["environment"]["RAINPULSE_RADAR_QC_CONFIG"]
-    assert orchestrator["RAINPULSE_PIPELINE_GRID_CONFIG"] == override[
-        "radar-grid-worker"
-    ]["environment"]["RAINPULSE_RADAR_GRID_CONFIG"]
-    assert orchestrator["RAINPULSE_PIPELINE_MOSAIC_CONFIG"] == override[
-        "radar-mosaic-worker"
-    ]["environment"]["RAINPULSE_RADAR_MOSAIC_CONFIG"]
-    assert orchestrator["RAINPULSE_PIPELINE_DIAGNOSTIC_CONFIG"] == override[
-        "analysis-diagnostics-worker"
-    ]["environment"]["RAINPULSE_DIAGNOSTIC_CONFIG"]
-    assert orchestrator["RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG"] == override[
-        "nowcast-input-worker"
-    ]["environment"]["RAINPULSE_NOWCAST_INPUT_CONFIG"]
+    assert (
+        orchestrator["RAINPULSE_PIPELINE_QC_CONFIG"]
+        == override["radar-qc-worker"]["environment"]["RAINPULSE_RADAR_QC_CONFIG"]
+    )
+    assert (
+        orchestrator["RAINPULSE_PIPELINE_GRID_CONFIG"]
+        == override["radar-grid-worker"]["environment"]["RAINPULSE_RADAR_GRID_CONFIG"]
+    )
+    assert (
+        orchestrator["RAINPULSE_PIPELINE_MOSAIC_CONFIG"]
+        == override["radar-mosaic-worker"]["environment"][
+            "RAINPULSE_RADAR_MOSAIC_CONFIG"
+        ]
+    )
+    assert (
+        orchestrator["RAINPULSE_PIPELINE_DIAGNOSTIC_CONFIG"]
+        == override["analysis-diagnostics-worker"]["environment"][
+            "RAINPULSE_DIAGNOSTIC_CONFIG"
+        ]
+    )
+    assert (
+        orchestrator["RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG"]
+        == override["nowcast-input-worker"]["environment"][
+            "RAINPULSE_NOWCAST_INPUT_CONFIG"
+        ]
+    )
 
 
 def test_fuzhou_grid_is_valid_and_matches_inclusive_point_registration() -> None:
-    schema = json.loads((CONFIG_ROOT / "schemas" / "grid-config.schema.json").read_text())
-    grid = yaml.safe_load((CONFIG_ROOT / "grids" / "fuzhou-0p01deg-v1.yaml").read_text())
+    schema = json.loads(
+        (CONFIG_ROOT / "schemas" / "grid-config.schema.json").read_text()
+    )
+    grid = yaml.safe_load(
+        (CONFIG_ROOT / "grids" / "fuzhou-0p01deg-v1.yaml").read_text()
+    )
 
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(grid)
@@ -363,8 +395,12 @@ def test_fuzhou_grid_is_valid_and_matches_inclusive_point_registration() -> None
 
     bounds = grid["bounds"]
     spacing = grid["spacing"]
-    expected_lon = round((bounds["east"] - bounds["west"]) / spacing["longitude_deg"]) + 1
-    expected_lat = round((bounds["north"] - bounds["south"]) / spacing["latitude_deg"]) + 1
+    expected_lon = (
+        round((bounds["east"] - bounds["west"]) / spacing["longitude_deg"]) + 1
+    )
+    expected_lat = (
+        round((bounds["north"] - bounds["south"]) / spacing["latitude_deg"]) + 1
+    )
     assert grid["shape"] == {"longitude": expected_lon, "latitude": expected_lat}
     assert grid["shape"] == {"longitude": 501, "latitude": 201}
 
@@ -376,7 +412,8 @@ def test_fuzhou_grid_is_valid_and_matches_inclusive_point_registration() -> None
     )
     assert image_edges == pytest.approx((117.995, 24.995, 123.005, 27.005))
     assert not math.isclose(
-        spacing["longitude_deg"] * math.cos(math.radians(grid["reference_latitude_deg"])),
+        spacing["longitude_deg"]
+        * math.cos(math.radians(grid["reference_latitude_deg"])),
         spacing["latitude_deg"],
     )
 
@@ -385,7 +422,9 @@ def test_fujian_taiwan_ancillary_sources_are_valid_and_cover_104_dem_tiles() -> 
     schema = json.loads(
         (CONFIG_ROOT / "schemas" / "ancillary-source.schema.json").read_text()
     )
-    source = yaml.safe_load((CONFIG_ROOT / "ancillary" / "fujian-taiwan-v1.yaml").read_text())
+    source = yaml.safe_load(
+        (CONFIG_ROOT / "ancillary" / "fujian-taiwan-v1.yaml").read_text()
+    )
 
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema, format_checker=FormatChecker()).validate(source)
@@ -409,15 +448,19 @@ def test_fujian_taiwan_ancillary_sources_are_valid_and_cover_104_dem_tiles() -> 
 
 def test_rp031_automatic_verification_profile_is_frozen_and_non_promoting() -> None:
     schema = json.loads(
-        (CONFIG_ROOT / "schemas" / "operational-verification-profile.schema.json").read_text()
+        (
+            CONFIG_ROOT / "schemas" / "operational-verification-profile.schema.json"
+        ).read_text()
     )
     profile = yaml.safe_load(
-        (CONFIG_ROOT / "verification" / "rp031-operational-deterministic-v1.yaml").read_text()
+        (
+            CONFIG_ROOT / "verification" / "rp031-operational-deterministic-v1.yaml"
+        ).read_text()
     )
 
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(profile)
-    assert profile["lead_minutes"] == list(range(5, 125, 5))
+    assert profile["lead_minutes"] == list(range(6, 181, 6))
     assert profile["fss_windows_km"] == [1, 5, 10, 20, 40]
     assert profile["validity_domain"] == "common"
     assert profile["promotion_eligible"] is False
@@ -446,7 +489,9 @@ def test_fujian_qc_promotion_profile_freezes_b3_non_inferiority_gates() -> None:
 
 def test_fujian_phase_processing_profile_freezes_c1_shadow_only_parameters() -> None:
     schema = json.loads(
-        (CONFIG_ROOT / "schemas" / "radar-phase-processing-profile.schema.json").read_text()
+        (
+            CONFIG_ROOT / "schemas" / "radar-phase-processing-profile.schema.json"
+        ).read_text()
     )
     profile = yaml.safe_load(
         (CONFIG_ROOT / "verification" / "fujian-phidp-kdp-shadow-v1.yaml").read_text()
@@ -474,7 +519,9 @@ def test_fujian_kdp_attenuation_profile_freezes_c2_shadow_only_boundary() -> Non
         (CONFIG_ROOT / "schemas" / "radar-attenuation-profile.schema.json").read_text()
     )
     profile = yaml.safe_load(
-        (CONFIG_ROOT / "verification" / "fujian-kdp-attenuation-shadow-v1.yaml").read_text()
+        (
+            CONFIG_ROOT / "verification" / "fujian-kdp-attenuation-shadow-v1.yaml"
+        ).read_text()
     )
 
     Draft202012Validator.check_schema(schema)
@@ -482,7 +529,10 @@ def test_fujian_kdp_attenuation_profile_freezes_c2_shadow_only_boundary() -> Non
     assert profile["profile_version"] == "fujian-kdp-attenuation-shadow-v1"
     assert profile["artifact_contract_version"] == "1.0"
     assert profile["source_normalized_radar_volume_contract_version"] == "1.0"
-    assert profile["source_phase_processing_profile_version"] == "fujian-phidp-kdp-shadow-v1"
+    assert (
+        profile["source_phase_processing_profile_version"]
+        == "fujian-phidp-kdp-shadow-v1"
+    )
     assert profile["radar_band"] == "S"
     assert profile["method"]["name"] == "kdp_path_integral"
     assert profile["method"]["integration_scheme"] == "two_way_trapezoidal"
@@ -495,10 +545,14 @@ def test_fujian_kdp_attenuation_profile_freezes_c2_shadow_only_boundary() -> Non
 
 def test_fujian_relative_bias_profile_freezes_c2_shadow_pair_boundary() -> None:
     schema = json.loads(
-        (CONFIG_ROOT / "schemas" / "radar-relative-bias-profile.schema.json").read_text()
+        (
+            CONFIG_ROOT / "schemas" / "radar-relative-bias-profile.schema.json"
+        ).read_text()
     )
     profile = yaml.safe_load(
-        (CONFIG_ROOT / "verification" / "fujian-radar-relative-bias-shadow-v1.yaml").read_text()
+        (
+            CONFIG_ROOT / "verification" / "fujian-radar-relative-bias-shadow-v1.yaml"
+        ).read_text()
     )
 
     Draft202012Validator.check_schema(schema)
@@ -523,7 +577,9 @@ def test_fujian_radar_calibration_profile_freezes_c2_p3_shadow_boundary() -> Non
         (CONFIG_ROOT / "schemas" / "radar-calibration-profile.schema.json").read_text()
     )
     profile = yaml.safe_load(
-        (CONFIG_ROOT / "verification" / "fujian-radar-calibration-shadow-v1.yaml").read_text()
+        (
+            CONFIG_ROOT / "verification" / "fujian-radar-calibration-shadow-v1.yaml"
+        ).read_text()
     )
 
     Draft202012Validator.check_schema(schema)
@@ -547,7 +603,9 @@ def test_fujian_radar_calibration_profile_freezes_c2_p3_shadow_boundary() -> Non
     assert profile["activation"]["qi_calibration_enabled"] is False
 
 
-def test_radar_calibration_reference_manifest_schema_requires_disjoint_shadow_splits() -> None:
+def test_radar_calibration_reference_manifest_schema_requires_disjoint_shadow_splits() -> (
+    None
+):
     schema = json.loads(
         (
             CONFIG_ROOT / "schemas" / "radar-calibration-reference-manifest.schema.json"
@@ -589,7 +647,9 @@ def test_radar_calibration_reference_manifest_schema_requires_disjoint_shadow_sp
     Draft202012Validator(schema).validate(manifest)
 
 
-def test_radar_attenuation_coefficient_table_schema_freezes_verified_shadow_entries() -> None:
+def test_radar_attenuation_coefficient_table_schema_freezes_verified_shadow_entries() -> (
+    None
+):
     schema = json.loads(
         (
             CONFIG_ROOT / "schemas" / "radar-attenuation-coefficient-table.schema.json"
@@ -609,7 +669,11 @@ def test_radar_attenuation_coefficient_table_schema_freezes_verified_shadow_entr
                 "coefficient_a": 0.04,
                 "exponent_b": 1.0,
                 "applicable_temperature_range_c": [5.0, 35.0],
-                "fitted_process_ids": ["storm-fit-001", "storm-fit-002", "storm-fit-003"],
+                "fitted_process_ids": [
+                    "storm-fit-001",
+                    "storm-fit-002",
+                    "storm-fit-003",
+                ],
                 "validation_process_ids": [
                     "storm-val-101",
                     "storm-val-102",
@@ -625,9 +689,7 @@ def test_radar_attenuation_coefficient_table_schema_freezes_verified_shadow_entr
 
 def test_radar_qc_replay_manifest_schema_freezes_manifest_loader_boundary() -> None:
     schema = json.loads(
-        (
-            CONFIG_ROOT / "schemas" / "radar-qc-replay-manifest.schema.json"
-        ).read_text()
+        (CONFIG_ROOT / "schemas" / "radar-qc-replay-manifest.schema.json").read_text()
     )
     manifest = {
         "schema_version": "1.0",
@@ -702,9 +764,10 @@ def test_rp009_hybrid_profile_is_valid_and_explicitly_engineering_only() -> None
     assert profile["beam_geometry"]["unverified_vertical_datum_policy"] == (
         "allow_engineering_only"
     )
-    assert profile["blockage"]["flag_fraction"] < profile["blockage"][
-        "maximum_usable_fraction"
-    ]
+    assert (
+        profile["blockage"]["flag_fraction"]
+        < profile["blockage"]["maximum_usable_fraction"]
+    )
     assert profile["hybrid_scan"]["selection"] == "lowest_usable_elevation"
     assert profile["hybrid_scan"]["reject_flags"] == ["MISSING", "HARDWARE_ANOMALY"]
     assert hashlib.sha256(profile_path.read_bytes()).hexdigest() == (
@@ -743,7 +806,7 @@ def test_rp010_mosaic_profile_freezes_time_alignment_and_linear_z_fusion() -> No
 
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(profile)
-    assert profile["alignment"]["step_seconds"] == 300
+    assert profile["alignment"]["step_seconds"] == 360
     assert profile["alignment"]["minimum_contributors"] == 1
     assert profile["alignment"]["minimum_operational_contributors"] >= 2
     assert profile["alignment"]["expected_radar_ids"] == []
@@ -751,7 +814,7 @@ def test_rp010_mosaic_profile_freezes_time_alignment_and_linear_z_fusion() -> No
     assert profile["fusion"]["blended_source_code"] == 65535
     assert profile["fusion"]["reject_flags"] == ["MISSING", "HARDWARE_ANOMALY"]
     assert hashlib.sha256(profile_path.read_bytes()).hexdigest() == (
-        "0d675a4aa9d667222e32689b4881a7def04dc063ef5f50c18a910b4d597d7a05"
+        "264a98a827531e9bebc3b5396ddc390e7612207f055f76256ca242e17fcd39fa"
     )
 
 
@@ -764,7 +827,7 @@ def test_rp016_mosaic_profile_versions_hard_qc_gate_immutably() -> None:
     )
 
     Draft202012Validator(schema).validate(profile)
-    assert profile["profile_version"] == "rp016-qi-mosaic-v1"
+    assert profile["profile_version"] == "rp016-qi-mosaic-v1-6m180"
     assert profile["algorithm_version"] == "qi-mosaic-1.1.0"
     assert {
         "MISSING",
@@ -783,14 +846,12 @@ def test_rp034_fujian_four_radar_profile_is_engineering_only_and_complete() -> N
     )
     profile = yaml.safe_load(
         (
-            CONFIG_ROOT
-            / "mosaic"
-            / "rp034-fujian-four-radar-engineering-v1.yaml"
+            CONFIG_ROOT / "mosaic" / "rp034-fujian-four-radar-engineering-v1.yaml"
         ).read_text()
     )
 
     Draft202012Validator(schema).validate(profile)
-    assert profile["profile_version"] == "rp034-fujian-four-radar-engineering-v1"
+    assert profile["profile_version"] == "rp034-fujian-four-radar-engineering-v1-6m180"
     assert profile["alignment"]["expected_radar_ids"] == [
         "z9591",
         "z9593",
@@ -810,20 +871,18 @@ def test_rp034_fujian_four_radar_profile_is_engineering_only_and_complete() -> N
     } <= set(profile["fusion"]["reject_flags"])
 
 
-def test_rp039_fujian_profile_relaxes_alignment_without_overriding_data_quality() -> None:
+def test_rp039_fujian_profile_relaxes_alignment_without_overriding_data_quality() -> (
+    None
+):
     schema = json.loads(
         (CONFIG_ROOT / "schemas" / "radar-mosaic-profile.schema.json").read_text()
     )
     profile = yaml.safe_load(
-        (
-            CONFIG_ROOT
-            / "mosaic"
-            / "rp039-fujian-four-radar-history-v1.yaml"
-        ).read_text()
+        (CONFIG_ROOT / "mosaic" / "rp039-fujian-four-radar-history-v1.yaml").read_text()
     )
 
     Draft202012Validator(schema).validate(profile)
-    assert profile["profile_version"] == "rp039-fujian-four-radar-history-v1"
+    assert profile["profile_version"] == "rp039-fujian-four-radar-history-v1-6m180"
     assert profile["algorithm_version"] == "qi-mosaic-1.2.0"
     assert profile["alignment"]["maximum_absolute_offset_seconds"] == 300
     assert profile["alignment"]["minimum_time_quality"] == 0.80
@@ -894,9 +953,7 @@ def test_rp012_diagnostic_profile_freezes_layers_and_transparency() -> None:
     )
     profile = yaml.safe_load(
         (
-            CONFIG_ROOT
-            / "diagnostics"
-            / "rp012-operational-diagnostics-v2.yaml"
+            CONFIG_ROOT / "diagnostics" / "rp012-operational-diagnostics-v2.yaml"
         ).read_text()
     )
 
@@ -932,7 +989,7 @@ def test_rp013_nowcast_input_profile_freezes_sequence_and_operational_gates() ->
     Draft202012Validator.check_schema(schema)
     profiles = [
         yaml.safe_load((CONFIG_ROOT / "nowcast" / name).read_text())
-        for name in ("rp013-fixed-5min-v1.yaml", "rp013-fixed-5min-v1.1.yaml")
+        for name in ("rp013-fixed-6min-v1.yaml", "rp013-fixed-6min-v1.1.yaml")
     ]
     for profile in profiles:
         Draft202012Validator(schema).validate(profile)
@@ -941,7 +998,7 @@ def test_rp013_nowcast_input_profile_freezes_sequence_and_operational_gates() ->
         assert profile["sequence"] == {
             "minimum_frames": 3,
             "maximum_frames": 6,
-            "timestep_minutes": 5,
+            "timestep_minutes": 6,
             "selection": "latest_contiguous",
         }
         assert profile["gates"]["require_all_frames_operational_eligible"] is True
@@ -965,18 +1022,18 @@ def test_rp014_pysteps_lk_profile_freezes_motion_and_baselines() -> None:
     assert profile["sequence"] == {
         "minimum_frames": 3,
         "maximum_frames": 6,
-        "timestep_minutes": 5,
+        "timestep_minutes": 6,
     }
     assert profile["motion"]["missing_policy"].endswith("preserve_advected_mask")
     assert profile["motion"]["fallback"] == "zero_motion_when_insufficient_features"
-    assert profile["extrapolation"]["lead_count"] == 24
+    assert profile["extrapolation"]["lead_count"] == 30
     assert profile["extrapolation"]["baselines"] == ["persistence", "translation"]
     assert profile["motion"]["minimum_trackable_rain_pixels"] == 16
     assert profile["motion"]["missing_policy"] == (
         "dry_floor_working_copy_preserve_advected_mask"
     )
     assert hashlib.sha256(profile_path.read_bytes()).hexdigest() == (
-        "18bc0d11b01b6437f63a79c57997a818d1aaed291d8f16a24efc54709b86a48d"
+        "1bd09a48b2c662cc08929eb4592f38762feca1d69a8d029efb4022e113c7ad37"
     )
 
 
@@ -1010,20 +1067,24 @@ def test_pipeline_and_workers_mount_the_same_rp040_radar_profiles() -> None:
     mosaic_worker = services["radar-mosaic-worker"]["environment"]
     nowcast_input_worker = services["nowcast-input-worker"]["environment"]
 
-    assert orchestrator["RAINPULSE_PIPELINE_QC_CONFIG"] == qc_worker[
-        "RAINPULSE_RADAR_QC_CONFIG"
-    ]
-    assert orchestrator["RAINPULSE_PIPELINE_GRID_CONFIG"] == grid_worker[
-        "RAINPULSE_RADAR_GRID_CONFIG"
-    ]
+    assert (
+        orchestrator["RAINPULSE_PIPELINE_QC_CONFIG"]
+        == qc_worker["RAINPULSE_RADAR_QC_CONFIG"]
+    )
+    assert (
+        orchestrator["RAINPULSE_PIPELINE_GRID_CONFIG"]
+        == grid_worker["RAINPULSE_RADAR_GRID_CONFIG"]
+    )
     assert orchestrator["RAINPULSE_PIPELINE_GRID_CONFIG"].endswith(
         "/rp040-hybrid-qc-v3.yaml"
     )
-    assert orchestrator["RAINPULSE_PIPELINE_MOSAIC_CONFIG"] == mosaic_worker[
-        "RAINPULSE_RADAR_MOSAIC_CONFIG"
-    ]
-    assert orchestrator["RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG"] == (
-        nowcast_input_worker["RAINPULSE_NOWCAST_INPUT_CONFIG"]
+    assert (
+        orchestrator["RAINPULSE_PIPELINE_MOSAIC_CONFIG"]
+        == mosaic_worker["RAINPULSE_RADAR_MOSAIC_CONFIG"]
+    )
+    assert (
+        orchestrator["RAINPULSE_PIPELINE_NOWCAST_INPUT_CONFIG"]
+        == (nowcast_input_worker["RAINPULSE_NOWCAST_INPUT_CONFIG"])
     )
 
 
@@ -1047,9 +1108,13 @@ def test_rp015_product_profile_freezes_all_distribution_formats() -> None:
 
 def test_v3_polarimetric_qc_profile_is_valid_and_scoped():
     schema = json.loads((CONFIG_ROOT / "schemas" / "radar-qc.schema.json").read_text())
-    profile = yaml.safe_load((CONFIG_ROOT / "qc" / "fujian-qc-evidence-v3.yaml").read_text())
+    profile = yaml.safe_load(
+        (CONFIG_ROOT / "qc" / "fujian-qc-evidence-v3.yaml").read_text()
+    )
     Draft202012Validator(schema).validate(profile)
     assert profile["radial_interference"]["polarimetric_extent_radars"] == ["z9598"]
     assert profile["pipeline_version"] == "fujian-qc-evidence-2.1.0"
-    previous = yaml.safe_load((CONFIG_ROOT / "qc" / "fujian-qc-evidence-v2.yaml").read_text())
+    previous = yaml.safe_load(
+        (CONFIG_ROOT / "qc" / "fujian-qc-evidence-v2.yaml").read_text()
+    )
     Draft202012Validator(schema).validate(previous)

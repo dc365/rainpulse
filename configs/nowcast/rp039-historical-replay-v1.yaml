@@ -1,5 +1,5 @@
 schema_version: "1.0"
-profile_version: rp039-historical-replay-v1
+profile_version: rp039-historical-replay-v1-6m180
 builder_version: nowcast-input-builder-1.1.0
 execution_mode: historical_replay
 nowcast_input_contract_version: "1.2"
@@ -11,7 +11,7 @@ grid_config_version: fuzhou-grid-0p01deg-v1
 sequence:
   minimum_frames: 3
   maximum_frames: 6
-  timestep_minutes: 5
+  timestep_minutes: 6
   selection: latest_contiguous
 
 gates:

@@ -23,10 +23,10 @@ def profile(
     *,
     validated: bool = True,
     enabled: bool = True,
-    issue_cadence_minutes: int = 5,
+    issue_cadence_minutes: int = 6,
 ) -> NowcastNetShadowProfile:
     return NowcastNetShadowProfile(
-        profile_version="fujian-nowcastnet-shadow-v1",
+        profile_version="fujian-nowcastnet-shadow-v1-6m180",
         source_model_profile="rp026-nowcastnet-offline-v1",
         grid_id="fuzhou_118_123_25_27_0p01deg_v1",
         grid_config_version="fuzhou-grid-0p01deg-v1",
@@ -52,10 +52,7 @@ def sequence(
     issue: datetime | None = None,
 ) -> tuple[list[datetime], np.ndarray, np.ndarray, datetime]:
     issue = issue or datetime(2026, 9, 1, 2, 0, tzinfo=UTC)
-    times = [
-        issue - timedelta(minutes=5 * offset)
-        for offset in range(20, -1, -1)
-    ]
+    times = [issue - timedelta(minutes=5 * offset) for offset in range(20, -1, -1)]
     rain = np.ones((len(times), 64, 96), dtype="float32")
     valid = np.ones_like(rain, dtype="uint8")
     return times, rain, valid, issue
@@ -75,7 +72,7 @@ def test_required_frames_select_exact_ten_minute_cadence_without_interpolation()
     assert result.rain_rate_mm_h.shape == (9, 32, 64)
     assert result.frame_times == required_frame_times(
         issue,
-        issue_cadence_minutes=5,
+        issue_cadence_minutes=6,
     )
     assert all(
         (right - left) == timedelta(minutes=10)
@@ -87,8 +84,8 @@ def test_required_frames_select_exact_ten_minute_cadence_without_interpolation()
     )
 
 
-def test_five_minute_issue_uses_latest_frame_with_ten_minute_input_stride() -> None:
-    issue = datetime(2026, 9, 1, 2, 5, tzinfo=UTC)
+def test_six_minute_issue_uses_latest_frame_with_ten_minute_input_stride() -> None:
+    issue = datetime(2026, 9, 1, 2, 6, tzinfo=UTC)
     times, rain, valid, issue = sequence(issue=issue)
     result = prepare_shadow_input(
         times,
@@ -100,21 +97,21 @@ def test_five_minute_issue_uses_latest_frame_with_ten_minute_input_stride() -> N
     assert result.eligible is True
     assert result.frame_times[-1] == issue
     assert result.frame_times[0] == issue - timedelta(minutes=80)
-    assert all(value.minute % 10 == 5 for value in result.frame_times)
+    assert all(value.minute % 10 == 6 for value in result.frame_times)
 
 
 def test_issue_cadence_rejects_non_aligned_time() -> None:
     issue = datetime(2026, 9, 1, 2, 3, tzinfo=UTC)
-    assert cadence_aligned(issue, 5) is False
+    assert cadence_aligned(issue, 6) is False
     with pytest.raises(NowcastNetShadowConfigError, match="issue cadence"):
-        required_frame_times(issue, issue_cadence_minutes=5)
+        required_frame_times(issue, issue_cadence_minutes=6)
 
 
-def test_profile_rejects_issue_cadence_that_does_not_divide_model_stride() -> None:
+def test_profile_rejects_nonpositive_issue_cadence() -> None:
     with pytest.raises(NowcastNetShadowConfigError, match="issue cadence"):
         from rainpulse_algo.nowcast.nowcastnet_shadow import _validate_profile
 
-        _validate_profile(profile(issue_cadence_minutes=6))
+        _validate_profile(profile(issue_cadence_minutes=0))
 
 
 def test_missing_required_time_fails_closed() -> None:
@@ -188,11 +185,10 @@ def test_roi_probe_reports_exact_missing_count() -> None:
 def test_repository_shadow_profile_is_probe_only() -> None:
     repository_root = Path(__file__).resolve().parents[2]
     loaded = load_nowcastnet_shadow_profile(
-        repository_root
-        / "configs/nowcast/fujian-nowcastnet-shadow-v1.yaml"
+        repository_root / "configs/nowcast/fujian-nowcastnet-shadow-v1.yaml"
     )
     assert loaded.roi.shape == (192, 480)
-    assert loaded.issue_cadence_minutes == 5
+    assert loaded.issue_cadence_minutes == 6
     assert loaded.timestep_minutes == 10
     assert loaded.activation.input_probe_enabled is True
     assert loaded.activation.inference_enabled is False

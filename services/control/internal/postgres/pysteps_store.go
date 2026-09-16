@@ -373,13 +373,13 @@ func validatePystepsLKMetrics(
 		metrics.ModelID != orchestration.PystepsLKModelID ||
 		metrics.ModelVersion == "" ||
 		metrics.ConfigVersion == "" || metrics.InputURI == "" ||
-		len(metrics.InputAssetIDs) == 0 || metrics.LeadCount != 24 ||
-		metrics.LeadStepMinutes != 5 || metrics.TrackableRainPixelCount < 0 ||
+		len(metrics.InputAssetIDs) == 0 || metrics.LeadCount != 30 ||
+		metrics.LeadStepMinutes != 6 || metrics.TrackableRainPixelCount < 0 ||
 		metrics.RuntimeMS < 0 || !supportedPystepsMissingPolicy(metrics.MissingPolicy) ||
 		len(metrics.BaselineModels) != 2 || metrics.BaselineModels[0] != "persistence" ||
 		metrics.BaselineModels[1] != "translation" ||
-		!metrics.ValidFrom.Equal(metrics.IssueTime.Add(5*time.Minute)) ||
-		!metrics.ValidTo.Equal(metrics.IssueTime.Add(120*time.Minute)) ||
+		!metrics.ValidFrom.Equal(metrics.IssueTime.Add(6*time.Minute)) ||
+		!metrics.ValidTo.Equal(metrics.IssueTime.Add(180*time.Minute)) ||
 		!finite(metrics.FirstLeadValidCoverageRatio) ||
 		!finite(metrics.LastLeadValidCoverageRatio) ||
 		!finite(metrics.MaximumForecastRateMMH) ||

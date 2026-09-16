@@ -211,12 +211,12 @@ func TestWorkspacePrefersLatestAnalysisForDuplicateHistoricalTimes(t *testing.T)
 			writeFixture(response, `{"items":[]}`)
 		case request.URL.Path == "/api/v1/analysis-cycles":
 			writeFixture(response, `{"items":[
-				{"analysis_id":"rp040-1100","analysis_time":"2026-08-28T03:00:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","config_version":"rp040-fujian-four-radar-qc-v2","created_at":"2026-08-31T08:26:30Z","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/rp040/1100.zarr"},
-				{"analysis_id":"rp008-1100","analysis_time":"2026-08-28T03:00:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","config_version":"rp034-fujian-four-radar-engineering-v1","created_at":"2026-08-30T18:50:00Z","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/rp008/1100.zarr"},
-				{"analysis_id":"rp040-1055","analysis_time":"2026-08-28T02:55:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","config_version":"rp040-fujian-four-radar-qc-v2","created_at":"2026-08-31T08:26:20Z","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/rp040/1055.zarr"},
-				{"analysis_id":"rp008-1055","analysis_time":"2026-08-28T02:55:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","config_version":"rp034-fujian-four-radar-engineering-v1","created_at":"2026-08-30T18:50:00Z","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/rp008/1055.zarr"},
-				{"analysis_id":"rp040-1050","analysis_time":"2026-08-28T02:50:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","config_version":"rp040-fujian-four-radar-qc-v2","created_at":"2026-08-31T08:26:10Z","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/rp040/1050.zarr"},
-				{"analysis_id":"rp008-1050","analysis_time":"2026-08-28T02:50:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","config_version":"rp034-fujian-four-radar-engineering-v1","created_at":"2026-08-30T18:50:00Z","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/rp008/1050.zarr"}
+				{"analysis_id":"rp040-1100","analysis_time":"2026-08-28T03:00:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","config_version":"rp040-fujian-four-radar-qc-v2-6m180","created_at":"2026-08-31T08:26:30Z","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/rp040/1100.zarr"},
+				{"analysis_id":"rp008-1100","analysis_time":"2026-08-28T03:00:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","config_version":"rp034-fujian-four-radar-engineering-v1-6m180","created_at":"2026-08-30T18:50:00Z","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/rp008/1100.zarr"},
+				{"analysis_id":"rp040-1055","analysis_time":"2026-08-28T02:55:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","config_version":"rp040-fujian-four-radar-qc-v2-6m180","created_at":"2026-08-31T08:26:20Z","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/rp040/1055.zarr"},
+				{"analysis_id":"rp008-1055","analysis_time":"2026-08-28T02:55:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","config_version":"rp034-fujian-four-radar-engineering-v1-6m180","created_at":"2026-08-30T18:50:00Z","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/rp008/1055.zarr"},
+				{"analysis_id":"rp040-1050","analysis_time":"2026-08-28T02:50:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","config_version":"rp040-fujian-four-radar-qc-v2-6m180","created_at":"2026-08-31T08:26:10Z","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/rp040/1050.zarr"},
+				{"analysis_id":"rp008-1050","analysis_time":"2026-08-28T02:50:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","config_version":"rp034-fujian-four-radar-engineering-v1-6m180","created_at":"2026-08-30T18:50:00Z","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/rp008/1050.zarr"}
 			]}`)
 		case request.URL.Path == "/api/v1/ensemble-products/cycles":
 			writeFixture(response, `[]`)
@@ -283,13 +283,13 @@ func TestWorkspaceHistoricalRP040CyclesExposeCurrentQPELineage(t *testing.T) {
 				items = append(items,
 					map[string]any{
 						"analysis_id": item.analysisID, "analysis_time": item.issueTime,
-						"grid_id": defaultGridID, "config_version": "rp040-fujian-four-radar-qc-v2",
+						"grid_id": defaultGridID, "config_version": "rp040-fujian-four-radar-qc-v2-6m180",
 						"created_at": "2026-08-31T08:26:30Z", "status": "ANALYSIS_READY",
 						"analysis_uri": "s3://rainpulse/rp040/" + item.analysisID + "/analysis.zarr",
 					},
 					map[string]any{
 						"analysis_id": "rp008-" + item.analysisID, "analysis_time": item.issueTime,
-						"grid_id": defaultGridID, "config_version": "rp034-fujian-four-radar-engineering-v1",
+						"grid_id": defaultGridID, "config_version": "rp034-fujian-four-radar-engineering-v1-6m180",
 						"created_at": "2026-08-30T18:50:00Z", "status": "ANALYSIS_READY",
 						"analysis_uri": "s3://rainpulse/rp008/" + item.analysisID + "/analysis.zarr",
 					},
@@ -306,7 +306,7 @@ func TestWorkspaceHistoricalRP040CyclesExposeCurrentQPELineage(t *testing.T) {
 					matched = true
 					_ = json.NewEncoder(response).Encode(map[string]any{
 						"analysis_id": analysisID, "analysis_time": item.issueTime,
-						"grid_id": defaultGridID, "config_version": "rp040-fujian-four-radar-qc-v2",
+						"grid_id": defaultGridID, "config_version": "rp040-fujian-four-radar-qc-v2-6m180",
 						"created_at": "2026-08-31T08:26:30Z", "mosaic_uri": mosaicURI,
 						"radars": []any{},
 					})
@@ -316,7 +316,7 @@ func TestWorkspaceHistoricalRP040CyclesExposeCurrentQPELineage(t *testing.T) {
 						"analysis_id": analysisID, "analysis_time": item.issueTime,
 						"grid_id":                  defaultGridID,
 						"qpe_config_version":       "rp011-basic-qpe-v1",
-						"mosaic_config_version":    "rp040-fujian-four-radar-qc-v2",
+						"mosaic_config_version":    "rp040-fujian-four-radar-qc-v2-6m180",
 						"mosaic_algorithm_version": "qi-mosaic-1.3.1-rp040-qc",
 						"input_mosaic_uri":         mosaicURI,
 						"valid_coverage_ratio":     0.42, "mean_quality_index": 0.5,
@@ -383,7 +383,7 @@ func TestWorkspaceHistoricalRP040CyclesExposeCurrentQPELineage(t *testing.T) {
 				payload.Quality.Maximum == nil || *payload.Quality.Maximum != item.maximum {
 				t.Fatalf("quality = %+v", payload.Quality)
 			}
-			if payload.Trace.AnalysisConfigVersion != "rp040-fujian-four-radar-qc-v2" ||
+			if payload.Trace.AnalysisConfigVersion != "rp040-fujian-four-radar-qc-v2-6m180" ||
 				payload.Trace.MosaicAlgorithmVersion != "qi-mosaic-1.3.1-rp040-qc" ||
 				payload.Trace.QPEConfigVersion != "rp011-basic-qpe-v1" ||
 				payload.Trace.InputMosaicURI != "s3://rainpulse/rp040/"+item.analysisID+"/mosaic.zarr" {
@@ -436,7 +436,7 @@ func TestWorkspaceDetailReturnsStableFourPanelForecastLayout(t *testing.T) {
 	if len(payload.Radars) != 2 || payload.Radars[0].RadarID != "z9591" {
 		t.Fatalf("radars = %+v", payload.Radars)
 	}
-	if len(payload.Timeline) != 3 {
+	if len(payload.Timeline) != 41 {
 		t.Fatalf("timeline = %+v", payload.Timeline)
 	}
 	qcPanel := payload.Panels[panelIndex(payload.Panels, "dbzh_qc:z9591")]
@@ -520,12 +520,12 @@ func fixtureCore(t *testing.T) http.Handler {
 		case path == "/api/v1/products":
 			writeFixture(response, `{"items":[{"product_id":"product-1","product_type":"rain_rate","model_id":"pysteps-lk","model_version":"1.0","config_version":"shadow-v1"}]}`)
 		case path == "/api/v1/products/product-1/assets":
-			writeFixture(response, `[{"asset_id":"lk-5","asset_type":"rendered_png","content_url":"/lk5.png","media_type":"image/png","lead_time_minutes":5,"valid_time":"2026-09-01T01:05:00Z","unit":"mm/h"},{"asset_id":"lk-10","asset_type":"rendered_png","content_url":"/lk10.png","media_type":"image/png","lead_time_minutes":10,"valid_time":"2026-09-01T01:10:00Z","unit":"mm/h"}]`)
+			writeFixture(response, `[{"asset_id":"lk-5","asset_type":"rendered_png","content_url":"/lk5.png","media_type":"image/png","lead_time_minutes":5,"valid_time":"2026-09-01T01:06:00Z","unit":"mm/h"},{"asset_id":"lk-10","asset_type":"rendered_png","content_url":"/lk10.png","media_type":"image/png","lead_time_minutes":10,"valid_time":"2026-09-01T01:12:00Z","unit":"mm/h"}]`)
 		case path == "/api/v1/ensemble-products/by-cycle":
 			if request.URL.Query().Get("issue_time") != "2026-09-01T01:00:00Z" {
 				t.Fatalf("unexpected issue time: %s", request.URL.RawQuery)
 			}
-			writeFixture(response, `{"bundle_id":"bundle-1","issue_time":"2026-09-01T01:00:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","member_count":12,"operational_eligible":false,"layers":[{"layer_id":"p50","product_type":"quantile","quantile":0.5,"unit":"mm/h","legend":[{"minimum":0.1,"color":"#fff"}],"assets":[{"asset_id":"steps-5","asset_type":"rendered_png","content_url":"/steps5.png","media_type":"image/png","lead_time_minutes":5,"valid_time":"2026-09-01T01:05:00Z","unit":"mm/h"},{"asset_id":"steps-10","asset_type":"rendered_png","content_url":"/steps10.png","media_type":"image/png","lead_time_minutes":10,"valid_time":"2026-09-01T01:10:00Z","unit":"mm/h"}]}]}`)
+			writeFixture(response, `{"bundle_id":"bundle-1","issue_time":"2026-09-01T01:00:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","member_count":12,"operational_eligible":false,"layers":[{"layer_id":"p50","product_type":"quantile","quantile":0.5,"unit":"mm/h","legend":[{"minimum":0.1,"color":"#fff"}],"assets":[{"asset_id":"steps-5","asset_type":"rendered_png","content_url":"/steps5.png","media_type":"image/png","lead_time_minutes":5,"valid_time":"2026-09-01T01:06:00Z","unit":"mm/h"},{"asset_id":"steps-10","asset_type":"rendered_png","content_url":"/steps10.png","media_type":"image/png","lead_time_minutes":10,"valid_time":"2026-09-01T01:12:00Z","unit":"mm/h"}]}]}`)
 		default:
 			http.Error(response, "fixture route not found: "+path+"?"+request.URL.RawQuery, http.StatusNotFound)
 		}
@@ -573,7 +573,7 @@ func TestWorkspaceAppliesMatchingNowcastNetShadowProbeStatus(t *testing.T) {
 		if request.URL.Path != "/status" {
 			t.Fatalf("unexpected upstream path %s", request.URL.Path)
 		}
-		writeFixture(response, `{"status":"input_ineligible","reason":"spatial_shape_not_validated","profile_version":"fujian-nowcastnet-shadow-v1","issue_time":"2026-09-01T01:00:00Z","frame_count":9,"common_valid_ratio":1.0}`)
+		writeFixture(response, `{"status":"input_ineligible","reason":"spatial_shape_not_validated","profile_version":"fujian-nowcastnet-shadow-v1-6m180","issue_time":"2026-09-01T01:00:00Z","frame_count":9,"common_valid_ratio":1.0}`)
 	}))
 	defer upstream.Close()
 
@@ -602,7 +602,7 @@ func TestWorkspaceAppliesMatchingNowcastNetShadowProbeStatus(t *testing.T) {
 	if panel.Status != "unavailable" || panel.UnavailableReason != "spatial_shape_not_validated" {
 		t.Fatalf("nowcastnet panel = %+v", panel)
 	}
-	if panel.AlgorithmID != "fujian-nowcastnet-shadow-v1" {
+	if panel.AlgorithmID != "fujian-nowcastnet-shadow-v1-6m180" {
 		t.Fatalf("nowcastnet algorithm = %q", panel.AlgorithmID)
 	}
 }
@@ -630,9 +630,9 @@ func TestWorkspaceAddsFutureRadarAnalysesAsVerificationTruth(t *testing.T) {
 	core := http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
 		case "/api/v1/analysis-cycles":
-			writeFixture(response, `{"items":[{"analysis_id":"analysis-1","run_id":"analysis-run-1","analysis_time":"2026-09-01T01:00:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/analysis.zarr","radar_count":2},{"analysis_id":"analysis-2","run_id":"analysis-run-2","analysis_time":"2026-09-01T01:05:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/analysis-2.zarr","radar_count":2}]}`)
+			writeFixture(response, `{"items":[{"analysis_id":"analysis-1","run_id":"analysis-run-1","analysis_time":"2026-09-01T01:00:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/analysis.zarr","radar_count":2},{"analysis_id":"analysis-2","run_id":"analysis-run-2","analysis_time":"2026-09-01T01:06:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/analysis-2.zarr","radar_count":2}]}`)
 		case "/api/v1/analysis-cycles/analysis-2/diagnostics":
-			writeFixture(response, `{"analysis_time":"2026-09-01T01:05:00Z","layers":[{"layer_id":"qpe-layer-2","scope":"grid","field":"RATE_QPE","title":"QPE","image_url":"/qpe-2.png","unit":"mm/h","bounds":[117.995,24.995,123.005,27.005],"legend":[{"minimum":0.1,"color":"#fff"}]}]}`)
+			writeFixture(response, `{"analysis_time":"2026-09-01T01:06:00Z","layers":[{"layer_id":"qpe-layer-2","scope":"grid","field":"RATE_QPE","title":"QPE","image_url":"/qpe-2.png","unit":"mm/h","bounds":[117.995,24.995,123.005,27.005],"legend":[{"minimum":0.1,"color":"#fff"}]}]}`)
 		default:
 			base.ServeHTTP(response, request)
 		}
@@ -656,7 +656,7 @@ func TestWorkspaceAddsFutureRadarAnalysesAsVerificationTruth(t *testing.T) {
 		t.Fatal(err)
 	}
 	qpe := payload.Panels[panelIndex(payload.Panels, "qpe")]
-	if len(qpe.Frames) != 2 || qpe.Frames[1].ValidTime != "2026-09-01T01:05:00Z" {
+	if len(qpe.Frames) != 2 || qpe.Frames[1].ValidTime != "2026-09-01T01:06:00Z" {
 		t.Fatalf("QPE truth frames = %+v", qpe.Frames)
 	}
 }
@@ -669,7 +669,7 @@ func TestWorkspaceUsesClearlyLabelledReferenceScanForMissingRadar(t *testing.T) 
 		case "/api/v1/analysis-cycles":
 			writeFixture(response, `{"items":[
 {"analysis_id":"analysis-missing","analysis_time":"2026-09-01T01:00:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/a.zarr","radars":[{"radar_id":"z9591","state":"MISSING"}]},
-{"analysis_id":"analysis-reference","analysis_time":"2026-09-01T01:05:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/b.zarr","radars":[{"radar_id":"z9591","state":"PARTICIPATING","scan_id":"scan-reference","time_offset_seconds":-180}]}
+{"analysis_id":"analysis-reference","analysis_time":"2026-09-01T01:06:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/b.zarr","radars":[{"radar_id":"z9591","state":"PARTICIPATING","scan_id":"scan-reference","time_offset_seconds":-180}]}
 ]}`)
 		case "/api/v1/analysis-cycles/analysis-missing":
 			writeFixture(response, `{"analysis_id":"analysis-missing","analysis_time":"2026-09-01T01:00:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","radars":[{"radar_id":"z9591","state":"MISSING"}]}`)
@@ -678,7 +678,7 @@ func TestWorkspaceUsesClearlyLabelledReferenceScanForMissingRadar(t *testing.T) 
 		case "/api/v1/analysis-cycles/analysis-missing/diagnostics":
 			writeFixture(response, `{"analysis_time":"2026-09-01T01:00:00Z","layers":[{"layer_id":"qpe","scope":"grid","field":"RATE_QPE","image_url":"/qpe.png"}]}`)
 		case "/api/v1/analysis-cycles/analysis-reference/diagnostics":
-			writeFixture(response, `{"analysis_time":"2026-09-01T01:05:00Z","layers":[
+			writeFixture(response, `{"analysis_time":"2026-09-01T01:06:00Z","layers":[
 {"layer_id":"raw-reference","scope":"polar","field":"DBZH_RAW","radar_id":"z9591","scan_id":"scan-reference","image_url":"/raw-reference.png","unit":"dBZ"},
 {"layer_id":"qc-reference","scope":"polar","field":"DBZH_QC","radar_id":"z9591","scan_id":"scan-reference","image_url":"/qc-reference.png","unit":"dBZ"}
 ]}`)
@@ -702,7 +702,7 @@ func TestWorkspaceUsesClearlyLabelledReferenceScanForMissingRadar(t *testing.T) 
 	}
 	panel := payload.Panels[panelIndex(payload.Panels, "dbzh_raw:z9591")]
 	if panel.Lifecycle != "reference" || len(panel.Frames) != 1 || !panel.Frames[0].ReferenceObservation ||
-		panel.Frames[0].ObservationTime != "2026-09-01T01:02:00Z" || panel.Frames[0].ObservationOffsetSeconds == nil || *panel.Frames[0].ObservationOffsetSeconds != 120 {
+		panel.Frames[0].ObservationTime != "2026-09-01T01:03:00Z" || panel.Frames[0].ObservationOffsetSeconds == nil || *panel.Frames[0].ObservationOffsetSeconds != 180 {
 		t.Fatalf("reference radar panel = %+v", panel)
 	}
 }
@@ -718,8 +718,8 @@ func TestWorkspaceFallsBackWhenLatestAnalysisHasNoDiagnostics(t *testing.T) {
 			writeFixture(response, `{"items":[
 {"analysis_id":"analysis-incomplete","analysis_time":"2026-09-01T01:00:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","created_at":"2026-09-03T00:00:00Z","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/incomplete.zarr"},
 {"analysis_id":"analysis-complete","analysis_time":"2026-09-01T01:00:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","created_at":"2026-09-02T00:00:00Z","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/complete.zarr"},
-{"analysis_id":"analysis-future-incomplete","analysis_time":"2026-09-01T01:05:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","created_at":"2026-09-03T00:00:00Z","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/future-incomplete.zarr"},
-{"analysis_id":"analysis-future-complete","analysis_time":"2026-09-01T01:05:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","created_at":"2026-09-02T00:00:00Z","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/future-complete.zarr"}
+{"analysis_id":"analysis-future-incomplete","analysis_time":"2026-09-01T01:06:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","created_at":"2026-09-03T00:00:00Z","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/future-incomplete.zarr"},
+{"analysis_id":"analysis-future-complete","analysis_time":"2026-09-01T01:06:00Z","grid_id":"fuzhou_118_123_25_27_0p01deg_v1","created_at":"2026-09-02T00:00:00Z","status":"ANALYSIS_READY","analysis_uri":"s3://rainpulse/future-complete.zarr"}
 ]}`)
 		case request.URL.Path == "/api/v1/ensemble-products/cycles":
 			writeFixture(response, `[]`)
@@ -738,7 +738,7 @@ func TestWorkspaceFallsBackWhenLatestAnalysisHasNoDiagnostics(t *testing.T) {
 		case request.URL.Path == "/api/v1/analysis-cycles/analysis-future-incomplete/diagnostics":
 			http.Error(response, "diagnostics unavailable", http.StatusNotFound)
 		case request.URL.Path == "/api/v1/analysis-cycles/analysis-future-complete/diagnostics":
-			writeFixture(response, `{"analysis_time":"2026-09-01T01:05:00Z","layers":[{"layer_id":"qpe-future","scope":"grid","field":"RATE_QPE","image_url":"/qpe-future.png","unit":"mm/h","bounds":[117.995,24.995,123.005,27.005]}]}`)
+			writeFixture(response, `{"analysis_time":"2026-09-01T01:06:00Z","layers":[{"layer_id":"qpe-future","scope":"grid","field":"RATE_QPE","image_url":"/qpe-future.png","unit":"mm/h","bounds":[117.995,24.995,123.005,27.005]}]}`)
 		default:
 			http.Error(response, "fixture route not found", http.StatusNotFound)
 		}
@@ -757,7 +757,7 @@ func TestWorkspaceFallsBackWhenLatestAnalysisHasNoDiagnostics(t *testing.T) {
 		t.Fatal(err)
 	}
 	qpeIndex := panelIndex(payload.Panels, "qpe")
-	if payload.AnalysisID != "analysis-complete" || qpeIndex < 0 || len(payload.Panels[qpeIndex].Frames) != 2 || payload.Panels[qpeIndex].Frames[0].LeadMinutes != 0 || payload.Panels[qpeIndex].Frames[1].LeadMinutes != 5 {
+	if payload.AnalysisID != "analysis-complete" || qpeIndex < 0 || len(payload.Panels[qpeIndex].Frames) != 2 || payload.Panels[qpeIndex].Frames[0].LeadMinutes != 0 || payload.Panels[qpeIndex].Frames[1].LeadMinutes != 6 {
 		t.Fatalf("analysis = %q, panels = %+v", payload.AnalysisID, payload.Panels)
 	}
 	if !containsString(payload.Warnings, "analysis-fallback") {

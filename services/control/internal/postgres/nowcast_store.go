@@ -145,7 +145,7 @@ func applyNowcastInputCompletion(
 	if metrics.SchemaVersion != "1.0" || metrics.IssueTimeUTC.IsZero() ||
 		metrics.GridID == "" || metrics.ProfileVersion == "" ||
 		metrics.PreprocessVersion == "" || metrics.FrameCount < 3 ||
-		metrics.FrameCount > 6 || metrics.TimestepMinutes != 5 ||
+		metrics.FrameCount > 6 || metrics.TimestepMinutes != 6 ||
 		len(metrics.AnalysisIDs) != metrics.FrameCount ||
 		len(metrics.InputAssetIDs) == 0 ||
 		len(metrics.InputURIs) != metrics.FrameCount ||
@@ -218,7 +218,7 @@ FROM nowcast_input_frames WHERE job_id = $1 ORDER BY frame_index`, event.JobID)
 		if index >= metrics.FrameCount || analysisID != metrics.AnalysisIDs[index] ||
 			analysisID != requested.Payload.AnalysisIDs[index] ||
 			inputURI != metrics.InputURIs[index] || inputURI != requested.Payload.InputURIs[index] ||
-			!analysisTime.Equal(issueTime.Add(time.Duration(index-metrics.FrameCount+1)*5*time.Minute)) {
+			!analysisTime.Equal(issueTime.Add(time.Duration(index-metrics.FrameCount+1)*6*time.Minute)) {
 			return fmt.Errorf("%w: NowcastInput frame provenance differs", orchestration.ErrInvalidEvent)
 		}
 		index++
@@ -308,7 +308,7 @@ FROM (
     FROM analysis_cycles
     WHERE grid_id = $1
       AND analysis_time <= $2
-      AND analysis_time >= $2 - ($3::int - 1) * INTERVAL '5 minutes'
+      AND analysis_time >= $2 - ($3::int - 1) * INTERVAL '6 minutes'
       AND status = 'ANALYSIS_READY'
       AND analysis_uri IS NOT NULL
     ORDER BY analysis_time DESC, created_at DESC

@@ -28,7 +28,7 @@ from rainpulse_algo.nowcast.nowcastnet_tile_atlas import (
     load_tile_atlas,
     stitch_member_tiles,
 )
-from rainpulse_algo.nowcast.temporal_adapter import adapt_members_to_five_minutes
+from rainpulse_algo.nowcast.temporal_adapter import adapt_members_to_six_minutes
 from rainpulse_algo.worker.object_store import (
     ArtifactObjectReader,
     minio_client_from_environment,
@@ -207,7 +207,7 @@ def main() -> None:
                         runtime.capsule_root, profile=profile, device=args.device
                     ),
                 )
-        adapted = adapt_members_to_five_minutes(
+        adapted = adapt_members_to_six_minutes(
             rates[-1],
             masks[-1],
             native,

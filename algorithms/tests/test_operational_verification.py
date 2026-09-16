@@ -27,10 +27,7 @@ from .test_pysteps_lk import tiny_grid
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PROFILE_PATH = (
-    REPOSITORY_ROOT
-    / "configs"
-    / "verification"
-    / "rp031-operational-deterministic-v1.yaml"
+    REPOSITORY_ROOT / "configs" / "verification" / "rp031-operational-deterministic-v1.yaml"
 )
 ISSUE_TIME = datetime(2026, 8, 30, 8, 0, tzinfo=UTC)
 RUN_ID = UUID("31000000-0000-4000-8000-000000000001")
@@ -39,7 +36,7 @@ JOB_ID = UUID("31000000-0000-4000-8000-000000000002")
 
 def _forecast_objects() -> dict[str, bytes]:
     grid = tiny_grid()
-    shape = (24, *grid.shape)
+    shape = (30, *grid.shape)
     valid = np.ones(shape, dtype="uint8")
     valid[:, :, -1] = 0
     lk = np.ones(shape, dtype="float32")
@@ -86,7 +83,7 @@ def _forecast_objects() -> dict[str, bytes]:
 
 def _truth_objects(index: int) -> dict[str, bytes]:
     grid = tiny_grid()
-    valid_time = ISSUE_TIME + timedelta(minutes=(index + 1) * 5)
+    valid_time = ISSUE_TIME + timedelta(minutes=(index + 1) * 6)
     valid = np.ones(grid.shape, dtype="uint8")
     valid[0, 0] = 0
     rate = np.ones(grid.shape, dtype="float32")
@@ -149,11 +146,11 @@ def _request(forecast_sha256: str, truth_sha256: list[str]) -> ForecastVerificat
                 "truth_frames": [
                     {
                         "analysis_id": f"31000000-0000-4000-8000-{index + 100:012d}",
-                        "valid_time": (ISSUE_TIME + timedelta(minutes=(index + 1) * 5)).isoformat(),
+                        "valid_time": (ISSUE_TIME + timedelta(minutes=(index + 1) * 6)).isoformat(),
                         "input_uri": f"s3://rainpulse/analysis/{index}/analysis.zarr",
                         "input_sha256": truth_sha256[index],
                     }
-                    for index in range(24)
+                    for index in range(30)
                 ],
                 "output_prefix": "s3://rainpulse/verification/test/",
                 "issue_time": ISSUE_TIME.isoformat(),
@@ -161,7 +158,7 @@ def _request(forecast_sha256: str, truth_sha256: list[str]) -> ForecastVerificat
                 "model_id": "pysteps-lk",
                 "model_version": "pysteps-lk-1.1.0",
                 "forecast_contract_version": "1.1",
-                "verification_config_version": "rp031-operational-deterministic-v1",
+                "verification_config_version": "rp031-operational-deterministic-v1-6m180",
                 "result_contract_version": "1.0",
             },
         }
@@ -171,12 +168,12 @@ def _request(forecast_sha256: str, truth_sha256: list[str]) -> ForecastVerificat
 def test_result_scores_all_leads_and_preserves_truth_missing_support() -> None:
     objects = build_operational_verification_result(
         _forecast_objects(),
-        [_truth_objects(index) for index in range(24)],
+        [_truth_objects(index) for index in range(30)],
         profile=load_operational_verification_profile(PROFILE_PATH),
         run_id=RUN_ID,
         job_id=JOB_ID,
         forecast_uri="s3://rainpulse/products/test/forecast.zarr",
-        truth_uris=[f"s3://rainpulse/analysis/{index}/analysis.zarr" for index in range(24)],
+        truth_uris=[f"s3://rainpulse/analysis/{index}/analysis.zarr" for index in range(30)],
     )
 
     summary = json.loads(objects["summary.json"])
@@ -185,7 +182,7 @@ def test_result_scores_all_leads_and_preserves_truth_missing_support() -> None:
         row
         for row in metrics
         if row["model"] == "lk"
-        and row["lead_minutes"] == 5
+        and row["lead_minutes"] == 6
         and row["threshold_mm_h"] == 1.0
         and row["window_target_km"] == 1.0
     )
@@ -193,16 +190,16 @@ def test_result_scores_all_leads_and_preserves_truth_missing_support() -> None:
         row
         for row in metrics
         if row["model"] == "persistence"
-        and row["lead_minutes"] == 5
+        and row["lead_minutes"] == 6
         and row["threshold_mm_h"] == 1.0
         and row["window_target_km"] == 1.0
     )
 
     assert summary["contract_name"] == "rainpulse.forecast-verification-result"
     assert summary["contract_version"] == "1.0"
-    assert summary["lead_count"] == 24
-    assert summary["truth_frame_count"] == 24
-    assert summary["metric_row_count"] == 3 * 24 * 6 * 5
+    assert summary["lead_count"] == 30
+    assert summary["truth_frame_count"] == 30
+    assert summary["metric_row_count"] == 3 * 30 * 6 * 5
     assert first_lk["fss"] == 1.0
     assert first_lk["truth_coverage"] == (64 * 64 - 1) / (64 * 64)
     assert first_persistence["fss"] == 0.0
@@ -221,19 +218,21 @@ def test_worker_reads_checksum_verified_forecast_and_truth_artifacts(
             f"s3://rainpulse/analysis/{index}/analysis.zarr",
             _truth_objects(index),
         )
-        for index in range(24)
+        for index in range(30)
     ]
     monkeypatch.setenv("RAINPULSE_VERIFICATION_CONFIG", str(PROFILE_PATH))
 
     result = _execute_forecast_verification(
-        _request(forecast_sha256, truth_sha256), client  # type: ignore[arg-type]
+        _request(forecast_sha256, truth_sha256),
+        client,  # type: ignore[arg-type]
     )
 
     assert result.objects is not None
-    assert json.loads(result.objects["summary.json"])["metric_row_count"] == 2160
-    assert result.metrics["truth_frame_count"] == 24.0
+    assert json.loads(result.objects["summary.json"])["metric_row_count"] == 2700
+    assert result.metrics["truth_frame_count"] == 30.0
 
     with np.testing.assert_raises(OperationalVerificationInputError):
         _execute_forecast_verification(
-            _request("0" * 64, truth_sha256), client  # type: ignore[arg-type]
+            _request("0" * 64, truth_sha256),
+            client,  # type: ignore[arg-type]
         )

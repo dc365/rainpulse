@@ -287,7 +287,7 @@ def validate_ensemble_application_product_bundle(
         leads = (
             ([60, 120] if layer.get("product_type") == "accumulation_60" else [120])
             if accumulation
-            else list(range(5, 125, 5))
+            else list(range(6, 181, 6))
         )
         assets = layer.get("assets")
         valid_times = layer.get("valid_times")

@@ -56,7 +56,7 @@ func (store *Store) GetNowcastNetRegeneration(ctx context.Context, runID uuid.UU
 	}
 	input.ModelID = orchestration.NowcastNetShadowModelID
 	input.ModelVersion = orchestration.NowcastNetShadowModelVersion
-	input.ConfigVersion = "fujian-nowcastnet-shadow-v2"
+	input.ConfigVersion = "fujian-nowcastnet-shadow-v2-6m180"
 	input.SourceModelConfigVersion = "rp026-nowcastnet-offline-v1"
 	input.TileAtlasVersion = "fujian-nowcastnet-tile-atlas-v1"
 	err = store.pool.QueryRow(ctx, `SELECT config, sha256 FROM config_versions WHERE config_version=$1`, input.ConfigVersion).Scan(&input.Config, &input.ConfigSHA256)
@@ -82,9 +82,9 @@ ORDER BY analysis_time`
 
 func nowcastNetShadowInputTimes(issueTime time.Time) []time.Time {
 	issueTime = issueTime.UTC()
-	values := make([]time.Time, 9)
+	values := make([]time.Time, 15)
 	for index := range values {
-		values[index] = issueTime.Add(time.Duration(-80+10*index) * time.Minute)
+		values[index] = issueTime.Add(time.Duration(-84+6*index) * time.Minute)
 	}
 	return values
 }
@@ -130,7 +130,7 @@ ON CONFLICT (config_version) DO NOTHING`, bundle.Job.ConfigVersion, bundle.Confi
 	}
 	modelMetadata, err := json.Marshal(map[string]any{
 		"lifecycle": "shadow", "native_lead_step_minutes": 10,
-		"display_lead_step_minutes": 5, "tile_atlas": "fujian-nowcastnet-tile-atlas-v1",
+		"display_lead_step_minutes": 6, "tile_atlas": "fujian-nowcastnet-tile-atlas-v1",
 		"source_model_config_version": "rp026-nowcastnet-offline-v1",
 	})
 	if err != nil {
@@ -167,8 +167,8 @@ FROM forecast_runs WHERE run_id = $1 FOR UPDATE`, bundle.Run.ID).Scan(&currentSt
 		!issueTime.Equal(bundle.Run.IssueTime) || gridID != bundle.Run.GridID {
 		return fmt.Errorf("NowcastNet shadow requires the committed INPUT_READY forecast run")
 	}
-	if len(bundle.InputFrames) != 9 {
-		return fmt.Errorf("NowcastNet shadow requires nine direct analysis frames")
+	if len(bundle.InputFrames) != 15 {
+		return fmt.Errorf("NowcastNet shadow requires fifteen six-minute source analysis frames")
 	}
 	analysisIDs := make([]uuid.UUID, len(bundle.InputFrames))
 	analysisURIs := make([]string, len(bundle.InputFrames))
@@ -182,7 +182,7 @@ FROM analysis_cycles WHERE analysis_id = $1 FOR UPDATE`, frame.AnalysisID).Scan(
 			return fmt.Errorf("lock NowcastNet shadow analysis frame %d: %w", index, err)
 		}
 		if status != "ANALYSIS_READY" || !storedTime.Equal(frame.AnalysisTime) || storedURI != frame.AnalysisURI ||
-			!storedTime.Equal(bundle.Run.IssueTime.Add(time.Duration(-80+10*index)*time.Minute)) {
+			!storedTime.Equal(bundle.Run.IssueTime.Add(time.Duration(-84+6*index)*time.Minute)) {
 			return fmt.Errorf("NowcastNet shadow analysis frame %d changed before scheduling", index)
 		}
 		analysisIDs[index] = frame.AnalysisID
@@ -327,7 +327,7 @@ FOR UPDATE OF ar`, event.JobID, event.RunID).Scan(
 	}
 	if err := json.Unmarshal(diagnostics, &reported); err != nil || reported.AlgorithmRunID != algorithmRunID ||
 		reported.JobID != event.JobID || reported.RunID != event.RunID || reported.NativeCadence != 10 ||
-		reported.DisplayCadence != 5 || reported.LeadCount != 24 {
+		reported.DisplayCadence != 6 || reported.LeadCount != 20 {
 		return fmt.Errorf("%w: invalid NowcastNet shadow diagnostics", orchestration.ErrInvalidEvent)
 	}
 	if _, err := tx.Exec(ctx, `

@@ -4,6 +4,7 @@ import json
 from uuid import uuid4
 
 import numpy as np
+import pytest
 import zarr
 from zarr.storage import MemoryStore
 
@@ -12,6 +13,23 @@ from rainpulse_algo.diagnostics.point_index import (
     attach_analysis_point_index,
 )
 from rainpulse_algo.products.point_index import validate_point_query_index
+
+
+def test_float32_coordinates_preserve_nominal_grid_pitch():
+    store = MemoryStore()
+    store.update(_analysis())
+    root = zarr.open_group(store=store, mode="a")
+    for name in ("lat", "lon"):
+        values = root[name][:].astype("float32")
+        del root[name]
+        root.create_dataset(name, data=values)
+    result = attach_analysis_point_index({"manifest.json": b"{}"}, dict(store))
+    header = validate_point_query_index(result[QPE_POINT_INDEX_PATH])
+    assert header["longitude_interval"] == 0.01
+    assert header["latitude_interval"] == 0.01
+    root["lon"][1] = 118.015
+    with pytest.raises(ValueError, match="regular grid"):
+        attach_analysis_point_index({"manifest.json": b"{}"}, dict(store))
 
 
 def _analysis() -> dict[str, bytes]:

@@ -147,8 +147,10 @@ def _validate(profile: PystepsStepsProfile) -> None:
         raise PystepsStepsConfigError("pySTEPS-STEPS requires NowcastInput contract 1.2")
     if profile.forecast_output_contract_version != "1.2":
         raise PystepsStepsConfigError("pySTEPS-STEPS requires ForecastOutput contract 1.2")
-    if profile.sequence != StepsSequenceConfig(3, 6, 5):
-        raise PystepsStepsConfigError("pySTEPS-STEPS requires 3-6 frames at five-minute steps")
+    if profile.sequence not in (StepsSequenceConfig(3, 6, 5), StepsSequenceConfig(3, 6, 6)):
+        raise PystepsStepsConfigError(
+            "pySTEPS-STEPS requires 3-6 frames at configured five/six-minute steps"
+        )
     ensemble = profile.ensemble
     if not 2 <= ensemble.member_count <= 96:
         raise PystepsStepsConfigError("ensemble member count must be within [2, 96]")

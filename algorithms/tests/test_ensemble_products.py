@@ -31,16 +31,10 @@ from .test_pysteps_steps import seeded_backend, steps_fields, steps_profile
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PROFILE_PATH = (
-    REPOSITORY_ROOT
-    / "configs"
-    / "products"
-    / "rp023-ensemble-application-products-v1.yaml"
+    REPOSITORY_ROOT / "configs" / "products" / "rp023-ensemble-application-products-v1.yaml"
 )
 SCHEMA_PATH = (
-    REPOSITORY_ROOT
-    / "configs"
-    / "schemas"
-    / "ensemble-application-product-profile.schema.json"
+    REPOSITORY_ROOT / "configs" / "schemas" / "ensemble-application-product-profile.schema.json"
 )
 RUN_ID = UUID("9b000000-0000-4000-8000-000000000001")
 MODEL_JOB_ID = UUID("9b000000-0000-4000-8000-000000000002")
@@ -98,8 +92,8 @@ def test_builds_complete_png_and_netcdf_layer_suite() -> None:
     manifest = validation["manifest"]
 
     assert validation["layer_count"] == 10
-    assert validation["asset_count"] == 390
-    assert validation["object_count"] == 393
+    assert validation["asset_count"] == 486
+    assert validation["object_count"] == 489
     assert manifest["member_count"] == 12
     assert manifest["operational_eligible"] is False
     assert manifest["source_forecast"]["sha256"] == artifact_sha256(forecast)
@@ -107,14 +101,12 @@ def test_builds_complete_png_and_netcdf_layer_suite() -> None:
     probability = next(
         layer for layer in manifest["layers"] if layer["layer_id"] == "probability-gt-5"
     )
-    quantile = next(
-        layer for layer in manifest["layers"] if layer["layer_id"] == "quantile-p90"
-    )
+    quantile = next(layer for layer in manifest["layers"] if layer["layer_id"] == "quantile-p90")
     assert probability["threshold_mm_h"] == 5.0
     assert probability["quantile"] is None
     assert quantile["threshold_mm_h"] is None
     assert quantile["quantile"] == 0.9
-    assert len(probability["valid_times"]) == 24
+    assert len(probability["valid_times"]) == 30
 
 
 def test_netcdf_preserves_probability_semantics_and_missing_cells() -> None:
@@ -129,13 +121,11 @@ def test_netcdf_preserves_probability_semantics_and_missing_cells() -> None:
         grid=tiny_grid(),
     )
     manifest = json.loads(objects["manifest.json"])
-    layer = next(
-        item for item in manifest["layers"] if item["layer_id"] == "probability-gt-1"
-    )
+    layer = next(item for item in manifest["layers"] if item["layer_id"] == "probability-gt-1")
     asset = next(
         item
         for item in layer["assets"]
-        if item["lead_time_minutes"] == 5 and item["media_type"] == NETCDF_MEDIA_TYPE
+        if item["lead_time_minutes"] == 6 and item["media_type"] == NETCDF_MEDIA_TYPE
     )
     data = objects[asset["object_path"]]
 

@@ -60,12 +60,12 @@ func TestFormalNowcastNetProductStoreReadsAuthoritativeArtifact(t *testing.T) {
 		BundleID: jobID, RunID: runID, JobID: jobID, AlgorithmRunID: algorithmRunID,
 		IssueTime: issueTime, GridID: "fuzhou-grid", GridConfigVersion: "grid-v1",
 		ModelID: "nowcastnet", ModelVersion: "public-v1", ProfileVersion: "shadow-v2",
-		MemberCount: 4, CadenceMinutes: 5, Lifecycle: "shadow", Width: 32, Height: 32,
+		MemberCount: 4, CadenceMinutes: 6, Lifecycle: "shadow", Width: 32, Height: 32,
 		Bounds: [4]float64{118, 25, 118.32, 25.32}, LegendUnit: "mm/h",
 		Legend:    []nowcastnetproducts.LegendEntry{{Minimum: 0.1, Color: "#9dd9ff"}, {Minimum: 1, Color: "#4ba3f2"}},
 		CreatedAt: issueTime.Add(time.Minute),
 	}
-	for lead := 5; lead <= 120; lead += 5 {
+	for lead := 6; lead <= 120; lead += 6 {
 		frame := nowcastnetproducts.Frame{
 			AssetID:    fmt.Sprintf("ensemble-mean-lead-%03d-png", lead),
 			ObjectPath: fmt.Sprintf("rain_rate/lead-%03d/layer.png", lead),
@@ -78,7 +78,7 @@ func TestFormalNowcastNetProductStoreReadsAuthoritativeArtifact(t *testing.T) {
 		} else {
 			frame.FrameKind = "derived"
 			frame.Derivation = "bidirectional-dense-optical-flow-advection-v1"
-			frame.SourceLeads = []int{lead - 5, lead + 5}
+			frame.SourceLeads = []int{lead / 10 * 10, (lead/10 + 1) * 10}
 		}
 		bundle.Frames = append(bundle.Frames, frame)
 	}

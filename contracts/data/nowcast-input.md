@@ -15,7 +15,7 @@ The required dimension order is `time × lat × lon`.
 | `lat` | `float32` | Degrees north, strictly increasing, identical to `grid_id` |
 | `lon` | `float32` | Degrees east, strictly increasing, identical to `grid_id` |
 
-Phase 1 inputs contain 3–6 frames at an exact five-minute interval. The final
+Phase 1 inputs contain 3–6 frames at an exact six-minute interval. The final
 `time` coordinate equals `issue_time_utc`. Mixing source intervals within one
 model input is invalid.
 
@@ -77,7 +77,7 @@ Missing cells must never be silently converted to zero rainfall.
 - All required arrays have identical `[time, lat, lon]` shapes.
 - Rain rate and data age are never negative when finite; angular intervals are positive.
 - `LOW_QUALITY_MASK <= VALID_MASK` element-wise.
-- Time coordinates are UTC, regular and exactly five minutes apart in Phase 1.
+- Time coordinates are UTC, regular and exactly six minutes apart in Phase 1.
 - Dataset publication is atomic: write immutable content-addressed objects,
   validate them, then conditionally create `_SUCCESS.json`; a concurrent
   duplicate reuses the first committed marker. The stable artifact URI is

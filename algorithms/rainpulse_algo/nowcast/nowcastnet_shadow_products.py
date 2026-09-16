@@ -45,7 +45,7 @@ def build_nowcastnet_shadow_product_bundle(
     input_analysis: list[dict[str, str]],
     runtime: dict[str, Any],
 ) -> dict[str, bytes]:
-    """Build 24 five-minute display frames and an exact-value point sidecar.
+    """Build 20 six-minute display frames and an exact-value point sidecar.
 
     Native ten-minute member fields are already represented by ``forecast``;
     this routine only renders and records them.  It never resamples or rounds
@@ -65,12 +65,12 @@ def build_nowcastnet_shadow_product_bundle(
         or members.shape[1] != len(forecast.frames)
     ):
         raise NowcastNetShadowProductError("NowcastNet shadow product dimensions differ")
-    if len(forecast.frames) != 24:
+    if len(forecast.frames) != 20:
         raise NowcastNetShadowProductError(
-            "NowcastNet shadow product requires 24 five-minute frames"
+            "NowcastNet shadow product requires 20 six-minute frames"
         )
     leads = [frame.lead_minutes for frame in forecast.frames]
-    if leads != list(range(5, 121, 5)):
+    if leads != list(range(6, 121, 6)):
         raise NowcastNetShadowProductError("NowcastNet shadow lead times differ")
     if any(frame.frame_kind not in {"native", "derived"} for frame in forecast.frames):
         raise NowcastNetShadowProductError("NowcastNet frame kind is invalid")
@@ -165,9 +165,9 @@ def build_nowcastnet_shadow_product_bundle(
         "model_version": model_profile.model_version,
         "profile_version": shadow_profile_version,
         "member_count": model_profile.protocol.ensemble_members,
-        "issue_cadence_minutes": 5,
+        "issue_cadence_minutes": 6,
         "native_timestep_minutes": model_profile.protocol.timestep_minutes,
-        "cadence_minutes": 5,
+        "cadence_minutes": 6,
         "lifecycle": "shadow",
         "operational_eligible": False,
         "tile_atlas_version": atlas_version,

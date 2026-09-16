@@ -1,4 +1,4 @@
-"""Issue-relative accumulation of complete five-minute member sequences."""
+"""Issue-relative accumulation of complete six-minute member sequences."""
 
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -48,11 +48,11 @@ def accumulate_windows(
         or rates.shape != masks.shape
         or rates.shape != quality.shape
         or min(rates.shape) < 1
-        or rates.shape[1] != 24
+        or rates.shape[1] not in (20, 30)
     ):
-        raise ValueError("arrays must share member x 24 leads x latitude x longitude shape")
-    if list(lead_minutes) != list(range(5, 121, 5)):
-        raise ValueError("lead minutes must be exactly +5 through +120 in five-minute steps")
+        raise ValueError("arrays must share member x 20 or 30 leads x latitude x longitude shape")
+    if list(lead_minutes) != list(range(6, rates.shape[1] * 6 + 1, 6)):
+        raise ValueError("lead minutes must be exactly +6 through +120 or +180 in six-minute steps")
     if np.any((masks != 0) & (masks != 1)):
         raise ValueError("valid mask must be binary")
     valid = masks == 1
@@ -63,9 +63,9 @@ def accumulate_windows(
 
     amounts, supports, qualities = [], [], []
     for _, start, end in WINDOWS:
-        window = slice(start // 5, end // 5)
+        window = slice(start // 6, end // 6)
         support = np.all(valid[:, window], axis=1)
-        amount = np.sum(np.where(valid[:, window], rates[:, window], 0), axis=1) / 12
+        amount = np.sum(np.where(valid[:, window], rates[:, window], 0), axis=1) / 10
         q = np.min(np.where(valid[:, window], quality[:, window], 0), axis=1)
         amounts.append(np.where(support, amount, np.nan).astype(np.float32))
         supports.append(support)

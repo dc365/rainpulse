@@ -207,8 +207,16 @@ def run_pysteps_steps_fields(
         rain_rate=members,
         member_valid_mask=member_valid.astype("uint8"),
         output_valid_mask=output_valid.astype("uint8"),
-        accum_60=_accumulate_members(members[:, :12], member_valid[:, :12]),
-        accum_120=_accumulate_members(members, member_valid),
+        accum_60=_accumulate_members(
+            members[:, : 60 // profile.sequence.timestep_minutes],
+            member_valid[:, : 60 // profile.sequence.timestep_minutes],
+            profile.sequence.timestep_minutes,
+        ),
+        accum_120=_accumulate_members(
+            members[:, : 120 // profile.sequence.timestep_minutes],
+            member_valid[:, : 120 // profile.sequence.timestep_minutes],
+            profile.sequence.timestep_minutes,
+        ),
         probability_exceedance=probability_exceedance,
         quantiles=quantiles,
         deterministic=deterministic,
@@ -230,8 +238,10 @@ def _validate_profile_pair(
         raise PystepsStepsInputError("LK motion profile grid differs from the runtime grid")
     if profile.sequence.timestep_minutes != lk_profile.sequence.timestep_minutes:
         raise PystepsStepsInputError("STEPS and LK profile timesteps differ")
-    if lk_profile.extrapolation.lead_count != 24:
-        raise PystepsStepsInputError("RP-022 requires 24 five-minute lead times")
+    if lk_profile.extrapolation.lead_count != (
+        30 if profile.sequence.timestep_minutes == 6 else 24
+    ):
+        raise PystepsStepsInputError("RP-022 requires 30 six-minute lead times")
 
 
 def _transform_to_db(values: np.ndarray, threshold: float) -> tuple[np.ndarray, dict[str, Any]]:
@@ -338,9 +348,9 @@ def _quantile(
     return values
 
 
-def _accumulate_members(rates: np.ndarray, valid_masks: np.ndarray) -> np.ndarray:
+def _accumulate_members(rates: np.ndarray, valid_masks: np.ndarray, step: int = 6) -> np.ndarray:
     valid = np.all(valid_masks, axis=1)
     values = np.sum(np.where(valid_masks, rates, 0.0), axis=1)
-    values = (values * np.float32(5.0 / 60.0)).astype("float32")
+    values = (values * np.float32(step / 60.0)).astype("float32")
     values[~valid] = np.nan
     return values

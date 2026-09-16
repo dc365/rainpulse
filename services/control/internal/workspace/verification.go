@@ -30,7 +30,7 @@ func (h *runtimeHandler) calculateVerification(w http.ResponseWriter, r *http.Re
 	}
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2048))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&input) != nil || input.CycleID == "" || len(input.CycleID) > 256 || strings.ContainsAny(input.CycleID, "/?%") || input.Lead < 5 || input.Lead > 120 || input.Lead%5 != 0 || (input.Algorithm != "lk" && input.Algorithm != "steps" && input.Algorithm != "nowcastnet") {
+	if decoder.Decode(&input) != nil || input.CycleID == "" || len(input.CycleID) > 256 || strings.ContainsAny(input.CycleID, "/?%") || input.Lead < 6 || input.Lead > 180 || input.Lead%6 != 0 || (input.Algorithm != "lk" && input.Algorithm != "steps" && input.Algorithm != "nowcastnet") {
 		runtimeWriteError(w, 400, "invalid_verification", "请选择有效起报、算法和原生预报时效")
 		return
 	}
@@ -62,13 +62,13 @@ func (h *runtimeHandler) calculateVerification(w http.ResponseWriter, r *http.Re
 		finish()
 		return
 	}
-	observed, err := h.intervalSources(ctx, detail, truth, input.Lead-5, input.Lead)
+	observed, err := h.intervalSources(ctx, detail, truth, input.Lead-6, input.Lead)
 	if err != nil {
 		result["reason"] = "雷达 QPE 数值源不可用"
 		finish()
 		return
 	}
-	predicted, err := h.intervalSources(ctx, detail, forecast, input.Lead-5, input.Lead)
+	predicted, err := h.intervalSources(ctx, detail, forecast, input.Lead-6, input.Lead)
 	if err != nil {
 		result["reason"] = "预报数值源不可用"
 		finish()

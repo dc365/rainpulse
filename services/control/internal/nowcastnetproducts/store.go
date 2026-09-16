@@ -257,7 +257,7 @@ func validateBundle(bundle Bundle, directoryID string) error {
 		return fmt.Errorf("%w: manifest identity differs", ErrInvalidBundle)
 	}
 	if (bundle.ContractVersion != "1.2" && (bundle.CadenceMinutes != 10 || len(bundle.Frames) != 12)) ||
-		(bundle.ContractVersion == "1.2" && (bundle.CadenceMinutes != 5 || len(bundle.Frames) != 24)) {
+		(bundle.ContractVersion == "1.2" && (bundle.CadenceMinutes != 6 || len(bundle.Frames) != 20)) {
 		return fmt.Errorf("%w: manifest cadence differs", ErrInvalidBundle)
 	}
 	width, height := rasterDimensions(bundle)
@@ -306,7 +306,7 @@ func validateBundle(bundle Bundle, directoryID string) error {
 				}
 			} else if frame.FrameKind != "derived" ||
 				frame.Derivation != "bidirectional-dense-optical-flow-advection-v1" ||
-				!slices.Equal(frame.SourceLeads, []int{expectedLead - 5, expectedLead + 5}) {
+				!slices.Equal(frame.SourceLeads, []int{expectedLead / 10 * 10, (expectedLead/10 + 1) * 10}) {
 				return fmt.Errorf("%w: derived frame lineage differs", ErrInvalidBundle)
 			}
 		}

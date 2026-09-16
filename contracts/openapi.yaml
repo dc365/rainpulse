@@ -494,9 +494,9 @@ paths:
           required: true
           schema:
             type: integer
-            minimum: 5
-            maximum: 120
-            multipleOf: 5
+            minimum: 6
+            maximum: 180
+            multipleOf: 6
       responses:
         "200":
           description: Area statistics
@@ -2795,8 +2795,8 @@ components:
           format: date-time
         lead_time_minutes:
           type: integer
-          minimum: 5
-          maximum: 120
+          minimum: 6
+          maximum: 180
         valid_pixel_count:
           type: integer
           format: int64
@@ -2860,14 +2860,14 @@ components:
         truth_frame_count:
           type: integer
           minimum: 0
-          maximum: 24
+          maximum: 30
         missing_lead_minutes:
           type: array
           items:
             type: integer
-            minimum: 5
-            maximum: 120
-            multipleOf: 5
+            minimum: 6
+            maximum: 180
+            multipleOf: 6
         profile_version:
           type: string
         metrics:
