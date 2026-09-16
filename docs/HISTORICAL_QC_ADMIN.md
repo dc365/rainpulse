@@ -15,3 +15,11 @@
 验证：Go workspace/controlplane/postgres/webgateway 相关测试；Web HistoricalQCPanel 与 AdminWorkspace 测试及 production build。线上必须确认 QC 批次任务类型与实际完成情况。
 
 105 实测：2026-08-28 批次 3389d299-6a7f-4dde-b7ad-d67e96c57218，共 452 个去重体扫、123 个最新网页对照时次；已确认四个 radar.qc 任务运行，重复 POST 返回原批次。尚不代表全日完成或算法效果已验收。
+
+## 2026-09-16 出图补修
+
+原批次 452/452 质控成功（09:00 后 414/414），但旧 RadarAnalysis 的 qc-flags-v1 与当前 v2 出图配置不符，123 个对照图未发布。兼容仅限 v1→v2 且全部原有位定义一致；保留 analysis_flag_definition_version，格网图例仍按 v1 解释，不重算或冒充新 QPE。测试覆盖成功混合版本及错误位映射拒绝。
+
+迁移 0021 取消 diagnostic_runs 的 analysis/config/renderer 唯一约束；同一分析的 QC 输入可更新，重算幂等由包含 regeneration ID 的 job_id 保证。旧已成功诊断保留至新图发布。
+
+105 使用 diagnostics 镜像 qc-opensource-7.1.0-oc1-display1。补图批次 38f8ca9a-bb2f-4e80-a3c1-64e58a529a61 复用原 452 个成功 QC job，仅重新排队 123 个 display。优先09:05与09:10已经成功；09:10 Z9598 参考体扫的新图绑定 qc-opensource-7.1.0，PNG 非透明像素由15087降为11097，3990像素有变化。这是显示差异证据，不是气象误删率或完整效果验收。

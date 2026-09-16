@@ -239,3 +239,20 @@ def test_bundle_validation_rejects_manifest_path_traversal(tmp_path: Path) -> No
 
     with pytest.raises(DiagnosticInputError, match="identity or path"):
         validate_diagnostic_bundle(objects)
+
+
+def test_legacy_analysis_can_display_with_v2_profile(tmp_path: Path) -> None:
+    import yaml
+    profile = load_diagnostic_profile(REPOSITORY_ROOT / 'configs/diagnostics/qc-opensource-diagnostics-v1.yaml')
+    definitions = {f['name']: f['mask'] for f in yaml.safe_load((REPOSITORY_ROOT / 'configs/qc/flag-definitions-v2.yaml').read_text())['flags']}
+    objects = build_diagnostic_bundle(analysis_fixture(), [('z9598', SCAN_ID, qc_fixture(tmp_path))],
+        analysis_uri='s3://rainpulse/analysis/legacy.zarr', analysis_id=ANALYSIS_ID, job_id=JOB_ID,
+        profile=profile, flag_definitions=definitions)
+    manifest = json.loads(objects['manifest.json'])
+    assert manifest['analysis_flag_definition_version'] == 'qc-flags-v1'
+    assert manifest['flag_definition_version'] == 'qc-flags-v2'
+    assert validate_diagnostic_bundle(objects)['radar_count'] == 1
+    definitions['GROUND_CLUTTER'] = 2
+    with pytest.raises(DiagnosticInputError, match='flag definition'):
+        build_diagnostic_bundle(analysis_fixture(), [], analysis_uri='s3://rainpulse/analysis/legacy.zarr',
+            analysis_id=ANALYSIS_ID, job_id=JOB_ID, profile=profile, flag_definitions=definitions)

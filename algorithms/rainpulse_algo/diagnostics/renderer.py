@@ -103,8 +103,23 @@ def build_diagnostic_bundle(
         raise DiagnosticInputError("RadarAnalysis identity differs from diagnostic request")
     if analysis.attrs.get("contract_version") != profile.radar_analysis_contract_version:
         raise DiagnosticInputError("RadarAnalysis contract differs from diagnostic profile")
-    if analysis.attrs.get("flag_definition_version") != profile.flag_definition_version:
-        raise DiagnosticInputError("RadarAnalysis flag definition differs from profile")
+    analysis_flag_version = analysis.attrs.get("flag_definition_version")
+    grid_flag_definitions = flag_definitions
+    if analysis_flag_version != profile.flag_definition_version:
+        # v2 only appends flags; v1 bit meanings must remain identical. This
+        # permits QC-only publication without relabelling or recomputing QPE.
+        legacy_names = (
+            "GROUND_CLUTTER", "SEA_CLUTTER", "ANOMALOUS_PROPAGATION",
+            "RADIAL_INTERFERENCE", "HARDWARE_ANOMALY", "BIOLOGICAL_ECHO",
+            "BEAM_BLOCKED", "ATTENUATED", "WET_RADOME", "BRIGHT_BAND",
+            "VELOCITY_ALIASED", "LOW_SNR", "MISSING", "CORRECTED", "LOW_QUALITY",
+        )
+        legacy = {name: 1 << bit for bit, name in enumerate(legacy_names)}
+        if (analysis_flag_version != "qc-flags-v1"
+                or profile.flag_definition_version != "qc-flags-v2"
+                or any(flag_definitions.get(name) != mask for name, mask in legacy.items())):
+            raise DiagnosticInputError("RadarAnalysis flag definition differs from profile")
+        grid_flag_definitions = legacy
 
     objects: dict[str, bytes] = {}
     layers: list[dict[str, Any]] = []
@@ -176,10 +191,10 @@ def build_diagnostic_bundle(
             rendering="flags",
             unit=None,
             rgba=_north_up_scaled(
-                _flag_rgba(analysis["QC_FLAGS"][:], valid, flag_definitions), grid_scale
+                _flag_rgba(analysis["QC_FLAGS"][:], valid, grid_flag_definitions), grid_scale
             ),
             palette_version=profile.palette_version,
-            legend=_flag_legend(flag_definitions),
+            legend=_flag_legend(grid_flag_definitions),
             bounds=bounds,
         )
     )
@@ -338,6 +353,7 @@ def build_diagnostic_bundle(
         "renderer_version": profile.renderer_version,
         "palette_version": profile.palette_version,
         "flag_definition_version": profile.flag_definition_version,
+        "analysis_flag_definition_version": analysis_flag_version,
         "operational_eligible": bool(analysis.attrs["operational_eligible"]),
         "operational_reasons": list(analysis.attrs.get("operational_reasons", [])),
         "layers": layers,

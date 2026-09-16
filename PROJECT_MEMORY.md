@@ -29,7 +29,10 @@ operational data here.
   (migration 0020, `/api/v1/admin/qc-batches`). Old forecast_all panel requests
   cancelled; 105 batch 3389d299-6a7f-4dde-b7ad-d67e96c57218 covers 452 scans
   and 123 display times. QC and diagnostics only, no grid/QPE/forecast.
-  See docs/HISTORICAL_QC_ADMIN.md. Completion/effect not yet accepted.
+  QC completed 452/452; display failed on legacy v1 flag compatibility.
+  Fixed renderer + migration 0021; display-only repair batch
+  38f8ca9a-bb2f-4e80-a3c1-64e58a529a61 reuses QC jobs. 09:05/09:10
+  new images verified; remaining displays running. See docs/HISTORICAL_QC_ADMIN.md.
 
 - 2026-09-15: Height experiment completed (98 pairs; third frozen donor missing).
   Stable positive support 2511 gates. Paired lowest-cut QC replay on 105 completed:

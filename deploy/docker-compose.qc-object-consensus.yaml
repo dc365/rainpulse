@@ -11,4 +11,4 @@ services:
   analysis-qpe-worker:
     image: rainpulse-cpu-worker:qc-opensource-7.1.0-oc1
   analysis-diagnostics-worker:
-    image: rainpulse-cpu-worker:qc-opensource-7.1.0-oc1
+    image: rainpulse-cpu-worker:qc-opensource-7.1.0-oc1-display1
