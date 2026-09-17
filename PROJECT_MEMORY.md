@@ -29,8 +29,11 @@ operational data here.
   broad-source candidate; target/guard blocks held out, independent ray groups,
   explicit fallback and observed-range coverage. 53 relevant tests pass. Four
   lowest-cut incremental replays on 105 match research: Z9591 10:42/10:48 high
-  diagnostic-domain residual 2665/17915; Z9598 controls add no isolation. Not full
-  volume acceptance or deployment; production remains 7.2.0. Work is uncommitted.
+  diagnostic-domain residual 2665/17915; Z9598 controls add no isolation. Full production recompute on 105 subsequently completed for these two times:
+  8/8 scans and 2/2 diagnostic sets; live API layers identify 7.3.1 and PNG hashes
+  verified. This is not meteorological truth acceptance. Code committed.
+  Priority completion batch: 428654db-68d2-4a26-a514-bb4a222406fd. Previous
+  full-day 7.2 batch superseded/stopped; other times were not recomputed here.
   See docs/质控_7_3_1_距离项实施与回放_20260917.md.
 
 - 2026-09-17: P0-P2 opt-in QC candidate 7.2 prepared on the c3e768 baseline.
