@@ -214,6 +214,16 @@ func TestCreateRadarQCUsesNormalizedInputAndStableIdentity(t *testing.T) {
 		t.Fatalf("CreateRadarQC() error = %v", err)
 	}
 	first := repository.radarQC
+	if job.ConfigVersion != input.QCPipelineVersion {
+		t.Fatal("legacy QC registry identity changed")
+	}
+	reviewInput := input
+	reviewInput.QCProfile = "review-20260917-audit"
+	reviewInput.QCConfig = json.RawMessage(`{"review_extension_version":"qc-review-20260917-v1"}`)
+	reviewJob, reviewErr := service.CreateRadarQC(context.Background(), reviewInput)
+	if reviewErr != nil || reviewJob.ConfigVersion != reviewInput.QCProfile {
+		t.Fatalf("review child profile must use a distinct registry identity: %v", reviewErr)
+	}
 	if first.Outbox.Subject != RadarQCRequestedSubject || first.Outbox.EventType != RadarQCRequestedEventType {
 		t.Fatalf("unexpected radar QC worker route: %#v", first.Outbox)
 	}

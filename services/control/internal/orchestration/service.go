@@ -469,9 +469,21 @@ func (service *Service) CreateRadarQC(
 	if err != nil {
 		return workflow.Job{}, fmt.Errorf("encode radar QC request: %w", err)
 	}
+	configVersion := input.QCPipelineVersion
+	var extension struct {
+		Version string `json:"review_extension_version"`
+	}
+	if err := json.Unmarshal(input.QCConfig, &extension); err != nil {
+		return workflow.Job{}, fmt.Errorf("decode QC extension identity: %w", err)
+	}
+	if extension.Version != "" {
+		// Child profiles share the algorithm version, but require immutable,
+		// distinct configuration registry entries for audit and experiment modes.
+		configVersion = input.QCProfile
+	}
 	job := workflow.Job{
 		ID: jobID, RunID: input.RunID, TraceID: traceID, JobType: RadarQCJobType,
-		ConfigVersion: input.QCPipelineVersion, Status: workflow.JobPending, Attempt: 1,
+		ConfigVersion: configVersion, Status: workflow.JobPending, Attempt: 1,
 		RequestPayload: payload, CreatedAt: now,
 	}
 	bundle := workflow.RadarQCBundle{
