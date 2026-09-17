@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily RainPulse checkpoint retention after overnight stop
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 08:15:00 Asia/Taipei
+Unit=rainpulse-training-checkpoint-prune.service
+Persistent=false
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

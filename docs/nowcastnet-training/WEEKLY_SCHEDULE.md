@@ -6,6 +6,7 @@
 
 - `rainpulse-training-weekly.timer`：工作日 20:00、周末 00:00；开机两分钟后检查，错过开始时补触发，但工作日白天直接退出。
 - `rainpulse-training-weekly-stop.timer`：周一至周五 08:00；不追补旧停止事件，避免夜间启用后误停。
+- `rainpulse-training-checkpoint-prune.timer`：周一至周五 08:15；仅在训练已停止后，foundation 保留唯一父 checkpoint，generative 保留最新和两个最近回退点。
 - 启动器带文件锁；active/activating/deactivating 时跳过。每次许可绑定最新 step、SHA、冻结配置、父模型与源码；原守卫仍检查文件哈希和 metrics 尾步一致性，GPU 预检保持不变。
 - 到达 500,000 步后自动启动器退出。失败不循环重试，需检查 systemd 日志；独立留出仍关闭。
 - 样本仅 NAS；checkpoint 和指标仍保存在服务器训练目录。

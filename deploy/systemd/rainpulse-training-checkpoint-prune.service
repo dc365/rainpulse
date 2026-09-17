@@ -1,0 +1,8 @@
+[Unit]
+Description=Prune retained RainPulse NowcastNet checkpoints after a stopped window
+After=rainpulse-nowcastnet-generative-stop.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /home/yons/.local/libexec/rainpulse-training-checkpoint-prune.py
+UMask=0077
