@@ -25,6 +25,34 @@ operational data here.
 
 ## Prelaunch convergence
 
+- 2026-09-17 deployment: QC 7.3.4 now live on105 (source9dd040d, build fix73aa24b).
+  Four QC workers and diagnostic worker healthy; planner uses source-edge profile.
+  Batch75f75a97-1725-4652-b855-ce810d74bf8c SUCCEEDED:8/8 scans,2/2 PNG bundles
+  for Beijing10:42/10:48. API image versions/hashes verified. Other times and
+  grid/QPE/forecast unchanged. Geometry limitation and10:42 residual remain.
+  See docs/质控_7_3_4_边缘关联接入与完整回放_20260917.md.
+
+- 2026-09-17: Candidate 7.3.4 source-edge one-hop association integrated with
+  weather/conflict/SNR protection and unified quarantine. 58 tests pass. Four
+  full-volume raw/context compute replays on 105 complete (11 sweeps each);
+  lowest-cut high residual Z9591 10:42/10:48 = 341/39, Z9598 controls no new
+  lowest-cut exclusion. Geometry config unavailable in frozen deployment context;
+  no truth acceptance. Not committed/published, live remains 7.3.1. See
+  docs/质控_7_3_4_边缘关联接入与完整回放_20260917.md.
+
+- 2026-09-17: QC 7.3.3 source-constrained scikit-image radial opening implemented
+  as an opt-in candidate. 105 lowest-cut replay: Z9591 10:42/10:48 high-domain
+  residual 341/1596 (7.3.2: 1230/6558); Z9598 controls add zero isolation.
+  55 relevant tests pass. Not full-volume acceptance; live remains 7.3.1.
+  Code uncommitted. See docs/质控_7_3_3_长条开运算实施与回放_20260917.md.
+
+- 2026-09-17: Opt-in QC 7.3.2 distance-conditioned cross-ray polar reference
+  implemented locally. Four lowest-cut incremental replays on 105 completed:
+  Z9591 10:42/10:48 high-domain residual 2665→1230 / 17915→6558;
+  Z9598 controls add zero isolation. 10:48 requires review; independent weather
+  evidence unavailable. Not full-volume acceptance or production promotion;
+  live remains 7.3.1. See docs/质控_7_3_2_距离极化参考实施与回放_20260917.md.
+
 - 2026-09-17: QC 7.3.1 shared paired-moment range term implemented as an opt-in
   broad-source candidate; target/guard blocks held out, independent ray groups,
   explicit fallback and observed-range coverage. 53 relevant tests pass. Four
