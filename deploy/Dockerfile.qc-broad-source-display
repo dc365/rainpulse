@@ -1,0 +1,4 @@
+# Preserve the currently deployed diagnostic renderer and palette.
+ARG BASE_IMAGE=rainpulse-cpu-worker:latest
+FROM ${BASE_IMAGE}
+COPY algorithms/rainpulse_algo/radar/qc_engine /opt/rainpulse/rainpulse_algo/radar/qc_engine
