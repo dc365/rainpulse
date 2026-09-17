@@ -2,23 +2,47 @@
 
 Does not reinterpret reasons, restore rejected gates or relabel quarantine.
 """
+
 import numpy as np
 
+from .quality_policy import health_facets
 
-def finalize_decision(sweep, decision, profile, health, *, baseline_quality=None,
-                      v5_quality=None, v7_baseline_quality=None):
+
+def finalize_decision(
+    sweep,
+    decision,
+    profile,
+    health,
+    *,
+    baseline_quality=None,
+    v5_quality=None,
+    v7_baseline_quality=None,
+):
     quality = decision.quality.copy()
-    if health["health"] == "DEGRADED":
-        quality *= profile.health_gate.degraded_quality_multiplier
+    cfg = getattr(profile, "generalization", None)
+    facets = health_facets(health, profile)
+    factor = facets["physical_quality_multiplier"]
+    pre_eligible = decision.arrays["QPE_ELIGIBLE_MASK"] == 1
+    legacy_factor = (
+        profile.health_gate.degraded_quality_multiplier if health["health"] == "DEGRADED" else 1.0
+    )
+    legacy_eligible = pre_eligible & (
+        quality * legacy_factor >= profile.quality_index.quantitative_minimum
+    )
+    if cfg is not None:
+        decision.arrays["P2_QUALITY_PRE_HEALTH"] = quality.copy()
+        decision.arrays["P2_LEGACY_HEALTH_ELIGIBLE_MASK"] = legacy_eligible.astype("uint8")
+    if factor != 1.0:
+        quality *= factor
         if baseline_quality is not None:
-            baseline_quality *= profile.health_gate.degraded_quality_multiplier
+            baseline_quality *= factor
     if baseline_quality is not None:
         decision.arrays["V5_BASELINE_ELIGIBLE_MASK"] &= (
             baseline_quality >= profile.quality_index.quantitative_minimum
         ).astype("uint8")
     if v5_quality is not None:
-        if health["health"] == "DEGRADED":
-            v5_quality *= profile.health_gate.degraded_quality_multiplier
+        if factor != 1.0:
+            v5_quality *= factor
         decision.arrays["V6_BASELINE_ELIGIBLE_MASK"] &= (
             v5_quality >= profile.quality_index.quantitative_minimum
         ).astype("uint8")
@@ -35,7 +59,16 @@ def finalize_decision(sweep, decision, profile, health, *, baseline_quality=None
         "float32"
     )
     if v7_baseline_quality is not None:
-        if health["health"] == "DEGRADED":
-            v7_baseline_quality *= profile.health_gate.degraded_quality_multiplier
-        decision.arrays["V7_BASELINE_ELIGIBLE_MASK"] &= (v7_baseline_quality >= profile.quality_index.quantitative_minimum).astype("uint8")
+        if factor != 1.0:
+            v7_baseline_quality *= factor
+        decision.arrays["V7_BASELINE_ELIGIBLE_MASK"] &= (
+            v7_baseline_quality >= profile.quality_index.quantitative_minimum
+        ).astype("uint8")
+    if cfg is not None:
+        decision.arrays["P2_ADMIN_PENALTY_REMOVED_MASK"] = (
+            eligible & ~legacy_eligible & facets["administrative_penalty_removed"]
+        ).astype("uint8")
+        decision.arrays["P2_PHYSICAL_HEALTH_FACTOR"] = np.where(observed, factor, np.nan).astype(
+            "float32"
+        )
     return quality, observed, low, flags

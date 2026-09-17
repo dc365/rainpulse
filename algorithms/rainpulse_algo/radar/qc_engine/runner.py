@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
-from time import perf_counter
 from datetime import UTC, datetime
+from time import perf_counter
 
 import numpy as np
 
@@ -16,16 +16,16 @@ from .crossradar import fuse_crossradar, sweep_funnel
 from .decision import Action, decide
 from .finalize import finalize_decision
 from .fragment_radials import apply_fragment_decision
-from .support import weather_support as select_weather_support
+from .hypotheses import graph_with_fallback
 from .objects import radial_objects
 from .paper_fusion import fuse_paper_decision, paper_evidence
 from .phase import process_phase
 from .radial import local_radial_candidates
 from .range_signature import range_signatures
 from .residual import residual_decision
-from .standalone_evidence import stage_a, stage_a_key
 from .stage_audit import Decider, StageAudit
-from .hypotheses import graph_with_fallback
+from .standalone_evidence import stage_a, stage_a_key
+from .support import weather_support as select_weather_support
 
 QI_NAMES = (
     "QI_METEO",
@@ -94,7 +94,9 @@ def run_open_source_qc(
                 raise QCInputError("V7 unified stage A does not silently mix external references")
             prepared = (standalone_by_sweep or {}).get(sweep.name)
             if prepared is not None and prepared.identity != stage_a_key(sweep, profile, prior):
-                raise QCInputError("prepared stage A belongs to different raw/config/resource inputs")
+                raise QCInputError(
+                    "prepared stage A belongs to different raw/config/resource inputs"
+                )
             prepared = prepared or stage_a(sweep, profile, prior)
             standalones[sweep.name] = prepared
             first = prepared.decision
@@ -102,9 +104,19 @@ def run_open_source_qc(
             donor_arrays = dict(first.arrays)
             donor_arrays["REFLECTIVITY_TRUST_MASK"] = prepared.donor_usable.astype("uint8")
             from .decision import Decision
+
             first = Decision(donor_arrays, first.flags, first.quality)
-            independent.append((prepared.library, prepared.radial, prepared.radial_record,
-                                first, prior, prepared.objects, prepared.papers))
+            independent.append(
+                (
+                    prepared.library,
+                    prepared.radial,
+                    prepared.radial_record,
+                    first,
+                    prior,
+                    prepared.objects,
+                    prepared.papers,
+                )
+            )
             continue
         evidence = library_evidence(sweep, profile, prior)
         objects_evidence = (
@@ -214,8 +226,11 @@ def run_open_source_qc(
         range_evidence = None
         baseline_quality = decision.quality.copy() if profile.cross_radar is not None else None
         if profile.cross_radar is not None:
-            range_evidence = (standalones[sweep.name].range_evidence if unified
-                              else range_signatures(sweep, profile.cross_radar))
+            range_evidence = (
+                standalones[sweep.name].range_evidence
+                if unified
+                else range_signatures(sweep, profile.cross_radar)
+            )
             decision = fuse_crossradar(
                 sweep, decision, range_evidence, profile, weather_support=weather
             )
@@ -233,39 +248,83 @@ def run_open_source_qc(
             tracker.observe(Decider.RESIDUAL, decision)
         v7_baseline_quality = decision.quality.copy() if v7 is not None else None
         if v7 is not None:
-            decision.arrays["V7_BASELINE_REJECT_MASK"] = (decision.arrays["QC_ACTION"] == Action.REJECT).astype("uint8")
-            decision.arrays["V7_BASELINE_QUARANTINE_MASK"] = decision.arrays["RFI_QUARANTINE_MASK"].copy()
-            decision.arrays["V7_BASELINE_ELIGIBLE_MASK"] = decision.arrays["QPE_ELIGIBLE_MASK"].copy()
+            decision.arrays["V7_BASELINE_REJECT_MASK"] = (
+                decision.arrays["QC_ACTION"] == Action.REJECT
+            ).astype("uint8")
+            decision.arrays["V7_BASELINE_QUARANTINE_MASK"] = decision.arrays[
+                "RFI_QUARANTINE_MASK"
+            ].copy()
+            decision.arrays["V7_BASELINE_ELIGIBLE_MASK"] = decision.arrays[
+                "QPE_ELIGIBLE_MASK"
+            ].copy()
             if v7.graph_enabled:
-                decision, graph_record = graph_with_fallback(sweep, decision, profile, weather_support=weather)
+                decision, graph_record = graph_with_fallback(
+                    sweep, decision, profile, weather_support=weather
+                )
             if v7.fragment_radials is not None:
                 decision, fragment_record = apply_fragment_decision(
-                    sweep, decision, v7.fragment_radials, profile, weather_support=weather, cross_support=cross
+                    sweep,
+                    decision,
+                    v7.fragment_radials,
+                    profile,
+                    weather_support=weather,
+                    cross_support=cross,
                 )
                 graph_record = {**(graph_record or {}), "fragment_radials": fragment_record}
             if tracker is not None:
                 tracker.observe(Decider.GRAPH, decision)
-            if profile.pipeline_version == "qc-opensource-7.1.0":
+            if profile.pipeline_version in {"qc-opensource-7.1.0", "qc-opensource-7.2.0"}:
                 from .object_consensus.adapter import evaluate_native, scalar_completion
                 from .object_consensus.config import Policy
+
                 oldq = decision.arrays["RFI_QUARANTINE_MASK"].copy()
+                p2_denominator = decision.arrays["QPE_ELIGIBLE_MASK"].copy()
                 decision, oc_evidence, oc_outcome = evaluate_native(
-                    sweep, decision, phase_period=profile.geometry.phase_period_deg,
+                    sweep,
+                    decision,
+                    phase_period=profile.geometry.phase_period_deg,
                     low_quality_flag=profile.flag_masks["LOW_QUALITY"],
-                    policy=Policy(mode="experiment_quarantine", allow_coherent_quarantine=True,
-                                  acknowledge_uncalibrated_model=True),
+                    policy=Policy(
+                        mode="experiment_quarantine",
+                        allow_coherent_quarantine=True,
+                        acknowledge_uncalibrated_model=True,
+                    ),
                 )
                 decision.arrays["OC1_BASELINE_QUARANTINE_MASK"] = oldq
-                decision.arrays["OC1_ADDED_QUARANTINE_MASK"] = oc_outcome.added_quarantine.astype("uint8")
+                decision.arrays["OC1_ADDED_QUARANTINE_MASK"] = oc_outcome.added_quarantine.astype(
+                    "uint8"
+                )
                 for name in ("state", "family_code", "reason", "fold_id"):
                     if name in oc_evidence.arrays:
                         decision.arrays["OC1_" + name.upper()] = oc_evidence.arrays[name]
-                graph_record = {**(graph_record or {}), "object_consensus": scalar_completion(oc_evidence, oc_outcome)}
+                graph_record = {
+                    **(graph_record or {}),
+                    "object_consensus": scalar_completion(oc_evidence, oc_outcome),
+                }
                 if tracker is not None:
                     tracker.observe(Decider.OBJECT_CONSENSUS, decision)
+                if profile.generalization is not None:
+                    from .generalization import broad_source_review
+
+                    decision, p2_record = broad_source_review(
+                        sweep,
+                        decision,
+                        profile,
+                        oc_evidence,
+                        oc_outcome,
+                        weather_support=weather,
+                        eligible_before_oc1=p2_denominator,
+                    )
+                    graph_record["generalization"] = p2_record
+                    if tracker is not None:
+                        tracker.observe(Decider.GENERALIZATION, decision)
             if unified:
-                decision.arrays["V7_STAGE_A_DONOR_USABLE_MASK"] = standalones[sweep.name].donor_usable.astype("uint8")
-                decision.arrays["V7_STAGE_A_DONOR_UNKNOWN_MASK"] = standalones[sweep.name].donor_unknown.astype("uint8")
+                decision.arrays["V7_STAGE_A_DONOR_USABLE_MASK"] = standalones[
+                    sweep.name
+                ].donor_usable.astype("uint8")
+                decision.arrays["V7_STAGE_A_DONOR_UNKNOWN_MASK"] = standalones[
+                    sweep.name
+                ].donor_unknown.astype("uint8")
         timings[sweep.name + ".decision_fusion_ms"] = (perf_counter() - checkpoint) * 1000
         checkpoint = perf_counter()
         phase, phase_record = process_phase(
@@ -274,14 +333,21 @@ def run_open_source_qc(
         timings[sweep.name + ".phase_ms"] = (perf_counter() - checkpoint) * 1000
         checkpoint = perf_counter()
         quality, observed, low, flags = finalize_decision(
-            sweep, decision, profile, health, baseline_quality=baseline_quality,
-            v5_quality=v5_quality, v7_baseline_quality=v7_baseline_quality,
+            sweep,
+            decision,
+            profile,
+            health,
+            baseline_quality=baseline_quality,
+            v5_quality=v5_quality,
+            v7_baseline_quality=v7_baseline_quality,
         )
         if tracker is not None:
             tracker.observe(Decider.HEALTH_QUALITY, decision)
             decision.arrays.update(tracker.arrays())
             decision.arrays["V7_VERTICAL_SUPPORT_SCORE"] = vertical.probabilities[index].copy()
-            decision.arrays["V7_CROSS_RADAR_SUPPORT_SCORE"] = (cross.copy() if cross is not None else np.full(sweep.shape, np.nan, "float32"))
+            decision.arrays["V7_CROSS_RADAR_SUPPORT_SCORE"] = (
+                cross.copy() if cross is not None else np.full(sweep.shape, np.nan, "float32")
+            )
         timings[sweep.name + ".finalize_ms"] = (perf_counter() - checkpoint) * 1000
         optional = {**evidence.arrays, **decision.arrays, **phase}
         optional["P_VERTICAL_CONSISTENCY_AVAILABLE_MASK"] = vertical.available_masks[index]
@@ -340,7 +406,17 @@ def run_open_source_qc(
         sweep_records[sweep.name] = {
             **({"v7_audit": tracker.summary()} if tracker is not None else {}),
             **({"v7_graph": graph_record} if graph_record is not None else {}),
-            **({"v7_stage_a": {k: v for k, v in standalones[sweep.name].summary.items() if k != "elapsed_ms"}} if unified else {}),
+            **(
+                {
+                    "v7_stage_a": {
+                        k: v
+                        for k, v in standalones[sweep.name].summary.items()
+                        if k != "elapsed_ms"
+                    }
+                }
+                if unified
+                else {}
+            ),
             **({"residual_v6": residual_record} if residual_record is not None else {}),
             **(
                 {
@@ -446,11 +522,33 @@ def run_open_source_qc(
         "module_records": [m.value() for m in modules],
         "vertical_context": vertical.metrics,
     }
+    if profile.generalization is not None:
+        from .quality_policy import health_facets
+
+        p2_summaries = [
+            rec.get("v7_graph", {}).get("generalization", {}) for rec in sweep_records.values()
+        ]
+        summary["health_facets"] = health_facets(health, profile)
+        summary["generalization_summary"] = {
+            "review_required": any(rec.get("review_required", False) for rec in p2_summaries),
+            "new_confirmed_gates": 0,
+            "added_quarantine_gates": sum(
+                rec.get("added_quarantine_gates", 0) for rec in p2_summaries
+            ),
+            "administrative_penalty_removed_gates": sum(
+                int(s.optional_qc_fields["P2_ADMIN_PENALTY_REMOVED_MASK"].sum()) for s in results
+            ),
+            "operational_eligible": False,
+        }
     timings["total_compute_ms"] = (perf_counter() - started) * 1000
     # Runtime telemetry must not alter immutable artifact hashes.
     if kwargs.get("timing_sink") is not None:
         kwargs["timing_sink"].update(timings)
-    logging.getLogger(__name__).info("qc_compute_timing scan_id=%s timings=%s", root.attrs.get("scan_id"), json.dumps(timings, sort_keys=True))
+    logging.getLogger(__name__).info(
+        "qc_compute_timing scan_id=%s timings=%s",
+        root.attrs.get("scan_id"),
+        json.dumps(timings, sort_keys=True),
+    )
     return QCResult(
         profile, tuple(results), tuple(modules), health, summary, created_at or datetime.now(UTC)
     )

@@ -1,0 +1,5 @@
+# Run from the repository root. Override with the exact frozen installed image.
+ARG BASE_IMAGE=rainpulse-cpu-worker:qc-opensource-7.1.0-oc1-display1
+FROM ${BASE_IMAGE}
+COPY algorithms/rainpulse_algo /opt/rainpulse/rainpulse_algo
+COPY configs/qc/fujian-qc-generalization-p0p2.yaml /opt/rainpulse/configs/qc/fujian-qc-generalization-p0p2.yaml

@@ -103,6 +103,7 @@ def test_disabled_profile_hash_and_invalid_configuration():
     p = load_qc_profile(ROOT / "configs/qc/fujian-qc-evidence-graph-v7.yaml", FLAGS)
     assert "fragment_radials" not in p.model_dump()["evidence_graph"]
     raw = p.model_dump(mode="json")
+    raw.pop("generalization", None)  # Absent 7.2 extension is not a frozen parameter.
     raw["context"].pop("split_radial_weather_support", None)
     assert (
         hashlib.sha256(json.dumps(raw, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
@@ -204,8 +205,9 @@ def test_association_preserves_weather_and_incompatible_measurements_as_review_o
 
 
 def test_linked_gate_needs_own_evidence_and_cross_conflict_withholds():
-    from rainpulse_algo.radar.qc_engine.fragment_radials import apply_fragment_decision
     from rainpulse_algo.radar.qc_engine.decision import Decision
+    from rainpulse_algo.radar.qc_engine.fragment_radials import apply_fragment_decision
+
     from .test_residual_v6 import v5_decision
 
     n = line_scene(dr=250, rho=0.7)
@@ -241,8 +243,8 @@ def test_linked_gate_needs_own_evidence_and_cross_conflict_withholds():
 
 
 def test_range_term_repairs_model_without_relaxing_residual_threshold():
-    from rainpulse_algo.radar.qc_engine.range_signature import _fit
     from rainpulse_algo.radar.qc_engine.crossradar_profile import CrossRadarConfig
+    from rainpulse_algo.radar.qc_engine.range_signature import _fit
 
     r = np.arange(20125, 460000, 250, dtype=float)
     z = 5 + 20 * np.log10(r / 1000) + 0.014 * r / 1000
@@ -281,8 +283,10 @@ def test_range_term_estimate_uses_two_ray_groups_and_rejects_disagreement():
 
 def test_range_candidate_only_quarantines_and_cross_weather_protects(monkeypatch):
     from types import SimpleNamespace
+
     from rainpulse_algo.radar.qc_engine import fragment_radials as module
     from rainpulse_algo.radar.qc_engine import range_signature
+
     from .test_residual_v6 import v5_decision
 
     n = line_scene()

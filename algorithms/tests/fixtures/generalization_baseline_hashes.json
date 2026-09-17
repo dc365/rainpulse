@@ -1,0 +1,86 @@
+{
+  "configs/qc/flag-definitions-v2.yaml": {
+    "sha256": "0424e405ce6c9374af3fd63aa02b504358983a68ebfa5285184c184a7e90f19f",
+    "parameters_hash": null
+  },
+  "configs/qc/flag-definitions.yaml": {
+    "sha256": "5dfa0fb4013b1b04b07836348165f4c6a1e535f4b6c003045dd86708672d701a",
+    "parameters_hash": null
+  },
+  "configs/qc/fujian-qc-crossradar-v5.yaml": {
+    "sha256": "7e35a57ab6f466065972e42766744eb8f95eac909742c1b3bbfd4ab609f6ed9c",
+    "parameters_hash": "44021f5263b3cbbc3c5fbd860d7b31be8358c742f077febe9915b91c657cbc66"
+  },
+  "configs/qc/fujian-qc-evidence-graph-v7.yaml": {
+    "sha256": "0677ea8f9e48081d4615ba10e415f647c54920fb423b97b4f3ebf1391d8916e0",
+    "parameters_hash": "d8901a7ce58fe8f5f3e2595715dc29d9f84d9768125039da3d1315172f86201d"
+  },
+  "configs/qc/fujian-qc-evidence-v2.yaml": {
+    "sha256": "e14c4eca3121d2734d8388fd57bd3affc5e05540e2ac76b559b2710d21d95f0a",
+    "parameters_hash": null
+  },
+  "configs/qc/fujian-qc-evidence-v3.yaml": {
+    "sha256": "1c3f6549575c8a7a57f0e2be21f647575dcfafd21c00424ca1fbad055ab4273c",
+    "parameters_hash": null
+  },
+  "configs/qc/fujian-qc-object-consensus-oc1.yaml": {
+    "sha256": "6cfaabe4c75df868e8fadca31b1e2b7dae2b4467f3f9ef747c9e1ba1125ecbea",
+    "parameters_hash": "55d38070f398502c4eecb8bd3bf1171d793b95d8b02221116a3e9d6cd2eff571"
+  },
+  "configs/qc/fujian-qc-opensource-rfi-v1.yaml": {
+    "sha256": "3c75e74637b68778182e55777679140b3374875e4a4bf0b93c981b01a279f1e8",
+    "parameters_hash": "4842baa965f1578c732a9ab8971efdc54e687e6aa2bdcff4d4e22aacc907a91a"
+  },
+  "configs/qc/fujian-qc-opensource-v1.yaml": {
+    "sha256": "fb5a471994c1b09f905146afc4f88fbccfb27a25ce0a30f05aa8eff4e32bfac8",
+    "parameters_hash": "7de1109ac5b749ee34fcd50ed220d80ac59df6b0da6df8820420e96e091efd0f"
+  },
+  "configs/qc/fujian-qc-paper-fusion-v4.yaml": {
+    "sha256": "4296b53107fc693ef4f9255a24626e653a487a8ed27b43e870c1f5159de6ecbe",
+    "parameters_hash": "7e6815773bc5b328f58eca083a22ad33f9068fb364c3978b37a2372722df9b81"
+  },
+  "configs/qc/fujian-qc-residual-v6.yaml": {
+    "sha256": "8c51f5c3091be0f5c22f140af471a8fe320af40eb62004a0af61e9bc08a4f291",
+    "parameters_hash": "9992899365bc932f91a6fb4594269a76c78ff73ec9633a66251935c350b428fa"
+  },
+  "configs/qc/fujian-qc-residual-v61.yaml": {
+    "sha256": "e83b68a11e0ff64354ecd5d46d05d061db8458fe3d5b36b68ae99fb1c70a1671",
+    "parameters_hash": "f099c3d7a9f374cc45bef77e716b0abf869e1ae785c3f4bd3be4d9a5f4f4e1ab"
+  },
+  "configs/qc/fujian-qc-rfi-objects-v2.yaml": {
+    "sha256": "7d0915d3d1b571d504b0c8d2310c63a9cfe7e3962069940437dbe3e01e052f3a",
+    "parameters_hash": "219fcee9f38cf8c3f20514ea91243b866c8c5e2070eafe17bbe77ed6b8200a57"
+  },
+  "configs/qc/fujian-qc-rfi-objects-v3.yaml": {
+    "sha256": "743f614d81576d16abef9de00dc6710dfc8f151d83b0741225140b8d913a0716",
+    "parameters_hash": "8a94f6bc8d7c2ab5c4a4a317a0dfc0d26b95a35141ee85cb735e66abc56c2ce0"
+  },
+  "configs/qc/fujian-qc-support-split-experiment.yaml": {
+    "sha256": "c9f38e24045d0d03febc02d1500a90c572197dc5dc112e086fc4521aea7f2914",
+    "parameters_hash": "b2f757472f738cb5c379e8316adefc0ad824a69ee010536d3d6345ea61d3cec5"
+  },
+  "configs/qc/rp008-basic-v1.yaml": {
+    "sha256": "d9bc3921f43850630df4c0c5fcc8368de34b4ccd64445e2eda1416741b7b4d39",
+    "parameters_hash": null
+  },
+  "configs/qc/rp040-fujian-radial-v2.yaml": {
+    "sha256": "444e6ae3c6c785117af68f58537f3246e7154f1eb9a7d3fad1ee4578469790aa",
+    "parameters_hash": null
+  },
+  "configs/qc/rp040-fujian-radial-v3.yaml": {
+    "sha256": "b2497e766507bbcc19e261aa636a1488f9f7df1ef6f70bc469a59246ad75aba5",
+    "parameters_hash": null
+  },
+  "configs/qc/rp042-fujian-evidence-v1.yaml": {
+    "sha256": "e28b0207cebdc05d26586d5ac15af3f64daf0e8455f5caf773ef0329ed8e202c",
+    "parameters_hash": null
+  },
+  "configs/qc/rp043-fujian-radial-closure-v1.yaml": {
+    "sha256": "036c2f299283a0087f3b4196eded8fc526866e83343039ccc3097b27a49b6e4d",
+    "parameters_hash": null
+  },
+  "configs/qc/rp047-fujian-radial-evidence-v1.yaml": {
+    "sha256": "806c4171de3fa97507f6b6806d16d1321a86029ead5ab7bdb8be4b8d04ccd5ab",
+    "parameters_hash": null
+  }
+}

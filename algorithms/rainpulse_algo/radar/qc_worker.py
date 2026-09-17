@@ -193,19 +193,40 @@ def _execute_basic_qc(request: RadarQCRequested, client: Minio) -> WorkerResult:
 
 def _completion_qc_summary(summary):
     """V7 graph details belong to the validated QC artifact, not the event bus."""
-    if summary.get("qc_pipeline_version") not in {"qc-opensource-7.0.0", "qc-opensource-7.1.0"}:
+    if summary.get("qc_pipeline_version") not in {
+        "qc-opensource-7.0.0",
+        "qc-opensource-7.1.0",
+        "qc-opensource-7.2.0",
+    }:
         return summary
     keys = (
-        "schema_version", "engine", "qc_pipeline_version", "qc_profile",
-        "decision_version", "flag_definition_version", "parameters_hash",
-        "radar_id", "scan_id", "health_state", "operational_eligible",
-        "valid_gate_count", "missing_gate_count", "low_quality_gate_count",
-        "no_rain_gate_count", "mean_quality_index", "radial_interference_ray_count",
-        "radial_interference_gate_count", "radial_interference_area_km2",
+        "schema_version",
+        "engine",
+        "qc_pipeline_version",
+        "qc_profile",
+        "decision_version",
+        "flag_definition_version",
+        "parameters_hash",
+        "radar_id",
+        "scan_id",
+        "health_state",
+        "operational_eligible",
+        "valid_gate_count",
+        "missing_gate_count",
+        "low_quality_gate_count",
+        "health_facets",
+        "generalization_summary",
+        "no_rain_gate_count",
+        "mean_quality_index",
+        "radial_interference_ray_count",
+        "radial_interference_gate_count",
+        "radial_interference_area_km2",
     )
-    return {**{key: summary[key] for key in keys if key in summary},
-            "summary_object_path": "qc/summary.json",
-            "summary_detail_storage": "completed_qc_asset"}
+    return {
+        **{key: summary[key] for key in keys if key in summary},
+        "summary_object_path": "qc/summary.json",
+        "summary_detail_storage": "completed_qc_asset",
+    }
 
 
 def prepare_qc_inputs(request, normalized, profile, client, *, reader=None, ancillary_maps=None):

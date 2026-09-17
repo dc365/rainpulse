@@ -38,12 +38,24 @@ def validate_sweep(group, attrs) -> None:
     if np.any(action > Action.MISSING) or not np.array_equal(action == Action.MISSING, ~valid):
         raise ValueError("QC actions and original observation support disagree")
     quarantine = np.zeros(shape, bool)
-    version7 = attrs.get("qc_pipeline_version") in {"qc-opensource-7.0.0", "qc-opensource-7.1.0", "qc-opensource-7.1.0"}
+    version7 = attrs.get("qc_pipeline_version") in {
+        "qc-opensource-7.0.0",
+        "qc-opensource-7.1.0",
+        "qc-opensource-7.2.0",
+    }
     version61 = version7 or attrs.get("qc_pipeline_version") == "qc-opensource-6.1.0"
     baseline7_reject, baseline7_quarantine = reject, quarantine
     graph_domain = np.zeros(shape, bool)
-    if attrs.get("qc_pipeline_version") == "qc-opensource-7.1.0" and "OC1_ADDED_QUARANTINE_MASK" not in group:
+    if (
+        attrs.get("qc_pipeline_version") in {"qc-opensource-7.1.0", "qc-opensource-7.2.0"}
+        and "OC1_ADDED_QUARANTINE_MASK" not in group
+    ):
         raise ValueError("OC1 provenance missing")
+    if (
+        attrs.get("qc_pipeline_version") == "qc-opensource-7.2.0"
+        and "P2_ADDED_QUARANTINE_MASK" not in group
+    ):
+        raise ValueError("missing P0-P2 provenance")
     if version7:
         from .evidence_validation import validate_evidence_fields
 
@@ -61,7 +73,9 @@ def validate_sweep(group, attrs) -> None:
         "qc-opensource-5.0.0",
         "qc-opensource-6.0.0",
         "qc-opensource-6.1.0",
-        "qc-opensource-7.0.0", "qc-opensource-7.1.0",
+        "qc-opensource-7.0.0",
+        "qc-opensource-7.1.0",
+        "qc-opensource-7.2.0",
     }:
         for field, dtype in {
             "RFI_OBJECT_ID": "uint32",
@@ -117,11 +131,15 @@ def validate_sweep(group, attrs) -> None:
                 if version6:
                     from .residual_validation import validate_residual_fields
 
-                    extra_domain = validate_residual_fields(
-                        group, valid,
-                        baseline7_reject if version7 else reject,
-                        baseline7_quarantine if version7 else quarantine,
-                    ) | graph_domain
+                    extra_domain = (
+                        validate_residual_fields(
+                            group,
+                            valid,
+                            baseline7_reject if version7 else reject,
+                            baseline7_quarantine if version7 else quarantine,
+                        )
+                        | graph_domain
+                    )
                     extra_domain |= validate_crossradar_fields(
                         group,
                         valid,
@@ -190,6 +208,26 @@ def validate_sweep(group, attrs) -> None:
             (outcome == 4) & ~(baseline7_reject if version7 else reject)
         ):
             raise ValueError("6.1 outcome disagrees with final measurement disposition")
+    if attrs.get("qc_pipeline_version") == "qc-opensource-7.2.0":
+        for name, dtype in {
+            "P2_REVIEW_REASON": "uint32",
+            "P2_RANGE_ROUTE_CODE": "uint8",
+            "P2_QUALITY_PRE_HEALTH": "float32",
+            "P2_ADMIN_PENALTY_REMOVED_MASK": "uint8",
+            "P2_PHYSICAL_HEALTH_FACTOR": "float32",
+        }.items():
+            if (
+                name not in group
+                or group[name].shape != shape
+                or group[name].dtype != np.dtype(dtype)
+            ):
+                raise ValueError(f"invalid P0-P2 field {name}")
+        restored = group["P2_ADMIN_PENALTY_REMOVED_MASK"][:] == 1
+        if np.any(restored & (~eligible | reject | quarantine | ~valid)):
+            raise ValueError("administrative projection revived a rejected/invalid measurement")
+        measurements = group["P2_RANGE_MEASUREMENT_MASK"][:] == 1
+        if np.any(measurements & ~valid):
+            raise ValueError("P0-P2 measurement routing filled missing data")
     if not np.array_equal(trusted, valid & ~reject & ~quarantine) or np.any(eligible & ~trusted):
         raise ValueError("QC measurement trust is inconsistent with decisions")
     if np.any(reject & ((flags & np.uint32(32768)) == 0)):

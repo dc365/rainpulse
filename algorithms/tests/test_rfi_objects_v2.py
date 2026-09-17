@@ -192,6 +192,9 @@ def test_v1_parameter_identity_is_unchanged():
 
     old = load_qc_profile(ROOT / "configs/qc/fujian-qc-opensource-v1.yaml", FLAGS)
     data = old.model_dump(mode="json")
+    data["context"].pop("split_radial_weather_support", None)  # Frozen optional context default.
+    data.pop("evidence_graph", None)  # Absent V7 extension is not a frozen V1 parameter.
+    data.pop("generalization", None)  # Absent 7.2 extension is not a frozen parameter.
     data.pop("rfi_objects", None)
     data.pop("literature", None)
     data.pop("residual", None)  # Absent V6 extension is not an old parameter.

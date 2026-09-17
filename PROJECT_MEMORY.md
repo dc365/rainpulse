@@ -25,6 +25,15 @@ operational data here.
 
 ## Prelaunch convergence
 
+- 2026-09-17: P0-P2 opt-in QC candidate 7.2 prepared on the c3e768 baseline.
+  Separates CONFIG_NOT_READY-only administrative status from physical QI penalty;
+  retains fitted broad-sector measurements and reviews OC1 coherent self-protection;
+  isolates supported budget-overflow proposals while surfacing manual-review status.
+  Original configs frozen. 1062 Python/config/contract tests pass, 3 native Emitter
+  tests skipped. Nine sanitized lowest-cut target-stage replays completed; NOT a
+  full historical-context rerun or independent weather acceptance. No 105 deployment.
+  See docs/radar-qc-opensource/GENERALIZATION_P0P2.md and its validation companion.
+
 - 2026-09-16: Local timeline/data-chain implementation now uses 6-minute cadence:
   observed -60..0, forecast +6..+180 (41 fixed slots). LK/STEPS 30 leads;
   NowcastNet retains native 10-minute protocol and adapts to 20 display leads

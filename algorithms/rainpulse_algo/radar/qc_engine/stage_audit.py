@@ -1,4 +1,5 @@
 """Compact first-exclusion provenance. Tracking never mutates a Decision."""
+
 from enum import IntEnum
 
 import numpy as np
@@ -14,6 +15,7 @@ class Decider(IntEnum):
     GRAPH = 6
     HEALTH_QUALITY = 7
     OBJECT_CONSENSUS = 8
+    GENERALIZATION = 9
 
 
 class StageAudit:
@@ -39,13 +41,15 @@ class StageAudit:
         self.first_eligibility[newly_ineligible] = np.where(
             invalid[newly_ineligible], Decider.ORIGINAL_INVALID, code
         )
-        self.records.append({
-            "stage": Decider(stage).name,
-            "rejected": int((action == 2).sum()),
-            "quarantined": int(quarantine.sum()),
-            "eligible": int(eligible.sum()),
-            "first_exclusions": int(first.sum()),
-        })
+        self.records.append(
+            {
+                "stage": Decider(stage).name,
+                "rejected": int((action == 2).sum()),
+                "quarantined": int(quarantine.sum()),
+                "eligible": int(eligible.sum()),
+                "first_exclusions": int(first.sum()),
+            }
+        )
 
     def arrays(self):
         return {
@@ -68,8 +72,10 @@ def gate_routes(fields):
         ("graph", "V7_GRAPH_REVIEW_MASK", "V7_GRAPH_STAGE_REASON"),
     ):
         value = fields.get(candidate)
-        routes[name] = {"evaluated": value is not None,
-                        "proposed": None if value is None else bool(value > 0),
-                        "reason_code": fields.get(reason) if reason else None,
-                        "unavailable_reason": "field_not_recorded" if value is None else None}
+        routes[name] = {
+            "evaluated": value is not None,
+            "proposed": None if value is None else bool(value > 0),
+            "reason_code": fields.get(reason) if reason else None,
+            "unavailable_reason": "field_not_recorded" if value is None else None,
+        }
     return routes

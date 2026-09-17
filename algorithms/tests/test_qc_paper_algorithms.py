@@ -281,6 +281,8 @@ def test_version_coherence_and_old_parameter_hash():
         OpenSourceQCProfile.model_validate(data)
     v3 = load_qc_profile(V3, FLAGS)
     data = v3.model_dump(mode="json")
+    data["context"].pop("split_radial_weather_support", None)  # Frozen optional context default.
+    data.pop("generalization", None)  # Absent 7.2 extension is not a frozen parameter.
     data.pop("literature")
     data.pop("residual", None)  # Absent V6 extension is not an old parameter.
     data.pop("residual_repair", None)  # Absent 6.1 extension is not a frozen input.

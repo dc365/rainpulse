@@ -90,7 +90,13 @@ def _fit(ranges, values, config, ceiling, *, range_term_db_per_km=0.0):
 
 
 def range_signatures(
-    native, config: CrossRadarConfig, *, association=None, protected=None, range_term_db_per_km=0.0
+    native,
+    config: CrossRadarConfig,
+    *,
+    association=None,
+    protected=None,
+    range_term_db_per_km=0.0,
+    route_all_shapes=False,
 ) -> RangeEvidence:
     if not np.isfinite(range_term_db_per_km) or not 0 <= range_term_db_per_km <= 0.03:
         raise ValueError("invalid measured range term")
@@ -192,6 +198,17 @@ def range_signatures(
     growth = fit_quality.copy()
     spans = fit_quality.copy()
     records = []
+    routed = []
+    routed_arrays = {}
+    if route_all_shapes:
+        routed_arrays = {
+            "P2_RANGE_MEASUREMENT_MASK": np.zeros(native.shape, "uint8"),
+            "P2_RANGE_ROUTE_CODE": np.zeros(native.shape, "uint8"),
+            "P2_RANGE_OBJECT_ID": np.zeros(native.shape, "uint32"),
+            "P2_RANGE_MODEL_CODE": np.zeros(native.shape, "uint8"),
+            "P2_RANGE_RESIDUAL_P90_DB": np.full(native.shape, np.nan, "float32"),
+            "P2_RANGE_GROWTH_DB": np.full(native.shape, np.nan, "float32"),
+        }
     for group in groups.values():
         angles = np.sort(np.unique([native.azimuth[parts[i][0]] for i in group]))
         width = float(360 - np.max(np.diff(np.r_[angles, angles[0] + 360])))
@@ -200,7 +217,32 @@ def range_signatures(
         hi = max(parts[i][2] for i in group)
         span = max((parts[i][2] - parts[i][1]) * dr for i in group)
         transverse = max(dr, (ranges[lo] + ranges[hi - 1]) / 2 * np.deg2rad(width))
-        if width > config.maximum_width_deg or span / transverse < config.minimum_aspect:
+        wide = width > config.maximum_width_deg
+        compact = span / transverse < config.minimum_aspect
+        if route_all_shapes:
+            route = 4 if wide and compact else 2 if wide else 3 if compact else 1
+            identity = len(routed) + 1
+            for i in group:
+                ray, a, b, idx, fit = parts[i]
+                # Exactly the original fitted inliers; no gaps/outliers are made observations.
+                routed_arrays["P2_RANGE_MEASUREMENT_MASK"][ray, idx] = 1
+                routed_arrays["P2_RANGE_ROUTE_CODE"][ray, idx] = route
+                routed_arrays["P2_RANGE_OBJECT_ID"][ray, idx] = identity
+                routed_arrays["P2_RANGE_MODEL_CODE"][ray, idx] = fit["mode"]
+                routed_arrays["P2_RANGE_RESIDUAL_P90_DB"][ray, idx] = fit["p90"]
+                routed_arrays["P2_RANGE_GROWTH_DB"][ray, idx] = fit["growth"]
+            routed.append(
+                {
+                    "object_id": identity,
+                    "route_code": route,
+                    "width_deg": width,
+                    "aspect": span / transverse,
+                    "observed_inlier_gates": sum(len(parts[i][3]) for i in group),
+                    "maximum_residual_db": max(parts[i][4]["p90"] for i in group),
+                    "interpretation": "measurement_support_not_RFI_truth",
+                }
+            )
+        if wide or compact:
             reasons["not_a_radial_object"] += 1
             continue
         identity = len(records) + 1
@@ -228,6 +270,7 @@ def range_signatures(
     candidate = ids > 0
     return RangeEvidence(
         {
+            **routed_arrays,
             "V5_RANGE_CANDIDATE_MASK": candidate.astype("uint8"),
             "V5_RANGE_FIT_AVAILABLE_MASK": candidate.astype("uint8"),
             "V5_RANGE_OBJECT_ID": ids,
@@ -245,6 +288,16 @@ def range_signatures(
             ),
         },
         dict(
+            **(
+                {
+                    "routed_objects": routed,
+                    "measurement_supported_gates": int(
+                        routed_arrays["P2_RANGE_MEASUREMENT_MASK"].sum()
+                    ),
+                }
+                if route_all_shapes
+                else {}
+            ),
             method=("range-inlier-association-v6" if association is not None else config.method),
             objects=records,
             object_count=len(records),
