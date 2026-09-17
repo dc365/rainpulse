@@ -1,6 +1,6 @@
 # RainPulse Project Memory
 
-Updated: 2026-09-16 (Asia/Taipei)
+Updated: 2026-09-17 (Asia/Taipei)
 
 This file is the concise handoff for a new Codex session. Stable engineering
 rules remain in `AGENTS.md`; implementation details remain in the referenced RP
@@ -24,6 +24,14 @@ operational data here.
   unless the user explicitly asks.
 
 ## Prelaunch convergence
+
+- 2026-09-17: QC 7.3.1 shared paired-moment range term implemented as an opt-in
+  broad-source candidate; target/guard blocks held out, independent ray groups,
+  explicit fallback and observed-range coverage. 53 relevant tests pass. Four
+  lowest-cut incremental replays on 105 match research: Z9591 10:42/10:48 high
+  diagnostic-domain residual 2665/17915; Z9598 controls add no isolation. Not full
+  volume acceptance or deployment; production remains 7.2.0. Work is uncommitted.
+  See docs/质控_7_3_1_距离项实施与回放_20260917.md.
 
 - 2026-09-17: P0-P2 opt-in QC candidate 7.2 prepared on the c3e768 baseline.
   Separates CONFIG_NOT_READY-only administrative status from physical QI penalty;

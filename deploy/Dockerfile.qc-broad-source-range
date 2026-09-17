@@ -1,0 +1,5 @@
+# Build from the installed P0/P2 worker; preserve its native libraries and profiles.
+ARG BASE_IMAGE=rainpulse-cpu-worker:qc-opensource-7.2.0-p0p2
+FROM ${BASE_IMAGE}
+COPY algorithms/rainpulse_algo /opt/rainpulse/rainpulse_algo
+COPY configs/qc/fujian-qc-broad-source-range-v1.yaml /opt/rainpulse/configs/qc/fujian-qc-broad-source-range-v1.yaml

@@ -273,7 +273,13 @@ def run_open_source_qc(
                 graph_record = {**(graph_record or {}), "fragment_radials": fragment_record}
             if tracker is not None:
                 tracker.observe(Decider.GRAPH, decision)
-            if profile.pipeline_version in {"qc-opensource-7.1.0", "qc-opensource-7.2.0"}:
+            if profile.pipeline_version in {
+                "qc-opensource-7.1.0",
+                "qc-opensource-7.2.0",
+                "qc-opensource-7.2.1",
+                "qc-opensource-7.3.0",
+                "qc-opensource-7.3.1",
+            }:
                 from .object_consensus.adapter import evaluate_native, scalar_completion
                 from .object_consensus.config import Policy
 

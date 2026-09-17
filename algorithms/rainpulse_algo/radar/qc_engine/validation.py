@@ -42,17 +42,33 @@ def validate_sweep(group, attrs) -> None:
         "qc-opensource-7.0.0",
         "qc-opensource-7.1.0",
         "qc-opensource-7.2.0",
+        "qc-opensource-7.2.1",
+        "qc-opensource-7.3.0",
+        "qc-opensource-7.3.1",
     }
     version61 = version7 or attrs.get("qc_pipeline_version") == "qc-opensource-6.1.0"
     baseline7_reject, baseline7_quarantine = reject, quarantine
     graph_domain = np.zeros(shape, bool)
     if (
-        attrs.get("qc_pipeline_version") in {"qc-opensource-7.1.0", "qc-opensource-7.2.0"}
+        attrs.get("qc_pipeline_version")
+        in {
+            "qc-opensource-7.1.0",
+            "qc-opensource-7.2.0",
+            "qc-opensource-7.2.1",
+            "qc-opensource-7.3.0",
+            "qc-opensource-7.3.1",
+        }
         and "OC1_ADDED_QUARANTINE_MASK" not in group
     ):
         raise ValueError("OC1 provenance missing")
     if (
-        attrs.get("qc_pipeline_version") == "qc-opensource-7.2.0"
+        attrs.get("qc_pipeline_version")
+        in {
+            "qc-opensource-7.2.0",
+            "qc-opensource-7.2.1",
+            "qc-opensource-7.3.0",
+            "qc-opensource-7.3.1",
+        }
         and "P2_ADDED_QUARANTINE_MASK" not in group
     ):
         raise ValueError("missing P0-P2 provenance")
@@ -76,6 +92,9 @@ def validate_sweep(group, attrs) -> None:
         "qc-opensource-7.0.0",
         "qc-opensource-7.1.0",
         "qc-opensource-7.2.0",
+        "qc-opensource-7.2.1",
+        "qc-opensource-7.3.0",
+        "qc-opensource-7.3.1",
     }:
         for field, dtype in {
             "RFI_OBJECT_ID": "uint32",
@@ -208,7 +227,12 @@ def validate_sweep(group, attrs) -> None:
             (outcome == 4) & ~(baseline7_reject if version7 else reject)
         ):
             raise ValueError("6.1 outcome disagrees with final measurement disposition")
-    if attrs.get("qc_pipeline_version") == "qc-opensource-7.2.0":
+    if attrs.get("qc_pipeline_version") in {
+        "qc-opensource-7.2.0",
+        "qc-opensource-7.2.1",
+        "qc-opensource-7.3.0",
+        "qc-opensource-7.3.1",
+    }:
         for name, dtype in {
             "P2_REVIEW_REASON": "uint32",
             "P2_RANGE_ROUTE_CODE": "uint8",
@@ -222,6 +246,36 @@ def validate_sweep(group, attrs) -> None:
                 or group[name].dtype != np.dtype(dtype)
             ):
                 raise ValueError(f"invalid P0-P2 field {name}")
+        if attrs.get("qc_pipeline_version") in {
+            "qc-opensource-7.2.1",
+            "qc-opensource-7.3.0",
+            "qc-opensource-7.3.1",
+        }:
+            key = "P2_BOUNDED_EDGE_REFERENCE_MASK"
+            if (
+                key not in group
+                or group[key].shape != shape
+                or group[key].dtype != np.dtype("uint8")
+            ):
+                raise ValueError("invalid bounded edge diagnostic mask")
+            edge = group[key][:] == 1
+            if np.any(edge & ~valid):
+                raise ValueError("bounded edge filled missing observations")
+        if attrs.get("qc_pipeline_version") in {"qc-opensource-7.3.0", "qc-opensource-7.3.1"}:
+            for name, dtype in {
+                "BWS_CANDIDATE_MASK": "uint8",
+                "BWS_REASON": "uint16",
+                "BWS_FOLD_ID": "uint32",
+                "BWS_RANGE_RESIDUAL_DB": "float32",
+            }.items():
+                if (
+                    name not in group
+                    or group[name].shape != shape
+                    or group[name].dtype != np.dtype(dtype)
+                ):
+                    raise ValueError(f"invalid broad source field {name}")
+            if np.any((group["BWS_CANDIDATE_MASK"][:] == 1) & ~valid):
+                raise ValueError("broad source filled missing observations")
         restored = group["P2_ADMIN_PENALTY_REMOVED_MASK"][:] == 1
         if np.any(restored & (~eligible | reject | quarantine | ~valid)):
             raise ValueError("administrative projection revived a rejected/invalid measurement")

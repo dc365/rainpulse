@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 import zarr
 from zarr.storage import MemoryStore
 
@@ -17,17 +18,26 @@ from .test_generalization_p0p2 import P
 from .test_residual_v61_integration import FLAGS, ROOT, build_case61, frozen
 
 
-def test_actual_worker_p0p2_artifact_and_idempotency(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    "config,version",
+    [
+        (P, "qc-opensource-7.2.0"),
+        (P.with_name("fujian-qc-generalization-edge.yaml"), "qc-opensource-7.2.1"),
+        (P.with_name("fujian-qc-broad-source-v1.yaml"), "qc-opensource-7.3.0"),
+        (P.with_name("fujian-qc-broad-source-range-v1.yaml"), "qc-opensource-7.3.1"),
+    ],
+)
+def test_actual_worker_p0p2_artifact_and_idempotency(tmp_path, monkeypatch, config, version):
     _, _, _, client, request = build_case61(tmp_path)
-    profile = load_qc_profile(P, FLAGS)
+    profile = load_qc_profile(config, FLAGS)
     task = request.model_dump(mode="json")
     task["payload"].update(
         qc_profile=profile.profile_version,
         qc_pipeline_version=profile.pipeline_version,
-        qc_profile_sha256=frozen(P)["sha256"],
+        qc_profile_sha256=frozen(config)["sha256"],
     )
     request = RadarQCRequested.model_validate(task)
-    monkeypatch.setenv("RAINPULSE_RADAR_QC_CONFIG", str(P))
+    monkeypatch.setenv("RAINPULSE_RADAR_QC_CONFIG", str(config))
     monkeypatch.setenv("RAINPULSE_QC_FLAG_DEFINITIONS", str(FLAGS))
     first = _execute_basic_qc(request, client)
     second = _execute_basic_qc(request, client)
@@ -38,7 +48,7 @@ def test_actual_worker_p0p2_artifact_and_idempotency(tmp_path, monkeypatch):
     root = zarr.open_group(store, mode="r")
     g = root["sweep_000"]
     observed = np.isfinite(g["DBZH_RAW"][:])
-    assert root.attrs["qc_pipeline_version"] == "qc-opensource-7.2.0"
+    assert root.attrs["qc_pipeline_version"] == version
     for k in (
         "P2_RANGE_MEASUREMENT_MASK",
         "P2_PROPOSAL_MASK",
@@ -121,3 +131,10 @@ def test_action_validator_rejects_unproven_or_unmeasured_additions():
     fields["P2_PROPOSAL_MASK"][0, 4] = 1
     with pytest.raises(ValueError, match="measured candidate"):
         validate_evidence_fields(fields, observed, reject)
+
+
+def test_original_broad_source_parameters_frozen():
+    assert (
+        load_qc_profile(P.with_name("fujian-qc-broad-source-v1.yaml"), FLAGS).parameters_hash
+        == "909697df6bb65665e067c4eb9ebbc9c8cff279c93ee665eef9426ca1959a9ca2"
+    )

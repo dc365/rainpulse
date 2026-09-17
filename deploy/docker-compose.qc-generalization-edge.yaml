@@ -1,0 +1,15 @@
+# Opt-in candidate. Drain old QC requests before switching the frozen profile.
+# Apply after existing geometry/six-minute/P0P2 overlays.
+services:
+  radar-qc-worker:
+    image: rainpulse-cpu-worker:qc-opensource-7.2.1-edge
+    environment:
+      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/fujian-qc-generalization-edge.yaml
+  radar-grid-worker:
+    image: rainpulse-cpu-worker:qc-opensource-7.2.1-edge
+  radar-mosaic-worker:
+    image: rainpulse-cpu-worker:qc-opensource-7.2.1-edge
+  analysis-qpe-worker:
+    image: rainpulse-cpu-worker:qc-opensource-7.2.1-edge
+  analysis-diagnostics-worker:
+    image: rainpulse-cpu-worker:qc-opensource-7.2.1-edge
