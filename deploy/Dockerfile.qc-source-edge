@@ -1,6 +1,8 @@
 ARG BASE_IMAGE=rainpulse-cpu-worker:qc-opensource-7.3.1-broad-source-range
 FROM ${BASE_IMAGE}
+USER root
 RUN python -m pip install --no-deps --target /opt/rainpulse/site-packages scikit-image==0.26.0 imageio==2.37.4 lazy-loader==0.5 networkx==3.6.1 tifffile==2026.9.15
+USER 65532:65532
 COPY algorithms/rainpulse_algo/radar/qc_engine /opt/rainpulse/rainpulse_algo/radar/qc_engine
 COPY algorithms/rainpulse_algo/radar/qc_worker.py /opt/rainpulse/rainpulse_algo/radar/qc_worker.py
 COPY configs/qc/fujian-qc-source-edge-v1.yaml /opt/rainpulse/configs/qc/fujian-qc-source-edge-v1.yaml
