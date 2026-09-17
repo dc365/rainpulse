@@ -61,11 +61,13 @@ LIMIT 1`, sourceRunID).Scan(
 	if err := json.Unmarshal(rawConfig, &profile); err != nil {
 		return orchestration.NowcastInputInput{}, fmt.Errorf("decode source NowcastInput configuration: %w", err)
 	}
+	// The six-minute migration moved the committed lineage onto a six-minute step,
+	// so a manual regeneration must accept both cadences instead of pinning five.
 	if profile.ProfileVersion != input.GateConfigVersion ||
 		profile.BuilderVersion != input.PreprocessVersion || profile.GridID != input.GridID ||
 		profile.ExecutionMode != storedMode || profile.GridConfig == "" ||
 		profile.Sequence.MinimumFrames != 3 || profile.Sequence.MaximumFrames != 6 ||
-		profile.Sequence.TimestepMinute != 5 {
+		(profile.Sequence.TimestepMinute != 5 && profile.Sequence.TimestepMinute != 6) {
 		return orchestration.NowcastInputInput{}, fmt.Errorf("source NowcastInput configuration does not match committed lineage")
 	}
 	rows, err := store.pool.Query(ctx, `
