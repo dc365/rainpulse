@@ -224,6 +224,8 @@ def _completion_qc_summary(summary):
         "low_quality_gate_count",
         "health_facets",
         "generalization_summary",
+        "review_extension_version",
+        "nonprecip_review_summary",
         "no_rain_gate_count",
         "mean_quality_index",
         "radial_interference_ray_count",

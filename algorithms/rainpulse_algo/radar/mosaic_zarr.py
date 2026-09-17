@@ -197,6 +197,9 @@ def validate_radar_mosaic_zarr_store(objects: Mapping[str, bytes]) -> dict[str, 
     if np.any(root["DATA_AGE"][:][~missing] < 0):
         raise RadarMosaicInputError("RadarMosaic data age is negative")
 
+    from .qc_engine.review_extension.lineage import validate_mosaic_weights
+
+    validate_mosaic_weights(root)
     summary = json.loads(objects["mosaic/summary.json"])
     valid_count = int(np.count_nonzero(valid))
     if summary.get("valid_cell_count") != valid_count:

@@ -16,6 +16,7 @@ class Decider(IntEnum):
     HEALTH_QUALITY = 7
     OBJECT_CONSENSUS = 8
     GENERALIZATION = 9
+    NONPRECIP_REVIEW = 10
 
 
 class StageAudit:
@@ -30,6 +31,7 @@ class StageAudit:
         arrays = decision.arrays
         action = np.asarray(arrays["QC_ACTION"])
         quarantine = arrays.get("RFI_QUARANTINE_MASK", np.zeros(action.shape)) == 1
+        quarantine |= arrays.get("NP_QUARANTINE_MASK", np.zeros(action.shape)) == 1
         excluded = (action == 2) | quarantine
         invalid = action == 3
         first = (self.first_action == 0) & (excluded | invalid)
@@ -58,7 +60,8 @@ class StageAudit:
         }
 
     def summary(self):
-        return {"stages": list(self.records), "codes": {s.name: int(s) for s in Decider}}
+        used_review = any(x["stage"] == "NONPRECIP_REVIEW" for x in self.records)
+        return {"stages": list(self.records), "codes": {s.name: int(s) for s in Decider if used_review or s != Decider.NONPRECIP_REVIEW}}
 
 
 def gate_routes(fields):

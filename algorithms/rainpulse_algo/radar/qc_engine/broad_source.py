@@ -12,6 +12,7 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
 from .distance_polar import distance_polar_reference
+from .review_extension.config import SourceReviewConfig
 
 
 class BroadSourceConfig(BaseModel):
@@ -24,6 +25,7 @@ class BroadSourceConfig(BaseModel):
     source_edge: bool = False
     near_range_targets: bool = False
     near_sector_consensus: bool = False
+    source_review: SourceReviewConfig | None = None
     block_m: float = Field(default=50000, gt=0)
     minimum_range_m: float = Field(default=50000, gt=0)
     maximum_range_m: float = Field(default=450000, gt=50000)
@@ -53,6 +55,7 @@ class Reason(IntFlag):
     SOURCE_EDGE = 128
     NEAR_RANGE_TARGET = 256
     NEAR_SECTOR_CONSENSUS = 512
+    SOURCE_REVIEW = 1024
 
 
 def wrap(x):
@@ -119,14 +122,30 @@ def infer_broad_source(native, cfg, *, weather=None, conflicts=None):
     fold_ids = np.zeros(shape, "uint32")
     residual = np.full(shape, np.nan, "float32")
     candidate = empty.copy()
+    source_extra, source_report = {}, {}
+    source_reference = empty.copy() if cfg.source_review is not None else None
+    source_residual = residual.copy() if cfg.source_review is not None else None
+    source_fold = fold_ids.copy() if cfg.source_review is not None else None
+    source_folds = []
     required = ["DBZH", "SNR", "RHOHV", "ZDR", "PHIDP"]
     if any(k not in native.fields for k in required):
+        if cfg.source_review is not None:
+            from .review_extension.source import source_additions
+
+            _, source_extra, source_detail = source_additions(
+                native, cfg.source_review, reference=source_reference,
+                residual=source_residual, weather=protected, conflicts=conflict,
+                reference_available=(source_fold > 0),
+            )
+            source_extra["SRC_REVIEW_REFERENCE_FOLD_ID"] = source_fold
+            source_report = {"source_review": dict(source_detail, reference_status="missing_moments", folds=[])}
         return {
             "BWS_CANDIDATE_MASK": candidate.astype("uint8"),
             "BWS_REASON": reason,
             "BWS_FOLD_ID": fold_ids,
             "BWS_RANGE_RESIDUAL_DB": residual,
-        }, {"status": "missing_moments", "candidate_gates": 0, "qualified_folds": 0}
+            **source_extra,
+        }, {"status": "missing_moments", "candidate_gates": 0, "qualified_folds": 0, **source_report}
     r = np.asarray(native.ranges, float)
     if r.shape != (shape[1],) or not np.isfinite(r).all() or np.any(np.diff(r) <= 0):
         raise ValueError("invalid broad source range geometry")
@@ -273,6 +292,22 @@ def infer_broad_source(native, cfg, *, weather=None, conflicts=None):
                     & (f["SNR"][ray] >= fit[5][0] - 1)
                     & (f["SNR"][ray] <= fit[5][1] + 1)
                 )
+            if cfg.source_review is not None:
+                from .review_extension.source import target_reference
+
+                target_match, target_delta = target_reference(
+                    native, ray, fit, power, target,
+                    maximum_residual_db=cfg.source_review.maximum_source_residual_db,
+                )
+                source_reference[ray] |= target_match
+                source_residual[ray, target] = target_delta[target]
+                source_folds.append({
+                    "fold_id": len(source_folds) + 1, "ray": int(ray),
+                    "target_block": int(block), "guard_blocks": [int(block)-1, int(block)+1],
+                    "reference_eligible_blocks": [int(x) for x in np.unique(blocks[train_geometry])],
+                    "reference_policy": "same_ray_raw_target_and_guards_excluded",
+                })
+                source_fold[ray, target] = len(source_folds)
             angular_span = np.ptp(
                 [(native.azimuth[k] - native.azimuth[ray] + 180) % 360 - 180 for k in neighbours]
             )
@@ -390,6 +425,24 @@ def infer_broad_source(native, cfg, *, weather=None, conflicts=None):
             "minimum_rays": 3,
             "minimum_range_span_m": 10000,
         }
+    if cfg.source_review is not None:
+        from .review_extension.source import source_additions
+
+        qualified_source, source_extra, source_detail = source_additions(
+            native, cfg.source_review, reference=source_reference,
+            residual=source_residual, weather=protected, conflicts=conflict | plateau,
+            reference_available=(source_fold > 0),
+        )
+        source_extra["SRC_REVIEW_REFERENCE_FOLD_ID"] = source_fold
+        added_source = qualified_source & ~candidate
+        if cfg.source_review.mode == "experiment_quarantine":
+            candidate |= qualified_source
+            reason[qualified_source] |= int(Reason.SOURCE_REVIEW | Reason.TARGET_MATCH)
+        source_report = {"source_review": dict(
+            source_detail, extension_version="qc-review-20260917-v1",
+            mode=cfg.source_review.mode, folds=source_folds,
+            action_proposal_additions=int(added_source.sum()) if cfg.source_review.mode == "experiment_quarantine" else 0,
+        )}
     reason[obs & protected] |= int(Reason.WEATHER_PROTECTED)
     reason[obs & conflict] |= int(Reason.TARGET_CONFLICT)
     reason[obs & plateau] |= int(Reason.NUMERIC_PLATEAU)
@@ -398,7 +451,9 @@ def infer_broad_source(native, cfg, *, weather=None, conflicts=None):
         "BWS_REASON": reason,
         "BWS_FOLD_ID": fold_ids,
         "BWS_RANGE_RESIDUAL_DB": residual,
+        **source_extra,
     }, {
+        **source_report,
         "status": "experimental_source_hypothesis",
         "candidate_gates": int(candidate.sum()),
         "qualified_folds": qualified,

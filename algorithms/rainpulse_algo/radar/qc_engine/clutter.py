@@ -17,8 +17,15 @@ def asset_digest(arrays: dict[str, np.ndarray]) -> str:
 
 
 def build_clutter_prior(
-    roots, *, reviewed_clear_air: bool, minimum_samples: int = 12, echo_threshold_dbz: float = 0.0
+    roots, *, reviewed_clear_air: bool, minimum_samples: int = 12, echo_threshold_dbz: float = 0.0,
+    canonical: bool = False, sample_metadata=None, policy=None,
 ) -> tuple[dict, dict]:
+    if canonical:
+        from .review_extension.background_compat import from_roots
+
+        if reviewed_clear_air is not True:
+            raise ValueError("v2 requires explicit clear-air review")
+        return from_roots(roots, sample_metadata=sample_metadata, policy=policy)
     if not reviewed_clear_air or len(roots) < minimum_samples:
         raise ValueError("clutter prior requires enough explicitly reviewed clear-air volumes")
     first = roots[0]

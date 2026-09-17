@@ -173,6 +173,10 @@ def _build_qc_zarr_store_objects(
                 "qc_score_semantics": "uncalibrated_membership_not_probability",
             }
         )
+    if getattr(result.profile, "review_extension_version", None) is not None:
+        from .qc_engine.review_extension.runtime import review_attributes
+
+        root.attrs.update(review_attributes(result.profile))
     if provenance:
         root.attrs.update(dict(provenance))
 

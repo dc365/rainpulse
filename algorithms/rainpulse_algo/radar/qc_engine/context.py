@@ -278,6 +278,14 @@ def prepare_open_source_inputs(
                 else aggregate_temporal_rfi(current, samples)
             )
             contexts[name].update({key: current.restore(value) for key, value in values.items()})
+            if profile.nonprecip_review is not None:
+                from .review_extension.temporal import recurrence_from_roots
+
+                raw_values, raw_record = recurrence_from_roots(
+                    current, [other for other, _, _ in temporal], profile,
+                )
+                contexts[name].update({key: current.restore(value) for key, value in raw_values.items()})
+                independent_records.append({"sweep": name, "nonprecip_raw_recurrence": raw_record})
             continue
         # V1 temporal evidence is diagnostic only and requires exactly matching
         # native-cut geometry. A same-angle split cut is not merged by similarity.
@@ -361,6 +369,13 @@ def _load_clutter(profile, client, root):
         actual.update(values.tobytes())
     if actual.hexdigest() != profile.static_ground_clutter.asset_sha256:
         raise ValueError("clutter asset content hash mismatch")
+    if "__meta_json" in archive:
+        from .review_extension.background_registry import load_verified_background
+
+        return load_verified_background(
+            archive, root, profile.static_ground_clutter.asset_sha256,
+            profile.static_ground_clutter.asset_version, load_asset=lambda uri: _load_npz(uri, client),
+        )
     result = {}
     for number in root["sweep_number"][:]:
         name = f"sweep_{int(number):03d}"

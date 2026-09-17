@@ -15,6 +15,7 @@ from .generalization_profile import GeneralizationConfig
 from .paper_profile import LiteratureConfig
 from .repair_profile import ResidualRepairConfig
 from .residual_profile import ResidualConfig
+from .review_extension.config import NonPrecipConfig
 
 
 class FrozenConfig(BaseModel):
@@ -301,6 +302,8 @@ class OpenSourceQCProfile(FrozenConfig):
     residual_repair: ResidualRepairConfig | None = None
     evidence_graph: EvidenceGraphConfig | None = None
     generalization: GeneralizationConfig | None = None
+    review_extension_version: Literal["qc-review-20260917-v1"] | None = None
+    nonprecip_review: NonPrecipConfig | None = None
     phase: PhaseConfig = Field(default_factory=PhaseConfig)
     context: ContextConfig = Field(default_factory=ContextConfig)
     _flag_masks: dict[str, np.uint32] = PrivateAttr(default_factory=dict)
@@ -311,7 +314,9 @@ class OpenSourceQCProfile(FrozenConfig):
 
     @property
     def parameters_hash(self) -> str:
-        value = self.model_dump(mode="json")
+        from .review_extension.profile_support import strip_absent_review_fields
+
+        value = strip_absent_review_fields(self.model_dump(mode="json"))
         if not self.context.split_radial_weather_support:
             value["context"].pop("split_radial_weather_support", None)
         # Preserve the frozen v1 semantic identity when the new engine is absent.
@@ -352,6 +357,12 @@ class OpenSourceQCProfile(FrozenConfig):
                     value["generalization"]["broad_source"].pop(key, None)
         data = json.dumps(value, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(data.encode()).hexdigest()
+
+    @model_validator(mode="after")
+    def validate_review_extension(self):
+        from .review_extension.profile_support import validate_review_profile
+
+        return validate_review_profile(self)
 
     @model_validator(mode="after")
     def validate_profile(self):

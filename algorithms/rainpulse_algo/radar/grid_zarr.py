@@ -96,6 +96,8 @@ def build_radar_grid_zarr_store(
         root.attrs.update(
             {key: source[key] for key in ("qc_engine", "qc_parameters_sha256", "qc_libraries")}
         )
+    if source.get("qc_review_extension_version"):
+        root.attrs["qc_review_extension_version"] = source["qc_review_extension_version"]
     if provenance:
         root.attrs.update(dict(provenance))
 
@@ -248,6 +250,10 @@ def validate_radar_grid_zarr_store(objects: Mapping[str, bytes]) -> dict[str, An
         adjacent = np.isfinite(cumulative[:, 1:]) & np.isfinite(cumulative[:, :-1])
         if np.any(np.diff(cumulative, axis=1)[adjacent] < -1e-6):
             raise RadarGridInputError(f"polar blockage is not cumulative for {name}")
+    if root.attrs.get("qc_review_extension_version"):
+        from .qc_engine.review_extension.lineage import validate_grid_sources
+
+        validate_grid_sources(root)
     summary = json.loads(objects["grid/summary.json"])
     valid_count = int(np.count_nonzero(valid))
     if summary.get("valid_cell_count") != valid_count:
@@ -283,7 +289,7 @@ def _array(
 def _fill_value(name: str, dtype: np.dtype[Any]) -> float | int:
     if np.issubdtype(dtype, np.floating):
         return np.nan
-    if name == "SOURCE_SWEEP":
+    if name in {"SOURCE_SWEEP", "SOURCE_RAY", "SOURCE_GATE"}:
         return -1
     return 0
 

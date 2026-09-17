@@ -30,11 +30,17 @@ class StaticGroundClutterAsset:
     probability_by_sweep: dict[str, np.ndarray]
     support_count_by_sweep: dict[str, np.ndarray]
     clear_sky_day_count_by_sweep: dict[str, int]
+    canonical_arrays: dict[str, np.ndarray] | None = None
+    canonical_metadata: dict | None = None
 
 
 def build_static_ground_clutter_asset(
-    samples: Iterable[Mapping[str, object]],
+    samples: Iterable[Mapping[str, object]], *, canonical: bool = False, policy=None,
 ) -> StaticGroundClutterAsset:
+    if canonical:
+        from .qc_engine.review_extension.background_compat import from_samples
+
+        return from_samples(samples, StaticGroundClutterAsset, policy=policy)
     observed_count_by_sweep: dict[str, np.ndarray] = {}
     hit_count_by_sweep: dict[str, np.ndarray] = {}
     clear_sky_days_by_sweep: dict[str, set[str]] = {}
@@ -131,6 +137,8 @@ def build_static_ground_clutter_asset(
 
 
 def clutter_asset_npz_arrays(asset: StaticGroundClutterAsset) -> dict[str, np.ndarray]:
+    if asset.canonical_arrays is not None:
+        return {k: v.copy() for k, v in asset.canonical_arrays.items()}
     return {
         f"{sweep_name}__ground_clutter": values.astype("float32", copy=False)
         for sweep_name, values in sorted(asset.probability_by_sweep.items())

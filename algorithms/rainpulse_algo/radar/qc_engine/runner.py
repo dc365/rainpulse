@@ -336,6 +336,17 @@ def run_open_source_qc(
                 decision.arrays["V7_STAGE_A_DONOR_UNKNOWN_MASK"] = standalones[
                     sweep.name
                 ].donor_unknown.astype("uint8")
+        nonprecip_record = None
+        if profile.nonprecip_review is not None:
+            from .review_extension.runtime import apply_nonprecip_review
+
+            decision, nonprecip_record = apply_nonprecip_review(
+                sweep, decision, evidence, profile,
+                ancillary=(ancillary_maps or {}).get(sweep.name, {}),
+                context=context, weather_support=weather,
+            )
+            if tracker is not None:
+                tracker.observe(Decider.NONPRECIP_REVIEW, decision)
         timings[sweep.name + ".decision_fusion_ms"] = (perf_counter() - checkpoint) * 1000
         checkpoint = perf_counter()
         phase, phase_record = process_phase(
@@ -415,6 +426,7 @@ def run_open_source_qc(
             )
         )
         sweep_records[sweep.name] = {
+            **({"nonprecip_review": nonprecip_record} if nonprecip_record is not None else {}),
             **({"v7_audit": tracker.summary()} if tracker is not None else {}),
             **({"v7_graph": graph_record} if graph_record is not None else {}),
             **(
@@ -504,6 +516,12 @@ def run_open_source_qc(
                 {},
             )
         )
+    if profile.review_extension_version is not None:
+        modules.append(QCModuleRecord(
+            "qc_review", profile.review_extension_version, "applied",
+            ("DBZH",), ("SRC_REVIEW_QUALIFIED_MASK", "NP_CLASS", "NP_QUARANTINE_MASK"),
+            "engineering_candidate_not_operationally_accepted", {},
+        ))
     summary = {
         "schema_version": "1.1",
         "engine": "open_source",
@@ -533,6 +551,12 @@ def run_open_source_qc(
         "module_records": [m.value() for m in modules],
         "vertical_context": vertical.metrics,
     }
+    if profile.review_extension_version is not None:
+        from .review_extension.runtime import review_summary
+
+        summary["review_extension_version"] = profile.review_extension_version
+        if profile.nonprecip_review is not None:
+            summary["nonprecip_review_summary"] = review_summary(sweep_records)
     if profile.generalization is not None:
         from .quality_policy import health_facets
 

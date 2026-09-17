@@ -251,6 +251,7 @@ def test_frozen_flag_layout_cannot_be_redefined(tmp_path):
         "fujian-qc-residual-v6.yaml",
         "fujian-qc-residual-v61.yaml",
         "fujian-qc-generalization-p0p2.yaml",
+        "fujian-qc-review-20260917-audit.yaml",
     ],
 )
 def test_new_qc_grid_mosaic_qpe_chain_preserves_generation_and_missing(tmp_path, profile_name):

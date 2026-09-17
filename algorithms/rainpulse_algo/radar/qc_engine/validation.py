@@ -320,6 +320,18 @@ def validate_sweep(group, attrs) -> None:
         measurements = group["P2_RANGE_MEASUREMENT_MASK"][:] == 1
         if np.any(measurements & ~valid):
             raise ValueError("P0-P2 measurement routing filled missing data")
+    if attrs.get("qc_review_nonprecip_enabled") and "NP_CLASS" not in group:
+        raise ValueError("review nonprecip output is missing")
+    if attrs.get("qc_review_source_enabled") and "SRC_REVIEW_QUALIFIED_MASK" not in group:
+        raise ValueError("review source output is missing")
+    if "NP_CLASS" in group:
+        from .review_extension.runtime import validate_nonprecip_fields
+
+        quarantine = quarantine | validate_nonprecip_fields(group, valid, reject, quarantine)
+    if "SRC_REVIEW_QUALIFIED_MASK" in group:
+        from .review_extension.source_validation import validate_source_fields
+
+        validate_source_fields(group, valid)
     if not np.array_equal(trusted, valid & ~reject & ~quarantine) or np.any(eligible & ~trusted):
         raise ValueError("QC measurement trust is inconsistent with decisions")
     if np.any(reject & ((flags & np.uint32(32768)) == 0)):

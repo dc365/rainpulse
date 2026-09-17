@@ -174,6 +174,12 @@ def build_radar_mosaic(
     fields["LOW_QUALITY_MASK"] = low.astype("uint8")
 
     contributor_details = _contributor_details(inputs, roots, contributes, adjusted_quality)
+    if any(root.attrs.get("qc_review_extension_version") for root in roots):
+        from .qc_engine.review_extension.lineage import attach_mosaic_sources
+
+        contributor_details = attach_mosaic_sources(
+            fields, contributor_details, inputs, roots, weights, codes,
+        )
     actual_radars = {
         item.radar_id for index, item in enumerate(inputs) if np.any(contributes[index])
     }

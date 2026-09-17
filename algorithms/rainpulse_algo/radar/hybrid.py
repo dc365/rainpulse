@@ -121,6 +121,10 @@ def build_hybrid_scan(
     longitude, latitude = np.meshgrid(grid.longitude, grid.latitude)
     shape = grid.shape
     output = _empty_grid_fields(shape, flag_masks)
+    review_lineage = bool(root.attrs.get("qc_review_extension_version"))
+    if review_lineage:
+        output["SOURCE_RAY"] = np.full(shape, -1, dtype="int32")
+        output["SOURCE_GATE"] = np.full(shape, -1, dtype="int32")
     selected = np.zeros(shape, dtype=bool)
     severe_blockage_seen = np.zeros(shape, dtype=bool)
     polar_diagnostics: list[PolarSweepDiagnostic] = []
@@ -210,6 +214,10 @@ def build_hybrid_scan(
             continue
         sweep_index = int(name.removeprefix("sweep_"))
         _select_into(output, candidate, choose, sweep_index, profile, flag_masks)
+        if review_lineage:
+            from .qc_engine.review_extension.lineage import record_grid_selection
+
+            record_grid_selection(output, mapping, choose)
         selected |= choose
         selection_counts[name] = int(np.count_nonzero(choose))
 
@@ -268,6 +276,8 @@ def build_hybrid_scan(
     source_attributes["volume_end_time_utc"] = np.datetime_as_string(
         ray_times.max(), unit="ns", timezone="UTC"
     )
+    if review_lineage:
+        source_attributes["qc_review_extension_version"] = root.attrs["qc_review_extension_version"]
     return RadarGridResult(
         grid=grid,
         profile=profile,
