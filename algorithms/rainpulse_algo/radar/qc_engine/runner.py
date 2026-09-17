@@ -279,6 +279,9 @@ def run_open_source_qc(
                 "qc-opensource-7.2.1",
                 "qc-opensource-7.3.0",
                 "qc-opensource-7.3.1",
+                "qc-opensource-7.3.2",
+                "qc-opensource-7.3.3",
+                "qc-opensource-7.3.4",
             }:
                 from .object_consensus.adapter import evaluate_native, scalar_completion
                 from .object_consensus.config import Policy

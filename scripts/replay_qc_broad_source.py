@@ -80,7 +80,9 @@ def main():
         new_isolated=int((mask & eligible).sum()),
         high_before=int(high.sum()),
         high_remaining=int((high & ~mask).sum()),
-        scope="incremental_generalization_on_saved_7_2_lowest_cut_not_published",
+        scope="incremental_generalization_on_saved_lowest_cut_not_published",
+        baseline_version=source.attrs.get("qc_pipeline_version", "unknown"),
+        candidate_version=profile.pipeline_version,
     )
     Path(args.output).write_text(json.dumps(summary, indent=2) + "\n")
     np.save(args.output + ".mask.npy", mask)
@@ -101,8 +103,14 @@ def main():
     for i, (label, m) in enumerate(
         [
             ("Raw", np.isfinite(z)),
-            ("7.2 eligible", eligible),
-            ("7.3 incremental stage replay - not published", eligible & ~mask),
+            (
+                str(source.attrs.get("qc_pipeline_version", "baseline")) + " eligible",
+                eligible,
+            ),
+            (
+                profile.pipeline_version + " incremental - not published",
+                eligible & ~mask,
+            ),
         ]
     ):
         im = Image.fromarray(

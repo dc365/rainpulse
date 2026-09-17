@@ -263,6 +263,9 @@ class OpenSourceQCProfile(FrozenConfig):
         "qc-opensource-7.2.1",
         "qc-opensource-7.3.0",
         "qc-opensource-7.3.1",
+        "qc-opensource-7.3.2",
+        "qc-opensource-7.3.3",
+        "qc-opensource-7.3.4",
     ] = "qc-opensource-1.0.0"
     decision_version: Literal[
         "type-specific-v1",
@@ -334,7 +337,13 @@ class OpenSourceQCProfile(FrozenConfig):
         if self.generalization is not None and self.generalization.broad_source is None:
             value["generalization"].pop("broad_source", None)
         if self.generalization is not None and self.generalization.broad_source is not None:
-            for key in ("shared_range_term", "observed_range"):
+            for key in (
+                "shared_range_term",
+                "observed_range",
+                "distance_polar_reference",
+                "radial_opening",
+                "source_edge",
+            ):
                 if not getattr(self.generalization.broad_source, key):
                     value["generalization"]["broad_source"].pop(key, None)
         data = json.dumps(value, sort_keys=True, separators=(",", ":"))
@@ -356,6 +365,9 @@ class OpenSourceQCProfile(FrozenConfig):
             "qc-opensource-7.2.1": "generalization-p0p2-v1",
             "qc-opensource-7.3.0": "generalization-p0p2-v1",
             "qc-opensource-7.3.1": "generalization-p0p2-v1",
+            "qc-opensource-7.3.2": "generalization-p0p2-v1",
+            "qc-opensource-7.3.3": "generalization-p0p2-v1",
+            "qc-opensource-7.3.4": "generalization-p0p2-v1",
         }[self.pipeline_version]
         if object_version is None:
             if self.decision_version != "type-specific-v1" or self.rfi_objects is not None:
@@ -380,6 +392,9 @@ class OpenSourceQCProfile(FrozenConfig):
                 "qc-opensource-7.2.1",
                 "qc-opensource-7.3.0",
                 "qc-opensource-7.3.1",
+                "qc-opensource-7.3.2",
+                "qc-opensource-7.3.3",
+                "qc-opensource-7.3.4",
             }
         ) != (self.literature is not None):
             raise ValueError("paper fusion requires its own versioned configuration")
@@ -399,6 +414,9 @@ class OpenSourceQCProfile(FrozenConfig):
                 "qc-opensource-7.2.1",
                 "qc-opensource-7.3.0",
                 "qc-opensource-7.3.1",
+                "qc-opensource-7.3.2",
+                "qc-opensource-7.3.3",
+                "qc-opensource-7.3.4",
             }
         ) != (self.cross_radar is not None):
             raise ValueError("cross-radar evidence requires its own coordinated V5 profile")
@@ -418,6 +436,9 @@ class OpenSourceQCProfile(FrozenConfig):
                 "qc-opensource-7.2.1",
                 "qc-opensource-7.3.0",
                 "qc-opensource-7.3.1",
+                "qc-opensource-7.3.2",
+                "qc-opensource-7.3.3",
+                "qc-opensource-7.3.4",
             }
         ) != (self.residual is not None):
             raise ValueError("residual modules require the coordinated V6 profile")
@@ -436,6 +457,9 @@ class OpenSourceQCProfile(FrozenConfig):
                 "qc-opensource-7.2.1",
                 "qc-opensource-7.3.0",
                 "qc-opensource-7.3.1",
+                "qc-opensource-7.3.2",
+                "qc-opensource-7.3.3",
+                "qc-opensource-7.3.4",
             }
         ) != (self.residual_repair is not None):
             raise ValueError("topology repair requires its own coordinated 6.1 profile")
@@ -448,6 +472,9 @@ class OpenSourceQCProfile(FrozenConfig):
                 "qc-opensource-7.2.1",
                 "qc-opensource-7.3.0",
                 "qc-opensource-7.3.1",
+                "qc-opensource-7.3.2",
+                "qc-opensource-7.3.3",
+                "qc-opensource-7.3.4",
             }
         ) != (self.evidence_graph is not None):
             raise ValueError("V7 evidence graph requires its own coordinated profile")
@@ -463,6 +490,9 @@ class OpenSourceQCProfile(FrozenConfig):
                 "qc-opensource-7.2.1",
                 "qc-opensource-7.3.0",
                 "qc-opensource-7.3.1",
+                "qc-opensource-7.3.2",
+                "qc-opensource-7.3.3",
+                "qc-opensource-7.3.4",
             }
         ) != (self.generalization is not None):
             raise ValueError("P0-P2 policies require their own coordinated 7.2 profile")
@@ -470,17 +500,47 @@ class OpenSourceQCProfile(FrozenConfig):
             self.generalization
             and self.generalization.bounded_edge_reference
             and self.pipeline_version
-            not in {"qc-opensource-7.2.1", "qc-opensource-7.3.0", "qc-opensource-7.3.1"}
+            not in {
+                "qc-opensource-7.2.1",
+                "qc-opensource-7.3.0",
+                "qc-opensource-7.3.1",
+                "qc-opensource-7.3.2",
+                "qc-opensource-7.3.3",
+                "qc-opensource-7.3.4",
+            }
         ):
             raise ValueError("bounded edge reference requires the 7.2.1 candidate identity")
         if self.generalization is not None and self.generalization.broad_source is not None:
             b = self.generalization.broad_source
-            if (
-                b.shared_range_term or b.observed_range
-            ) and self.pipeline_version != "qc-opensource-7.3.1":
+            if b.source_edge and self.pipeline_version != "qc-opensource-7.3.4":
+                raise ValueError("source edge requires 7.3.4 identity")
+            if b.radial_opening and self.pipeline_version not in {
+                "qc-opensource-7.3.3",
+                "qc-opensource-7.3.4",
+            }:
+                raise ValueError("radial opening requires 7.3.3 identity")
+            if b.distance_polar_reference and self.pipeline_version not in {
+                "qc-opensource-7.3.2",
+                "qc-opensource-7.3.3",
+                "qc-opensource-7.3.4",
+            }:
+                raise ValueError("distance polar reference requires 7.3.2 identity")
+            if (b.shared_range_term or b.observed_range) and self.pipeline_version not in {
+                "qc-opensource-7.3.1",
+                "qc-opensource-7.3.2",
+                "qc-opensource-7.3.3",
+                "qc-opensource-7.3.4",
+            }:
                 raise ValueError("shared range model requires 7.3.1 identity")
         if self.generalization is not None and (self.generalization.broad_source is not None) != (
-            self.pipeline_version in {"qc-opensource-7.3.0", "qc-opensource-7.3.1"}
+            self.pipeline_version
+            in {
+                "qc-opensource-7.3.0",
+                "qc-opensource-7.3.1",
+                "qc-opensource-7.3.2",
+                "qc-opensource-7.3.3",
+                "qc-opensource-7.3.4",
+            }
         ):
             raise ValueError("broad source model requires its own 7.3.0 identity")
         if (

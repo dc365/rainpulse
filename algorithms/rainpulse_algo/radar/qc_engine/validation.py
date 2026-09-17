@@ -45,6 +45,9 @@ def validate_sweep(group, attrs) -> None:
         "qc-opensource-7.2.1",
         "qc-opensource-7.3.0",
         "qc-opensource-7.3.1",
+        "qc-opensource-7.3.2",
+        "qc-opensource-7.3.3",
+        "qc-opensource-7.3.4",
     }
     version61 = version7 or attrs.get("qc_pipeline_version") == "qc-opensource-6.1.0"
     baseline7_reject, baseline7_quarantine = reject, quarantine
@@ -57,6 +60,9 @@ def validate_sweep(group, attrs) -> None:
             "qc-opensource-7.2.1",
             "qc-opensource-7.3.0",
             "qc-opensource-7.3.1",
+            "qc-opensource-7.3.2",
+            "qc-opensource-7.3.3",
+            "qc-opensource-7.3.4",
         }
         and "OC1_ADDED_QUARANTINE_MASK" not in group
     ):
@@ -68,6 +74,9 @@ def validate_sweep(group, attrs) -> None:
             "qc-opensource-7.2.1",
             "qc-opensource-7.3.0",
             "qc-opensource-7.3.1",
+            "qc-opensource-7.3.2",
+            "qc-opensource-7.3.3",
+            "qc-opensource-7.3.4",
         }
         and "P2_ADDED_QUARANTINE_MASK" not in group
     ):
@@ -95,6 +104,9 @@ def validate_sweep(group, attrs) -> None:
         "qc-opensource-7.2.1",
         "qc-opensource-7.3.0",
         "qc-opensource-7.3.1",
+        "qc-opensource-7.3.2",
+        "qc-opensource-7.3.3",
+        "qc-opensource-7.3.4",
     }:
         for field, dtype in {
             "RFI_OBJECT_ID": "uint32",
@@ -232,6 +244,9 @@ def validate_sweep(group, attrs) -> None:
         "qc-opensource-7.2.1",
         "qc-opensource-7.3.0",
         "qc-opensource-7.3.1",
+        "qc-opensource-7.3.2",
+        "qc-opensource-7.3.3",
+        "qc-opensource-7.3.4",
     }:
         for name, dtype in {
             "P2_REVIEW_REASON": "uint32",
@@ -250,6 +265,9 @@ def validate_sweep(group, attrs) -> None:
             "qc-opensource-7.2.1",
             "qc-opensource-7.3.0",
             "qc-opensource-7.3.1",
+            "qc-opensource-7.3.2",
+            "qc-opensource-7.3.3",
+            "qc-opensource-7.3.4",
         }:
             key = "P2_BOUNDED_EDGE_REFERENCE_MASK"
             if (
@@ -261,7 +279,13 @@ def validate_sweep(group, attrs) -> None:
             edge = group[key][:] == 1
             if np.any(edge & ~valid):
                 raise ValueError("bounded edge filled missing observations")
-        if attrs.get("qc_pipeline_version") in {"qc-opensource-7.3.0", "qc-opensource-7.3.1"}:
+        if attrs.get("qc_pipeline_version") in {
+            "qc-opensource-7.3.0",
+            "qc-opensource-7.3.1",
+            "qc-opensource-7.3.2",
+            "qc-opensource-7.3.3",
+            "qc-opensource-7.3.4",
+        }:
             for name, dtype in {
                 "BWS_CANDIDATE_MASK": "uint8",
                 "BWS_REASON": "uint16",

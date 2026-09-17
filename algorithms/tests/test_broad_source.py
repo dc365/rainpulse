@@ -184,3 +184,76 @@ def test_enabled_model_keeps_target_guard_out_of_calibration():
     right = [x for x in after["range_term_folds"] if x["target_block"] == 3]
     assert left and left == right
     assert left[0]["status"] == "measured_consistent"
+
+
+def distance_scene():
+    n = scene()
+    rng = np.random.default_rng(93)
+    near = n.ranges < 100000
+    n.fields["PHIDP"][:, near] = rng.normal(0, 5, (12, near.sum()))
+    n.fields["ZDR"][:, near] = rng.normal(0, 0.55, (12, near.sum()))
+    n.fields["RHOHV"][:, near] = rng.uniform(0.85, 1, (12, near.sum()))
+    return n, near
+
+
+def test_distance_polar_recovers_heldout_near_source():
+    n, near = distance_scene()
+    old, _ = infer_broad_source(n, BroadSourceConfig())
+    new, diag = infer_broad_source(n, BroadSourceConfig(distance_polar_reference=True))
+    assert new["BWS_CANDIDATE_MASK"][:, near].sum() > old["BWS_CANDIDATE_MASK"][:, near].sum() * 2
+    assert any(
+        x.get("distance_polar", {}).get("status") == "measured_consistent" for x in diag["folds"]
+    )
+
+
+def test_distance_polar_target_guard_cannot_train_reference():
+    n, near = distance_scene()
+    cfg = BroadSourceConfig(distance_polar_reference=True)
+    _, a = infer_broad_source(n, cfg)
+    for k in ("PHIDP", "ZDR", "RHOHV"):
+        n.fields[k][4:7, near] += 40
+    out, b = infer_broad_source(n, cfg)
+
+    def ref(d):
+        return next(
+            x["distance_polar"] for x in d["folds"] if x["ray"] == 5 and x["target_block"] == 0
+        )
+
+    assert ref(a) == ref(b)
+    assert not out["BWS_CANDIDATE_MASK"][5, near].any()
+
+
+def test_distance_polar_protection_enhancement_and_sparse_fallback():
+    n, near = distance_scene()
+    cfg = BroadSourceConfig(distance_polar_reference=True)
+    weather = np.zeros(n.shape, bool)
+    weather[5, :40] = True
+    n.fields["DBZH"][5, 40:80] += 10
+    n.field_available["DBZH"][5, 80:100] = False
+    out, _ = infer_broad_source(n, cfg, weather=weather)
+    assert out["BWS_CANDIDATE_MASK"][:, near].any()
+    assert not out["BWS_CANDIDATE_MASK"][5, :100].any()
+    n.gap_after[:] = True
+    out, _ = infer_broad_source(n, cfg)
+    assert not out["BWS_CANDIDATE_MASK"].any()
+
+
+def test_distance_phase_wrap_preserves_candidates():
+    n, _ = distance_scene()
+    cfg = BroadSourceConfig(distance_polar_reference=True)
+    a, _ = infer_broad_source(n, cfg)
+    n.fields["PHIDP"] = (n.fields["PHIDP"] + 359) % 360
+    b, _ = infer_broad_source(n, cfg)
+    assert np.array_equal(a["BWS_CANDIDATE_MASK"], b["BWS_CANDIDATE_MASK"])
+
+
+def test_distance_inconsistent_donors_do_not_expand_old_mask():
+    n, near = distance_scene()
+    # Target ray 5 has donor rays 0,1,2,3,7,8,9,10 in connected ±5°.
+    for ray in (1, 3, 8, 10):
+        n.fields["PHIDP"][ray, near] += 4
+    a, _ = infer_broad_source(n, BroadSourceConfig())
+    b, diag = infer_broad_source(n, BroadSourceConfig(distance_polar_reference=True))
+    fold = next(x for x in diag["folds"] if x["ray"] == 5 and x["target_block"] == 0)
+    assert fold["distance_polar"]["status"] != "measured_consistent"
+    assert np.array_equal(a["BWS_CANDIDATE_MASK"][5, near], b["BWS_CANDIDATE_MASK"][5, near])

@@ -1,0 +1,8 @@
+# Apply after the existing deployment overlays. QC data and diagnostic PNGs only.
+services:
+  radar-qc-worker:
+    image: rainpulse-cpu-worker:qc-opensource-7.3.4-source-edge
+    environment:
+      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/fujian-qc-source-edge-v1.yaml
+  analysis-diagnostics-worker:
+    image: rainpulse-cpu-worker:qc-opensource-7.3.4-display

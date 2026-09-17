@@ -11,12 +11,17 @@ from typing import Literal
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
+from .distance_polar import distance_polar_reference
+
 
 class BroadSourceConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
     mode: Literal["audit", "experiment_quarantine"] = "audit"
     shared_range_term: bool = False
     observed_range: bool = False
+    distance_polar_reference: bool = False
+    radial_opening: bool = False
+    source_edge: bool = False
     block_m: float = Field(default=50000, gt=0)
     minimum_range_m: float = Field(default=50000, gt=0)
     maximum_range_m: float = Field(default=450000, gt=50000)
@@ -42,6 +47,8 @@ class Reason(IntFlag):
     WEATHER_PROTECTED = 8
     TARGET_CONFLICT = 16
     NUMERIC_PLATEAU = 32
+    RADIAL_MORPHOLOGY = 64
+    SOURCE_EDGE = 128
 
 
 def wrap(x):
@@ -161,6 +168,13 @@ def infer_broad_source(native, cfg, *, weather=None, conflicts=None):
             for lo, hi in zip(np.flatnonzero(edges == 1), np.flatnonzero(edges == -1)):
                 if r[indices[hi]] - r[indices[lo]] >= 25000:
                     reference_plateau[ray, indices[lo : hi + 1]] = True
+    polar_veto = protected | conflict | plateau
+    morphology = empty.copy()
+    if cfg.radial_opening:
+        from .radial_opening import radial_opening
+
+        morphology = radial_opening(f["DBZH"], obs, native.gate_spacing_m)
+    edge_reference = empty.copy()
     range_term_folds = []
     records = []
     qualified = 0
@@ -240,6 +254,11 @@ def infer_broad_source(native, cfg, *, weather=None, conflicts=None):
                     current = nxt
             target = valid[ray] & target_geometry
             reason[ray, target] |= int(Reason.REFERENCE_FIT)
+            if cfg.source_edge:
+                residual[ray, target] = (power[ray] - fit[0])[target]
+                edge_reference[ray] |= (
+                    target & (f["SNR"][ray] >= fit[5][0] - 1) & (f["SNR"][ray] <= fit[5][1] + 1)
+                )
             angular_span = np.ptp(
                 [(native.azimuth[k] - native.azimuth[ray] + 180) % 360 - 180 for k in neighbours]
             )
@@ -268,6 +287,44 @@ def infer_broad_source(native, cfg, *, weather=None, conflicts=None):
                 & (f["RHOHV"][ray] >= max(0, h[0] - 0.01))
                 & (f["RHOHV"][ray] <= min(1, h[1] + 0.01))
             )
+            polar_diag = {"status": "disabled"}
+            if cfg.distance_polar_reference:
+                bounds, polar_diag = distance_polar_reference(
+                    native,
+                    cfg,
+                    ray,
+                    neighbours,
+                    fits,
+                    power,
+                    target_geometry,
+                    valid,
+                    polar_veto,
+                )
+                if bounds is not None:
+                    pp, zz, hh = bounds
+                    matched |= (
+                        target
+                        & (abs(delta) <= cfg.range_residual_db)
+                        & (f["SNR"][ray] >= s[0] - 1)
+                        & (f["SNR"][ray] <= s[1] + 1)
+                        & (pc >= pp[0] - 0.5)
+                        & (pc <= pp[1] + 0.5)
+                        & (f["ZDR"][ray] >= zz[0] - 0.125)
+                        & (f["ZDR"][ray] <= zz[1] + 0.125)
+                        & (f["RHOHV"][ray] >= max(0, hh[0] - 0.01))
+                        & (f["RHOHV"][ray] <= min(1, hh[1] + 0.01))
+                    )
+            if cfg.radial_opening:
+                morph_match = (
+                    target
+                    & morphology[ray]
+                    & (abs(delta) <= cfg.range_residual_db)
+                    & (f["SNR"][ray] >= s[0] - 1)
+                    & (f["SNR"][ray] <= s[1] + 1)
+                )
+                reason[ray, morph_match] |= int(Reason.RADIAL_MORPHOLOGY)
+                reason[ray, morph_match & ~matched] |= int(Reason.TARGET_CONFLICT)
+                matched |= morph_match
             reason[ray, matched] |= int(Reason.TARGET_MATCH)
             reason[ray, target & ~matched] |= int(Reason.TARGET_CONFLICT)
             candidate[ray] = candidate[ray] | (
@@ -281,8 +338,24 @@ def infer_broad_source(native, cfg, *, weather=None, conflicts=None):
                     "intercept_db": intercept,
                     "phase_center_deg": center,
                     "support_rays": sorted(neighbours),
+                    **({"distance_polar": polar_diag} if cfg.distance_polar_reference else {}),
                 }
             )
+    edge_summary = {"status": "disabled", "candidate_gates": 0}
+    if cfg.source_edge:
+        from .source_edge import source_edge
+
+        edge_added, _ = source_edge(
+            native,
+            candidate,
+            edge_reference,
+            residual,
+            weather=protected,
+            conflicts=conflict | plateau,
+        )
+        candidate |= edge_added
+        reason[edge_added] |= int(Reason.SOURCE_EDGE | Reason.TARGET_MATCH)
+        edge_summary = {"status": "experimental_one_hop", "candidate_gates": int(edge_added.sum())}
     reason[obs & protected] |= int(Reason.WEATHER_PROTECTED)
     reason[obs & conflict] |= int(Reason.TARGET_CONFLICT)
     reason[obs & plateau] |= int(Reason.NUMERIC_PLATEAU)
@@ -298,4 +371,20 @@ def infer_broad_source(native, cfg, *, weather=None, conflicts=None):
         "operational_eligible": False,
         "folds": records,
         "range_term_folds": range_term_folds,
+        **({"source_edge": edge_summary} if cfg.source_edge else {}),
+        **(
+            {
+                "radial_opening": {
+                    "algorithm": "skimage.morphology.opening",
+                    "version": "0.26.0",
+                    "threshold_dbz_exclusive": 35,
+                    "minimum_length_m": 50000,
+                    "footprint_gates": int(np.ceil(50000 / native.gate_spacing_m)) | 1,
+                    "raw_candidate_gates": int(morphology.sum()),
+                    "source_supported_gates": int(((reason & 64) != 0).sum()),
+                }
+            }
+            if cfg.radial_opening
+            else {}
+        ),
     }

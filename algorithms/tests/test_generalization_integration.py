@@ -25,6 +25,9 @@ from .test_residual_v61_integration import FLAGS, ROOT, build_case61, frozen
         (P.with_name("fujian-qc-generalization-edge.yaml"), "qc-opensource-7.2.1"),
         (P.with_name("fujian-qc-broad-source-v1.yaml"), "qc-opensource-7.3.0"),
         (P.with_name("fujian-qc-broad-source-range-v1.yaml"), "qc-opensource-7.3.1"),
+        (P.with_name("fujian-qc-distance-polar-v1.yaml"), "qc-opensource-7.3.2"),
+        (P.with_name("fujian-qc-radial-opening-v1.yaml"), "qc-opensource-7.3.3"),
+        (P.with_name("fujian-qc-source-edge-v1.yaml"), "qc-opensource-7.3.4"),
     ],
 )
 def test_actual_worker_p0p2_artifact_and_idempotency(tmp_path, monkeypatch, config, version):
