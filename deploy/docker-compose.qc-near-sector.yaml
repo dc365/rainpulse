@@ -1,0 +1,8 @@
+# Apply after the source-edge overlay. Regenerates station QC and diagnostics only.
+services:
+  radar-qc-worker:
+    image: rainpulse-cpu-worker:qc-opensource-7.3.6-near-sector
+    environment:
+      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/fujian-qc-near-sector-v1.yaml
+  analysis-diagnostics-worker:
+    image: rainpulse-cpu-worker:qc-opensource-7.3.6-display

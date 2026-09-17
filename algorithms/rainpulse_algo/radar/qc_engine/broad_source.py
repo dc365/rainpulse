@@ -22,6 +22,8 @@ class BroadSourceConfig(BaseModel):
     distance_polar_reference: bool = False
     radial_opening: bool = False
     source_edge: bool = False
+    near_range_targets: bool = False
+    near_sector_consensus: bool = False
     block_m: float = Field(default=50000, gt=0)
     minimum_range_m: float = Field(default=50000, gt=0)
     maximum_range_m: float = Field(default=450000, gt=50000)
@@ -49,6 +51,8 @@ class Reason(IntFlag):
     NUMERIC_PLATEAU = 32
     RADIAL_MORPHOLOGY = 64
     SOURCE_EDGE = 128
+    NEAR_RANGE_TARGET = 256
+    NEAR_SECTOR_CONSENSUS = 512
 
 
 def wrap(x):
@@ -132,7 +136,8 @@ def infer_broad_source(native, cfg, *, weather=None, conflicts=None):
     in_range = (r >= cfg.minimum_range_m) & (
         True if cfg.observed_range else r < cfg.maximum_range_m
     )
-    valid = obs & in_range[None, :]
+    target_range = in_range | (cfg.near_range_targets & (r > 0) & (r < cfg.minimum_range_m))
+    valid = obs & target_range[None, :]
     for k in required:
         valid &= a[k] & np.isfinite(f[k])
     valid &= f["SNR"] >= 8
@@ -174,11 +179,12 @@ def infer_broad_source(native, cfg, *, weather=None, conflicts=None):
         from .radial_opening import radial_opening
 
         morphology = radial_opening(f["DBZH"], obs, native.gate_spacing_m)
+    near_reference = empty.copy()
     edge_reference = empty.copy()
     range_term_folds = []
     records = []
     qualified = 0
-    for block in np.unique(blocks[in_range]):
+    for block in np.unique(blocks[target_range]):
         target_geometry = blocks == block
         # No target or guard values enter any reference statistic or membership.
         train_geometry = in_range & (abs(blocks - block) > 1)
@@ -254,10 +260,18 @@ def infer_broad_source(native, cfg, *, weather=None, conflicts=None):
                     current = nxt
             target = valid[ray] & target_geometry
             reason[ray, target] |= int(Reason.REFERENCE_FIT)
+            reason[ray, target & ~in_range] |= int(Reason.NEAR_RANGE_TARGET)
+            if cfg.near_sector_consensus:
+                near_reference[ray] |= (
+                    target & (f["SNR"][ray] >= fit[5][0] - 1) & (f["SNR"][ray] <= fit[5][1] + 1)
+                )
             if cfg.source_edge:
                 residual[ray, target] = (power[ray] - fit[0])[target]
                 edge_reference[ray] |= (
-                    target & (f["SNR"][ray] >= fit[5][0] - 1) & (f["SNR"][ray] <= fit[5][1] + 1)
+                    target
+                    & in_range
+                    & (f["SNR"][ray] >= fit[5][0] - 1)
+                    & (f["SNR"][ray] <= fit[5][1] + 1)
                 )
             angular_span = np.ptp(
                 [(native.azimuth[k] - native.azimuth[ray] + 180) % 360 - 180 for k in neighbours]
@@ -317,6 +331,7 @@ def infer_broad_source(native, cfg, *, weather=None, conflicts=None):
             if cfg.radial_opening:
                 morph_match = (
                     target
+                    & in_range
                     & morphology[ray]
                     & (abs(delta) <= cfg.range_residual_db)
                     & (f["SNR"][ray] >= s[0] - 1)
@@ -356,6 +371,25 @@ def infer_broad_source(native, cfg, *, weather=None, conflicts=None):
         candidate |= edge_added
         reason[edge_added] |= int(Reason.SOURCE_EDGE | Reason.TARGET_MATCH)
         edge_summary = {"status": "experimental_one_hop", "candidate_gates": int(edge_added.sum())}
+    sector_summary = {"status": "disabled", "candidate_gates": 0}
+    if cfg.near_sector_consensus:
+        from .near_sector import near_sector
+
+        measured_source = (
+            near_reference & ((reason & 3) == 3) & (abs(residual) <= cfg.range_residual_db)
+        )
+        sector_added = near_sector(
+            native, measured_source, weather=protected, conflicts=conflict | plateau
+        )
+        sector_added &= ~candidate
+        candidate |= sector_added
+        reason[sector_added] |= int(Reason.NEAR_SECTOR_CONSENSUS | Reason.TARGET_MATCH)
+        sector_summary = {
+            "status": "experimental_source_morphology",
+            "candidate_gates": int(sector_added.sum()),
+            "minimum_rays": 3,
+            "minimum_range_span_m": 10000,
+        }
     reason[obs & protected] |= int(Reason.WEATHER_PROTECTED)
     reason[obs & conflict] |= int(Reason.TARGET_CONFLICT)
     reason[obs & plateau] |= int(Reason.NUMERIC_PLATEAU)
@@ -371,6 +405,7 @@ def infer_broad_source(native, cfg, *, weather=None, conflicts=None):
         "operational_eligible": False,
         "folds": records,
         "range_term_folds": range_term_folds,
+        **({"near_sector": sector_summary} if cfg.near_sector_consensus else {}),
         **({"source_edge": edge_summary} if cfg.source_edge else {}),
         **(
             {

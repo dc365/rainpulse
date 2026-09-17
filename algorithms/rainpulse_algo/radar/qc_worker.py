@@ -203,6 +203,8 @@ def _completion_qc_summary(summary):
         "qc-opensource-7.3.2",
         "qc-opensource-7.3.3",
         "qc-opensource-7.3.4",
+        "qc-opensource-7.3.5",
+        "qc-opensource-7.3.6",
     }:
         return summary
     keys = (

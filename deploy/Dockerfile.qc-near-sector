@@ -1,0 +1,5 @@
+ARG BASE_IMAGE=rainpulse-cpu-worker:qc-opensource-7.3.4-source-edge
+FROM ${BASE_IMAGE}
+COPY algorithms/rainpulse_algo/radar/qc_engine /opt/rainpulse/rainpulse_algo/radar/qc_engine
+COPY algorithms/rainpulse_algo/radar/qc_worker.py /opt/rainpulse/rainpulse_algo/radar/qc_worker.py
+COPY configs/qc/fujian-qc-near-sector-v1.yaml /opt/rainpulse/configs/qc/fujian-qc-near-sector-v1.yaml
