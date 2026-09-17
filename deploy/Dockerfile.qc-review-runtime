@@ -1,0 +1,4 @@
+FROM rainpulse-cpu-worker:qc-review-20260917-v1
+USER root
+RUN python -m pip install --no-cache-dir scikit-image==0.26.0
+RUN python -c "import skimage; assert skimage.__version__ == '0.26.0'"

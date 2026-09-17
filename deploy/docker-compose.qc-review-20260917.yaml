@@ -1,13 +1,15 @@
 services:
   radar-qc-worker:
-    image: rainpulse-cpu-worker:qc-review-20260917-v1
+    image: rainpulse-cpu-worker:qc-review-20260917-r2
     environment:
-      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/fujian-qc-review-20260917-audit.yaml
+      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/fujian-qc-review-20260917-experiment.yaml
+    volumes:
+      - ../configs/qc/fujian-qc-review-20260917-experiment.yaml:/opt/rainpulse/configs/qc/fujian-qc-review-20260917-experiment.yaml:ro
   radar-grid-worker:
-    image: rainpulse-cpu-worker:qc-review-20260917-v1
+    image: rainpulse-cpu-worker:qc-review-20260917-r2
   radar-mosaic-worker:
-    image: rainpulse-cpu-worker:qc-review-20260917-v1
+    image: rainpulse-cpu-worker:qc-review-20260917-r2
   analysis-qpe-worker:
-    image: rainpulse-cpu-worker:qc-review-20260917-v1
+    image: rainpulse-cpu-worker:qc-review-20260917-r2
   analysis-diagnostics-worker:
-    image: rainpulse-cpu-worker:qc-review-20260917-v1
+    image: rainpulse-cpu-worker:qc-review-20260917-r2
