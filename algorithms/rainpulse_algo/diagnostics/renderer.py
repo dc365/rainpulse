@@ -26,16 +26,17 @@ class DiagnosticInputError(ValueError):
 
 
 REFLECTIVITY_STOPS = (
-    (-10.0, "#9dd9ff"),
-    (0.0, "#4ba3f2"),
-    (10.0, "#1d73d0"),
-    (20.0, "#3ca85b"),
-    (30.0, "#9acb3c"),
-    (40.0, "#efd23a"),
-    (50.0, "#ee8a2d"),
-    (60.0, "#cf453b"),
-    (70.0, "#862f82"),
+    # Seven anchors in the supplied operational legend.  The renderer blends
+    # continuously between anchors, while the legend labels stay at 10 dBZ.
+    (10.0, "#0fa3ea"),
+    (20.0, "#06d215"),
+    (30.0, "#089e0a"),
+    (40.0, "#f0ac14"),
+    (50.0, "#e46c60"),
+    (60.0, "#cb15aa"),
+    (70.0, "#ad96f2"),
 )
+
 RATE_STOPS = (
     (0.0, "#dce9ee"),
     (0.1, "#9dd9ff"),
@@ -134,7 +135,7 @@ def build_diagnostic_bundle(
         ("grid-beam-height", "波束高度", "BEAM_HEIGHT", "scalar", "m", BEAM_STOPS),
     )
     for layer_id, title, field, rendering, unit, stops in grid_specs:
-        rgba = _scalar_rgba(analysis[field][:], valid, stops)
+        rgba = _scalar_rgba(analysis[field][:], valid, stops, smooth=unit == "dBZ")
         rgba = _north_up_scaled(rgba, grid_scale)
         layers.append(
             _store_layer(
@@ -285,7 +286,7 @@ def build_diagnostic_bundle(
                     if "QPE_ELIGIBLE_MASK" not in group:
                         raise DiagnosticInputError("v2 QC lacks quantitative eligibility")
                     field_valid &= group["QPE_ELIGIBLE_MASK"][:] == 1
-            rgba = _scalar_rgba(group[field][:], field_valid, stops)
+            rgba = _scalar_rgba(group[field][:], field_valid, stops, smooth=unit == "dBZ")
             projected = projector(
                 rgba,
                 group["azimuth"][:],
@@ -448,6 +449,8 @@ def _scalar_rgba(
     values: np.ndarray,
     valid: np.ndarray,
     stops: Sequence[tuple[float, str]],
+    *,
+    smooth: bool = False,
 ) -> np.ndarray:
     data = np.asarray(values)
     mask = np.asarray(valid, dtype=bool) & np.isfinite(data)
@@ -456,7 +459,23 @@ def _scalar_rgba(
     colors = np.asarray([_hex_rgba(item[1]) for item in stops], dtype=np.uint8)
     indices = np.searchsorted(thresholds, data, side="right") - 1
     indices = np.clip(indices, 0, len(stops) - 1)
-    rgba[mask] = colors[indices[mask]]
+    if smooth:
+        upper = np.clip(indices + 1, 0, len(stops) - 1)
+        lower_thresholds = thresholds[indices]
+        spans = thresholds[upper] - lower_thresholds
+        fractions = np.divide(
+            data - lower_thresholds,
+            spans,
+            out=np.zeros_like(data, dtype=np.float64),
+            where=spans > 0,
+        )
+        blended = np.rint(
+            colors[indices].astype(np.float64) * (1.0 - fractions[..., None])
+            + colors[upper].astype(np.float64) * fractions[..., None]
+        ).astype(np.uint8)
+        rgba[mask] = blended[mask]
+    else:
+        rgba[mask] = colors[indices[mask]]
     return rgba
 
 

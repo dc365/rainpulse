@@ -341,7 +341,10 @@ def _render(out, cut, native, baseline, arrays):
         ),
     ):
         rgba = _scalar_rgba(
-            baseline.get("DBZH_QC", native.fields["DBZH"]), eligible, REFLECTIVITY_STOPS
+            baseline.get("DBZH_QC", native.fields["DBZH"]),
+            eligible,
+            REFLECTIVITY_STOPS,
+            smooth=True,
         )
         png = encode_rgba_png(_polar_to_ppi(rgba, native.azimuth, native.ranges, 640))
         path = out / f"{cut}-{name}.png"

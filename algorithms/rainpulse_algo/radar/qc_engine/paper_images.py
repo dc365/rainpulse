@@ -32,7 +32,7 @@ def _ppi(values, valid, azimuth, ranges, size=640):
     good = supported & (delta <= spacing * 0.55) & (distance <= ranges[-1])
     good &= distance >= max(0.0, ranges[0] - dr / 2)
     good &= valid[index, gate]
-    rgba = _scalar_rgba(values[index, gate], good, REFLECTIVITY_STOPS)
+    rgba = _scalar_rgba(values[index, gate], good, REFLECTIVITY_STOPS, smooth=True)
     return rgba.reshape((size, size, 4))
 
 
