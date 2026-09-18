@@ -19,6 +19,28 @@ vi.mock('ol/Map.js', async () => {
   } }
 })
 afterEach(() => { vi.useRealTimers(); cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
+
+it('renders reflectivity anchors as one continuous gradient', () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
+  const colors = ['#0fa3ea', '#06d215', '#089e0a', '#f0ac14', '#e46c60', '#cb15aa', '#ad96f2']
+  const legend = [10, 20, 30, 40, 50, 60, 70].map((minimum, index) => ({
+    label: String(minimum), minimum, color: colors[index],
+  }))
+  render(<RasterGISMap
+    imageDescription="reflectivity" imageExtent={[118, 25, 123, 27]}
+    validTimeLabel="T0" contextLabel="test" productLabel="reflectivity"
+    legend={legend} legendUnit="dBZ" footerNote="" mapLabel="reflectivity map"
+    resetViewLabel="reset" loading={false} layerError={false}
+    onLayerError={vi.fn()} comparisonMode
+  />)
+  const bar = screen.getByTestId('reflectivity-gradient')
+  expect(bar.style.backgroundImage).toContain('linear-gradient')
+  expect(bar.style.backgroundImage).toContain('0%')
+  expect(bar.style.backgroundImage).toContain('100%')
+  expect(screen.getByText('10')).toBeTruthy()
+  expect(screen.getByText('70')).toBeTruthy()
+})
+
 it('shows accumulation progress instead of unavailable, but retains real failure feedback', () => {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
   const props = { imageDescription: 'rain', validTimeLabel: 'T0', contextLabel: 'test',

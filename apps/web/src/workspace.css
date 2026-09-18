@@ -627,6 +627,68 @@ button, select { min-height: 40px; }
   scrollbar-width: none;
 }
 .workspace-comparison-map .gis-comparison-legend-scroll::-webkit-scrollbar { display: none; }
+.workspace-comparison-map .reflectivity-legend {
+  width: min(640px, calc(100% - 12px));
+  flex-wrap: wrap;
+  padding: 6px 10px;
+  gap: 6px 12px;
+}
+.workspace-comparison-map .reflectivity-legend > header {
+  border: 0;
+  white-space: nowrap;
+}
+.workspace-comparison-map .reflectivity-legend .gis-comparison-legend-scroll {
+  flex-basis: 360px;
+  overflow: visible;
+  padding-left: 8px;
+}
+.workspace-comparison-map .reflectivity-legend .gis-comparison-legend-scale {
+  gap: 0;
+}
+.workspace-comparison-map .reflectivity-legend .gis-comparison-legend-scale i {
+  height: 12px;
+  border: 1px solid #26312f;
+  border-right: 0;
+}
+.workspace-comparison-map .reflectivity-legend .gis-comparison-legend-scale span:last-child i {
+  border-right: 1px solid #26312f;
+}
+.workspace-comparison-map .reflectivity-legend .gis-comparison-legend-scale small {
+  overflow: visible;
+  justify-self: start;
+  transform: translateX(-50%);
+  padding-top: 3px;
+}
+.workspace-comparison-map .gis-comparison-reflectivity-scale {
+  min-width: 0;
+  margin: 7px 0 2px;
+}
+.workspace-comparison-map .gis-comparison-reflectivity-scale > i {
+  display: block;
+  height: 14px;
+  border: 1px solid #26312f;
+  border-radius: 7px;
+}
+.workspace-comparison-map .gis-comparison-reflectivity-scale > div {
+  position: relative;
+  height: 17px;
+}
+.workspace-comparison-map .gis-comparison-reflectivity-scale small {
+  position: absolute;
+  top: 3px;
+  color: var(--rp-muted);
+  font-size: 11px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.workspace-comparison-map .gis-comparison-reflectivity-scale small:first-child {
+  transform: none;
+}
+.workspace-comparison-map .gis-comparison-reflectivity-scale small:last-child {
+  transform: translateX(-100%);
+}
 .workspace-comparison-map .gis-comparison-legend-scale {
   display: grid;
   gap: 1px;

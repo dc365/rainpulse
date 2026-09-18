@@ -378,6 +378,25 @@ interface RasterGISMapProps {
   picker?: ReactNode
 }
 
+function reflectivityLegendPosition(
+  legend: readonly GISLegendEntry[],
+  index: number,
+): number {
+  const values = legend.map((entry) => entry.minimum)
+  const minimum = values[0]
+  const maximum = values[values.length - 1]
+  if (minimum != null && maximum != null && maximum > minimum && values.every(Number.isFinite)) {
+    return ((values[index]! - minimum) / (maximum - minimum)) * 100
+  }
+  return legend.length > 1 ? (index / (legend.length - 1)) * 100 : 0
+}
+
+function reflectivityLegendGradient(legend: readonly GISLegendEntry[]): string {
+  const stops = legend.map((entry, index) =>
+    `${entry.color} ${reflectivityLegendPosition(legend, index)}%`)
+  return `linear-gradient(90deg, ${stops.join(', ')})`
+}
+
 export function RasterGISMap({
   imageUrl,
   imageDescription,
@@ -933,8 +952,8 @@ export function RasterGISMap({
       {!comparisonMode ? <div ref={pickerRef} className="gis-picker-wrap">{point ? picker : null}</div> : null}
 
       {comparisonMode && legend.length ? (
-        <div className={`gis-comparison-legend ${legendMode}`} aria-label={`${productLabel}图例`} tabIndex={0}>
-          {legendUnit ? <header><strong>{legendUnit}</strong></header> : null}
+        <div className={`gis-comparison-legend ${legendMode}${legendUnit === 'dBZ' ? ' reflectivity-legend' : ''}`} aria-label={`${productLabel}图例`} tabIndex={0}>
+          {legendUnit ? <header><strong>{legendUnit === 'dBZ' ? '基本反射率 · dBZ' : legendUnit}</strong></header> : null}
           <div className="gis-comparison-legend-scroll">
             {legendMode === 'categorical' ? (
               <div className="gis-comparison-legend-list">
@@ -947,6 +966,24 @@ export function RasterGISMap({
                     <small>{item.label}</small>
                   </span>
                 ))}
+              </div>
+            ) : legendUnit === 'dBZ' ? (
+              <div className="gis-comparison-reflectivity-scale">
+                <i
+                  aria-hidden="true"
+                  data-testid="reflectivity-gradient"
+                  style={{ backgroundImage: reflectivityLegendGradient(legend) }}
+                />
+                <div>
+                  {legend.map((item, index) => (
+                    <small
+                      key={`${item.label}-${item.color}`}
+                      style={{ left: `${reflectivityLegendPosition(legend, index)}%` }}
+                    >
+                      {item.label}
+                    </small>
+                  ))}
+                </div>
               </div>
             ) : (
               <div
@@ -980,6 +1017,20 @@ export function RasterGISMap({
         {legendMode === 'categorical' ? (
           <div className="gis-legend-list">
             {legend.map((item) => <span key={`${item.label}-${item.color}`} title={item.sourceLabel ? `${item.label}（${item.sourceLabel}）` : item.label}><i style={{ backgroundColor: item.color }} /><small>{item.label}</small></span>)}
+          </div>
+        ) : legendUnit === 'dBZ' ? (
+          <div className="gis-comparison-reflectivity-scale">
+            <i aria-hidden="true" style={{ backgroundImage: reflectivityLegendGradient(legend) }} />
+            <div>
+              {legend.map((item, index) => (
+                <small
+                  key={`${item.label}-${item.color}`}
+                  style={{ left: `${reflectivityLegendPosition(legend, index)}%` }}
+                >
+                  {item.label}
+                </small>
+              ))}
+            </div>
           </div>
         ) : (
           <div className="gis-legend-cells" style={{ gridTemplateColumns: `repeat(${legend.length}, minmax(0, 1fr))` }}>
