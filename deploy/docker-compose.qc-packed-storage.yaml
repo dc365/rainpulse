@@ -1,0 +1,6 @@
+# Apply only after every QC consumer has the compatible object reader.
+services:
+  radar-qc-worker:
+    environment:
+      RAINPULSE_RADAR_QC_ZARR_LAYOUT: 128x1024
+      RAINPULSE_QC_PACKED_STORAGE: '1'

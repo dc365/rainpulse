@@ -4,5 +4,10 @@ services:
     environment:
       RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/radial-20260918/radial-20260918-step3-experiment_quarantine.yaml
       RAINPULSE_QC_FLAG_DEFINITIONS: /opt/rainpulse/configs/qc/flag-definitions-v2.yaml
+      RAINPULSE_RADAR_QC_ZARR_LAYOUT: 128x1024
+      RAINPULSE_QC_PACKED_STORAGE: '1'
   analysis-diagnostics-worker:
     image: rainpulse-cpu-worker:qc-radial-20260918
+  radar-grid-worker:
+    volumes:
+      - ../algorithms/rainpulse_algo/worker/object_store.py:/opt/rainpulse/rainpulse_algo/worker/object_store.py:ro

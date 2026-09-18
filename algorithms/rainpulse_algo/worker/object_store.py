@@ -103,6 +103,9 @@ class AtomicObjectPublisher:
         marker_key = self._marker_key(prefix, artifact_name)
         digest = artifact_sha256(payloads)
         total_size = sum(len(value) for value in payloads.values())
+        packed_entries = None
+        if os.getenv("RAINPULSE_QC_PACKED_STORAGE", "0") == "1" and "qc/summary.json" in payloads:
+            payloads, packed_entries = _pack_objects(payloads)
         data_prefix = f"_objects/{digest}"
         expected_asset_uri = f"s3://{bucket}/{prefix}/{artifact_name}"
         matching_assets = [
@@ -117,7 +120,7 @@ class AtomicObjectPublisher:
             raise ValueError("completion asset identity differs from the artifact bundle")
         diagnostics = dict(completion.payload.diagnostics)
         diagnostics["artifact_publication"] = {
-            "schema_version": "2.0",
+            "schema_version": "3.0" if packed_entries is not None else "2.0",
             "data_prefix": data_prefix,
         }
         committed_completion = completion.model_copy(
@@ -137,16 +140,19 @@ class AtomicObjectPublisher:
 
         marker = json.dumps(
             {
-                "schema_version": "2.0",
+                "schema_version": "3.0" if packed_entries is not None else "2.0",
                 "sha256": digest,
                 "size_bytes": total_size,
                 "data_prefix": data_prefix,
                 "objects": manifest,
+                **({"packed_entries": packed_entries} if packed_entries is not None else {}),
                 "completion_event": committed_completion.model_dump(mode="json"),
             },
             separators=(",", ":"),
             sort_keys=True,
         ).encode()
+        if len(marker) > MAX_ARTIFACT_MARKER_BYTES:
+            raise ValueError("artifact marker exceeds reader size limit")
         marker_started = time.perf_counter()
         try:
             self._put_marker_if_absent(bucket, marker_key, marker)
@@ -329,6 +335,10 @@ class ArtifactObjectReader:
             worker=self._load_manifest_entry(bucket, object_prefix),
         )
         objects = {key: value for key, value in loaded_pairs}
+        if marker.get("schema_version") == "3.0":
+            objects = _unpack_objects(objects, marker.get("packed_entries"))
+        elif "packed_entries" in marker:
+            raise RuntimeError("packed artifact requires schema 3.0")
         if artifact_sha256(objects) != marker.get("sha256"):
             raise RuntimeError("published artifact bundle checksum differs")
         return objects
@@ -365,6 +375,43 @@ class ArtifactObjectReader:
         finally:
             response.close()
             response.release_conn()
+
+
+def _pack_objects(objects: Mapping[str, bytes], target: int = 8 * 1024**2):
+    packs: dict[str, bytes] = {}
+    entries: list[list[Any]] = []
+    buffer = bytearray()
+    name = "packs/000000.bin"
+    for key, value in sorted(objects.items()):
+        if buffer and len(buffer) + len(value) > target:
+            packs[name] = bytes(buffer)
+            buffer.clear()
+            name = f"packs/{len(packs):06d}.bin"
+        entries.append([key, name, len(buffer), len(value)])
+        buffer.extend(value)
+    packs[name] = bytes(buffer)
+    return packs, entries
+
+
+def _unpack_objects(packs: dict[str, bytes], entries: Any) -> dict[str, bytes]:
+    if not isinstance(entries, list) or not 0 < len(entries) <= 100_000:
+        raise RuntimeError("invalid packed artifact index")
+    positions = dict.fromkeys(packs, 0)
+    objects: dict[str, bytes] = {}
+    for entry in entries:
+        if not isinstance(entry, list) or len(entry) != 4:
+            raise RuntimeError("invalid packed artifact entry")
+        key, name, offset, size = entry
+        if (not isinstance(key, str) or not isinstance(name, str)
+                or name not in packs or key in objects
+                or type(offset) is not int or type(size) is not int or size < 0
+                or offset != positions[name] or offset + size > len(packs[name])):
+            raise RuntimeError("invalid packed artifact bounds or duplicate key")
+        objects[key] = packs[name][offset:offset + size]
+        positions[name] += size
+    if any(positions[name] != len(value) for name, value in packs.items()):
+        raise RuntimeError("packed artifact has unreferenced bytes")
+    return normalize_artifact_objects(data=None, objects=objects)
 
 
 def normalize_artifact_objects(

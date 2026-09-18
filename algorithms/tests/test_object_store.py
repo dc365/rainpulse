@@ -30,6 +30,28 @@ class Response(io.BytesIO):
         pass
 
 
+def test_qc_pack_twenty_thousand_objects_and_corruption():
+    from rainpulse_algo.worker.object_store import _pack_objects, _unpack_objects
+
+    objects = {f"sweep/field/{i}": bytes([i % 256]) * 2048 for i in range(20_000)}
+    packs, entries = _pack_objects(objects)
+    assert len(packs) == 5
+    assert _unpack_objects(packs, entries) == objects
+    assert _pack_objects(dict(reversed(list(objects.items())))) == (packs, entries)
+    with pytest.raises(RuntimeError, match="pack"):
+        _unpack_objects(packs, entries + [entries[0]])
+    with pytest.raises(RuntimeError, match="pack"):
+        _unpack_objects(packs, entries[:-1])
+
+
+def test_qc_pack_preserves_empty_and_oversized_entries():
+    from rainpulse_algo.worker.object_store import _pack_objects, _unpack_objects
+
+    objects = {"a": b"", "b": b"x" * 20, "c": b"", "d": b"yes"}
+    packs, entries = _pack_objects(objects, target=8)
+    assert _unpack_objects(packs, entries) == objects
+
+
 class FakeMinio:
     def __init__(self) -> None:
         self.objects: dict[tuple[str, str], bytes] = {}
@@ -237,7 +259,8 @@ def test_atomic_publish_rejects_completion_for_different_bundle_bytes() -> None:
         )
 
 
-def test_atomic_publish_commits_multi_object_zarr_bundle_before_marker() -> None:
+@pytest.mark.parametrize("packed", [False, True])
+def test_atomic_publish_commits_multi_object_zarr_bundle_before_marker(monkeypatch, packed) -> None:
     from rainpulse_algo.worker.contracts import JobRequested
     from rainpulse_algo.worker.runtime import WorkerResult
 
@@ -251,6 +274,9 @@ def test_atomic_publish_commits_multi_object_zarr_bundle_before_marker() -> None
         ".zattrs": b'{"contract_name":"rainpulse.normalized-radar-volume"}',
         "sweep_000/DBZH/0.0": b"compressed-radar-bytes",
     }
+    if packed:
+        monkeypatch.setenv("RAINPULSE_QC_PACKED_STORAGE", "1")
+        objects["qc/summary.json"] = b"{}"
     result = WorkerResult(objects=objects, metrics={"sweep_count": 1.0})
     completion = worker._build_completion(  # noqa: SLF001
         request=request,
@@ -277,15 +303,23 @@ def test_atomic_publish_commits_multi_object_zarr_bundle_before_marker() -> None
     )
 
     marker = json.loads(client.objects[("rainpulse", published.marker_key)])
-    assert marker["schema_version"] == "2.0"
+    assert marker["schema_version"] == ("3.0" if packed else "2.0")
     assert marker["data_prefix"] == f"_objects/{published.sha256}"
-    assert [item["key"] for item in marker["objects"]] == sorted(objects)
+    if packed:
+        assert len(marker["objects"]) == 1
+    else:
+        assert [item["key"] for item in marker["objects"]] == sorted(objects)
     assert published.size_bytes == sum(map(len, objects.values()))
     assert completion.payload.assets[0].sha256 == published.sha256
     assert all(not key.startswith("_temporary/") for _, key in client.objects)
 
     loaded = ArtifactObjectReader(client).load(published.asset_uri)  # type: ignore[arg-type]
     assert loaded == objects
+    if packed:
+        marker["packed_entries"][0][2] = 1
+        client.objects[("rainpulse", published.marker_key)] = json.dumps(marker).encode()
+        with pytest.raises(RuntimeError, match="pack"):
+            ArtifactObjectReader(client).load(published.asset_uri)
 
 
 def test_atomic_publish_uses_bounded_parallel_object_writes() -> None:
