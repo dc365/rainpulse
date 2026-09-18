@@ -10,6 +10,9 @@ def strip_absent_review_fields(value):
     broad = general.get("broad_source") or {}
     if broad.get("source_review") is None:
         broad.pop("source_review", None)
+    source = broad.get("source_review") or {}
+    if source.get("radial_revision") is None:
+        source.pop("radial_revision", None)
     return value
 
 
@@ -31,6 +34,9 @@ def validate_review_profile(profile):
         raise ValueError("review source reference requires the 360-degree phase convention")
     if source is not None and broad.range_residual_db > source.maximum_source_residual_db:
         raise ValueError("held-out reference fit must be at least as strict as the source target residual")
+    if source is not None and source.radial_revision is not None:
+        if "radial-20260918" not in profile.profile_version:
+            raise ValueError("radial revision requires a distinct radial-20260918 child profile")
     if nonprecip is not None:
         if nonprecip.quarantine_quality >= profile.quality_index.quantitative_minimum:
             raise ValueError("nonprecip quarantine cannot be quantitatively eligible")

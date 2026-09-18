@@ -38,5 +38,9 @@ def validate_source_fields(group, observed):
             raise ValueError("identity links filled noncandidate gates")
         morphology |= candidate
     blocked = (get("SRC_REVIEW_WEATHER_PROTECTED_MASK") == 1) | (get("SRC_REVIEW_CONFLICT_MASK") == 1)
-    if not np.array_equal(qualified, source & morphology & ~blocked):
+    expected = source & morphology & ~blocked
+    if "RV2_MODE_CODE" in group:
+        from .radial_revision.validation import validate_revision_fields
+        expected |= validate_revision_fields(group, observed, source, blocked)
+    if not np.array_equal(qualified, expected):
         raise ValueError("source qualification differs from evidence and barriers")

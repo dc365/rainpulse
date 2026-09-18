@@ -1,0 +1,3 @@
+FROM rainpulse-cpu-worker:qc-review-20260917-r2
+USER root
+COPY algorithms/rainpulse_algo/radar/qc_engine/review_extension /opt/rainpulse/rainpulse_algo/radar/qc_engine/review_extension

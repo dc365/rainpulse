@@ -162,6 +162,12 @@ def review_attributes(profile):
         return {}
     broad = profile.generalization.broad_source
     return {
+        **({
+            "qc_radial_revision_version": broad.source_review.radial_revision.version,
+            "qc_radial_revision_step": broad.source_review.radial_revision.step,
+            "qc_radial_revision_mode": broad.source_review.radial_revision.mode,
+        } if broad is not None and broad.source_review is not None
+             and broad.source_review.radial_revision is not None else {}),
         "qc_review_extension_version": version,
         "qc_review_nonprecip_enabled": profile.nonprecip_review is not None,
         "qc_review_source_enabled": broad is not None and broad.source_review is not None,

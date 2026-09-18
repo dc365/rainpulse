@@ -1,0 +1,7 @@
+services:
+  radar-qc-worker:
+    image: rainpulse-cpu-worker:qc-radial-20260918
+    environment:
+      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/radial-20260918/radial-20260918-step3-experiment_quarantine.yaml
+  analysis-diagnostics-worker:
+    image: rainpulse-cpu-worker:qc-radial-20260918

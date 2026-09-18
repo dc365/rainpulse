@@ -4,7 +4,7 @@ from .arrays import mask, numeric, moment
 from .multiscale import multiscale_radials
 
 
-def source_additions(native, cfg, reference, residual, *, weather=None, conflicts=None, reference_available=None):
+def source_additions(native, cfg, reference, residual, *, weather=None, conflicts=None, reference_available=None, revision_records=None):
     shape = native.shape
     observed = moment(native, "DBZH")[1]
     protected = mask(weather, shape, "weather")
@@ -29,6 +29,16 @@ def source_additions(native, cfg, reference, residual, *, weather=None, conflict
         summary = ev.summary
         multiscale = ev.arrays["SRC_REVIEW_CANDIDATE_MASK"] == 1
     qualified = (narrow | multiscale) & source & ~protected & ~conflict
+    revision_summary = {}
+    if cfg.radial_revision is not None:
+        from .radial_revision.engine import evaluate
+        extra, detail = evaluate(
+            native, cfg.radial_revision, source, delta,
+            weather=protected, conflicts=conflict, records_out=revision_records,
+        )
+        arrays.update(extra)
+        qualified |= extra["RV2_ACTION_PROPOSAL_MASK"] == 1
+        revision_summary = {"radial_revision": detail}
     arrays.update({
         "SRC_REVIEW_NARROW_MASK": narrow.astype("uint8"),
         "SRC_REVIEW_NARROW_REASON": narrow_reason,
@@ -43,6 +53,7 @@ def source_additions(native, cfg, reference, residual, *, weather=None, conflict
     return qualified, arrays, {
         "status": "experimental_source_supported", "narrow_gates": int(narrow.sum()),
         "qualified_gates": int(qualified.sum()), "multiscale": summary,
+        **revision_summary,
         "confirmed_gates": 0, "operational_eligible": False,
     }
 

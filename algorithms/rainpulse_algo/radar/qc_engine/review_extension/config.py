@@ -7,7 +7,11 @@ class Frozen(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
 
 
+from .radial_revision.config import RadialRevisionConfig
+
+
 class SourceReviewConfig(Frozen):
+    radial_revision: RadialRevisionConfig | None = None
     mode: Literal["audit", "experiment_quarantine"] = "audit"
     narrow_enabled: bool = True
     multiscale_enabled: bool = True
