@@ -1,3 +1,5 @@
 FROM rainpulse-cpu-worker:qc-review-20260917-r2
 USER root
 COPY algorithms/rainpulse_algo/radar/qc_engine/review_extension /opt/rainpulse/rainpulse_algo/radar/qc_engine/review_extension
+COPY algorithms/rainpulse_algo/radar/qc_engine/broad_source.py /opt/rainpulse/rainpulse_algo/radar/qc_engine/broad_source.py
+COPY configs/qc/radial-20260918/radial-20260918-step3-experiment_quarantine.yaml /opt/rainpulse/configs/qc/radial-20260918/radial-20260918-step3-experiment_quarantine.yaml
