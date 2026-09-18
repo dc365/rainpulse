@@ -10,6 +10,7 @@ services:
     image: rainpulse-cpu-worker:qc-radial-20260918
     environment:
       RAINPULSE_DIAGNOSTIC_CONFIG: /opt/rainpulse/configs/diagnostics/qc-residual-diagnostics-v6.yaml
+      RAINPULSE_QC_FLAG_DEFINITIONS: /opt/rainpulse/configs/qc/flag-definitions-v2.yaml
   radar-grid-worker:
     volumes:
       - ../algorithms/rainpulse_algo/worker/object_store.py:/opt/rainpulse/rainpulse_algo/worker/object_store.py:ro
