@@ -88,20 +88,20 @@ it('puts the radar mosaic in the lower-left QC slot and keeps the flag layer one
   fireEvent.click(screen.getByRole('tab', { name: '质控排查' }))
 
   expect(document.querySelectorAll('.workspace-map-panel')).toHaveLength(4)
-  expect(captionTitles()).toEqual(['Z9591 原始反射率', 'Z9591 质控后反射率', '雷达拼图', '雷达 QPE'])
+  expect(captionTitles()).toEqual(['Z9591 原始反射率', 'Z9591 质控后反射率', '雷达组合反射率', '雷达 QPE'])
   const mosaicCaption = document.querySelectorAll('.workspace-map-caption')[2]
   expect(within(mosaicCaption as HTMLElement).getByText(/2 站参与/)).toBeTruthy()
-  expect(within(mosaicCaption as HTMLElement).getByText('多雷达拼图')).toBeTruthy()
+  expect(within(mosaicCaption as HTMLElement).getByText('多雷达组合')).toBeTruthy()
 
   const evidence = screen.getByRole('group', { name: '质控证据图层' })
   expect(within(evidence).getAllByRole('button').map(button => button.textContent))
-    .toEqual(['雷达拼图', '质控标志'])
-  expect(within(evidence).getByRole('button', { name: '雷达拼图' }).getAttribute('aria-pressed')).toBe('true')
+    .toEqual(['雷达组合反射率', '质控标志'])
+  expect(within(evidence).getByRole('button', { name: '雷达组合反射率' }).getAttribute('aria-pressed')).toBe('true')
 
   // The single-map menu follows the preset, so the mosaic must be reachable there too.
   fireEvent.click(document.querySelector('.workspace-focus-trigger') as HTMLElement)
   expect(Array.from(document.querySelectorAll('.workspace-focus-menu button strong')).map(node => node.textContent))
-    .toEqual(['Z9591 原始反射率', 'Z9591 质控后反射率', '雷达拼图', '雷达 QPE'])
+    .toEqual(['Z9591 原始反射率', 'Z9591 质控后反射率', '雷达组合反射率', '雷达 QPE'])
   fireEvent.click(document.querySelector('.workspace-focus-trigger') as HTMLElement)
 
   fireEvent.click(within(evidence).getByRole('button', { name: '质控标志' }))

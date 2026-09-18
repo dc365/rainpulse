@@ -582,7 +582,7 @@ function MapPanel({
     ? panel.unavailable_reason === 'observation_accumulation_unavailable' ? '观测累计产品暂不可用，不使用预报或零值填补。'
       : panel.unavailable_reason === 'accumulation_not_generated' ? '本起报累计产品尚未生成，需重新生成数据。' : reasonLabel(panel.unavailable_reason)
     : panel.data_kind.startsWith('accumulation_') && frame == null ? '该区间累计数据不完整或尚未生成。'
-    : frame == null ? panel.panel_id === 'qpe' ? '该时刻实况尚未到达或缺测。' : isMosaicPanel ? '该分析时次尚未生成雷达拼图。' : panel.panel_id === 'nowcastnet' && detail && selectedTime && Date.parse(selectedTime)-Date.parse(detail.issue_time) > 120*60_000 ? '超出当前模型预报范围（120 分钟）。' : '该时刻预报尚未生成或缺测。' : undefined
+    : frame == null ? panel.panel_id === 'qpe' ? '该时刻实况尚未到达或缺测。' : isMosaicPanel ? '该分析时次尚未生成雷达组合反射率。' : panel.panel_id === 'nowcastnet' && detail && selectedTime && Date.parse(selectedTime)-Date.parse(detail.issue_time) > 120*60_000 ? '超出当前模型预报范围（120 分钟）。' : '该时刻预报尚未生成或缺测。' : undefined
   const lifecycle = panel.lifecycle === 'shadow'
     ? '影子'
     : panel.lifecycle === 'offline'
@@ -601,7 +601,7 @@ function MapPanel({
     : frame?.reference_observation && frame.observation_time
     ? `参考体扫 ${formatValidTime(frame.observation_time)}（${formatObservationOffset(frame.observation_offset_seconds)}，未参与本时次拼图）`
     : isMosaicPanel
-    ? `多雷达拼图 · 质控反射率 · ${participatingRadars} 站参与`
+    ? `多雷达组合 · 质控反射率 · ${participatingRadars} 站参与`
     : frame
     ? leadLabel(detail?.issue_time ?? frame.valid_time, frame.valid_time)
     : `每 ${panel.cadence_minutes} 分钟`
@@ -962,7 +962,7 @@ function formatUTCCycleTime(value: string) {
 }
 
 function roleLabel(panel: WorkspacePanel) {
-  if (panel.panel_id === mosaicPanelID) return '多雷达拼图'
+  if (panel.panel_id === mosaicPanelID) return '多雷达组合'
   if (panel.role === 'observation') return '实况分析'
   if (panel.role === 'qc') return panel.radar_id ? `${panel.radar_id.toUpperCase()} 质控` : '质控证据'
   if (panel.role === 'diagnostic') return '分析诊断'
@@ -970,7 +970,7 @@ function roleLabel(panel: WorkspacePanel) {
 }
 
 function panelDisplayName(panel: WorkspacePanel) {
-  if (panel.panel_id === mosaicPanelID) return '雷达拼图'
+  if (panel.panel_id === mosaicPanelID) return '雷达组合反射率'
   if (panel.panel_id === 'steps') {
     return panel.data_kind === 'probability_exceedance' ? 'STEPS 概率' : 'STEPS P50'
   }

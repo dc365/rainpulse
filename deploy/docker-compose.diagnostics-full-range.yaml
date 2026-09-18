@@ -1,0 +1,5 @@
+services:
+  analysis-diagnostics-worker:
+    environment:
+      RAINPULSE_DIAGNOSTIC_CONFIG: /opt/rainpulse/configs/diagnostics/qc-full-range-diagnostics-v7.yaml
+      RAINPULSE_RADAR_CONFIG_DIR: "${RAINPULSE_RADAR_CONFIG_DIR:-/opt/rainpulse/configs/radars/fujian-1985-20260915}"

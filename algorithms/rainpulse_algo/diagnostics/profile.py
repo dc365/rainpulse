@@ -16,6 +16,7 @@ class StrictModel(BaseModel):
 
 
 class GridRender(StrictModel):
+    full_range_reflectivity: bool = False
     pixel_scale: int = Field(ge=1, le=4)
     north_up: Literal[True]
     missing_alpha: Literal[0]

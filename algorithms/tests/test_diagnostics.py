@@ -107,6 +107,35 @@ def test_scalar_render_keeps_valid_zero_visible_and_missing_transparent() -> Non
     assert rgba[0, 1, 3] == 0
 
 
+def test_full_range_composite_publishes_own_bounds_and_preserves_qpe(tmp_path):
+    profile = load_diagnostic_profile(DIAGNOSTIC_CONFIG)
+    profile = profile.model_copy(update={"grid_render": profile.grid_render.model_copy(
+        update={"full_range_reflectivity": True})})
+    objects = build_diagnostic_bundle(
+        analysis_fixture(), [("z9598", SCAN_ID, qc_fixture(tmp_path))],
+        analysis_uri="s3://rainpulse/analysis/fixture/analysis.zarr",
+        analysis_id=ANALYSIS_ID, job_id=JOB_ID, profile=profile,
+        flag_definitions=flag_definitions(),
+        radar_sites={"z9598": {"longitude_deg": 117.08, "latitude_deg": 27.01}},
+    )
+    manifest = validate_diagnostic_bundle(objects)["manifest"]
+    layers = {layer["layer_id"]: layer for layer in manifest["layers"]}
+    assert layers["grid-dbzh-qc"]["bounds"][0] < 117.08
+    assert layers["grid-dbzh-qc"]["bounds"][3] > 27.01
+    assert layers["grid-dbzh-qc"]["coverage"] == "full_radar_footprints"
+    assert layers["grid-dbzh-qc"]["qc_inputs"][0]["scan_id"] == str(SCAN_ID)
+    assert layers["grid-rate-qpe"]["bounds"] == [117.995, 24.995, 118.015, 25.015]
+
+
+def test_smooth_palette_clamps_weak_echoes_and_missing():
+    rgba = _scalar_rgba(np.array([-10., 10., 15., 20., 80., np.nan]),
+                        np.ones(6, dtype=bool), ((10., "#0000ff"), (20., "#00ff00")), smooth=True)
+    assert np.array_equal(rgba[0], rgba[1])
+    assert np.array_equal(rgba[3], rgba[4])
+    assert tuple(rgba[2]) == (0, 128, 128, 255)
+    assert rgba[5, 3] == 0
+
+
 def test_bundle_renders_real_grid_and_polar_pngs(tmp_path: Path) -> None:
     objects = build_diagnostic_bundle(
         analysis_fixture(),

@@ -1,0 +1,42 @@
+import numpy as np
+import zarr
+from zarr.storage import MemoryStore
+
+from rainpulse_algo.diagnostics.composite import composite_reflectivity
+
+
+def volume(lon=117.0):
+    root = zarr.group(store=MemoryStore())
+    root.attrs.update(site_longitude_deg=lon, site_latitude_deg=28.0,
+                      flag_definition_version="qc-flags-v2")
+    root.array("sweep_number", np.array([0, 1]))
+    for number, value in enumerate([20., 40.]):
+        sweep = root.create_group(f"sweep_{number:03d}")
+        sweep.array("range", np.arange(1000., 101000., 1000.))
+        sweep.array("azimuth", np.arange(360.))
+        sweep.array("elevation", np.full(360, number))
+        sweep.array("DBZH_QC", np.full((360, 100), value, dtype="float32"))
+        sweep.array("VALID_MASK", np.ones((360, 100), dtype="uint8"))
+        sweep.array("QPE_ELIGIBLE_MASK", np.ones((360, 100), dtype="uint8"))
+        sweep.array("QC_FLAGS", np.zeros((360, 100), dtype="uint32"))
+    return root
+
+
+def test_full_extent_vertical_maximum_and_quarantine():
+    root = volume()
+    values, bounds = composite_reflectivity([root], 1, maximum_size=128)
+    assert bounds[0] < 117 < bounds[2] and bounds[1] < 28 < bounds[3]
+    assert bounds[3] > 28.8  # Outside the old 25..27 forecast domain.
+    assert np.nanmax(values) == 40
+    root["sweep_001/QPE_ELIGIBLE_MASK"][:] = 0
+    values, _ = composite_reflectivity([root], 1, maximum_size=128)
+    assert np.nanmax(values) == 20
+    root["sweep_000/QC_FLAGS"][:] = 1
+    values, _ = composite_reflectivity([root], 1, maximum_size=128)
+    assert np.isnan(values).all()
+
+
+def test_union_extent_preserves_unobserved_gap():
+    values, bounds = composite_reflectivity([volume(115), volume(120)], 1, maximum_size=128)
+    assert bounds[0] < 115 and bounds[2] > 120
+    assert np.isnan(values[:, values.shape[1] // 2]).all()

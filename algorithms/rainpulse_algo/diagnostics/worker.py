@@ -38,6 +38,19 @@ def _execute_analysis_diagnostics(
         (item.radar_id, item.scan_id, reader.load(item.qc_uri))
         for item in request.payload.radar_inputs
     ]
+    radar_sites = None
+    if profile.grid_render.full_range_reflectivity:
+        from rainpulse_algo.radar.config import load_radar_config
+
+        directory = Path(os.environ["RAINPULSE_RADAR_CONFIG_DIR"])
+        radar_sites = {}
+        for item in request.payload.radar_inputs:
+            if Path(item.radar_id).name != item.radar_id:
+                raise DiagnosticConfigError("invalid radar ID for site lookup")
+            config = load_radar_config(directory / f"{item.radar_id}.yaml")
+            if config.radar_id != item.radar_id:
+                raise DiagnosticConfigError("composite site identity differs from request")
+            radar_sites[item.radar_id] = config.site
     objects = build_diagnostic_bundle(
         analysis_objects,
         radar_inputs,
@@ -46,6 +59,7 @@ def _execute_analysis_diagnostics(
         job_id=request.job_id,
         profile=profile,
         flag_definitions=flag_definitions,
+        radar_sites=radar_sites,
     )
     objects = attach_analysis_point_index(objects, analysis_objects)
     validation = validate_diagnostic_bundle(objects)

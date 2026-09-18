@@ -1,5 +1,7 @@
 FROM rainpulse-cpu-worker:qc-review-20260917-r2
 USER root
+COPY algorithms/rainpulse_algo/diagnostics /opt/rainpulse/rainpulse_algo/diagnostics
+COPY configs/diagnostics/qc-full-range-diagnostics-v7.yaml /opt/rainpulse/configs/diagnostics/qc-full-range-diagnostics-v7.yaml
 COPY configs/diagnostics/qc-residual-diagnostics-v6.yaml /opt/rainpulse/configs/diagnostics/qc-residual-diagnostics-v6.yaml
 COPY algorithms/rainpulse_algo/worker/object_store.py /opt/rainpulse/rainpulse_algo/worker/object_store.py
 COPY algorithms/rainpulse_algo/radar/qc_zarr.py /opt/rainpulse/rainpulse_algo/radar/qc_zarr.py

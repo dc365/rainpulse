@@ -168,7 +168,7 @@ export type QCEvidenceLayer = 'mosaic' | 'flags'
 export const mosaicPanelID = 'analysis:dbzh_qc'
 
 export const qcEvidenceLabels: Record<QCEvidenceLayer, string> = {
-  mosaic: '雷达拼图',
+  mosaic: '雷达组合反射率',
   flags: '质控标志',
 }
 
@@ -197,7 +197,7 @@ export function qcEvidencePanelID(
 }
 
 // Only offer evidence the analysed cycle can actually draw: a switch labelled
-// 雷达拼图 must never render a flag bitmap.
+// 雷达组合反射率 must never render a flag bitmap.
 export function availableQCEvidenceLayers(
   detail: WorkspaceCycleDetail,
   radarID: string,

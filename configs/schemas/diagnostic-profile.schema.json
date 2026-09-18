@@ -20,6 +20,7 @@
       "required": ["pixel_scale", "north_up", "missing_alpha"],
       "properties": {
         "pixel_scale": { "type": "integer", "minimum": 1, "maximum": 4 },
+        "full_range_reflectivity": { "type": "boolean" },
         "north_up": { "const": true },
         "missing_alpha": { "const": 0 }
       }

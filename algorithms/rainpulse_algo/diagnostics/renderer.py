@@ -97,6 +97,7 @@ def build_diagnostic_bundle(
     job_id: UUID,
     profile: DiagnosticProfile,
     flag_definitions: Mapping[str, int],
+    radar_sites: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, bytes]:
     validate_radar_analysis_zarr_store(analysis_objects)
     analysis = _open_group(analysis_objects)
@@ -225,6 +226,8 @@ def build_diagnostic_bundle(
     projector = _polar_to_ppi if measured_footprint else _polar_to_ppi_legacy
     sampling_version = "native-footprint-v2" if measured_footprint else None
     seen_radars: set[str] = set()
+    composite_roots = []
+    composite_inputs = []
     for radar_id, scan_id, qc_objects in radar_inputs:
         normalized_id = _slug(radar_id)
         if normalized_id in seen_radars:
@@ -243,6 +246,9 @@ def build_diagnostic_bundle(
             "qc_parameters_sha256": qc.attrs.get("qc_parameters_sha256"),
             "qc_content_sha256": artifact_sha256(qc_objects),
         }
+        if radar_id.lower() in {key.lower() for key in source_codes}:
+            composite_roots.append(qc)
+            composite_inputs.append({"radar_id": radar_id, "scan_id": str(scan_id), **qc_binding})
         group, sweep_number = _lowest_dbzh_sweep(qc)
         maximum_range_km = float(np.max(group["range"][:]) / 1000.0)
         elevation_deg = float(np.nanmedian(group["elevation"][:]))
@@ -341,6 +347,24 @@ def build_diagnostic_bundle(
                 maximum_range_km=maximum_range_km,
             )
         )
+
+    if profile.grid_render.full_range_reflectivity:
+        from .composite import composite_reflectivity
+
+        reject_mask = 0
+        for name in BUSINESS_HARD_REJECT_FLAG_NAMES:
+            reject_mask |= int(flag_definitions.get(name, 0))
+        composite, composite_bounds = composite_reflectivity(composite_roots, reject_mask, sites=radar_sites)
+        layer = _store_layer(
+            objects, layer_id="grid-dbzh-qc", title="雷达组合反射率",
+            scope="grid", field="DBZH_QC", rendering="scalar", unit="dBZ",
+            rgba=_scalar_rgba(composite, np.isfinite(composite), REFLECTIVITY_STOPS, smooth=True),
+            palette_version=profile.palette_version,
+            legend=_numeric_legend(REFLECTIVITY_STOPS, "dBZ"), bounds=composite_bounds,
+        )
+        layer.update(aggregation="maximum_eligible_over_sweeps_and_radars",
+                     coverage="full_radar_footprints", qc_inputs=composite_inputs)
+        layers = [layer if old["layer_id"] == "grid-dbzh-qc" else old for old in layers]
 
     created_at = datetime.now(UTC).isoformat()
     manifest = {
@@ -469,6 +493,7 @@ def _scalar_rgba(
             out=np.zeros_like(data, dtype=np.float64),
             where=spans > 0,
         )
+        fractions = np.clip(np.nan_to_num(fractions, nan=0.0), 0.0, 1.0)
         blended = np.rint(
             colors[indices].astype(np.float64) * (1.0 - fractions[..., None])
             + colors[upper].astype(np.float64) * fractions[..., None]

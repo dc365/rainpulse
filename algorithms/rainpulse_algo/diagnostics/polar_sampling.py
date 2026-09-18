@@ -19,6 +19,19 @@ class PolarPixels:
 
 
 def polar_pixels(azimuth, ranges, size, *, nominal_azimuth_deg=None):
+    if not isinstance(size, (int, np.integer)) or not 2 <= size <= 4096:
+        raise ValueError("invalid PPI image size")
+    xy = np.linspace(-1.0, 1.0, int(size), dtype=np.float64)
+    xx, yy = np.meshgrid(xy, -xy)
+    if not len(ranges):
+        raise ValueError("empty PPI ranges")
+    radius = np.hypot(xx, yy) * ranges[-1]
+    angle = np.degrees(np.arctan2(xx, yy)) % 360
+    return polar_targets(azimuth, ranges, radius, angle, nominal_azimuth_deg=nominal_azimuth_deg)
+
+
+def polar_targets(azimuth, ranges, radius, angle, *, nominal_azimuth_deg=None):
+    """Sample measured polar footprints at arbitrary range/azimuth targets."""
     az = np.asarray(azimuth, float)
     r = np.asarray(ranges, float)
     if (
@@ -26,8 +39,6 @@ def polar_pixels(azimuth, ranges, size, *, nominal_azimuth_deg=None):
         or r.ndim != 1
         or not len(az)
         or len(r) < 2
-        or not isinstance(size, (int, np.integer))
-        or not 2 <= size <= 4096
         or not np.isfinite(az).all()
         or not np.isfinite(r).all()
         or np.any(r < 0)
@@ -54,10 +65,7 @@ def polar_pixels(azimuth, ranges, size, *, nominal_azimuth_deg=None):
         gap[:] = 360
     after = np.where(gap > nominal * 1.8, nominal, gap) / 2
     before = np.roll(after, 1)
-    xy = np.linspace(-1.0, 1.0, int(size), dtype=np.float64)
-    xx, yy = np.meshgrid(xy, -xy)
-    radius = np.hypot(xx, yy) * r[-1]
-    angle = np.degrees(np.arctan2(xx, yy)) % 360
+    radius, angle = np.broadcast_arrays(np.asarray(radius, float), np.asarray(angle, float) % 360)
     pos = np.searchsorted(a, angle)
     li = (pos - 1) % len(a)
     ri = pos % len(a)
