@@ -132,12 +132,15 @@ def infer_broad_source(native, cfg, *, weather=None, conflicts=None):
         if cfg.source_review is not None:
             from .review_extension.source import source_additions
 
-            _, source_extra, source_detail = source_additions(
+            qualified_source, source_extra, source_detail = source_additions(
                 native, cfg.source_review, reference=source_reference,
                 residual=source_residual, weather=protected, conflicts=conflict,
                 reference_available=(source_fold > 0),
             )
             source_extra["SRC_REVIEW_REFERENCE_FOLD_ID"] = source_fold
+            if cfg.source_review.mode == 'experiment_quarantine':
+                candidate |= qualified_source
+                reason[qualified_source] |= int(Reason.SOURCE_REVIEW)
             source_report = {"source_review": dict(source_detail, reference_status="missing_moments", folds=[])}
         return {
             "BWS_CANDIDATE_MASK": candidate.astype("uint8"),
@@ -145,7 +148,8 @@ def infer_broad_source(native, cfg, *, weather=None, conflicts=None):
             "BWS_FOLD_ID": fold_ids,
             "BWS_RANGE_RESIDUAL_DB": residual,
             **source_extra,
-        }, {"status": "missing_moments", "candidate_gates": 0, "qualified_folds": 0, **source_report}
+        }, {"status": "missing_moments_morphology_evaluated" if candidate.any() else "missing_moments",
+            "candidate_gates": int(candidate.sum()), "qualified_folds": 0, **source_report}
     r = np.asarray(native.ranges, float)
     if r.shape != (shape[1],) or not np.isfinite(r).all() or np.any(np.diff(r) <= 0):
         raise ValueError("invalid broad source range geometry")
@@ -437,7 +441,15 @@ def infer_broad_source(native, cfg, *, weather=None, conflicts=None):
         added_source = qualified_source & ~candidate
         if cfg.source_review.mode == "experiment_quarantine":
             candidate |= qualified_source
-            reason[qualified_source] |= int(Reason.SOURCE_REVIEW | Reason.TARGET_MATCH)
+            reason[qualified_source] |= int(Reason.SOURCE_REVIEW)
+            source_supported = qualified_source.copy()
+            if 'RV2_LINE_MORPH_MASK' in source_extra or 'RV2_LINE_ISOLATED_MASK' in source_extra:
+                physical = source_extra['SRC_REVIEW_SOURCE_MATCH_MASK'] == 1
+                for key in ('RV2_SEGMENT_MATCH_MASK', 'RV2_LINE_SOURCE_MASK'):
+                    if key in source_extra:
+                        physical |= source_extra[key] == 1
+                source_supported &= physical
+            reason[source_supported] |= int(Reason.TARGET_MATCH)
         source_report = {"source_review": dict(
             source_detail, extension_version="qc-review-20260917-v1",
             mode=cfg.source_review.mode, folds=source_folds,

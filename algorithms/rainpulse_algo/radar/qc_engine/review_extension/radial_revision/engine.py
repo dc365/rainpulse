@@ -22,6 +22,11 @@ class Reason(IntFlag):
     SOURCE_UNAVAILABLE_OR_MISMATCH = 256
     IDENTITY_ONLY_LINK = 512
     SEGMENTED_ACTION_DISABLED = 1024
+    FRAGMENT_LINE = 2048
+    COHERENT_LINE_SOURCE = 4096
+    DIRECT_LINE_MORPHOLOGY = 8192
+    ISOLATED_LINE_MORPHOLOGY = 16384
+    GROUP_POLAR_MORPHOLOGY = 32768
 
 
 DTYPES = {
@@ -75,6 +80,34 @@ def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, confl
         if cfg.step >= 3:
             out.update(bundle_candidates(native, cfg, barred))
         candidate = ((out["RV2_TOPOLOGY_MASK"] == 1) | (out["RV2_BUNDLE_MASK"] == 1)) & observed & ~barred
+        line_report = {"status": "disabled"}
+        line_source = np.zeros(native.shape, bool)
+        line_morphology = np.zeros(native.shape, bool)
+        line_isolated = np.zeros(native.shape, bool)
+        group_polar = np.zeros(native.shape, bool)
+        group_morph = np.zeros(native.shape, bool)
+        if cfg.fragment_line is not None:
+            from .fragment_line import detect, coherent_source
+            fields, line_report = detect(native, cfg.fragment_line, barred, source=source & ~barred)
+            out.update(fields)
+            candidate |= fields["RV2_LINE_MASK"] == 1
+            if 'RV2_LINE_MORPH_MASK' in fields:
+                line_morphology = fields['RV2_LINE_MORPH_MASK'] == 1
+            if 'RV2_LINE_ISOLATED_MASK' in fields:
+                line_isolated = fields['RV2_LINE_ISOLATED_MASK'] == 1
+            if cfg.fragment_line.coherent_source_enabled:
+                out.update(coherent_source(native, fields["RV2_LINE_MASK"] == 1, barred))
+                line_source = out["RV2_LINE_SOURCE_MASK"] == 1
+                line_report["coherent_source_gates"] = int(line_source.sum())
+        if cfg.fragment_line is not None and cfg.fragment_line.sparse_isolated_enabled:
+            from .fragment_line import grouped_strips
+            out.update(grouped_strips(native, cfg.fragment_line, barred))
+            candidate |= out['RV2_GROUP_MASK'] == 1
+            group_polar = out['RV2_GROUP_POLAR_MASK'] == 1
+            group_morph = out['RV2_GROUP_MORPH_MASK'] == 1
+            line_report['group_morphology_gates'] = int(group_morph.sum())
+            line_report['group_candidate_gates'] = int(out['RV2_GROUP_MASK'].sum())
+            line_report['group_polar_gates'] = int(group_polar.sum())
         source_report = {"status": "disabled", "reference_folds": 0, "reference_models": 0}
         if cfg.step >= 2:
             # Target plateau veto is already in candidate. Training plateau
@@ -94,11 +127,17 @@ def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, confl
                             (out["RV2_WEAK_MATCH_MASK"] == 1))
         legacy_match = candidate & source & ~barred
         segment_match = (out["RV2_SEGMENT_MATCH_MASK"] == 1) & candidate & ~barred
-        qualified = legacy_match | segment_match
-        proposal = legacy_match | (segment_match & cfg.allow_segmented_quarantine)
+        qualified = legacy_match | segment_match | line_source | line_morphology | line_isolated | group_polar | group_morph
+        proposal = legacy_match | (segment_match & cfg.allow_segmented_quarantine) | line_source | line_morphology | line_isolated | group_polar | group_morph
         if cfg.mode != "experiment_quarantine":
             proposal[:] = False
         reason = out["RV2_REASON"]
+        reason[group_polar | group_morph] |= int(Reason.GROUP_POLAR_MORPHOLOGY)
+        if "RV2_LINE_MASK" in out:
+            reason[out["RV2_LINE_MASK"] == 1] |= int(Reason.FRAGMENT_LINE)
+            reason[line_source] |= int(Reason.COHERENT_LINE_SOURCE)
+            reason[line_morphology] |= int(Reason.DIRECT_LINE_MORPHOLOGY)
+            reason[line_isolated] |= int(Reason.ISOLATED_LINE_MORPHOLOGY)
         for test, bit in (
             (out["RV2_TOPOLOGY_MASK"] == 1, Reason.RAW_TOPOLOGY),
             (out["RV2_BUNDLE_MASK"] == 1, Reason.MEASURED_BUNDLE),
@@ -128,7 +167,8 @@ def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, confl
                      "legacy_source_supported_gates": int(legacy_match.sum()),
                      "segmented_source_supported_gates": int(segment_match.sum()),
                      "qualified_gates": int(qualified.sum()), "action_proposal_gates": int(proposal.sum()),
-                     "source": source_report, "identity": link_report}
+                     "weak_actions": int((proposal & weak).sum()),
+                     "source": source_report, "identity": link_report, "fragment_line": line_report}
     except ResourceLimit as exc:
         out = empty_arrays(native.shape, cfg)
         out["RV2_REASON"][observed] = int(Reason.RESOURCE_ABSTAINED)
