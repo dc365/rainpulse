@@ -8,6 +8,8 @@ services:
       RAINPULSE_QC_PACKED_STORAGE: '1'
   analysis-diagnostics-worker:
     image: rainpulse-cpu-worker:qc-radial-20260918
+    environment:
+      RAINPULSE_DIAGNOSTIC_CONFIG: /opt/rainpulse/configs/diagnostics/qc-residual-diagnostics-v6.yaml
   radar-grid-worker:
     volumes:
       - ../algorithms/rainpulse_algo/worker/object_store.py:/opt/rainpulse/rainpulse_algo/worker/object_store.py:ro
