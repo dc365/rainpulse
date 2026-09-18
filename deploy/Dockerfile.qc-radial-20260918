@@ -1,4 +1,5 @@
-FROM rainpulse-cpu-worker:qc-review-20260917-r2
+# 105 is an air-gapped runtime.  Its current production worker is the base.
+FROM rainpulse-cpu-worker:qc-radial-20260918
 USER root
 COPY algorithms/rainpulse_algo/diagnostics /opt/rainpulse/rainpulse_algo/diagnostics
 COPY configs/diagnostics/qc-full-range-diagnostics-v7.yaml /opt/rainpulse/configs/diagnostics/qc-full-range-diagnostics-v7.yaml
