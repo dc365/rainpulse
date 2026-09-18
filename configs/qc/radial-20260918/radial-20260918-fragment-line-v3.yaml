@@ -453,6 +453,9 @@ generalization:
           coherent_source_enabled: true
           morphology_quarantine_enabled: true
           isolated_quarantine_enabled: true
+          sparse_isolated_enabled: true
+          group_morphology_enabled: true
+          window_tracks_enabled: true
 review_extension_version: qc-review-20260917-v1
 nonprecip_review:
   mode: experiment_quarantine
