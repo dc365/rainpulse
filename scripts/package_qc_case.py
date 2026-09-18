@@ -332,7 +332,7 @@ def inventory_radars() -> list:
     return [row[0] for row in psql("SELECT DISTINCT radar_id FROM radar_scans ORDER BY radar_id")]
 
 
-def case_rows(date: str, radars: list, clock_from: str, clock_to: str) -> list:
+def case_rows(date: str, radars: list, clock_from: str, clock_to: str, scan_ids: list) -> list:
     filter_sql = ""
     if radars:
         quoted = ",".join(f"'{radar}'" for radar in radars)
@@ -341,8 +341,12 @@ def case_rows(date: str, radars: list, clock_from: str, clock_to: str) -> list:
         filter_sql += f" AND s.volume_end_time::time >= '{clock_from}'"
     if clock_to:
         filter_sql += f" AND s.volume_end_time::time <= '{clock_to}'"
+    if scan_ids:
+        quoted = ",".join(f"'{scan_id}'::uuid" for scan_id in scan_ids)
+        filter_sql += f" AND s.scan_id IN ({quoted})"
     rows = psql(f"""
-        SELECT s.scan_id::text, r.radar_id, s.volume_start_time::text, s.volume_end_time::text,
+        SELECT DISTINCT ON (s.scan_id)
+               s.scan_id::text, r.radar_id, s.volume_start_time::text, s.volume_end_time::text,
                r.normalized_uri, COALESCE(r.qc_uri, ''), COALESCE(d.bundle_uri, ''),
                COALESCE(m.qc_profile, ''), COALESCE(m.qc_pipeline_version, ''),
                COALESCE(m.flag_definition_version, ''), COALESCE(m.health_state, ''),
@@ -361,7 +365,7 @@ def case_rows(date: str, radars: list, clock_from: str, clock_to: str) -> list:
         LEFT JOIN diagnostic_runs d ON d.analysis_id = a.analysis_id
         WHERE s.volume_end_time >= '{date}' AND s.volume_end_time < '{date}'::date + 1
           AND r.normalized_uri IS NOT NULL{filter_sql}
-        ORDER BY s.volume_end_time, r.radar_id
+        ORDER BY s.scan_id, s.volume_end_time, r.radar_id
     """)
     keys = ("scan_id", "radar_id", "volume_start", "volume_end", "normalized_uri", "qc_uri",
             "bundle_uri", "qc_profile", "qc_pipeline", "flag_version", "health_state",
@@ -384,7 +388,8 @@ def package(args) -> Path:
         (bundle / sub).mkdir(parents=True, exist_ok=True)
 
     rows = case_rows(args.date, [r.strip() for r in (args.radars or "").split(",") if r.strip()],
-                     args.clock_from, args.clock_to)
+                     args.clock_from, args.clock_to,
+                     [scan_id.strip() for scan_id in (args.scan_ids or "").split(",") if scan_id.strip()])
     if not rows:
         sys.exit("no QC-ready volumes matched the requested scope")
     scope_radars = sorted({row["radar_id"] for row in rows})
@@ -623,6 +628,7 @@ def main() -> None:
     parser.add_argument("--from", dest="clock_from", default="", help="UTC clock lower bound HH:MM")
     parser.add_argument("--to", dest="clock_to", default="", help="UTC clock upper bound HH:MM")
     parser.add_argument("--radars", default="", help="comma list of radar ids; default all")
+    parser.add_argument("--scan-ids", default="", help="comma list of exact scan UUIDs; overrides broad time selection")
     parser.add_argument("--sweeps", default="", help="comma list of sweep indexes; default all")
     parser.add_argument("--max-gib", type=float, default=2.0, help="size budget")
     parser.add_argument("--out", default="/home/yons/qc-packages")
