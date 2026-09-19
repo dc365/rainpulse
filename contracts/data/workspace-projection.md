@@ -75,3 +75,17 @@ skill score or an independent gauge validation.
 Clock-only freshness changes do not alter that revision. SSE sends heartbeat
 comments. One bounded producer per API process uses the normal projection
 caches; browser reconnection and low-frequency polling recover missed events.
+
+## QC elevation selection
+
+Polar panel frames additionally carry `sweep_number`, `elevation_deg`,
+`maximum_range_km`, and `scan_id` when present in the diagnostic manifest.
+A frame is unique by `(valid_time, sweep_number)` within a polar panel, rather
+than time alone. Raw/QC panels retain their stable panel IDs and include every
+rendered reflectivity sweep. The frontend chooses a paired raw/QC sweep for the
+selected radar/time; identical nominal elevations remain distinct by sweep
+number. Raw, QC and station flag panels share this selection. If the selected
+sweep is absent after a radar/cycle change, use the first available paired sweep
+and update the visible selection. Never substitute another sweep in only one
+of the raw/QC panels. Composite reflectivity and QPE are independent of the
+selection. Polar image extent uses the selected sweep's maximum range.

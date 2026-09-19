@@ -22,12 +22,15 @@ class FragmentLineConfig(BaseModel):
     sparse_isolated_enabled: bool = False
     group_morphology_enabled: bool = False
     window_tracks_enabled: bool = False
+    power_fan_enabled: bool = False
     antenna_beam_width_deg: float | None = Field(default=None, gt=0., le=5.)
     isolated_link_gap_m: float = Field(default=30000., ge=0, le=30000.)
 
     @model_validator(mode="after")
     def check(self):
         import math
+        if self.power_fan_enabled and not self.group_morphology_enabled:
+            raise ValueError("power fans require group morphology")
         if self.window_tracks_enabled and not self.group_morphology_enabled:
             raise ValueError("window tracks require group morphology")
         if self.group_morphology_enabled and not self.sparse_isolated_enabled:

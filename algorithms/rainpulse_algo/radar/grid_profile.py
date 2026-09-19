@@ -63,6 +63,7 @@ class RadarGridProfile:
     blockage: BlockageConfig
     polar_mapping: PolarMappingConfig
     hybrid_scan: HybridScanConfig
+    emit_ground_range: bool = False
 
 
 def load_radar_grid_profile(path: str | Path) -> RadarGridProfile:
@@ -93,7 +94,10 @@ def load_radar_grid_profile(path: str | Path) -> RadarGridProfile:
             raise RadarGridConfigError("unsupported polar mapping method")
         if hybrid["selection"] != "lowest_usable_elevation":
             raise RadarGridConfigError("unsupported Hybrid Scan selection rule")
+        if not isinstance(raw.get("emit_ground_range", False), bool):
+            raise RadarGridConfigError("emit_ground_range must be boolean")
         profile = RadarGridProfile(
+            emit_ground_range=raw.get("emit_ground_range", False),
             profile_version=str(raw["profile_version"]),
             algorithm_version=str(raw["algorithm_version"]),
             flag_definition_version=str(raw["flag_definition_version"]),

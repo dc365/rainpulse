@@ -286,3 +286,46 @@ def test_legacy_analysis_can_display_with_v2_profile(tmp_path: Path) -> None:
     with pytest.raises(DiagnosticInputError, match='flag definition'):
         build_diagnostic_bundle(analysis_fixture(), [], analysis_uri='s3://rainpulse/analysis/legacy.zarr',
             analysis_id=ANALYSIS_ID, job_id=JOB_ID, profile=profile, flag_definitions=definitions)
+
+
+def test_all_reflectivity_sweeps_have_independent_layers_and_metadata(tmp_path: Path):
+    store = MemoryStore()
+    store.update(qc_fixture(tmp_path))
+    root = zarr.open_group(store=store, mode='a')
+    original = root['sweep_000']
+    for number in (4, 5):
+        target = root.create_group(f'sweep_{number:03d}')
+        for name in original.array_keys():
+            arr = original[name]
+            target.array(name, arr[:], dtype=arr.dtype)
+            target[name].attrs.update(dict(arr.attrs))
+        target['elevation'][:] = 2.39
+        target['range'][:] = original['range'][:] * .75
+    # No reflectivity in this velocity-only cut: do not offer it in the UI.
+    root['sweep_005/DBZH_RAW'][:] = np.nan
+    for key, values in [('sweep_number', [0, 4, 5]),
+                        ('sweep_start_ray_index', [0, 4, 8]),
+                        ('sweep_end_ray_index', [3, 7, 11])]:
+        root.array(key, np.array(values, dtype=root[key].dtype), overwrite=True)
+    profile = load_diagnostic_profile(DIAGNOSTIC_CONFIG)
+    profile = profile.model_copy(update={'polar_render': profile.polar_render.model_copy(
+        update={'sweep_selection': 'all_dbzh_sweeps'})})
+    bundle = build_diagnostic_bundle(analysis_fixture(),
+        [('z9598', SCAN_ID, {str(k): bytes(v) for k, v in store.items()})],
+        analysis_uri='s3://rainpulse/analysis/fixture/analysis.zarr',
+        analysis_id=ANALYSIS_ID, job_id=JOB_ID, profile=profile, flag_definitions=flag_definitions())
+    result = validate_diagnostic_bundle(bundle)
+    polar = [l for l in result['manifest']['layers'] if l['scope'] == 'polar']
+    assert len(polar) == 8 and result['radar_count'] == 1
+    assert {l['sweep_number'] for l in polar} == {0, 4}
+    higher = [l for l in polar if l['sweep_number'] == 4]
+    assert {l['field'] for l in higher} == {'DBZH_RAW', 'DBZH_QC', 'QUALITY_INDEX', 'QC_FLAGS'}
+    assert all(l['layer_id'].endswith('-sweep-004') for l in higher)
+    assert all(l['elevation_deg'] == pytest.approx(2.39) for l in higher)
+    assert all(l['maximum_range_km'] == pytest.approx(float(root['sweep_004/range'][-1])/1000) for l in higher)
+    # Missing QC at one elevation must not be hidden by another sweep's QC.
+    manifest = result['manifest']
+    manifest['layers'] = [l for l in manifest['layers'] if l['layer_id'] != 'radar-z9598-dbzh-qc-sweep-004']
+    bundle['manifest.json'] = json.dumps(manifest).encode()
+    with pytest.raises(DiagnosticInputError, match='polar layer'):
+        validate_diagnostic_bundle(bundle)

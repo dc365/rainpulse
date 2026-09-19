@@ -36,6 +36,8 @@ import {
   panelsForPreset,
   qcEvidenceLabels,
   qcFlagLabel,
+  qcSweepOptions,
+  withQCSweep,
   radarIDs,
   reasonLabel,
   timelineForPreset,
@@ -75,6 +77,10 @@ export function MainWorkspace() {
   const [preset, setPreset] = useState<WorkspacePreset>('forecast')
   const [storedRadarID, setSelectedRadarID] = useState<string | null>(null)
   const selectedRadarID = detail && storedRadarID && radarIDs(detail).includes(storedRadarID) ? storedRadarID : detail ? radarIDs(detail)[0] ?? null : null
+  const [storedSweep, setStoredSweep] = useState<number | null>(null)
+  const sweepOptions = detail ? qcSweepOptions(detail, selectedRadarID ?? '', snapshotTime) : []
+  const selectedSweep = sweepOptions.some(item => item.number === storedSweep)
+    ? storedSweep : sweepOptions[0]?.number ?? null
   const [verificationAlgorithm, setVerificationAlgorithm] = useState('lk')
   const [verificationThreshold, setVerificationThreshold] = useState(20)
   const [verificationWindow, setVerificationWindow] = useState(10)
@@ -111,7 +117,7 @@ export function MainWorkspace() {
     ? qcEvidence
     : qcEvidenceChoices[0] ?? 'mosaic'
 
-  const panels = useMemo(
+  const basePanels = useMemo(
     () => detail ? activeProductMode === 'rain_rate' ? panelsForPreset(detail, preset, selectedRadarID, verificationAlgorithm, activeQCEvidence)
       : panelsForPreset(detail, 'forecast', selectedRadarID, verificationAlgorithm, activeQCEvidence).map(panel => accumulation.panels?.find(result => result.panel_id === panel.panel_id) ?? ({
         ...panel, data_kind: 'accumulation_interval', frames: [], legend_unit: 'mm', legend: [], status: 'unavailable' as const,
@@ -119,6 +125,8 @@ export function MainWorkspace() {
       })) : [],
     [detail, preset, selectedRadarID, verificationAlgorithm, activeQCEvidence, activeProductMode, accumulation.panels, accumulation.error],
   )
+
+  const panels = preset === 'qc' ? withQCSweep(basePanels, selectedRadarID, selectedSweep) : basePanels
 
   const timelineValues = useMemo(
     () => detail ? timelineForPreset(detail, cycles, preset, verificationAlgorithm) : [],
@@ -320,9 +328,20 @@ export function MainWorkspace() {
             <span>雷达</span>
             <select
               value={selectedRadarID ?? ''}
-              onChange={(event) => setSelectedRadarID(event.target.value || null)}
+              onChange={(event) => { setSelectedRadarID(event.target.value || null); setStoredSweep(null); setProbe(null); setLayerErrors({}) }}
             >
               {radarIDs(detail).map((radarID) => <option key={radarID} value={radarID}>{radarID.toUpperCase()}</option>)}
+            </select>
+          </label>
+        ) : null}
+        {preset === 'qc' && detail ? (
+          <label className="radar-selector">
+            <span>仰角</span>
+            <select aria-label="质控仰角" value={selectedSweep ?? ''} disabled={!sweepOptions.length}
+              onChange={event => { setStoredSweep(Number(event.target.value)); setProbe(null); setLayerErrors({}) }}>
+              {sweepOptions.length ? sweepOptions.map(sweep => (
+                <option key={sweep.number} value={sweep.number}>{sweep.elevation.toFixed(2)}° · 第 {sweep.number + 1} 层</option>
+              )) : <option value="">暂无仰角图</option>}
             </select>
           </label>
         ) : null}
@@ -483,7 +502,7 @@ export function MainWorkspace() {
           detail={detail}
           issueTime={detail.issue_time}
           values={timelineValues}
-          panels={panelsForPreset(detail, preset, selectedRadarID, verificationAlgorithm, activeQCEvidence)}
+          panels={preset === 'qc' ? panels : panelsForPreset(detail, preset, selectedRadarID, verificationAlgorithm, activeQCEvidence)}
           selectedTime={selectedTime}
           playing={playing}
           onTogglePlaying={() => { setProductMode('rain_rate'); setPlaying((value) => !value) }}
@@ -554,6 +573,7 @@ function MapPanel({
   const radarContext = radarSite
     ? {
         ...radarSite,
+        maximumRangeKM: frame?.maximum_range_km ?? radarSite.maximumRangeKM,
         timeOffsetSeconds: analysisRadar?.time_offset_seconds,
         meanQualityIndex: analysisRadar?.mean_quality_index,
       }
@@ -563,7 +583,7 @@ function MapPanel({
   const isMosaicPanel = panel.panel_id === mosaicPanelID
   const participatingRadars = detail?.radars.filter((radar) => radar.state === 'PARTICIPATING').length ?? 0
   const imageExtent: GISMapExtent = radarSite
-    ? radarDisplayExtent(radarSite, radarSite.maximumRangeKM)
+    ? radarDisplayExtent(radarSite, frame?.maximum_range_km ?? radarSite.maximumRangeKM)
     : validExtent(frame?.bounds)
       ?? validExtent(detail?.grid.raster_bounds)
       ?? [117.995, 24.995, 123.005, 27.005]
@@ -622,7 +642,7 @@ function MapPanel({
         <strong>{displayName}</strong>
         <span>{usesAnalysisBaseline ? '雷达实况' : roleLabel(panel)}</span>
         <b>{usesAnalysisBaseline ? '分析' : lifecycle}</b>
-        <small>{frameContext}{frame?.frame_kind === 'derived' ? ' · 派生帧' : ''}{panel.panel_id === 'steps' ? ' · 未校准集合' : ''}</small>
+        <small>{frameContext}{frame?.sweep_number != null && frame.elevation_deg != null ? ` · ${frame.elevation_deg.toFixed(2)}° / 第 ${frame.sweep_number + 1} 层` : ''}{frame?.frame_kind === 'derived' ? ' · 派生帧' : ''}{panel.panel_id === 'steps' ? ' · 未校准集合' : ''}</small>
       </div>
       <button
         type="button"

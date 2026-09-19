@@ -37,6 +37,10 @@ export type WorkspaceLegendEntry = {
 }
 
 export type WorkspaceFrame = {
+  sweep_number?: number
+  elevation_deg?: number
+  maximum_range_km?: number
+  scan_id?: string
   asset_id: string
   valid_time: string
   lead_time_minutes: number
@@ -235,6 +239,29 @@ export function panelsForPreset(
   return detail.panels
     .filter((panel) => panel.role === 'qc' || panel.panel_id === 'qpe')
     .slice(0, 4)
+}
+
+export function qcSweepOptions(detail: WorkspaceCycleDetail, radarID: string, validTime: string | null) {
+  const atTime = (frame: WorkspaceFrame) => !validTime
+    || Date.parse(frame.valid_time) === Date.parse(validTime) || frame.reference_observation === true
+  const raw = panelByID(detail, `dbzh_raw:${radarID}`)?.frames.filter(atTime) ?? []
+  const qc = panelByID(detail, `dbzh_qc:${radarID}`)?.frames.filter(atTime) ?? []
+  return raw.filter(frame => frame.sweep_number != null && Number.isFinite(frame.elevation_deg)
+    && qc.some(other => other.sweep_number === frame.sweep_number
+      && other.scan_id === frame.scan_id && other.valid_time === frame.valid_time))
+    .map(frame => ({ number: frame.sweep_number!, elevation: frame.elevation_deg! }))
+    .filter((item, index, all) => all.findIndex(other => other.number === item.number) === index)
+    .sort((a, b) => a.number - b.number)
+}
+
+export function withQCSweep(panels: WorkspacePanel[], radarID: string | null, sweep: number | null) {
+  return panels.map(panel => {
+    if (panel.role !== 'qc' || panel.radar_id !== radarID) return panel
+    // Legacy single-sweep bundles remain visible, but never masquerade as a
+    // selected elevation from another cut. Missing selected layers stay blank.
+    if (sweep == null && !panel.frames.some(frame => frame.sweep_number != null)) return panel
+    return { ...panel, frames: panel.frames.filter(frame => frame.sweep_number === sweep) }
+  })
 }
 
 export function frameAt(panel: WorkspacePanel, validTime: string | null) {

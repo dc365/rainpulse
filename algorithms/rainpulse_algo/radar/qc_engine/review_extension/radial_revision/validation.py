@@ -55,6 +55,15 @@ def validate_revision_fields(group, observed, legacy_source, blocked):
         group_morph = mask(value, shape, 'group morphology')
         if np.any(group_morph & ~group_candidate):
             raise ValueError('group morphology lacks candidate')
+    if 'RV2_POWER_FAN_MASK' in group:
+        value = get('RV2_POWER_FAN_MASK')
+        residual = get('RV2_POWER_FAN_RESIDUAL_DB')
+        if value.dtype != np.dtype('uint8') or residual.dtype != np.dtype('float32') or residual.shape != shape:
+            raise ValueError('invalid power fan evidence dtype/shape')
+        fan = mask(value, shape, 'power fan')
+        if (np.any(fan & ~group_morph) or np.isinf(residual).any() or
+                np.any(fan & (~np.isfinite(residual) | (abs(residual) > 6.)))):
+            raise ValueError('power fan lacks morphology or measured residual')
     if not np.array_equal(candidate, (topology | bundle | line | group_candidate) & ~barred):
         raise ValueError("radial candidate differs from raw evidence")
     if np.any(candidate & blocked) or np.any((get("RV2_PLATEAU_MASK") == 1) & candidate):

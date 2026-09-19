@@ -301,6 +301,13 @@ def grouped_strips(native, cfg, blocked):
             track_details.update(boundaries)
         result |= track
         morphology |= track
+    if cfg.power_fan_enabled:
+        from .power_fan import detect_power_fans
+        fan = detect_power_fans(native, blocked)
+        hit = fan['RV2_POWER_FAN_MASK'] == 1
+        result |= hit
+        morphology |= hit
+        track_details.update(fan)
     snr, sv = moment(native, 'SNR')
     rho, rv = moment(native, 'RHOHV')
     zdr, zv = moment(native, 'ZDR')

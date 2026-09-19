@@ -83,3 +83,11 @@ profile may either reject processing or emit an explicitly
 `operational_eligible=false`, `vertical_datum_status=unverified_engineering`
 artifact. Such an artifact is valid for engineering replay only and cannot
 enter an operational mosaic/QPE cycle.
+
+### Optional geodesic distance for distance-weighted mosaics
+
+Profiles with `emit_ground_range: true` emit `GROUND_RANGE` (float32, metres),
+WGS84 ellipsoidal surface distance from the configured radar to each valid grid
+centre. Missing grid cells remain NaN. This is neither pixel distance nor slant
+range, and cannot be inferred from an unavailable `QI_RANGE`. Old profiles omit
+this extension; new profiles must have a distinct algorithm/config identity.

@@ -31,7 +31,7 @@
       "required": ["image_size", "sweep_selection", "missing_alpha"],
       "properties": {
         "image_size": { "type": "integer", "minimum": 256, "maximum": 1200 },
-        "sweep_selection": { "const": "lowest_dbzh_sweep" },
+        "sweep_selection": { "enum": ["lowest_dbzh_sweep", "all_dbzh_sweeps"] },
         "missing_alpha": { "const": 0 }
       }
     },

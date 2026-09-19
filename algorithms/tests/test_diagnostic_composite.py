@@ -40,3 +40,19 @@ def test_union_extent_preserves_unobserved_gap():
     values, bounds = composite_reflectivity([volume(115), volume(120)], 1, maximum_size=128)
     assert bounds[0] < 115 and bounds[2] > 120
     assert np.isnan(values[:, values.shape[1] // 2]).all()
+
+
+def test_winning_gate_provenance_follows_maximum_and_eligibility():
+    root = volume()
+    values, _, sources = composite_reflectivity([root], 1, maximum_size=64, return_sources=True)
+    valid = np.isfinite(values)
+    assert (sources['sweep'][values == 40] == 1).all()
+    assert (sources['sweep'][values == 20] == 0).all()
+    assert (sources['radar'][valid] == 0).all()
+    assert (sources['gate'][~valid] == -1).all()
+    for number in (0, 1):
+        selected = valid & (sources['sweep'] == number)
+        assert np.array_equal(root[f'sweep_{number:03d}/DBZH_QC'][:][sources['ray'][selected], sources['gate'][selected]], values[selected])
+    root['sweep_001/QPE_ELIGIBLE_MASK'][:] = 0
+    values, _, sources = composite_reflectivity([root], 1, maximum_size=64, return_sources=True)
+    assert (sources['sweep'][np.isfinite(values)] == 0).all()

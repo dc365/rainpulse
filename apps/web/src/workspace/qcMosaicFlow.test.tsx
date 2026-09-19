@@ -121,3 +121,28 @@ it('keeps the four-map layout when a cycle has no mosaic layer', () => {
   // Nothing left to switch between: the control hides instead of showing a dead button.
   expect(screen.queryByRole('group', { name: '质控证据图层' })).toBeNull()
 })
+
+it('switches raw, QC and flags together by sweep while leaving the composite unchanged', () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
+  state.cycles = [cycle]
+  state.selectedTime = issueTime
+  state.detail = { ...detail, panels: detail.panels.map(panel => panel.role === 'qc' ? {
+    ...panel, frames: [0, 4].map(sweep => ({ ...panel.frames[0],
+      asset_id: `${panel.panel_id}-${sweep}`, image_url: `/sweep-${panel.panel_id}-${sweep}.png`,
+      scan_id: 'scan-a', sweep_number: sweep, elevation_deg: sweep === 0 ? 0.5 : 2.39,
+      maximum_range_km: sweep === 0 ? 460 : 330,
+    })),
+  } : panel) }
+  render(<MainWorkspace />)
+  fireEvent.click(screen.getByRole('tab', { name: '质控排查' }))
+  const selector = screen.getByRole('combobox', { name: '质控仰角' }) as HTMLSelectElement
+  expect(selector.value).toBe('0')
+  expect(document.querySelectorAll('.workspace-map-caption')[0].textContent).toContain('0.50°')
+  fireEvent.change(selector, { target: { value: '4' } })
+  const captions = document.querySelectorAll('.workspace-map-caption')
+  expect(captions[0].textContent).toContain('2.39° / 第 5 层')
+  expect(captions[1].textContent).toContain('2.39° / 第 5 层')
+  expect(captions[2].textContent).not.toContain('2.39°')
+  fireEvent.click(screen.getByRole('button', { name: '质控标志' }))
+  expect(document.querySelectorAll('.workspace-map-caption')[2].textContent).toContain('2.39°')
+})

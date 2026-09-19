@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -781,4 +782,27 @@ func containsString(values []string, wanted string) bool {
 		}
 	}
 	return false
+}
+
+func TestDiagnosticSweepsSharePanelWithoutDroppingSameTimeFrames(t *testing.T) {
+	var detail cycleDetail
+	for _, sweep := range []int{4, 0, 4} {
+		elevation, distance := float64(sweep)+0.5, 330.0
+		layer := diagnosticLayer{LayerID: fmt.Sprintf("radar-z9598-dbzh-raw-sweep-%03d", sweep),
+			Scope: "polar", Field: "DBZH_RAW", RadarID: "z9598", ScanID: "scan-a",
+			ImageURL: fmt.Sprintf("/sweep-%d.png", sweep), SweepNumber: &sweep,
+			ElevationDeg: &elevation, MaximumRangeKM: &distance}
+		panel, ok := diagnosticPanel(layer, "2026-08-28T00:12:00Z")
+		if !ok {
+			t.Fatal("missing panel")
+		}
+		mergePanelFrame(&detail, panel)
+	}
+	if len(detail.Panels) != 1 || len(detail.Panels[0].Frames) != 2 {
+		t.Fatalf("sweeps dropped or duplicated: %+v", detail.Panels)
+	}
+	frames := detail.Panels[0].Frames
+	if *frames[0].SweepNumber != 0 || *frames[1].SweepNumber != 4 || *frames[1].ElevationDeg != 4.5 || *frames[1].MaximumRangeKM != 330 || frames[1].ScanID != "scan-a" {
+		t.Fatalf("sweep metadata lost: %+v", frames)
+	}
 }

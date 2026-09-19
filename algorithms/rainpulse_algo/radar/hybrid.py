@@ -125,6 +125,8 @@ def build_hybrid_scan(
     if review_lineage:
         output["SOURCE_RAY"] = np.full(shape, -1, dtype="int32")
         output["SOURCE_GATE"] = np.full(shape, -1, dtype="int32")
+    if profile.emit_ground_range:
+        output["GROUND_RANGE"] = np.full(shape, np.nan, dtype="float32")
     selected = np.zeros(shape, dtype=bool)
     severe_blockage_seen = np.zeros(shape, dtype=bool)
     polar_diagnostics: list[PolarSweepDiagnostic] = []
@@ -218,6 +220,8 @@ def build_hybrid_scan(
             from .qc_engine.review_extension.lineage import record_grid_selection
 
             record_grid_selection(output, mapping, choose)
+        if profile.emit_ground_range:
+            output["GROUND_RANGE"][choose] = mapping.distance_m[choose]
         selected |= choose
         selection_counts[name] = int(np.count_nonzero(choose))
 

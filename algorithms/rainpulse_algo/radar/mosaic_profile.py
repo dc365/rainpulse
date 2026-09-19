@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -30,6 +31,8 @@ class MosaicFusionConfig:
     low_quality_threshold: float
     blended_source_code: int
     reject_flags: tuple[str, ...]
+    method: str = "highest_qi_then_linear_z_blend"
+    distance_scale_km: float | None = None
 
 
 @dataclass(frozen=True)
@@ -54,7 +57,7 @@ def load_radar_mosaic_profile(path: str | Path) -> RadarMosaicProfile:
         fusion = raw["fusion"]
         if alignment["selection"] != "closest_volume_end_to_analysis_time":
             raise RadarMosaicConfigError("unsupported radar alignment selection")
-        if fusion["method"] != "highest_qi_then_linear_z_blend":
+        if fusion["method"] not in {"highest_qi_then_linear_z_blend", "qi_distance_linear_z_blend"}:
             raise RadarMosaicConfigError("unsupported radar mosaic fusion method")
         profile = RadarMosaicProfile(
             profile_version=str(raw["profile_version"]),
@@ -65,25 +68,19 @@ def load_radar_mosaic_profile(path: str | Path) -> RadarMosaicProfile:
             grid_config_version=str(raw["grid_config_version"]),
             alignment=MosaicAlignmentConfig(
                 step_seconds=int(alignment["step_seconds"]),
-                maximum_absolute_offset_seconds=int(
-                    alignment["maximum_absolute_offset_seconds"]
-                ),
-                minimum_time_quality=float(
-                    alignment.get("minimum_time_quality", 0.0)
-                ),
+                maximum_absolute_offset_seconds=int(alignment["maximum_absolute_offset_seconds"]),
+                minimum_time_quality=float(alignment.get("minimum_time_quality", 0.0)),
                 minimum_contributors=int(alignment["minimum_contributors"]),
-                minimum_operational_contributors=int(
-                    alignment["minimum_operational_contributors"]
-                ),
-                expected_radar_ids=tuple(
-                    str(item) for item in alignment["expected_radar_ids"]
-                ),
+                minimum_operational_contributors=int(alignment["minimum_operational_contributors"]),
+                expected_radar_ids=tuple(str(item) for item in alignment["expected_radar_ids"]),
             ),
             fusion=MosaicFusionConfig(
+                method=fusion["method"],
+                distance_scale_km=float(fusion["distance_scale_km"])
+                if "distance_scale_km" in fusion
+                else None,
                 minimum_quality_index=float(fusion["minimum_quality_index"]),
-                similar_quality_max_difference=float(
-                    fusion["similar_quality_max_difference"]
-                ),
+                similar_quality_max_difference=float(fusion["similar_quality_max_difference"]),
                 quality_weight_power=float(fusion["quality_weight_power"]),
                 low_quality_threshold=float(fusion["low_quality_threshold"]),
                 blended_source_code=int(fusion["blended_source_code"]),
@@ -93,9 +90,7 @@ def load_radar_mosaic_profile(path: str | Path) -> RadarMosaicProfile:
     except (KeyError, TypeError, ValueError) as exc:
         if isinstance(exc, RadarMosaicConfigError):
             raise
-        raise RadarMosaicConfigError(
-            f"invalid radar mosaic profile {profile_path}: {exc}"
-        ) from exc
+        raise RadarMosaicConfigError(f"invalid radar mosaic profile {profile_path}: {exc}") from exc
     _validate_profile(profile)
     return profile
 
@@ -117,6 +112,16 @@ def _validate_profile(profile: RadarMosaicProfile) -> None:
         )
     if len(alignment.expected_radar_ids) != len(set(alignment.expected_radar_ids)):
         raise RadarMosaicConfigError("expected radar IDs must be unique")
+    if fusion.method == "qi_distance_linear_z_blend" and (
+        fusion.distance_scale_km is None
+        or not math.isfinite(fusion.distance_scale_km)
+        or not 0 < fusion.distance_scale_km <= 1000
+    ):
+        raise RadarMosaicConfigError(
+            "distance fusion needs a finite positive distance_scale_km <= 1000"
+        )
+    if fusion.method == "highest_qi_then_linear_z_blend" and fusion.distance_scale_km is not None:
+        raise RadarMosaicConfigError("distance scale requires explicit distance fusion method")
     probabilities = (
         fusion.minimum_quality_index,
         fusion.similar_quality_max_difference,

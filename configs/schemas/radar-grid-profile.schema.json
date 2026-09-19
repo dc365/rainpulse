@@ -20,6 +20,7 @@
   ],
   "properties": {
     "schema_version": { "const": "1.0" },
+    "emit_ground_range": { "type": "boolean", "default": false },
     "profile_version": { "$ref": "#/$defs/identifier" },
     "algorithm_version": { "$ref": "#/$defs/identifier" },
     "flag_definition_version": { "$ref": "#/$defs/identifier" },
@@ -127,7 +128,8 @@
         "GROUND_CLUTTER",
         "SEA_CLUTTER",
         "ANOMALOUS_PROPAGATION",
-        "BIOLOGICAL_ECHO"
+        "BIOLOGICAL_ECHO",
+        "NON_METEOROLOGICAL"
       ]
     }
   }

@@ -1,6 +1,6 @@
 schema_version: '1.0'
-profile_version: qc-full-range-diagnostics-v9
-renderer_version: radar-diagnostic-renderer-1.4.0
+profile_version: qc-full-range-diagnostics-v10
+renderer_version: radar-diagnostic-renderer-1.5.0
 bundle_contract_version: '1.0'
 radar_analysis_contract_version: '1.2'
 qc_radar_volume_contract_version: '1.0'
@@ -13,7 +13,7 @@ grid_render:
   full_range_reflectivity: true
 polar_render:
   image_size: 640
-  sweep_selection: lowest_dbzh_sweep
+  sweep_selection: all_dbzh_sweeps
   missing_alpha: 0
 layers:
 - grid_dbzh_qc

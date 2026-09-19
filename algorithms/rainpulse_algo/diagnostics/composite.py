@@ -7,7 +7,7 @@ from pyproj import Geod
 from .polar_sampling import polar_targets
 
 
-def composite_reflectivity(roots, reject_mask: int, *, maximum_size: int = 1200, sites=None):
+def composite_reflectivity(roots, reject_mask: int, *, maximum_size: int = 1200, sites=None, return_sources=False):
     if not roots:
         raise ValueError("full-range composite requires participating radar volumes")
     geod = Geod(ellps="WGS84")
@@ -35,7 +35,9 @@ def composite_reflectivity(roots, reject_mask: int, *, maximum_size: int = 1200,
     height = int(np.ceil((north - south) / step))
     east, north = west + width * step, south + height * step
     result = np.full((height, width), np.nan, dtype="float32")
-    for root, (lon, lat, *_) in zip(roots, footprints):
+    sources = {key: np.full((height, width), -1, dtype="int32")
+               for key in ("radar", "sweep", "ray", "gate")} if return_sources else None
+    for radar_index, (root, (lon, lat, *_)) in enumerate(zip(roots, footprints)):
         sweeps = []
         for number in root["sweep_number"][:]:
             group = root[f"sweep_{int(number):03d}"]
@@ -44,7 +46,7 @@ def composite_reflectivity(roots, reject_mask: int, *, maximum_size: int = 1200,
             fields = ["DBZH_QC", "VALID_MASK", "QC_FLAGS", "elevation", "azimuth", "range"]
             if root.attrs.get("flag_definition_version") == "qc-flags-v2":
                 fields.append("QPE_ELIGIBLE_MASK")
-            sweeps.append({name: group[name][:] for name in fields})
+            sweeps.append({"number": int(number), **{name: group[name][:] for name in fields}})
         # Reuse site geometry across sweeps; chunk rows to bound temporary memory.
         for start in range(0, height, 128):
             end = min(start + 128, height)
@@ -66,5 +68,13 @@ def composite_reflectivity(roots, reject_mask: int, *, maximum_size: int = 1200,
                 valid &= (np.asarray(sweep["QC_FLAGS"][:])[ray, gate] & np.uint32(reject_mask)) == 0
                 if root.attrs.get("flag_definition_version") == "qc-flags-v2":
                     valid &= np.asarray(sweep["QPE_ELIGIBLE_MASK"][:])[ray, gate] == 1
+                if sources is not None:
+                    # Ties retain the first observed contributor, consistently.
+                    wins = valid & (~np.isfinite(result[start:end]) | (values > result[start:end]))
+                    sources["radar"][start:end][wins] = radar_index
+                    sources["sweep"][start:end][wins] = sweep["number"]
+                    sources["ray"][start:end][wins] = ray[wins]
+                    sources["gate"][start:end][wins] = gate[wins]
                 result[start:end] = np.fmax(result[start:end], np.where(valid, values, np.nan))
-    return result, [west, south, east, north]
+    output = result, [west, south, east, north]
+    return (*output, sources) if return_sources else output

@@ -24,3 +24,12 @@ values or masks and must identify their palette/config/renderer versions.
 Go exposes the validated manifest and proxies only paths listed in it. Layer
 paths are never accepted as arbitrary object-store keys. A bundle is written
 under a renderer-version-isolated prefix and `_SUCCESS.json` is committed last.
+
+The `all_dbzh_sweeps` polar selection generates the four polar fields for every
+sweep with finite raw reflectivity, including sweeps whose QC is entirely
+masked. Velocity-only sweeps are omitted. The first eligible sweep retains the
+existing layer IDs; subsequent layer IDs append `-sweep-NNN`. Every polar layer
+records its actual `sweep_number`, median `elevation_deg` and
+`maximum_range_km`. A complete four-field set is required for each radar/sweep.
+This display-only change needs a new diagnostic profile and renderer identity
+and image regeneration, not a new QC calculation.

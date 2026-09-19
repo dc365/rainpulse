@@ -113,17 +113,43 @@ def build_radar_mosaic(
         & (adjusted_quality >= profile.fusion.minimum_quality_index)
         & ((source_flags & reject_mask) == 0)
     )
-    best_quality = np.max(np.where(usable, adjusted_quality, -np.inf), axis=0)
-    contributes = usable & (
-        adjusted_quality >= best_quality[None, :, :] - profile.fusion.similar_quality_max_difference
-    )
+    distance_fusion = profile.fusion.method == "qi_distance_linear_z_blend"
+    if distance_fusion:
+        for root in roots:
+            if (
+                "GROUND_RANGE" not in root
+                or root["GROUND_RANGE"].shape != shape
+                or root["GROUND_RANGE"].attrs.get("units") != "m"
+            ):
+                raise RadarMosaicInputError("distance fusion requires GROUND_RANGE in metres")
+        distance = _stack(roots, "GROUND_RANGE").astype("float64")
+        if np.any(usable & (~np.isfinite(distance) | (distance < 0))):
+            raise RadarMosaicInputError("invalid GROUND_RANGE on eligible input")
+        scale = profile.fusion.distance_scale_km
+        if scale is None or not np.isfinite(scale) or not 0 < scale <= 1000:
+            raise RadarMosaicInputError("invalid distance scale")
+        contributes = usable & (adjusted_quality > 0)
+        # Normalize log weights to avoid underflow changing sole-source coverage.
+        log_weights = np.full(distance.shape, -np.inf)
+        log_weights[contributes] = profile.fusion.quality_weight_power * np.log(
+            adjusted_quality[contributes].astype("float64")
+        ) - np.square(distance[contributes] / (scale * 1000.0))
+        peak = np.max(log_weights, axis=0)
+        peak = np.where(np.isfinite(peak), peak, 0)
+        raw_weights = np.exp(log_weights - peak[None, :, :])
+    else:
+        best_quality = np.max(np.where(usable, adjusted_quality, -np.inf), axis=0)
+        contributes = usable & (
+            adjusted_quality
+            >= best_quality[None, :, :] - profile.fusion.similar_quality_max_difference
+        )
+        raw_weights = np.where(
+            contributes,
+            np.power(adjusted_quality, profile.fusion.quality_weight_power),
+            0.0,
+        ).astype("float32")
     contributor_count = np.sum(contributes, axis=0, dtype="uint8")
     valid = contributor_count > 0
-    raw_weights = np.where(
-        contributes,
-        np.power(adjusted_quality, profile.fusion.quality_weight_power),
-        0.0,
-    ).astype("float32")
     weight_sum = raw_weights.sum(axis=0)
     weights = np.divide(
         raw_weights,
@@ -207,6 +233,8 @@ def build_radar_mosaic(
             float(np.mean(fields["QUALITY_INDEX"][valid])) if valid_count else 0.0
         ),
         "contributors": list(contributor_details),
+        "fusion_method": profile.fusion.method,
+        "distance_scale_km": profile.fusion.distance_scale_km,
     }
     return RadarMosaicResult(
         grid=grid,

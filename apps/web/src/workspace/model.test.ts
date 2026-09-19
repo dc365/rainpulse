@@ -197,3 +197,19 @@ describe('workspace model', () => {
     expect(timelineForPreset(irregular, cycles, 'forecast')).toEqual(irregular.timeline)
   })
 })
+
+it('pairs only matching radar/time/sweep frames and never substitutes another elevation', async () => {
+  const { qcSweepOptions, withQCSweep } = await import('./model')
+  const time = '2026-08-28T00:12:00Z'
+  const frame = (sweep: number) => ({asset_id: `${sweep}`, valid_time: time, lead_time_minutes: 0,
+    image_url: `/${sweep}`, media_type: 'image/png', sweep_number: sweep, elevation_deg: 0.5, scan_id: 'a'})
+  const panel = (id: string, sweeps: number[]) => ({panel_id: id, radar_id: 'r', role: 'qc' as const,
+    algorithm_id: 'radar', display_name: id, lifecycle: 'analysis' as const, data_kind: 'reflectivity',
+    cadence_minutes: 6, status: 'ready' as const, frames: sweeps.map(frame)})
+  const panels = [panel('dbzh_raw:r', [0, 2, 4]), panel('dbzh_qc:r', [0, 2])]
+  const d = {panels} as WorkspaceCycleDetail
+  expect(qcSweepOptions(d, 'r', time).map(sweep => sweep.number)).toEqual([0, 2])
+  expect(qcSweepOptions(d, 'r', '2026-08-28T00:18:00Z')).toEqual([])
+  expect(withQCSweep(panels, 'r', 2).map(p => p.frames[0].image_url)).toEqual(['/2', '/2'])
+  expect(withQCSweep(panels, 'r', 4)[1].frames).toEqual([])
+})

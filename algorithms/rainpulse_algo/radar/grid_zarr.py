@@ -316,7 +316,7 @@ def _field_attributes(name: str) -> dict[str, Any]:
         return {"units": "dBZ", "missing_value": "NaN"}
     if name == "SOURCE_ELEVATION":
         return {"units": "degree", "missing_value": "NaN"}
-    if name in {"BEAM_HEIGHT", "TERRAIN_HEIGHT"}:
+    if name in {"BEAM_HEIGHT", "TERRAIN_HEIGHT", "GROUND_RANGE"}:
         return {"units": "m", "missing_value": "NaN"}
     if name == "DATA_AGE":
         return {"units": "minute", "missing_value": "NaN"}

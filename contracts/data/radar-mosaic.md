@@ -56,3 +56,16 @@ Publication is atomic under:
 ```text
 analysis/mosaic/{grid_id}/{yyyy}/{mm}/{dd}/{analysis_time}/{mosaic_algorithm_version}/mosaic.zarr
 ```
+
+### Opt-in Gaussian distance fusion
+
+`qi_distance_linear_z_blend` requires explicit `distance_scale_km` and a finite,
+non-negative `GROUND_RANGE` (metres) for every otherwise eligible input cell.
+Missing/malformed geometry fails validation. After the existing time, QI and
+hard-reject eligibility gates, all eligible radars receive normalized weights
+`QI_adjusted ** quality_weight_power * exp(-(GROUND_RANGE / (1000*distance_scale_km))**2)`.
+Fusion averages linear Z, not dBZ. Distance changes relative source influence,
+not single-radar reflectivity or QC masks. Weight normalization must be stable
+at long range. Missing is never zero rain. The old highest-QI selection method
+and frozen profiles are unchanged. This is an engineering candidate, not RFI
+classification or proof that contaminated single-radar echoes have been removed.

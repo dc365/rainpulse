@@ -34,9 +34,11 @@
     "fusion": {
       "type": "object",
       "additionalProperties": false,
+      "allOf": [{"if": {"properties": {"method": {"const": "qi_distance_linear_z_blend"}}}, "then": {"required": ["distance_scale_km"]}}],
       "required": ["method", "minimum_quality_index", "similar_quality_max_difference", "quality_weight_power", "low_quality_threshold", "blended_source_code", "reject_flags"],
       "properties": {
-        "method": { "const": "highest_qi_then_linear_z_blend" },
+        "method": { "enum": ["highest_qi_then_linear_z_blend", "qi_distance_linear_z_blend"] },
+        "distance_scale_km": { "type": "number", "exclusiveMinimum": 0, "maximum": 1000 },
         "minimum_quality_index": { "$ref": "#/$defs/probability" },
         "similar_quality_max_difference": { "$ref": "#/$defs/probability" },
         "quality_weight_power": { "type": "number", "minimum": 1, "maximum": 8 },
@@ -62,7 +64,8 @@
         "GROUND_CLUTTER",
         "SEA_CLUTTER",
         "ANOMALOUS_PROPAGATION",
-        "BIOLOGICAL_ECHO"
+        "BIOLOGICAL_ECHO",
+        "NON_METEOROLOGICAL"
       ]
     }
   }

@@ -156,15 +156,9 @@ def qc_fixture(radar_config_version: str) -> dict[str, bytes]:
                 "source_moments": ["REF"],
             }
         )
-        group.create_dataset(
-            "azimuth", data=np.array([0.0, 90.0, 180.0, 270.0], dtype="float32")
-        )
-        group.create_dataset(
-            "elevation", data=np.full(4, elevation, dtype="float32")
-        )
-        group.create_dataset(
-            "range", data=np.array([500.0, 1500.0], dtype="float32")
-        )
+        group.create_dataset("azimuth", data=np.array([0.0, 90.0, 180.0, 270.0], dtype="float32"))
+        group.create_dataset("elevation", data=np.full(4, elevation, dtype="float32"))
+        group.create_dataset("range", data=np.array([500.0, 1500.0], dtype="float32"))
         group.create_dataset(
             "ray_time",
             data=np.array(
@@ -584,3 +578,38 @@ def test_verified_dem_tile_store_skips_cache_when_tile_exceeds_budget(
     assert open_calls == 2
     assert first.cache_stats() == {"hits": 0, "misses": 1}
     assert second.cache_stats() == {"hits": 0, "misses": 1}
+
+
+def test_opt_in_ground_range_uses_wgs84_and_preserves_missing(tmp_path):
+    radar = load_radar_config(make_config(tmp_path))
+    lon, lat = float(radar.site["longitude_deg"]), float(radar.site["latitude_deg"])
+    grid = small_grid(lon, lat)
+    p = replace(
+        load_radar_grid_profile(PROFILE_PATH),
+        grid_id=grid.grid_id,
+        grid_config_version=grid.config_version,
+        emit_ground_range=True,
+    )
+    result = build_hybrid_scan(
+        qc_fixture(radar.config_version),
+        radar_config=radar,
+        grid=grid,
+        profile=p,
+        terrain=RidgeTerrain(lon, lat),
+        flag_masks=flag_masks(),
+        expected_scan_id="10000000-0000-4000-8000-000000000004",
+    )
+    xx, yy = np.meshgrid(grid.longitude, grid.latitude)
+    _, _, expected = Geod(ellps="WGS84").inv(np.full(xx.shape, lon), np.full(yy.shape, lat), xx, yy)
+    valid = result.fields["VALID_MASK"] == 1
+    np.testing.assert_allclose(result.fields["GROUND_RANGE"][valid], expected[valid], rtol=1e-6)
+    assert np.isnan(result.fields["GROUND_RANGE"][~valid]).all()
+    objects = build_radar_grid_zarr_store(
+        result,
+        asset_id=UUID("60000000-0000-4000-8000-000000000001"),
+        qc_volume_uri="s3://rainpulse/qc/volume.zarr",
+    )
+    store = MemoryStore()
+    store.update(objects)
+    assert zarr.open_group(store, mode="r")["GROUND_RANGE"].attrs["units"] == "m"
+    validate_radar_grid_zarr_store(objects)

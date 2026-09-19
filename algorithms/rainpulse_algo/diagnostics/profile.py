@@ -24,7 +24,7 @@ class GridRender(StrictModel):
 
 class PolarRender(StrictModel):
     image_size: int = Field(ge=256, le=1200)
-    sweep_selection: Literal["lowest_dbzh_sweep"]
+    sweep_selection: Literal["lowest_dbzh_sweep", "all_dbzh_sweeps"]
     missing_alpha: Literal[0]
 
 

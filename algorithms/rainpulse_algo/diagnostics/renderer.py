@@ -246,63 +246,93 @@ def build_diagnostic_bundle(
         if radar_id.lower() in {key.lower() for key in source_codes}:
             composite_roots.append(qc)
             composite_inputs.append({"radar_id": radar_id, "scan_id": str(scan_id), **qc_binding})
-        group, sweep_number = _lowest_dbzh_sweep(qc)
-        maximum_range_km = float(np.max(group["range"][:]) / 1000.0)
-        elevation_deg = float(np.nanmedian(group["elevation"][:]))
-        business_reject = _flagged_by_name(
-            group["QC_FLAGS"][:],
-            flag_definitions,
-            BUSINESS_HARD_REJECT_FLAG_NAMES,
-        )
-        business_reflectivity_title = "业务质控反射率"
-        polar_specs = (
-            ("dbzh-raw", "原始反射率", "DBZH_RAW", "scalar", "dBZ", REFLECTIVITY_STOPS),
-            (
-                "dbzh-qc",
-                business_reflectivity_title,
-                "DBZH_QC",
-                "scalar",
-                "dBZ",
-                REFLECTIVITY_STOPS,
-            ),
-            (
-                "quality-index",
-                "极坐标质量指数",
-                "QUALITY_INDEX",
-                "scalar",
-                "1",
-                QUALITY_STOPS,
-            ),
-        )
-        for suffix, title, field, rendering, unit, stops in polar_specs:
-            field_valid = np.isfinite(group[field][:])
-            if field == "DBZH_QC":
-                field_valid &= ~business_reject
-                if qc.attrs.get("flag_definition_version") == "qc-flags-v2":
-                    if "QPE_ELIGIBLE_MASK" not in group:
-                        raise DiagnosticInputError("v2 QC lacks quantitative eligibility")
-                    field_valid &= group["QPE_ELIGIBLE_MASK"][:] == 1
-            rgba = _scalar_rgba(group[field][:], field_valid, stops, smooth=unit == "dBZ")
-            projected = projector(
-                rgba,
-                group["azimuth"][:],
-                group["range"][:],
-                profile.polar_render.image_size,
+        sweeps = (_dbzh_sweeps(qc) if profile.polar_render.sweep_selection == "all_dbzh_sweeps"
+                  else [_lowest_dbzh_sweep(qc)])
+        for sweep_index, (group, sweep_number) in enumerate(sweeps):
+            sweep_suffix = "" if sweep_index == 0 else f"-sweep-{sweep_number:03d}"
+            maximum_range_km = float(np.max(group["range"][:]) / 1000.0)
+            elevation_deg = float(np.nanmedian(group["elevation"][:]))
+            business_reject = _flagged_by_name(
+                group["QC_FLAGS"][:],
+                flag_definitions,
+                BUSINESS_HARD_REJECT_FLAG_NAMES,
             )
+            business_reflectivity_title = "业务质控反射率"
+            polar_specs = (
+                ("dbzh-raw", "原始反射率", "DBZH_RAW", "scalar", "dBZ", REFLECTIVITY_STOPS),
+                (
+                    "dbzh-qc",
+                    business_reflectivity_title,
+                    "DBZH_QC",
+                    "scalar",
+                    "dBZ",
+                    REFLECTIVITY_STOPS,
+                ),
+                (
+                    "quality-index",
+                    "极坐标质量指数",
+                    "QUALITY_INDEX",
+                    "scalar",
+                    "1",
+                    QUALITY_STOPS,
+                ),
+            )
+            for suffix, title, field, rendering, unit, stops in polar_specs:
+                field_valid = np.isfinite(group[field][:])
+                if field == "DBZH_QC":
+                    field_valid &= ~business_reject
+                    if qc.attrs.get("flag_definition_version") == "qc-flags-v2":
+                        if "QPE_ELIGIBLE_MASK" not in group:
+                            raise DiagnosticInputError("v2 QC lacks quantitative eligibility")
+                        field_valid &= group["QPE_ELIGIBLE_MASK"][:] == 1
+                rgba = _scalar_rgba(group[field][:], field_valid, stops, smooth=unit == "dBZ")
+                projected = projector(
+                    rgba,
+                    group["azimuth"][:],
+                    group["range"][:],
+                    profile.polar_render.image_size,
+                )
+                layers.append(
+                    _store_layer(
+                        objects,
+                        layer_id=f"radar-{normalized_id}-{suffix}{sweep_suffix}",
+                        title=f"{radar_id.upper()} · {title}",
+                        scope="polar",
+                        sampling_version=sampling_version,
+                    qc_binding=qc_binding,
+                        field=field,
+                        rendering=rendering,
+                        unit=unit,
+                        rgba=projected,
+                        palette_version=profile.palette_version,
+                        legend=_numeric_legend(stops, unit),
+                        radar_id=radar_id,
+                        scan_id=str(scan_id),
+                        sweep_number=sweep_number,
+                        elevation_deg=elevation_deg,
+                        maximum_range_km=maximum_range_km,
+                    )
+                )
+            polar_valid = group["VALID_MASK"][:] == 1
             layers.append(
                 _store_layer(
                     objects,
-                    layer_id=f"radar-{normalized_id}-{suffix}",
-                    title=f"{radar_id.upper()} · {title}",
+                    layer_id=f"radar-{normalized_id}-qc-flags{sweep_suffix}",
+                    title=f"{radar_id.upper()} · 质控标志",
                     scope="polar",
                     sampling_version=sampling_version,
-                qc_binding=qc_binding,
-                    field=field,
-                    rendering=rendering,
-                    unit=unit,
-                    rgba=projected,
+                    qc_binding=qc_binding,
+                    field="QC_FLAGS",
+                    rendering="flags",
+                    unit=None,
+                    rgba=projector(
+                        _flag_rgba(group["QC_FLAGS"][:], polar_valid, flag_definitions),
+                        group["azimuth"][:],
+                        group["range"][:],
+                        profile.polar_render.image_size,
+                    ),
                     palette_version=profile.palette_version,
-                    legend=_numeric_legend(stops, unit),
+                    legend=_flag_legend(flag_definitions),
                     radar_id=radar_id,
                     scan_id=str(scan_id),
                     sweep_number=sweep_number,
@@ -310,33 +340,6 @@ def build_diagnostic_bundle(
                     maximum_range_km=maximum_range_km,
                 )
             )
-        polar_valid = group["VALID_MASK"][:] == 1
-        layers.append(
-            _store_layer(
-                objects,
-                layer_id=f"radar-{normalized_id}-qc-flags",
-                title=f"{radar_id.upper()} · 质控标志",
-                scope="polar",
-                sampling_version=sampling_version,
-                qc_binding=qc_binding,
-                field="QC_FLAGS",
-                rendering="flags",
-                unit=None,
-                rgba=projector(
-                    _flag_rgba(group["QC_FLAGS"][:], polar_valid, flag_definitions),
-                    group["azimuth"][:],
-                    group["range"][:],
-                    profile.polar_render.image_size,
-                ),
-                palette_version=profile.palette_version,
-                legend=_flag_legend(flag_definitions),
-                radar_id=radar_id,
-                scan_id=str(scan_id),
-                sweep_number=sweep_number,
-                elevation_deg=elevation_deg,
-                maximum_range_km=maximum_range_km,
-            )
-        )
 
     if profile.grid_render.full_range_reflectivity:
         from .composite import composite_reflectivity
@@ -390,7 +393,7 @@ def validate_diagnostic_bundle(objects: Mapping[str, bytes]) -> dict[str, Any]:
         raise DiagnosticInputError("diagnostic manifest identity or layers are invalid")
     layer_ids: set[str] = set()
     grid_fields: set[str] = set()
-    polar_fields: dict[str, set[str]] = {}
+    polar_fields: dict[tuple[str, int], set[str]] = {}
     for layer in manifest["layers"]:
         layer_id = layer.get("layer_id")
         object_path = layer.get("object_path")
@@ -418,7 +421,7 @@ def validate_diagnostic_bundle(objects: Mapping[str, bytes]) -> dict[str, Any]:
             radar_id = layer.get("radar_id")
             if not radar_id or layer.get("scan_id") is None:
                 raise DiagnosticInputError("polar diagnostic layer lacks radar identity")
-            polar_fields.setdefault(str(radar_id), set()).add(str(layer.get("field")))
+            polar_fields.setdefault((str(radar_id), layer.get("sweep_number")), set()).add(str(layer.get("field")))
         else:
             raise DiagnosticInputError("diagnostic scope is invalid")
     if grid_fields != {
@@ -437,7 +440,7 @@ def validate_diagnostic_bundle(objects: Mapping[str, bytes]) -> dict[str, Any]:
     return {
         "layer_count": len(layer_ids),
         "grid_layer_count": len(grid_fields),
-        "radar_count": len(polar_fields),
+        "radar_count": len({key[0] for key in polar_fields}),
         "object_count": len(objects),
         "size_bytes": sum(len(value) for value in objects.values()),
         "manifest": manifest,
@@ -448,6 +451,18 @@ def _open_group(objects: Mapping[str, bytes]) -> zarr.Group:
     store = MemoryStore()
     store.update({key: bytes(value) for key, value in objects.items()})
     return zarr.open_group(store=store, mode="r")
+
+
+def _dbzh_sweeps(root: zarr.Group) -> list[tuple[zarr.Group, int]]:
+    sweeps = []
+    for sweep in root["sweep_number"][:]:
+        number = int(sweep)
+        group = root[f"sweep_{number:03d}"]
+        if "DBZH_RAW" in group and np.any(np.isfinite(group["DBZH_RAW"][:])):
+            sweeps.append((group, number))
+    if not sweeps:
+        raise DiagnosticInputError("QCRadarVolume has no finite DBZH sweep")
+    return sweeps
 
 
 def _lowest_dbzh_sweep(root: zarr.Group) -> tuple[zarr.Group, int]:

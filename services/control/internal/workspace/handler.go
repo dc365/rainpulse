@@ -166,6 +166,10 @@ type legendEntry struct {
 }
 
 type frameView struct {
+	SweepNumber              *int        `json:"sweep_number,omitempty"`
+	ElevationDeg             *float64    `json:"elevation_deg,omitempty"`
+	MaximumRangeKM           *float64    `json:"maximum_range_km,omitempty"`
+	ScanID                   string      `json:"scan_id,omitempty"`
 	AssetID                  string      `json:"asset_id"`
 	ValidTime                string      `json:"valid_time"`
 	LeadMinutes              int         `json:"lead_time_minutes"`
@@ -281,16 +285,19 @@ type diagnosticBundle struct {
 }
 
 type diagnosticLayer struct {
-	LayerID  string             `json:"layer_id"`
-	Scope    string             `json:"scope"`
-	Field    string             `json:"field"`
-	RadarID  string             `json:"radar_id"`
-	ScanID   string             `json:"scan_id"`
-	Title    string             `json:"title"`
-	ImageURL string             `json:"image_url"`
-	Unit     *string            `json:"unit"`
-	Bounds   []float64          `json:"bounds"`
-	Legend   []diagnosticLegend `json:"legend"`
+	SweepNumber    *int               `json:"sweep_number"`
+	ElevationDeg   *float64           `json:"elevation_deg"`
+	MaximumRangeKM *float64           `json:"maximum_range_km"`
+	LayerID        string             `json:"layer_id"`
+	Scope          string             `json:"scope"`
+	Field          string             `json:"field"`
+	RadarID        string             `json:"radar_id"`
+	ScanID         string             `json:"scan_id"`
+	Title          string             `json:"title"`
+	ImageURL       string             `json:"image_url"`
+	Unit           *string            `json:"unit"`
+	Bounds         []float64          `json:"bounds"`
+	Legend         []diagnosticLegend `json:"legend"`
 }
 
 type diagnosticLegend struct {
@@ -649,7 +656,7 @@ func (handler *Handler) addRadarReferencePanels(
 			panel.Frames[0].ObservationTime = reference.observationTime.Format(time.RFC3339)
 			panel.Frames[0].ObservationOffsetSeconds = &offset
 			panel.Frames[0].ReferenceObservation = true
-			upsertPanel(detail, panel)
+			mergePanelFrame(detail, panel)
 		}
 	}
 }
@@ -955,7 +962,7 @@ func (handler *Handler) addAnalysis(ctx context.Context, detail *cycleDetail, su
 		if !ok {
 			continue
 		}
-		detail.Panels = append(detail.Panels, panel)
+		mergePanelFrame(detail, panel)
 		if layer.Scope == "grid" && layer.Field == "RATE_QPE" {
 			if bounds, valid := fourBounds(layer.Bounds); valid {
 				detail.Grid.RasterBounds = bounds
@@ -1055,12 +1062,16 @@ func mergePanelFrame(detail *cycleDetail, panel panelView) {
 	frameTime, frameTimeOK := normalizedTime(frame.ValidTime)
 	for _, existing := range detail.Panels[index].Frames {
 		existingTime, existingTimeOK := normalizedTime(existing.ValidTime)
-		if frameTimeOK && existingTimeOK && frameTime.Equal(existingTime) {
+		if frameTimeOK && existingTimeOK && frameTime.Equal(existingTime) && sameSweep(frame.SweepNumber, existing.SweepNumber) {
 			return
 		}
 	}
 	detail.Panels[index].Frames = append(detail.Panels[index].Frames, frame)
 	sortFrames(detail.Panels[index].Frames)
+}
+
+func sameSweep(a, b *int) bool {
+	return (a == nil && b == nil) || (a != nil && b != nil && *a == *b)
 }
 
 func diagnosticPanel(layer diagnosticLayer, validTime string) (panelView, bool) {
@@ -1091,7 +1102,9 @@ func diagnosticPanel(layer diagnosticLayer, validTime string) (panelView, bool) 
 		legend = append(legend, legendEntry{Minimum: item.Minimum, Label: item.Label, Color: item.Color})
 	}
 	frame := frameView{AssetID: layer.LayerID, ValidTime: validTime, LeadMinutes: 0,
-		ImageURL: layer.ImageURL, MediaType: "image/png", FrameKind: "analysis"}
+		ImageURL: layer.ImageURL, MediaType: "image/png", FrameKind: "analysis",
+		SweepNumber: layer.SweepNumber, ElevationDeg: layer.ElevationDeg,
+		MaximumRangeKM: layer.MaximumRangeKM, ScanID: layer.ScanID}
 	if layer.Unit != nil {
 		frame.Unit = *layer.Unit
 	}
@@ -1566,6 +1579,9 @@ func panelRank(panelID string) int {
 func sortFrames(frames []frameView) {
 	sort.Slice(frames, func(left, right int) bool {
 		if frames[left].LeadMinutes == frames[right].LeadMinutes {
+			if frames[left].ValidTime == frames[right].ValidTime && frames[left].SweepNumber != nil && frames[right].SweepNumber != nil {
+				return *frames[left].SweepNumber < *frames[right].SweepNumber
+			}
 			return frames[left].ValidTime < frames[right].ValidTime
 		}
 		return frames[left].LeadMinutes < frames[right].LeadMinutes

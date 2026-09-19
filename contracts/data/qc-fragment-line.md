@@ -182,3 +182,26 @@ fractions describe geometry-valid samples with absent DBZH, not clear air.
 Multiple accepted windows store the last deterministic accepted window.
 The original raw values remain immutable. These diagnostics accompany group
 morphology proposals; audit mode still has zero actions.
+
+## Opt-in power-fan morphology (2026-09-19 v1)
+
+`fragment_line.power_fan_enabled` requires group morphology and defaults to false.
+The child profile `radial-power-fan-20260919.yaml` enables it with its own profile
+identity; the pipeline remains on the required frozen 7.3.6 review base.
+
+On native polar DBZH, 20 km block medians of `DBZH - 20 log10(r/50 km)`
+nominate bounded 2–90 degree fans. At least eight measured blocks, 80 km measured
+support and 160 km span are required. The 90th percentile block residual is at
+most 2.5 dB and alternating-block median disagreement at most 1.5 dB. Model
+support may bridge up to four degrees for nomination only. Shoulders are sought
+within four degrees, without crossing invalid rays or geometry discontinuities;
+no more than 20% of usable samples may be within 6 dB of the target. Missing
+flanks remain unknown, not measured zero reflectivity. No gap is filled.
+
+Only observed, unprotected gates within 6 dB of the per-ray model are proposed.
+`RV2_POWER_FAN_MASK` (uint8) and `RV2_POWER_FAN_RESIDUAL_DB` (float32, NaN outside
+the mask) record the cause. The mask must be a subset of `RV2_GROUP_MORPH_MASK`
+and passes through the existing group-morphology proposal, quarantine and numeric
+eligibility path. Audit mode still prohibits actions. Raw reflectivity is immutable.
+This is morphological evidence with a range-law constraint, not calibrated
+receiver-power proof. A single-case replay does not establish generalization.

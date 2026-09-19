@@ -1426,8 +1426,7 @@ func applyAnalysisDiagnosticsCompletion(
 	}
 	layerIDs := make(map[string]struct{}, len(manifest.Layers))
 	gridFields := make(map[string]struct{}, 7)
-	polarFields := make(map[string]map[string]struct{})
-	polarScans := make(map[string]uuid.UUID)
+	polarFields := newPolarDiagnosticFields()
 	gridLayers := 0
 	polarLayers := 0
 	for _, layer := range manifest.Layers {
@@ -1453,24 +1452,9 @@ func applyAnalysisDiagnosticsCompletion(
 			gridFields[layer.Field] = struct{}{}
 		case "polar":
 			polarLayers++
-			if layer.RadarID == nil || *layer.RadarID == "" || layer.ScanID == nil ||
-				layer.SweepNumber == nil || layer.ElevationDeg == nil ||
-				layer.MaximumRangeKM == nil || *layer.MaximumRangeKM <= 0 {
-				return fmt.Errorf("%w: invalid polar diagnostic layer", orchestration.ErrInvalidEvent)
+			if err := polarFields.add(layer); err != nil {
+				return err
 			}
-			fields, exists := polarFields[*layer.RadarID]
-			if !exists {
-				fields = make(map[string]struct{}, 4)
-				polarFields[*layer.RadarID] = fields
-				polarScans[*layer.RadarID] = *layer.ScanID
-			}
-			if polarScans[*layer.RadarID] != *layer.ScanID {
-				return fmt.Errorf("%w: inconsistent polar diagnostic scan", orchestration.ErrInvalidEvent)
-			}
-			if _, exists = fields[layer.Field]; exists {
-				return fmt.Errorf("%w: duplicate polar diagnostic field", orchestration.ErrInvalidEvent)
-			}
-			fields[layer.Field] = struct{}{}
 		default:
 			return fmt.Errorf("%w: invalid diagnostic layer scope", orchestration.ErrInvalidEvent)
 		}
@@ -1522,20 +1506,8 @@ WHERE d.job_id = $1 AND a.run_id = $2 FOR UPDATE OF d, a`,
 	for _, radar := range requested.Payload.RadarInputs {
 		expectedRadars[radar.RadarID] = radar.ScanID
 	}
-	if len(polarFields) != len(expectedRadars) {
-		return fmt.Errorf("%w: polar diagnostics do not match requested radars", orchestration.ErrInvalidEvent)
-	}
-	requiredPolarFields := []string{"DBZH_RAW", "DBZH_QC", "QUALITY_INDEX", "QC_FLAGS"}
-	for radarID, scanID := range expectedRadars {
-		fields, exists := polarFields[radarID]
-		if !exists || polarScans[radarID] != scanID || len(fields) != len(requiredPolarFields) {
-			return fmt.Errorf("%w: polar diagnostics do not match requested radar", orchestration.ErrInvalidEvent)
-		}
-		for _, field := range requiredPolarFields {
-			if _, exists = fields[field]; !exists {
-				return fmt.Errorf("%w: missing polar diagnostic field", orchestration.ErrInvalidEvent)
-			}
-		}
+	if err := polarFields.validate(expectedRadars); err != nil {
+		return err
 	}
 	if manifest.AnalysisID != analysisID || requested.Payload.AnalysisID != analysisID ||
 		!manifest.AnalysisTime.Equal(analysisTime) ||
