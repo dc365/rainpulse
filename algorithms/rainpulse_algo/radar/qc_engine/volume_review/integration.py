@@ -84,14 +84,22 @@ def review_result(result, native):
     values=np.concatenate([s.quality_index[np.isfinite(s.quality_index)] for s in updated])
     summary["mean_quality_index"]=float(values.mean()) if values.size else 0.
     summary["low_quality_gate_count"]=sum(int(s.low_quality_mask.sum()) for s in updated)
-    return replace(result,sweeps=tuple(updated),summary=summary,volume_review_artifacts=artifacts)
+    reviewed = replace(result,sweeps=tuple(updated),summary=summary,volume_review_artifacts=artifacts)
+    if cfg.near_measurement is not None:
+        from .near_measurement.integration import review_result as review_near_result
+        reviewed = review_near_result(reviewed, native)
+    return reviewed
 
 
 def root_attributes(profile):
     cfg=getattr(profile,"volume_review",None)
     if cfg is None:
         return {}
-    return {"qc_volume_review_version":VERSION,"qc_volume_review_phase":cfg.phase,
+    near = {}
+    if cfg.near_measurement is not None:
+        from .near_measurement.integration import attributes
+        near = attributes(cfg.near_measurement, profile.flag_masks["LOW_QUALITY"])
+    return {**near, "qc_volume_review_version":VERSION,"qc_volume_review_phase":cfg.phase,
             "qc_volume_review_mode":cfg.mode,"qc_volume_review_sha256":cfg.digest,
             "cr_unknown_policy":cfg.unknown_cr_policy,
             "cr_qualification_version":"reflectivity-cr-eligibility-v1",

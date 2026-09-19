@@ -22,6 +22,9 @@ class LegacyView(Mapping):
 
 
 def validate_serialized(group,attrs,legacy_validator):
+    if attrs.get("qc_near_measurement_version") is not None or any(k.startswith("NMR_") for k in group):
+        from .near_measurement.validation import validate_serialized as validate_near
+        return validate_near(group, attrs, lambda g, a: validate_serialized(g, a, legacy_validator))
     if attrs.get("qc_volume_review_version")!="volume-object-review-20260919-v1" or attrs.get("operational_eligible") is not False:
         raise ValueError("unsupported volume extension identity")
     if attrs.get("qc_volume_review_mode") not in ("audit","experiment_quarantine"):

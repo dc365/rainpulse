@@ -89,6 +89,9 @@ def snapshot_group(group):
           "QUALITY_INDEX","REFLECTIVITY_TRUST_MASK","QPE_ELIGIBLE_MASK","RFI_QUARANTINE_MASK","NP_QUARANTINE_MASK",
           "VOR_QUARANTINE_MASK","VOR_STATE","VOR_REASON","VOR_OBJECT_ID","REFLECTIVITY_ELIGIBLE_FOR_CR","CR_UNCERTAIN_MASK","CR_QUALIFICATION_REASON"]
     keys += [k+"_RAW" for k in ("SNR","RHOHV","ZDR","PHIDP","VR","SW")]
+    # Bound availability, reasons and exact delta; do not repeat pre-stage arrays
+    # in the light-weight snapshots (the full QC Zarr keeps all before-states).
+    keys += [k for k in group if k.startswith("NMR_") and not k.startswith("NMR_BEFORE_")]
     return {k:np.array(group[k][:],copy=True) for k in keys if k in group}
 
 
@@ -105,6 +108,9 @@ def write_snapshots(root,output_store,result):
         return
     records=[]
     for qc in result.sweeps:
+        if cfg.near_measurement is not None:
+            from .near_measurement.schema import annotate
+            annotate(root[qc.name])
         arrays=snapshot_group(root[qc.name]); content=npz_bytes(arrays)
         path=f"qc/volume_review/{qc.name}.npz"; output_store[path]=content
         records.append({"sweep":qc.name,"path":path,"numeric_sha256":array_digest(arrays),
@@ -114,6 +120,10 @@ def write_snapshots(root,output_store,result):
               "algorithm_version":result.profile.pipeline_version,"extension_sha256":cfg.digest,
               "flag_definitions":{k:int(v) for k,v in result.profile.flag_masks.items()},
               "unknown_raw_codes_are_not_no_echo":True,"sweeps":records}
+    if cfg.near_measurement is not None:
+        manifest["near_measurement"] = {"config": cfg.near_measurement.model_dump(mode="json"),
+            "sha256": cfg.near_measurement.digest,
+            "summary": result.summary.get("near_measurement", {})}
     output_store["qc/volume_review/manifest.json"]=json_bytes(manifest)
 
 

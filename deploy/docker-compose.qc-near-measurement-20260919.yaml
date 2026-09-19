@@ -1,0 +1,26 @@
+services:
+  radar-qc-worker:
+    image: rainpulse-cpu-worker:near-measurement-20260919-v1
+    environment:
+      RAINPULSE_QC_FLAG_DEFINITIONS: /opt/rainpulse/configs/qc/flag-definitions-v2.yaml
+      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/near-measurement-20260919/near-measurement-strict-cr-snr8-nonmet-quarantine.yaml
+  analysis-diagnostics-worker:
+    image: rainpulse-cpu-worker:near-measurement-20260919-v1
+    environment:
+      RAINPULSE_QC_FLAG_DEFINITIONS: /opt/rainpulse/configs/qc/flag-definitions-v2.yaml
+      RAINPULSE_DIAGNOSTIC_CONFIG: /opt/rainpulse/configs/diagnostics/diagnostic-near-measurement-20260919.yaml
+  radar-grid-worker:
+    image: rainpulse-cpu-worker:near-measurement-20260919-v1
+    environment:
+      RAINPULSE_QC_FLAG_DEFINITIONS: /opt/rainpulse/configs/qc/flag-definitions-v2.yaml
+      RAINPULSE_RADAR_GRID_CONFIG: /opt/rainpulse/configs/gridding/near-measurement-20260919.yaml
+  radar-mosaic-worker:
+    image: rainpulse-cpu-worker:near-measurement-20260919-v1
+    environment:
+      RAINPULSE_QC_FLAG_DEFINITIONS: /opt/rainpulse/configs/qc/flag-definitions-v2.yaml
+      RAINPULSE_RADAR_MOSAIC_CONFIG: /opt/rainpulse/configs/mosaic/near-measurement-20260919.yaml
+  analysis-qpe-worker:
+    image: rainpulse-cpu-worker:near-measurement-20260919-v1
+    environment:
+      RAINPULSE_QC_FLAG_DEFINITIONS: /opt/rainpulse/configs/qc/flag-definitions-v2.yaml
+      RAINPULSE_QPE_CONFIG: /opt/rainpulse/configs/qpe/near-measurement-20260919.yaml

@@ -507,5 +507,16 @@ operational data here.
   progress `/tmp/rp-near-recompute.log`, final IDs `/tmp/rp-near-recompute-results.json`.
   First08:12 Z9591 succeeded;41510near-background gates verified excluded from CR/QPE.
   Remaining recomputation was still running at handoff; do not claim web switch complete.
-  Source remains local uncommitted; deployment used an isolated tested source bundle.
+  Source committed and pushed as fbfa0d5.
   Details: docs/near-background-clutter-20260919.md.
+
+- 2026-09-20: Integrated near-measurement-20260919 candidate over fbfa0d5.
+  105 image `rainpulse-cpu-worker:near-measurement-20260919-v1`; append
+  `deploy/docker-compose.qc-near-measurement-20260919.yaml` to the deployed stack.
+  Selected strict-cr-snr8-nonmet-quarantine child of the real near-background profile.
+  Nonmet quarantine affects trust/QPE; low-SNR withholding affects CR only.
+  All worker flag definitions explicitly use v2 (old mosaic used v1 and failed).
+  Local near-measurement/volume tests: 136 passed; server real wradlib/Py-ART parity passed.
+  Two-cycle four-station recompute: `/tmp/rp-nmr-recompute.py`, progress
+  `/tmp/rp-nmr-recompute.log`, results `/tmp/rp-nmr-recompute-results.json`.
+  Check completion before claiming refreshed imagery or improved clutter performance.

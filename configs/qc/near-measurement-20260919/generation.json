@@ -1,0 +1,46 @@
+{
+  "source_parent_sha256": "f17bf717f3bcfed311cbcbb40ef46fcd58650618e8f23de252a8692e3ee96fc7",
+  "profiles": [
+    {
+      "file": "near-measurement-audit.yaml",
+      "sha256": "51ed3a88dc9918413943cf8f722d4c110de50ff39938b209622e0f039f894fe3",
+      "near_config_sha256": "70f102a62cb8c3107bfbe5b956939674cddad6f36fc137956aa3dda8d77b620b"
+    },
+    {
+      "file": "near-measurement-nonmet-cr.yaml",
+      "sha256": "ca78e2a5fd52bd279fc654eb8dfe1f71992f87b0b6b69e1b7fe5878c18a7121e",
+      "near_config_sha256": "f444d4c358b1d258cdc18cfb1797c277b2fc2fb34fa0e86f9326340a6be2eddb"
+    },
+    {
+      "file": "near-measurement-strict-cr-snr3.yaml",
+      "sha256": "ca96de9b85af5e22626f8ab12a5fd172b78e65ea23bbb363c5bbe4f7c6ed9297",
+      "near_config_sha256": "2ee041ca1779f5c1cee50a25bb990e85206c5445e7fa79d29da72ec5ad3e4f3f"
+    },
+    {
+      "file": "near-measurement-strict-cr-snr6.yaml",
+      "sha256": "25d8207efcbc90071415b2d3602fc6e6545a9825e91a81b45b8aefde6c78a70e",
+      "near_config_sha256": "daedba142f808e1ec93a3b5b44e196d1d44111b6c772899e87e310a813a36d7a"
+    },
+    {
+      "file": "near-measurement-strict-cr-snr8.yaml",
+      "sha256": "b8d2d5e35d5f1b9779eea82689502228a80083b975f7251ad19ccd53a233fc68",
+      "near_config_sha256": "039a3ba38d42ecc9453e4e5a0608fe6c81a22f3786e1f8a4434095ed9f957c45"
+    },
+    {
+      "file": "near-measurement-strict-cr-snr10.yaml",
+      "sha256": "b72b9a6597a24845cf9156eb2c3f43b351089ced4d0c08acc6da5cfca5ac9d0a",
+      "near_config_sha256": "af191e5080828bce8a61a0d6fe3e66382e45112c25abd251a02ae4bf61c68473"
+    },
+    {
+      "file": "near-measurement-nonmet-quarantine.yaml",
+      "sha256": "74f50c223502daaccf10cfd4ef5a873072818a30a0d0c7cfea5583a7f66ed1fd",
+      "near_config_sha256": "73a56b0ce4d32acbb85e1d2623a52c8dfdee1d17acf2bd04ecac3cc485e4653a"
+    },
+    {
+      "file": "near-measurement-strict-cr-snr8-nonmet-quarantine.yaml",
+      "sha256": "b7e1d8b584c618a1ccf5a9b7ce869034f28eb779ef9f73ae0bb5e093c1bca327",
+      "near_config_sha256": "ccd0468ac3fc197f5492a90e53fcbab150adac9320be3d57d162b1d49771f77b"
+    }
+  ],
+  "live_configuration_modified": false
+}

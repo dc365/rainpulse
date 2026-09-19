@@ -2,7 +2,8 @@
 from typing import Literal
 import hashlib
 import json
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, model_serializer
+from .near_measurement.config import NearMeasurementConfig
 
 
 class VolumeReviewConfig(BaseModel):
@@ -51,6 +52,14 @@ class VolumeReviewConfig(BaseModel):
     maximum_folds: int = Field(default=20000, ge=1, le=100000)
     maximum_links: int = Field(default=40000, ge=1, le=200000)
     export_evidence: bool = True
+    near_measurement: NearMeasurementConfig | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_near(self, handler):
+        value = handler(self)
+        if self.near_measurement is None:
+            value.pop("near_measurement", None)
+        return value
 
     @model_validator(mode="after")
     def checks(self):
@@ -65,6 +74,13 @@ class VolumeReviewConfig(BaseModel):
             raise ValueError("ordered physical integer scales required")
         if self.phase < 2 and self.mode != "audit":
             raise ValueError("P0/P1 are audit only")
+        if self.near_measurement is not None:
+            if self.phase != 3:
+                raise ValueError("near measurement requires P3 qualification")
+            if self.near_measurement.mode == "experiment" and self.mode != "experiment_quarantine":
+                raise ValueError("near experiment requires parent experimental mode")
+            if not self.export_evidence:
+                raise ValueError("near measurement requires bound evidence export")
         return self
 
     @property
