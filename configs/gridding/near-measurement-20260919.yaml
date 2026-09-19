@@ -1,7 +1,7 @@
 schema_version: '1.0'
-profile_version: rp043-hybrid-radial-closure-v1-near-measurement-20260919-v1
-algorithm_version: hybrid-scan-1.2.4-rp043-radial-closure
-flag_definition_version: qc-flags-v1
+profile_version: rp043-hybrid-radial-closure-v1-near-measurement-20260919-v4
+algorithm_version: hybrid-scan-1.2.4-rp043-radial-closure-nmr-v3
+flag_definition_version: qc-flags-v2
 grid_id: fuzhou_118_123_25_27_0p01deg_v1
 grid_config_version: fuzhou-grid-0p01deg-v1
 ancillary_config_version: ancillary-fujian-taiwan-v1
@@ -39,3 +39,4 @@ hybrid_scan:
   - SEA_CLUTTER
   - ANOMALOUS_PROPAGATION
   - BIOLOGICAL_ECHO
+  - NON_METEOROLOGICAL
