@@ -6,6 +6,7 @@ COPY configs/diagnostics/qc-full-range-diagnostics-v7.yaml /opt/rainpulse/config
 COPY configs/diagnostics/qc-residual-diagnostics-v6.yaml /opt/rainpulse/configs/diagnostics/qc-residual-diagnostics-v6.yaml
 COPY algorithms/rainpulse_algo/worker/object_store.py /opt/rainpulse/rainpulse_algo/worker/object_store.py
 COPY algorithms/rainpulse_algo/radar/qc.py /opt/rainpulse/rainpulse_algo/radar/qc.py
+COPY algorithms/rainpulse_algo/radar/qc_worker.py /opt/rainpulse/rainpulse_algo/radar/qc_worker.py
 COPY algorithms/rainpulse_algo/radar/qc_zarr.py /opt/rainpulse/rainpulse_algo/radar/qc_zarr.py
 COPY algorithms/rainpulse_algo/radar/qc_engine/profile.py /opt/rainpulse/rainpulse_algo/radar/qc_engine/profile.py
 COPY algorithms/rainpulse_algo/radar/qc_engine/runner.py /opt/rainpulse/rainpulse_algo/radar/qc_engine/runner.py

@@ -54,6 +54,7 @@ def validate_sweep(group, attrs) -> None:
         "qc-opensource-7.3.4",
         "qc-opensource-7.3.5",
         "qc-opensource-7.3.6",
+        "qc-opensource-7.3.7",
     }
     version61 = version7 or attrs.get("qc_pipeline_version") == "qc-opensource-6.1.0"
     baseline7_reject, baseline7_quarantine = reject, quarantine
@@ -71,6 +72,7 @@ def validate_sweep(group, attrs) -> None:
             "qc-opensource-7.3.4",
             "qc-opensource-7.3.5",
             "qc-opensource-7.3.6",
+            "qc-opensource-7.3.7",
         }
         and "OC1_ADDED_QUARANTINE_MASK" not in group
     ):
@@ -87,6 +89,7 @@ def validate_sweep(group, attrs) -> None:
             "qc-opensource-7.3.4",
             "qc-opensource-7.3.5",
             "qc-opensource-7.3.6",
+            "qc-opensource-7.3.7",
         }
         and "P2_ADDED_QUARANTINE_MASK" not in group
     ):
@@ -119,6 +122,7 @@ def validate_sweep(group, attrs) -> None:
         "qc-opensource-7.3.4",
         "qc-opensource-7.3.5",
         "qc-opensource-7.3.6",
+        "qc-opensource-7.3.7",
     }:
         for field, dtype in {
             "RFI_OBJECT_ID": "uint32",
@@ -261,6 +265,7 @@ def validate_sweep(group, attrs) -> None:
         "qc-opensource-7.3.4",
         "qc-opensource-7.3.5",
         "qc-opensource-7.3.6",
+        "qc-opensource-7.3.7",
     }:
         for name, dtype in {
             "P2_REVIEW_REASON": "uint32",
@@ -284,6 +289,7 @@ def validate_sweep(group, attrs) -> None:
             "qc-opensource-7.3.4",
             "qc-opensource-7.3.5",
             "qc-opensource-7.3.6",
+            "qc-opensource-7.3.7",
         }:
             key = "P2_BOUNDED_EDGE_REFERENCE_MASK"
             if (
@@ -303,6 +309,7 @@ def validate_sweep(group, attrs) -> None:
             "qc-opensource-7.3.4",
             "qc-opensource-7.3.5",
             "qc-opensource-7.3.6",
+            "qc-opensource-7.3.7",
         }:
             for name, dtype in {
                 "BWS_CANDIDATE_MASK": "uint8",
