@@ -1,0 +1,12 @@
+"""A separate versioned extension; never rewrite frozen parent configurations."""
+
+def validate_profile(profile):
+    cfg=profile.volume_review
+    if cfg is None:return profile
+    if profile.pipeline_version!="qc-opensource-7.3.6" or profile.operational_eligible is not False:
+        raise ValueError("volume review requires the non-operational 7.3.6 baseline")
+    if cfg.quarantine_quality>=profile.quality_index.quantitative_minimum:
+        raise ValueError("volume isolation quality must be below quantitative eligibility")
+    if profile.geometry.phase_period_deg!=360:
+        raise ValueError("volume source signatures require an explicit 360-degree phase convention")
+    return profile

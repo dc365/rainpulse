@@ -584,6 +584,11 @@ def run_open_source_qc(
         root.attrs.get("scan_id"),
         json.dumps(timings, sort_keys=True),
     )
-    return QCResult(
+    result = QCResult(
         profile, tuple(results), tuple(modules), health, summary, created_at or datetime.now(UTC)
     )
+    if getattr(profile, "volume_review", None) is not None:
+        from .volume_review.integration import review_result
+
+        result = review_result(result, native)
+    return result

@@ -1,0 +1,10 @@
+services:
+  radar-qc-worker:
+    image: rainpulse-cpu-worker:qc-volume-20260919
+    environment:
+      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/radial-20260918/volume-p3-experiment-quarantine-20260919.yaml
+
+  analysis-diagnostics-worker:
+    image: rainpulse-cpu-worker:qc-volume-20260919
+    environment:
+      RAINPULSE_DIAGNOSTIC_CONFIG: /opt/rainpulse/configs/diagnostics/diagnostic-volume-all-sweeps-20260919.yaml

@@ -180,6 +180,11 @@ def _build_qc_zarr_store_objects(
     if provenance:
         root.attrs.update(dict(provenance))
 
+    if getattr(result.profile, "volume_review", None) is not None:
+        from .qc_engine.volume_review.integration import root_attributes
+
+        root.attrs.update(root_attributes(result.profile))
+
     compressor = Blosc(cname="zstd", clevel=3, shuffle=Blosc.BITSHUFFLE)
     for name in ("sweep_number", "sweep_start_ray_index", "sweep_end_ray_index"):
         _array(root, name, source[name][:], None)
@@ -248,6 +253,10 @@ def _build_qc_zarr_store_objects(
                     else f"{result.profile.decision_version}-reason-bits"
                 )
 
+    if getattr(result.profile, "volume_review", None) is not None:
+        from .qc_engine.volume_review.receipts import write_snapshots
+
+        write_snapshots(root, output_store, result)
     output_store["qc/summary.json"] = result.summary_bytes()
     zarr.consolidate_metadata(output_store)
     return {str(key): bytes(value) for key, value in output_store.items()}

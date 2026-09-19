@@ -371,6 +371,7 @@ class QCResult:
     health: dict[str, Any]
     summary: dict[str, Any]
     created_at: datetime
+    volume_review_artifacts: dict[str, bytes] | None = None
 
     def module_status(self, name: str) -> str:
         return next(item.status for item in self.modules if item.name == name)

@@ -313,6 +313,10 @@ def build_diagnostic_bundle(
                         maximum_range_km=maximum_range_km,
                     )
                 )
+                if qc.attrs.get("qc_volume_review_version") is not None:
+                    from ..radar.qc_engine.volume_review.receipts import bind_renderer_layer
+
+                    bind_renderer_layer(objects, layers[-1], group, qc_binding, field, field_valid, rgba)
             polar_valid = group["VALID_MASK"][:] == 1
             layers.append(
                 _store_layer(
@@ -347,7 +351,11 @@ def build_diagnostic_bundle(
         reject_mask = 0
         for name in BUSINESS_HARD_REJECT_FLAG_NAMES:
             reject_mask |= int(flag_definitions.get(name, 0))
-        composite, composite_bounds = composite_reflectivity(composite_roots, reject_mask, sites=radar_sites)
+        from ..radar.qc_engine.volume_review.composite import diagnostic_composite
+
+        composite, composite_bounds, composite_meta = diagnostic_composite(
+            composite_roots, reject_mask, objects=objects, sites=radar_sites
+        )
         layer = _store_layer(
             objects, layer_id="grid-dbzh-qc", title="雷达组合反射率",
             scope="grid", field="DBZH_QC", rendering="scalar", unit="dBZ",
@@ -357,6 +365,7 @@ def build_diagnostic_bundle(
         )
         layer.update(aggregation="maximum_eligible_over_sweeps_and_radars",
                      coverage="full_radar_footprints", qc_inputs=composite_inputs)
+        layer.update(composite_meta)
         layers = [layer if old["layer_id"] == "grid-dbzh-qc" else old for old in layers]
 
     created_at = datetime.now(UTC).isoformat()

@@ -246,7 +246,11 @@ class ContextConfig(FrozenConfig):
     strong_support: float = Field(default=0.7, ge=0, le=1)
 
 
+from .volume_review.config import VolumeReviewConfig
+
+
 class OpenSourceQCProfile(FrozenConfig):
+    volume_review: VolumeReviewConfig | None = None
     schema_version: Literal["1.1"] = "1.1"
     engine: Literal["open_source"] = "open_source"
     profile_version: str = "fujian-qc-opensource-v1"
@@ -317,6 +321,8 @@ class OpenSourceQCProfile(FrozenConfig):
         from .review_extension.profile_support import strip_absent_review_fields
 
         value = strip_absent_review_fields(self.model_dump(mode="json"))
+        if self.volume_review is None:
+            value.pop("volume_review", None)
         if not self.context.split_radial_weather_support:
             value["context"].pop("split_radial_weather_support", None)
         # Preserve the frozen v1 semantic identity when the new engine is absent.
@@ -362,6 +368,10 @@ class OpenSourceQCProfile(FrozenConfig):
     def validate_review_extension(self):
         from .review_extension.profile_support import validate_review_profile
 
+        if self.volume_review is not None:
+            from .volume_review.profile_support import validate_profile
+
+            validate_profile(self)
         return validate_review_profile(self)
 
     @model_validator(mode="after")

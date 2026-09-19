@@ -6,6 +6,10 @@ from .decision import Action
 
 
 def validate_sweep(group, attrs) -> None:
+    if attrs.get("qc_volume_review_version") is not None:
+        from .volume_review.validation import validate_serialized
+
+        return validate_serialized(group, attrs, validate_sweep)
     if attrs.get("flag_definition_version") != "qc-flags-v2":
         raise ValueError("open-source QC requires v2 cause flags")
     if attrs.get("operational_eligible") is not False:

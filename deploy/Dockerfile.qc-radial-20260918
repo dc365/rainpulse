@@ -5,8 +5,15 @@ COPY algorithms/rainpulse_algo/diagnostics /opt/rainpulse/rainpulse_algo/diagnos
 COPY configs/diagnostics/qc-full-range-diagnostics-v7.yaml /opt/rainpulse/configs/diagnostics/qc-full-range-diagnostics-v7.yaml
 COPY configs/diagnostics/qc-residual-diagnostics-v6.yaml /opt/rainpulse/configs/diagnostics/qc-residual-diagnostics-v6.yaml
 COPY algorithms/rainpulse_algo/worker/object_store.py /opt/rainpulse/rainpulse_algo/worker/object_store.py
+COPY algorithms/rainpulse_algo/radar/qc.py /opt/rainpulse/rainpulse_algo/radar/qc.py
 COPY algorithms/rainpulse_algo/radar/qc_zarr.py /opt/rainpulse/rainpulse_algo/radar/qc_zarr.py
+COPY algorithms/rainpulse_algo/radar/qc_engine/profile.py /opt/rainpulse/rainpulse_algo/radar/qc_engine/profile.py
+COPY algorithms/rainpulse_algo/radar/qc_engine/runner.py /opt/rainpulse/rainpulse_algo/radar/qc_engine/runner.py
+COPY algorithms/rainpulse_algo/radar/qc_engine/validation.py /opt/rainpulse/rainpulse_algo/radar/qc_engine/validation.py
 COPY algorithms/rainpulse_algo/radar/qc_engine/review_extension /opt/rainpulse/rainpulse_algo/radar/qc_engine/review_extension
+COPY algorithms/rainpulse_algo/radar/qc_engine/volume_review /opt/rainpulse/rainpulse_algo/radar/qc_engine/volume_review
 COPY algorithms/rainpulse_algo/radar/qc_engine/broad_source.py /opt/rainpulse/rainpulse_algo/radar/qc_engine/broad_source.py
 COPY configs/qc/radial-20260918/radial-20260918-step3-experiment_quarantine.yaml /opt/rainpulse/configs/qc/radial-20260918/radial-20260918-step3-experiment_quarantine.yaml
+COPY configs/qc/radial-20260918/volume-p3-experiment-quarantine-20260919.yaml /opt/rainpulse/configs/qc/radial-20260918/volume-p3-experiment-quarantine-20260919.yaml
+COPY configs/diagnostics/diagnostic-volume-all-sweeps-20260919.yaml /opt/rainpulse/configs/diagnostics/diagnostic-volume-all-sweeps-20260919.yaml
 COPY configs/qc/flag-definitions-v2.yaml /opt/rainpulse/configs/qc/flag-definitions-v2.yaml
