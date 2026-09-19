@@ -83,9 +83,6 @@ BUSINESS_HARD_REJECT_FLAG_NAMES = (
     "ANOMALOUS_PROPAGATION",
     "BIOLOGICAL_ECHO",
 )
-BUSINESS_REFLECTIVITY_MASK_RENDERERS = frozenset(
-    {"radar-diagnostic-renderer-1.1.0", "radar-diagnostic-renderer-1.2.0"}
-)
 
 
 def build_diagnostic_bundle(
@@ -222,9 +219,9 @@ def build_diagnostic_bundle(
         )
     )
 
-    measured_footprint = profile.renderer_version == "radar-diagnostic-renderer-1.2.0"
-    projector = _polar_to_ppi if measured_footprint else _polar_to_ppi_legacy
-    sampling_version = "native-footprint-v2" if measured_footprint else None
+    # Versions identify output; they must never disable QC or native geometry.
+    projector = _polar_to_ppi
+    sampling_version = "native-footprint-v2"
     seen_radars: set[str] = set()
     composite_roots = []
     composite_inputs = []
@@ -257,11 +254,7 @@ def build_diagnostic_bundle(
             flag_definitions,
             BUSINESS_HARD_REJECT_FLAG_NAMES,
         )
-        business_reflectivity_title = (
-            "业务质控反射率"
-            if profile.renderer_version in BUSINESS_REFLECTIVITY_MASK_RENDERERS
-            else "质控后反射率"
-        )
+        business_reflectivity_title = "业务质控反射率"
         polar_specs = (
             ("dbzh-raw", "原始反射率", "DBZH_RAW", "scalar", "dBZ", REFLECTIVITY_STOPS),
             (
@@ -283,10 +276,7 @@ def build_diagnostic_bundle(
         )
         for suffix, title, field, rendering, unit, stops in polar_specs:
             field_valid = np.isfinite(group[field][:])
-            if (
-                field == "DBZH_QC"
-                and profile.renderer_version in BUSINESS_REFLECTIVITY_MASK_RENDERERS
-            ):
+            if field == "DBZH_QC":
                 field_valid &= ~business_reject
                 if qc.attrs.get("flag_definition_version") == "qc-flags-v2":
                     if "QPE_ELIGIBLE_MASK" not in group:

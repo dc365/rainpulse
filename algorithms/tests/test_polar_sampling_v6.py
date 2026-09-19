@@ -92,8 +92,10 @@ def test_versioned_renderer_preserves_legacy_and_selects_new_footprint(tmp_path)
     old = load_diagnostic_profile(DIAGNOSTIC_CONFIG)
     raw = qc_fixture(tmp_path)
     for version, expected in [
-        ("radar-diagnostic-renderer-1.1.0", None),
+        ("radar-diagnostic-renderer-1.1.0", "native-footprint-v2"),
         ("radar-diagnostic-renderer-1.2.0", "native-footprint-v2"),
+        ("radar-diagnostic-renderer-1.4.0", "native-footprint-v2"),
+        ("radar-diagnostic-renderer-9.0.0", "native-footprint-v2"),
     ]:
         objects = build_diagnostic_bundle(
             analysis_fixture(),

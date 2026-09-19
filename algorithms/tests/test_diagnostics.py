@@ -165,7 +165,8 @@ def test_bundle_renders_real_grid_and_polar_pngs(tmp_path: Path) -> None:
         assert png_dimensions(data) == (layer["width"], layer["height"])
 
 
-def test_bundle_masks_hard_reject_flags_from_business_reflectivity(tmp_path: Path) -> None:
+@pytest.mark.parametrize("renderer_version", ["radar-diagnostic-renderer-1.2.0", "radar-diagnostic-renderer-1.3.0", "radar-diagnostic-renderer-1.4.0", "radar-diagnostic-renderer-9.0.0"])
+def test_bundle_masks_hard_reject_flags_from_business_reflectivity(tmp_path: Path, renderer_version: str) -> None:
     qc_objects = qc_fixture(tmp_path)
     qc_store = MemoryStore()
     qc_store.update(qc_objects)
@@ -189,7 +190,7 @@ def test_bundle_masks_hard_reject_flags_from_business_reflectivity(tmp_path: Pat
         analysis_uri="s3://rainpulse/analysis/fixture/analysis.zarr",
         analysis_id=ANALYSIS_ID,
         job_id=JOB_ID,
-        profile=load_diagnostic_profile(DIAGNOSTIC_CONFIG),
+        profile=load_diagnostic_profile(DIAGNOSTIC_CONFIG).model_copy(update={"renderer_version": renderer_version}),
         flag_definitions=flag_definitions(),
     )
     manifest = json.loads(objects["manifest.json"])
@@ -211,7 +212,7 @@ def test_bundle_masks_hard_reject_flags_from_business_reflectivity(tmp_path: Pat
     assert "radar-z9598-qc-flags" in layers
 
 
-def test_legacy_renderer_keeps_its_original_business_reflectivity_semantics(
+def test_old_profile_also_uses_current_business_reflectivity_semantics(
     tmp_path: Path,
 ) -> None:
     qc_objects = qc_fixture(tmp_path)
@@ -248,7 +249,7 @@ def test_legacy_renderer_keeps_its_original_business_reflectivity_semantics(
         cv2.IMREAD_UNCHANGED,
     )
 
-    assert business_layer["title"] == "Z9598 · 质控后反射率"
+    assert business_layer["title"] == "Z9598 · 业务质控反射率"
     assert np.count_nonzero(business[:, :, 3]) > 0
 
 
