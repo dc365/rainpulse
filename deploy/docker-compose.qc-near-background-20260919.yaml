@@ -1,0 +1,21 @@
+services:
+  radar-qc-worker:
+    image: rainpulse-cpu-worker:near-background-20260919-v1
+    environment:
+      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/radial-20260918/near-background-20260919.yaml
+  analysis-diagnostics-worker:
+    image: rainpulse-cpu-worker:near-background-20260919-v1
+    environment:
+      RAINPULSE_DIAGNOSTIC_CONFIG: /opt/rainpulse/configs/diagnostics/diagnostic-near-background-20260919.yaml
+  radar-grid-worker:
+    image: rainpulse-cpu-worker:near-background-20260919-v1
+    environment:
+      RAINPULSE_RADAR_GRID_CONFIG: /opt/rainpulse/configs/gridding/near-background-20260919.yaml
+  radar-mosaic-worker:
+    image: rainpulse-cpu-worker:near-background-20260919-v1
+    environment:
+      RAINPULSE_RADAR_MOSAIC_CONFIG: /opt/rainpulse/configs/mosaic/near-background-20260919.yaml
+  analysis-qpe-worker:
+    image: rainpulse-cpu-worker:near-background-20260919-v1
+    environment:
+      RAINPULSE_QPE_CONFIG: /opt/rainpulse/configs/qpe/near-background-20260919.yaml

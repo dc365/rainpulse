@@ -25,6 +25,31 @@ operational data here.
 
 ## Prelaunch convergence
 
+- 2026-09-18: Local fragment-line-v3 adds isolated missing-flank morphology,
+  bounded30km same-ray fragment identity (no gap filling), valid-ray/weather
+  barriers. 08:42 source-stage projection Z9591 north890→0, Z9598 selected
+  rays808→0/482→7; another373-gate ray remains. 243 tests pass. Not deployed
+  or committed. See QC docs FRAGMENT_LINE_20260918.md and v3 child profile.
+
+- 2026-09-18: User-authorized fragment-line-v2 adds independent measured
+  bilateral-edge morphology quarantine. Frozen22-layer source-stage replay:
+  Z9591 adds842 gates, Z9598 adds447 (lowest70) vs deployed step3. Missing
+  flanks stay unknown; several weak target lines remain. Profiles/tests/docs
+  prepared locally, not deployed. See FRAGMENT_LINE_20260918.md in QC docs.
+
+- 2026-09-18: Local opt-in fragment-line-v1 adds scikit-image Hough/RANSAC
+  nominations and strict held-out strong coherent-line evidence. 22 frozen
+  sweep source-stage replays: Z9591 lowest cut adds776 isolated eligible gates
+  over e9241cd step3; Z9598 adds0. Not deployed/full-worker acceptance.
+  See docs/radar-qc-opensource/FRAGMENT_LINE_20260918.md. Unrelated dirty work
+  remains untouched; production stays radial step3 until explicit rollout.
+
+- 2026-09-17: Uncommitted candidate7.3.6 integrates near-range targets and
+  source-coherent sector morphology with unified quarantine. 62 tests pass.
+  105 four full-volume replays complete,11 sweeps each: Z9591 red sector
+  10–50km >=30dBZ remains347/2529; Z9598 lowest-cut new exclusion0.
+  Live still7.3.4; no promotion. See docs/质控_7_3_6_近距离扇区接入与完整回放_20260917.md.
+
 - 2026-09-17 deployment: QC 7.3.4 now live on105 (source9dd040d, build fix73aa24b).
   Four QC workers and diagnostic worker healthy; planner uses source-edge profile.
   Batch75f75a97-1725-4652-b855-ce810d74bf8c SUCCEEDED:8/8 scans,2/2 PNG bundles
@@ -474,3 +499,13 @@ operational data here.
 - Pipeline qc-opensource-7.1.0 / decision object-consensus-oc1 now appends OC1 quarantine with separate baseline/addition provenance and first-decider code8. New worker serialization checks passed; no confirmed-pollution additions.
 - 105 uses rainpulse-cpu-worker:qc-opensource-7.1.0-oc1 across QC/grid/mosaic/QPE/diagnostics; control.env points to fujian-qc-object-consensus-oc1.yaml. Append deploy/docker-compose.qc-object-consensus.yaml after existing overrides for future compose actions.
 - 4173 HTTP200. Background runtime/reports/oc1-online-20260916/refresh.py serially regenerates 08:35 and08:45 forecasts (preceding frames cover08:15/35/40/45). First request d8890a9d-1804-52ea-ba58-1aabfbe8aa4a observed QC_RUNNING. This is not completion evidence; inspect refresh.log before resubmitting. Raw data preserved. Old derived disk cleanup not yet verified.
+
+- 2026-09-19: 105 deployed near-background-20260919-v1 CPU image / QC7.3.9.
+  Pinned Z9591/Z9598 single-day background only applies to UTC2026-08-28;
+  other dates abstain. QC/grid/mosaic/QPE/diagnostic services use new profiles.
+  `/tmp/rp-near-recompute.py` on105 runs08:12 then08:18 all4stations and downstream;
+  progress `/tmp/rp-near-recompute.log`, final IDs `/tmp/rp-near-recompute-results.json`.
+  First08:12 Z9591 succeeded;41510near-background gates verified excluded from CR/QPE.
+  Remaining recomputation was still running at handoff; do not claim web switch complete.
+  Source remains local uncommitted; deployment used an isolated tested source bundle.
+  Details: docs/near-background-clutter-20260919.md.

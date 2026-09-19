@@ -285,7 +285,7 @@ def run_open_source_qc(
                 "qc-opensource-7.3.5",
                 "qc-opensource-7.3.6",
                 "qc-opensource-7.3.7",
-                "qc-opensource-7.3.8",
+                "qc-opensource-7.3.8", "qc-opensource-7.3.9",
             }:
                 from .object_consensus.adapter import evaluate_native, scalar_completion
                 from .object_consensus.config import Policy
@@ -341,11 +341,15 @@ def run_open_source_qc(
         nonprecip_record = None
         if profile.nonprecip_review is not None:
             from .review_extension.runtime import apply_nonprecip_review
+            from .review_extension.observation_match import paired_doppler
+
+            paired = paired_doppler(sweep, native, profile.nonprecip_review)
+            nonprecip_context = {**context, **{k:sweep.restore(v) for k,v in paired.items()}}
 
             decision, nonprecip_record = apply_nonprecip_review(
                 sweep, decision, evidence, profile,
                 ancillary=(ancillary_maps or {}).get(sweep.name, {}),
-                context=context, weather_support=weather,
+                context=nonprecip_context, weather_support=weather,
             )
             if tracker is not None:
                 tracker.observe(Decider.NONPRECIP_REVIEW, decision)

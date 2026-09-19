@@ -1,6 +1,6 @@
 schema_version: '1.0'
-profile_version: qc-full-range-diagnostics-v11-volume-20260919-all-sweeps
-renderer_version: radar-diagnostic-renderer-1.5.1
+profile_version: qc-full-range-near-background-v12
+renderer_version: radar-diagnostic-renderer-1.5.2
 bundle_contract_version: '1.0'
 radar_analysis_contract_version: '1.2'
 qc_radar_volume_contract_version: '1.0'

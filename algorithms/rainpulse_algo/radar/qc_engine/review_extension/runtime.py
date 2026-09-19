@@ -85,6 +85,10 @@ def apply_nonprecip_review(native, baseline, evidence, profile, *, ancillary=Non
                       weather_support=weather_support,
                       no_rain_below_dbz=profile.echo.no_rain_below_dbz,
                       strong_weather_support=profile.context.strong_support)
+    if cfg.near_background is not None:
+        from .near_background_runtime import augment
+        augment(native,baseline,result,cfg,profile.echo.no_rain_below_dbz)
+    result.arrays.update({k:v for k,v in ctx.items() if k.startswith('NP_PAIRED_')})
     return project(native, baseline, result, cfg, low_quality_flag=profile.flag_masks["LOW_QUALITY"])
 
 
@@ -123,10 +127,15 @@ def validate_nonprecip_fields(group, valid, reject, rfi_quarantine):
     if not np.array_equal(get("QC_ACTION"), np.where(q, 1, old)):
         raise ValueError("nonprecip action provenance differs")
     cls = get("NP_CLASS")
-    if np.any(cls > 8) or not np.array_equal(cls == 7, ~valid):
+    if np.any(cls > 9) or not np.array_equal(cls == 7, ~valid):
         raise ValueError("nonprecip classes changed original missing support")
-    if np.any(proposal & (~valid | ~np.isin(cls, [2, 3, 4]))) or np.any(get("NP_CONFIRMED_MASK")):
+    if np.any(proposal & (~valid | ~np.isin(cls, [2, 3, 4, 9]))) or np.any(get("NP_CONFIRMED_MASK")):
         raise ValueError("unsupported nonprecip proposal/confirmation")
+    if np.any(cls == 9):
+        near = mask(get("NP_NEAR_CANDIDATE_MASK"), shape, "near_candidate")
+        available = mask(get("NP_NEAR_AVAILABLE_MASK"), shape, "near_available")
+        if np.any((cls == 9) & (~near | ~available)):
+            raise ValueError("near nonmet class lacks measured neighbourhood support")
     if np.any(q & ((get("NP_WEATHER_PROTECTED_MASK") == 1) | (get("NP_MIXED_MASK") == 1))):
         raise ValueError("nonprecip action crossed a weather barrier")
     eligible = get("QPE_ELIGIBLE_MASK") == 1

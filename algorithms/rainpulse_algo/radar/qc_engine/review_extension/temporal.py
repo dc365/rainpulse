@@ -24,10 +24,22 @@ def raw_recurrence(current, references, cfg, *, maximum_age_seconds=900):
         age = (current_time - timestamp(other.attrs["volume_end_time_utc"])).total_seconds()
         if not 0 < age <= maximum_age_seconds:
             rejected["time"] += 1; continue
-        if other.name != current.name or any(not np.array_equal(getattr(current, k), getattr(other, k)) for k in ("ranges", "azimuth", "elevation")):
+        if other.name != current.name:
             rejected["geometry"] += 1; continue
         y, valid = moment(other, "DBZH")
-        valid &= observed & current.geometry_good[:, None] & other.geometry_good[:, None]
+        exact = all(np.array_equal(getattr(current,k),getattr(other,k)) for k in ('ranges','azimuth','elevation'))
+        if not exact:
+            if not cfg.temporal_spatial_matching:
+                rejected['geometry'] += 1; continue
+            from .observation_match import nearest
+            ray,gate,matched=nearest(current,other,cfg)
+            y=y[ray[:,None],gate[None,:]]
+            valid=valid[ray[:,None],gate[None,:]]&matched
+            if not valid.any():
+                rejected['geometry'] += 1
+        else:
+            valid &= other.geometry_good[:,None]
+        valid &= observed & current.geometry_good[:, None]
         count += valid
         hits += valid & (abs(z-y) <= cfg.temporal_match_db)
     fraction = np.divide(hits, count, out=np.full(shape, np.nan, "float32"), where=count > 0)

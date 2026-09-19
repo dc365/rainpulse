@@ -20,6 +20,7 @@ class EchoClass(IntEnum):
     MIXED_OR_AMBIGUOUS = 6
     MISSING = 7
     BELOW_NO_RAIN_THRESHOLD = 8
+    NEAR_NONMET = 9
 
 
 class Family(IntFlag):
@@ -59,6 +60,15 @@ def classify(native, evidence, cfg, *, background=None, context=None, weather_su
     weather = raw_weather | (np.isfinite(ws) & (ws >= strong_weather_support))
     texture = mask(evidence.get("OS_GABELLA_CANDIDATE_MASK"), shape, "gabella") | mask(evidence.get("OS_DBZH_TEXTURE_CANDIDATE_MASK"), shape, "z_texture")
     doppler = avr & asw & (abs(vr) <= cfg.maximum_abs_velocity_ms) & (sw >= 0) & (sw <= cfg.maximum_spectrum_width_ms)
+    paired_available = np.zeros(shape,bool)
+    if cfg.paired_doppler_enabled:
+        paired_available = mask(context.get('NP_PAIRED_DOPPLER_AVAILABLE_MASK'),shape,'paired_doppler')
+        pv=numeric(context.get('NP_PAIRED_VR'),shape,'paired_velocity')
+        pw=numeric(context.get('NP_PAIRED_SW'),shape,'paired_width')
+        age=numeric(context.get('NP_PAIRED_AGE_SECONDS'),shape,'paired_age',lower=0)
+        if np.any(paired_available & (~np.isfinite(pv)|~np.isfinite(pw)|~np.isfinite(age)|(pw<0)|(age>cfg.paired_doppler_maximum_seconds))):
+            raise ValueError('paired Doppler lacks measured valid support')
+        doppler |= paired_available & ~(avr|asw) & (abs(pv)<=cfg.maximum_abs_velocity_ms) & (pw<=cfg.maximum_spectrum_width_ms)
     fixed = numeric(context.get("NP_FIXED_MATCH_FRACTION"), shape, "fixed_recurrence", lower=0, upper=1)
     count = numeric(context.get("NP_FIXED_SAMPLE_COUNT", np.zeros(shape)), shape, "fixed_count", lower=0, upper=3)
     if not np.isfinite(count).all() or np.any(count != np.floor(count)) or np.any((count == 0) & np.isfinite(fixed)) or np.any((count > 0) & ~np.isfinite(fixed)):
@@ -94,8 +104,12 @@ def classify(native, evidence, cfg, *, background=None, context=None, weather_su
     ap = echo & texture & doppler & vn & nonmet_pol
     sea = echo & marine & lowbeam & texture & nonmet_pol & (vn | recurrent)
     # Biological is a candidate only without a dedicated validated temporal/context model.
-    biological = echo & nonmet_pol & (zdr >= 3.) & (z <= 25.) & ~marine & ~history
-    classes = {EchoClass.FIXED_GROUND: ground, EchoClass.ANOMALOUS_PROPAGATION: ap, EchoClass.SEA_CLUTTER: sea, EchoClass.BIOLOGICAL: biological}
+    from .near_clutter import candidates
+    near, near_available, near_fraction = candidates(native, cfg, texture)
+    # Keep existing specific diagnoses; near_nonmet deliberately claims no cause.
+    near &= echo & ~ground & ~ap & ~sea
+    biological = echo & nonmet_pol & (zdr >= 3.) & (z <= 25.) & ~marine & ~history & ~near
+    classes = {EchoClass.FIXED_GROUND: ground, EchoClass.ANOMALOUS_PROPAGATION: ap, EchoClass.SEA_CLUTTER: sea, EchoClass.BIOLOGICAL: biological, EchoClass.NEAR_NONMET: near}
     bits = np.zeros(shape, "uint16")
     family_count = np.zeros(shape, "uint8")
     for value, family, counted in ((history, Family.HISTORY, True), (doppler, Family.DOPPLER, True), (nonmet_pol, Family.POLARIZATION, True), (texture, Family.REFLECTIVITY_STRUCTURE, True), (recurrent, Family.TEMPORAL, True), (vn, Family.VERTICAL, True), (marine & lowbeam, Family.MARINE_CONTEXT, False), (weather, Family.WEATHER_SUPPORT, False)):
@@ -115,7 +129,8 @@ def classify(native, evidence, cfg, *, background=None, context=None, weather_su
     code[obs & ~echo] = EchoClass.BELOW_NO_RAIN_THRESHOLD
     code[~obs] = EchoClass.MISSING
     allow = {getattr(EchoClass, name.upper()) for name in cfg.quarantine_classes}
-    proposal = echo & (nclass == 1) & ~weather & ~mixed & (family_count >= cfg.minimum_evidence_families) & np.isin(code, [int(x) for x in allow])
+    enough = (family_count >= cfg.minimum_evidence_families) | (near & (family_count >= 2))
+    proposal = echo & (nclass == 1) & ~weather & ~mixed & enough & np.isin(code, [int(x) for x in allow])
     # Biology has no validated local/motion model in v1: always abstain from action.
     proposal &= code != EchoClass.BIOLOGICAL
     arrays = {
@@ -128,6 +143,9 @@ def classify(native, evidence, cfg, *, background=None, context=None, weather_su
         "NP_COMPONENT_ID": ids, "NP_COMPONENT_AREA_KM2": area,
         "NP_SMALL_STRONG_PROTECTED_MASK": strong_small.astype("uint8"),
         "NP_FIXED_SAMPLE_COUNT": count.astype("uint8"), "NP_FIXED_MATCH_FRACTION": fixed,
+        "NP_NEAR_CANDIDATE_MASK": near.astype("uint8"),
+        "NP_NEAR_AVAILABLE_MASK": near_available.astype("uint8"),
+        "NP_NEAR_ABNORMAL_FRACTION": near_fraction,
     }
     return Classification(arrays, {
         "class_counts": {c.name.lower(): int((code == c).sum()) for c in EchoClass},
@@ -139,4 +157,8 @@ def classify(native, evidence, cfg, *, background=None, context=None, weather_su
         "motion_compensated_status": "unavailable_not_inferred",
         "independent_weather_gates": int((np.isfinite(ws) & (ws >= strong_weather_support)).sum()),
         "scores_are_probabilities": False,
+        "near_candidate_gates": int(near.sum()),
+        "near_available_gates": int(near_available.sum()),
+        "paired_doppler_available_gates": int((paired_available&echo).sum()),
+        "near_evidence_policy": "polarization_and_structure_with_measured_neighbourhood_agreement",
     })

@@ -26,7 +26,7 @@ def validate_review_profile(profile):
         if profile.review_extension_version is not None:
             raise ValueError("review extension identity declared without review configuration")
         return profile
-    if profile.pipeline_version not in {"qc-opensource-7.3.6", "qc-opensource-7.3.7", "qc-opensource-7.3.8"} or profile.review_extension_version != VERSION:
+    if profile.pipeline_version not in {"qc-opensource-7.3.6", "qc-opensource-7.3.7", "qc-opensource-7.3.8", "qc-opensource-7.3.9"} or profile.review_extension_version != VERSION:
         raise ValueError("review requires explicit v1 extension identity on the frozen 7.3.x base")
     if "review-20260917" not in profile.profile_version:
         raise ValueError("a distinct review-20260917 child profile is required")

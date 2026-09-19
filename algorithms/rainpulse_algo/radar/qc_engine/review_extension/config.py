@@ -47,9 +47,35 @@ class SourceReviewConfig(Frozen):
         return self
 
 
+class NearBackgroundAsset(Frozen):
+    path: str = Field(min_length=1)
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class NearBackgroundPolicy(Frozen):
+    version: Literal["near-background-20260919-v1"]
+    target_date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    assets: dict[str, NearBackgroundAsset]
+
+
 class NonPrecipConfig(Frozen):
+    near_background: NearBackgroundPolicy | None = None
+    paired_doppler_enabled: bool = False
+    temporal_spatial_matching: bool = False
+    match_maximum_azimuth_deg: float = Field(default=.6, gt=0, le=1)
+    match_maximum_elevation_deg: float = Field(default=.2, gt=0, le=.3)
+    match_maximum_horizontal_m: float = Field(default=750., gt=0, le=1000)
+    match_maximum_vertical_m: float = Field(default=250., gt=0, le=500)
+    paired_doppler_maximum_seconds: float = Field(default=90., gt=0, le=180)
     mode: Literal["audit", "experiment_quarantine"] = "audit"
-    quarantine_classes: tuple[Literal["fixed_ground", "anomalous_propagation", "sea_clutter", "biological"], ...] = ("fixed_ground",)
+    quarantine_classes: tuple[Literal["fixed_ground", "anomalous_propagation", "sea_clutter", "biological", "near_nonmet"], ...] = ("fixed_ground",)
+    near_enabled: bool = False
+    near_maximum_range_m: float = Field(default=75000., gt=0, le=150000)
+    near_maximum_dbz: float = Field(default=30., le=35)
+    near_maximum_rhohv: float = Field(default=.8, gt=0, le=.85)
+    near_range_window_m: float = Field(default=2000., gt=0, le=10000)
+    near_minimum_coverage: float = Field(default=.8, ge=.7, le=1)
+    near_minimum_fraction: float = Field(default=.7, ge=.6, le=1)
     quarantine_quality: float = Field(default=0.25, ge=0, lt=0.5)
     maximum_new_eligible_loss_fraction: float = Field(default=0.05, ge=0, le=1)
     minimum_history_lower_bound: float = Field(default=0.80, gt=0.5, lt=1)
