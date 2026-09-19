@@ -52,6 +52,9 @@ def generate(parent_path, output, *, backend="wradlib", pyart_check=False):
             "profiles": records, "live_configuration_modified": False}, indent=2))
         # Complete set appears together. Refuse a concurrent target, do not replace.
         if output.exists(): raise ValueError("output appeared concurrently")
+        # TemporaryDirectory starts at 0700; workers and the control service
+        # must be able to traverse the published configuration directory.
+        tmp.chmod(0o755)
         os.rename(tmp, output)
     return records
 
