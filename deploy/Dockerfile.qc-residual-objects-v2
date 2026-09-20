@@ -1,0 +1,6 @@
+# Offline overlay for the already installed near-measurement worker image.
+# The base image carries the pinned runtime/site-packages; this layer only
+# replaces the radial residual detector and its QC serialization code.
+FROM rainpulse-cpu-worker:near-measurement-20260919-v1
+COPY algorithms/rainpulse_algo /opt/rainpulse/rainpulse_algo
+ENTRYPOINT ["python", "-m", "rainpulse_algo.worker"]
