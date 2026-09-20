@@ -1,0 +1,13 @@
+services:
+  radar-qc-worker:
+    image: rainpulse-cpu-worker:receiver-domain-20260921
+    environment:
+      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/receiver-domain-20260921/receiver-joint-quarantine.yaml
+  radar-grid-worker:
+    image: rainpulse-cpu-worker:receiver-domain-20260921
+  radar-mosaic-worker:
+    image: rainpulse-cpu-worker:receiver-domain-20260921
+  analysis-qpe-worker:
+    image: rainpulse-cpu-worker:receiver-domain-20260921
+  analysis-diagnostics-worker:
+    image: rainpulse-cpu-worker:receiver-domain-20260921
