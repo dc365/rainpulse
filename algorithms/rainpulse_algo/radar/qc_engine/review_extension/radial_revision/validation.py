@@ -68,15 +68,7 @@ def validate_revision_fields(group, observed, legacy_source, blocked):
     if 'RV2_RESIDUAL_LINK_MASK' in group:
         link = mask(get('RV2_RESIDUAL_LINK_MASK'), shape, 'residual links')
         direct = mask(get('RV2_RESIDUAL_DIRECT_MASK'), shape, 'residual direct')
-        span = np.zeros(shape, bool)
-        if 'RV2_RESIDUAL_SPAN_MASK' in group:
-            value = get('RV2_RESIDUAL_SPAN_MASK')
-            if value.dtype != np.dtype('uint8'):
-                raise ValueError('invalid residual span dtype')
-            span = mask(value, shape, 'residual span')
-            if np.any(span & ~link):
-                raise ValueError('residual span lacks linked evidence')
-        residual_objects = link | direct | span
+        residual_objects = link | direct
         for key in ('RV2_RESIDUAL_LINK_MASK', 'RV2_RESIDUAL_DIRECT_MASK'):
             if get(key).dtype != np.dtype('uint8'): raise ValueError('invalid residual mask dtype')
         for suffix in ('LEFT_DEG', 'RIGHT_DEG', 'SCALE_M', 'ANCHOR_DISTANCE_M'):

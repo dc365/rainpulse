@@ -9,9 +9,7 @@ from scipy.ndimage import uniform_filter1d
 from ..arrays import mask, moment, native_geometry, runs
 
 
-def detect(native, blocked, source, *, beam_width=None, span_minimum_m=None,
-           span_flank_rays=3, span_flank_delta_db=3., span_flank_fraction=.7,
-           span_weather_snr_db=25., span_weather_fraction=.6):
+def detect(native, blocked, source, *, beam_width=None):
     r, az, dr, good, gaps = native_geometry(native)
     z, obs = moment(native, 'DBZH')
     blocked = mask(blocked, native.shape, 'residual barriers') | ~good[:, None]
@@ -83,17 +81,6 @@ def detect(native, blocked, source, *, beam_width=None, span_minimum_m=None,
                             evidence['RIGHT_DEG'][row, new] = angles[b]
                             evidence['SCALE_M'][row, new] = scale
                             evidence['ANCHOR_DISTANCE_M'][row, new] = distance[np.searchsorted(gi,new)]
-    span, span_ids, span_evidence, span_objects = _span(
-        native, z, obs, valid, blocked, beam_width,
-        minimum_m=span_minimum_m, flank_rays=span_flank_rays,
-        flank_delta_db=span_flank_delta_db, flank_fraction=span_flank_fraction,
-        weather_snr_db=span_weather_snr_db, weather_fraction=span_weather_fraction)
-    fresh_span = span & ~linked
-    linked |= span
-    ids[fresh_span] = span_ids[fresh_span] + object_id
-    for key in evidence:
-        evidence[key][fresh_span] = span_evidence[key][fresh_span]
-    object_id += span_objects
     track, parents, anchor_ids, tracked = _track(native, z, obs, valid, blocked, anchors, beam_width)
     fresh = track & ~linked
     linked |= track
@@ -105,115 +92,12 @@ def detect(native, blocked, source, *, beam_width=None, span_minimum_m=None,
             'RV2_RESIDUAL_ANCHOR_ID': anchor_ids,
             'RV2_RESIDUAL_LINK_MASK': linked.astype('uint8'),
             'RV2_RESIDUAL_DIRECT_MASK': direct.astype('uint8'),
-            'RV2_RESIDUAL_SPAN_MASK': fresh_span.astype('uint8'),
             'RV2_RESIDUAL_OBJECT_ID': ids,
             **{'RV2_RESIDUAL_'+k: v for k,v in evidence.items()}}, {
                 'version': 'residual-objects-v2', 'tracked_gates': int(track.sum()), 'linked_gates': int(linked.sum()),
-                'direct_gates': int(direct.sum()), 'span_gates': int(fresh_span.sum()),
-                'span_objects': int(span_objects), 'filled_gates': 0,
+                'direct_gates': int(direct.sum()), 'filled_gates': 0,
                 'anchor_policy': 'frozen_independent_no_recursive_growth'}
 
-
-
-def _span(native, z, obs, valid, blocked, beam_width, *, minimum_m=None, flank_rays=3,
-          flank_delta_db=3., flank_fraction=.7, weather_snr_db=25., weather_fraction=.6):
-    """Whole-ray isolation: long thin runs with missing or clearly weaker flanks.
-
-    A radial interference line is not bounded by a short evidence window: it
-    extends over tens of kilometres while both neighbouring rays stay empty or
-    much weaker, so the frozen anchor reach never has to be enough on its own.
-    """
-    r, az, dr, good, gaps = native_geometry(native)
-    hit = np.zeros(native.shape, bool)
-    object_ids = np.zeros(native.shape, 'uint32')
-    evidence = {k: np.full(native.shape, np.nan, 'float32') for k in
-                ('LEFT_DEG', 'RIGHT_DEG', 'SCALE_M', 'ANCHOR_DISTANCE_M')}
-    objects = 0
-    if minimum_m is None or minimum_m <= 0:
-        return hit, object_ids, evidence, objects
-    minimum_gates = max(3, int(round(minimum_m/dr)))
-    bridge = max(0, int(round(2000./dr)))
-    snr, snr_available = moment(native, 'SNR')
-    peer_delta = 3.
-    for rows in np.split(np.arange(native.shape[0]), np.flatnonzero(gaps[:-1])+1):
-        if len(rows) < 3:
-            continue
-        angles = np.rad2deg(np.unwrap(np.deg2rad(az[rows])))
-        spacing = float(np.median(np.diff(angles)))
-        if spacing <= 0:
-            continue
-        beam = max(spacing, beam_width or spacing)
-        # The inspected corridor must stay inside the frozen eight degree width.
-        reach = int(min(flank_rays, max(1, np.floor(4./beam))))
-        for index in range(1, len(rows)-1):
-            row = rows[index]
-            line = valid[row].copy()
-            if not line.any():
-                continue
-            if bridge:
-                line = _bridge(line, bridge)
-            for begin, end in runs(line):
-                keep = valid[row, begin:end]
-                if int(keep.sum()) < minimum_gates:
-                    continue
-                gates = np.arange(begin, end)
-                centre = z[row, begin:end]
-                # A neighbour carrying the same echo makes this a bundle, not an
-                # isolated single-ray line, and bundles keep their own evidence.
-                peers = False
-                for offset in (-1, 1):
-                    other = rows[index+offset]
-                    peer = obs[other, begin:end] & (z[other, begin:end] >= centre - peer_delta)
-                    if peer[keep].mean() > .5:
-                        peers = True
-                        break
-                if peers:
-                    continue
-                weak = [np.zeros(end-begin, bool), np.zeros(end-begin, bool)]
-                boundary = [np.nan, np.nan]
-                complete = True
-                for offset in range(1, reach+1):
-                    for side, delta in ((0, -offset), (1, offset)):
-                        other = index+delta
-                        if other < 0 or other >= len(rows):
-                            complete = False
-                            continue
-                        neighbour = rows[other]
-                        weak[side] |= (~obs[neighbour, begin:end] |
-                                       (centre - z[neighbour, begin:end] >= flank_delta_db))
-                        boundary[side] = angles[other]
-                if not complete or not np.isfinite(boundary).all():
-                    continue
-                if boundary[1] <= boundary[0] or boundary[1]-boundary[0] > 8.:
-                    continue
-                if min(weak[0][keep].mean(), weak[1][keep].mean()) < flank_fraction:
-                    continue
-                # Measured strong weather support keeps the echo.
-                weather = snr_available[row, begin:end] & (snr[row, begin:end] >= weather_snr_db)
-                if weather[keep].mean() >= weather_fraction:
-                    continue
-                take = gates[keep & ~hit[row, gates]]
-                if not len(take):
-                    continue
-                objects += 1
-                hit[row, take] = True
-                object_ids[row, take] = objects
-                evidence['LEFT_DEG'][row, take] = boundary[0]
-                evidence['RIGHT_DEG'][row, take] = boundary[1]
-                evidence['SCALE_M'][row, take] = 60000.
-                evidence['ANCHOR_DISTANCE_M'][row, take] = 0.
-    return hit, object_ids, evidence, objects
-
-
-def _bridge(line, bridge):
-    """Fill short range gaps so a dashed line is judged as one radial run."""
-    out = np.array(line, dtype=bool, copy=True)
-    for begin, end in runs(line):
-        if begin-bridge >= 0 and not out[begin-bridge]:
-            out[begin-bridge:begin] = True
-        if end+bridge <= len(out) and not out[end]:
-            out[end:end+bridge] = True
-    return out
 
 
 def _track(native, z, obs, valid, blocked, anchors, beam_width):
