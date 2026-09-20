@@ -1,0 +1,23 @@
+{
+  "schema": "rainpulse.receiver-segment-profiles-v1",
+  "parent_sha256": "972d6cc8e6297cb2399504f8c107881ba9d684d967a209323f5f3fc5397b667a",
+  "profiles": [
+    {
+      "file": "receiver-segment-audit.yaml",
+      "sha256": "5682bcc3ba6a0a628ab029d22ae89e6a13ca4e2fe0603cc253440534ecdc247b",
+      "receiver_config_sha256": "84b47af5d8baed9ab5758f4b6546ba030e5057343e366945869700559353b3c8"
+    },
+    {
+      "file": "receiver-segment-experiment.yaml",
+      "sha256": "02555856983af14ffda37ed08f1ea5ef9e5d71fb5fa5d2f1482e630853bc3b12",
+      "receiver_config_sha256": "86fa7a42217fe8d61b327af602f8a552b067e6a6cdec894fd58005b8c9c0c5c5"
+    },
+    {
+      "file": "receiver-segment-experiment-partial-cr.yaml",
+      "sha256": "d00a051e50511ad5affd79758bf0c7c3e3a025de27e68712895cabbb5886ad0b",
+      "receiver_config_sha256": "9091f42b5fb12d39bfc413ff4147c4975181eaf81e12e5715b3cb4935de723a4"
+    }
+  ],
+  "parent_mode_preserved": true,
+  "live_configuration_changed": false
+}

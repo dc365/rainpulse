@@ -2,7 +2,24 @@
 import hashlib
 import json
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, model_serializer
+
+
+class SegmentReferenceConfig(BaseModel):
+    """Finite, intermittent receiver states; research fallback, not a short-blob filter."""
+    model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
+    version: Literal["receiver-segment-reference-v1"] = "receiver-segment-reference-v1"
+    mode: Literal["audit", "experiment"] = "audit"
+    partial_policy: Literal["diagnostic_only", "cr_withhold"] = "diagnostic_only"
+    reference_minimum_range_m: float = Field(default=10000., ge=10000.)
+    minimum_reference_blocks: int = Field(default=3, ge=3)
+    minimum_reference_span_m: float = Field(default=40000., ge=40000.)
+    minimum_reference_support_m: float = Field(default=12000., ge=10000.)
+    state_separation_db: float = Field(default=6., ge=6.)
+    maximum_states: int = Field(default=3, ge=1, le=3)
+    maximum_reference_distance_m: float = Field(default=50000., gt=0., le=50000.)
+    crosscheck_minimum_span_m: float = Field(default=10000., ge=5000.)
+    maximum_state_trials: int = Field(default=50000, ge=1, le=100000)
 
 
 class ReceiverDomainConfig(BaseModel):
@@ -42,10 +59,25 @@ class ReceiverDomainConfig(BaseModel):
     maximum_folds: int = Field(default=40000, ge=1, le=100000)
     operational_eligible: Literal[False] = False
 
+    segment_reference: SegmentReferenceConfig | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_segment(self, handler):
+        value = handler(self)
+        if self.segment_reference is None:
+            value.pop("segment_reference", None)
+        return value
+
     @model_validator(mode="after")
     def check(self):
         if self.minimum_pair_span_m > self.minimum_reference_span_m:
             raise ValueError("paired span must fit within receiver reference span")
+        if self.segment_reference is not None:
+            seg = self.segment_reference
+            if seg.reference_minimum_range_m > self.minimum_range_m:
+                raise ValueError("segment reference must cover the target minimum range")
+            if self.minimum_pair_span_m > seg.minimum_reference_span_m:
+                raise ValueError("segment reference must contain the required paired span")
         return self
 
     @property

@@ -21,6 +21,17 @@ DTYPES = {
 }
 
 
+SEGMENT_DTYPES = {
+    "SEGMENT_REFERENCE_MASK": "uint8", "SEGMENT_MATCH_COUNT": "uint8",
+    "SEGMENT_AMBIGUOUS_MASK": "uint8", "SEGMENT_SIDE_MEASURED_MASK": "uint8",
+    "SEGMENT_REFERENCE_DISTANCE_M": "float32",
+}
+
+
+def evidence_dtypes(cfg):
+    return {**DTYPES, **(SEGMENT_DTYPES if cfg.segment_reference is not None else {})}
+
+
 @dataclass(frozen=True)
 class Evidence:
     arrays: dict
@@ -165,12 +176,13 @@ def evaluate(s, cfg, *, independent_weather=None, local_coherence=None,
     hard = protection(independent_weather, "independent weather")
     local = protection(local_coherence, "local coherence")
     unknown = protection(unknown_protection, "unattributed protection")
-    out = {"RDR_"+k: np.full(s.shape, np.nan if dt == "float32" else 0, dt) for k, dt in DTYPES.items()}
+    out = {"RDR_"+k: np.full(s.shape, np.nan if dt == "float32" else 0, dt) for k, dt in evidence_dtypes(cfg).items()}
     out["RDR_OBSERVED_MASK"] = obs.astype("uint8")
     out["RDR_INDEPENDENT_WEATHER_MASK"] = hard.astype("uint8")
     out["RDR_LOCAL_COHERENCE_MASK"] = local.astype("uint8")
     out["RDR_UNKNOWN_PROTECTION_MASK"] = unknown.astype("uint8")
     records = []; failures = Counter(); trials = 0
+    segment_failures = Counter(); state_trials = [0]
     bix = (s.ranges//cfg.block_m).astype(int)
     if "SNR" in s.fields:
         for row in np.flatnonzero(s.good & domain.any(axis=1)):
@@ -181,6 +193,15 @@ def evaluate(s, cfg, *, independent_weather=None, local_coherence=None,
                 model, status = fit_fold(s, row, int(block), cfg, (f, a), restrict_snr_to_dbzh)
                 if model is None:
                     failures[status] += 1
+                    if cfg.segment_reference is not None:
+                        from .segment_reference import fit_segment_models, project_segment_models
+                        models, diagnostics = fit_segment_models(s, row, int(block), cfg,
+                            prepared=(f, a), state_trials=state_trials,
+                            restrict_snr_to_dbzh=restrict_snr_to_dbzh)
+                        segment_failures.update(diagnostics)
+                        if models:
+                            project_segment_models(s, row, int(block), cfg, (f, a),
+                                domain, models, records, out)
                     continue
                 records.append({"id": len(records)+1, **model})
                 j = np.flatnonzero(domain[row] & (bix == block) & a["SNR"][row])
@@ -233,14 +254,23 @@ def evaluate(s, cfg, *, independent_weather=None, local_coherence=None,
         "source_qualified": int(source.sum()), "mixed": int(out["RDR_MIXED_MASK"].sum()),
         "local_reviewed": int(out["RDR_LOCAL_REVIEWED_MASK"].sum()), "confirmed_gates": 0,
         "filled_gates": 0, "operational_eligible": False,
-        "family": "coherent_receiver_only", "scores_are_probabilities": False})
+        "family": "coherent_receiver_only", "scores_are_probabilities": False,
+        **({"segment_reference": {
+            "version": cfg.segment_reference.version, "mode": cfg.segment_reference.mode,
+            "state_trials": state_trials[0], "failure_counts": dict(segment_failures),
+            "models": sum(m.get("reference_route") == "finite_receiver_state" for m in records),
+            "full_matches": int((full & (out["RDR_SEGMENT_REFERENCE_MASK"] == 1)).sum()),
+            "source_qualified": int((source & (out["RDR_SEGMENT_REFERENCE_MASK"] == 1)).sum()),
+            "partial_matches": int((partial & (out["RDR_SEGMENT_REFERENCE_MASK"] == 1)).sum()),
+            "ambiguous_gates": int(out["RDR_SEGMENT_AMBIGUOUS_MASK"].sum()),
+        }} if cfg.segment_reference is not None else {})})
 
 
 def abstained(s, cfg, reason):
     """Complete zero-action evidence after a resource limit, never partial results."""
     _, a = domains(s, cfg)
     obs = a["DBZH"]
-    out = {"RDR_"+k: np.full(s.shape, np.nan if dt == "float32" else 0, dt) for k,dt in DTYPES.items()}
+    out = {"RDR_"+k: np.full(s.shape, np.nan if dt == "float32" else 0, dt) for k,dt in evidence_dtypes(cfg).items()}
     out["RDR_OBSERVED_MASK"] = obs.astype("uint8")
     out["RDR_STATE"] = obs.astype("uint8")
     return Evidence(out, [], {"status":"RESOURCE_ABSTAINED", "reason":reason,

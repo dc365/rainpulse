@@ -13,6 +13,10 @@ def annotate(group):
             meta.update(units="1", semantics="0:false,1:true; observed-only")
         elif name.endswith("_DB"):
             meta["units"] = "dB"
+        elif name.endswith("_M"):
+            meta["units"] = "m"
+        elif name == "RDR_SEGMENT_MATCH_COUNT":
+            meta.update(units="1", semantics="compatible train-only states; >1 forbids action")
         elif name == "RDR_STATE":
             meta.update(units="1", semantics="0:missing,1:not_supported,2:source_hypothesis,3:partial,4:mixed,5:protected")
         else: meta["units"] = "1"

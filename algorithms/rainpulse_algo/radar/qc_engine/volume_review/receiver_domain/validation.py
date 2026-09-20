@@ -2,7 +2,7 @@
 from collections.abc import Mapping
 import numpy as np
 from .config import ReceiverDomainConfig
-from .core import DTYPES
+from .core import evidence_dtypes
 from .disposition import apply, mutable_names
 
 
@@ -30,7 +30,7 @@ def validate_serialized(group, attrs, parent_validator):
     clean = {k: v for k, v in attrs.items() if not k.startswith("qc_receiver_domain_")}
     parent_validator(view, clean)
     before = {k: np.array(view[k][:], copy=True) for k in view}
-    evidence = {"RDR_"+k: np.asarray(group["RDR_"+k][:]) for k in DTYPES}
+    evidence = {"RDR_"+k: np.asarray(group["RDR_"+k][:]) for k in evidence_dtypes(cfg)}
     predicted, _ = apply(before, evidence, cfg, low_quality_flag=attrs["qc_receiver_domain_low_quality_flag"])
     if set(predicted) != set(group):
         raise ValueError("unexpected/missing receiver output keys")
