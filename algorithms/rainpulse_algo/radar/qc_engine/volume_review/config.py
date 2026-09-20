@@ -4,6 +4,7 @@ import hashlib
 import json
 from pydantic import BaseModel, ConfigDict, Field, model_validator, model_serializer
 from .near_measurement.config import NearMeasurementConfig
+from .receiver_domain.config import ReceiverDomainConfig
 
 
 class VolumeReviewConfig(BaseModel):
@@ -53,12 +54,15 @@ class VolumeReviewConfig(BaseModel):
     maximum_links: int = Field(default=40000, ge=1, le=200000)
     export_evidence: bool = True
     near_measurement: NearMeasurementConfig | None = None
+    receiver_domain: ReceiverDomainConfig | None = None
 
     @model_serializer(mode="wrap")
     def serialize_optional_near(self, handler):
         value = handler(self)
         if self.near_measurement is None:
             value.pop("near_measurement", None)
+        if self.receiver_domain is None:
+            value.pop("receiver_domain", None)
         return value
 
     @model_validator(mode="after")
@@ -74,6 +78,11 @@ class VolumeReviewConfig(BaseModel):
             raise ValueError("ordered physical integer scales required")
         if self.phase < 2 and self.mode != "audit":
             raise ValueError("P0/P1 are audit only")
+        if self.receiver_domain is not None:
+            if self.phase != 3 or not self.export_evidence:
+                raise ValueError("receiver domain requires P3 and evidence export")
+            if self.receiver_domain.mode != "audit" and self.mode != "experiment_quarantine":
+                raise ValueError("receiver actions require parent experiment mode")
         if self.near_measurement is not None:
             if self.phase != 3:
                 raise ValueError("near measurement requires P3 qualification")

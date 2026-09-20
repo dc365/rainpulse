@@ -22,6 +22,9 @@ class LegacyView(Mapping):
 
 
 def validate_serialized(group,attrs,legacy_validator):
+    if attrs.get("qc_receiver_domain_version") is not None or any(k.startswith("RDR_") for k in group):
+        from .receiver_domain.validation import validate_serialized as validate_receiver
+        return validate_receiver(group, attrs, lambda g, a: validate_serialized(g, a, legacy_validator))
     if attrs.get("qc_near_measurement_version") is not None or any(k.startswith("NMR_") for k in group):
         from .near_measurement.validation import validate_serialized as validate_near
         return validate_near(group, attrs, lambda g, a: validate_serialized(g, a, legacy_validator))

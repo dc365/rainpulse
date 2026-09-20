@@ -92,6 +92,7 @@ def snapshot_group(group):
     # Bound availability, reasons and exact delta; do not repeat pre-stage arrays
     # in the light-weight snapshots (the full QC Zarr keeps all before-states).
     keys += [k for k in group if k.startswith("NMR_") and not k.startswith("NMR_BEFORE_")]
+    keys += [k for k in group if k.startswith("RDR_") and not k.startswith("RDR_BEFORE_")]
     return {k:np.array(group[k][:],copy=True) for k in keys if k in group}
 
 
@@ -111,6 +112,9 @@ def write_snapshots(root,output_store,result):
         if cfg.near_measurement is not None:
             from .near_measurement.schema import annotate
             annotate(root[qc.name])
+        if cfg.receiver_domain is not None:
+            from .receiver_domain.schema import annotate as annotate_receiver
+            annotate_receiver(root[qc.name])
         arrays=snapshot_group(root[qc.name]); content=npz_bytes(arrays)
         path=f"qc/volume_review/{qc.name}.npz"; output_store[path]=content
         records.append({"sweep":qc.name,"path":path,"numeric_sha256":array_digest(arrays),
@@ -124,6 +128,9 @@ def write_snapshots(root,output_store,result):
         manifest["near_measurement"] = {"config": cfg.near_measurement.model_dump(mode="json"),
             "sha256": cfg.near_measurement.digest,
             "summary": result.summary.get("near_measurement", {})}
+    if cfg.receiver_domain is not None:
+        manifest["receiver_domain"] = {"config": cfg.receiver_domain.model_dump(mode="json"),
+            "sha256": cfg.receiver_domain.digest, "summary": result.summary.get("receiver_domain", {})}
     output_store["qc/volume_review/manifest.json"]=json_bytes(manifest)
 
 

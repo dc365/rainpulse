@@ -88,6 +88,9 @@ def review_result(result, native):
     if cfg.near_measurement is not None:
         from .near_measurement.integration import review_result as review_near_result
         reviewed = review_near_result(reviewed, native)
+    if cfg.receiver_domain is not None:
+        from .receiver_domain.integration import review_result as review_receiver
+        reviewed = review_receiver(reviewed, native)
     return reviewed
 
 
@@ -99,6 +102,9 @@ def root_attributes(profile):
     if cfg.near_measurement is not None:
         from .near_measurement.integration import attributes
         near = attributes(cfg.near_measurement, profile.flag_masks["LOW_QUALITY"])
+    if cfg.receiver_domain is not None:
+        from .receiver_domain.integration import attributes as receiver_attributes
+        near.update(receiver_attributes(cfg.receiver_domain, profile.flag_masks["LOW_QUALITY"]))
     return {**near, "qc_volume_review_version":VERSION,"qc_volume_review_phase":cfg.phase,
             "qc_volume_review_mode":cfg.mode,"qc_volume_review_sha256":cfg.digest,
             "cr_unknown_policy":cfg.unknown_cr_policy,

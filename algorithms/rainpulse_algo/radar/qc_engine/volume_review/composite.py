@@ -19,6 +19,10 @@ class Composite:
 def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
     if not roots or not 16<=maximum_size<=1200:
         raise ValueError("nonempty volume list and bounded grid required")
+    receiver_ids = {r.attrs.get("qc_receiver_domain_sha256") for r in roots}
+    if len(receiver_ids) != 1:
+        raise ValueError("CR receiver-domain generations are mixed")
+    receiver_active = None not in receiver_ids
     near_ids = {r.attrs.get("qc_near_measurement_sha256") for r in roots}
     if len(near_ids) != 1:
         raise ValueError("CR near-measurement generations are mixed")
@@ -66,6 +70,12 @@ def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
                         raise ValueError("CR missing near evidence: " + key)
                 if np.any((a["NMR_CR_WITHHELD_MASK"] == 1) & (a["REFLECTIVITY_ELIGIBLE_FOR_CR"] == 1)):
                     raise ValueError("near withheld measurement leaked into CR")
+            if receiver_active:
+                for key in ("RDR_SOURCE_MASK", "RDR_PARTIAL_MATCH_MASK", "RDR_MIXED_MASK", "RDR_CR_WITHHELD_MASK"):
+                    if key not in a or a[key].shape != a["DBZH_QC"].shape or not np.isin(a[key], (0,1)).all():
+                        raise ValueError("CR missing receiver evidence " + key)
+                if np.any((a["RDR_CR_WITHHELD_MASK"] == 1) & (a["REFLECTIVITY_ELIGIBLE_FOR_CR"] == 1)):
+                    raise ValueError("receiver withheld measurement leaked into CR")
             sources.append({"radar":rid,"radar_id":station,"scan_id":root.attrs.get("scan_id"),"sweep":number,
                             "qc_asset_id":root.attrs.get("asset_id"),"qc_parameters_sha256":root.attrs.get("qc_parameters_sha256"),
                             "numeric_sha256":array_digest(a),"height_datum":"above_source_radar_effective_4_3_earth"})
@@ -84,6 +94,9 @@ def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
     if near_active:
         arrays.update({k: np.full(shape, np.nan, "float32") for k in (
             "CR_NEAR_NONMET_CANDIDATE", "CR_NEAR_LOW_RELIABILITY", "CR_NEAR_WITHHELD")})
+    if receiver_active:
+        arrays.update({k: np.full(shape, np.nan, "float32") for k in (
+            "CR_RECEIVER_SOURCE", "CR_RECEIVER_PARTIAL", "CR_RECEIVER_MIXED", "CR_RECEIVER_WITHHELD")})
     for start in range(0,height,128):
         end=min(start+128,height); sl=np.s_[start:end,:]
         xx,yy=np.meshgrid(west+(np.arange(width)+.5)*step,north-(np.arange(start,end)+.5)*step)
@@ -108,6 +121,11 @@ def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
                         ("CR_NEAR_WITHHELD", "NMR_CR_WITHHELD_MASK")):
                     selected = observed & (a[source_mask][ray,gate] == 1)
                     arrays[target][sl] = np.fmax(arrays[target][sl], np.where(selected, value, np.nan))
+            if receiver_active:
+                for target, mask in (("CR_RECEIVER_SOURCE", "RDR_SOURCE_MASK"), ("CR_RECEIVER_PARTIAL", "RDR_PARTIAL_MATCH_MASK"),
+                        ("CR_RECEIVER_MIXED", "RDR_MIXED_MASK"), ("CR_RECEIVER_WITHHELD", "RDR_CR_WITHHELD_MASK")):
+                    selected = observed & (a[mask][ray,gate] == 1)
+                    arrays[target][sl] = np.fmax(arrays[target][sl], np.where(selected,value,np.nan))
             old=arrays["CR_TRUSTED"][sl]
             wins=trusted & (~np.isfinite(old)|(value>old))
             for target,source in (("CR_RUNNER_UP","CR_TRUSTED"),("RUNNER_UP_SOURCE","WINNER_SOURCE"),
