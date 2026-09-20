@@ -38,6 +38,7 @@ DTYPES = {
         "RV2_LEGACY_MATCH_MASK", "RV2_QUALIFIED_MASK", "RV2_ACTION_PROPOSAL_MASK",
         "RV2_BARRED_MASK", "RV2_PLATEAU_MASK", "RV2_LINKED_SEGMENT_MASK",
         "RV2_MODE_CODE", "RV2_STEP_CODE", "RV2_SEGMENT_ACTION_ENABLED",
+        "RV2_RESIDUAL_SPAN_MASK",
     )},
     **{k: "uint16" for k in ("RV2_SCALE_BITS", "RV2_BUNDLE_SCALE_BITS", "RV2_REASON")},
     **{k: "uint32" for k in ("RV2_SEGMENT_FOLD_ID", "RV2_MODEL_ID", "RV2_OBJECT_ID")},
@@ -111,11 +112,19 @@ def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, confl
             line_report['group_polar_gates'] = int(group_polar.sum())
         if cfg.fragment_line is not None and cfg.fragment_line.residual_objects_enabled:
             from .residual_objects import detect as detect_residual
+            span = cfg.fragment_line
             fields, residual_report = detect_residual(
                 native, barred, source | line_morphology | line_isolated | group_morph,
-                beam_width=cfg.fragment_line.antenna_beam_width_deg)
+                beam_width=span.antenna_beam_width_deg,
+                span_minimum_m=span.residual_span_minimum_m if span.residual_span_enabled else None,
+                span_flank_rays=span.residual_span_flank_rays,
+                span_flank_delta_db=span.residual_span_flank_delta_db,
+                span_flank_fraction=span.residual_span_flank_fraction,
+                span_weather_snr_db=span.residual_span_weather_snr_db,
+                span_weather_fraction=span.residual_span_weather_fraction)
             out.update(fields)
-            residual = (fields['RV2_RESIDUAL_LINK_MASK'] | fields['RV2_RESIDUAL_DIRECT_MASK']) == 1
+            residual = (fields['RV2_RESIDUAL_LINK_MASK'] | fields['RV2_RESIDUAL_DIRECT_MASK'] |
+                        fields.get('RV2_RESIDUAL_SPAN_MASK', 0)) == 1
             candidate |= residual
             line_report['residual_objects'] = residual_report
         source_report = {"status": "disabled", "reference_folds": 0, "reference_models": 0}

@@ -24,6 +24,13 @@ class FragmentLineConfig(BaseModel):
     window_tracks_enabled: bool = False
     power_fan_enabled: bool = False
     residual_objects_enabled: bool = False
+    residual_span_enabled: bool = False
+    residual_span_minimum_m: float = Field(default=15000., ge=5000., le=60000.)
+    residual_span_flank_rays: int = Field(default=3, ge=1, le=5)
+    residual_span_flank_delta_db: float = Field(default=3., ge=1., le=12.)
+    residual_span_flank_fraction: float = Field(default=.7, gt=0., le=1.)
+    residual_span_weather_snr_db: float = Field(default=25., ge=10.)
+    residual_span_weather_fraction: float = Field(default=.6, gt=0., le=1.)
     antenna_beam_width_deg: float | None = Field(default=None, gt=0., le=5.)
     isolated_link_gap_m: float = Field(default=30000., ge=0, le=30000.)
 
@@ -34,6 +41,8 @@ class FragmentLineConfig(BaseModel):
             raise ValueError("power fans require group morphology")
         if self.window_tracks_enabled and not self.group_morphology_enabled:
             raise ValueError("window tracks require group morphology")
+        if self.residual_span_enabled and not self.residual_objects_enabled:
+            raise ValueError("whole-ray isolation requires residual objects")
         if self.group_morphology_enabled and not self.sparse_isolated_enabled:
             raise ValueError("group morphology requires sparse isolation")
         if self.sparse_isolated_enabled and not self.isolated_quarantine_enabled:
