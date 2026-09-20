@@ -1,0 +1,13 @@
+services:
+  radar-qc-worker:
+    image: rainpulse-cpu-worker:receiver-segment-20260921
+    environment:
+      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/receiver-segment-20260921/receiver-segment-experiment-partial-cr.yaml
+  radar-grid-worker:
+    image: rainpulse-cpu-worker:receiver-segment-20260921
+  radar-mosaic-worker:
+    image: rainpulse-cpu-worker:receiver-segment-20260921
+  analysis-qpe-worker:
+    image: rainpulse-cpu-worker:receiver-segment-20260921
+  analysis-diagnostics-worker:
+    image: rainpulse-cpu-worker:receiver-segment-20260921
