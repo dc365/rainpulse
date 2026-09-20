@@ -1,0 +1,5 @@
+services:
+  radar-qc-worker:
+    image: rainpulse-cpu-worker:residual-objects-v2
+    environment:
+      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/radial-residual-20260920.yaml
