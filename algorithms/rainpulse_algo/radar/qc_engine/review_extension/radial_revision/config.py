@@ -29,6 +29,7 @@ class FragmentLineConfig(BaseModel):
     residual_span_flank_rays: int = Field(default=3, ge=1, le=5)
     residual_span_flank_delta_db: float = Field(default=3., ge=1., le=12.)
     residual_span_flank_fraction: float = Field(default=.7, gt=0., le=1.)
+    residual_span_minimum_dbz: float = Field(default=12., ge=-10., le=40.)
     residual_span_weather_snr_db: float = Field(default=25., ge=10.)
     residual_span_weather_fraction: float = Field(default=.6, gt=0., le=1.)
     antenna_beam_width_deg: float | None = Field(default=None, gt=0., le=5.)
