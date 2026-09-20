@@ -64,7 +64,41 @@ def validate_revision_fields(group, observed, legacy_source, blocked):
         if (np.any(fan & ~group_morph) or np.isinf(residual).any() or
                 np.any(fan & (~np.isfinite(residual) | (abs(residual) > 6.)))):
             raise ValueError('power fan lacks morphology or measured residual')
-    if not np.array_equal(candidate, (topology | bundle | line | group_candidate) & ~barred):
+    residual_objects = np.zeros(shape, bool)
+    if 'RV2_RESIDUAL_LINK_MASK' in group:
+        link = mask(get('RV2_RESIDUAL_LINK_MASK'), shape, 'residual links')
+        direct = mask(get('RV2_RESIDUAL_DIRECT_MASK'), shape, 'residual direct')
+        residual_objects = link | direct
+        for key in ('RV2_RESIDUAL_LINK_MASK', 'RV2_RESIDUAL_DIRECT_MASK'):
+            if get(key).dtype != np.dtype('uint8'): raise ValueError('invalid residual mask dtype')
+        for suffix in ('LEFT_DEG', 'RIGHT_DEG', 'SCALE_M', 'ANCHOR_DISTANCE_M'):
+            value = get('RV2_RESIDUAL_'+suffix)
+            if value.shape != shape or value.dtype != np.dtype('float32') or np.isinf(value).any():
+                raise ValueError('invalid residual diagnostics')
+        left, right = get('RV2_RESIDUAL_LEFT_DEG'), get('RV2_RESIDUAL_RIGHT_DEG')
+        distance = get('RV2_RESIDUAL_ANCHOR_DISTANCE_M')
+        identity = get('RV2_RESIDUAL_OBJECT_ID')
+        if identity.shape != shape or identity.dtype != np.dtype('uint32'):
+            raise ValueError('invalid residual object identity')
+        if (np.any(residual_objects & (~observed | blocked | barred | ~np.isfinite(left) | ~np.isfinite(right) |
+                              (right <= left) | (right-left > 8.00001))) or
+            np.any(link & ((identity == 0) | ~np.isfinite(distance) | (distance < 0) | (distance > 40000.))) or
+            np.any(residual_objects & ~np.isin(get('RV2_RESIDUAL_SCALE_M'), [12000.,30000.,60000.]))):
+            raise ValueError('residual object crossed barrier or lacks bounded evidence')
+        if 'RV2_RESIDUAL_TRACK_MASK' in group:
+            track = mask(get('RV2_RESIDUAL_TRACK_MASK'), shape, 'residual track')
+            parent = get('RV2_RESIDUAL_TRACK_PARENT_ID')
+            anchors = get('RV2_RESIDUAL_ANCHOR_ID')
+            if get('RV2_RESIDUAL_TRACK_MASK').dtype != np.dtype('uint8'):
+                raise ValueError('invalid track mask dtype')
+            for value in (parent, anchors):
+                if value.shape != shape or value.dtype != np.dtype('uint32'):
+                    raise ValueError('invalid track lineage dtype')
+            if (np.any(track & ~link) or np.any(track & (parent == 0)) or
+                np.any((anchors > 0) & (~observed | blocked | barred)) or
+                not np.isin(parent[track], anchors[anchors > 0]).all()):
+                raise ValueError('track lacks frozen anchor lineage')
+    if not np.array_equal(candidate, (topology | bundle | line | group_candidate | residual_objects) & ~barred):
         raise ValueError("radial candidate differs from raw evidence")
     if np.any(candidate & blocked) or np.any((get("RV2_PLATEAU_MASK") == 1) & candidate):
         raise ValueError("radial candidate crossed a barrier")
@@ -146,9 +180,9 @@ def validate_revision_fields(group, observed, legacy_source, blocked):
                     raise ValueError('invalid window evidence')
                 if suffix.endswith('FRACTION') and np.any(support & ((value < -1e-6)|(value > 1.000001))):
                     raise ValueError('invalid missing fraction')
-    if not np.array_equal(qualified, legacy | segment | line_source | morph | isolated | group_polar | group_morph):
+    if not np.array_equal(qualified, legacy | segment | line_source | morph | isolated | group_polar | group_morph | residual_objects):
         raise ValueError("radial qualification not equal to its source paths")
-    expected = (legacy | (segment & (allow == 1)) | line_source | morph | isolated | group_polar | group_morph) & (mode == 1)
+    expected = (legacy | (segment & (allow == 1)) | line_source | morph | isolated | group_polar | group_morph | residual_objects) & (mode == 1)
     proposal = get("RV2_ACTION_PROPOSAL_MASK") == 1
     if not np.array_equal(proposal, expected):
         raise ValueError("radial action differs from explicit policy")

@@ -572,6 +572,9 @@ def _field_attributes(name: str) -> dict[str, Any]:
                 "5": "reverse",
             },
         }
+    if name.startswith('RV2_RESIDUAL_'):
+        unit = 'degree' if name.endswith('_DEG') else 'm' if name.endswith('_M') else '1'
+        return {'units': unit, 'missing_value': 'NaN' if unit != '1' else 0}
     if name.startswith(("QI_", "P_")) or name == "QUALITY_INDEX":
         return {"units": "1", "valid_range": [0.0, 1.0], "missing_value": "NaN"}
     if name.startswith("KDP"):

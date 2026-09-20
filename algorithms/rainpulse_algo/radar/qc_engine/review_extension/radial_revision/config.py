@@ -23,6 +23,7 @@ class FragmentLineConfig(BaseModel):
     group_morphology_enabled: bool = False
     window_tracks_enabled: bool = False
     power_fan_enabled: bool = False
+    residual_objects_enabled: bool = False
     antenna_beam_width_deg: float | None = Field(default=None, gt=0., le=5.)
     isolated_link_gap_m: float = Field(default=30000., ge=0, le=30000.)
 

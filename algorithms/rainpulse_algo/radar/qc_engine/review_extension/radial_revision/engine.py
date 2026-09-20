@@ -86,6 +86,7 @@ def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, confl
         line_isolated = np.zeros(native.shape, bool)
         group_polar = np.zeros(native.shape, bool)
         group_morph = np.zeros(native.shape, bool)
+        residual = np.zeros(native.shape, bool)
         if cfg.fragment_line is not None:
             from .fragment_line import detect, coherent_source
             fields, line_report = detect(native, cfg.fragment_line, barred, source=source & ~barred)
@@ -108,6 +109,15 @@ def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, confl
             line_report['group_morphology_gates'] = int(group_morph.sum())
             line_report['group_candidate_gates'] = int(out['RV2_GROUP_MASK'].sum())
             line_report['group_polar_gates'] = int(group_polar.sum())
+        if cfg.fragment_line is not None and cfg.fragment_line.residual_objects_enabled:
+            from .residual_objects import detect as detect_residual
+            fields, residual_report = detect_residual(
+                native, barred, source | line_morphology | line_isolated | group_morph,
+                beam_width=cfg.fragment_line.antenna_beam_width_deg)
+            out.update(fields)
+            residual = (fields['RV2_RESIDUAL_LINK_MASK'] | fields['RV2_RESIDUAL_DIRECT_MASK']) == 1
+            candidate |= residual
+            line_report['residual_objects'] = residual_report
         source_report = {"status": "disabled", "reference_folds": 0, "reference_models": 0}
         if cfg.step >= 2:
             # Target plateau veto is already in candidate. Training plateau
@@ -127,8 +137,8 @@ def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, confl
                             (out["RV2_WEAK_MATCH_MASK"] == 1))
         legacy_match = candidate & source & ~barred
         segment_match = (out["RV2_SEGMENT_MATCH_MASK"] == 1) & candidate & ~barred
-        qualified = legacy_match | segment_match | line_source | line_morphology | line_isolated | group_polar | group_morph
-        proposal = legacy_match | (segment_match & cfg.allow_segmented_quarantine) | line_source | line_morphology | line_isolated | group_polar | group_morph
+        qualified = legacy_match | segment_match | line_source | line_morphology | line_isolated | group_polar | group_morph | residual
+        proposal = legacy_match | (segment_match & cfg.allow_segmented_quarantine) | line_source | line_morphology | line_isolated | group_polar | group_morph | residual
         if cfg.mode != "experiment_quarantine":
             proposal[:] = False
         reason = out["RV2_REASON"]
