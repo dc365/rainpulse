@@ -143,6 +143,46 @@ def mc(*args: str, check: bool = True) -> subprocess.CompletedProcess:
     return result
 
 
+def mc_bytes(*args: str, check: bool = True) -> bytes:
+    result = subprocess.run([str(MC), *args], capture_output=True)
+    if check and result.returncode != 0:
+        raise RuntimeError(f"mc {' '.join(args[:3])} failed: {result.stderr.decode()[:200]}")
+    return result.stdout
+
+
+def unpack_volume(relative: str, destination: Path) -> None:
+    """Materialize a published artifact as plain objects.
+
+    A packed publication keeps every logical object inside
+    ``_objects/<digest>/packs``.  Identity carried by an evidence JSON is then
+    invisible to a file-level scrubber, so the pack must be unpacked first.
+    """
+    base = relative.rstrip("/")
+    marker = json.loads(mc("cat", f"{ALIAS}/rainpulse/{base}/_SUCCESS.json").stdout)
+    data_prefix = str(marker.get("data_prefix") or "")
+    if not data_prefix:
+        raise RuntimeError("published artifact marker has no data prefix")
+    destination.mkdir(parents=True, exist_ok=True)
+    entries = marker.get("packed_entries") or []
+    if not entries:
+        mirror(f"{base}/{data_prefix}", destination)
+        return
+    packs: dict[str, bytes] = {}
+    positions: dict[str, int] = {}
+    for key, name, offset, size in entries:
+        if name not in packs:
+            packs[name] = mc_bytes(
+                "cat", f"{ALIAS}/rainpulse/{base}/{data_prefix}/{name}"
+            )
+            positions[name] = 0
+        if offset != positions[name]:
+            raise RuntimeError("packed artifact is not sequentially laid out")
+        target = destination / key
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(packs[name][offset:offset + size])
+        positions[name] += size
+
+
 def s3_path(uri: str) -> str:
     return uri.replace("s3://rainpulse/", "")
 
@@ -259,19 +299,24 @@ def verify_directory(directory: Path, replacements: dict, strict_keys: bool = Tr
     """
     problems = []
     for file in sorted(directory.rglob("*")):
-        if not file.is_file() or not scrub_file(file):
-            continue
-        try:
-            text = file.read_text(encoding="utf-8")
-        except (UnicodeDecodeError, OSError):
+        if not file.is_file():
             continue
         relative = file.relative_to(directory).as_posix()[-90:]
+        raw = file.read_bytes()
+        # Opaque containers hide identity from a text-only review, so every file
+        # is scanned bytewise before the readable ones are checked in detail.
         for radar in replacements:
-            if re.search(re.escape(radar), text, flags=re.IGNORECASE):
+            if re.search(re.escape(radar).encode(), raw, flags=re.IGNORECASE):
                 problems.append(f"{relative}: value contains {radar}")
         for pattern in LEAK_PATTERNS:
-            if re.search(pattern, text):
+            if re.search(pattern.encode(), raw):
                 problems.append(f"{relative}: value contains {pattern}")
+        if not scrub_file(file):
+            continue
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
         if not strict_keys:
             continue
         if not (file.suffix == ".json" or file.name.endswith((".zattrs", ".zmetadata", ".zattributes"))):
@@ -431,7 +476,7 @@ def package(args) -> Path:
                 frozen = artifact_root(normalized)
                 size = tree_bytes(normalized)
                 if args.qc_volume and row["qc_uri"]:
-                    mirror(s3_path(row["qc_uri"]), evidence)
+                    unpack_volume(s3_path(row["qc_uri"]), evidence)
                     scrub_volume(evidence, replacements, sweeps)
                     size += tree_bytes(evidence)
             except Exception as error:  # one bad volume must not stop the run
