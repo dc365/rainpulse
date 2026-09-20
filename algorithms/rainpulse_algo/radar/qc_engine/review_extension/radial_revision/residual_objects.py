@@ -11,7 +11,7 @@ from ..arrays import mask, moment, native_geometry, runs
 
 def detect(native, blocked, source, *, beam_width=None, span_minimum_m=None,
            span_flank_rays=3, span_flank_delta_db=3., span_flank_fraction=.7,
-           span_minimum_dbz=12., span_weather_snr_db=25., span_weather_fraction=.6):
+           span_weather_snr_db=25., span_weather_fraction=.6):
     r, az, dr, good, gaps = native_geometry(native)
     z, obs = moment(native, 'DBZH')
     blocked = mask(blocked, native.shape, 'residual barriers') | ~good[:, None]
@@ -87,7 +87,6 @@ def detect(native, blocked, source, *, beam_width=None, span_minimum_m=None,
         native, z, obs, valid, blocked, beam_width,
         minimum_m=span_minimum_m, flank_rays=span_flank_rays,
         flank_delta_db=span_flank_delta_db, flank_fraction=span_flank_fraction,
-        minimum_dbz=span_minimum_dbz,
         weather_snr_db=span_weather_snr_db, weather_fraction=span_weather_fraction)
     fresh_span = span & ~linked
     linked |= span
@@ -117,8 +116,7 @@ def detect(native, blocked, source, *, beam_width=None, span_minimum_m=None,
 
 
 def _span(native, z, obs, valid, blocked, beam_width, *, minimum_m=None, flank_rays=3,
-          flank_delta_db=3., flank_fraction=.7, minimum_dbz=12.,
-          weather_snr_db=25., weather_fraction=.6):
+          flank_delta_db=3., flank_fraction=.7, weather_snr_db=25., weather_fraction=.6):
     """Whole-ray isolation: long thin runs with missing or clearly weaker flanks.
 
     A radial interference line is not bounded by a short evidence window: it
@@ -189,10 +187,6 @@ def _span(native, z, obs, valid, blocked, beam_width, *, minimum_m=None, flank_r
                 if boundary[1] <= boundary[0] or boundary[1]-boundary[0] > 8.:
                     continue
                 if min(weak[0][keep].mean(), weak[1][keep].mean()) < flank_fraction:
-                    continue
-                # A line without measured echo is invisible noise, not a false
-                # radial product; keep the rule on echoes the product can show.
-                if np.median(centre[keep]) < minimum_dbz:
                     continue
                 # Measured strong weather support keeps the echo.
                 weather = snr_available[row, begin:end] & (snr[row, begin:end] >= weather_snr_db)

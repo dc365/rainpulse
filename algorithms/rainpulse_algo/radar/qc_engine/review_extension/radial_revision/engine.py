@@ -120,7 +120,6 @@ def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, confl
                 span_flank_rays=span.residual_span_flank_rays,
                 span_flank_delta_db=span.residual_span_flank_delta_db,
                 span_flank_fraction=span.residual_span_flank_fraction,
-                span_minimum_dbz=span.residual_span_minimum_dbz,
                 span_weather_snr_db=span.residual_span_weather_snr_db,
                 span_weather_fraction=span.residual_span_weather_fraction)
             out.update(fields)
