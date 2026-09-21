@@ -1,15 +1,14 @@
-# Append only after generating and validating actual child profiles and building
-# the worker image. Does not invent mounts or change the existing source family.
 services:
   radar-qc-worker:
-    image: ${RAINPULSE_NEAR_JOINT_IMAGE:?set the tested new worker image}
+    image: rainpulse-cpu-worker:near-joint-20260922
     environment:
-      RAINPULSE_RADAR_QC_CONFIG: ${RAINPULSE_NEAR_JOINT_PROFILE:?set actual mounted child profile path}
+      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/near-joint-20260922/near-joint-joint-cr-dem.yaml
+      RAINPULSE_RADAR_CONTEXT_CONFIG_DIR: /opt/rainpulse/configs/radars/fujian-20260828
   radar-grid-worker:
-    image: ${RAINPULSE_NEAR_JOINT_IMAGE:?set the tested new worker image}
+    image: rainpulse-cpu-worker:near-joint-20260922
   radar-mosaic-worker:
-    image: ${RAINPULSE_NEAR_JOINT_IMAGE:?set the tested new worker image}
+    image: rainpulse-cpu-worker:near-joint-20260922
   analysis-qpe-worker:
-    image: ${RAINPULSE_NEAR_JOINT_IMAGE:?set the tested new worker image}
+    image: rainpulse-cpu-worker:near-joint-20260922
   analysis-diagnostics-worker:
-    image: ${RAINPULSE_NEAR_JOINT_IMAGE:?set the tested new worker image}
+    image: rainpulse-cpu-worker:near-joint-20260922
