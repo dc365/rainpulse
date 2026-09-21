@@ -3,6 +3,7 @@ services:
     image: rainpulse-cpu-worker:beam-contract-20260921
     environment:
       RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/clutter-fusion-20260921/clutter-fusion-quarantine-bg-retro-vbeam.yaml
+      RAINPULSE_RADAR_CONTEXT_CONFIG_DIR: /opt/rainpulse/configs/radars/fujian-20260828
   radar-grid-worker:
     image: rainpulse-cpu-worker:beam-contract-20260921
   radar-mosaic-worker:

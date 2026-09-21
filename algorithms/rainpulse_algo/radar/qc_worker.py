@@ -82,15 +82,33 @@ def _clutter_context_contract(beam: Any, request: RadarQCRequested) -> dict[str,
     fusion stage keeps every upper-beam observation diagnostic-only.
     """
     width = getattr(beam, "beam_width_vertical_deg", None)
+    version = getattr(beam, "radar_config_version", None)
+    origin = "radar beam context"
+    if width is None:
+        # The geometry stage is optional in this deployment, so fall back to the
+        # same radar configuration the decoder verified the header against.
+        directory = os.getenv("RAINPULSE_RADAR_CONTEXT_CONFIG_DIR")
+        radar_id = str(getattr(request.payload, "radar_id", "") or "")
+        if not directory or not radar_id:
+            return None
+        try:
+            config = load_radar_config(Path(directory) / f"{radar_id.lower()}.yaml")
+        except Exception:  # noqa: BLE001 - absent config keeps the contract unset
+            return None
+        if config.radar_id.lower() != radar_id.lower():
+            return None
+        hardware = dict(getattr(config, "hardware", {}) or {})
+        width = hardware.get("beam_width_vertical_deg") or hardware.get("beam_width_deg")
+        version = version or getattr(config, "config_version", None)
+        origin = f"radar configuration {config.config_version}"
     if width is None or not np.isfinite(width) or not 0 < float(width) <= 3:
         return None
-    version = getattr(beam, "radar_config_version", None) or (
-        request.payload.radar_config_version
-    )
     return {
         "beam_width_deg": float(width),
         "beam_source": (
-            f"radar-config hardware.beam_width_vertical_deg ({version}) "
+            f"hardware.beam_width_vertical_deg from {origin}"
+            + (f" ({version})" if version else "")
+            + " "
             "verified against the FMT header at decode"
         ),
     }
