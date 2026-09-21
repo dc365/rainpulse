@@ -83,6 +83,23 @@ def test_strong_near_audit_records_but_does_not_act():
     assert np.array_equal(out['QPE_ELIGIBLE_MASK'],without_strong['QPE_ELIGIBLE_MASK'])
 
 
+def test_strong_near_background_enhancement_mixed_alone_does_not_protect():
+    from volume_review.clutter_fusion.near_joint import _strong_barriers
+    shape=strong_scene().shape
+    base={key:np.zeros(shape,"uint8") for key in (
+        "CF_HARD_WEATHER_MASK","CF_LOCAL_WEATHER_MASK","CF_LEGACY_PROTECTED_MASK",
+        "CF_WEATHER_PROXY_MASK","CF_MIXED_MASK","CF_BG_ENHANCEMENT_MASK")}
+    assert not _strong_barriers(base).any()
+    base["CF_BG_ENHANCEMENT_MASK"][:]=1
+    assert not _strong_barriers(base).any()
+    base["CF_MIXED_MASK"][:]=1
+    assert not _strong_barriers(base).any()
+    base["CF_HARD_WEATHER_MASK"][0]=1
+    assert _strong_barriers(base)[0,0]
+    base["CF_HARD_WEATHER_MASK"][:]=0;base["CF_BG_ENHANCEMENT_MASK"][:]=0
+    assert _strong_barriers(base).any()
+
+
 def test_strong_near_quarantine_removes_only_supported_gates():
     s=strong_scene();e,out,d=check(s,strong_config('quarantine'))
     selected=e.arrays['CF_NR_STRONG_CANDIDATE_MASK']==1

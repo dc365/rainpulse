@@ -61,6 +61,15 @@ def _strong_empty(shape):
     }
 
 
+def _strong_barriers(base):
+    """Concrete protection blocks; background enhancement alone is not weather."""
+    concrete=((base["CF_HARD_WEATHER_MASK"]==1)|(base["CF_LOCAL_WEATHER_MASK"]==1)|
+              (base["CF_LEGACY_PROTECTED_MASK"]==1)|(base["CF_WEATHER_PROXY_MASK"]==1))
+    mixed=(base["CF_MIXED_MASK"]==1)
+    enhancement_only_mixed=mixed&(base["CF_BG_ENHANCEMENT_MASK"]==1)
+    return concrete|(mixed&~enhancement_only_mixed)
+
+
 def _physical_neighbor_rows(s):
     rows=np.arange(len(s.azimuth),dtype="int32")
     right=np.roll(rows,-1);left=np.roll(rows,1)
@@ -138,9 +147,7 @@ def _strong_evidence(s,cfg,base):
               & np.isfinite(base["CF_TEXTURE_SCORE"])
               & (base["CF_TEXTURE_SCORE"]>=c.minimum_texture_score)
               & (base["CF_FAMILY_COUNT"]>=c.minimum_family_count))
-    barriers=((base["CF_HARD_WEATHER_MASK"]==1)|(base["CF_LOCAL_WEATHER_MASK"]==1)|
-              (base["CF_LEGACY_PROTECTED_MASK"]==1)|(base["CF_WEATHER_PROXY_MASK"]==1)|
-              (base["CF_MIXED_MASK"]==1))
+    barriers=_strong_barriers(base)
     protected=bounds & barriers
     core=features & ~protected
     propagated=np.zeros(shape,bool)
@@ -294,9 +301,7 @@ def validate(a,cfg):
         dilated=a['CF_NR_STRONG_DILATED_MASK']==1
         dilation_domain=a['CF_NR_STRONG_DILATION_DOMAIN_MASK']==1
         protected=a['CF_NR_STRONG_PROTECTED_MASK']==1
-        barriers=((a['CF_HARD_WEATHER_MASK']==1)|(a['CF_LOCAL_WEATHER_MASK']==1)|
-                  (a['CF_LEGACY_PROTECTED_MASK']==1)|(a['CF_WEATHER_PROXY_MASK']==1)|
-                  (a['CF_MIXED_MASK']==1))
+        barriers=_strong_barriers(a)
         action=a['CF_NR_STRONG_ACTION_MASK']==1
         if np.any((candidate|core|propagated|dilated|dilation_domain)&barriers):
             raise ValueError('strong near candidate crossed a protection barrier')
