@@ -34,8 +34,9 @@ def parent():
 def test_generated_candidates_enable_existing_near_and_preserve_radials(tmp_path):
     v=parent();p=tmp_path/'parent.yaml';raw=yaml.safe_dump(v).encode();p.write_bytes(raw)
     m=load_script('make_near_joint_profiles');recs=m.generate(p,tmp_path/'children',validate_full=False)
-    assert len(recs)==7 and p.read_bytes()==raw
+    assert len(recs)==9 and p.read_bytes()==raw
     assert {r['strong_near_mode'] for r in recs}=={None,'audit','quarantine'}
+    assert {r['strong_near_object_propagation'] for r in recs}=={False,True}
     assert (tmp_path/'children').stat().st_mode&0o777==0o755
     for rec in recs:
         b=(tmp_path/'children'/rec['file']).read_bytes();c=yaml.safe_load(b)

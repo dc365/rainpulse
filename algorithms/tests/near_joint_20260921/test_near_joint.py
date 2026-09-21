@@ -19,6 +19,8 @@ from review_extension.near_clutter import candidates
 def config(mode='cr_withhold',**kw):return cfg(mode='quarantine',near_revision=N(mode=mode,**kw))
 def strong_config(mode='quarantine'):
     return config(strong_near=StrongNearConfig(mode=mode))
+def strong_object_config(mode='quarantine'):
+    return config(strong_near=StrongNearConfig(mode=mode,object_propagation=True))
 def change(s,k,value=None,missing=False):
     f={k:v.copy() for k,v in s.fields.items()};a={k:v.copy() for k,v in s.available.items()}
     if missing:
@@ -87,6 +89,34 @@ def test_strong_near_quarantine_removes_only_supported_gates():
     assert not out['QPE_ELIGIBLE_MASK'][selected].any()
     assert not np.isfinite(out['DBZH_USABLE'][selected]).any()
     assert not out['REFLECTIVITY_TRUST_MASK'][selected].any()
+
+
+def test_strong_near_object_propagation_extends_bounded_objects():
+    s=strong_scene();e=one(s,strong_object_config('quarantine'))
+    core=e.arrays['CF_NR_STRONG_CORE_MASK']==1
+    propagated=e.arrays['CF_NR_STRONG_OBJECT_PROPAGATED_MASK']==1
+    candidate=e.arrays['CF_NR_STRONG_CANDIDATE_MASK']==1
+    assert core.any() and propagated.any() and not np.any(core&propagated)
+    assert np.array_equal(candidate,core|propagated)
+    assert np.array_equal(e.arrays['CF_NR_STRONG_ACTION_MASK']==1,candidate)
+    ids=set(map(int,np.unique(e.arrays['CF_NR_STRONG_OBJECT_ID'][candidate])))
+    assert ids and all(i>0 for i in ids)
+
+
+def test_strong_near_object_audit_records_without_actions():
+    s=strong_scene();e=one(s,strong_object_config('audit'))
+    assert (e.arrays['CF_NR_STRONG_CANDIDATE_MASK']==1).any()
+    assert (e.arrays['CF_NR_STRONG_OBJECT_PROPAGATED_MASK']==1).any()
+    assert not (e.arrays['CF_NR_STRONG_ACTION_MASK']==1).any()
+
+
+def test_strong_near_object_budget_preserves_parent_cf():
+    gaps=strong_scene().gap_after.copy();gaps[5]=True
+    s=replace(strong_scene(),gap_after=gaps);c=config(strong_near=StrongNearConfig(
+        mode='quarantine',object_propagation=True,maximum_strong_objects=1))
+    e=one(s,c)
+    assert e.summary['near_revision']['status']=='RESOURCE_LIMIT_ABSTAINED'
+    assert not (e.arrays['CF_NR_STRONG_ACTION_MASK']==1).any()
 
 
 @pytest.mark.parametrize('which',[0,1,2])

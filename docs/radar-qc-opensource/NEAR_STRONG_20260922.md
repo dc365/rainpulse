@@ -22,6 +22,11 @@ audit 只记录候选；quarantine 才把候选投影为 QC DOWNWEIGHT、取消 
 `DBZH_USABLE`，并把 CF/CR 资格同步扣除。所有子配置仍保持
 `operational_eligible=false`。
 
+`object_propagation=true` 时，强回波核心可以在一个不跨越天气/混合保护、方位
+断缝或坏射线的原始观测连通对象内扩展。对象必须仍在 10–55 dBZ、75 km 内，
+核心门数至少 3、核心占比至少 30%，且对象不超过 5000 门。传播只补充同一测量
+对象内未达核心条件的门；对象数超预算时整个 strong 新增分支弃权并保留父级 CF。
+
 ## 真实样本核查
 
 用 09:00、09:12、15:30 四站共 12 个体扫回放该规则：
@@ -36,12 +41,18 @@ audit 只记录候选；quarantine 才把候选投影为 QC DOWNWEIGHT、取消 
 和 mixed；Z9598 09:00 的主要可见残留簇分别命中 88/29/11、39/24、10/3/12 门。
 这不是独立天气误删率，正式启用前仍需弱雨、混合降水和海上降水样本验收。
 
+按执行点可用的原始观测连通对象回放，object 传播在 09:00 Z9598 将 QPE 损失
+从 272 门提高到 401 门（0.224%），09:12 Z9598 为 531 门（0.291%），仍显著低于
+5% 业务预算。该结果同样不是独立天气误删率。
+
 ## 生成与验收
 
 `scripts/make_near_joint_profiles.py` 会额外生成：
 
 - `near-joint-strong-audit.yaml`
 - `near-joint-strong-quarantine.yaml`
+- `near-joint-strong-object-audit.yaml`
+- `near-joint-strong-object-quarantine.yaml`
 
 先运行 audit 对比候选，再用 quarantine 做同输入端到端复核。`scripts/audit_near_joint.py`
 会检查 strong 候选、保护、隔离和 CR 资格泄漏。

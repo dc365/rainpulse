@@ -111,6 +111,7 @@ def review_result(result,native,*,near_context=None):
             "dem_cr_loss_gates":sum(r["disposition"]["near_dem_cr_loss_gates"] for r in records),
             "strong_near_cr_loss_gates":sum(r["disposition"].get("strong_near_cr_loss_gates",0) for r in records),
             "strong_near_quarantine_gates":sum(r["disposition"].get("strong_near_quarantine_gates",0) for r in records),
+            "strong_near_object_propagated_gates":sum(r["disposition"].get("strong_near_object_propagated_gates",0) for r in records),
             "new_qpe_loss_gates":sum(r["disposition"]["near_revision_new_qpe_loss_gates"] for r in records),
             "operational_eligible":False}
     return replace(result,sweeps=tuple(updated),summary=summary,volume_review_artifacts=artifacts)

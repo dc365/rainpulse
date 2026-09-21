@@ -89,5 +89,8 @@ def evaluate_volume(sweeps,cfg,*,backgrounds=None,protections=None,metadata=None
                     x.arrays["CF_NR_STRONG_CANDIDATE_MASK"].sum())
                 x.summary["strong_near_quarantine_gates"]=int(
                     x.arrays["CF_NR_STRONG_ACTION_MASK"].sum())
+                if cfg.near_revision.strong_near.object_propagation:
+                    x.summary["strong_near_object_propagated_gates"]=int(
+                        x.arrays["CF_NR_STRONG_OBJECT_PROPAGATED_MASK"].sum())
     if before != [s.digest for s in sweeps]:raise RuntimeError("fusion mutated original measurement")
     return results

@@ -1,6 +1,7 @@
 """Near revision evidence/decision within the existing CF disposition owner."""
 from enum import IntEnum,IntFlag
 import numpy as np
+from scipy.ndimage import label
 from . import partial_moments,causal_temporal,terrain_admission
 
 
@@ -35,10 +36,15 @@ class Reason(IntFlag):
 def _strong_empty(shape):
     return {
         "CF_NR_STRONG_CANDIDATE_MASK": np.zeros(shape, "uint8"),
+        "CF_NR_STRONG_CORE_MASK": np.zeros(shape, "uint8"),
+        "CF_NR_STRONG_OBJECT_PROPAGATED_MASK": np.zeros(shape, "uint8"),
         "CF_NR_STRONG_ACTION_MASK": np.zeros(shape, "uint8"),
         "CF_NR_STRONG_PROTECTED_MASK": np.zeros(shape, "uint8"),
         "CF_NR_STRONG_STATE": np.full(shape, State.STRONG_NEAR_INSUFFICIENT, "uint8"),
         "CF_NR_STRONG_REASON": np.zeros(shape, "uint16"),
+        "CF_NR_STRONG_OBJECT_ID": np.zeros(shape, "int32"),
+        "CF_NR_STRONG_OBJECT_SIZE": np.zeros(shape, "uint32"),
+        "CF_NR_STRONG_OBJECT_SEED_FRACTION": np.full(shape, np.nan, "float32"),
         "CF_NR_STRONG_RHOHV": np.full(shape, np.nan, "float32"),
         "CF_NR_STRONG_SNR_DB": np.full(shape, np.nan, "float32"),
         "CF_NR_STRONG_RANGE_M": np.full(shape, np.nan, "float32"),
@@ -93,10 +99,34 @@ def _strong_evidence(s,cfg,base):
               & np.isfinite(base["CF_TEXTURE_SCORE"])
               & (base["CF_TEXTURE_SCORE"]>=c.minimum_texture_score)
               & (base["CF_FAMILY_COUNT"]>=c.minimum_family_count))
-    protected=(bounds & ((base["CF_HARD_WEATHER_MASK"]==1)|(base["CF_LOCAL_WEATHER_MASK"]==1)|
-               (base["CF_LEGACY_PROTECTED_MASK"]==1)|(base["CF_WEATHER_PROXY_MASK"]==1)|
-               (base["CF_MIXED_MASK"]==1)))
-    candidate=features & ~protected
+    barriers=((base["CF_HARD_WEATHER_MASK"]==1)|(base["CF_LOCAL_WEATHER_MASK"]==1)|
+              (base["CF_LEGACY_PROTECTED_MASK"]==1)|(base["CF_WEATHER_PROXY_MASK"]==1)|
+              (base["CF_MIXED_MASK"]==1))
+    protected=bounds & barriers
+    core=features & ~protected
+    propagated=np.zeros(shape,bool)
+    object_id=np.zeros(shape,"int32");object_size=np.zeros(shape,"uint32")
+    object_fraction=np.full(shape,np.nan,"float32")
+    if c.object_propagation:
+        delta=(np.roll(s.azimuth,-1)-s.azimuth)%360
+        edges=s.gap_after|(delta<=0)|(delta>2)
+        safe_rows=s.good&~edges&~np.roll(edges,1)
+        object_domain=(observed&safe_rows[:,None]&ar&az
+                       &np.isfinite(z)&(z>=c.minimum_object_dbz)&(z<=c.maximum_object_dbz)
+                       &(s.ranges[None,:] <=c.maximum_range_m)&~barriers)
+        labels,count=label(object_domain,structure=np.ones((3,3),dtype=np.uint8))
+        if count>c.maximum_strong_objects:
+            from ..data import ResourceLimit
+            raise ResourceLimit("strong near object count budget")
+        for value in range(1,int(count)+1):
+            component=labels==value;size=int(component.sum());seeds=int((component&core).sum())
+            fraction=seeds/size if size else 0.
+            object_id[component]=value;object_size[component]=size;object_fraction[component]=fraction
+            if (seeds>=c.minimum_object_seed_gates
+                    and fraction>=c.minimum_object_seed_fraction
+                    and size<=c.maximum_object_gates):
+                propagated|=component&~core
+    candidate=core|propagated
     state=np.full(shape,State.STRONG_NEAR_INSUFFICIENT,"uint8")
     state[~observed]=State.MISSING
     state[observed & ~bounds]=State.OUTSIDE_DOMAIN
@@ -109,16 +139,22 @@ def _strong_evidence(s,cfg,base):
         reason[mask & observed]|=int(bit)
     return {
         "CF_NR_STRONG_CANDIDATE_MASK":candidate.astype("uint8"),
+        "CF_NR_STRONG_CORE_MASK":core.astype("uint8"),
+        "CF_NR_STRONG_OBJECT_PROPAGATED_MASK":propagated.astype("uint8"),
         "CF_NR_STRONG_ACTION_MASK":(candidate & (c.mode=="quarantine")).astype("uint8"),
         "CF_NR_STRONG_PROTECTED_MASK":protected.astype("uint8"),
         "CF_NR_STRONG_STATE":state,
         "CF_NR_STRONG_REASON":reason,
+        "CF_NR_STRONG_OBJECT_ID":object_id,
+        "CF_NR_STRONG_OBJECT_SIZE":object_size,
+        "CF_NR_STRONG_OBJECT_SEED_FRACTION":object_fraction,
         "CF_NR_STRONG_RHOHV":np.where(observed,np.asarray(rho,dtype="float32"),np.nan).astype("float32"),
         "CF_NR_STRONG_SNR_DB":np.where(observed,np.asarray(snr,dtype="float32"),np.nan).astype("float32"),
         "CF_NR_STRONG_RANGE_M":np.broadcast_to(s.ranges,shape).astype("float32"),
         "summary":{"candidate_gates":int(candidate.sum()),
                    "protected_gates":int(protected.sum()),
-                   "mode":c.mode,"weather_protection_retained":True,
+                   "mode":c.mode,"propagated_gates":int(propagated.sum()),
+                   "weather_protection_retained":True,
                    "background_enhancement_alone_is_not_weather":True},
     }
 
@@ -190,9 +226,12 @@ def validate(a,cfg):
     if c.strong_near is not None:
         strong=c.strong_near;obs=a['CF_OBSERVED_MASK']==1
         candidate=a['CF_NR_STRONG_CANDIDATE_MASK']==1
+        core=a['CF_NR_STRONG_CORE_MASK']==1
+        propagated=a['CF_NR_STRONG_OBJECT_PROPAGATED_MASK']==1
         protected=a['CF_NR_STRONG_PROTECTED_MASK']==1
         action=a['CF_NR_STRONG_ACTION_MASK']==1
-        if np.any(candidate&protected):raise ValueError('strong near candidate crossed a protection barrier')
+        if np.any((candidate|core|propagated)&protected):
+            raise ValueError('strong near candidate crossed a protection barrier')
         if not np.array_equal(action,candidate&(strong.mode=='quarantine')):
             raise ValueError('strong near action differs from audited measured support')
         feature=(obs&(a['CF_STRONG_MASK']==1)&(a['CF_POLAR_AVAILABLE_MASK']==1)
@@ -203,4 +242,18 @@ def validate(a,cfg):
                  &np.isfinite(a['CF_NR_STRONG_RANGE_M'])&(a['CF_NR_STRONG_RANGE_M']<=strong.maximum_range_m)
                  &np.isfinite(a['CF_TEXTURE_SCORE'])&(a['CF_TEXTURE_SCORE']>=strong.minimum_texture_score)
                  &(a['CF_FAMILY_COUNT']>=strong.minimum_family_count)&~protected)
-        if not np.array_equal(candidate,feature):raise ValueError('strong near candidate lacks measured two-family support')
+        if not np.array_equal(core,feature):raise ValueError('strong near core lacks measured two-family support')
+        if np.any(core&propagated) or not np.array_equal(candidate,core|propagated):
+            raise ValueError('strong near object propagation identity differs')
+        oid=a['CF_NR_STRONG_OBJECT_ID'];size=a['CF_NR_STRONG_OBJECT_SIZE']
+        fraction=a['CF_NR_STRONG_OBJECT_SEED_FRACTION']
+        if np.any((oid==0)&((size!=0)|np.isfinite(fraction))) or np.any((oid!=0)&((size==0)|~np.isfinite(fraction))):
+            raise ValueError('strong near object bookkeeping differs')
+        if np.any(propagated&(oid==0)):
+            raise ValueError('strong near propagation lacks an object identity')
+        for value in np.unique(oid[propagated]):
+            component=oid==value;members=int(component.sum());seeds=int((component&core).sum())
+            if members!=int(size[component][0]) or not np.allclose(fraction[component],seeds/members):
+                raise ValueError('strong near object size or seed fraction differs')
+            if members>strong.maximum_object_gates or seeds<strong.minimum_object_seed_gates or seeds/members<strong.minimum_object_seed_fraction:
+                raise ValueError('strong near object lacks sufficient bounded seed support')
