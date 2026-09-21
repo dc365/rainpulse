@@ -1,0 +1,14 @@
+services:
+  radar-qc-worker:
+    image: rainpulse-cpu-worker:source-family-20260921
+    environment:
+      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/receiver-family-20260921/receiver-family-full-cr.yaml
+      RAINPULSE_RADAR_CONTEXT_CONFIG_DIR: /opt/rainpulse/configs/radars/fujian-20260828
+  radar-grid-worker:
+    image: rainpulse-cpu-worker:source-family-20260921
+  radar-mosaic-worker:
+    image: rainpulse-cpu-worker:source-family-20260921
+  analysis-qpe-worker:
+    image: rainpulse-cpu-worker:source-family-20260921
+  analysis-diagnostics-worker:
+    image: rainpulse-cpu-worker:source-family-20260921
