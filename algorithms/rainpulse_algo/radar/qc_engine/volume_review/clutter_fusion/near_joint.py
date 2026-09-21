@@ -157,7 +157,7 @@ def _strong_evidence(s,cfg,base):
         "CF_NR_STRONG_DILATED_MASK":dilated.astype("uint8"),
         "CF_NR_STRONG_DILATION_DOMAIN_MASK":dilation_domain.astype("uint8"),
         "CF_NR_STRONG_SAFE_ROW_MASK":np.broadcast_to(
-            safe_rows[:,None],shape).astype("uint8"),
+            safe_rows[:,None],shape).astype("uint8") & observed,
         "CF_NR_STRONG_ACTION_MASK":(candidate & (c.mode=="quarantine")).astype("uint8"),
         "CF_NR_STRONG_PROTECTED_MASK":protected.astype("uint8"),
         "CF_NR_STRONG_STATE":state,
