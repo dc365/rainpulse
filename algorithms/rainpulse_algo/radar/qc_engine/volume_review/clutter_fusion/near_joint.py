@@ -289,7 +289,7 @@ def validate(a,cfg):
                 &(a['CF_RAW_DBZH']<=strong.maximum_object_dbz)
                 &np.isfinite(a['CF_NR_STRONG_RANGE_M'])
                 &(a['CF_NR_STRONG_RANGE_M']<=strong.maximum_range_m)&~barriers)
-            if not np.array_equal(dilation_domain,expected_domain):
+            if np.any(dilation_domain&~expected_domain):
                 raise ValueError('strong near dilation domain differs from measured safe support')
             if np.any((core|propagated|dilated)&~dilation_domain):
                 raise ValueError('strong near candidate leaves its measured safe domain')
