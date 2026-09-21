@@ -106,6 +106,24 @@ def test_temporal_low_rho_requires_two_causal_snapshots():
     assert not out['QPE_ELIGIBLE_MASK'][selected].any()
 
 
+def test_temporal_low_rho_prefers_same_named_donor_among_duplicate_elevations():
+    c=config(strong_near=StrongNearConfig(mode='quarantine',temporal_low_rho=TemporalLowRhoConfig()))
+    current=scene(kind='ground',z=15.,rho=.7,snr=16.,zdr=.2,time=300.)
+    wrong=change(replace(current,name='sweep_001'),'RHOHV',.99)
+    context_past=[]
+    for scan,sha,when in (('prior-1','a'*64,120.),('prior-2','b'*64,240.)):
+        good=replace(current,ray_time_s=np.full(current.shape[0],when,dtype=float))
+        bad=replace(wrong,ray_time_s=np.full(current.shape[0],when,dtype=float))
+        for donor in (good,bad):
+            context_past.append(ct.PastSweep(donor,sha,scan,'site_a','processor-v1',
+                                              np.arange(current.shape[0]),True))
+    context=RuntimeContext('site_a','test-scan','processor-v1',tuple(context_past))
+    e=one(current,c,near_context=context)
+    selected=e.arrays['CF_NR_TEMPORAL_LOW_RHO_OBJECT_MASK']==1
+    assert selected.any()
+    assert e.summary['near_revision']['strong_near']['temporal_low_rho']['status']=='EVALUATED'
+
+
 def test_temporal_low_rho_current_high_rho_does_not_act():
     c=config(strong_near=StrongNearConfig(mode='quarantine',temporal_low_rho=TemporalLowRhoConfig()))
     current=scene(kind='ground',z=15.,rho=.99,snr=16.,zdr=.2,time=300.)
