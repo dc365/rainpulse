@@ -41,6 +41,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 MC = ROOT / ".build/linux-amd64/mc"
 ALIAS = "rp"
+# Only a fallback for the summary when no cycle could be resolved for a case;
+# the live mosaic config version is read from the resolved analysis cycle.
 ANALYSIS_CONFIG = "qc-opensource-mosaic-v1-6m180"
 SCRUB_ATTR_KEYS = (
     "asset_id", "filename", "filename_time", "source_filename", "field_mapping_version",
@@ -63,6 +65,11 @@ SCRUBBED_SUFFIXES = (
     ".yaml", ".yml", ".txt", ".csv", ".md",
 )
 LEAK_PATTERNS = (r"s3://", r"/home/yons", r"/opt/rainpulse", r"rainpulse_minio")
+# Service configs bind clear-air background assets by absolute path, so the
+# deployment root has to be dropped as well as the file name that carries the
+# site code.  verify_directory() scans case-insensitively; this scrubber has to
+# match that, otherwise Z9591.npz survives a lower-case z9591 replacement.
+DEPLOYMENT_PATH = re.compile(r"(?:(?:s3://|/opt/rainpulse|/home/yons)\S*)")
 # Keys that must survive with a rewritten value: the QC baseline reads
 # root.attrs["radar_id"] and rejects a volume whose health summary disagrees.
 KEEP_VALUE_KEYS = {"radar_id"}
@@ -400,14 +407,31 @@ def case_rows(date: str, radars: list, clock_from: str, clock_to: str, scan_ids:
                COALESCE(m.no_rain_gate_count::text, ''), COALESCE(m.radial_interference_ray_count::text, ''),
                COALESCE(m.ground_clutter_gate_count::text, ''), COALESCE(m.sea_clutter_gate_count::text, ''),
                COALESCE(m.ap_gate_count::text, ''), COALESCE(m.diagnostics::text, ''),
-               COALESCE(to_char(a.analysis_time, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), '')
+               COALESCE(to_char(a.analysis_time, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), ''),
+               COALESCE(a.config_version, '')
         FROM radar_scan_runs r
         JOIN radar_scans s ON s.scan_id = r.scan_id
         LEFT JOIN radar_qc_metrics m ON m.scan_id = r.scan_id
-        LEFT JOIN analysis_cycles a ON a.analysis_time =
-             to_timestamp(round(extract(epoch from s.volume_end_time) / 360) * 360)
-             AND a.config_version = '{ANALYSIS_CONFIG}'
-        LEFT JOIN diagnostic_runs d ON d.analysis_id = a.analysis_id
+        -- Resolve the live cycle the same way the workspace does: newest ready
+        -- analysis at this scan time, whatever the mosaic config version is.
+        -- Pinning a config version here silently dropped every image once the
+        -- pipeline profile moved on and the old cycles were retired.
+        LEFT JOIN LATERAL (
+            SELECT a2.analysis_id, a2.analysis_time, a2.config_version
+            FROM analysis_cycles a2
+            WHERE a2.analysis_time =
+                  to_timestamp(round(extract(epoch from s.volume_end_time) / 360) * 360)
+              AND a2.status = 'ANALYSIS_READY'
+            ORDER BY a2.created_at DESC
+            LIMIT 1
+        ) a ON true
+        LEFT JOIN LATERAL (
+            SELECT d2.bundle_uri
+            FROM diagnostic_runs d2
+            WHERE d2.analysis_id = a.analysis_id AND d2.status = 'SUCCEEDED'
+            ORDER BY d2.measured_at DESC
+            LIMIT 1
+        ) d ON true
         WHERE s.volume_end_time >= '{date}' AND s.volume_end_time < '{date}'::date + 1
           AND r.normalized_uri IS NOT NULL{filter_sql}
         ORDER BY s.scan_id, s.volume_end_time, r.radar_id
@@ -416,7 +440,7 @@ def case_rows(date: str, radars: list, clock_from: str, clock_to: str, scan_ids:
             "bundle_uri", "qc_profile", "qc_pipeline", "flag_version", "health_state",
             "mean_quality_index", "valid_gates", "missing_gates", "low_quality_gates",
             "no_rain_gates", "rfi_rays", "ground_clutter_gates", "sea_clutter_gates", "ap_gates",
-            "diagnostics", "analysis_time")
+            "diagnostics", "analysis_time", "analysis_config_version")
     return [dict(zip(keys, row)) for row in rows]
 
 
@@ -539,6 +563,9 @@ def package(args) -> Path:
                 log(f"staged {included} volumes, {used / 1024 ** 2:.0f} MiB, last {case_id} {row['volume_end']}")
 
     write_configs(bundle, replacements)
+    resolved_configs = sorted({
+        row["analysis_config_version"] for row in rows if row["analysis_config_version"]
+    })
     (bundle / "metadata" / "summary.json").write_text(json.dumps({
         "date": args.date,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -547,7 +574,10 @@ def package(args) -> Path:
                   "size_budget_gib": args.max_gib, "bytes_included": used,
                   "qc_volume_included": bool(args.qc_volume), "images_included": bool(args.images)},
         "skipped": skipped,
-        "analysis_config_version": ANALYSIS_CONFIG,
+        "analysis_config_version": (
+            resolved_configs[0] if len(resolved_configs) == 1 else ANALYSIS_CONFIG
+        ),
+        "analysis_config_versions": resolved_configs,
     }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     write_review_manifest(bundle)
     write_readme(bundle, args, radar_alias, included, used, skipped)
@@ -578,7 +608,8 @@ def write_configs(bundle: Path, replacements: dict) -> None:
             continue
         text = path.read_text(encoding="utf-8")
         for radar, alias in replacements.items():
-            text = text.replace(radar, alias)
+            text = re.sub(re.escape(radar), alias, text, flags=re.IGNORECASE)
+        text = DEPLOYMENT_PATH.sub("<redacted-path>", text)
         text = re.sub(r"(?im)^\s*(longitude_deg|latitude_deg|display_name|asset_uri|coastline_asset_uri):.*\n?",
                       "", text)
         (target / path.name).write_text(text, encoding="utf-8")

@@ -28,6 +28,28 @@ from rainpulse_algo.worker.object_store import (
 COORDINATES = ("azimuth", "elevation", "range", "ray_time")
 SCALAR = (str, int, float, bool, type(None))
 SITE_IDS = ("z9591", "z9593", "z9598", "z9599")
+# Attribute keys that name a station, a source file or an object-store location.
+# scripts/package_qc_case.py applies the same rule to the volumes it stages, so
+# both bundles expose the same attribute surface.  radar_id keeps its key and is
+# rewritten to the site alias because the QC review tool reads it.
+IDENTITY_KEYS = frozenset({
+    "asset_id", "filename", "filename_time", "source_filename", "field_mapping_version",
+    "radar_config_version", "raw_asset_id", "source_path", "input_path", "display_name",
+})
+IDENTITY_KEY_PATTERNS = (
+    re.compile(r"(?i)^(site|station|radar|antenna)_"),
+    re.compile(r"(?i)^(.*_)?(latitude|longitude)(_deg)?$"),
+    re.compile(r"(?i)^.*(uri|path|filename|asset).*$"),
+    re.compile(r"(?i)^(display_)?name$"),
+)
+IDENTITY_EXEMPT = frozenset({"radar_id"})
+
+
+def identity_key(key: str) -> bool:
+    """True when an attribute key carries station or deployment identity."""
+    if key in IDENTITY_EXEMPT:
+        return False
+    return key in IDENTITY_KEYS or any(pattern.match(key) for pattern in IDENTITY_KEY_PATTERNS)
 
 
 def scrub_text(text: str, site: str) -> str:
@@ -50,6 +72,8 @@ def main() -> None:
     meta = {"site": site, "case": case, "root_attrs": {}, "sweeps": {}}
     for key in sorted(root.attrs):
         value = root.attrs[key]
+        if identity_key(key):
+            continue
         if isinstance(value, SCALAR):
             if key == "radar_id":
                 meta["root_attrs"][key] = site
