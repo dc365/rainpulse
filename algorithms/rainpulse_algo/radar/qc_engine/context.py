@@ -338,12 +338,32 @@ def prepare_open_source_inputs(
             ],
             "recurrence_semantics": "structural_repetition_not_truth",
         }
+    # The loader above has already selected and validated strictly-past raw
+    # observations. Pass them and the SAME terrain resources to the final CF
+    # stage, without placing any radar arrays into task/event payloads.
+    from .volume_review.clutter_fusion.near_runtime import prepare as prepare_near
+    near_context = prepare_near(profile, view.root, temporal, beam, terrain,
+                                dem_version, cutoff, artifacts)
+    if near_context is not None:
+        identity["near_joint_context"] = {
+            "source_sha256": sorted({p.source_sha256 for p in near_context.past}),
+            "dem_version": dem_version,
+            "terrain_identity": getattr(terrain, "cache_identity", None),
+            "beam_geometry_sha256": hashlib.sha256(json.dumps({
+                k: getattr(beam, k, None) for k in ("radar_id", "radar_config_version",
+                    "longitude_deg", "latitude_deg", "antenna_altitude_m",
+                    "beam_width_vertical_deg", "altitude_datum_status")
+            }, sort_keys=True).encode()).hexdigest(),
+            "datum_status": getattr(beam, "altitude_datum_status", None),
+            "temporal_policy": "frozen_strictly_past_raw_not_previous_QC",
+        }
     fingerprint = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
     return {
         "input_view": view,
         "ancillary_maps": ancillary,
         "radial_context": contexts,
         "radar_beam_context": beam,
+        **({"near_clutter_context": near_context} if near_context is not None else {}),
         **({"standalone_by_sweep": current_standalone} if unified else {}),
     }, {
         **identity,

@@ -684,6 +684,7 @@ def apply_basic_qc(
     paper_references_by_sweep: dict[str, Any] | None = None,
     standalone_by_sweep: dict[str, Any] | None = None,
     context_contract: dict[str, Any] | None = None,
+    near_clutter_context: Any | None = None,
 ) -> QCResult:
     if getattr(profile, "engine", None) == "open_source":
         from .qc_engine.runner import run_open_source_qc
@@ -697,7 +698,10 @@ def apply_basic_qc(
             paper_references_by_sweep=paper_references_by_sweep,
             standalone_by_sweep=standalone_by_sweep,
             context_contract=context_contract,
+            near_clutter_context=near_clutter_context,
         )
+    if near_clutter_context is not None:
+        raise QCInputError("near clutter runtime context requires the open-source engine")
     if paper_references_by_sweep:
         raise QCInputError("paper references cannot be mixed with legacy QC")
     if "health/summary.json" not in normalized_objects:

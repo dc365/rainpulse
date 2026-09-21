@@ -604,5 +604,5 @@ def run_open_source_qc(
     if getattr(profile, "volume_review", None) is not None:
         from .volume_review.integration import review_result
 
-        result = review_result(result, native)
+        result = review_result(result, native, near_clutter_context=kwargs.get("near_clutter_context"))
     return result
