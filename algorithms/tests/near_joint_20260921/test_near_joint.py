@@ -4,7 +4,7 @@ from types import SimpleNamespace as NS
 import copy,json,numpy as np,pytest
 from fusion_helpers import scene,baseline,cfg,Native,fixture,group
 from volume_review.data import Sweep,ResourceLimit
-from volume_review.clutter_fusion.near_revision_config import NearRevisionConfig as N
+from volume_review.clutter_fusion.near_revision_config import NearRevisionConfig as N,StrongNearConfig
 from volume_review.clutter_fusion import partial_moments as pm,causal_temporal as ct,terrain_admission as ta
 from volume_review.clutter_fusion.engine import evaluate_volume
 from volume_review.clutter_fusion.near_runtime import RuntimeContext
@@ -17,6 +17,8 @@ from review_extension.near_clutter import candidates
 
 
 def config(mode='cr_withhold',**kw):return cfg(mode='quarantine',near_revision=N(mode=mode,**kw))
+def strong_config(mode='quarantine'):
+    return config(strong_near=StrongNearConfig(mode=mode))
 def change(s,k,value=None,missing=False):
     f={k:v.copy() for k,v in s.fields.items()};a={k:v.copy() for k,v in s.available.items()}
     if missing:
@@ -24,6 +26,15 @@ def change(s,k,value=None,missing=False):
     else:f[k][:]=value
     return replace(s,fields=f,available=a)
 def partial(**kw):return scene(missing=('ZDR',),**kw)
+def strong_scene(**kw):
+    z=kw.pop('z',35.);rho=kw.pop('rho',.70);snr=kw.pop('snr',20.)
+    s=partial(z=z,rho=rho,snr=snr,**kw)
+    if z==35.:
+        pattern=np.array([35.,42.,25.,18.],dtype='float32')
+        values=np.broadcast_to(np.tile(pattern,s.shape[1]//4+1)[:s.shape[1]],s.shape).copy()
+    else:
+        values=np.full(s.shape,z,dtype='float32')
+    return replace(s,fields={**s.fields,'DBZH':values})
 def one(s,c,**kw):return evaluate_volume([s],c,**kw)[0]
 def check(s,c,**kw):
     e=one(s,c,**kw);out,d=apply(baseline(s),e.arrays,c,low_quality_flag=1024);return e,out,d
@@ -54,6 +65,44 @@ def test_partial_works_without_zdr_and_without_rough_z():
     assert d['near_revision_new_qpe_loss_gates']==0
     assert np.array_equal(out['QPE_ELIGIBLE_MASK'],baseline(s)['QPE_ELIGIBLE_MASK'])
     assert np.array_equal(out['DBZH_RAW'],s.fields['DBZH'])
+
+
+def test_strong_near_audit_records_but_does_not_act():
+    s=strong_scene();e,out,d=check(s,strong_config('audit'))
+    assert e.arrays['CF_NR_STRONG_CANDIDATE_MASK'].any()
+    assert not e.arrays['CF_NR_STRONG_ACTION_MASK'].any()
+    _,without_strong,_=check(s,config())
+    assert d['strong_near_quarantine_gates']==0 and d['near_revision_new_qpe_loss_gates']==0
+    assert np.array_equal(out['QC_ACTION'],without_strong['QC_ACTION'])
+    assert np.array_equal(out['QPE_ELIGIBLE_MASK'],without_strong['QPE_ELIGIBLE_MASK'])
+
+
+def test_strong_near_quarantine_removes_only_supported_gates():
+    s=strong_scene();e,out,d=check(s,strong_config('quarantine'))
+    selected=e.arrays['CF_NR_STRONG_CANDIDATE_MASK']==1
+    assert selected.any() and np.array_equal(e.arrays['CF_NR_STRONG_ACTION_MASK']==1,selected)
+    assert d['strong_near_quarantine_gates']==int(selected.sum())
+    assert d['near_revision_new_qpe_loss_gates']==int(selected.sum())
+    assert np.array_equal(out['QC_ACTION'][selected],np.full(int(selected.sum()),1,np.uint8))
+    assert not out['QPE_ELIGIBLE_MASK'][selected].any()
+    assert not np.isfinite(out['DBZH_USABLE'][selected]).any()
+    assert not out['REFLECTIVITY_TRUST_MASK'][selected].any()
+
+
+@pytest.mark.parametrize('which',[0,1,2])
+def test_strong_near_keeps_every_external_protection(which):
+    protect=[np.zeros(strong_scene().shape,bool) for _ in range(3)];protect[which][:]=True
+    e=one(strong_scene(),strong_config('quarantine'),protections=[tuple(protect)])
+    assert e.arrays['CF_NR_STRONG_PROTECTED_MASK'].any()
+    assert not e.arrays['CF_NR_STRONG_ACTION_MASK'].any()
+
+
+@pytest.mark.parametrize('kw',[
+    {'rho':.99},{'snr':5.},{'z':25.},{'z':55.},
+])
+def test_strong_near_requires_bounded_measurement_and_two_families(kw):
+    s=strong_scene(**kw);e=one(s,strong_config('quarantine'))
+    assert not e.arrays['CF_NR_STRONG_CANDIDATE_MASK'].any()
 
 @pytest.mark.parametrize('key',['PHIDP','RHOHV','SNR'])
 def test_no_target_measurement_no_candidate(key):

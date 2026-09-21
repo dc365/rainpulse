@@ -29,7 +29,7 @@ def zero_evidence(s,cfg,reason):
     a.update(empty_context(s.shape));a.update(empty_background(s.shape,cfg))
     if cfg.near_revision is not None:
         from .near_joint import empty
-        a.update(empty(s))
+        a.update(empty(s, strong=cfg.near_revision.strong_near is not None))
     a.update(decide(a,cfg))
     return FusionEvidence(a,{"status":"RESOURCE_LIMIT_ABSTAINED","reason":reason,"candidate_gates":0})
 
@@ -56,7 +56,7 @@ def evaluate_volume(sweeps,cfg,*,backgrounds=None,protections=None,metadata=None
             # New evidence is prepared for all sweeps before any new action.
             if cfg.near_revision is not None:
                 from .near_joint import empty
-                a.update(empty(s))
+                a.update(empty(s, strong=cfg.near_revision.strong_near is not None))
             a.update(decide(a,cfg))
             summary={"status":"EVALUATED","features":f.summary,"background":rec,
                 "candidate_gates":int(a["CF_NONMET_SUPPORTED_MASK"].sum()),
@@ -77,11 +77,17 @@ def evaluate_volume(sweeps,cfg,*,backgrounds=None,protections=None,metadata=None
         except ResourceLimit as exc:
             # Preserve the old CF decision across the entire volume; only the
             # opt-in addition abstains when its own resource budget is exceeded.
-            additions=[(empty(s),{"status":"RESOURCE_LIMIT_ABSTAINED","reason":str(exc)}) for s in sweeps]
+            additions=[(empty(s, strong=cfg.near_revision.strong_near is not None),
+                        {"status":"RESOURCE_LIMIT_ABSTAINED","reason":str(exc)}) for s in sweeps]
         for x,(arrays,detail) in zip(results,additions,strict=True):
             x.arrays.update(arrays);x.arrays.update(decide(x.arrays,cfg))
             x.summary["near_revision"]=detail
             x.summary["near_candidate_gates"]=int(x.arrays["CF_NR_ACTION_MASK"].sum())
             x.summary["near_dem_severe_gates"]=int(x.arrays["CF_NR_DEM_ACTION_MASK"].sum())
+            if cfg.near_revision.strong_near is not None:
+                x.summary["strong_near_candidate_gates"]=int(
+                    x.arrays["CF_NR_STRONG_CANDIDATE_MASK"].sum())
+                x.summary["strong_near_quarantine_gates"]=int(
+                    x.arrays["CF_NR_STRONG_ACTION_MASK"].sum())
     if before != [s.digest for s in sweeps]:raise RuntimeError("fusion mutated original measurement")
     return results

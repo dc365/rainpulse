@@ -1,6 +1,6 @@
 """Frozen opt-in near-site current/causal/terrain policy. Scores are not probabilities."""
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 
 class NearRevisionConfig(BaseModel):
@@ -33,9 +33,37 @@ class NearRevisionConfig(BaseModel):
     local_interception_pbb: float = Field(default=.10, gt=0, le=.5)
     maximum_dem_range_m: float = Field(default=75000., gt=0, le=150000)
     maximum_dem_gates: int = Field(default=5000000, ge=1, le=10000000)
+    strong_near: "StrongNearConfig | None" = None
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_strong(self, handler):
+        value = handler(self)
+        if self.strong_near is None:
+            value.pop("strong_near", None)
+        return value
 
     @model_validator(mode="after")
     def check(self):
         if self.temporal_minimum_jitter_deg > self.minimum_jitter_deg:
             raise ValueError("temporal prerequisite cannot be stricter than the seed by accident")
+        return self
+
+
+class StrongNearConfig(BaseModel):
+    """Bounded strong-echo exception; two measured CF families remain required."""
+    model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
+    version: Literal["strong-near-20260922-v1"] = "strong-near-20260922-v1"
+    mode: Literal["audit", "quarantine"] = "audit"
+    minimum_dbz: float = Field(default=30., ge=25, le=35)
+    maximum_dbz: float = Field(default=50., gt=30, le=55)
+    maximum_rhohv: float = Field(default=.85, ge=.5, le=.90)
+    minimum_snr_db: float = Field(default=12., ge=8, le=25)
+    minimum_texture_score: float = Field(default=.40, ge=.25, le=1)
+    minimum_family_count: int = Field(default=2, ge=2, le=4)
+    maximum_range_m: float = Field(default=75000., gt=0, le=150000)
+
+    @model_validator(mode="after")
+    def check(self):
+        if self.minimum_dbz >= self.maximum_dbz:
+            raise ValueError("strong near reflectivity bounds overlap")
         return self

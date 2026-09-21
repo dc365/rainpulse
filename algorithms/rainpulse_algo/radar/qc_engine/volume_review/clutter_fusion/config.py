@@ -70,6 +70,13 @@ class ClutterFusionConfig(BaseModel):
         if self.near_revision is not None:
             if self.near_revision.maximum_dbz > self.protected_dbz:
                 raise ValueError("near revision must preserve the parent strong-echo boundary")
+            strong=self.near_revision.strong_near
+            if strong is not None and self.near_revision.mode != "cr_withhold":
+                raise ValueError("strong near requires the active near revision owner")
+            if strong is not None and strong.minimum_dbz < self.protected_dbz:
+                raise ValueError("strong near exception must start at the parent strong boundary")
+            if strong is not None and strong.maximum_range_m > self.maximum_range_m:
+                raise ValueError("strong near range exceeds the clutter-fusion domain")
         b = self.background
         if b.mode != "audit" or b.review_local_weather_conflicts or b.withhold_mixed:
             raise ValueError("nested episode must supply evidence only; no separate EBG actions")

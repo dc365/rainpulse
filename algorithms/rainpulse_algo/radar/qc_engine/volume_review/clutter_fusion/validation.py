@@ -27,7 +27,9 @@ def validate_serialized(group,attrs,parent_validator):
     baseline={k:np.asarray(view[k][:]) for k in view}
     outputs={"CF_CR_WITHHELD_MASK","CF_QUARANTINE_MASK","CF_MIXED_CR_WITHHELD_MASK","CF_DERIVED_INVALIDATION_MASK"}
     if cfg.near_revision is not None:
-        outputs |= {"CF_NR_CR_WITHHELD_MASK","CF_NR_PARTIAL_CR_WITHHELD_MASK", "CF_NR_TEMPORAL_CR_WITHHELD_MASK","CF_NR_DEM_CR_WITHHELD_MASK"}
+        outputs |= {"CF_NR_CR_WITHHELD_MASK","CF_NR_PARTIAL_CR_WITHHELD_MASK",
+                    "CF_NR_TEMPORAL_CR_WITHHELD_MASK","CF_NR_DEM_CR_WITHHELD_MASK",
+                    "CF_NR_STRONG_QUARANTINE_MASK"}
     evidence={k:np.asarray(group[k][:]) for k in group if k.startswith("CF_") and not k.startswith("CF_BEFORE_") and k not in outputs}
     out,_=apply(baseline,evidence,cfg,low_quality_flag=attrs["qc_clutter_fusion_low_quality_flag"])
     if set(out)!=set(group):raise ValueError("unexpected or missing fusion output fields")

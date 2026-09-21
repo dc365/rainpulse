@@ -5,7 +5,7 @@ import yaml
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'algorithms/rainpulse_algo/radar/qc_engine'))
 from volume_review.config import VolumeReviewConfig
 from volume_review.clutter_fusion.config import ClutterFusionConfig
-from volume_review.clutter_fusion.near_revision_config import NearRevisionConfig
+from volume_review.clutter_fusion.near_revision_config import NearRevisionConfig,StrongNearConfig
 from review_extension.config import NonPrecipConfig
 from review_extension.near_reliability import NearReliabilityConfig
 
@@ -29,16 +29,18 @@ def generate(parent_path,output,*,backend=None,validate_full=True):
         full_validator(parent)
     echo=float(parent.get('echo',{}).get('no_rain_below_dbz',-10.))
     # Literal unchanged parent is the A0 baseline, not the default model config.
-    variants=[('audit',False,'audit','audit',False),
-              ('near-on',True,None,None,False),
-              ('near-on-tuned',True,None,None,True),
-              ('joint-cr',True,'cr_withhold','audit',False),
-              ('joint-cr-dem',True,'cr_withhold','cr_withhold',False)]
+    variants=[('audit',False,'audit','audit',False,None),
+              ('near-on',True,None,None,False,None),
+              ('near-on-tuned',True,None,None,True,None),
+              ('joint-cr',True,'cr_withhold','audit',False,None),
+              ('joint-cr-dem',True,'cr_withhold','cr_withhold',False,None),
+              ('strong-audit',True,'cr_withhold','audit',False,'audit'),
+              ('strong-quarantine',True,'cr_withhold','audit',False,'quarantine')]
     if output.exists():raise ValueError('output exists; refusing mixed generations')
     output.parent.mkdir(parents=True,exist_ok=True);records=[]
     with tempfile.TemporaryDirectory(prefix='.near-joint-',dir=output.parent) as td:
         temp=Path(td)
-        for name,on,mode,dem,tuned in variants:
+        for name,on,mode,dem,tuned,strong_mode in variants:
             child=copy.deepcopy(parent)
             child['profile_version']+='-near-joint-v1-'+name
             # pipeline_version is a frozen Literal coordinated with old stages.
@@ -52,7 +54,11 @@ def generate(parent_path,output,*,backend=None,validate_full=True):
             NonPrecipConfig.model_validate(child['nonprecip_review'])
             if mode:
                 c=child['volume_review']['clutter_fusion']
-                c['near_revision']=NearRevisionConfig(mode=mode,dem_policy=dem).model_dump(mode='json')
+                c['near_revision']=NearRevisionConfig(
+                    mode=mode,dem_policy=dem,
+                    **({} if strong_mode is None else
+                       {'strong_near':StrongNearConfig(mode=strong_mode)}),
+                ).model_dump(mode='json')
             if backend is not None:
                 # Explicit diagnostic override creates a distinct config identity.
                 child['volume_review']['clutter_fusion']['depolarization_backend']=backend
@@ -63,6 +69,7 @@ def generate(parent_path,output,*,backend=None,validate_full=True):
             records.append({'file':filename,'sha256':hashlib.sha256(data).hexdigest(),
                  'near_enabled_effective':NonPrecipConfig.model_validate(child['nonprecip_review']).near_enabled,
                  'proposed_final_candidate':name=='joint-cr-dem',
+                 'strong_near_mode':strong_mode,
                  'requires_independent_acceptance':True})
         (temp/'generation.json').write_text(json.dumps({'parent_sha256':hashlib.sha256(raw).hexdigest(),
              'validation_level':'full_OpenSourceQCProfile' if validate_full else 'explicit_subconfig_only',

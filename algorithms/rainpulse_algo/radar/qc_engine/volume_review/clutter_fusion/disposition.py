@@ -91,8 +91,11 @@ def apply(group,evidence,cfg,*,low_quality_flag):
     if nr is not None and enabled and nr.mode=="cr_withhold":
         near=evidence["CF_NR_ACTION_MASK"]==1
         terrain=(evidence["CF_NR_DEM_ACTION_MASK"]==1)&(nr.dem_policy=="cr_withhold")
-    loss=cr&(candidate|near|terrain)
-    quarantine=(evidence["CF_QUARANTINE_SUPPORTED_MASK"]==1)&trust&obs&(np.asarray(group["QC_ACTION"])!=2)&(cfg.mode=="quarantine")
+    strong=np.zeros(obs.shape,bool)
+    if nr is not None and enabled and nr.strong_near is not None and nr.strong_near.mode=="quarantine":
+        strong=(evidence["CF_NR_STRONG_ACTION_MASK"]==1)&trust&obs&(np.asarray(group["QC_ACTION"])!=2)
+    loss=cr&(candidate|near|terrain|strong)
+    quarantine=(((evidence["CF_QUARANTINE_SUPPORTED_MASK"]==1)&(cfg.mode=="quarantine"))|strong)&trust&obs&(np.asarray(group["QC_ACTION"])!=2)
     changing=set(mutable_names(group))
     # Share unchanged immutable raw/historical arrays instead of duplicating them.
     a={k:np.array(v,copy=True) if k in changing else v for k,v in group.items()}
@@ -108,6 +111,7 @@ def apply(group,evidence,cfg,*,low_quality_flag):
         a["CF_NR_PARTIAL_CR_WITHHELD_MASK"]=(extra&near&(evidence["CF_NR_STRICT_MASK"]==1)).astype("uint8")
         a["CF_NR_TEMPORAL_CR_WITHHELD_MASK"]=(extra&near&(evidence["CF_NR_STRICT_MASK"]!=1)).astype("uint8")
         a["CF_NR_DEM_CR_WITHHELD_MASK"]=(extra&terrain&~near).astype("uint8")
+        a["CF_NR_STRONG_QUARANTINE_MASK"]=strong.astype("uint8")
     a[CR][loss]=0
     if enabled:
         a["CR_UNCERTAIN_MASK"][(evidence["CF_MIXED_MASK"]==1)|loss]=1
@@ -132,6 +136,8 @@ def apply(group,evidence,cfg,*,low_quality_flag):
             "near_partial_cr_loss_gates":int(a["CF_NR_PARTIAL_CR_WITHHELD_MASK"].sum()),
             "near_temporal_cr_loss_gates":int(a["CF_NR_TEMPORAL_CR_WITHHELD_MASK"].sum()),
             "near_dem_cr_loss_gates":int(a["CF_NR_DEM_CR_WITHHELD_MASK"].sum()),
-            "near_revision_new_qpe_loss_gates":0} if nr is not None else {}),
+            "near_revision_new_qpe_loss_gates":int(qloss[a["CF_NR_STRONG_QUARANTINE_MASK"]==1].sum()),
+            "strong_near_quarantine_gates":int(strong.sum()),
+            "strong_near_cr_loss_gates":int((strong&cr).sum())} if nr is not None else {}),
         "budget_policy":"retain_isolation_require_review","confirmed_gates":0,"filled_gates":0,
         "operational_eligible":False}

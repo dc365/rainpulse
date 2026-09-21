@@ -29,15 +29,22 @@ def audit(root):
                      'CF_BG_MATCH_MASK','CF_BG_CURRENT_NONMET_MASK','CF_BG_ENHANCEMENT_MASK','CF_NR_READY_MASK',
                      'CF_NR_STRICT_MASK','CF_NR_TEMPORAL_SUPPORT_MASK','CF_NR_PROTECTED_MASK','CF_NR_DEM_AVAILABLE_MASK',
                      'CF_NR_DEM_ACTION_AVAILABLE_MASK','CF_NR_DEM_LOCAL_INTERCEPTION_MASK','CF_NR_DEM_SEVERE_MASK',
-                     'CF_NR_CR_WITHHELD_MASK','CF_NR_PARTIAL_CR_WITHHELD_MASK','CF_NR_TEMPORAL_CR_WITHHELD_MASK','CF_NR_DEM_CR_WITHHELD_MASK'):
+                     'CF_NR_CR_WITHHELD_MASK','CF_NR_PARTIAL_CR_WITHHELD_MASK','CF_NR_TEMPORAL_CR_WITHHELD_MASK','CF_NR_DEM_CR_WITHHELD_MASK',
+                     'CF_NR_STRONG_CANDIDATE_MASK','CF_NR_STRONG_ACTION_MASK','CF_NR_STRONG_PROTECTED_MASK','CF_NR_STRONG_QUARANTINE_MASK'):
             record['fields'][name]=int((a[name]==1).sum()) if name in a else None
-        for name in ('NP_QUARANTINE_MASK','NMR_CR_WITHHELD_MASK','RDR_CR_WITHHELD_MASK','CF_CR_WITHHELD_MASK','CF_NR_CR_WITHHELD_MASK'):
+        for name in ('NP_QUARANTINE_MASK','NMR_CR_WITHHELD_MASK','RDR_CR_WITHHELD_MASK','CF_CR_WITHHELD_MASK',
+                     'CF_NR_CR_WITHHELD_MASK','CF_NR_STRONG_QUARANTINE_MASK'):
             if name in a and np.any((a[name]==1)&cr):raise ValueError('ineligible contribution leaked into CR: '+name)
         if 'CF_BG_STATE' in a:
             keys,count=np.unique(a['CF_BG_STATE'][obs],return_counts=True);record['background_state_counts']=dict(zip(map(str,keys),map(int,count)))
         if 'CF_NR_REASON' in a:
             from volume_review.clutter_fusion.near_joint import Reason
             record['near_reason_counts']={x.name:int(((a['CF_NR_REASON']&int(x))!=0).sum()) for x in Reason}
+        if 'CF_NR_STRONG_REASON' in a:
+            record['strong_near_reason_counts']={x.name:int(((a['CF_NR_STRONG_REASON']&int(x))!=0).sum()) for x in Reason if int(x)>=256}
+        if 'CF_NR_STRONG_STATE' in a:
+            values,count=np.unique(a['CF_NR_STRONG_STATE'][obs],return_counts=True)
+            record['strong_near_state_counts']=dict(zip(map(str,values),map(int,count)))
         out['sweeps'].append(record)
     out['status']='CHECKED_NO_ELIGIBILITY_LEAK';return out
 
@@ -61,6 +68,7 @@ def check_composite(roots,path,metadata_path):
         for key in ('CF_BG_AVAILABLE_MASK','CF_BG_STABLE_MASK','CF_BG_MATCH_MASK','CF_BG_CURRENT_NONMET_MASK',
                     'CF_BG_ENHANCEMENT_MASK','CF_NR_READY_MASK','CF_NR_STRICT_MASK','CF_NR_TEMPORAL_SUPPORT_MASK',
                     'CF_NR_PROTECTED_MASK','CF_NR_DEM_AVAILABLE_MASK','CF_NR_DEM_ACTION_AVAILABLE_MASK',
+                    'CF_NR_STRONG_CANDIDATE_MASK','CF_NR_STRONG_ACTION_MASK','CF_NR_STRONG_PROTECTED_MASK',
                     'NP_NEAR_CANDIDATE_MASK','NP_WEATHER_PROTECTED_MASK','NP_MIXED_MASK'):
             item['evidence'][key]=int((g[key][:][rows,gates]==1).sum()) if key in g else None
         for key in ('CF_BG_STATE','CF_NR_STATE'):
