@@ -2,7 +2,7 @@ services:
   radar-qc-worker:
     image: rainpulse-cpu-worker:clutter-fusion-20260921
     environment:
-      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/clutter-fusion-20260921/clutter-fusion-quarantine.yaml
+      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/clutter-fusion-20260921/clutter-fusion-quarantine-bg-live.yaml
   radar-grid-worker:
     image: rainpulse-cpu-worker:clutter-fusion-20260921
   radar-mosaic-worker:
