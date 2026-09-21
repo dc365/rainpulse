@@ -25,6 +25,8 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--inputs", type=Path, required=True, help="JSON list of local normalized Zarr directory paths")
     p.add_argument("--qc-profile", type=Path, required=True, help="Actual source QC profile for raw availability rules")
+    p.add_argument("--qc-flags", type=Path, default=Path("/opt/rainpulse/configs/qc/flag-definitions-v2.yaml"),
+                   help="Flag definitions belonging to the QC profile")
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--reviewed-no-precipitation", action="store_true")
     p.add_argument("--review-receipt", help="SHA256 of the operator's review record")
@@ -34,7 +36,7 @@ def main():
         p.error("both decoder-verified status fields must be supplied together")
     if args.reviewed_no_precipitation and not is_hash(args.review_receipt):
         p.error("reviewed background requires a review-record SHA256")
-    profile = load_qc_profile(args.qc_profile)
+    profile = load_qc_profile(args.qc_profile, args.qc_flags)
     paths = json.loads(args.inputs.read_text())
     if not isinstance(paths, list) or not paths: p.error("inputs must be a nonempty path list")
     def write(root):
