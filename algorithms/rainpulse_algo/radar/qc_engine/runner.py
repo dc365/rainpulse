@@ -50,6 +50,7 @@ def run_open_source_qc(
     created_at=None,
     paper_references_by_sweep=None,
     standalone_by_sweep=None,
+    context_contract=None,
     **kwargs,
 ):
     started = checkpoint = perf_counter()
@@ -74,6 +75,13 @@ def run_open_source_qc(
     native = [adapt_sweep(root, f"sweep_{int(i):03d}", profile) for i in root["sweep_number"][:]]
     if not native:
         raise QCInputError("normalized radar volume contains no usable sweep")
+    if context_contract:
+        # Declared beam geometry from the radar configuration, already verified
+        # against the source header at decode time. Sweep attributes are shared
+        # with the volume review stages, which refuse to infer it from indices.
+        contract = dict(context_contract)
+        for sweep in native:
+            sweep.attrs["clutter_context_contract"] = contract
     timings["input_adaptation_ms"] = (perf_counter() - checkpoint) * 1000
     checkpoint = perf_counter()
     # Stage 1 is independent of neighbouring final QC: no circular dependencies.

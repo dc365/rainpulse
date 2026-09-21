@@ -73,6 +73,29 @@ def execute_basic_qc(request: RadarQCRequested) -> WorkerResult:
     return _execute_basic_qc(request, minio_client_from_environment())
 
 
+def _clutter_context_contract(beam: Any, request: RadarQCRequested) -> dict[str, Any] | None:
+    """Declared beam geometry for action-grade vertical context checks.
+
+    The width is the radar configuration's vertical beam width, which the FMT
+    decoder already verifies against the source header, so the contract is only
+    attached when that verified value is present.  Without it the clutter
+    fusion stage keeps every upper-beam observation diagnostic-only.
+    """
+    width = getattr(beam, "beam_width_vertical_deg", None)
+    if width is None or not np.isfinite(width) or not 0 < float(width) <= 3:
+        return None
+    version = getattr(beam, "radar_config_version", None) or (
+        request.payload.radar_config_version
+    )
+    return {
+        "beam_width_deg": float(width),
+        "beam_source": (
+            f"radar-config hardware.beam_width_vertical_deg ({version}) "
+            "verified against the FMT header at decode"
+        ),
+    }
+
+
 def _execute_basic_qc(request: RadarQCRequested, client: Minio) -> WorkerResult:
     profile = load_qc_profile(
         _required_file("RAINPULSE_RADAR_QC_CONFIG"),
@@ -121,6 +144,9 @@ def _execute_basic_qc(request: RadarQCRequested, client: Minio) -> WorkerResult:
             normalized,
             profile,
             **prepared,
+            context_contract=_clutter_context_contract(
+                prepared.get("radar_beam_context"), request
+            ),
             **(
                 {"created_at": request.occurred_at}
                 if getattr(profile, "engine", None) == "open_source"

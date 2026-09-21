@@ -683,6 +683,7 @@ def apply_basic_qc(
     created_at: datetime | None = None,
     paper_references_by_sweep: dict[str, Any] | None = None,
     standalone_by_sweep: dict[str, Any] | None = None,
+    context_contract: dict[str, Any] | None = None,
 ) -> QCResult:
     if getattr(profile, "engine", None) == "open_source":
         from .qc_engine.runner import run_open_source_qc
@@ -695,6 +696,7 @@ def apply_basic_qc(
             attenuation_profile=attenuation_profile, created_at=created_at,
             paper_references_by_sweep=paper_references_by_sweep,
             standalone_by_sweep=standalone_by_sweep,
+            context_contract=context_contract,
         )
     if paper_references_by_sweep:
         raise QCInputError("paper references cannot be mixed with legacy QC")
