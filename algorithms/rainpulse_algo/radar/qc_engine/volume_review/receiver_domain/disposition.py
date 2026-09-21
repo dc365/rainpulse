@@ -49,6 +49,9 @@ def check_evidence(e, observed, cfg):
                 or np.any((full | partial) & seg & (distance > cfg.segment_reference.maximum_reference_distance_m))
                 or np.any(seg & ~m("SEGMENT_SIDE_MEASURED_MASK") & ~m("TARGET_SIDE_CONFLICT_MASK"))):
             raise ValueError("invalid finite receiver reference provenance")
+    if cfg.source_family is not None:
+        from .family_validation import check_family_evidence
+        check_family_evidence(e, observed, cfg)
     hard = m("INDEPENDENT_WEATHER_MASK") | m("UNKNOWN_PROTECTION_MASK")
     local = m("LOCAL_COHERENCE_MASK")
     side_conflict = m("TARGET_SIDE_CONFLICT_MASK")
@@ -89,12 +92,19 @@ def apply(group, evidence, cfg, *, low_quality_flag):
         segment = evidence["RDR_SEGMENT_REFERENCE_MASK"] == 1
         route_active[segment] = cfg.segment_reference.mode == "experiment"
         partial_allowed[segment] = cfg.segment_reference.partial_policy == "cr_withhold"
+    family = np.zeros(obs.shape, bool)
+    if cfg.source_family is not None:
+        family = evidence["RDR_FAMILY_REFERENCE_MASK"] == 1
+        route_active[family] = cfg.source_family.mode == "experiment"
+        partial_allowed[family] = cfg.source_family.partial_policy == "cr_withhold"
     partial_action = (partial & ~hard & ~local & (evidence["RDR_TARGET_SIDE_CONFLICT_MASK"] == 0)
                       & partial_allowed & route_active & active)
     selected = (source & active & route_active) | partial_action
     if np.any(selected & ((a["DBZH_RAW"] < cfg.no_rain_below_dbz) | ~np.isfinite(a["DBZH_RAW"]))):
         raise ValueError("receiver action crosses raw/no-rain boundary")
     q = source & route_active & trust & obs & (a["QC_ACTION"] != 2) & (cfg.mode == "quarantine")
+    if cfg.source_family is not None and cfg.source_family.full_policy != "quarantine":
+        q &= ~family
     loss = cr & selected
     for k in mutable_names(a):
         a["RDR_BEFORE_"+k] = a[k].copy()
@@ -102,11 +112,16 @@ def apply(group, evidence, cfg, *, low_quality_flag):
     a["RDR_CR_WITHHELD_MASK"] = loss.astype("uint8")
     a["RDR_QUARANTINE_MASK"] = q.astype("uint8")
     a["RDR_PARTIAL_CR_WITHHELD_MASK"] = (loss & partial_action).astype("uint8")
+    if cfg.source_family is not None:
+        a["RDR_FAMILY_CR_WITHHELD_MASK"] = (loss & family).astype("uint8")
+        a["RDR_FAMILY_QUARANTINE_MASK"] = (q & family).astype("uint8")
     a[CR][loss] = 0
     if active:
         a["CR_UNCERTAIN_MASK"][(partial | (evidence["RDR_MIXED_MASK"] == 1)) & route_active] = 1
         a["CR_QUALIFICATION_REASON"][loss] |= np.uint16(1024)
         a["CR_QUALIFICATION_REASON"][loss] &= np.uint16(65534)
+    if active and cfg.source_family is not None and cfg.source_family.mode == "experiment":
+        a["CR_UNCERTAIN_MASK"][evidence["RDR_FAMILY_UNRESOLVED_MASK"] == 1] = 1
     derived = derived_invalidation(trust, q)
     a["RDR_DERIVED_INVALIDATION_MASK"] = derived.astype("uint8")
     for key in DERIVED_FIELDS:
@@ -135,4 +150,9 @@ def apply(group, evidence, cfg, *, low_quality_flag):
         **({"segment_cr_loss_gates": int((loss & segment).sum()),
              "segment_qpe_loss_gates": int((qp_loss & segment).sum()),
              "segment_audit": cfg.segment_reference.mode == "audit"}
-            if cfg.segment_reference is not None else {})}
+            if cfg.segment_reference is not None else {}),
+        **({"family_cr_loss_gates": int((loss & family).sum()),
+             "family_qpe_loss_gates": int((qp_loss & family).sum()),
+             "family_quarantine_gates": int((q & family).sum()),
+             "family_audit": cfg.source_family.mode == "audit"}
+            if cfg.source_family is not None else {})}

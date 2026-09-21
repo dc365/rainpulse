@@ -61,6 +61,7 @@ def review_result(result, native):
         raise ValueError("receiver native/QC sweep identity differs")
     prepared = {}
     sweeps = {n.name: from_native(n) for n in native}
+    from .source_family import FamilyResourceLimit, parent_only_evidence
     try:
         if sum(int(np.prod(n.shape)) for n in native) > cfg.maximum_volume_gates:
             raise ResourceLimit("receiver-domain volume gate budget")
@@ -69,9 +70,28 @@ def review_result(result, native):
             hard, local, unknown = protection_masks(n, old.optional_qc_fields, result.profile.context.strong_support)
             prepared[old.name] = evaluate(sweeps[old.name], cfg, independent_weather=hard,
                 local_coherence=local, unknown_protection=unknown)
+    except FamilyResourceLimit as exc:
+        # New family failure cannot restore measurements removed by the parent
+        # RDR. Re-evaluate every sweep without borrowing; discard successful
+        # family results too so no partially applied volume can escape.
+        parent_cfg = cfg.model_copy(update={"source_family": None})
+        try:
+            prepared = {}
+            for old in result.sweeps:
+                n = lookup[old.name]
+                hard, local, unknown = protection_masks(n, old.optional_qc_fields, result.profile.context.strong_support)
+                parent = evaluate(sweeps[old.name], parent_cfg, independent_weather=hard,
+                    local_coherence=local, unknown_protection=unknown)
+                prepared[old.name] = parent_only_evidence(parent, cfg, exc)
+        except ResourceLimit as parent_error:
+            prepared = {name: abstained(s, cfg, str(parent_error)) for name,s in sweeps.items()}
     except ResourceLimit as exc:
         # Discard ALL partial sweep results. Parent products stay available.
         prepared = {name: abstained(s, cfg, str(exc)) for name,s in sweeps.items()}
+    if cfg.source_family is not None:
+        from .family_validation import validate_family_records
+        for name, evidence in prepared.items():
+            validate_family_records(evidence.models, sweeps[name], cfg)
     updated = []; records = []; model_records = []
     summary = dict(result.summary)
     sweep_summary = {k: dict(v) for k, v in summary["sweeps"].items()}
@@ -94,8 +114,8 @@ def review_result(result, native):
             quality_index=after["QUALITY_INDEX"], low_quality_mask=after["LOW_QUALITY_MASK"],
             qi_components={k: after[k] for k in old.qi_components}))
         for m in evidence.models:
-            rec = dict(m, sweep=old.name, native_sorted_ray=m["ray"], ray=int(n.original_indices[m["ray"]]))
-            rec["shoulders"] = [dict(side, ray=int(n.original_indices[side["ray"]])) for side in m["shoulders"]]
+            rec = restore_reference_indices(m, n.original_indices)
+            rec["sweep"] = old.name
             model_records.append(rec)
         record = {"sweep": old.name, "native_digest": before, "evidence": evidence.summary, "disposition": delta}
         records.append(record); sweep_summary[old.name]["receiver_domain"] = record
@@ -114,9 +134,32 @@ def review_result(result, native):
         "review_required": any(x["disposition"]["review_required"] for x in records),
         **{key: sum(x["disposition"][key] for x in records) for key in (
             "added_quarantine_gates", "cr_loss_gates", "partial_cr_loss_gates", "qpe_loss_gates")},
-        "confirmed_gates": 0}
+        "confirmed_gates": 0,
+        **({"source_family_status": "RESOURCE_ABSTAINED_PARENT_RETAINED" if any(
+            e.summary.get("source_family", {}).get("status") == "RESOURCE_ABSTAINED_PARENT_RETAINED"
+            for e in prepared.values()) else "EVALUATED",
+            "source_family_version": cfg.source_family.version}
+            if cfg.source_family is not None else {})}
     summary["sweeps"] = sweep_summary
     values = np.concatenate([s.quality_index[np.isfinite(s.quality_index)] for s in updated])
     summary["mean_quality_index"] = float(values.mean()) if values.size else 0.
     summary["low_quality_gate_count"] = sum(int(s.low_quality_mask.sum()) for s in updated)
     return replace(result, sweeps=tuple(updated), summary=summary, volume_review_artifacts=artifacts)
+
+
+def restore_reference_indices(record, original_indices):
+    """Restore nested donor AND donor-shoulder index values, not just target rows."""
+    if isinstance(record, list):
+        return [restore_reference_indices(x, original_indices) for x in record]
+    if not isinstance(record, dict):
+        return record
+    out = {k: restore_reference_indices(v, original_indices) for k, v in record.items()}
+    if "ray" in record:
+        index = int(record["ray"])
+        if not 0 <= index < len(original_indices):
+            raise ValueError("reference ray index outside native acquisition")
+        out["native_sorted_ray"] = index
+        out["ray"] = int(original_indices[index])
+    if record.get("reference_route") == "shared_coherent_source_family":
+        out["reference_digest_order"] = "native_sorted_raw_before_index_restoration"
+    return out

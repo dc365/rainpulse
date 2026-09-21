@@ -22,6 +22,46 @@ class SegmentReferenceConfig(BaseModel):
     maximum_state_trials: int = Field(default=50000, ge=1, le=100000)
 
 
+class SourceFamilyConfig(BaseModel):
+    """One-hop shared coherent reference. No station/angle/target-value rules."""
+    model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
+    version: Literal["receiver-source-family-20260921-v1"] = "receiver-source-family-20260921-v1"
+    mode: Literal["audit", "experiment"] = "audit"
+    partial_policy: Literal["diagnostic_only", "cr_withhold"] = "diagnostic_only"
+    full_policy: Literal["cr_only", "quarantine"] = "cr_only"
+    maximum_neighbor_angle_deg: float = Field(default=3., gt=0., le=5.)
+    minimum_donors: int = Field(default=2, ge=2, le=4)
+    maximum_donors: int = Field(default=6, ge=2, le=12)
+    maximum_donor_phase_difference_deg: float = Field(default=2., gt=0., le=5.)
+    maximum_donor_zdr_difference_db: float = Field(default=.25, gt=0., le=.5)
+    maximum_donor_offset_difference_db: float = Field(default=.5, gt=0., le=1.)
+    maximum_donor_relation_difference_db: float = Field(default=1., gt=0., le=1.)
+    maximum_ray_bias_db: float = Field(default=1., gt=0., le=1.)
+    local_block_m: float = Field(default=2000., ge=1000., le=5000.)
+    minimum_local_support_m: float = Field(default=1000., ge=500.)
+    minimum_own_support_m: float = Field(default=4000., ge=4000.)
+    minimum_own_blocks: int = Field(default=2, ge=2)
+    maximum_states: int = Field(default=3, ge=1, le=3)
+    maximum_state_center_spread_db: float = Field(default=2., gt=0., le=2.)
+    maximum_elevation_difference_deg: float = Field(default=.2, gt=0., le=.3)
+    maximum_time_difference_s: float = Field(default=120., gt=0., le=180.)
+    require_ray_times: bool = True
+    maximum_family_folds: int = Field(default=40000, ge=1, le=100000)
+    maximum_donor_trials: int = Field(default=200000, ge=1, le=500000)
+    maximum_family_models: int = Field(default=10000, ge=1, le=40000)
+    maximum_ordered_blocks: int = Field(default=1000000, ge=1, le=3000000)
+
+    @model_validator(mode="after")
+    def bounds(self):
+        if self.minimum_donors > self.maximum_donors:
+            raise ValueError("minimum donors exceeds bounded donor budget")
+        if self.minimum_local_support_m > self.local_block_m:
+            raise ValueError("local observed support must fit in the physical block")
+        if self.minimum_own_support_m < 2*self.minimum_local_support_m:
+            raise ValueError("own support must contain separate reference blocks")
+        return self
+
+
 class ReceiverDomainConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
     version: Literal["receiver-domain-20260921-v1"] = "receiver-domain-20260921-v1"
@@ -60,12 +100,15 @@ class ReceiverDomainConfig(BaseModel):
     operational_eligible: Literal[False] = False
 
     segment_reference: SegmentReferenceConfig | None = None
+    source_family: SourceFamilyConfig | None = None
 
     @model_serializer(mode="wrap")
     def serialize_optional_segment(self, handler):
         value = handler(self)
         if self.segment_reference is None:
             value.pop("segment_reference", None)
+        if self.source_family is None:
+            value.pop("source_family", None)
         return value
 
     @model_validator(mode="after")
@@ -78,6 +121,8 @@ class ReceiverDomainConfig(BaseModel):
                 raise ValueError("segment reference must cover the target minimum range")
             if self.minimum_pair_span_m > seg.minimum_reference_span_m:
                 raise ValueError("segment reference must contain the required paired span")
+        if self.source_family is not None and self.source_family.maximum_neighbor_angle_deg > self.maximum_flank_angle_deg:
+            raise ValueError("source family must fit inside the flank search geometry")
         return self
 
     @property

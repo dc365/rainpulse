@@ -33,6 +33,16 @@ def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
     if len(receiver_ids) != 1:
         raise ValueError("CR receiver-domain generations are mixed")
     receiver_active = None not in receiver_ids
+    family_configs = [r.attrs.get("qc_receiver_domain_config", {}).get("source_family") for r in roots]
+    family_active = any(c is not None for c in family_configs)
+    if family_active:
+        from .receiver_domain.config import ReceiverDomainConfig
+        if not receiver_active or any(c is None for c in family_configs):
+            raise ValueError("CR source-family generations are mixed")
+        for root in roots:
+            cfg = ReceiverDomainConfig.model_validate(root.attrs.get("qc_receiver_domain_config", {}))
+            if cfg.digest != root.attrs.get("qc_receiver_domain_sha256"):
+                raise ValueError("CR source-family configuration identity differs")
     near_ids = {r.attrs.get("qc_near_measurement_sha256") for r in roots}
     if len(near_ids) != 1:
         raise ValueError("CR near-measurement generations are mixed")
@@ -92,6 +102,15 @@ def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
                         raise ValueError("CR missing receiver evidence " + key)
                 if np.any((a["RDR_CR_WITHHELD_MASK"] == 1) & (a["REFLECTIVITY_ELIGIBLE_FOR_CR"] == 1)):
                     raise ValueError("receiver withheld measurement leaked into CR")
+            if family_active:
+                for key in ("RDR_FAMILY_REFERENCE_MASK", "RDR_FAMILY_UNRESOLVED_MASK", "RDR_FAMILY_CR_WITHHELD_MASK"):
+                    if key not in a or a[key].shape != a["DBZH_QC"].shape or not np.isin(a[key], (0, 1)).all():
+                        raise ValueError("CR missing source-family evidence " + key)
+                for key in ("RDR_FAMILY_OBJECT_ID", "RDR_FAMILY_REASON"):
+                    if key not in a or a[key].shape != a["DBZH_QC"].shape or a[key].dtype != np.dtype("uint32"):
+                        raise ValueError("CR missing source-family provenance " + key)
+                if np.any((a["RDR_FAMILY_CR_WITHHELD_MASK"] == 1) & (a["REFLECTIVITY_ELIGIBLE_FOR_CR"] == 1)):
+                    raise ValueError("source-family withheld contribution leaked into CR")
             sources.append({"radar":rid,"radar_id":station,"scan_id":root.attrs.get("scan_id"),"sweep":number,
                             "qc_asset_id":root.attrs.get("asset_id"),"qc_parameters_sha256":root.attrs.get("qc_parameters_sha256"),
                             "numeric_sha256":array_digest(a),"height_datum":"above_source_radar_effective_4_3_earth"})
@@ -118,6 +137,11 @@ def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
     if receiver_active:
         arrays.update({k: np.full(shape, np.nan, "float32") for k in (
             "CR_RECEIVER_SOURCE", "CR_RECEIVER_PARTIAL", "CR_RECEIVER_MIXED", "CR_RECEIVER_WITHHELD")})
+    if family_active:
+        arrays.update({k: np.full(shape, np.nan, "float32") for k in (
+            "CR_RECEIVER_FAMILY", "CR_RECEIVER_FAMILY_UNRESOLVED", "CR_RECEIVER_FAMILY_WITHHELD")})
+        arrays["WINNER_RECEIVER_FAMILY_OBJECT_ID"] = np.zeros(shape, "uint32")
+        arrays["WINNER_RECEIVER_FAMILY_REASON"] = np.zeros(shape, "uint32")
     for start in range(0,height,128):
         end=min(start+128,height); sl=np.s_[start:end,:]
         xx,yy=np.meshgrid(west+(np.arange(width)+.5)*step,north-(np.arange(start,end)+.5)*step)
@@ -147,6 +171,12 @@ def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
                         ("CR_RECEIVER_MIXED", "RDR_MIXED_MASK"), ("CR_RECEIVER_WITHHELD", "RDR_CR_WITHHELD_MASK")):
                     selected = observed & (a[mask][ray,gate] == 1)
                     arrays[target][sl] = np.fmax(arrays[target][sl], np.where(selected,value,np.nan))
+            if family_active:
+                for target, mask in (("CR_RECEIVER_FAMILY", "RDR_FAMILY_REFERENCE_MASK"),
+                        ("CR_RECEIVER_FAMILY_UNRESOLVED", "RDR_FAMILY_UNRESOLVED_MASK"),
+                        ("CR_RECEIVER_FAMILY_WITHHELD", "RDR_FAMILY_CR_WITHHELD_MASK")):
+                    selected = observed & (a[mask][ray,gate] == 1)
+                    arrays[target][sl] = np.fmax(arrays[target][sl], np.where(selected, value, np.nan))
             if clutter_active:
                 for target, mask in (("CR_CLUTTER_CANDIDATE", "CF_NONMET_SUPPORTED_MASK"),
                         ("CR_CLUTTER_MIXED", "CF_MIXED_MASK"), ("CR_CLUTTER_WITHHELD", "CF_CR_WITHHELD_MASK")):
@@ -166,6 +196,9 @@ def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
             if clutter_active:
                 arrays["WINNER_CLUTTER_CLASS"][sl][wins] = a["CF_CLASS"][ray,gate][wins]
                 arrays["WINNER_CLUTTER_REASON"][sl][wins] = a["CF_REASON"][ray,gate][wins]
+            if family_active:
+                arrays["WINNER_RECEIVER_FAMILY_OBJECT_ID"][sl][wins] = a["RDR_FAMILY_OBJECT_ID"][ray,gate][wins]
+                arrays["WINNER_RECEIVER_FAMILY_REASON"][sl][wins] = a["RDR_FAMILY_REASON"][ray,gate][wins]
             rr=a["range"][gate]; ee=np.deg2rad(a["elevation"][ray])
             h=np.sqrt(EARTH**2+rr*rr+2*EARTH*rr*np.sin(ee))-EARTH
             arrays["WINNER_HEIGHT_ABOVE_RADAR_M"][sl][wins]=h[wins]

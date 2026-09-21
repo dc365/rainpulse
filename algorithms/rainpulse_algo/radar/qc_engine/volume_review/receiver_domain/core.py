@@ -29,7 +29,11 @@ SEGMENT_DTYPES = {
 
 
 def evidence_dtypes(cfg):
-    return {**DTYPES, **(SEGMENT_DTYPES if cfg.segment_reference is not None else {})}
+    extra = {}
+    if cfg.source_family is not None:
+        from .source_family import DTYPES as FAMILY_DTYPES
+        extra = FAMILY_DTYPES
+    return {**DTYPES, **(SEGMENT_DTYPES if cfg.segment_reference is not None else {}), **extra}
 
 
 @dataclass(frozen=True)
@@ -235,6 +239,10 @@ def evaluate(s, cfg, *, independent_weather=None, local_coherence=None,
                     ("SNR_DELTA_DB", ds), ("TARGET_POLAR_COUNT", count), ("TARGET_SIDE_CONFLICT_MASK", side_conflict),
                     ("TARGET_POLAR_CONFLICT_MASK", ~compatible), ("TARGET_POWER_MATCH_MASK", power), ("TARGET_TAIL_MASK", tail)):
                     out["RDR_"+key][row, j] = value
+    family_report = None
+    if cfg.source_family is not None:
+        from .source_family import extend
+        family_report = extend(s, cfg, (f, a), domain, out, records)
     full = out["RDR_FULL_MATCH_MASK"] == 1
     partial = out["RDR_PARTIAL_MATCH_MASK"] == 1
     side_conflict = out["RDR_TARGET_SIDE_CONFLICT_MASK"] == 1
@@ -248,6 +256,9 @@ def evaluate(s, cfg, *, independent_weather=None, local_coherence=None,
     out["RDR_MIXED_MASK"] = (mixed & ~source).astype("uint8")
     out["RDR_LOCAL_REVIEWED_MASK"] = (source & local).astype("uint8")
     out["RDR_STATE"] = state
+    if cfg.source_family is not None:
+        from .source_family import finish
+        family_report.update(finish(out, cfg))
     return Evidence(out, records, {"status": "EVALUATED" if "SNR" in s.fields else "MISSING_SNR",
         "config_sha256": cfg.digest, "fold_trials": trials, "failure_counts": dict(failures),
         "models": len(records), "full_matches": int(full.sum()), "partial_matches": int(partial.sum()),
@@ -255,6 +266,7 @@ def evaluate(s, cfg, *, independent_weather=None, local_coherence=None,
         "local_reviewed": int(out["RDR_LOCAL_REVIEWED_MASK"].sum()), "confirmed_gates": 0,
         "filled_gates": 0, "operational_eligible": False,
         "family": "coherent_receiver_only", "scores_are_probabilities": False,
+        **({"source_family": family_report} if family_report is not None else {}),
         **({"segment_reference": {
             "version": cfg.segment_reference.version, "mode": cfg.segment_reference.mode,
             "state_trials": state_trials[0], "failure_counts": dict(segment_failures),

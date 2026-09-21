@@ -17,6 +17,13 @@ def annotate(group):
             meta["units"] = "m"
         elif name == "RDR_SEGMENT_MATCH_COUNT":
             meta.update(units="1", semantics="compatible train-only states; >1 forbids action")
+        elif name == "RDR_FAMILY_REASON":
+            from .source_family import Reason
+            meta.update(units="1", flag_definitions={k.name: int(k) for k in Reason})
+        elif name == "RDR_FAMILY_OBJECT_ID":
+            meta.update(units="1", semantics="fold-scoped source object in receiver_domain.json; zero means none")
+        elif name == "RDR_FAMILY_STATE_ID":
+            meta.update(units="1", semantics="unique train-built ordered state within family object; zero means none or ambiguous")
         elif name == "RDR_STATE":
             meta.update(units="1", semantics="0:missing,1:not_supported,2:source_hypothesis,3:partial,4:mixed,5:protected")
         else: meta["units"] = "1"
