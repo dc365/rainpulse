@@ -19,6 +19,16 @@ class Composite:
 def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
     if not roots or not 16<=maximum_size<=1200:
         raise ValueError("nonempty volume list and bounded grid required")
+    clutter_ids = {r.attrs.get("qc_clutter_fusion_sha256") for r in roots}
+    if len(clutter_ids) != 1:
+        raise ValueError("CR clutter-fusion generations are mixed")
+    clutter_active = None not in clutter_ids
+    if clutter_active:
+        from .clutter_fusion.config import ClutterFusionConfig
+        for root in roots:
+            cfg = ClutterFusionConfig.model_validate(root.attrs.get("qc_clutter_fusion_config", {}))
+            if cfg.digest != root.attrs.get("qc_clutter_fusion_sha256"):
+                raise ValueError("CR clutter-fusion config identity differs")
     receiver_ids = {r.attrs.get("qc_receiver_domain_sha256") for r in roots}
     if len(receiver_ids) != 1:
         raise ValueError("CR receiver-domain generations are mixed")
@@ -64,6 +74,12 @@ def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
             for k in ("REFLECTIVITY_ELIGIBLE_FOR_CR","CR_UNCERTAIN_MASK","VALID_MASK"):
                 if a[k].shape!=a["DBZH_QC"].shape or not np.isin(a[k],(0,1)).all():
                     raise ValueError("invalid CR binary field "+k)
+            if clutter_active:
+                for ck in ("CF_NONMET_SUPPORTED_MASK", "CF_MIXED_MASK", "CF_CR_WITHHELD_MASK"):
+                    if ck not in a or a[ck].shape != a["DBZH_QC"].shape or not np.isin(a[ck], (0,1)).all():
+                        raise ValueError("CR missing clutter evidence " + ck)
+                if np.any((a["CF_CR_WITHHELD_MASK"] == 1) & (a["REFLECTIVITY_ELIGIBLE_FOR_CR"] == 1)):
+                    raise ValueError("clutter withheld contribution leaked into CR")
             if near_active:
                 for key in ("NMR_NONMET_CANDIDATE_MASK", "NMR_LOW_SNR_UNCERTAIN_MASK", "NMR_CR_WITHHELD_MASK"):
                     if key not in a or a[key].shape != a["DBZH_QC"].shape or not np.isin(a[key], (0, 1)).all():
@@ -91,6 +107,11 @@ def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
     arrays={k:np.full(shape,np.nan,"float32") for k in ("CR_RAW","CR_TRUSTED","CR_UNCERTAIN","CR_RUNNER_UP","WINNER_HEIGHT_ABOVE_RADAR_M")}
     arrays.update({k:np.full(shape,-1,"int32") for k in ("WINNER_SOURCE","WINNER_RAY","WINNER_GATE","RUNNER_UP_SOURCE","RUNNER_UP_RAY","RUNNER_UP_GATE")})
     arrays["WINNER_REASON"]=np.zeros(shape,"uint16")
+    if clutter_active:
+        arrays.update({k: np.full(shape, np.nan, "float32") for k in (
+            "CR_CLUTTER_CANDIDATE", "CR_CLUTTER_MIXED", "CR_CLUTTER_WITHHELD")})
+        arrays["WINNER_CLUTTER_CLASS"] = np.zeros(shape, "uint8")
+        arrays["WINNER_CLUTTER_REASON"] = np.zeros(shape, "uint16")
     if near_active:
         arrays.update({k: np.full(shape, np.nan, "float32") for k in (
             "CR_NEAR_NONMET_CANDIDATE", "CR_NEAR_LOW_RELIABILITY", "CR_NEAR_WITHHELD")})
@@ -126,6 +147,11 @@ def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
                         ("CR_RECEIVER_MIXED", "RDR_MIXED_MASK"), ("CR_RECEIVER_WITHHELD", "RDR_CR_WITHHELD_MASK")):
                     selected = observed & (a[mask][ray,gate] == 1)
                     arrays[target][sl] = np.fmax(arrays[target][sl], np.where(selected,value,np.nan))
+            if clutter_active:
+                for target, mask in (("CR_CLUTTER_CANDIDATE", "CF_NONMET_SUPPORTED_MASK"),
+                        ("CR_CLUTTER_MIXED", "CF_MIXED_MASK"), ("CR_CLUTTER_WITHHELD", "CF_CR_WITHHELD_MASK")):
+                    selected = observed & (a[mask][ray,gate] == 1)
+                    arrays[target][sl] = np.fmax(arrays[target][sl], np.where(selected, value, np.nan))
             old=arrays["CR_TRUSTED"][sl]
             wins=trusted & (~np.isfinite(old)|(value>old))
             for target,source in (("CR_RUNNER_UP","CR_TRUSTED"),("RUNNER_UP_SOURCE","WINNER_SOURCE"),
@@ -137,6 +163,9 @@ def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
             arrays["RUNNER_UP_RAY"][sl][seconds]=ray[seconds]; arrays["RUNNER_UP_GATE"][sl][seconds]=gate[seconds]
             arrays["CR_TRUSTED"][sl][wins]=value[wins]
             arrays["WINNER_SOURCE"][sl][wins]=sid; arrays["WINNER_RAY"][sl][wins]=ray[wins]; arrays["WINNER_GATE"][sl][wins]=gate[wins]
+            if clutter_active:
+                arrays["WINNER_CLUTTER_CLASS"][sl][wins] = a["CF_CLASS"][ray,gate][wins]
+                arrays["WINNER_CLUTTER_REASON"][sl][wins] = a["CF_REASON"][ray,gate][wins]
             rr=a["range"][gate]; ee=np.deg2rad(a["elevation"][ray])
             h=np.sqrt(EARTH**2+rr*rr+2*EARTH*rr*np.sin(ee))-EARTH
             arrays["WINNER_HEIGHT_ABOVE_RADAR_M"][sl][wins]=h[wins]

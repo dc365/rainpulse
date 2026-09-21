@@ -1,0 +1,27 @@
+{
+  "source_parent_sha256": "d00a051e50511ad5affd79758bf0c7c3e3a025de27e68712895cabbb5886ad0b",
+  "profiles": [
+    {
+      "file": "clutter-fusion-audit.yaml",
+      "sha256": "ccb81115fe9acf6e532c9292d23e334326041269a8ec9a32b0a105a4d63b473c",
+      "fusion_sha256": "c3f9e6bbb040d09e144fefd683074373cb00ec62f64bc5dc6c36fa9d95406a13"
+    },
+    {
+      "file": "clutter-fusion-cr.yaml",
+      "sha256": "df1e43f41dcbd260259222bdd24dd61027c0b60e4c04795fb833344438e78716",
+      "fusion_sha256": "d7e166e8a1fecfe7a47a82379447a0759e698e261f23e8fb91a50d85ac61be77"
+    },
+    {
+      "file": "clutter-fusion-quarantine.yaml",
+      "sha256": "2abd1126a8c140b2a0e975d766a38ecce46f8f46e2183f866fc3a1d9100217ea",
+      "fusion_sha256": "1504ff7e9655e777e0839cd72bb803e1d1c81dfec35b773eeb06d8b4a7d018e7"
+    },
+    {
+      "file": "clutter-fusion-local-conflict-cr.yaml",
+      "sha256": "c690148f15e5346be4fe30db9caec8c92399949ae5f8d2656a29cd41b54e562f",
+      "fusion_sha256": "fa3582c9eadfcdfd7e1973c4140142b7bfdad06c7d00ef7608b05759a6fd41bc"
+    }
+  ],
+  "radial_config_unchanged": true,
+  "no_live_selection": true
+}

@@ -91,6 +91,9 @@ def review_result(result, native):
     if cfg.receiver_domain is not None:
         from .receiver_domain.integration import review_result as review_receiver
         reviewed = review_receiver(reviewed, native)
+    if cfg.clutter_fusion is not None:
+        from .clutter_fusion.integration import review_result as review_clutter
+        reviewed = review_clutter(reviewed, native)
     return reviewed
 
 
@@ -99,9 +102,12 @@ def root_attributes(profile):
     if cfg is None:
         return {}
     near = {}
+    if cfg.clutter_fusion is not None:
+        from .clutter_fusion.integration import attributes as clutter_attributes
+        near.update(clutter_attributes(cfg.clutter_fusion, profile.flag_masks["LOW_QUALITY"]))
     if cfg.near_measurement is not None:
         from .near_measurement.integration import attributes
-        near = attributes(cfg.near_measurement, profile.flag_masks["LOW_QUALITY"])
+        near.update(attributes(cfg.near_measurement, profile.flag_masks["LOW_QUALITY"]))
     if cfg.receiver_domain is not None:
         from .receiver_domain.integration import attributes as receiver_attributes
         near.update(receiver_attributes(cfg.receiver_domain, profile.flag_masks["LOW_QUALITY"]))

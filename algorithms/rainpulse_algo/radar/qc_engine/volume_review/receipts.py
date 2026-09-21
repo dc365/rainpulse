@@ -93,6 +93,7 @@ def snapshot_group(group):
     # in the light-weight snapshots (the full QC Zarr keeps all before-states).
     keys += [k for k in group if k.startswith("NMR_") and not k.startswith("NMR_BEFORE_")]
     keys += [k for k in group if k.startswith("RDR_") and not k.startswith("RDR_BEFORE_")]
+    keys += [k for k in group if k.startswith("CF_") and not k.startswith("CF_BEFORE_")]
     return {k:np.array(group[k][:],copy=True) for k in keys if k in group}
 
 
@@ -109,6 +110,9 @@ def write_snapshots(root,output_store,result):
         return
     records=[]
     for qc in result.sweeps:
+        if cfg.clutter_fusion is not None:
+            from .clutter_fusion.integration import annotate as annotate_clutter
+            annotate_clutter(root[qc.name])
         if cfg.near_measurement is not None:
             from .near_measurement.schema import annotate
             annotate(root[qc.name])
@@ -131,6 +135,9 @@ def write_snapshots(root,output_store,result):
     if cfg.receiver_domain is not None:
         manifest["receiver_domain"] = {"config": cfg.receiver_domain.model_dump(mode="json"),
             "sha256": cfg.receiver_domain.digest, "summary": result.summary.get("receiver_domain", {})}
+    if cfg.clutter_fusion is not None:
+        manifest["clutter_fusion"] = {"config": cfg.clutter_fusion.model_dump(mode="json"),
+            "sha256": cfg.clutter_fusion.digest, "summary": result.summary.get("clutter_fusion", {})}
     output_store["qc/volume_review/manifest.json"]=json_bytes(manifest)
 
 
