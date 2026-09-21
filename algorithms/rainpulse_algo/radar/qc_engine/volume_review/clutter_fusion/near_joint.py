@@ -180,7 +180,8 @@ def _temporal_low_rho(s,strong,base,runtime):
         if reason:
             rejected[reason]=rejected.get(reason,0)+1;continue
         key=(item.scan_id,item.source_sha256,donor.name)
-        candidate=(float(donor.ray_time_s.max()),-abs(float(np.median(donor.elevation))-float(np.median(s.elevation))),key)
+        candidate=(int(donor.name==s.name),float(donor.ray_time_s.max()),
+                    -abs(float(np.median(donor.elevation))-float(np.median(s.elevation))),key)
         previous=by_scan.get(item.scan_id)
         if previous is None or candidate>previous[0]:by_scan[item.scan_id]=(candidate,item)
     selected=[value[1] for value in sorted(by_scan.values(),key=lambda value:value[0],reverse=True)]
