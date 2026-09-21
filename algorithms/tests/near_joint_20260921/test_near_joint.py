@@ -21,6 +21,10 @@ def strong_config(mode='quarantine'):
     return config(strong_near=StrongNearConfig(mode=mode))
 def strong_object_config(mode='quarantine'):
     return config(strong_near=StrongNearConfig(mode=mode,object_propagation=True))
+def strong_dilation_config(mode='quarantine'):
+    return config(strong_near=StrongNearConfig(
+        mode=mode,object_dilation_iterations=1,object_dilation_rays=3,
+        object_dilation_gates=9))
 def change(s,k,value=None,missing=False):
     f={k:v.copy() for k,v in s.fields.items()};a={k:v.copy() for k,v in s.available.items()}
     if missing:
@@ -116,6 +120,25 @@ def test_strong_near_object_budget_preserves_parent_cf():
         mode='quarantine',object_propagation=True,maximum_strong_objects=1))
     e=one(s,c)
     assert e.summary['near_revision']['status']=='RESOURCE_LIMIT_ABSTAINED'
+    assert not (e.arrays['CF_NR_STRONG_ACTION_MASK']==1).any()
+
+
+def test_strong_near_dilation_is_bounded_and_reproducible():
+    s=strong_scene();e=one(s,strong_dilation_config('quarantine'))
+    core=e.arrays['CF_NR_STRONG_CORE_MASK']==1
+    dilated=e.arrays['CF_NR_STRONG_DILATED_MASK']==1
+    domain=e.arrays['CF_NR_STRONG_DILATION_DOMAIN_MASK']==1
+    candidate=e.arrays['CF_NR_STRONG_CANDIDATE_MASK']==1
+    assert core.any() and dilated.any() and not np.any(core&dilated)
+    assert np.array_equal(candidate,core|dilated)
+    assert np.all(dilated<=domain)
+    assert np.array_equal(e.arrays['CF_NR_STRONG_ACTION_MASK']==1,candidate)
+
+
+def test_strong_near_dilation_stops_at_domain_and_protection():
+    protect=[np.zeros(strong_scene().shape,bool) for _ in range(3)];protect[0][:]=True
+    e=one(strong_scene(),strong_dilation_config('quarantine'),protections=[tuple(protect)])
+    assert not (e.arrays['CF_NR_STRONG_DILATED_MASK']==1).any()
     assert not (e.arrays['CF_NR_STRONG_ACTION_MASK']==1).any()
 
 

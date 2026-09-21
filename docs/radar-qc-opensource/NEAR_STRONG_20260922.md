@@ -27,6 +27,11 @@ audit 只记录候选；quarantine 才把候选投影为 QC DOWNWEIGHT、取消 
 核心门数至少 3、核心占比至少 30%，且对象不超过 5000 门。传播只补充同一测量
 对象内未达核心条件的门；对象数超预算时整个 strong 新增分支弃权并保留父级 CF。
 
+`object_dilation_iterations=1` 是另一个独立、默认关闭的敏感性档。它只把
+strong 核心在一个 3 根射线 × 9 个距离门的有界邻域内扩展，且扩展掩膜不能越过
+天气/混合保护、方位断缝、坏射线、缺测或 10–55 dBZ 域。序列化输出保留安全
+行、扩展域和扩展门掩膜，并可在验证器中从核心逐门重建。
+
 ## 真实样本核查
 
 用 09:00、09:12、15:30 四站共 12 个体扫回放该规则：
@@ -45,6 +50,10 @@ audit 只记录候选；quarantine 才把候选投影为 QC DOWNWEIGHT、取消 
 从 272 门提高到 401 门（0.224%），09:12 Z9598 为 531 门（0.291%），仍显著低于
 5% 业务预算。该结果同样不是独立天气误删率。
 
+一次有界形态膨胀在相同十二个体扫上的最高 QPE 损失为 0.313%
+（09:12 Z9598）；09:00 Z9598 为 0.263%。它尚未通过独立弱雨、混合降水和海上
+降水验收，因此只作为研究对照，不作为默认或最终候选。
+
 ## 生成与验收
 
 `scripts/make_near_joint_profiles.py` 会额外生成：
@@ -53,6 +62,8 @@ audit 只记录候选；quarantine 才把候选投影为 QC DOWNWEIGHT、取消 
 - `near-joint-strong-quarantine.yaml`
 - `near-joint-strong-object-audit.yaml`
 - `near-joint-strong-object-quarantine.yaml`
+- `near-joint-strong-dilation-audit.yaml`
+- `near-joint-strong-dilation-quarantine.yaml`
 
 先运行 audit 对比候选，再用 quarantine 做同输入端到端复核。`scripts/audit_near_joint.py`
 会检查 strong 候选、保护、隔离和 CR 资格泄漏。

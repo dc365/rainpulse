@@ -1,7 +1,7 @@
 """Near revision evidence/decision within the existing CF disposition owner."""
 from enum import IntEnum,IntFlag
 import numpy as np
-from scipy.ndimage import label
+from scipy.ndimage import binary_dilation,label
 from . import partial_moments,causal_temporal,terrain_admission
 
 
@@ -31,6 +31,7 @@ class Reason(IntFlag):
     STRONG_TEXTURE_SECOND_FAMILY=512
     STRONG_WEATHER_OR_MIXED=1024
     STRONG_OUTSIDE_BOUND=2048
+    STRONG_DILATED=4096
 
 
 def _strong_empty(shape):
@@ -38,6 +39,9 @@ def _strong_empty(shape):
         "CF_NR_STRONG_CANDIDATE_MASK": np.zeros(shape, "uint8"),
         "CF_NR_STRONG_CORE_MASK": np.zeros(shape, "uint8"),
         "CF_NR_STRONG_OBJECT_PROPAGATED_MASK": np.zeros(shape, "uint8"),
+        "CF_NR_STRONG_DILATED_MASK": np.zeros(shape, "uint8"),
+        "CF_NR_STRONG_DILATION_DOMAIN_MASK": np.zeros(shape, "uint8"),
+        "CF_NR_STRONG_SAFE_ROW_MASK": np.zeros(shape, "uint8"),
         "CF_NR_STRONG_ACTION_MASK": np.zeros(shape, "uint8"),
         "CF_NR_STRONG_PROTECTED_MASK": np.zeros(shape, "uint8"),
         "CF_NR_STRONG_STATE": np.full(shape, State.STRONG_NEAR_INSUFFICIENT, "uint8"),
@@ -105,15 +109,18 @@ def _strong_evidence(s,cfg,base):
     protected=bounds & barriers
     core=features & ~protected
     propagated=np.zeros(shape,bool)
+    dilated=np.zeros(shape,bool);dilation_domain=np.zeros(shape,bool)
+    safe_rows=np.zeros(shape[0],bool)
     object_id=np.zeros(shape,"int32");object_size=np.zeros(shape,"uint32")
     object_fraction=np.full(shape,np.nan,"float32")
-    if c.object_propagation:
+    if c.object_propagation or c.object_dilation_iterations:
         delta=(np.roll(s.azimuth,-1)-s.azimuth)%360
         edges=s.gap_after|(delta<=0)|(delta>2)
         safe_rows=s.good&~edges&~np.roll(edges,1)
         object_domain=(observed&safe_rows[:,None]&ar&az
                        &np.isfinite(z)&(z>=c.minimum_object_dbz)&(z<=c.maximum_object_dbz)
                        &(s.ranges[None,:] <=c.maximum_range_m)&~barriers)
+        dilation_domain=object_domain
         labels,count=label(object_domain,structure=np.ones((3,3),dtype=np.uint8))
         if count>c.maximum_strong_objects:
             from ..data import ResourceLimit
@@ -122,11 +129,17 @@ def _strong_evidence(s,cfg,base):
             component=labels==value;size=int(component.sum());seeds=int((component&core).sum())
             fraction=seeds/size if size else 0.
             object_id[component]=value;object_size[component]=size;object_fraction[component]=fraction
-            if (seeds>=c.minimum_object_seed_gates
+            if (c.object_propagation
+                    and seeds>=c.minimum_object_seed_gates
                     and fraction>=c.minimum_object_seed_fraction
                     and size<=c.maximum_object_gates):
                 propagated|=component&~core
-    candidate=core|propagated
+        if c.object_dilation_iterations:
+            structure=np.ones((c.object_dilation_rays,c.object_dilation_gates),dtype=bool)
+            dilated=binary_dilation(core,structure=structure,mask=object_domain,
+                                    iterations=c.object_dilation_iterations)
+            dilated &= ~(core|propagated)
+    candidate=core|propagated|dilated
     state=np.full(shape,State.STRONG_NEAR_INSUFFICIENT,"uint8")
     state[~observed]=State.MISSING
     state[observed & ~bounds]=State.OUTSIDE_DOMAIN
@@ -135,12 +148,16 @@ def _strong_evidence(s,cfg,base):
     reason=np.zeros(shape,"uint16")
     for mask,bit in ((features,Reason.STRONG_LOW_RHOHV),(features,Reason.STRONG_TEXTURE_SECOND_FAMILY),
                      (protected,Reason.STRONG_WEATHER_OR_MIXED),(observed&~bounds,Reason.STRONG_OUTSIDE_BOUND),
-                     (bounds&~features,Reason.FEATURE_UNAVAILABLE)):
+                     (bounds&~features,Reason.FEATURE_UNAVAILABLE),(dilated,Reason.STRONG_DILATED)):
         reason[mask & observed]|=int(bit)
     return {
         "CF_NR_STRONG_CANDIDATE_MASK":candidate.astype("uint8"),
         "CF_NR_STRONG_CORE_MASK":core.astype("uint8"),
         "CF_NR_STRONG_OBJECT_PROPAGATED_MASK":propagated.astype("uint8"),
+        "CF_NR_STRONG_DILATED_MASK":dilated.astype("uint8"),
+        "CF_NR_STRONG_DILATION_DOMAIN_MASK":dilation_domain.astype("uint8"),
+        "CF_NR_STRONG_SAFE_ROW_MASK":np.broadcast_to(
+            safe_rows[:,None],shape).astype("uint8"),
         "CF_NR_STRONG_ACTION_MASK":(candidate & (c.mode=="quarantine")).astype("uint8"),
         "CF_NR_STRONG_PROTECTED_MASK":protected.astype("uint8"),
         "CF_NR_STRONG_STATE":state,
@@ -154,6 +171,7 @@ def _strong_evidence(s,cfg,base):
         "summary":{"candidate_gates":int(candidate.sum()),
                    "protected_gates":int(protected.sum()),
                    "mode":c.mode,"propagated_gates":int(propagated.sum()),
+                   "dilated_gates":int(dilated.sum()),
                    "weather_protection_retained":True,
                    "background_enhancement_alone_is_not_weather":True},
     }
@@ -228,9 +246,14 @@ def validate(a,cfg):
         candidate=a['CF_NR_STRONG_CANDIDATE_MASK']==1
         core=a['CF_NR_STRONG_CORE_MASK']==1
         propagated=a['CF_NR_STRONG_OBJECT_PROPAGATED_MASK']==1
+        dilated=a['CF_NR_STRONG_DILATED_MASK']==1
+        dilation_domain=a['CF_NR_STRONG_DILATION_DOMAIN_MASK']==1
         protected=a['CF_NR_STRONG_PROTECTED_MASK']==1
+        barriers=((a['CF_HARD_WEATHER_MASK']==1)|(a['CF_LOCAL_WEATHER_MASK']==1)|
+                  (a['CF_LEGACY_PROTECTED_MASK']==1)|(a['CF_WEATHER_PROXY_MASK']==1)|
+                  (a['CF_MIXED_MASK']==1))
         action=a['CF_NR_STRONG_ACTION_MASK']==1
-        if np.any((candidate|core|propagated)&protected):
+        if np.any((candidate|core|propagated|dilated|dilation_domain)&barriers):
             raise ValueError('strong near candidate crossed a protection barrier')
         if not np.array_equal(action,candidate&(strong.mode=='quarantine')):
             raise ValueError('strong near action differs from audited measured support')
@@ -241,9 +264,10 @@ def validate(a,cfg):
                  &np.isfinite(a['CF_NR_STRONG_SNR_DB'])&(a['CF_NR_STRONG_SNR_DB']>=strong.minimum_snr_db)
                  &np.isfinite(a['CF_NR_STRONG_RANGE_M'])&(a['CF_NR_STRONG_RANGE_M']<=strong.maximum_range_m)
                  &np.isfinite(a['CF_TEXTURE_SCORE'])&(a['CF_TEXTURE_SCORE']>=strong.minimum_texture_score)
-                 &(a['CF_FAMILY_COUNT']>=strong.minimum_family_count)&~protected)
+                 &(a['CF_FAMILY_COUNT']>=strong.minimum_family_count)&~barriers)
         if not np.array_equal(core,feature):raise ValueError('strong near core lacks measured two-family support')
-        if np.any(core&propagated) or not np.array_equal(candidate,core|propagated):
+        if (np.any(core&(propagated|dilated)) or np.any(propagated&dilated)
+                or not np.array_equal(candidate,core|propagated|dilated)):
             raise ValueError('strong near object propagation identity differs')
         oid=a['CF_NR_STRONG_OBJECT_ID'];size=a['CF_NR_STRONG_OBJECT_SIZE']
         fraction=a['CF_NR_STRONG_OBJECT_SEED_FRACTION']
@@ -257,3 +281,23 @@ def validate(a,cfg):
                 raise ValueError('strong near object size or seed fraction differs')
             if members>strong.maximum_object_gates or seeds<strong.minimum_object_seed_gates or seeds/members<strong.minimum_object_seed_fraction:
                 raise ValueError('strong near object lacks sufficient bounded seed support')
+        if strong.object_propagation or strong.object_dilation_iterations:
+            expected_domain=(obs&(a['CF_NR_STRONG_SAFE_ROW_MASK']==1)
+                &np.isfinite(a['CF_RAW_DBZH'])
+                &(a['CF_RAW_DBZH']>=strong.minimum_object_dbz)
+                &(a['CF_RAW_DBZH']<=strong.maximum_object_dbz)
+                &np.isfinite(a['CF_NR_STRONG_RANGE_M'])
+                &(a['CF_NR_STRONG_RANGE_M']<=strong.maximum_range_m)&~barriers)
+            if not np.array_equal(dilation_domain,expected_domain):
+                raise ValueError('strong near dilation domain differs from measured safe support')
+            if np.any((core|propagated|dilated)&~dilation_domain):
+                raise ValueError('strong near candidate leaves its measured safe domain')
+        if strong.object_dilation_iterations:
+            structure=np.ones((
+                strong.object_dilation_rays,strong.object_dilation_gates),dtype=bool)
+            expected=binary_dilation(core,structure=structure,mask=dilation_domain,
+                iterations=strong.object_dilation_iterations)&~(core|propagated)
+            if not np.array_equal(dilated,expected):
+                raise ValueError('strong near dilation differs from bounded measured support')
+        elif np.any(dilated):
+            raise ValueError('strong near dilation is disabled')

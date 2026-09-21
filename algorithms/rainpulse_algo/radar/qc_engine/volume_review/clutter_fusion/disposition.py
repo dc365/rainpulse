@@ -141,6 +141,8 @@ def apply(group,evidence,cfg,*,low_quality_flag):
             "strong_near_cr_loss_gates":int((strong&cr).sum()),
             "strong_near_object_propagated_gates":int(
                 (evidence.get("CF_NR_STRONG_OBJECT_PROPAGATED_MASK",np.zeros(obs.shape,"uint8"))==1).sum()),
+            "strong_near_dilated_gates":int(
+                (evidence.get("CF_NR_STRONG_DILATED_MASK",np.zeros(obs.shape,"uint8"))==1).sum()),
         } if nr is not None else {}),
         "budget_policy":"retain_isolation_require_review","confirmed_gates":0,"filled_gates":0,
         "operational_eligible":False}

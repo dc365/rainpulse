@@ -68,6 +68,9 @@ class StrongNearConfig(BaseModel):
     minimum_object_seed_fraction: float = Field(default=.30, ge=.1, le=1)
     maximum_object_gates: int = Field(default=5000, ge=1, le=50000)
     maximum_strong_objects: int = Field(default=20000, ge=1, le=100000)
+    object_dilation_iterations: int = Field(default=0, ge=0, le=3)
+    object_dilation_rays: int = Field(default=3, ge=3, le=11)
+    object_dilation_gates: int = Field(default=9, ge=3, le=31)
 
     @model_validator(mode="after")
     def check(self):
@@ -77,4 +80,6 @@ class StrongNearConfig(BaseModel):
             raise ValueError("strong near object reflectivity bounds overlap")
         if self.minimum_object_dbz > self.minimum_dbz:
             raise ValueError("strong near object domain must include its seed domain")
+        if self.object_dilation_rays % 2 == 0 or self.object_dilation_gates % 2 == 0:
+            raise ValueError("strong near dilation stencil dimensions must be odd")
         return self
