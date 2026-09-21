@@ -26,13 +26,17 @@ def zero_evidence(s,cfg,reason):
     for k in ("POLAR_SAMPLE_COUNT","TEXTURE_SAMPLE_COUNT","PHASE_PAIR_COUNT"):
         a["CF_"+k]=np.zeros(s.shape,"uint16")
     a["CF_RAW_DBZH"]=np.asarray(z,"float32").copy()
-    a.update(empty_context(s.shape));a.update(empty_background(s.shape));a.update(decide(a,cfg))
+    a.update(empty_context(s.shape));a.update(empty_background(s.shape,cfg))
+    if cfg.near_revision is not None:
+        from .near_joint import empty
+        a.update(empty(s))
+    a.update(decide(a,cfg))
     return FusionEvidence(a,{"status":"RESOURCE_LIMIT_ABSTAINED","reason":reason,"candidate_gates":0})
 
 
-def evaluate_volume(sweeps,cfg,*,backgrounds=None,protections=None,metadata=None):
+def evaluate_volume(sweeps,cfg,*,backgrounds=None,protections=None,metadata=None,near_context=None):
     if not sweeps or len({s.name for s in sweeps})!=len(sweeps):raise ValueError("unique nonempty sweep list required")
-    backgrounds=backgrounds or [(empty_background(s.shape),{"status":"NO_ASSET_BOUND"}) for s in sweeps]
+    backgrounds=backgrounds or [(empty_background(s.shape,cfg),{"status":"NO_ASSET_BOUND"}) for s in sweeps]
     protections=protections or [(np.zeros(s.shape,bool),)*3 for s in sweeps]
     if len(backgrounds)!=len(sweeps) or len(protections)!=len(sweeps):raise ValueError("fusion input list lengths differ")
     before=[s.digest for s in sweeps]
@@ -49,6 +53,10 @@ def evaluate_volume(sweeps,cfg,*,backgrounds=None,protections=None,metadata=None
                 if mask.shape!=s.shape or not np.isin(mask,(0,1)).all():raise ValueError("invalid fusion protection")
                 a["CF_"+name+"_MASK"]=(mask.astype(bool)&(a["CF_OBSERVED_MASK"]==1)).astype("uint8")
             a["CF_RAW_DBZH"]=np.asarray(s.fields["DBZH"],"float32").copy()
+            # New evidence is prepared for all sweeps before any new action.
+            if cfg.near_revision is not None:
+                from .near_joint import empty
+                a.update(empty(s))
             a.update(decide(a,cfg))
             summary={"status":"EVALUATED","features":f.summary,"background":rec,
                 "candidate_gates":int(a["CF_NONMET_SUPPORTED_MASK"].sum()),
@@ -62,5 +70,18 @@ def evaluate_volume(sweeps,cfg,*,backgrounds=None,protections=None,metadata=None
             results.append(FusionEvidence(a,summary))
     except ResourceLimit as exc:
         results=[zero_evidence(s,cfg,str(exc)) for s in sweeps]
+    if cfg.near_revision is not None and not any(x.summary["status"]=="RESOURCE_LIMIT_ABSTAINED" for x in results):
+        from .near_joint import evidence,empty
+        try:
+            additions=[evidence(s,cfg,x.arrays,near_context) for s,x in zip(sweeps,results,strict=True)]
+        except ResourceLimit as exc:
+            # Preserve the old CF decision across the entire volume; only the
+            # opt-in addition abstains when its own resource budget is exceeded.
+            additions=[(empty(s),{"status":"RESOURCE_LIMIT_ABSTAINED","reason":str(exc)}) for s in sweeps]
+        for x,(arrays,detail) in zip(results,additions,strict=True):
+            x.arrays.update(arrays);x.arrays.update(decide(x.arrays,cfg))
+            x.summary["near_revision"]=detail
+            x.summary["near_candidate_gates"]=int(x.arrays["CF_NR_ACTION_MASK"].sum())
+            x.summary["near_dem_severe_gates"]=int(x.arrays["CF_NR_DEM_ACTION_MASK"].sum())
     if before != [s.digest for s in sweeps]:raise RuntimeError("fusion mutated original measurement")
     return results

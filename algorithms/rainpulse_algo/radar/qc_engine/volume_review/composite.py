@@ -29,6 +29,7 @@ def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
             cfg = ClutterFusionConfig.model_validate(root.attrs.get("qc_clutter_fusion_config", {}))
             if cfg.digest != root.attrs.get("qc_clutter_fusion_sha256"):
                 raise ValueError("CR clutter-fusion config identity differs")
+    near_joint_active = clutter_active and roots[0].attrs["qc_clutter_fusion_config"].get("near_revision") is not None
     receiver_ids = {r.attrs.get("qc_receiver_domain_sha256") for r in roots}
     if len(receiver_ids) != 1:
         raise ValueError("CR receiver-domain generations are mixed")
@@ -88,6 +89,13 @@ def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
                 for ck in ("CF_NONMET_SUPPORTED_MASK", "CF_MIXED_MASK", "CF_CR_WITHHELD_MASK"):
                     if ck not in a or a[ck].shape != a["DBZH_QC"].shape or not np.isin(a[ck], (0,1)).all():
                         raise ValueError("CR missing clutter evidence " + ck)
+                if near_joint_active:
+                    for key in ("CF_NR_ACTION_MASK","CF_NR_DEM_ACTION_MASK","CF_NR_CR_WITHHELD_MASK","CF_NR_DEM_CR_WITHHELD_MASK"):
+                        if key not in a or a[key].shape != a["DBZH_QC"].shape or not np.isin(a[key],(0,1)).all():
+                            raise ValueError("CR missing near joint evidence " + key)
+                    for key in ("CF_NR_CR_WITHHELD_MASK","CF_NR_DEM_CR_WITHHELD_MASK"):
+                        if np.any((a[key]==1)&(a["REFLECTIVITY_ELIGIBLE_FOR_CR"]==1)):
+                            raise ValueError("near joint/DEM contribution leaked into CR")
                 if np.any((a["CF_CR_WITHHELD_MASK"] == 1) & (a["REFLECTIVITY_ELIGIBLE_FOR_CR"] == 1)):
                     raise ValueError("clutter withheld contribution leaked into CR")
             if near_active:
@@ -131,6 +139,11 @@ def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
             "CR_CLUTTER_CANDIDATE", "CR_CLUTTER_MIXED", "CR_CLUTTER_WITHHELD")})
         arrays["WINNER_CLUTTER_CLASS"] = np.zeros(shape, "uint8")
         arrays["WINNER_CLUTTER_REASON"] = np.zeros(shape, "uint16")
+    if near_joint_active:
+        arrays.update({k:np.full(shape,np.nan,"float32") for k in
+            ("CR_NEAR_JOINT_NONMET","CR_NEAR_JOINT_WITHHELD","CR_TERRAIN_UNRELIABLE","WINNER_CUMULATIVE_BLOCKAGE")})
+        arrays["WINNER_NEAR_JOINT_STATE"]=np.zeros(shape,"uint8")
+        arrays["WINNER_NEAR_JOINT_REASON"]=np.zeros(shape,"uint16")
     if near_active:
         arrays.update({k: np.full(shape, np.nan, "float32") for k in (
             "CR_NEAR_NONMET_CANDIDATE", "CR_NEAR_LOW_RELIABILITY", "CR_NEAR_WITHHELD")})
@@ -182,6 +195,12 @@ def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
                         ("CR_CLUTTER_MIXED", "CF_MIXED_MASK"), ("CR_CLUTTER_WITHHELD", "CF_CR_WITHHELD_MASK")):
                     selected = observed & (a[mask][ray,gate] == 1)
                     arrays[target][sl] = np.fmax(arrays[target][sl], np.where(selected, value, np.nan))
+            if near_joint_active:
+                for target,mask in (("CR_NEAR_JOINT_NONMET","CF_NR_ACTION_MASK"),
+                                    ("CR_NEAR_JOINT_WITHHELD","CF_NR_CR_WITHHELD_MASK"),
+                                    ("CR_TERRAIN_UNRELIABLE","CF_NR_DEM_ACTION_MASK")):
+                    selected=observed&(a[mask][ray,gate]==1)
+                    arrays[target][sl]=np.fmax(arrays[target][sl],np.where(selected,value,np.nan))
             old=arrays["CR_TRUSTED"][sl]
             wins=trusted & (~np.isfinite(old)|(value>old))
             for target,source in (("CR_RUNNER_UP","CR_TRUSTED"),("RUNNER_UP_SOURCE","WINNER_SOURCE"),
@@ -196,6 +215,11 @@ def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
             if clutter_active:
                 arrays["WINNER_CLUTTER_CLASS"][sl][wins] = a["CF_CLASS"][ray,gate][wins]
                 arrays["WINNER_CLUTTER_REASON"][sl][wins] = a["CF_REASON"][ray,gate][wins]
+            if near_joint_active:
+                for target,source in (("WINNER_NEAR_JOINT_STATE","CF_NR_STATE"),
+                                      ("WINNER_NEAR_JOINT_REASON","CF_NR_REASON"),
+                                      ("WINNER_CUMULATIVE_BLOCKAGE","CF_NR_DEM_CBB")):
+                    arrays[target][sl][wins]=a[source][ray,gate][wins]
             if family_active:
                 arrays["WINNER_RECEIVER_FAMILY_OBJECT_ID"][sl][wins] = a["RDR_FAMILY_OBJECT_ID"][ray,gate][wins]
                 arrays["WINNER_RECEIVER_FAMILY_REASON"][sl][wins] = a["RDR_FAMILY_REASON"][ray,gate][wins]

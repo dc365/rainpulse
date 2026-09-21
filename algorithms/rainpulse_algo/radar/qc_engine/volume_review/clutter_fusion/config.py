@@ -2,13 +2,15 @@
 from typing import Literal
 import hashlib
 import json
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, model_serializer
 from ..episode_background.config import EpisodeConfig
 from . import VERSION
+from .near_revision_config import NearRevisionConfig
 
 
 class ClutterFusionConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
+    near_revision: NearRevisionConfig | None = None
     version: Literal["clutter-fusion-20260921-v1"] = VERSION
     mode: Literal["audit", "cr_withhold", "quarantine"] = "audit"
     operational_eligible: Literal[False] = False
@@ -65,12 +67,22 @@ class ClutterFusionConfig(BaseModel):
             raise ValueError("vertical limits overlap")
         if self.minimum_phase_spacing_m > self.maximum_phase_spacing_m:
             raise ValueError("phase spacing bounds overlap")
+        if self.near_revision is not None:
+            if self.near_revision.maximum_dbz > self.protected_dbz:
+                raise ValueError("near revision must preserve the parent strong-echo boundary")
         b = self.background
         if b.mode != "audit" or b.review_local_weather_conflicts or b.withhold_mixed:
             raise ValueError("nested episode must supply evidence only; no separate EBG actions")
         if b.no_rain_below_dbz != self.no_rain_below_dbz or b.protected_dbz != self.protected_dbz:
             raise ValueError("background and fusion reflectivity semantics differ")
         return self
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_near(self, handler):
+        data = handler(self)
+        if self.near_revision is None:
+            data.pop("near_revision", None)
+        return data
 
     @property
     def digest(self):

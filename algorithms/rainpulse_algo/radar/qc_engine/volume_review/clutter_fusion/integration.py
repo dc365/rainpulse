@@ -34,7 +34,7 @@ def metadata(n):
     return ContextMetadata(**src)
 
 
-def review_result(result,native):
+def review_result(result,native,*,near_context=None):
     cfg=getattr(result.profile.volume_review,"clutter_fusion",None)
     if cfg is None:return result
     if cfg.no_rain_below_dbz!=result.profile.echo.no_rain_below_dbz:
@@ -53,7 +53,13 @@ def review_result(result,native):
         hard,local,prior=protections(group,result.profile.context.strong_support)
         protect.append(tuple(m[n.original_indices] for m in (hard,local,prior)))
         backgrounds.append(for_native(n,cfg))
-    evidence=evaluate_volume(sweeps,cfg,backgrounds=backgrounds,protections=protect,metadata=[metadata(n) for n in native])
+    if near_context is not None:
+        for n in native:
+            if (str(n.attrs.get("radar_id","")).lower()!=near_context.radar_id.lower()
+                    or str(n.attrs.get("scan_id",""))!=near_context.scan_id
+                    or str(n.attrs.get("radar_config_version",""))!=near_context.processing_id):
+                raise ValueError("frozen near context differs from current native identity")
+    evidence=evaluate_volume(sweeps,cfg,backgrounds=backgrounds,protections=protect,metadata=[metadata(n) for n in native],near_context=near_context)
     updated=[];records=[]
     for n,ev in zip(native,evidence,strict=True):
         old=by_name[n.name]
@@ -95,6 +101,15 @@ def review_result(result,native):
         "qpe_loss_gates":sum(r["disposition"]["qpe_loss_gates"] for r in records),
         "review_required":any(r["disposition"]["review_required"] for r in records),
         "evidence_path":path,"evidence_sha256":hashlib.sha256(payload).hexdigest(),"confirmed_gates":0}
+    if cfg.near_revision is not None:
+        summary["clutter_fusion"]["near_revision"] = {
+            "version":cfg.near_revision.version,"mode":cfg.near_revision.mode,
+            "status":"RESOURCE_LIMIT_ABSTAINED" if any(r["evidence"].get("near_revision",{}).get("status")=="RESOURCE_LIMIT_ABSTAINED" for r in records) else "EVALUATED",
+            "net_new_cr_loss_gates":sum(r["disposition"]["near_revision_cr_loss_gates"] for r in records),
+            "partial_cr_loss_gates":sum(r["disposition"]["near_partial_cr_loss_gates"] for r in records),
+            "temporal_cr_loss_gates":sum(r["disposition"]["near_temporal_cr_loss_gates"] for r in records),
+            "dem_cr_loss_gates":sum(r["disposition"]["near_dem_cr_loss_gates"] for r in records),
+            "new_qpe_loss_gates":0,"operational_eligible":False}
     return replace(result,sweeps=tuple(updated),summary=summary,volume_review_artifacts=artifacts)
 
 
@@ -104,9 +119,17 @@ def annotate(group):
         meta={"extension":"clutter-fusion-20260921-v1","scores_are_probabilities":False}
         if k.endswith("_MASK"):meta.update(units="1",definition="0:false;1:true; unknown is not no-rain")
         if k=="CF_CLASS":meta["codes"]={str(v.value):v.name for v in EchoClass}
+        if k=="CF_NR_STATE":
+            from .near_joint import State
+            meta["codes"]={str(v.value):v.name for v in State}
+        if k=="CF_NR_REASON":
+            from .near_joint import Reason as NearReason
+            meta["bits"]={str(v.value):v.name for v in NearReason}
         if k=="CF_REASON":meta["bits"]={str(v.value):v.name for v in Reason}
         if k=="CF_FAMILY_BITS":meta["bits"]={str(v.value):v.name for v in Family}
         if k.startswith("CF_BEFORE_"):meta["semantics"]="exact_pre_fusion_state"
         if any(k.endswith(t) for t in ("_RAY","_GATE","_SWEEP")):
             meta["semantics"]="original acquisition indices; -1 unavailable; sweep index uses evidence.json ordered list"
+        if k.startswith("CF_NR_TEMPORAL_") and k.endswith(("_SOURCE","_RAY","_GATE")):
+            meta["semantics"]="sources list in this target sweep's near_revision.temporal receipt; ray/gate in original acquisition order; -1 unavailable"
         group[k].attrs.update(meta)

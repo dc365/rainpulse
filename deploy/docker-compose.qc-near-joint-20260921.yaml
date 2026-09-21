@@ -1,0 +1,15 @@
+# Append only after generating and validating actual child profiles and building
+# the worker image. Does not invent mounts or change the existing source family.
+services:
+  radar-qc-worker:
+    image: ${RAINPULSE_NEAR_JOINT_IMAGE:?set the tested new worker image}
+    environment:
+      RAINPULSE_RADAR_QC_CONFIG: ${RAINPULSE_NEAR_JOINT_PROFILE:?set actual mounted child profile path}
+  radar-grid-worker:
+    image: ${RAINPULSE_NEAR_JOINT_IMAGE:?set the tested new worker image}
+  radar-mosaic-worker:
+    image: ${RAINPULSE_NEAR_JOINT_IMAGE:?set the tested new worker image}
+  analysis-qpe-worker:
+    image: ${RAINPULSE_NEAR_JOINT_IMAGE:?set the tested new worker image}
+  analysis-diagnostics-worker:
+    image: ${RAINPULSE_NEAR_JOINT_IMAGE:?set the tested new worker image}

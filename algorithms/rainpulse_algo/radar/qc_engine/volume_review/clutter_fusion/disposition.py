@@ -62,6 +62,9 @@ def check_evidence(e,group,cfg):
         raise ValueError("invalid measured Doppler values")
     if np.any(upper & ~np.isfinite(e["CF_UPPER_DROP_DB"])):
         raise ValueError("upper drop requires actual finite reflectivities")
+    if cfg.near_revision is not None:
+        from .near_joint import validate
+        validate(e,cfg)
     bg=e["CF_BG_CURRENT_NONMET_MASK"]==1
     if np.any(bg&((e["CF_BG_MATCH_MASK"]!=1)|(e["CF_BG_STABLE_MASK"]!=1))):
         raise ValueError("background nonmet lacks stable comparison")
@@ -83,7 +86,12 @@ def apply(group,evidence,cfg,*,low_quality_flag):
     nm=evidence["CF_NONMET_SUPPORTED_MASK"]==1
     mixed=evidence["CF_MIXED_ACTION_MASK"]==1
     candidate=(nm|mixed)&enabled
-    loss=cr&candidate
+    near=np.zeros(obs.shape,bool);terrain=np.zeros(obs.shape,bool)
+    nr=cfg.near_revision
+    if nr is not None and enabled and nr.mode=="cr_withhold":
+        near=evidence["CF_NR_ACTION_MASK"]==1
+        terrain=(evidence["CF_NR_DEM_ACTION_MASK"]==1)&(nr.dem_policy=="cr_withhold")
+    loss=cr&(candidate|near|terrain)
     quarantine=(evidence["CF_QUARANTINE_SUPPORTED_MASK"]==1)&trust&obs&(np.asarray(group["QC_ACTION"])!=2)&(cfg.mode=="quarantine")
     changing=set(mutable_names(group))
     # Share unchanged immutable raw/historical arrays instead of duplicating them.
@@ -93,6 +101,13 @@ def apply(group,evidence,cfg,*,low_quality_flag):
     a["CF_CR_WITHHELD_MASK"]=loss.astype("uint8")
     a["CF_QUARANTINE_MASK"]=quarantine.astype("uint8")
     a["CF_MIXED_CR_WITHHELD_MASK"]=(loss&mixed).astype("uint8")
+    if nr is not None:
+        # Net-new attribution relative to existing CF, without double counting.
+        extra=cr&~candidate&(near|terrain)
+        a["CF_NR_CR_WITHHELD_MASK"]=extra.astype("uint8")
+        a["CF_NR_PARTIAL_CR_WITHHELD_MASK"]=(extra&near&(evidence["CF_NR_STRICT_MASK"]==1)).astype("uint8")
+        a["CF_NR_TEMPORAL_CR_WITHHELD_MASK"]=(extra&near&(evidence["CF_NR_STRICT_MASK"]!=1)).astype("uint8")
+        a["CF_NR_DEM_CR_WITHHELD_MASK"]=(extra&terrain&~near).astype("uint8")
     a[CR][loss]=0
     if enabled:
         a["CR_UNCERTAIN_MASK"][(evidence["CF_MIXED_MASK"]==1)|loss]=1
@@ -113,5 +128,10 @@ def apply(group,evidence,cfg,*,low_quality_flag):
     return a,{"cr_loss_gates":int(loss.sum()),"cr_loss_fraction":cf,"quarantine_gates":int(quarantine.sum()),
         "qpe_loss_gates":int(qloss.sum()),"qpe_loss_fraction":qf,"mixed_cr_loss_gates":int((loss&mixed).sum()),
         "review_required":cf>cfg.maximum_new_cr_loss_fraction or qf>cfg.maximum_new_qpe_loss_fraction,
+        **({"near_revision_cr_loss_gates":int(a["CF_NR_CR_WITHHELD_MASK"].sum()),
+            "near_partial_cr_loss_gates":int(a["CF_NR_PARTIAL_CR_WITHHELD_MASK"].sum()),
+            "near_temporal_cr_loss_gates":int(a["CF_NR_TEMPORAL_CR_WITHHELD_MASK"].sum()),
+            "near_dem_cr_loss_gates":int(a["CF_NR_DEM_CR_WITHHELD_MASK"].sum()),
+            "near_revision_new_qpe_loss_gates":0} if nr is not None else {}),
         "budget_policy":"retain_isolation_require_review","confirmed_gates":0,"filled_gates":0,
         "operational_eligible":False}

@@ -8,11 +8,16 @@ from ..episode_background.core import evaluate as episode_evaluate
 from ..episode_background.io import load_background
 
 
-def empty(shape):
+def empty(shape,cfg=None):
     a={"CF_BG_"+k+"_MASK":np.zeros(shape,"uint8") for k in (
         "AVAILABLE","STABLE","MATCH","CURRENT_NONMET","ENHANCEMENT","TAIL_MATCH")}
     a["CF_BG_DISTANCE"]=np.full(shape,np.nan,"float32")
     a["CF_BG_FEATURE_COUNT"]=np.zeros(shape,"uint8")
+    if cfg is not None and cfg.near_revision is not None:
+        a["CF_BG_STATE"]=np.zeros(shape,"uint8")
+        a["CF_BG_REASON"]=np.zeros(shape,"uint32")
+        for key in ("DBZH_DEPARTURE_DB","MAP_AZ_ERROR_DEG","MAP_RANGE_ERROR_M"):
+            a["CF_BG_"+key]=np.full(shape,np.nan,"float32")
     return a
 
 
@@ -24,13 +29,16 @@ def load(path, digest, maximum_bytes):
 def compare(sample, model, cfg):
     """Public pure bridge used by both worker and synthetic/background tests."""
     ev=episode_evaluate(sample,model,cfg.background)
-    a=empty(sample.shape)
+    a=empty(sample.shape,cfg)
     for dst,src in (("AVAILABLE","MODEL_AVAILABLE"),("STABLE","STABLE_CORE"),
                     ("MATCH","BACKGROUND_MATCH"),("CURRENT_NONMET","CURRENT_NONMET"),
                     ("ENHANCEMENT","ENHANCEMENT"),("TAIL_MATCH","TAIL_STATE_MATCH")):
         a["CF_BG_"+dst+"_MASK"]=ev.arrays["EBG_"+src+"_MASK"].copy()
     a["CF_BG_DISTANCE"]=ev.arrays["EBG_MAX_DISTANCE"].copy()
     a["CF_BG_FEATURE_COUNT"]=ev.arrays["EBG_FEATURE_COUNT"].copy()
+    if cfg.near_revision is not None:
+        for key in ("STATE","REASON","DBZH_DEPARTURE_DB","MAP_AZ_ERROR_DEG","MAP_RANGE_ERROR_M"):
+            a["CF_BG_"+key]=ev.arrays["EBG_"+key].copy()
     return a, ev.summary
 
 
@@ -56,7 +64,7 @@ def from_native(n):
 def for_native(n,cfg):
     binding=cfg.background.assets.get(str(n.attrs.get("radar_id","")).lower())
     if binding is None:
-        return empty(n.shape),{"status":"NO_ASSET_BOUND","background_sha256":None}
+        return empty(n.shape,cfg),{"status":"NO_ASSET_BOUND","background_sha256":None}
     model=load(binding.path,binding.sha256,cfg.background.maximum_asset_bytes)
     a,summary=compare(from_native(n),model,cfg)
     return a,{**summary,"background_sha256":binding.sha256,"used_as_evidence_only":True}

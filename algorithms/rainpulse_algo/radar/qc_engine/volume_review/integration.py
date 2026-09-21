@@ -17,7 +17,7 @@ def from_native(native):
                  native.fields,native.field_available,native.geometry_good,native.gap_after,times)
 
 
-def review_result(result, native):
+def review_result(result, native, *, near_clutter_context=None):
     cfg=getattr(result.profile,"volume_review",None)
     if cfg is None:
         return result
@@ -93,7 +93,7 @@ def review_result(result, native):
         reviewed = review_receiver(reviewed, native)
     if cfg.clutter_fusion is not None:
         from .clutter_fusion.integration import review_result as review_clutter
-        reviewed = review_clutter(reviewed, native)
+        reviewed = review_clutter(reviewed, native, near_context=near_clutter_context)
     return reviewed
 
 
@@ -111,6 +111,13 @@ def root_attributes(profile):
     if cfg.receiver_domain is not None:
         from .receiver_domain.integration import attributes as receiver_attributes
         near.update(receiver_attributes(cfg.receiver_domain, profile.flag_masks["LOW_QUALITY"]))
+    nonprecip = getattr(profile,"nonprecip_review",None)
+    if nonprecip is not None and (getattr(nonprecip,"near_reliability",None) is not None
+            or (cfg.clutter_fusion is not None and cfg.clutter_fusion.near_revision is not None)):
+        near.update(qc_near_clutter_enabled=bool(nonprecip.near_enabled),
+                    qc_near_clutter_mode=nonprecip.mode,
+                    qc_near_clutter_allowed_classes=list(nonprecip.quarantine_classes),
+                    qc_near_clutter_policy=nonprecip.model_dump(mode="json"))
     return {**near, "qc_volume_review_version":VERSION,"qc_volume_review_phase":cfg.phase,
             "qc_volume_review_mode":cfg.mode,"qc_volume_review_sha256":cfg.digest,
             "cr_unknown_policy":cfg.unknown_cr_policy,

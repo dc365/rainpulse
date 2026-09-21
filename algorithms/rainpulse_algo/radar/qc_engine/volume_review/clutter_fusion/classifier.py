@@ -115,7 +115,11 @@ def decide(a,cfg):
         "GROUND_PATTERN_MASK":domain&neighbour&ground,"BIO_PATTERN_MASK":domain&neighbour&bio,
         "GROUND_SCORE":np.where(obs,gs,np.nan),"POLAR_STRUCTURE_SCORE":np.where(obs,st,np.nan),
         "POLAR_VERTICAL_SCORE":np.where(obs,sv,np.nan)}
-    return {"CF_"+k:np.asarray(v,dtype=DECISION_DTYPES[k]) for k,v in result.items()}
+    out = {"CF_"+k:np.asarray(v,dtype=DECISION_DTYPES[k]) for k,v in result.items()}
+    if cfg.near_revision is not None:
+        from .near_joint import decision
+        out.update(decision(a,cfg))
+    return out
 
 
 def protections(group,threshold):

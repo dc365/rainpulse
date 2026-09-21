@@ -1,6 +1,6 @@
 from typing import Literal
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, model_serializer
 
 
 class Frozen(BaseModel):
@@ -58,7 +58,11 @@ class NearBackgroundPolicy(Frozen):
     assets: dict[str, NearBackgroundAsset]
 
 
+from .near_reliability import NearReliabilityConfig
+
+
 class NonPrecipConfig(Frozen):
+    near_reliability: NearReliabilityConfig | None = None
     near_background: NearBackgroundPolicy | None = None
     paired_doppler_enabled: bool = False
     temporal_spatial_matching: bool = False
@@ -93,6 +97,13 @@ class NonPrecipConfig(Frozen):
     minimum_evidence_families: int = Field(default=3, ge=3, le=5)
     small_object_max_area_km2: float = Field(default=2., gt=0)
     strong_echo_dbz: float = Field(default=35.)
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_near(self, handler):
+        data = handler(self)
+        if self.near_reliability is None:
+            data.pop("near_reliability", None)
+        return data
 
 
 class BackgroundPolicy(Frozen):

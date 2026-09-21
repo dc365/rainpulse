@@ -26,6 +26,13 @@ def candidates(native, cfg, texture):
     ready = obs & arho & azdr & asnr & (snr >= cfg.minimum_pol_snr_db) & safe[:, None]
     physical = (rho >= 0) & (rho <= 1) & (zdr >= -10) & (zdr <= 10)
     ready &= physical
+    policy = getattr(cfg, "near_reliability", None)
+    if policy is not None:
+        # A numeric ZDR tail is not a reliable out-of-range physical value.
+        # Exclude it from BOTH target decisions and neighbour voting. Missing
+        # samples reduce support; they never become votes for no-rain.
+        ready &= abs(zdr) < policy.maximum_abs_zdr_db
+        ready &= (z >= policy.no_rain_below_dbz) & (r[None, :] >= policy.minimum_range_m)
     abnormal = ready & (rho <= cfg.near_maximum_rhohv) & ((zdr < -1.) | (zdr > 4.))
     width = max(3, int(round(cfg.near_range_window_m / dr)) | 1)
     # Constant boundaries: outside coverage is unavailable, never zero echo.
