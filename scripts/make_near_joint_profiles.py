@@ -5,7 +5,7 @@ import yaml
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'algorithms/rainpulse_algo/radar/qc_engine'))
 from volume_review.config import VolumeReviewConfig
 from volume_review.clutter_fusion.config import ClutterFusionConfig
-from volume_review.clutter_fusion.near_revision_config import NearRevisionConfig,StrongNearConfig
+from volume_review.clutter_fusion.near_revision_config import NearRevisionConfig,StrongNearConfig,TemporalLowRhoConfig
 from review_extension.config import NonPrecipConfig
 from review_extension.near_reliability import NearReliabilityConfig
 
@@ -29,22 +29,24 @@ def generate(parent_path,output,*,backend=None,validate_full=True):
         full_validator(parent)
     echo=float(parent.get('echo',{}).get('no_rain_below_dbz',-10.))
     # Literal unchanged parent is the A0 baseline, not the default model config.
-    variants=[('audit',False,'audit','audit',False,None,False,0),
-              ('near-on',True,None,None,False,None,False,0),
-              ('near-on-tuned',True,None,None,True,None,False,0),
-              ('joint-cr',True,'cr_withhold','audit',False,None,False,0),
-              ('joint-cr-dem',True,'cr_withhold','cr_withhold',False,None,False,0),
-              ('strong-audit',True,'cr_withhold','audit',False,'audit',False,0),
-              ('strong-quarantine',True,'cr_withhold','audit',False,'quarantine',False,0),
-              ('strong-object-audit',True,'cr_withhold','audit',False,'audit',True,0),
-              ('strong-object-quarantine',True,'cr_withhold','audit',False,'quarantine',True,0),
-              ('strong-dilation-audit',True,'cr_withhold','audit',False,'audit',False,1),
-              ('strong-dilation-quarantine',True,'cr_withhold','audit',False,'quarantine',False,1)]
+    variants=[('audit',False,'audit','audit',False,None,False,0,False),
+              ('near-on',True,None,None,False,None,False,0,False),
+              ('near-on-tuned',True,None,None,True,None,False,0,False),
+              ('joint-cr',True,'cr_withhold','audit',False,None,False,0,False),
+              ('joint-cr-dem',True,'cr_withhold','cr_withhold',False,None,False,0,False),
+              ('strong-audit',True,'cr_withhold','audit',False,'audit',False,0,False),
+              ('strong-quarantine',True,'cr_withhold','audit',False,'quarantine',False,0,False),
+              ('strong-object-audit',True,'cr_withhold','audit',False,'audit',True,0,False),
+              ('strong-object-quarantine',True,'cr_withhold','audit',False,'quarantine',True,0,False),
+              ('strong-dilation-audit',True,'cr_withhold','audit',False,'audit',False,1,False),
+              ('strong-dilation-quarantine',True,'cr_withhold','audit',False,'quarantine',False,1,False),
+              ('strong-temporal-audit',True,'cr_withhold','audit',False,'audit',False,1,True),
+              ('strong-temporal-quarantine',True,'cr_withhold','audit',False,'quarantine',False,1,True)]
     if output.exists():raise ValueError('output exists; refusing mixed generations')
     output.parent.mkdir(parents=True,exist_ok=True);records=[]
     with tempfile.TemporaryDirectory(prefix='.near-joint-',dir=output.parent) as td:
         temp=Path(td)
-        for name,on,mode,dem,tuned,strong_mode,strong_object,strong_dilation in variants:
+        for name,on,mode,dem,tuned,strong_mode,strong_object,strong_dilation,strong_temporal in variants:
             child=copy.deepcopy(parent)
             child['profile_version']+='-near-joint-v1-'+name
             # pipeline_version is a frozen Literal coordinated with old stages.
@@ -58,13 +60,13 @@ def generate(parent_path,output,*,backend=None,validate_full=True):
             NonPrecipConfig.model_validate(child['nonprecip_review'])
             if mode:
                 c=child['volume_review']['clutter_fusion']
-                c['near_revision']=NearRevisionConfig(
-                    mode=mode,dem_policy=dem,
-                    **({} if strong_mode is None else
-                       {'strong_near':StrongNearConfig(
-                           mode=strong_mode,object_propagation=strong_object,
-                           object_dilation_iterations=strong_dilation)}),
-                ).model_dump(mode='json')
+                strong_kwargs={} if strong_mode is None else {
+                    'strong_near':StrongNearConfig(
+                        mode=strong_mode,object_propagation=strong_object,
+                        object_dilation_iterations=strong_dilation,
+                        temporal_low_rho=TemporalLowRhoConfig() if strong_temporal else None)
+                }
+                c['near_revision']=NearRevisionConfig(mode=mode,dem_policy=dem,**strong_kwargs).model_dump(mode='json')
             if backend is not None:
                 # Explicit diagnostic override creates a distinct config identity.
                 child['volume_review']['clutter_fusion']['depolarization_backend']=backend
@@ -78,6 +80,7 @@ def generate(parent_path,output,*,backend=None,validate_full=True):
                  'strong_near_mode':strong_mode,
                  'strong_near_object_propagation':strong_object,
                  'strong_near_dilation_iterations':strong_dilation,
+                 'strong_near_temporal_low_rho':strong_temporal,
                  'requires_independent_acceptance':True})
         (temp/'generation.json').write_text(json.dumps({'parent_sha256':hashlib.sha256(raw).hexdigest(),
              'validation_level':'full_OpenSourceQCProfile' if validate_full else 'explicit_subconfig_only',

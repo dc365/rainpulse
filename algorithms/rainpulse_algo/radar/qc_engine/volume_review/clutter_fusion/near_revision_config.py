@@ -49,6 +49,26 @@ class NearRevisionConfig(BaseModel):
         return self
 
 
+class TemporalLowRhoConfig(BaseModel):
+    """Conservative causal recurrence family; default is off."""
+    model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
+    version: Literal["temporal-low-rho-20260922-v1"] = "temporal-low-rho-20260922-v1"
+    maximum_range_m: float = Field(default=15000., gt=0, le=30000)
+    minimum_dbz: float = Field(default=7., ge=0, le=20)
+    maximum_dbz: float = Field(default=30., gt=5, le=40)
+    maximum_rhohv: float = Field(default=.90, ge=.5, le=.95)
+    minimum_snr_db: float = Field(default=12., ge=8, le=25)
+    maximum_age_seconds: float = Field(default=900., ge=60, le=1200)
+    maximum_horizontal_error_m: float = Field(default=750., gt=0, le=1000)
+    maximum_vertical_error_m: float = Field(default=250., gt=0, le=500)
+    maximum_elevation_error_deg: float = Field(default=.30, gt=0, le=.5)
+    minimum_prior_snapshots: int = Field(default=2, ge=2, le=2)
+    minimum_object_gates: int = Field(default=10, ge=3, le=1000)
+    maximum_object_gates: int = Field(default=5000, ge=1, le=50000)
+    minimum_object_recurrence_fraction: float = Field(default=.50, ge=.3, le=1)
+    maximum_temporal_objects: int = Field(default=20000, ge=1, le=100000)
+
+
 class StrongNearConfig(BaseModel):
     """Bounded strong-echo exception; two measured CF families remain required."""
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
@@ -71,6 +91,14 @@ class StrongNearConfig(BaseModel):
     object_dilation_iterations: int = Field(default=0, ge=0, le=3)
     object_dilation_rays: int = Field(default=3, ge=3, le=11)
     object_dilation_gates: int = Field(default=9, ge=3, le=31)
+    temporal_low_rho: "TemporalLowRhoConfig | None" = None
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_temporal(self, handler):
+        value = handler(self)
+        if self.temporal_low_rho is None:
+            value.pop("temporal_low_rho", None)
+        return value
 
     @model_validator(mode="after")
     def check(self):
@@ -82,4 +110,7 @@ class StrongNearConfig(BaseModel):
             raise ValueError("strong near object domain must include its seed domain")
         if self.object_dilation_rays % 2 == 0 or self.object_dilation_gates % 2 == 0:
             raise ValueError("strong near dilation stencil dimensions must be odd")
+        temporal = self.temporal_low_rho
+        if temporal is not None and temporal.minimum_dbz >= temporal.maximum_dbz:
+            raise ValueError("temporal low-rho reflectivity bounds overlap")
         return self

@@ -3,6 +3,7 @@ from enum import IntEnum,IntFlag
 import numpy as np
 from scipy.ndimage import binary_dilation,label
 from . import partial_moments,causal_temporal,terrain_admission
+from .context import ground,height,sample_ground
 
 
 class State(IntEnum):
@@ -32,6 +33,7 @@ class Reason(IntFlag):
     STRONG_WEATHER_OR_MIXED=1024
     STRONG_OUTSIDE_BOUND=2048
     STRONG_DILATED=4096
+    TEMPORAL_LOW_RHO_RECURRENCE=8192
 
 
 def _strong_empty(shape):
@@ -58,6 +60,14 @@ def _strong_empty(shape):
         "CF_NR_STRONG_RHOHV": np.full(shape, np.nan, "float32"),
         "CF_NR_STRONG_SNR_DB": np.full(shape, np.nan, "float32"),
         "CF_NR_STRONG_RANGE_M": np.full(shape, np.nan, "float32"),
+        "CF_NR_TEMPORAL_LOW_RHO_DOMAIN_MASK": np.zeros(shape, "uint8"),
+        "CF_NR_TEMPORAL_LOW_RHO_PRIOR1_MASK": np.zeros(shape, "uint8"),
+        "CF_NR_TEMPORAL_LOW_RHO_PRIOR2_MASK": np.zeros(shape, "uint8"),
+        "CF_NR_TEMPORAL_LOW_RHO_SUPPORT_MASK": np.zeros(shape, "uint8"),
+        "CF_NR_TEMPORAL_LOW_RHO_OBJECT_MASK": np.zeros(shape, "uint8"),
+        "CF_NR_TEMPORAL_LOW_RHO_OBJECT_ID": np.zeros(shape, "int32"),
+        "CF_NR_TEMPORAL_LOW_RHO_OBJECT_SIZE": np.zeros(shape, "uint32"),
+        "CF_NR_TEMPORAL_LOW_RHO_OBJECT_FRACTION": np.full(shape, np.nan, "float32"),
     }
 
 
@@ -114,7 +124,7 @@ def evidence(s,cfg,base,runtime=None):
     a=partial_moments.extract(s,cfg)
     strong=None
     if cfg.near_revision.strong_near is not None:
-        strong=_strong_evidence(s,cfg,base)
+        strong=_strong_evidence(s,cfg,base,runtime)
     if runtime is None:
         temporal=causal_temporal.empty(s.shape);tr={'status':'NO_FROZEN_TEMPORAL_CONTEXT','sources':[]}
         terrain=terrain_admission.empty(s.shape);dr={'status':'NO_TERRAIN_CONTEXT'}
@@ -134,7 +144,102 @@ def evidence(s,cfg,base,runtime=None):
             'actions_are_quarantine_only':cfg.near_revision.strong_near.mode=='quarantine'}}
 
 
-def _strong_evidence(s,cfg,base):
+def _temporal_low_rho(s,strong,base,runtime):
+    """Two-snapshot causal low-RHOHV recurrence for bounded near-site objects."""
+    shape=s.shape
+    keys=("DOMAIN_MASK","PRIOR1_MASK","PRIOR2_MASK","SUPPORT_MASK","OBJECT_MASK")
+    out={("CF_NR_TEMPORAL_LOW_RHO_"+k):np.zeros(shape,"uint8") for k in keys}
+    out.update({
+        "CF_NR_TEMPORAL_LOW_RHO_OBJECT_ID":np.zeros(shape,"int32"),
+        "CF_NR_TEMPORAL_LOW_RHO_OBJECT_SIZE":np.zeros(shape,"uint32"),
+        "CF_NR_TEMPORAL_LOW_RHO_OBJECT_FRACTION":np.full(shape,np.nan,"float32"),
+    })
+    cfg=strong.temporal_low_rho
+    if cfg is None:return out,{"status":"DISABLED","sources":[]}
+    if runtime is None:return out,{"status":"NO_FROZEN_TEMPORAL_CONTEXT","sources":[]}
+    if s.ray_time_s is None:return out,{"status":"CURRENT_TIME_UNAVAILABLE","sources":[]}
+    z,z_available=s.moment("DBZH");rho,rho_available=s.moment("RHOHV");snr,snr_available=s.moment("SNR")
+    barriers=_strong_barriers(base)
+    observed=base["CF_OBSERVED_MASK"]==1
+    domain=(observed&z_available&rho_available&snr_available&np.isfinite(z)&np.isfinite(rho)&np.isfinite(snr)
+            &(z>=cfg.minimum_dbz)&(z<=cfg.maximum_dbz)&(rho<=cfg.maximum_rhohv)&(snr>=cfg.minimum_snr_db)
+            &(s.ranges[None,:]<=cfg.maximum_range_m)&~barriers)
+    by_scan={}
+    rejected={}
+    for item in runtime.past:
+        donor=item.sweep;reason=None
+        if item.radar_id.lower()!=runtime.radar_id.lower() or item.processing_id!=runtime.processing_id:
+            reason="IDENTITY_MISMATCH"
+        elif item.scan_id==runtime.scan_id:reason="SELF_REFERENCE"
+        elif donor.ray_time_s is None:reason="PAST_TIME_UNAVAILABLE"
+        elif donor.ray_time_s.max()>=s.ray_time_s.min():reason="NOT_STRICTLY_PAST"
+        elif s.ray_time_s.min()-donor.ray_time_s.max()>cfg.maximum_age_seconds:reason="TOO_OLD"
+        else:
+            elevation_error=abs(float(np.median(donor.elevation))-float(np.median(s.elevation)))
+            if elevation_error>cfg.maximum_elevation_error_deg:reason="ELEVATION_MISMATCH"
+        if reason:
+            rejected[reason]=rejected.get(reason,0)+1;continue
+        key=(item.scan_id,item.source_sha256,donor.name)
+        candidate=(float(donor.ray_time_s.max()),-abs(float(np.median(donor.elevation))-float(np.median(s.elevation))),key)
+        previous=by_scan.get(item.scan_id)
+        if previous is None or candidate>previous[0]:by_scan[item.scan_id]=(candidate,item)
+    selected=[value[1] for value in sorted(by_scan.values(),key=lambda value:value[0],reverse=True)]
+    selected=selected[:cfg.minimum_prior_snapshots]
+    if len(selected)<cfg.minimum_prior_snapshots:
+        return out,{"status":"INSUFFICIENT_PRIOR_SNAPSHOTS","sources":[],"rejected":rejected}
+    xx=ground(s.ranges[None,:],s.elevation[:,None]);hh=height(s.ranges[None,:],s.elevation[:,None])
+    aa=np.broadcast_to(s.azimuth[:,None],shape)
+    recurrence=[]
+    sources=[]
+    for source_index,item in enumerate(selected):
+        donor=item.sweep
+        jj,kk,support,donor_height=sample_ground(donor,aa,xx)
+        donor_ground=ground(donor.ranges[kk],donor.elevation[jj])
+        angular=(donor.azimuth[jj]-aa+180.)%360.-180.
+        horizontal=np.sqrt(np.maximum(0.,xx*xx+donor_ground*donor_ground
+                                      -2.*xx*donor_ground*np.cos(np.deg2rad(angular))))
+        age=s.ray_time_s[:,None]-donor.ray_time_s[jj]
+        geometric=(support&(horizontal<=cfg.maximum_horizontal_error_m)
+                   &(abs(donor_height-hh)<=cfg.maximum_vertical_error_m)
+                   &(abs(donor.elevation[jj]-s.elevation[:,None])<=cfg.maximum_elevation_error_deg)
+                   &(age>0)&(age<=cfg.maximum_age_seconds))
+        donor_rho,dr_available=donor.moment("RHOHV");donor_snr,ds_available=donor.moment("SNR")
+        measured=geometric&dr_available[jj,kk]&ds_available[jj,kk]
+        values_rho=np.asarray(donor_rho[jj,kk],dtype=float)
+        values_snr=np.asarray(donor_snr[jj,kk],dtype=float)
+        recurrence.append(measured&np.isfinite(values_rho)&np.isfinite(values_snr)
+                          &(values_rho<=cfg.maximum_rhohv)&(values_snr>=cfg.minimum_snr_db))
+        sources.append({"source_index":source_index,"scan_id":item.scan_id,"sweep":donor.name,
+                        "source_sha256":item.source_sha256,"ingest_time_verified":item.ingest_time_verified})
+    first,second=recurrence
+    out["CF_NR_TEMPORAL_LOW_RHO_DOMAIN_MASK"][domain]=1
+    out["CF_NR_TEMPORAL_LOW_RHO_PRIOR1_MASK"][domain&first]=1
+    out["CF_NR_TEMPORAL_LOW_RHO_PRIOR2_MASK"][domain&second]=1
+    support=domain&first&second
+    out["CF_NR_TEMPORAL_LOW_RHO_SUPPORT_MASK"][support]=1
+    labels,count=label(domain,structure=np.ones((3,3),dtype=np.uint8))
+    temporal_object=np.zeros(shape,bool)
+    if count>cfg.maximum_temporal_objects:
+        from ..data import ResourceLimit
+        raise ResourceLimit("temporal low-rho object count budget")
+    oid=out["CF_NR_TEMPORAL_LOW_RHO_OBJECT_ID"];size=out["CF_NR_TEMPORAL_LOW_RHO_OBJECT_SIZE"]
+    fraction=out["CF_NR_TEMPORAL_LOW_RHO_OBJECT_FRACTION"]
+    for value in range(1,int(count)+1):
+        component=labels==value;members=int(component.sum())
+        recurrence_fraction=min(float(first[component].mean()),float(second[component].mean()))
+        oid[component]=value;size[component]=members;fraction[component]=recurrence_fraction
+        if (members>=cfg.minimum_object_gates and members<=cfg.maximum_object_gates
+                and recurrence_fraction>=cfg.minimum_object_recurrence_fraction):
+            temporal_object|=component
+    out["CF_NR_TEMPORAL_LOW_RHO_OBJECT_MASK"][temporal_object]=1
+    return out,{"status":"EVALUATED","sources":sources,"rejected":rejected,
+                "domain_gates":int(domain.sum()),"prior1_gates":int((domain&first).sum()),
+                "prior2_gates":int((domain&second).sum()),"support_gates":int(support.sum()),
+                "object_gates":int(temporal_object.sum()),"object_count":int(temporal_object.any() and len(np.unique(oid[temporal_object]))),
+                "semantics":"causal_low_rho_measurement_recurrence_not_ground_truth"}
+
+
+def _strong_evidence(s,cfg,base,runtime=None):
     c=cfg.near_revision.strong_near
     shape=s.shape
     z,az=s.moment("DBZH");rho,ar=s.moment("RHOHV");snr,asr=s.moment("SNR")
@@ -188,7 +293,9 @@ def _strong_evidence(s,cfg,base):
                                        c.object_dilation_gates,c.object_dilation_iterations)
             dilated &= object_domain
             dilated &= ~(core|propagated)
-    candidate=core|propagated|dilated
+    temporal,temporal_summary=_temporal_low_rho(s,c,base,runtime)
+    temporal_object=temporal["CF_NR_TEMPORAL_LOW_RHO_OBJECT_MASK"].astype(bool)
+    candidate=core|propagated|dilated|temporal_object
     state=np.full(shape,State.STRONG_NEAR_INSUFFICIENT,"uint8")
     state[~observed]=State.MISSING
     state[observed & ~bounds]=State.OUTSIDE_DOMAIN
@@ -197,7 +304,8 @@ def _strong_evidence(s,cfg,base):
     reason=np.zeros(shape,"uint16")
     for mask,bit in ((features,Reason.STRONG_LOW_RHOHV),(features,Reason.STRONG_TEXTURE_SECOND_FAMILY),
                      (protected,Reason.STRONG_WEATHER_OR_MIXED),(observed&~bounds,Reason.STRONG_OUTSIDE_BOUND),
-                     (bounds&~features,Reason.FEATURE_UNAVAILABLE),(dilated,Reason.STRONG_DILATED)):
+                     (bounds&~features,Reason.FEATURE_UNAVAILABLE),(dilated,Reason.STRONG_DILATED),
+                     (temporal_object,Reason.TEMPORAL_LOW_RHO_RECURRENCE)):
         reason[mask & observed]|=int(bit)
     return {
         "CF_NR_STRONG_CANDIDATE_MASK":candidate.astype("uint8"),
@@ -220,12 +328,14 @@ def _strong_evidence(s,cfg,base):
         "CF_NR_STRONG_RHOHV":np.where(observed,np.asarray(rho,dtype="float32"),np.nan).astype("float32"),
         "CF_NR_STRONG_SNR_DB":np.where(observed,np.asarray(snr,dtype="float32"),np.nan).astype("float32"),
         "CF_NR_STRONG_RANGE_M":np.broadcast_to(s.ranges,shape).astype("float32"),
+        **temporal,
         "summary":{"candidate_gates":int(candidate.sum()),
                    "protected_gates":int(protected.sum()),
                    "mode":c.mode,"propagated_gates":int(propagated.sum()),
                    "dilated_gates":int(dilated.sum()),
                    "weather_protection_retained":True,
-                   "background_enhancement_alone_is_not_weather":True},
+                   "background_enhancement_alone_is_not_weather":True,
+                   "temporal_low_rho":temporal_summary},
     }
 
 
@@ -303,7 +413,9 @@ def validate(a,cfg):
         protected=a['CF_NR_STRONG_PROTECTED_MASK']==1
         barriers=_strong_barriers(a)
         action=a['CF_NR_STRONG_ACTION_MASK']==1
-        if np.any((candidate|core|propagated|dilated|dilation_domain)&barriers):
+        temporal_domain=a['CF_NR_TEMPORAL_LOW_RHO_DOMAIN_MASK']==1
+        temporal_object=a['CF_NR_TEMPORAL_LOW_RHO_OBJECT_MASK']==1
+        if np.any((candidate|core|propagated|dilated|dilation_domain|temporal_domain)&barriers):
             raise ValueError('strong near candidate crossed a protection barrier')
         if not np.array_equal(action,candidate&(strong.mode=='quarantine')):
             raise ValueError('strong near action differs from audited measured support')
@@ -317,7 +429,7 @@ def validate(a,cfg):
                  &(a['CF_FAMILY_COUNT']>=strong.minimum_family_count)&~barriers)
         if not np.array_equal(core,feature):raise ValueError('strong near core lacks measured two-family support')
         if (np.any(core&(propagated|dilated)) or np.any(propagated&dilated)
-                or not np.array_equal(candidate,core|propagated|dilated)):
+                or not np.array_equal(candidate,core|propagated|dilated|temporal_object)):
             raise ValueError('strong near object propagation identity differs')
         oid=a['CF_NR_STRONG_OBJECT_ID'];size=a['CF_NR_STRONG_OBJECT_SIZE']
         fraction=a['CF_NR_STRONG_OBJECT_SEED_FRACTION']
@@ -331,6 +443,42 @@ def validate(a,cfg):
                 raise ValueError('strong near object size or seed fraction differs')
             if members>strong.maximum_object_gates or seeds<strong.minimum_object_seed_gates or seeds/members<strong.minimum_object_seed_fraction:
                 raise ValueError('strong near object lacks sufficient bounded seed support')
+        prior1=a['CF_NR_TEMPORAL_LOW_RHO_PRIOR1_MASK']==1
+        prior2=a['CF_NR_TEMPORAL_LOW_RHO_PRIOR2_MASK']==1
+        temporal_support=a['CF_NR_TEMPORAL_LOW_RHO_SUPPORT_MASK']==1
+        if not np.array_equal(temporal_support,temporal_domain&prior1&prior2):
+            raise ValueError('temporal low-rho support identity differs')
+        if np.any(temporal_object&~temporal_domain):
+            raise ValueError('temporal low-rho object leaves its measured domain')
+        temporal_oid=a['CF_NR_TEMPORAL_LOW_RHO_OBJECT_ID']
+        temporal_size=a['CF_NR_TEMPORAL_LOW_RHO_OBJECT_SIZE']
+        temporal_fraction=a['CF_NR_TEMPORAL_LOW_RHO_OBJECT_FRACTION']
+        if np.any((temporal_oid==0)&((temporal_size!=0)|np.isfinite(temporal_fraction))) or np.any(
+                (temporal_oid!=0)&((temporal_size==0)|~np.isfinite(temporal_fraction))):
+            raise ValueError('temporal low-rho object bookkeeping differs')
+        if np.any(temporal_object&(temporal_oid==0)):
+            raise ValueError('temporal low-rho object identity differs')
+        for value in np.unique(temporal_oid[temporal_object]):
+            component=temporal_oid==value;members=int(component.sum())
+            if members!=int(temporal_size[component][0]):
+                raise ValueError('temporal low-rho object size differs')
+            if (members<strong.temporal_low_rho.minimum_object_gates
+                    or members>strong.temporal_low_rho.maximum_object_gates
+                    or float(temporal_fraction[component][0])+1e-6<strong.temporal_low_rho.minimum_object_recurrence_fraction):
+                raise ValueError('temporal low-rho object lacks recurrent support')
+        if strong.temporal_low_rho is not None:
+            expected_temporal_domain=(obs&np.isfinite(a['CF_RAW_DBZH'])
+                &np.isfinite(a['CF_NR_STRONG_RHOHV'])&np.isfinite(a['CF_NR_STRONG_SNR_DB'])
+                &np.isfinite(a['CF_NR_STRONG_RANGE_M'])
+                &(a['CF_RAW_DBZH']>=strong.temporal_low_rho.minimum_dbz)
+                &(a['CF_RAW_DBZH']<=strong.temporal_low_rho.maximum_dbz)
+                &(a['CF_NR_STRONG_RHOHV']<=strong.temporal_low_rho.maximum_rhohv)
+                &(a['CF_NR_STRONG_SNR_DB']>=strong.temporal_low_rho.minimum_snr_db)
+                &(a['CF_NR_STRONG_RANGE_M']<=strong.temporal_low_rho.maximum_range_m)&~barriers)
+            if not np.array_equal(temporal_domain,expected_temporal_domain):
+                raise ValueError('temporal low-rho domain differs from measured support')
+        elif np.any(temporal_domain|prior1|prior2|temporal_support|temporal_object):
+            raise ValueError('temporal low-rho evidence exists while disabled')
         if strong.object_propagation or strong.object_dilation_iterations:
             expected_domain=(obs&(a['CF_NR_STRONG_SAFE_ROW_MASK']==1)
                 &np.isfinite(a['CF_RAW_DBZH'])

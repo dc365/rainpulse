@@ -4,7 +4,7 @@ from types import SimpleNamespace as NS
 import copy,json,numpy as np,pytest
 from fusion_helpers import scene,baseline,cfg,Native,fixture,group
 from volume_review.data import Sweep,ResourceLimit
-from volume_review.clutter_fusion.near_revision_config import NearRevisionConfig as N,StrongNearConfig
+from volume_review.clutter_fusion.near_revision_config import NearRevisionConfig as N,StrongNearConfig,TemporalLowRhoConfig
 from volume_review.clutter_fusion import partial_moments as pm,causal_temporal as ct,terrain_admission as ta
 from volume_review.clutter_fusion.engine import evaluate_volume
 from volume_review.clutter_fusion.near_runtime import RuntimeContext
@@ -81,6 +81,39 @@ def test_strong_near_audit_records_but_does_not_act():
     assert d['strong_near_quarantine_gates']==0 and d['near_revision_new_qpe_loss_gates']==0
     assert np.array_equal(out['QC_ACTION'],without_strong['QC_ACTION'])
     assert np.array_equal(out['QPE_ELIGIBLE_MASK'],without_strong['QPE_ELIGIBLE_MASK'])
+
+
+def past_sweep(s,scan,when):
+    d=replace(s,ray_time_s=np.full(s.shape[0],when,dtype=float))
+    return ct.PastSweep(d,'a'*64 if scan=='past-1' else 'b'*64,scan,'site_a','processor-v1',
+                        np.arange(s.shape[0]),True)
+
+
+def test_temporal_low_rho_requires_two_causal_snapshots():
+    c=config(strong_near=StrongNearConfig(mode='quarantine',temporal_low_rho=TemporalLowRhoConfig()))
+    s=scene(kind='ground',z=15.,rho=.7,snr=16.,zdr=.2,time=300.)
+    one_past=(past_sweep(s,'past-1',120.),)
+    two_past=(past_sweep(s,'past-1',120.),past_sweep(s,'past-2',240.))
+    insufficient=one(s,c,near_context=RuntimeContext('site_a','test-scan','processor-v1',one_past))
+    assert not (insufficient.arrays['CF_NR_TEMPORAL_LOW_RHO_OBJECT_MASK']==1).any()
+    e=one(s,c,near_context=RuntimeContext('site_a','test-scan','processor-v1',two_past))
+    selected=e.arrays['CF_NR_TEMPORAL_LOW_RHO_OBJECT_MASK']==1
+    assert selected.any() and np.all(selected<=(e.arrays['CF_NR_TEMPORAL_LOW_RHO_DOMAIN_MASK']==1))
+    assert np.all(selected<=(e.arrays['CF_NR_TEMPORAL_LOW_RHO_SUPPORT_MASK']==1))
+    assert e.summary['near_revision']['strong_near']['temporal_low_rho']['status']=='EVALUATED'
+    _,out,d=check(s,c,near_context=RuntimeContext('site_a','test-scan','processor-v1',two_past))
+    assert d['strong_near_quarantine_gates']==int(selected.sum())
+    assert not out['QPE_ELIGIBLE_MASK'][selected].any()
+
+
+def test_temporal_low_rho_current_high_rho_does_not_act():
+    c=config(strong_near=StrongNearConfig(mode='quarantine',temporal_low_rho=TemporalLowRhoConfig()))
+    current=scene(kind='ground',z=15.,rho=.99,snr=16.,zdr=.2,time=300.)
+    past=scene(kind='ground',z=15.,rho=.7,snr=16.,zdr=.2,time=240.)
+    context=RuntimeContext('site_a','test-scan','processor-v1',
+        (past_sweep(past,'past-1',120.),past_sweep(past,'past-2',240.)))
+    e=one(current,c,near_context=context)
+    assert not (e.arrays['CF_NR_TEMPORAL_LOW_RHO_OBJECT_MASK']==1).any()
 
 
 def test_strong_near_background_enhancement_mixed_alone_does_not_protect():

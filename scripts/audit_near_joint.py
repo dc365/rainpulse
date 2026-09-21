@@ -32,7 +32,10 @@ def audit(root):
                      'CF_NR_CR_WITHHELD_MASK','CF_NR_PARTIAL_CR_WITHHELD_MASK','CF_NR_TEMPORAL_CR_WITHHELD_MASK','CF_NR_DEM_CR_WITHHELD_MASK',
                      'CF_NR_STRONG_CANDIDATE_MASK','CF_NR_STRONG_CORE_MASK','CF_NR_STRONG_OBJECT_PROPAGATED_MASK',
                      'CF_NR_STRONG_DILATED_MASK','CF_NR_STRONG_DILATION_DOMAIN_MASK',
-                     'CF_NR_STRONG_ACTION_MASK','CF_NR_STRONG_PROTECTED_MASK','CF_NR_STRONG_QUARANTINE_MASK'):
+                     'CF_NR_STRONG_ACTION_MASK','CF_NR_STRONG_PROTECTED_MASK','CF_NR_STRONG_QUARANTINE_MASK',
+                     'CF_NR_TEMPORAL_LOW_RHO_DOMAIN_MASK','CF_NR_TEMPORAL_LOW_RHO_PRIOR1_MASK',
+                     'CF_NR_TEMPORAL_LOW_RHO_PRIOR2_MASK','CF_NR_TEMPORAL_LOW_RHO_SUPPORT_MASK',
+                     'CF_NR_TEMPORAL_LOW_RHO_OBJECT_MASK'):
             record['fields'][name]=int((a[name]==1).sum()) if name in a else None
         for name in ('NP_QUARANTINE_MASK','NMR_CR_WITHHELD_MASK','RDR_CR_WITHHELD_MASK','CF_CR_WITHHELD_MASK',
                      'CF_NR_CR_WITHHELD_MASK','CF_NR_STRONG_QUARANTINE_MASK'):
@@ -71,6 +74,8 @@ def check_composite(roots,path,metadata_path):
                     'CF_BG_ENHANCEMENT_MASK','CF_NR_READY_MASK','CF_NR_STRICT_MASK','CF_NR_TEMPORAL_SUPPORT_MASK',
                     'CF_NR_PROTECTED_MASK','CF_NR_DEM_AVAILABLE_MASK','CF_NR_DEM_ACTION_AVAILABLE_MASK',
                     'CF_NR_STRONG_CANDIDATE_MASK','CF_NR_STRONG_ACTION_MASK','CF_NR_STRONG_PROTECTED_MASK',
+                    'CF_NR_TEMPORAL_LOW_RHO_DOMAIN_MASK','CF_NR_TEMPORAL_LOW_RHO_SUPPORT_MASK',
+                    'CF_NR_TEMPORAL_LOW_RHO_OBJECT_MASK',
                     'NP_NEAR_CANDIDATE_MASK','NP_WEATHER_PROTECTED_MASK','NP_MIXED_MASK'):
             item['evidence'][key]=int((g[key][:][rows,gates]==1).sum()) if key in g else None
         for key in ('CF_BG_STATE','CF_NR_STATE'):
