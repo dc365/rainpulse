@@ -284,6 +284,7 @@ def validate(a,cfg):
         if strong.object_propagation or strong.object_dilation_iterations:
             expected_domain=(obs&(a['CF_NR_STRONG_SAFE_ROW_MASK']==1)
                 &np.isfinite(a['CF_RAW_DBZH'])
+                &np.isfinite(a['CF_NR_STRONG_RHOHV'])
                 &(a['CF_RAW_DBZH']>=strong.minimum_object_dbz)
                 &(a['CF_RAW_DBZH']<=strong.maximum_object_dbz)
                 &np.isfinite(a['CF_NR_STRONG_RANGE_M'])
