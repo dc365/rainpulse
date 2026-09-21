@@ -42,6 +42,12 @@ def _strong_empty(shape):
         "CF_NR_STRONG_DILATED_MASK": np.zeros(shape, "uint8"),
         "CF_NR_STRONG_DILATION_DOMAIN_MASK": np.zeros(shape, "uint8"),
         "CF_NR_STRONG_SAFE_ROW_MASK": np.zeros(shape, "uint8"),
+        "CF_NR_STRONG_ROW_ID": np.broadcast_to(
+            np.arange(shape[0], dtype="int32")[:, None], shape).copy(),
+        "CF_NR_STRONG_LEFT_NEIGHBOR_ROW": np.broadcast_to(
+            np.full(shape[0], -1, "int32")[:, None], shape).copy(),
+        "CF_NR_STRONG_RIGHT_NEIGHBOR_ROW": np.broadcast_to(
+            np.full(shape[0], -1, "int32")[:, None], shape).copy(),
         "CF_NR_STRONG_ACTION_MASK": np.zeros(shape, "uint8"),
         "CF_NR_STRONG_PROTECTED_MASK": np.zeros(shape, "uint8"),
         "CF_NR_STRONG_STATE": np.full(shape, State.STRONG_NEAR_INSUFFICIENT, "uint8"),
@@ -53,6 +59,35 @@ def _strong_empty(shape):
         "CF_NR_STRONG_SNR_DB": np.full(shape, np.nan, "float32"),
         "CF_NR_STRONG_RANGE_M": np.full(shape, np.nan, "float32"),
     }
+
+
+def _physical_neighbor_rows(s):
+    rows=np.arange(len(s.azimuth),dtype="int32")
+    right=np.roll(rows,-1);left=np.roll(rows,1)
+    delta=(np.roll(s.azimuth,-1)-s.azimuth)%360
+    edges=s.gap_after|(delta<=0)|(delta>2)
+    safe=s.good&~edges&~np.roll(edges,1)
+    # The explicit loops make the wrap boundary and unavailable rows explicit.
+    right=np.roll(rows,-1);left=np.roll(rows,1)
+    for value in range(len(rows)):
+        if not safe[value]:
+            right[value]=-1;left[value]=-1;continue
+        nxt=int(right[value]);prv=int(left[value])
+        if nxt>=0 and not safe[nxt]:right[value]=-1
+        if prv>=0 and not safe[prv]:left[value]=-1
+    return left,right,safe
+
+
+def _neighbor_dilation(core,mask,left,right,gates,iterations):
+    current=np.asarray(core,dtype=bool).copy()
+    structure=np.ones((1,gates),dtype=bool)
+    for _ in range(int(iterations)):
+        source=current.copy()
+        valid_left=left>=0;valid_right=right>=0
+        source[valid_left]|=current[left[valid_left]]
+        source[valid_right]|=current[right[valid_right]]
+        current=binary_dilation(source,structure=structure,mask=mask)
+    return current
 
 
 def empty(s, strong=False):
@@ -111,12 +146,19 @@ def _strong_evidence(s,cfg,base):
     propagated=np.zeros(shape,bool)
     dilated=np.zeros(shape,bool);dilation_domain=np.zeros(shape,bool)
     safe_rows=np.zeros(shape[0],bool)
+    left_rows=np.full(shape[0],-1,"int32");right_rows=np.full(shape[0],-1,"int32")
+    row_ids=np.arange(shape[0],dtype="int32")
+    left_serial=np.full(shape[0],-1,"int32");right_serial=np.full(shape[0],-1,"int32")
     object_id=np.zeros(shape,"int32");object_size=np.zeros(shape,"uint32")
     object_fraction=np.full(shape,np.nan,"float32")
     if c.object_propagation or c.object_dilation_iterations:
-        delta=(np.roll(s.azimuth,-1)-s.azimuth)%360
-        edges=s.gap_after|(delta<=0)|(delta>2)
-        safe_rows=s.good&~edges&~np.roll(edges,1)
+        left_rows,right_rows,safe_rows=_physical_neighbor_rows(s)
+        row_ids=(np.arange(shape[0],dtype="int32") if s.original_indices is None
+                 else np.asarray(s.original_indices,dtype="int32"))
+        left_serial=np.full(shape[0],-1,"int32");right_serial=np.full(shape[0],-1,"int32")
+        left_valid=left_rows>=0;right_valid=right_rows>=0
+        left_serial[left_valid]=row_ids[left_rows[left_valid]]
+        right_serial[right_valid]=row_ids[right_rows[right_valid]]
         object_domain=(observed&safe_rows[:,None]&ar&az
                        &np.isfinite(z)&(z>=c.minimum_object_dbz)&(z<=c.maximum_object_dbz)
                        &(s.ranges[None,:] <=c.maximum_range_m)&~barriers)
@@ -135,9 +177,9 @@ def _strong_evidence(s,cfg,base):
                     and size<=c.maximum_object_gates):
                 propagated|=component&~core
         if c.object_dilation_iterations:
-            structure=np.ones((c.object_dilation_rays,c.object_dilation_gates),dtype=bool)
-            dilated=binary_dilation(core,structure=structure,mask=object_domain,
-                                    iterations=c.object_dilation_iterations)
+            dilated=_neighbor_dilation(core,object_domain,left_rows,right_rows,
+                                       c.object_dilation_gates,c.object_dilation_iterations)
+            dilated &= object_domain
             dilated &= ~(core|propagated)
     candidate=core|propagated|dilated
     state=np.full(shape,State.STRONG_NEAR_INSUFFICIENT,"uint8")
@@ -158,6 +200,9 @@ def _strong_evidence(s,cfg,base):
         "CF_NR_STRONG_DILATION_DOMAIN_MASK":dilation_domain.astype("uint8"),
         "CF_NR_STRONG_SAFE_ROW_MASK":np.broadcast_to(
             safe_rows[:,None],shape).astype("uint8") & observed,
+        "CF_NR_STRONG_ROW_ID":np.broadcast_to(row_ids[:,None],shape).copy(),
+        "CF_NR_STRONG_LEFT_NEIGHBOR_ROW":np.broadcast_to(left_serial[:,None],shape).copy(),
+        "CF_NR_STRONG_RIGHT_NEIGHBOR_ROW":np.broadcast_to(right_serial[:,None],shape).copy(),
         "CF_NR_STRONG_ACTION_MASK":(candidate & (c.mode=="quarantine")).astype("uint8"),
         "CF_NR_STRONG_PROTECTED_MASK":protected.astype("uint8"),
         "CF_NR_STRONG_STATE":state,
@@ -294,10 +339,17 @@ def validate(a,cfg):
             if np.any((core|propagated|dilated)&~dilation_domain):
                 raise ValueError('strong near candidate leaves its measured safe domain')
         if strong.object_dilation_iterations:
-            structure=np.ones((
-                strong.object_dilation_rays,strong.object_dilation_gates),dtype=bool)
-            expected=binary_dilation(core,structure=structure,mask=dilation_domain,
-                iterations=strong.object_dilation_iterations)&~(core|propagated)
+            row_id=a['CF_NR_STRONG_ROW_ID'][:,0]
+            left=a['CF_NR_STRONG_LEFT_NEIGHBOR_ROW'][:,0]
+            right=a['CF_NR_STRONG_RIGHT_NEIGHBOR_ROW'][:,0]
+            if not np.array_equal(row_id,np.arange(len(row_id))):
+                raise ValueError('strong near serialized row identity differs')
+            valid=(left>=0)&(left<len(left))&(right>=0)&(right<len(right))
+            if np.any(valid&((left==right)|(left==row_id)|(right==row_id))):
+                raise ValueError('strong near physical neighbor identity differs')
+            expected=_neighbor_dilation(core,dilation_domain,left,right,
+                strong.object_dilation_gates,strong.object_dilation_iterations)&~(core|propagated)
+            expected &= dilation_domain
             if not np.array_equal(dilated,expected):
                 raise ValueError('strong near dilation differs from bounded measured support')
         elif np.any(dilated):

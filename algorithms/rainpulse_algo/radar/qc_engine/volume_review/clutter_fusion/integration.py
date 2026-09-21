@@ -22,7 +22,8 @@ def raw_sweep(n):
     if times.dtype.kind=="M":
         times=None if np.isnat(times).any() else times.astype("datetime64[ns]").astype("int64")/1e9
     elif times.dtype.kind not in "fiu" or not np.isfinite(times).all():times=None
-    return Sweep(n.name,n.azimuth,n.elevation,n.ranges,n.fields,n.field_available,n.geometry_good,n.gap_after,times)
+    return Sweep(n.name,n.azimuth,n.elevation,n.ranges,n.fields,n.field_available,
+                 n.geometry_good,n.gap_after,times,original_indices=n.original_indices)
 
 
 def metadata(n):

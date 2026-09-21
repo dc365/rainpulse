@@ -57,6 +57,7 @@ class Sweep:
     gap_after: np.ndarray
     ray_time_s: np.ndarray | None = None
     no_echo: np.ndarray | None = None
+    original_indices: np.ndarray | None = None
 
     def __post_init__(self):
         nr, ng = len(self.azimuth), len(self.ranges)
@@ -74,6 +75,11 @@ class Sweep:
             raise ValueError("nonuniform range stencil not supported")
         good = checked_mask(self.good, (nr,), "good rays")
         gaps = checked_mask(self.gap_after, (nr,), "ray edges")
+        if self.original_indices is not None:
+            indices = np.asarray(self.original_indices)
+            if (indices.shape != (nr,) or indices.dtype.kind not in "iu"
+                    or not np.array_equal(np.sort(indices), np.arange(nr))):
+                raise ValueError("original ray indices must be a permutation")
         # Accept native sorted/rotated order only: never infer adjacency by raw row index.
         da = (np.roll(az, -1)-az) % 360
         if np.any((da <= .01) & good & np.roll(good, -1)):

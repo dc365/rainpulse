@@ -142,6 +142,19 @@ def test_strong_near_dilation_stops_at_domain_and_protection():
     assert not (e.arrays['CF_NR_STRONG_ACTION_MASK']==1).any()
 
 
+def test_strong_near_dilation_survives_permuted_ray_serialization():
+    c=strong_dilation_config('quarantine');s=strong_scene();e=one(s,c)
+    order=np.array([6,7,5,8,0,2,4,3,1,9,11,10])
+    s=replace(s,original_indices=order);e=one(s,c)
+    def restore(value):
+        output=np.empty_like(value);output[order]=value;return output
+    reordered={key:restore(value) for key,value in e.arrays.items()
+               if isinstance(value,np.ndarray) and value.shape==s.shape}
+    from volume_review.clutter_fusion.near_joint import validate
+    validate(reordered,c)
+    assert (reordered['CF_NR_STRONG_DILATED_MASK']==1).any()
+
+
 @pytest.mark.parametrize('which',[0,1,2])
 def test_strong_near_keeps_every_external_protection(which):
     protect=[np.zeros(strong_scene().shape,bool) for _ in range(3)];protect[which][:]=True

@@ -60,7 +60,9 @@ class Native:
         self.fields=s.fields;self.field_available=s.available;self.geometry_good=s.good;self.gap_after=s.gap_after
         self.ray_time=s.ray_time_s if s.ray_time_s is not None else np.full(s.shape[0],np.nan)
         self.shape=s.shape;self.gate_spacing_m=s.dr
-        self.original_indices=np.roll(np.arange(s.shape[0]),3) if permuted else np.arange(s.shape[0])
+        indices=np.arange(s.shape[0])
+        if isinstance(permuted,np.ndarray):self.original_indices=np.asarray(permuted)
+        else:self.original_indices=np.roll(indices,3) if permuted else indices
         self.attrs={"radar_id":"site_a","scan_id":"test-scan","radar_config_version":"processor-v1",
                     "volume_end_time_utc":"2026-09-18T03:00:00+00:00"}
     def restore(self,a):
@@ -71,8 +73,9 @@ def group(q):return {**q.optional_qc_fields,**q.qi_components,"DBZH_RAW":q.dbzh_
     "QC_FLAGS":q.qc_flags,"QUALITY_INDEX":q.quality_index,"VALID_MASK":q.valid_mask,"LOW_QUALITY_MASK":q.low_quality_mask}
 
 
-def fixture(c,*,permuted=False,near=False,receiver=False):
-    s=scene(kind="ground",zdr=.2);n=Native(s,permuted);a=baseline(s)
+def fixture(c,*,permuted=False,near=False,receiver=False,sweep=None,permutation=None):
+    s=sweep if sweep is not None else scene(kind="ground",zdr=.2)
+    n=Native(s,permuted=permutation if permutation is not None else permuted);a=baseline(s)
     for k in list(a):
         if k.startswith("CR_") or k=="REFLECTIVITY_ELIGIBLE_FOR_CR":del a[k]
     a={k:n.restore(v) for k,v in a.items()}
