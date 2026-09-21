@@ -1,13 +1,13 @@
 services:
   radar-qc-worker:
-    image: rainpulse-cpu-worker:clutter-fusion-20260921
+    image: rainpulse-cpu-worker:beam-contract-20260921
     environment:
-      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/clutter-fusion-20260921/clutter-fusion-quarantine-bg-live.yaml
+      RAINPULSE_RADAR_QC_CONFIG: /opt/rainpulse/configs/qc/clutter-fusion-20260921/clutter-fusion-quarantine-bg-retro-vbeam.yaml
   radar-grid-worker:
-    image: rainpulse-cpu-worker:clutter-fusion-20260921
+    image: rainpulse-cpu-worker:beam-contract-20260921
   radar-mosaic-worker:
-    image: rainpulse-cpu-worker:clutter-fusion-20260921
+    image: rainpulse-cpu-worker:beam-contract-20260921
   analysis-qpe-worker:
-    image: rainpulse-cpu-worker:clutter-fusion-20260921
+    image: rainpulse-cpu-worker:beam-contract-20260921
   analysis-diagnostics-worker:
-    image: rainpulse-cpu-worker:clutter-fusion-20260921
+    image: rainpulse-cpu-worker:beam-contract-20260921
