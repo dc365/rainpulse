@@ -135,6 +135,9 @@ def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, confl
         polar_ok = np.logical_and.reduce([moment(native, k)[1] for k in ("RHOHV", "ZDR", "PHIDP")])
         weak = candidate & (~snr_ok | (snr < cfg.minimum_coherent_snr_db) | ~polar_ok |
                             (out["RV2_WEAK_MATCH_MASK"] == 1))
+        # The persisted source path must not claim weak states; proposal-only
+        # exclusion is too late for serialized radial validation.
+        out["RV2_SEGMENT_MATCH_MASK"] &= (~weak).astype("uint8")
         legacy_match = candidate & source & ~barred
         segment_match = (out["RV2_SEGMENT_MATCH_MASK"] == 1) & candidate & ~barred & ~weak
         qualified = legacy_match | segment_match | line_source | line_morphology | line_isolated | group_polar | group_morph | residual
