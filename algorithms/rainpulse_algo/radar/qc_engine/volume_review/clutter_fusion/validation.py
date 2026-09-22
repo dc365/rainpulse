@@ -30,6 +30,9 @@ def validate_serialized(group,attrs,parent_validator):
         outputs |= {"CF_NR_CR_WITHHELD_MASK","CF_NR_PARTIAL_CR_WITHHELD_MASK",
                     "CF_NR_TEMPORAL_CR_WITHHELD_MASK","CF_NR_DEM_CR_WITHHELD_MASK",
                     "CF_NR_STRONG_QUARANTINE_MASK"}
+    if cfg.isolated_objects is not None:
+        from .isolated_objects import APPLIED
+        outputs |= APPLIED
     evidence={k:np.asarray(group[k][:]) for k in group if k.startswith("CF_") and not k.startswith("CF_BEFORE_") and k not in outputs}
     out,_=apply(baseline,evidence,cfg,low_quality_flag=attrs["qc_clutter_fusion_low_quality_flag"])
     if set(out)!=set(group):raise ValueError("unexpected or missing fusion output fields")

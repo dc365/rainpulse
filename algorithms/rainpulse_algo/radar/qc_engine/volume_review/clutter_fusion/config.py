@@ -6,11 +6,13 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator, model_serial
 from ..episode_background.config import EpisodeConfig
 from . import VERSION
 from .near_revision_config import NearRevisionConfig
+from .isolation_config import IsolationConfig
 
 
 class ClutterFusionConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
     near_revision: NearRevisionConfig | None = None
+    isolated_objects: IsolationConfig | None = None
     version: Literal["clutter-fusion-20260921-v1"] = VERSION
     mode: Literal["audit", "cr_withhold", "quarantine"] = "audit"
     operational_eligible: Literal[False] = False
@@ -77,6 +79,14 @@ class ClutterFusionConfig(BaseModel):
                 raise ValueError("strong near exception must start at the parent strong boundary")
             if strong is not None and strong.maximum_range_m > self.maximum_range_m:
                 raise ValueError("strong near range exceeds the clutter-fusion domain")
+        iso = self.isolated_objects
+        if iso is not None:
+            if iso.echo_threshold_dbz < self.no_rain_below_dbz or iso.echo_threshold_dbz >= self.protected_dbz:
+                raise ValueError("isolation structural threshold crosses parent reflectivity semantics")
+            if iso.mode != "audit" and self.mode == "audit":
+                raise ValueError("active isolation requires an active CF parent")
+            if iso.mode == "quarantine" and self.mode != "quarantine":
+                raise ValueError("quantitative isolation cannot exceed parent CF policy")
         b = self.background
         if b.mode != "audit" or b.review_local_weather_conflicts or b.withhold_mixed:
             raise ValueError("nested episode must supply evidence only; no separate EBG actions")
@@ -89,6 +99,8 @@ class ClutterFusionConfig(BaseModel):
         data = handler(self)
         if self.near_revision is None:
             data.pop("near_revision", None)
+        if self.isolated_objects is None:
+            data.pop("isolated_objects", None)
         return data
 
     @property

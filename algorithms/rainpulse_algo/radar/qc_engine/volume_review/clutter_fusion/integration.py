@@ -84,7 +84,19 @@ def review_result(result,native,*,near_context=None):
     if raw_before!=[array_digest(n.fields) for n in native]:raise RuntimeError("fusion modified native raw")
     summary=dict(result.summary);sr={k:dict(v) for k,v in summary["sweeps"].items()}
     for old,record in zip(updated,records,strict=True):
-        sr[old.name]["clutter_fusion"]=record
+        summary_record=record
+        if cfg.isolated_objects is not None:
+            # Keep per-object rings in the hashed object-store evidence artifact,
+            # not the small completion/control-plane summary.
+            summary_record=dict(record)
+            thin_evidence=dict(record["evidence"])
+            thin_isolation=dict(thin_evidence.get("isolated_objects",{}))
+            objects=thin_isolation.pop("object_records",[])
+            thin_isolation["object_records_count"]=len(objects)
+            thin_isolation["object_records_path"]="qc/volume_review/clutter_fusion.json"
+            thin_evidence["isolated_objects"]=thin_isolation
+            summary_record["evidence"]=thin_evidence
+        sr[old.name]["clutter_fusion"]=summary_record
         sr[old.name]["quantitative_eligible_gates"]=int((old.optional_qc_fields["QPE_ELIGIBLE_MASK"]==1).sum())
         sr[old.name]["action_counts"]={name:int((old.optional_qc_fields["QC_ACTION"]==i).sum()) for i,name in enumerate(("KEEP","DOWNWEIGHT","REJECT","MISSING"))}
     summary["sweeps"]=sr
@@ -116,6 +128,14 @@ def review_result(result,native,*,near_context=None):
             "strong_near_dilated_gates":sum(r["disposition"].get("strong_near_dilated_gates",0) for r in records),
             "new_qpe_loss_gates":sum(r["disposition"]["near_revision_new_qpe_loss_gates"] for r in records),
             "operational_eligible":False}
+    if cfg.isolated_objects is not None:
+        summary["clutter_fusion"]["isolated_objects"] = {
+            "version":cfg.isolated_objects.version,"mode":cfg.isolated_objects.mode,
+            "candidate_gates":sum(r["evidence"].get("isolated_objects",{}).get("candidate_gates",0) for r in records),
+            "net_new_cr_loss_gates":sum(r["disposition"].get("isolated_objects_cr_loss_gates",0) for r in records),
+            "net_new_qpe_loss_gates":sum(r["disposition"].get("isolated_objects_qpe_loss_gates",0) for r in records),
+            "status":"RESOURCE_LIMIT_ABSTAINED" if any(r["evidence"].get("isolated_objects",{}).get("status")=="RESOURCE_LIMIT_ABSTAINED" for r in records) else "EVALUATED",
+            "weak_kernel_action":"diagnostic_only","operational_eligible":False}
     return replace(result,sweeps=tuple(updated),summary=summary,volume_review_artifacts=artifacts)
 
 
@@ -124,6 +144,20 @@ def annotate(group):
         if not k.startswith("CF_") or not hasattr(group[k],"attrs"):continue
         meta={"extension":"clutter-fusion-20260921-v1","scores_are_probabilities":False}
         if k.endswith("_MASK"):meta.update(units="1",definition="0:false;1:true; unknown is not no-rain")
+        if k.startswith("CF_ISO_"):
+            meta["isolation_version"]="isolated-objects-20260923-v1"
+            meta["structure_source"]="original_polar_gates"
+            if k=="CF_ISO_STATE":
+                from .isolated_objects import State as IsolationState
+                meta["codes"]={str(v.value):v.name for v in IsolationState}
+            if k=="CF_ISO_REASON":
+                from .isolated_objects import Reason as IsolationReason
+                meta["bits"]={str(v.value):v.name for v in IsolationReason}
+            if k.startswith("CF_ISO_WEAK_"):
+                meta["action_policy"]="diagnostic_only"
+                meta["semantics"]="fixed-metre diagonal dBZ sum; ZERO denotes paper-style unknown-to-zero comparison, not no-rain"
+            if k.endswith("AREA_KM2"):meta["units"]="km2"
+            if k.endswith("DIAMETER_M") or k.endswith("FOOTPRINT_MAX_M"):meta["units"]="m"
         if k=="CF_CLASS":meta["codes"]={str(v.value):v.name for v in EchoClass}
         if k=="CF_NR_STATE":
             from .near_joint import State

@@ -93,5 +93,8 @@ def evaluate_volume(sweeps,cfg,*,backgrounds=None,protections=None,metadata=None
                     x.arrays["CF_NR_STRONG_OBJECT_PROPAGATED_MASK"].sum())
                 x.summary["strong_near_dilated_gates"]=int(
                     x.arrays["CF_NR_STRONG_DILATED_MASK"].sum())
+    if cfg.isolated_objects is not None:
+        from .isolated_objects import attach_volume
+        attach_volume(sweeps, results, cfg)
     if before != [s.digest for s in sweeps]:raise RuntimeError("fusion mutated original measurement")
     return results

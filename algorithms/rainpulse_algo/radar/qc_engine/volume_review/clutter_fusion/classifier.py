@@ -119,6 +119,9 @@ def decide(a,cfg):
     if cfg.near_revision is not None:
         from .near_joint import decision
         out.update(decision(a,cfg))
+    if cfg.isolated_objects is not None and "CF_ISO_OBJECT_ID" in a:
+        from .isolated_objects import decision as isolated_decision
+        out.update(isolated_decision(a,cfg))
     return out
 
 

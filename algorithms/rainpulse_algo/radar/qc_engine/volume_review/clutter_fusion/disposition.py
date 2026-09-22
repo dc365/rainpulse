@@ -65,6 +65,9 @@ def check_evidence(e,group,cfg):
     if cfg.near_revision is not None:
         from .near_joint import validate
         validate(e,cfg)
+    if cfg.isolated_objects is not None:
+        from .isolated_objects import validate as validate_isolation
+        validate_isolation(e,cfg)
     bg=e["CF_BG_CURRENT_NONMET_MASK"]==1
     if np.any(bg&((e["CF_BG_MATCH_MASK"]!=1)|(e["CF_BG_STABLE_MASK"]!=1))):
         raise ValueError("background nonmet lacks stable comparison")
@@ -94,8 +97,17 @@ def apply(group,evidence,cfg,*,low_quality_flag):
     strong=np.zeros(obs.shape,bool)
     if nr is not None and enabled and nr.strong_near is not None and nr.strong_near.mode=="quarantine":
         strong=(evidence["CF_NR_STRONG_ACTION_MASK"]==1)&trust&obs&(np.asarray(group["QC_ACTION"])!=2)
-    loss=cr&(candidate|near|terrain|strong)
+    parent_loss=cr&(candidate|near|terrain|strong)
+    isolated=np.zeros(obs.shape,bool);isolated_quantitative=isolated.copy()
+    ic=cfg.isolated_objects
+    if ic is not None and enabled and ic.mode!="audit":
+        isolated=evidence["CF_ISO_CANDIDATE_MASK"]==1
+        if ic.mode=="quarantine" and cfg.mode=="quarantine":
+            isolated_quantitative=evidence["CF_ISO_QUARANTINE_CANDIDATE_MASK"]==1
+    loss=cr&(candidate|near|terrain|strong|isolated)
     quarantine=(((evidence["CF_QUARANTINE_SUPPORTED_MASK"]==1)&(cfg.mode=="quarantine"))|strong)&trust&obs&(np.asarray(group["QC_ACTION"])!=2)
+    isolated_quantitative &= trust&obs&(np.asarray(group["QC_ACTION"])!=2)&~quarantine
+    quarantine |= isolated_quantitative
     changing=set(mutable_names(group))
     # Share unchanged immutable raw/historical arrays instead of duplicating them.
     a={k:np.array(v,copy=True) if k in changing else v for k,v in group.items()}
@@ -112,6 +124,9 @@ def apply(group,evidence,cfg,*,low_quality_flag):
         a["CF_NR_TEMPORAL_CR_WITHHELD_MASK"]=(extra&near&(evidence["CF_NR_STRICT_MASK"]!=1)).astype("uint8")
         a["CF_NR_DEM_CR_WITHHELD_MASK"]=(extra&terrain&~near).astype("uint8")
         a["CF_NR_STRONG_QUARANTINE_MASK"]=strong.astype("uint8")
+    if ic is not None:
+        a["CF_ISO_CR_WITHHELD_MASK"]=(cr&isolated&~parent_loss).astype("uint8")
+        a["CF_ISO_QUARANTINE_MASK"]=isolated_quantitative.astype("uint8")
     a[CR][loss]=0
     if enabled:
         a["CR_UNCERTAIN_MASK"][(evidence["CF_MIXED_MASK"]==1)|loss]=1
@@ -144,5 +159,8 @@ def apply(group,evidence,cfg,*,low_quality_flag):
             "strong_near_dilated_gates":int(
                 (evidence.get("CF_NR_STRONG_DILATED_MASK",np.zeros(obs.shape,"uint8"))==1).sum()),
         } if nr is not None else {}),
+        **({"isolated_objects_cr_loss_gates":int(a["CF_ISO_CR_WITHHELD_MASK"].sum()),
+            "isolated_objects_quarantine_gates":int(isolated_quantitative.sum()),
+            "isolated_objects_qpe_loss_gates":int((isolated_quantitative&qpe).sum())} if ic is not None else {}),
         "budget_policy":"retain_isolation_require_review","confirmed_gates":0,"filled_gates":0,
         "operational_eligible":False}
