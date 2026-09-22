@@ -7,6 +7,16 @@ rules remain in `AGENTS.md`; implementation details remain in the referenced RP
 documents. Do not add passwords, tokens, private data-source details, or raw
 operational data here.
 
+## Architecture batch 1 (source-only handoff, 2026-09-22)
+
+- Bounded planner reads, version-independent QC completion summary, native
+  unified admission pause/release verification and a single Compose entry are
+  supplied as a baseline-checked patch against `3d84719eb73750d3fa2fa0dd6541eded606c7d52`.
+- No 105 deployment or algorithm-threshold change is implied. Keep the latest
+  near-radar/QC configuration and operational eligibility unchanged.
+- Read `docs/ARCHITECTURE_BATCH1_20260922.md` for installation, rollback and the
+  distinction between isolated tests and required full-stack acceptance.
+
 ## Current source state
 
 - Repository: `https://github.com/dc365/rainpulse.git`.

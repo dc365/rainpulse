@@ -237,9 +237,23 @@ build-worker-linux:
 	RAINPULSE_DOWNLOAD_PROXY="$(WORKER_WHEEL_PROXY)" bash scripts/stage_linux_nowcast_wheels.sh .build/wheelhouse .build/worker-site-packages
 	bash scripts/stage_pysteps_runtime.sh .build/worker-site-packages
 
+# Unified is the default. Existing installations first adopt their exact
+# running overlay order, rather than silently resetting experimental profiles.
 deploy-up:
-	@test -f "$(COMPOSE_ENV_FILE)" || { echo "create $(COMPOSE_ENV_FILE) from deploy/.env.example and set required secrets" >&2; exit 1; }
-	docker compose --env-file $(COMPOSE_ENV_FILE) -f $(COMPOSE_FILE) up -d --build --wait
+	python3 scripts/rainpulsectl.py --env-file "$(COMPOSE_ENV_FILE)" up
+
+.PHONY: deploy-check deploy-status deploy-up-legacy test-architecture-batch1
+deploy-check:
+	python3 scripts/rainpulsectl.py --env-file "$(COMPOSE_ENV_FILE)" config-check
+
+deploy-status:
+	python3 scripts/rainpulsectl.py --env-file "$(COMPOSE_ENV_FILE)" status
+
+deploy-up-legacy:
+	python3 scripts/rainpulsectl.py --env-file "$(COMPOSE_ENV_FILE)" up --legacy
+
+test-architecture-batch1:
+	bash scripts/test_architecture_batch1.sh
 
 dev-up: build-linux build-worker-linux deploy-up
 

@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "QC completion transport summary v1",
+  "description": "Transport only. Full evidence remains in the completed QC artifact. Implementations enforce a 65536-byte JSON budget and bounded optional JSON trees. This does not replace the enclosing job.completed schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "completion_summary_version",
+    "summary_object_path",
+    "summary_detail_storage"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "engine": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "qc_pipeline_version": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "qc_profile": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "decision_version": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "flag_definition_version": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "parameters_hash": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "radar_id": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "scan_id": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "health_state": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "review_extension_version": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "measured_at": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "valid_gate_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775807
+    },
+    "missing_gate_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775807
+    },
+    "low_quality_gate_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775807
+    },
+    "no_rain_gate_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775807
+    },
+    "radial_interference_ray_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775807
+    },
+    "radial_interference_gate_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775807
+    },
+    "ground_clutter_gate_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775807
+    },
+    "sea_clutter_gate_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775807
+    },
+    "ap_gate_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775807
+    },
+    "mean_quality_index": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "radial_interference_area_km2": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "health_facets": {},
+    "generalization_summary": {},
+    "nonprecip_review_summary": {},
+    "module_statuses": {},
+    "operational_eligible": {
+      "type": "boolean"
+    },
+    "completion_summary_version": {
+      "const": "1.0"
+    },
+    "summary_object_path": {
+      "const": "qc/summary.json"
+    },
+    "summary_detail_storage": {
+      "const": "completed_qc_asset"
+    },
+    "summary_omitted_fields": {
+      "type": "array",
+      "maxItems": 4,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "health_facets",
+          "generalization_summary",
+          "nonprecip_review_summary",
+          "module_statuses"
+        ]
+      }
+    }
+  },
+  "x-max-encoded-bytes": 65536
+}

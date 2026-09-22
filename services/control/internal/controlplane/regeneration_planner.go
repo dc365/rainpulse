@@ -85,7 +85,7 @@ func (planner *pipelinePlanner) refreshRegenerationFrameScans(
 	ctx context.Context,
 	request workflow.PipelineRegeneration,
 ) ([]workflow.PipelineRegenerationFrame, error) {
-	ready, err := planner.listRegenerationRadarScans(ctx)
+	ready, err := planner.listRegenerationRadarScans(ctx, request)
 	if err != nil {
 		return nil, fmt.Errorf("list grid-ready scans for regeneration: %w", err)
 	}
@@ -115,7 +115,12 @@ func (planner *pipelinePlanner) refreshRegenerationFrameScans(
 // the latter silently drops otherwise reusable historical volumes.
 func (planner *pipelinePlanner) listRegenerationRadarScans(
 	ctx context.Context,
+	request workflow.PipelineRegeneration,
 ) ([]workflow.RadarScan, error) {
+	windows, err := planner.regenerationScanWindow(request)
+	if err != nil {
+		return nil, err
+	}
 	states := []workflow.RadarScanStatus{
 		workflow.RadarScanNormalized,
 		workflow.RadarScanQCReady,
@@ -124,7 +129,14 @@ func (planner *pipelinePlanner) listRegenerationRadarScans(
 	}
 	items := make([]workflow.RadarScan, 0)
 	for _, state := range states {
-		page, err := planner.listRadarScans(ctx, state)
+		scope, err := planner.plannerScope(string(state), false)
+		if err != nil {
+			return nil, err
+		}
+		scope.Windows = windows
+		// Explicit full-chain regeneration may reuse QC-only historical inputs.
+		scope.ExcludeQCOnly = false
+		page, err := planner.readPlanningScansInScope(ctx, scope)
 		if err != nil {
 			return nil, err
 		}

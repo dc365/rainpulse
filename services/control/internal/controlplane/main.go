@@ -27,6 +27,7 @@ import (
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/orchestration"
 	postgresstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/postgres"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/radaringest"
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/releaseguard"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/runtimeconfig"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/workflow"
 	"github.com/google/uuid"
@@ -74,6 +75,17 @@ func Main() {
 	}
 	defer pool.Close()
 	defer bus.Close()
+
+	// Serve must keep consuming results while release admission is paused.
+	// Explicit completion/failure commands also do not create new work.
+	if command != "serve" && command != "complete" && command != "fail" {
+		release, admissionErr := releaseguard.Acquire(ctx)
+		if admissionErr != nil {
+			slog.Error("new work is paused or release guard is unavailable", "error", admissionErr)
+			os.Exit(1)
+		}
+		defer release()
+	}
 
 	switch command {
 	case "serve":

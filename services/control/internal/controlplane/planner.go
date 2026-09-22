@@ -47,19 +47,20 @@ type pipelineSettings struct {
 }
 
 type pipelinePlanner struct {
+	releaseQCHash       string
 	settings            pipelineSettings
 	store               *postgresstore.Store
 	service             *orchestration.Service
-	plannedQC           map[uuid.UUID]struct{}
-	plannedGrid         map[uuid.UUID]struct{}
-	plannedMosaic       map[time.Time]struct{}
-	plannedQPE          map[uuid.UUID]struct{}
-	plannedDiagnostic   map[uuid.UUID]struct{}
-	plannedNowcast      map[time.Time]struct{}
-	plannedPysteps      map[uuid.UUID]struct{}
-	plannedNowcastNet   map[uuid.UUID]struct{}
-	plannedProduct      map[uuid.UUID]struct{}
-	plannedVerification map[uuid.UUID]struct{}
+	plannedQC           map[uuid.UUID]time.Time
+	plannedGrid         map[uuid.UUID]time.Time
+	plannedMosaic       map[time.Time]time.Time
+	plannedQPE          map[uuid.UUID]time.Time
+	plannedDiagnostic   map[uuid.UUID]time.Time
+	plannedNowcast      map[time.Time]time.Time
+	plannedPysteps      map[uuid.UUID]time.Time
+	plannedNowcastNet   map[uuid.UUID]time.Time
+	plannedProduct      map[uuid.UUID]time.Time
+	plannedVerification map[uuid.UUID]time.Time
 }
 
 type mosaicWaterlineDecision struct {
@@ -85,8 +86,8 @@ func pipelineSettingsFromEnvironment() (*pipelineSettings, error) {
 		return nil, fmt.Errorf("RAINPULSE_PIPELINE_INTERVAL must be a positive duration")
 	}
 	lookback, err := time.ParseDuration(environmentOrDefault("RAINPULSE_PIPELINE_LOOKBACK", "1h"))
-	if err != nil || lookback < 0 {
-		return nil, fmt.Errorf("RAINPULSE_PIPELINE_LOOKBACK must be a non-negative duration")
+	if err != nil || lookback <= 0 {
+		return nil, fmt.Errorf("RAINPULSE_PIPELINE_LOOKBACK must be positive; use an explicit historical replay window instead of lookback=0")
 	}
 	historicalReplayStart, historicalReplayEnd, err := historicalReplayWindowFromEnvironment()
 	if err != nil {
@@ -308,12 +309,12 @@ func newPipelinePlanner(
 ) *pipelinePlanner {
 	return &pipelinePlanner{
 		settings: settings, store: store, service: service,
-		plannedQC: make(map[uuid.UUID]struct{}), plannedGrid: make(map[uuid.UUID]struct{}),
-		plannedMosaic: make(map[time.Time]struct{}), plannedQPE: make(map[uuid.UUID]struct{}),
-		plannedDiagnostic: make(map[uuid.UUID]struct{}), plannedNowcast: make(map[time.Time]struct{}),
-		plannedPysteps: make(map[uuid.UUID]struct{}), plannedNowcastNet: make(map[uuid.UUID]struct{}),
-		plannedProduct:      make(map[uuid.UUID]struct{}),
-		plannedVerification: make(map[uuid.UUID]struct{}),
+		plannedQC: make(map[uuid.UUID]time.Time), plannedGrid: make(map[uuid.UUID]time.Time),
+		plannedMosaic: make(map[time.Time]time.Time), plannedQPE: make(map[uuid.UUID]time.Time),
+		plannedDiagnostic: make(map[uuid.UUID]time.Time), plannedNowcast: make(map[time.Time]time.Time),
+		plannedPysteps: make(map[uuid.UUID]time.Time), plannedNowcastNet: make(map[uuid.UUID]time.Time),
+		plannedProduct:      make(map[uuid.UUID]time.Time),
+		plannedVerification: make(map[uuid.UUID]time.Time),
 	}
 }
 
@@ -333,6 +334,16 @@ func (planner *pipelinePlanner) Run(ctx context.Context) {
 }
 
 func (planner *pipelinePlanner) PlanOnce(ctx context.Context) error {
+	release, err := planner.beginPlanning(ctx)
+	if err != nil {
+		return err
+	}
+	if release == nil {
+		return nil
+	}
+	defer release()
+	planner.prunePlanningCaches(time.Now().UTC())
+	defer func() { planner.prunePlanningCaches(time.Now().UTC()) }()
 	if err := planner.planQCBatch(ctx); err != nil {
 		return err
 	}
@@ -363,13 +374,6 @@ func (planner *pipelinePlanner) planRadarStage(ctx context.Context, status workf
 		return err
 	}
 	for _, scan := range scans {
-		qcOnly, err := planner.store.IsQCOnlyScan(ctx, scan.ID)
-		if err != nil {
-			return err
-		}
-		if qcOnly {
-			continue
-		}
 		if _, allowed := planner.settings.radarIDs[strings.ToLower(scan.RadarID)]; !allowed {
 			continue
 		}
@@ -393,7 +397,7 @@ func (planner *pipelinePlanner) planRadarStage(ctx context.Context, status workf
 			slog.Error("plan radar stage", "stage", stage, "scan_id", scan.ID, "error", err)
 			continue
 		}
-		planned[scan.ID] = struct{}{}
+		planned[scan.ID] = time.Now().UTC()
 	}
 	return nil
 }
@@ -460,7 +464,7 @@ func (planner *pipelinePlanner) planMosaics(ctx context.Context) error {
 			slog.Error("plan radar mosaic", "analysis_time", analysisTime, "error", err)
 			continue
 		}
-		planner.plannedMosaic[analysisTime] = struct{}{}
+		planner.plannedMosaic[analysisTime] = time.Now().UTC()
 		slog.Info("radar mosaic crossed waterline",
 			"analysis_time", analysisTime,
 			"contributors", len(selected),
@@ -504,23 +508,12 @@ func (planner *pipelinePlanner) listRadarScans(
 	ctx context.Context,
 	status workflow.RadarScanStatus,
 ) ([]workflow.RadarScan, error) {
-	const pageSize = 200
-	scans := make([]workflow.RadarScan, 0, pageSize)
-	for offset := 0; ; offset += pageSize {
-		page, err := planner.store.ListRadarScansPage(ctx, pageSize, offset, nil, &status)
-		if err != nil {
-			return nil, err
-		}
-		scans = append(scans, page...)
-		if len(page) < pageSize {
-			return scans, nil
-		}
-	}
+	return planner.readPlanningScans(ctx, status)
 }
 
 func (planner *pipelinePlanner) planAnalyses(ctx context.Context) error {
 	qpeStatus := workflow.AnalysisQPE
-	cycles, err := planner.store.ListAutomaticAnalysisCycles(ctx, 200, &qpeStatus)
+	cycles, err := planner.listPlanningAnalyses(ctx, qpeStatus)
 	if err != nil {
 		return err
 	}
@@ -540,11 +533,11 @@ func (planner *pipelinePlanner) planAnalyses(ctx context.Context) error {
 			slog.Error("plan analysis QPE", "analysis_id", cycle.ID, "error", err)
 			continue
 		}
-		planner.plannedQPE[cycle.ID] = struct{}{}
+		planner.plannedQPE[cycle.ID] = time.Now().UTC()
 	}
 
 	readyStatus := workflow.AnalysisReady
-	ready, err := planner.store.ListAutomaticAnalysisCycles(ctx, 200, &readyStatus)
+	ready, err := planner.listPlanningAnalyses(ctx, readyStatus)
 	if err != nil {
 		return err
 	}
@@ -565,7 +558,7 @@ func (planner *pipelinePlanner) planAnalyses(ctx context.Context) error {
 			); err != nil {
 				slog.Error("plan analysis diagnostics", "analysis_id", cycle.ID, "error", err)
 			} else {
-				planner.plannedDiagnostic[cycle.ID] = struct{}{}
+				planner.plannedDiagnostic[cycle.ID] = time.Now().UTC()
 			}
 		}
 	}
@@ -596,14 +589,14 @@ func (planner *pipelinePlanner) planAnalyses(ctx context.Context) error {
 			slog.Error("plan NowcastInput", "issue_time", cycle.AnalysisTime, "error", createErr)
 			continue
 		}
-		planner.plannedNowcast[cycle.AnalysisTime] = struct{}{}
+		planner.plannedNowcast[cycle.AnalysisTime] = time.Now().UTC()
 	}
 	return nil
 }
 
 func (planner *pipelinePlanner) planForecasts(ctx context.Context) error {
 	inputReady := workflow.RunInputReady
-	runs, _, err := planner.store.ListRuns(ctx, 200, nil, &inputReady)
+	runs, err := planner.listPlanningRuns(ctx, inputReady)
 	if err != nil {
 		return err
 	}
@@ -621,7 +614,7 @@ func (planner *pipelinePlanner) planForecasts(ctx context.Context) error {
 				); err != nil {
 					slog.Debug("plan NowcastNet shadow", "run_id", run.ID, "error", err)
 				} else {
-					planner.plannedNowcastNet[run.ID] = struct{}{}
+					planner.plannedNowcastNet[run.ID] = time.Now().UTC()
 				}
 			}
 		}
@@ -634,11 +627,11 @@ func (planner *pipelinePlanner) planForecasts(ctx context.Context) error {
 			slog.Error("plan pySTEPS-LK", "run_id", run.ID, "error", err)
 			continue
 		}
-		planner.plannedPysteps[run.ID] = struct{}{}
+		planner.plannedPysteps[run.ID] = time.Now().UTC()
 	}
 
 	baselineReady := workflow.RunBaselineReady
-	runs, _, err = planner.store.ListRuns(ctx, 200, nil, &baselineReady)
+	runs, err = planner.listPlanningRuns(ctx, baselineReady)
 	if err != nil {
 		return err
 	}
@@ -658,11 +651,11 @@ func (planner *pipelinePlanner) planForecasts(ctx context.Context) error {
 			slog.Error("plan application products", "run_id", run.ID, "error", err)
 			continue
 		}
-		planner.plannedProduct[run.ID] = struct{}{}
+		planner.plannedProduct[run.ID] = time.Now().UTC()
 	}
 
 	published := workflow.RunPublished
-	runs, _, err = planner.store.ListRuns(ctx, 200, nil, &published)
+	runs, err = planner.listPlanningRuns(ctx, published)
 	if err != nil {
 		return err
 	}
@@ -687,7 +680,7 @@ func (planner *pipelinePlanner) planForecasts(ctx context.Context) error {
 			slog.Error("plan forecast verification", "run_id", run.ID, "error", err)
 			continue
 		}
-		planner.plannedVerification[run.ID] = struct{}{}
+		planner.plannedVerification[run.ID] = time.Now().UTC()
 	}
 	return nil
 }
