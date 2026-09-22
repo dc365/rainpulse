@@ -60,6 +60,7 @@ def _strong_empty(shape):
         "CF_NR_STRONG_RHOHV": np.full(shape, np.nan, "float32"),
         "CF_NR_STRONG_SNR_DB": np.full(shape, np.nan, "float32"),
         "CF_NR_STRONG_RANGE_M": np.full(shape, np.nan, "float32"),
+        "CF_NR_TEMPORAL_LOW_RHO_AVAILABLE_MASK": np.zeros(shape, "uint8"),
         "CF_NR_TEMPORAL_LOW_RHO_DOMAIN_MASK": np.zeros(shape, "uint8"),
         "CF_NR_TEMPORAL_LOW_RHO_PRIOR1_MASK": np.zeros(shape, "uint8"),
         "CF_NR_TEMPORAL_LOW_RHO_PRIOR2_MASK": np.zeros(shape, "uint8"),
@@ -147,7 +148,7 @@ def evidence(s,cfg,base,runtime=None):
 def _temporal_low_rho(s,strong,base,runtime):
     """Two-snapshot causal low-RHOHV recurrence for bounded near-site objects."""
     shape=s.shape
-    keys=("DOMAIN_MASK","PRIOR1_MASK","PRIOR2_MASK","SUPPORT_MASK","OBJECT_MASK")
+    keys=("AVAILABLE_MASK","DOMAIN_MASK","PRIOR1_MASK","PRIOR2_MASK","SUPPORT_MASK","OBJECT_MASK")
     out={("CF_NR_TEMPORAL_LOW_RHO_"+k):np.zeros(shape,"uint8") for k in keys}
     out.update({
         "CF_NR_TEMPORAL_LOW_RHO_OBJECT_ID":np.zeros(shape,"int32"),
@@ -188,6 +189,7 @@ def _temporal_low_rho(s,strong,base,runtime):
     selected=selected[:cfg.minimum_prior_snapshots]
     if len(selected)<cfg.minimum_prior_snapshots:
         return out,{"status":"INSUFFICIENT_PRIOR_SNAPSHOTS","sources":[],"rejected":rejected}
+    out["CF_NR_TEMPORAL_LOW_RHO_AVAILABLE_MASK"][:] = 1
     xx=ground(s.ranges[None,:],s.elevation[:,None]);hh=height(s.ranges[None,:],s.elevation[:,None])
     aa=np.broadcast_to(s.azimuth[:,None],shape)
     recurrence=[]
@@ -414,6 +416,7 @@ def validate(a,cfg):
         protected=a['CF_NR_STRONG_PROTECTED_MASK']==1
         barriers=_strong_barriers(a)
         action=a['CF_NR_STRONG_ACTION_MASK']==1
+        temporal_available=a['CF_NR_TEMPORAL_LOW_RHO_AVAILABLE_MASK']==1
         temporal_domain=a['CF_NR_TEMPORAL_LOW_RHO_DOMAIN_MASK']==1
         temporal_object=a['CF_NR_TEMPORAL_LOW_RHO_OBJECT_MASK']==1
         if np.any((candidate|core|propagated|dilated|dilation_domain|temporal_domain)&barriers):
@@ -467,7 +470,7 @@ def validate(a,cfg):
                     or members>strong.temporal_low_rho.maximum_object_gates
                     or float(temporal_fraction[component][0])+1e-6<strong.temporal_low_rho.minimum_object_recurrence_fraction):
                 raise ValueError('temporal low-rho object lacks recurrent support')
-        if strong.temporal_low_rho is not None:
+        if strong.temporal_low_rho is not None and temporal_available.any():
             expected_temporal_domain=(obs&np.isfinite(a['CF_RAW_DBZH'])
                 &np.isfinite(a['CF_NR_STRONG_RHOHV'])&np.isfinite(a['CF_NR_STRONG_SNR_DB'])
                 &np.isfinite(a['CF_NR_STRONG_RANGE_M'])
@@ -478,8 +481,8 @@ def validate(a,cfg):
                 &(a['CF_NR_STRONG_RANGE_M']<=strong.temporal_low_rho.maximum_range_m)&~barriers)
             if not np.array_equal(temporal_domain,expected_temporal_domain):
                 raise ValueError('temporal low-rho domain differs from measured support')
-        elif np.any(temporal_domain|prior1|prior2|temporal_support|temporal_object):
-            raise ValueError('temporal low-rho evidence exists while disabled')
+        elif np.any(temporal_available|temporal_domain|prior1|prior2|temporal_support|temporal_object):
+            raise ValueError('temporal low-rho evidence exists while unavailable')
         if strong.object_propagation or strong.object_dilation_iterations:
             expected_domain=(obs&(a['CF_NR_STRONG_SAFE_ROW_MASK']==1)
                 &np.isfinite(a['CF_RAW_DBZH'])

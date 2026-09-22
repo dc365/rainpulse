@@ -96,9 +96,13 @@ def test_temporal_low_rho_requires_two_causal_snapshots():
     two_past=(past_sweep(s,'past-1',120.),past_sweep(s,'past-2',240.))
     insufficient=one(s,c,near_context=RuntimeContext('site_a','test-scan','processor-v1',one_past))
     assert not (insufficient.arrays['CF_NR_TEMPORAL_LOW_RHO_OBJECT_MASK']==1).any()
+    assert not (insufficient.arrays['CF_NR_TEMPORAL_LOW_RHO_AVAILABLE_MASK']==1).any()
+    _,out,d=check(s,c,near_context=RuntimeContext('site_a','test-scan','processor-v1',one_past))
+    assert d['strong_near_quarantine_gates']==0
     e=one(s,c,near_context=RuntimeContext('site_a','test-scan','processor-v1',two_past))
     selected=e.arrays['CF_NR_TEMPORAL_LOW_RHO_OBJECT_MASK']==1
     assert selected.any() and np.all(selected<=(e.arrays['CF_NR_TEMPORAL_LOW_RHO_DOMAIN_MASK']==1))
+    assert (e.arrays['CF_NR_TEMPORAL_LOW_RHO_AVAILABLE_MASK']==1).any()
     assert np.all(selected<=(e.arrays['CF_NR_TEMPORAL_LOW_RHO_SUPPORT_MASK']==1))
     assert e.summary['near_revision']['strong_near']['temporal_low_rho']['status']=='EVALUATED'
     _,out,d=check(s,c,near_context=RuntimeContext('site_a','test-scan','processor-v1',two_past))
