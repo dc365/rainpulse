@@ -841,7 +841,13 @@ def _validate_temporal_context_artifact(
         return "invalid_volume_end_time"
     delta_seconds = (end_time - current_end_time).total_seconds()
     fusion = profile.radial_interference.morphology.context_fusion
-    if fusion.temporal_selection_mode != "symmetric_offline" and delta_seconds >= 0:
+    near = getattr(profile.volume_review, "clutter_fusion", None)
+    near = getattr(near, "near_revision", None)
+    strong = getattr(near, "strong_near", None)
+    temporal = getattr(strong, "temporal_low_rho", None)
+    boundary_retrospective = bool(getattr(temporal, "retrospective_boundary_enabled", False))
+    if (fusion.temporal_selection_mode != "symmetric_offline" and not boundary_retrospective
+            and delta_seconds >= 0):
         return "future_time_disallowed" if delta_seconds > 0 else "non_past_temporal_context"
     if abs(delta_seconds) > fusion.temporal_max_time_offset_seconds:
         return "time_out_of_window"
