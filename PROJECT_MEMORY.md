@@ -520,3 +520,13 @@ operational data here.
   Two-cycle four-station recompute: `/tmp/rp-nmr-recompute.py`, progress
   `/tmp/rp-nmr-recompute.log`, results `/tmp/rp-nmr-recompute-results.json`.
   Check completion before claiming refreshed imagery or improved clutter performance.
+
+- 2026-09-22: Diagnostics CR now uses CR admission for legacy full-range fusion
+  and withholds weak (<25 dBZ) returns within 10 km of a source radar before the
+  multi-radar maximum. This is CR-only; QPE inputs remain unchanged. Commit
+  `9d65244`; 105 diagnostics worker image
+  `rainpulse-cpu-worker:diagnostic-cr-near-weak-20260922`, with compose override
+  `deploy/docker-compose.diagnostic-cr-near-weak-20260922.yaml`. BJT 09:00 proof
+  job `432b68f3-3184-4707-9be7-ca4c91ab5fee`: 598 weak CR pixels removed overall,
+  including the 244-pixel Z9598 station-edge component; new grid PNG SHA
+  `d4a9ae2d8db3dfbff95469d8e138e5ec6e64b4357c6394166d2e1d6807a2b3d9`.
