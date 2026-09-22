@@ -1,6 +1,11 @@
 # RainPulse
 
-RainPulse is a 0–2 hour precipitation nowcasting system. The repository keeps the React user interface, Go control plane, Python compute workers, contracts, configuration, and deployment assets together so their boundaries remain explicit and testable.
+Current architecture and maintenance entry: [`docs/ARCHITECTURE_CURRENT.md`](docs/ARCHITECTURE_CURRENT.md).
+The active Phase 1 cadence is six minutes with 30 LK forecast leads through +180 minutes;
+older RP acceptance records below retain their frozen historical five-minute/24-lead settings.
+For the three architecture changes and their validation boundaries, start with the current architecture page.
+
+RainPulse is a short-term precipitation nowcasting system. The repository keeps the React user interface, Go control plane, Python compute workers, contracts, configuration, and deployment assets together so their boundaries remain explicit and testable.
 
 The implementation baseline is [`docs/RainPulse_技术架构与实施方案_含雷达质控_v1.1.md`](docs/RainPulse_技术架构与实施方案_含雷达质控_v1.1.md). Phase 1 first builds a trusted radar field from immutable raw polar volumes, then delivers a deterministic pySTEPS-LK loop before probabilistic ensembles or NowcastNet enter the production path.
 

@@ -77,9 +77,12 @@ def validate_context_identity(root, item, *, role, current_root, cutoff, config,
 
 
 def prepare_open_source_inputs(
-    request, normalized, profile, client, *, reader=None, ancillary_maps=None
+    request, normalized, profile, client, *, reader=None, ancillary_maps=None,
+    geometry_loader=None,
 ):
-    from ..qc_worker import _load_qc_geometry_resources
+    from ..qc_resources import load_geometry_resources
+
+    geometry_loader = geometry_loader if geometry_loader is not None else load_geometry_resources
 
     view = open_qc_input(normalized)
     if profile.rfi_objects is not None:
@@ -90,7 +93,7 @@ def prepare_open_source_inputs(
             raise ValueError("current observation is after the frozen decision cutoff")
     geometry_audit = {}
     audited = getattr(profile, "residual_repair", None) is not None
-    beam, terrain, config_dir, dem_version = _load_qc_geometry_resources(
+    beam, terrain, config_dir, dem_version = geometry_loader(
         request, profile, **({"audit": geometry_audit} if audited else {})
     )
     load = reader or ArtifactObjectReader(client)
@@ -384,12 +387,12 @@ def prepare_open_source_inputs(
 
 
 def _load_clutter(profile, client, root):
-    from ..qc_worker import _load_npz
+    from ..qc_resources import load_npz
 
     uri = profile.static_ground_clutter.asset_uri
     # The asset format includes the hash of every native geometry. _load_npz
     # loads only data, never pickle/code. Artifact-content digest is verified here.
-    archive = _load_npz(uri, client)
+    archive = load_npz(uri, client)
     actual = hashlib.sha256()
     for key in sorted(archive):
         values = np.asarray(archive[key])
@@ -402,7 +405,7 @@ def _load_clutter(profile, client, root):
 
         return load_verified_background(
             archive, root, profile.static_ground_clutter.asset_sha256,
-            profile.static_ground_clutter.asset_version, load_asset=lambda uri: _load_npz(uri, client),
+            profile.static_ground_clutter.asset_version, load_asset=lambda uri: load_npz(uri, client),
         )
     result = {}
     for number in root["sweep_number"][:]:

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	nowcastnetproductstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/nowcastnetproducts"
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/readquery"
 	"github.com/google/uuid"
 )
 
@@ -26,6 +27,7 @@ const (
 )
 
 type RuntimeOptions struct {
+	Queries         *readquery.Service
 	Store           RuntimeStore
 	ProjectionStore ProjectionStore
 	Objects         RuntimeObjectReader
@@ -65,7 +67,7 @@ func NewRuntimeHandler(core http.Handler, options RuntimeOptions) http.Handler {
 	if runs, ok := options.Store.(NowcastNetAlgorithmRunStore); ok {
 		formalNowcastNet = newFormalNowcastNetProductStore(runs, options.Objects)
 	}
-	projection := newHandler(core, newCombinedNowcastNetProductStore(formalNowcastNet, legacyNowcastNet))
+	projection := newHandlerWithQueries(core, newCombinedNowcastNetProductStore(formalNowcastNet, legacyNowcastNet), options.Queries)
 	projected := http.Handler(projection)
 	if options.ProjectionStore != nil && environmentBool(
 		"RAINPULSE_WORKSPACE_PERSISTENT_PROJECTION_ENABLED",

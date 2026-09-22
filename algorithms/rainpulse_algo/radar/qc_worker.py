@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import io
 import json
 import os
 import resource
@@ -10,7 +9,6 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlparse
 from uuid import NAMESPACE_URL, uuid5
 
 import numpy as np
@@ -25,7 +23,6 @@ from rainpulse_algo.worker.object_store import (
     ArtifactObjectReader,
     artifact_sha256,
     minio_client_from_environment,
-    parse_s3_uri,
 )
 from rainpulse_algo.worker.runtime import WorkerResult
 
@@ -254,6 +251,7 @@ def prepare_qc_inputs(request, normalized, profile, client, *, reader=None, anci
             client,
             reader=reader,
             ancillary_maps=ancillary_maps,
+            geometry_loader=_load_qc_geometry_resources,
         )
     from .qc_input import open_qc_input
 
@@ -627,79 +625,16 @@ def _load_qc_geometry_resources(
     Path | None,
     str | None,
 ]:
-    record = audit if audit is not None else {}
-    record.update(
-        status="not_requested",
-        beam_status="unavailable",
-        terrain_status="unavailable",
-        resources={},
+    """Compatibility seam for older replay callers and dependency-patched tests."""
+    from .qc_resources import GeometryProviders, load_geometry_resources
+
+    return load_geometry_resources(
+        request, profile, audit=audit,
+        providers=GeometryProviders(
+            load_radar_config, radar_beam_context_from_config, load_source,
+            VerifiedDEMTileStore, _optional_file, _optional_directory,
+        ),
     )
-    # Capability, not an ever-growing version list. V6 was accidentally omitted
-    # from the old list. Legacy algorithms retain their original eligibility.
-    if (
-        getattr(profile, "engine", None) != "open_source"
-        and profile.decision_version != "evidence-v2"
-    ):
-        return None, None, None, None
-    radar_config_dir = _optional_directory("RAINPULSE_RADAR_CONFIG_DIR")
-    if radar_config_dir is None:
-        record["status"] = "radar_config_directory_unavailable"
-        return None, None, None, None
-    record["status"] = "radar_config_invalid"
-    try:
-        path = radar_config_dir / f"{request.payload.radar_id}.yaml"
-        before = path.read_bytes()
-        current_radar_config = load_radar_config(path)
-        if path.read_bytes() != before:
-            raise ValueError("radar geometry config changed while reading")
-        record["resources"]["current_radar_config"] = {
-            "sha256": hashlib.sha256(before).hexdigest(),
-            "config_version": current_radar_config.config_version,
-        }
-        if current_radar_config.radar_id.lower() != request.payload.radar_id.lower():
-            record["status"] = "radar_identity_mismatch"
-            return None, None, radar_config_dir, None
-        current_beam_context = radar_beam_context_from_config(current_radar_config)
-    except (OSError, ValueError) as error:
-        record["error_type"] = type(error).__name__
-        return None, None, radar_config_dir, None
-    record.update(
-        status="beam_loaded",
-        beam_status="loaded",
-        altitude_datum_status=current_beam_context.altitude_datum_status,
-        terrain_status="not_configured",
-    )
-    ancillary_config_path = _optional_file("RAINPULSE_ANCILLARY_CONFIG")
-    ancillary_root = _optional_directory("RAINPULSE_ANCILLARY_ROOT")
-    expected_dem_asset_version = current_radar_config.ancillary.get("dem_asset_version")
-    if (
-        ancillary_config_path is None
-        or ancillary_root is None
-        or not isinstance(expected_dem_asset_version, str)
-        or not expected_dem_asset_version
-    ):
-        return current_beam_context, None, radar_config_dir, None
-    try:
-        before = ancillary_config_path.read_bytes()
-        ancillary_source = load_source(ancillary_config_path)
-        if ancillary_config_path.read_bytes() != before:
-            raise ValueError("ancillary config changed while reading")
-        record["resources"]["ancillary_config"] = {
-            "sha256": hashlib.sha256(before).hexdigest(),
-        }
-        terrain = VerifiedDEMTileStore(
-            ancillary_source,
-            ancillary_root,
-            expected_asset_version=expected_dem_asset_version,
-            expected_config_version=ancillary_source.config_version,
-        )
-        record["resources"]["dem_manifest"] = {"sha256": terrain.manifest_sha256}
-        record.update(status="resources_loaded", terrain_status="manifest_verified")
-        # Individual raster bytes are verified lazily by VerifiedDEMTileStore.
-    except (OSError, RuntimeError, ValueError) as error:
-        terrain = None
-        record.update(terrain_status="invalid", error_type=type(error).__name__)
-    return current_beam_context, terrain, radar_config_dir, expected_dem_asset_version
 
 
 def _load_cross_radar_support_reference(
@@ -1038,8 +973,6 @@ def _validate_request_versions(
 ) -> None:
     payload = request.payload
     if getattr(profile, "engine", None) == "open_source":
-        import hashlib
-
         actual = hashlib.sha256(
             _required_file("RAINPULSE_RADAR_QC_CONFIG").read_bytes()
         ).hexdigest()
@@ -1072,25 +1005,8 @@ def _load_ancillary_maps(
 
 
 def _load_npz(uri: str, client: Minio) -> dict[str, np.ndarray]:
-    parsed = urlparse(uri)
-    if parsed.scheme == "s3":
-        bucket, key = parse_s3_uri(uri)
-        response = client.get_object(bucket, key)
-        try:
-            data = response.read()
-        finally:
-            response.close()
-            response.release_conn()
-    elif parsed.scheme == "file":
-        path = Path(unquote(parsed.path)).resolve(strict=True)
-        roots = _required_roots("RAINPULSE_QC_ASSET_ROOTS")
-        if not any(path == root or root in path.parents for root in roots):
-            raise QCConfigError("QC ancillary file is outside the configured roots")
-        data = path.read_bytes()
-    else:
-        raise QCConfigError(f"unsupported QC ancillary URI {uri!r}")
-    with np.load(io.BytesIO(data), allow_pickle=False) as archive:
-        return {name: archive[name].astype("float32") for name in archive.files}
+    from .qc_resources import load_npz
+    return load_npz(uri, client)
 
 
 def _merge_npz(
@@ -1153,27 +1069,15 @@ def _required_file(name: str) -> Path:
 
 
 def _optional_file(name: str) -> Path | None:
-    value = os.getenv(name)
-    if not value:
-        return None
-    path = Path(value).resolve(strict=True)
-    if not path.is_file():
-        raise QCConfigError(f"{name} must identify a file")
-    return path
+    from .qc_resource_paths import optional_file
+    return optional_file(name)
 
 
 def _optional_directory(name: str) -> Path | None:
-    value = os.getenv(name)
-    if not value:
-        return None
-    path = Path(value).resolve(strict=True)
-    if not path.is_dir():
-        raise QCConfigError(f"{name} must identify a directory")
-    return path
+    from .qc_resource_paths import optional_directory
+    return optional_directory(name)
 
 
 def _required_roots(name: str) -> tuple[Path, ...]:
-    value = os.getenv(name)
-    if not value:
-        raise QCConfigError(f"{name} is required for file ancillary assets")
-    return tuple(Path(item).resolve(strict=True) for item in value.split(os.pathsep) if item)
+    from .qc_resource_paths import required_roots
+    return required_roots(name)

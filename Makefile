@@ -1,5 +1,7 @@
 SHELL := /usr/bin/env bash
 
+# Current maintenance checks; the first Make target remains unchanged.
+
 COMPOSE_FILE := deploy/docker-compose.yaml
 COMPOSE_ENV_FILE ?= deploy/.env
 POSTGRES_IMAGE := postgres:17.11-alpine3.24
@@ -436,3 +438,10 @@ test-qc-crossradar-v5:
 .PHONY: test-qc-residual-v6
 test-qc-residual-v6:
 	uv run --project algorithms pytest algorithms/tests/test_residual_v6.py algorithms/tests/test_residual_network_v6.py algorithms/tests/test_polar_sampling_v6.py
+
+.PHONY: test-architecture-batch3 test-architecture-boundaries
+test-architecture-boundaries:
+	python3 scripts/check_architecture_boundaries.py
+
+test-architecture-batch3:
+	bash scripts/test_architecture_batch3.sh

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	nowcastnetproductstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/nowcastnetproducts"
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/readquery"
 )
 
 const (
@@ -37,6 +38,7 @@ var (
 // deliberately composes its bounded JSON responses instead of reaching into
 // PostgreSQL or object storage directly.
 type Handler struct {
+	queries              *readquery.Service
 	core                 http.Handler
 	now                  func() time.Time
 	executionMode        string
@@ -59,6 +61,10 @@ func NewHandler(core http.Handler) http.Handler {
 }
 
 func newHandler(core http.Handler, products nowcastNetProductStore) http.Handler {
+	return newHandlerWithQueries(core, products, nil)
+}
+
+func newHandlerWithQueries(core http.Handler, products nowcastNetProductStore, queries *readquery.Service) http.Handler {
 	mode := strings.TrimSpace(os.Getenv("RAINPULSE_WORKSPACE_EXECUTION_MODE"))
 	if mode != "realtime_shadow" && mode != "operational" {
 		mode = ""
@@ -68,7 +74,7 @@ func newHandler(core http.Handler, products nowcastNetProductStore) http.Handler
 		catalogDateUTC = ""
 	}
 	handler := &Handler{
-		core: core, executionMode: mode,
+		core: core, queries: queries, executionMode: mode,
 		catalogGridID:  strings.TrimSpace(os.Getenv("RAINPULSE_WORKSPACE_CYCLE_GRID_ID")),
 		catalogDateUTC: catalogDateUTC,
 		catalogNeedsAnalysis: strings.EqualFold(
@@ -637,9 +643,8 @@ func (handler *Handler) addRadarReferencePanels(
 		if !found {
 			continue
 		}
-		var diagnostics diagnosticBundle
-		path := "/api/v1/analysis-cycles/" + url.PathEscape(reference.analysis.AnalysisID) + "/diagnostics"
-		if err := handler.readCore(ctx, path, &diagnostics); err != nil {
+		diagnostics, err := handler.queryDiagnostics(ctx, reference.analysis.AnalysisID)
+		if err != nil {
 			continue
 		}
 		for _, layer := range diagnostics.Layers {
@@ -721,12 +726,8 @@ func (handler *Handler) catalog(ctx context.Context) (map[string]*cycleAccumulat
 		cursor := ""
 		seenCursors := make(map[string]struct{})
 		for {
-			path := "/api/v1/runs?status=" + url.QueryEscape(status) + "&limit=100"
-			if cursor != "" {
-				path += "&cursor=" + url.QueryEscape(cursor)
-			}
-			var page forecastRunPage
-			if err := handler.readCore(ctx, path, &page); err != nil {
+			page, err := handler.queryForecastPage(ctx, status, cursor)
+			if err != nil {
 				degraded = append(degraded, "runs:"+strings.ToLower(status))
 				break
 			}
@@ -768,12 +769,8 @@ func (handler *Handler) catalog(ctx context.Context) (map[string]*cycleAccumulat
 	cursor := ""
 	seenAnalysisCursors := make(map[string]struct{})
 	for {
-		path := "/api/v1/analysis-cycles?status=ANALYSIS_READY&limit=200"
-		if cursor != "" {
-			path += "&cursor=" + url.QueryEscape(cursor)
-		}
-		var analyses analysisCyclePage
-		if err := handler.readCore(ctx, path, &analyses); err != nil {
+		analyses, err := handler.queryAnalysisPage(ctx, cursor)
+		if err != nil {
 			degraded = append(degraded, "analysis-cycles")
 			break
 		}
@@ -914,22 +911,22 @@ func handlerExecutionMode(now time.Time, issueTime time.Time, configured string)
 }
 
 func (handler *Handler) addAnalysis(ctx context.Context, detail *cycleDetail, summary analysisCycle) bool {
-	var full analysisCycle
-	if err := handler.readCore(ctx, "/api/v1/analysis-cycles/"+url.PathEscape(summary.AnalysisID), &full); err != nil {
+	full, err := handler.queryAnalysis(ctx, summary.AnalysisID)
+	if err != nil {
 		detail.Warnings = append(detail.Warnings, "analysis-detail")
 		full = summary
 	}
 
-	var qpe qpeSummary
-	if err := handler.readCore(ctx, "/api/v1/analysis-cycles/"+url.PathEscape(summary.AnalysisID)+"/qpe-summary", &qpe); err != nil {
+	qpe, err := handler.queryQPE(ctx, summary.AnalysisID)
+	if err != nil {
 		detail.Warnings = append(detail.Warnings, "qpe-summary")
 	} else if !qpeLineageMatches(full, qpe) {
 		detail.Warnings = append(detail.Warnings, "qpe-lineage")
 		return false
 	}
 
-	var diagnostics diagnosticBundle
-	if err := handler.readCore(ctx, "/api/v1/analysis-cycles/"+url.PathEscape(summary.AnalysisID)+"/diagnostics", &diagnostics); err != nil {
+	diagnostics, err := handler.queryDiagnostics(ctx, summary.AnalysisID)
+	if err != nil {
 		detail.Warnings = append(detail.Warnings, "analysis-diagnostics")
 		return false
 	}
@@ -1027,9 +1024,8 @@ func (handler *Handler) addObservedTimeline(
 			if analysis.AnalysisID == selected.AnalysisID {
 				continue
 			}
-			var diagnostics diagnosticBundle
-			path := "/api/v1/analysis-cycles/" + url.PathEscape(analysis.AnalysisID) + "/diagnostics"
-			if err := handler.readCore(ctx, path, &diagnostics); err != nil {
+			diagnostics, err := handler.queryDiagnostics(ctx, analysis.AnalysisID)
+			if err != nil {
 				continue
 			}
 			for _, layer := range diagnostics.Layers {

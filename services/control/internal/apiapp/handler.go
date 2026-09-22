@@ -11,6 +11,7 @@ import (
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/objectstore"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/orchestration"
 	postgresstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/postgres"
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/readquery"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/releaseguard"
 	verificationstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/verification"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/workspace"
@@ -23,6 +24,7 @@ func NewHandler(pool *pgxpool.Pool) (http.Handler, error) {
 		version = buildinfo.Identity()
 	}
 	store := postgresstore.New(pool)
+	queries := readquery.New(store, store)
 	commands := orchestration.NewService(store, orchestration.Options{})
 	diagnosticLayers, err := objectstore.NewFromEnvironment()
 	if err != nil {
@@ -52,6 +54,7 @@ func NewHandler(pool *pgxpool.Pool) (http.Handler, error) {
 
 	adminToken := os.Getenv("RAINPULSE_ADMIN_TOKEN")
 	coreHandler := api.NewHandler(api.Options{
+		Queries:              queries,
 		Version:              version,
 		AdminToken:           adminToken,
 		Runs:                 store,
@@ -68,7 +71,8 @@ func NewHandler(pool *pgxpool.Pool) (http.Handler, error) {
 		OperationalIssues:    store,
 	})
 	return releaseguard.Wrap(workspace.NewRuntimeHandler(coreHandler, workspace.RuntimeOptions{
-		Store: store, ProjectionStore: store, Objects: diagnosticLayers, EnsembleRoot: ensembleRoot, NowcastNetRoot: nowcastNetRoot, AdminToken: adminToken,
+		Queries: queries,
+		Store:   store, ProjectionStore: store, Objects: diagnosticLayers, EnsembleRoot: ensembleRoot, NowcastNetRoot: nowcastNetRoot, AdminToken: adminToken,
 	})), nil
 
 }

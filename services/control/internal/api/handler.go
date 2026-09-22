@@ -23,6 +23,7 @@ import (
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/operationalmetrics"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/orchestration"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/productquery"
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/readquery"
 	verificationstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/verification"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/workflow"
 	"github.com/google/uuid"
@@ -142,6 +143,7 @@ type EnsembleProductStore interface {
 }
 
 type Options struct {
+	Queries              *readquery.Service
 	Version              string
 	AdminToken           string
 	Runs                 RunStore
@@ -160,6 +162,7 @@ type Options struct {
 }
 
 type server struct {
+	queries *readquery.Service
 	apiv1.Unimplemented
 	version              string
 	runs                 RunStore
@@ -177,11 +180,16 @@ type server struct {
 }
 
 func NewHandler(options Options) http.Handler {
+	queries := options.Queries
+	if queries == nil {
+		queries = readquery.New(options.Runs, options.Observations)
+	}
 	pollInterval := options.SSEPollInterval
 	if pollInterval <= 0 {
 		pollInterval = time.Second
 	}
 	handler := apiv1.HandlerWithOptions(&server{
+		queries:              queries,
 		version:              options.Version,
 		runs:                 options.Runs,
 		observations:         options.Observations,
@@ -718,7 +726,7 @@ func (service *server) GetLatestRun(response http.ResponseWriter, request *http.
 		writeServiceUnavailable(response)
 		return
 	}
-	run, err := service.runs.LatestRun(request.Context())
+	run, err := service.readService().LatestRun(request.Context())
 	if err != nil {
 		writeStoreError(response, err)
 		return
@@ -731,7 +739,7 @@ func (service *server) GetRun(response http.ResponseWriter, request *http.Reques
 		writeServiceUnavailable(response)
 		return
 	}
-	run, err := service.runs.GetRun(request.Context(), runID)
+	run, err := service.readService().GetRun(request.Context(), runID)
 	if err != nil {
 		writeStoreError(response, err)
 		return
@@ -762,7 +770,7 @@ func (service *server) ListRuns(response http.ResponseWriter, request *http.Requ
 		value := workflow.RunStatus(*params.Status)
 		status = &value
 	}
-	runs, next, err := service.runs.ListRuns(request.Context(), limit, cursor, status)
+	runs, next, err := service.readService().ListRuns(request.Context(), limit, cursor, status)
 	if err != nil {
 		writeStoreError(response, err)
 		return
@@ -784,7 +792,7 @@ func (service *server) ListRunJobs(response http.ResponseWriter, request *http.R
 		writeServiceUnavailable(response)
 		return
 	}
-	if _, err := service.runs.GetRun(request.Context(), runID); err != nil {
+	if _, err := service.readService().GetRun(request.Context(), runID); err != nil {
 		writeStoreError(response, err)
 		return
 	}
@@ -1178,16 +1186,10 @@ func (service *server) ListAnalysisCycles(
 		value := workflow.AnalysisStatus(*params.Status)
 		status = &value
 	}
-	var cycles []workflow.AnalysisCycle
-	var next *uuid.UUID
-	var err error
-	if paged, ok := service.observations.(AnalysisCyclePageStore); ok {
-		cycles, next, err = paged.ListAnalysisCyclesPage(request.Context(), limit, status, params.Cursor)
-	} else if params.Cursor != nil {
+	cycles, next, err := service.readService().ListAnalysisCyclesPage(request.Context(), limit, status, params.Cursor)
+	if errors.Is(err, readquery.ErrPaginationUnavailable) {
 		writeError(response, http.StatusServiceUnavailable, "pagination_unavailable", "analysis pagination is unavailable")
 		return
-	} else {
-		cycles, err = service.observations.ListAnalysisCycles(request.Context(), limit, status)
 	}
 	if err != nil {
 		writeStoreError(response, err)
@@ -1209,7 +1211,7 @@ func (service *server) GetAnalysisCycle(
 		writeServiceUnavailable(response)
 		return
 	}
-	cycle, err := service.observations.GetAnalysisCycle(request.Context(), analysisID)
+	cycle, err := service.readService().GetAnalysisCycle(request.Context(), analysisID)
 	if err != nil {
 		writeStoreError(response, err)
 		return
@@ -1245,7 +1247,7 @@ func (service *server) GetAnalysisQpeSummary(
 		writeServiceUnavailable(response)
 		return
 	}
-	metrics, err := service.observations.GetAnalysisQPEMetrics(
+	metrics, err := service.readService().GetAnalysisQPEMetrics(
 		request.Context(), analysisID,
 	)
 	if err != nil {
@@ -1264,7 +1266,7 @@ func (service *server) GetAnalysisDiagnostics(
 		writeServiceUnavailable(response)
 		return
 	}
-	diagnostics, err := service.observations.GetAnalysisDiagnostics(
+	diagnostics, err := service.readService().GetAnalysisDiagnostics(
 		request.Context(), analysisID,
 	)
 	if err != nil {
@@ -1711,7 +1713,7 @@ func (service *server) streamLoader(params apiv1.StreamEventsParams) streamLoade
 	if params.AnalysisId != nil {
 		analysisID := *params.AnalysisId
 		return func(ctx context.Context) (streamSnapshot, error) {
-			cycle, err := service.observations.GetAnalysisCycle(ctx, analysisID)
+			cycle, err := service.readService().GetAnalysisCycle(ctx, analysisID)
 			return streamSnapshot{
 				ID: cycle.ID.String(), UpdatedAt: cycle.UpdatedAt,
 				EventType: "analysis.cycle.updated", Data: toAPIAnalysis(cycle),
@@ -1722,7 +1724,7 @@ func (service *server) streamLoader(params apiv1.StreamEventsParams) streamLoade
 	if params.RunId != nil {
 		runID := *params.RunId
 		load = func(ctx context.Context) (workflow.Run, error) {
-			return service.runs.GetRun(ctx, runID)
+			return service.readService().GetRun(ctx, runID)
 		}
 	}
 	return func(ctx context.Context) (streamSnapshot, error) {

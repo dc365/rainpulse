@@ -45,6 +45,9 @@ jobs:
         run: make bootstrap
       - name: Verify
         run: make ${{ matrix.target }}
+      - name: Maintenance boundary regression
+        if: matrix.target == 'test'
+        run: make test-architecture-batch3
   verify:
     name: verify
     runs-on: ubuntu-latest
