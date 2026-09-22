@@ -443,14 +443,17 @@ def validate(a,cfg):
         dilated=a['CF_NR_STRONG_DILATED_MASK']==1
         dilation_domain=a['CF_NR_STRONG_DILATION_DOMAIN_MASK']==1
         protected=a['CF_NR_STRONG_PROTECTED_MASK']==1
-        barriers=_strong_barriers(a,strong.temporal_low_rho)
+        strong_barriers=_strong_barriers(a)
+        temporal_barriers=_strong_barriers(a,strong.temporal_low_rho)
         action=a['CF_NR_STRONG_ACTION_MASK']==1
         temporal_available=a['CF_NR_TEMPORAL_LOW_RHO_AVAILABLE_MASK']==1
         temporal_boundary=a['CF_NR_TEMPORAL_LOW_RHO_BOUNDARY_MODE_MASK']==1
         temporal_domain=a['CF_NR_TEMPORAL_LOW_RHO_DOMAIN_MASK']==1
         temporal_object=a['CF_NR_TEMPORAL_LOW_RHO_OBJECT_MASK']==1
-        if np.any((candidate|core|propagated|dilated|dilation_domain|temporal_domain)&barriers):
+        if np.any((candidate|core|propagated|dilated|dilation_domain)&strong_barriers):
             raise ValueError('strong near candidate crossed a protection barrier')
+        if np.any(temporal_domain&temporal_barriers):
+            raise ValueError('temporal near candidate crossed a protection barrier')
         if not np.array_equal(action,candidate&(strong.mode=='quarantine')):
             raise ValueError('strong near action differs from audited measured support')
         feature=(obs&(a['CF_STRONG_MASK']==1)&(a['CF_POLAR_AVAILABLE_MASK']==1)
@@ -460,7 +463,7 @@ def validate(a,cfg):
                  &np.isfinite(a['CF_NR_STRONG_SNR_DB'])&(a['CF_NR_STRONG_SNR_DB']>=strong.minimum_snr_db)
                  &np.isfinite(a['CF_NR_STRONG_RANGE_M'])&(a['CF_NR_STRONG_RANGE_M']<=strong.maximum_range_m)
                  &np.isfinite(a['CF_TEXTURE_SCORE'])&(a['CF_TEXTURE_SCORE']>=strong.minimum_texture_score)
-                 &(a['CF_FAMILY_COUNT']>=strong.minimum_family_count)&~barriers)
+                 &(a['CF_FAMILY_COUNT']>=strong.minimum_family_count)&~strong_barriers)
         if not np.array_equal(core,feature):raise ValueError('strong near core lacks measured two-family support')
         if (np.any(core&(propagated|dilated)) or np.any(propagated&dilated)
                 or not np.array_equal(candidate,core|propagated|dilated|temporal_object)):
@@ -510,7 +513,7 @@ def validate(a,cfg):
                     temporal_boundary,strong.temporal_low_rho.boundary_maximum_rhohv,
                     strong.temporal_low_rho.maximum_rhohv))
                 &(a['CF_NR_STRONG_SNR_DB']>=strong.temporal_low_rho.minimum_snr_db)
-                &(a['CF_NR_STRONG_RANGE_M']<=strong.temporal_low_rho.maximum_range_m)&~barriers)
+                &(a['CF_NR_STRONG_RANGE_M']<=strong.temporal_low_rho.maximum_range_m)&~temporal_barriers)
             if not np.array_equal(temporal_domain,expected_temporal_domain):
                 raise ValueError('temporal low-rho domain differs from measured support')
         elif np.any(temporal_available|temporal_domain|prior1|prior2|temporal_support|temporal_object):
@@ -522,7 +525,7 @@ def validate(a,cfg):
                 &(a['CF_RAW_DBZH']>=strong.minimum_object_dbz)
                 &(a['CF_RAW_DBZH']<=strong.maximum_object_dbz)
                 &np.isfinite(a['CF_NR_STRONG_RANGE_M'])
-                &(a['CF_NR_STRONG_RANGE_M']<=strong.maximum_range_m)&~barriers)
+                &(a['CF_NR_STRONG_RANGE_M']<=strong.maximum_range_m)&~strong_barriers)
             if np.any(dilation_domain&~expected_domain):
                 raise ValueError('strong near dilation domain differs from measured safe support')
             if np.any((core|propagated|dilated)&~dilation_domain):
