@@ -18,6 +18,7 @@ def volume(lon=117.0):
         sweep.array("DBZH_QC", np.full((360, 100), value, dtype="float32"))
         sweep.array("VALID_MASK", np.ones((360, 100), dtype="uint8"))
         sweep.array("QPE_ELIGIBLE_MASK", np.ones((360, 100), dtype="uint8"))
+        sweep.array("REFLECTIVITY_ELIGIBLE_FOR_CR", np.ones((360, 100), dtype="uint8"))
         sweep.array("QC_FLAGS", np.zeros((360, 100), dtype="uint32"))
     return root
 
@@ -28,7 +29,12 @@ def test_full_extent_vertical_maximum_and_quarantine():
     assert bounds[0] < 117 < bounds[2] and bounds[1] < 28 < bounds[3]
     assert bounds[3] > 28.8  # Outside the old 25..27 forecast domain.
     assert np.nanmax(values) == 40
-    root["sweep_001/QPE_ELIGIBLE_MASK"][:] = 0
+    root["sweep_001/REFLECTIVITY_ELIGIBLE_FOR_CR"][:] = 0
+    values, _ = composite_reflectivity([root], 1, maximum_size=128)
+    assert np.nanmax(values) == 20
+    # QPE eligibility must not re-admit a gate withheld from CR display.
+    root["sweep_001/QPE_ELIGIBLE_MASK"][:] = 1
+    root["sweep_001/REFLECTIVITY_ELIGIBLE_FOR_CR"][:] = 0
     values, _ = composite_reflectivity([root], 1, maximum_size=128)
     assert np.nanmax(values) == 20
     root["sweep_000/QC_FLAGS"][:] = 1
@@ -53,6 +59,6 @@ def test_winning_gate_provenance_follows_maximum_and_eligibility():
     for number in (0, 1):
         selected = valid & (sources['sweep'] == number)
         assert np.array_equal(root[f'sweep_{number:03d}/DBZH_QC'][:][sources['ray'][selected], sources['gate'][selected]], values[selected])
-    root['sweep_001/QPE_ELIGIBLE_MASK'][:] = 0
+    root['sweep_001/REFLECTIVITY_ELIGIBLE_FOR_CR'][:] = 0
     values, _, sources = composite_reflectivity([root], 1, maximum_size=64, return_sources=True)
     assert (sources['sweep'][np.isfinite(values)] == 0).all()

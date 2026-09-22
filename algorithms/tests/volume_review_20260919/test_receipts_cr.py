@@ -61,6 +61,16 @@ def test_cr_winner_every_pixel_reconstructs():
     assert np.isnan(p.arrays['CR_TRUSTED'][p.arrays['CR_VALID_MASK']==0]).all()
 
 
+def test_close_range_weak_echo_is_recorded_and_cannot_enter_cr():
+    s=sweep();root=root_from_sweeps([s]);g=root['sweep_000'];near=s.ranges<=10_000
+    g['DBZH_QC'][:,near]=10.;g['DBZH_QC'][:,~near]=30.
+    p=build_composite([root],32768,maximum_size=96)
+    assert np.isfinite(p.arrays['CR_NEAR_RANGE_WEAK_WITHHELD']).any()
+    weak=np.isfinite(p.arrays['CR_NEAR_RANGE_WEAK_WITHHELD'])
+    assert np.isnan(p.arrays['CR_TRUSTED'][weak]).all()
+    assert np.nanmax(p.arrays['CR_TRUSTED']) >= 30.
+
+
 def test_quarantined_high_echo_cannot_win():
     a=sweep();b=change(sweep('sweep_001'),'DBZH',lambda x:x.__iadd__(20))
     root=root_from_sweeps([a,b],[a.observed,np.zeros(b.shape,bool)])

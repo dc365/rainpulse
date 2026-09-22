@@ -45,7 +45,10 @@ def composite_reflectivity(roots, reject_mask: int, *, maximum_size: int = 1200,
                 continue
             fields = ["DBZH_QC", "VALID_MASK", "QC_FLAGS", "elevation", "azimuth", "range"]
             if root.attrs.get("flag_definition_version") == "qc-flags-v2":
-                fields.append("QPE_ELIGIBLE_MASK")
+                # CR has its own admission result. QPE eligibility is intentionally
+                # not used here: quantitative rain estimates may retain weak echoes
+                # that the CR fusion has already withheld.
+                fields.append("REFLECTIVITY_ELIGIBLE_FOR_CR")
             sweeps.append({"number": int(number), **{name: group[name][:] for name in fields}})
         # Reuse site geometry across sweeps; chunk rows to bound temporary memory.
         for start in range(0, height, 128):
@@ -67,7 +70,9 @@ def composite_reflectivity(roots, reject_mask: int, *, maximum_size: int = 1200,
                 valid &= np.asarray(sweep["VALID_MASK"][:])[ray, gate] == 1
                 valid &= (np.asarray(sweep["QC_FLAGS"][:])[ray, gate] & np.uint32(reject_mask)) == 0
                 if root.attrs.get("flag_definition_version") == "qc-flags-v2":
-                    valid &= np.asarray(sweep["QPE_ELIGIBLE_MASK"][:])[ray, gate] == 1
+                    valid &= (
+                        np.asarray(sweep["REFLECTIVITY_ELIGIBLE_FOR_CR"][:])[ray, gate] == 1
+                    )
                 if sources is not None:
                     # Ties retain the first observed contributor, consistently.
                     wins = valid & (~np.isfinite(result[start:end]) | (values > result[start:end]))

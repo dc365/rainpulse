@@ -16,6 +16,14 @@ class Composite:
     sources: list
 
 
+# Close-range weak returns are the least reliable CR observations: polarimetric
+# evidence is often incomplete and several sweeps can sample the same local
+# scatterer. Keep these observations for QPE, but withhold weak CR admission
+# before the maximum operator so one station's local clutter cannot win a pixel.
+NEAR_RANGE_WEAK_MAXIMUM_RANGE_M = 10_000.0
+NEAR_RANGE_WEAK_MAXIMUM_DBZ = 25.0
+
+
 def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
     if not roots or not 16<=maximum_size<=1200:
         raise ValueError("nonempty volume list and bounded grid required")
@@ -132,6 +140,7 @@ def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
     east,north=west+width*step,south+height*step
     shape=(height,width)
     arrays={k:np.full(shape,np.nan,"float32") for k in ("CR_RAW","CR_TRUSTED","CR_UNCERTAIN","CR_RUNNER_UP","WINNER_HEIGHT_ABOVE_RADAR_M")}
+    arrays["CR_NEAR_RANGE_WEAK_WITHHELD"]=np.full(shape,np.nan,"float32")
     arrays.update({k:np.full(shape,-1,"int32") for k in ("WINNER_SOURCE","WINNER_RAY","WINNER_GATE","RUNNER_UP_SOURCE","RUNNER_UP_RAY","RUNNER_UP_GATE")})
     arrays["WINNER_REASON"]=np.zeros(shape,"uint16")
     if clutter_active:
@@ -169,7 +178,15 @@ def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
             foot &= denominator>0
             raw=a["DBZH_RAW"][ray,gate]; value=a["DBZH_QC"][ray,gate]
             observed=foot & (a["VALID_MASK"][ray,gate]==1) & np.isfinite(value)
-            trusted=observed & (a["REFLECTIVITY_ELIGIBLE_FOR_CR"][ray,gate]==1) & ((a["QC_FLAGS"][ray,gate]&np.uint32(reject_mask))==0)
+            near_range_weak = observed & (
+                a["range"][gate] <= NEAR_RANGE_WEAK_MAXIMUM_RANGE_M
+            ) & (value < NEAR_RANGE_WEAK_MAXIMUM_DBZ)
+            arrays["CR_NEAR_RANGE_WEAK_WITHHELD"][sl]=np.fmax(
+                arrays["CR_NEAR_RANGE_WEAK_WITHHELD"][sl],
+                np.where(near_range_weak,value,np.nan),
+            )
+            trusted=(observed & (a["REFLECTIVITY_ELIGIBLE_FOR_CR"][ray,gate]==1) &
+                     ((a["QC_FLAGS"][ray,gate]&np.uint32(reject_mask))==0) & ~near_range_weak)
             unknown=observed & (a["CR_UNCERTAIN_MASK"][ray,gate]==1)
             arrays["CR_RAW"][sl]=np.fmax(arrays["CR_RAW"][sl],np.where(foot,raw,np.nan))
             arrays["CR_UNCERTAIN"][sl]=np.fmax(arrays["CR_UNCERTAIN"][sl],np.where(unknown,value,np.nan))
@@ -281,6 +298,9 @@ def diagnostic_composite(roots,reject_mask,*,objects,sites=None,legacy_composito
     meta={"schema":"rainpulse.cr-source-receipt-v1","bounds":product.bounds,"sources":product.sources,
           "payload_sha256":hashlib.sha256(payload).hexdigest(),"numeric_sha256":array_digest(product.arrays),
           "aggregation":"maximum_eligible_over_sweeps_and_radars", "operational_eligible":False,
+          "near_range_weak_policy":{"maximum_range_m":NEAR_RANGE_WEAK_MAXIMUM_RANGE_M,
+                                    "maximum_dbz":NEAR_RANGE_WEAK_MAXIMUM_DBZ,
+                                    "action":"cr_withhold_before_maximum"},
           "winner_tie_policy":"first_in_recorded_source_order", "unknown_is_clear_air":False}
     objects["volume_review/composite.json"]=json_bytes(meta)
     failed=any(r.attrs.get("qc_volume_review_status")=="RESOURCE_ABSTAINED" for r in roots)
