@@ -61,13 +61,13 @@ def test_cr_winner_every_pixel_reconstructs():
     assert np.isnan(p.arrays['CR_TRUSTED'][p.arrays['CR_VALID_MASK']==0]).all()
 
 
-def test_close_range_weak_echo_is_recorded_and_cannot_enter_cr():
+def test_close_range_weak_echo_without_object_evidence_stays_in_cr():
     s=sweep();root=root_from_sweeps([s]);g=root['sweep_000'];near=s.ranges<=10_000
     g['DBZH_QC'][:,near]=10.;g['DBZH_QC'][:,~near]=30.
     p=build_composite([root],32768,maximum_size=96)
-    assert np.isfinite(p.arrays['CR_NEAR_RANGE_WEAK_WITHHELD']).any()
-    weak=np.isfinite(p.arrays['CR_NEAR_RANGE_WEAK_WITHHELD'])
-    assert np.isnan(p.arrays['CR_TRUSTED'][weak]).all()
+    assert 'CR_NEAR_RANGE_WEAK_WITHHELD' not in p.arrays
+    station=p.arrays['CR_VALID_MASK'].astype(bool)
+    assert np.nanmax(p.arrays['CR_TRUSTED'][station]) >= 10
     assert np.nanmax(p.arrays['CR_TRUSTED']) >= 30.
 
 

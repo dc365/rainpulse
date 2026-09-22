@@ -7,6 +7,7 @@ from .geometry import EARTH
 from .sampling import polar_targets
 from .receipts import npz_bytes, snapshot_group
 from .data import array_digest, json_bytes
+from .near_object import NEAR_OBJECT_POLICY, evaluate_near_object
 
 
 @dataclass
@@ -15,13 +16,6 @@ class Composite:
     bounds: list
     sources: list
 
-
-# Close-range weak returns are the least reliable CR observations: polarimetric
-# evidence is often incomplete and several sweeps can sample the same local
-# scatterer. Keep these observations for QPE, but withhold weak CR admission
-# before the maximum operator so one station's local clutter cannot win a pixel.
-NEAR_RANGE_WEAK_MAXIMUM_RANGE_M = 10_000.0
-NEAR_RANGE_WEAK_MAXIMUM_DBZ = 25.0
 
 
 def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
@@ -130,7 +124,8 @@ def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
             sources.append({"radar":rid,"radar_id":station,"scan_id":root.attrs.get("scan_id"),"sweep":number,
                             "qc_asset_id":root.attrs.get("asset_id"),"qc_parameters_sha256":root.attrs.get("qc_parameters_sha256"),
                             "numeric_sha256":array_digest(a),"height_datum":"above_source_radar_effective_4_3_earth"})
-            sweeps.append((len(sources)-1,lon,lat,a))
+            near_object_mask=evaluate_near_object(a,near_active=near_active)
+            sweeps.append((len(sources)-1,lon,lat,a,near_object_mask))
     west,south,east,north=min(x[0] for x in footprints),min(x[1] for x in footprints),max(x[2] for x in footprints),max(x[3] for x in footprints)
     if east-west>180:
         raise ValueError("dateline spanning CR unsupported")
@@ -140,7 +135,7 @@ def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
     east,north=west+width*step,south+height*step
     shape=(height,width)
     arrays={k:np.full(shape,np.nan,"float32") for k in ("CR_RAW","CR_TRUSTED","CR_UNCERTAIN","CR_RUNNER_UP","WINNER_HEIGHT_ABOVE_RADAR_M")}
-    arrays["CR_NEAR_RANGE_WEAK_WITHHELD"]=np.full(shape,np.nan,"float32")
+    arrays["CR_NEAR_OBJECT_WITHHELD"]=np.full(shape,np.nan,"float32")
     arrays.update({k:np.full(shape,-1,"int32") for k in ("WINNER_SOURCE","WINNER_RAY","WINNER_GATE","RUNNER_UP_SOURCE","RUNNER_UP_RAY","RUNNER_UP_GATE")})
     arrays["WINNER_REASON"]=np.zeros(shape,"uint16")
     if clutter_active:
@@ -167,7 +162,7 @@ def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
     for start in range(0,height,128):
         end=min(start+128,height); sl=np.s_[start:end,:]
         xx,yy=np.meshgrid(west+(np.arange(width)+.5)*step,north-(np.arange(start,end)+.5)*step)
-        for sid,lon,lat,a in sweeps:
+        for sid,lon,lat,a,near_object_mask in sweeps:
             angle,_,distance=geod.inv(np.full(xx.shape,lon),np.full(xx.shape,lat),xx,yy)
             # Row selection depends only on azimuth, then invert using its actual elevation.
             ray,_,_=polar_targets(a["azimuth"],a["range"],distance,angle)
@@ -178,15 +173,13 @@ def build_composite(roots,reject_mask,*,maximum_size=1200,sites=None):
             foot &= denominator>0
             raw=a["DBZH_RAW"][ray,gate]; value=a["DBZH_QC"][ray,gate]
             observed=foot & (a["VALID_MASK"][ray,gate]==1) & np.isfinite(value)
-            near_range_weak = observed & (
-                a["range"][gate] <= NEAR_RANGE_WEAK_MAXIMUM_RANGE_M
-            ) & (value < NEAR_RANGE_WEAK_MAXIMUM_DBZ)
-            arrays["CR_NEAR_RANGE_WEAK_WITHHELD"][sl]=np.fmax(
-                arrays["CR_NEAR_RANGE_WEAK_WITHHELD"][sl],
-                np.where(near_range_weak,value,np.nan),
+            near_object_withheld = observed & (near_object_mask[ray,gate] == 1)
+            arrays["CR_NEAR_OBJECT_WITHHELD"][sl]=np.fmax(
+                arrays["CR_NEAR_OBJECT_WITHHELD"][sl],
+                np.where(near_object_withheld,value,np.nan),
             )
             trusted=(observed & (a["REFLECTIVITY_ELIGIBLE_FOR_CR"][ray,gate]==1) &
-                     ((a["QC_FLAGS"][ray,gate]&np.uint32(reject_mask))==0) & ~near_range_weak)
+                     ((a["QC_FLAGS"][ray,gate]&np.uint32(reject_mask))==0) & ~near_object_withheld)
             unknown=observed & (a["CR_UNCERTAIN_MASK"][ray,gate]==1)
             arrays["CR_RAW"][sl]=np.fmax(arrays["CR_RAW"][sl],np.where(foot,raw,np.nan))
             arrays["CR_UNCERTAIN"][sl]=np.fmax(arrays["CR_UNCERTAIN"][sl],np.where(unknown,value,np.nan))
@@ -298,9 +291,7 @@ def diagnostic_composite(roots,reject_mask,*,objects,sites=None,legacy_composito
     meta={"schema":"rainpulse.cr-source-receipt-v1","bounds":product.bounds,"sources":product.sources,
           "payload_sha256":hashlib.sha256(payload).hexdigest(),"numeric_sha256":array_digest(product.arrays),
           "aggregation":"maximum_eligible_over_sweeps_and_radars", "operational_eligible":False,
-          "near_range_weak_policy":{"maximum_range_m":NEAR_RANGE_WEAK_MAXIMUM_RANGE_M,
-                                    "maximum_dbz":NEAR_RANGE_WEAK_MAXIMUM_DBZ,
-                                    "action":"cr_withhold_before_maximum"},
+          "near_object_policy":NEAR_OBJECT_POLICY,
           "winner_tie_policy":"first_in_recorded_source_order", "unknown_is_clear_air":False}
     objects["volume_review/composite.json"]=json_bytes(meta)
     failed=any(r.attrs.get("qc_volume_review_status")=="RESOURCE_ABSTAINED" for r in roots)

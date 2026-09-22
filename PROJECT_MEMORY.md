@@ -530,3 +530,11 @@ operational data here.
   job `432b68f3-3184-4707-9be7-ca4c91ab5fee`: 598 weak CR pixels removed overall,
   including the 244-pixel Z9598 station-edge component; new grid PNG SHA
   `d4a9ae2d8db3dfbff95469d8e138e5ec6e64b4357c6394166d2e1d6807a2b3d9`.
+
+- 2026-09-22: Replaced the fixed 10 km/<25 dBZ diagnostic-CR hole with
+  `near-object-cr-20260922-v1`. The new polar object policy requires evidence
+  families, weather protection, and bounded growth; it withholds CR before the
+  multi-radar maximum and records `CR_NEAR_OBJECT_WITHHELD`. It does not alter
+  raw/QC/grid/mosaic/QPE. BJT 09:00 replay increased Z9598 0–10 km trusted CR
+  pixels from 17 to 170 while reducing 10–50 km weak residuals. See
+  `docs/near-object-cr-20260922.md`; deployment/web acceptance remains pending.
