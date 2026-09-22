@@ -34,7 +34,7 @@ def utc_time(value: str) -> datetime:
     return parsed.astimezone(UTC)
 
 
-def validate_context_identity(root, item, *, role, current_root, cutoff, config):
+def validate_context_identity(root, item, *, role, current_root, cutoff, config, profile=None):
     if getattr(item, "scan_id", None) is not None and str(root.attrs.get("scan_id")) != str(
         item.scan_id
     ):
@@ -46,14 +46,22 @@ def validate_context_identity(root, item, *, role, current_root, cutoff, config)
     if actual != claimed:
         raise ValueError("context observation time differs from the committed task")
     current_end = utc_time(current_root.attrs["volume_end_time_utc"])
-    if actual > current_end or actual > cutoff:
+    near = getattr(profile, "volume_review", None)
+    near = getattr(near, "clutter_fusion", None)
+    near = getattr(near, "near_revision", None)
+    strong = getattr(near, "strong_near", None)
+    temporal = getattr(strong, "temporal_low_rho", None)
+    boundary = bool(getattr(temporal, "retrospective_boundary_enabled", False))
+    if (actual > current_end and not (boundary and role == "temporal")) or actual > cutoff:
         return "future_context_disallowed"
     if role == "temporal":
         if item.radar_id.lower() != str(current_root.attrs["radar_id"]).lower():
             raise ValueError("temporal context must be the same radar")
-        if actual >= current_end:
+        if actual == current_end:
             return "temporal_context_not_strictly_past"
-        if (current_end - actual).total_seconds() > config.max_age_seconds:
+        age = abs((current_end - actual).total_seconds())
+        limit = getattr(temporal, "maximum_boundary_age_seconds", config.max_age_seconds) if boundary else config.max_age_seconds
+        if age > limit:
             return "context_too_old"
     else:
         if item.radar_id.lower() == str(current_root.attrs["radar_id"]).lower():
@@ -149,7 +157,7 @@ def prepare_open_source_inputs(
                     role=role,
                     current_root=view.root,
                     cutoff=cutoff,
-                    config=profile.context,
+                    config=profile.context, profile=profile,
                 )
                 if reason:
                     entry.update(status="excluded", reason=reason)
