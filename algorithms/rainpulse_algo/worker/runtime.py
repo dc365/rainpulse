@@ -16,6 +16,7 @@ from nats.errors import TimeoutError as NATSTimeoutError
 from nats.js.api import AckPolicy, ConsumerConfig
 from pydantic import BaseModel, ValidationError
 
+from .asset_cache import process_asset_cache, process_cache_metrics
 from .contracts import (
     JOB_COMPLETED_SUBJECT,
     JOB_FAILED_SUBJECT,
@@ -37,6 +38,11 @@ from .object_store import (
     parse_s3_uri,
 )
 from .release_identity import capture_release_identity, report_release_identity
+from .resources import (
+    WorkerResourcePolicy,
+    ensure_pending_limit,
+    resource_handler,
+)
 from .simulation import SimulatedFailure, execute
 
 
@@ -113,6 +119,8 @@ class Worker:
             asset_type="forecast_zarr",
             artifact_name="forecast.zarr",
         )
+        self._resource_policy = WorkerResourcePolicy.from_environment()
+        self._handler = resource_handler(self._handler, self._resource_policy)
         self._connection: Any = None
         self._ready = False
         self._stop = asyncio.Event()
@@ -135,8 +143,10 @@ class Worker:
                 ack_policy=AckPolicy.EXPLICIT,
                 ack_wait=self._handler.ack_wait_seconds,
                 max_deliver=self._handler.max_deliveries,
+                max_ack_pending=self._resource_policy.max_ack_pending,
             ),
         )
+        await ensure_pending_limit(jetstream, JOB_STREAM, self._handler, self._resource_policy)
         health_server = await asyncio.start_server(
             self._handle_health,
             self._config.health_host,
@@ -551,6 +561,9 @@ class Worker:
             **self._coerce_observability(result_observability),
             **self._coerce_observability(publication_observability),
         }
+        # Process totals, not invented per-task deltas when interval HTTP work
+        # is concurrent. Dedicated QC workers still execute one task at a time.
+        fields.update(process_cache_metrics())
         fields["event_publish_ms"] = event_publish_ms
         fields["end_to_end_ms"] = _elapsed_ms(started_tick)
         if failure_stage is not None:
@@ -631,6 +644,10 @@ class Worker:
             {
                 "status": "ready" if healthy else "unavailable",
                 "profile": self._handler.profile,
+                "resources": self._resource_policy.report(),
+                "subject": self._handler.subject,
+                "consumer": self._handler.consumer,
+                "asset_cache": process_asset_cache().snapshot(),
                 "release": report_release_identity(self._startup_release_identity),
             }
         ).encode()

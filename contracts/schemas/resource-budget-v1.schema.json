@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RainPulse CPU resource allocation v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "cpu_budget",
+    "memory_budget_mib",
+    "services"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "cpu_budget": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "memory_budget_mib": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1048576
+    },
+    "services": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "realtime",
+          "background"
+        ],
+        "properties": {
+          "realtime": {
+            "$ref": "#/$defs/pool"
+          },
+          "background": {
+            "$ref": "#/$defs/pool"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "pool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "replicas",
+        "cpus",
+        "memory_mib"
+      ],
+      "properties": {
+        "replicas": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 128
+        },
+        "cpus": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 128
+        },
+        "memory_mib": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1048576
+        },
+        "native_threads": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "cache_mib": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8192
+        },
+        "read_concurrency": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32
+        },
+        "max_ack_pending": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024
+        }
+      }
+    }
+  }
+}

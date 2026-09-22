@@ -21,5 +21,8 @@ func Run(ctx context.Context, pool *pgxpool.Pool) error {
 		return err
 	}
 	store := postgresstore.New(pool)
+	if err := configureResourceRouting(bus, store); err != nil {
+		return err
+	}
 	return serve(ctx, store, bus, orchestration.NewService(store, orchestration.Options{}))
 }

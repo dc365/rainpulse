@@ -126,18 +126,14 @@ class IntervalService:
             except S3Error as error:
                 if error.code not in {"NoSuchKey", "NoSuchObject"}:
                     raise
-                marker = json.loads(self._read(base + "/_SUCCESS.json"))
-                entry = next(item for item in marker["objects"] if item["key"] == relative)
-                if entry["sha256"] != source["sha256"]:
-                    raise ValueError("source marker differs")
-                prefix = marker.get("data_prefix", "")
-                data = self._read("/".join(filter(None, [base, prefix, relative])))
+                selected = ArtifactObjectReader(self.client).load_selected(base, keys=[relative])
+                data = selected[relative]
         else:
             data = self._read(source["uri"])
         if hashlib.sha256(data).hexdigest() != source["sha256"]:
             raise ValueError("source checksum differs")
         self.sources[identity] = data
-        while sum(map(len, self.sources.values())) > 64 * 1024**2:
+        while len(self.sources) > 128 or sum(map(len, self.sources.values())) > 64 * 1024**2:
             self.sources.popitem(last=False)
         return decode_point(data)
 
@@ -165,13 +161,14 @@ class IntervalService:
                 if self.client is None:
                     self.client = minio_client_from_environment()
                 source = request["sources"][-1]
-                objects = ArtifactObjectReader(self.client, max_size_bytes=512 * 1024**2).load(
-                    source["uri"]
+                objects = ArtifactObjectReader(
+                    self.client, max_size_bytes=512 * 1024**2
+                ).load_selected(
+                    source["uri"],
+                    keys=[".zgroup", ".zattrs"],
+                    prefixes=["rain_rate", "member_valid_mask", "lat", "lon", "lead_time"],
+                    expected_sha256=source["sha256"],
                 )
-                from rainpulse_algo.worker.object_store import artifact_sha256
-
-                if artifact_sha256(objects) != source["sha256"]:
-                    raise ValueError("ensemble source differs")
                 group = _open_group(objects)
                 shape = group["rain_rate"].shape
                 if len(shape) != 4 or shape[0] > 32 or np.prod(shape) > 64_000_000:

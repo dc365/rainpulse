@@ -16,6 +16,8 @@ from uuid import UUID
 from minio import Minio
 from minio.error import S3Error
 
+from .asset_access import VerifiedArtifactReader
+from .asset_cache import VerifiedObjectCache
 from .contracts import JobCompleted
 
 MAX_ARTIFACT_MARKER_BYTES = 16 * 1024 * 1024
@@ -26,12 +28,17 @@ def minio_client_from_environment() -> Minio:
     endpoint = urlparse(_required_environment("RAINPULSE_OBJECT_STORE_ENDPOINT"))
     if not endpoint.hostname:
         raise ValueError("RAINPULSE_OBJECT_STORE_ENDPOINT must include a hostname")
-    return Minio(
+    client = Minio(
         endpoint.netloc,
         access_key=_required_environment("RAINPULSE_OBJECT_STORE_ACCESS_KEY"),
         secret_key=_required_environment("RAINPULSE_OBJECT_STORE_SECRET_KEY"),
         secure=endpoint.scheme == "https",
     )
+    # Do not retain or expose credentials in the cache key/metrics. Different
+    # endpoints or principals must never share an object cache namespace.
+    scope = endpoint.geturl() + "\0" + _required_environment("RAINPULSE_OBJECT_STORE_ACCESS_KEY")
+    client._rainpulse_cache_namespace = hashlib.sha256(scope.encode()).hexdigest()
+    return client
 
 
 @dataclass(frozen=True)
@@ -248,120 +255,37 @@ class AtomicObjectPublisher:
         return f"{prefix.rstrip('/')}/{artifact_name}/_SUCCESS.json"
 
 
-class ArtifactObjectReader:
-    """Loads and verifies an atomically published multi-object artifact."""
+class ArtifactObjectReader(VerifiedArtifactReader):
+    """Compatible full reader plus verified selections and process-local cache."""
 
     def __init__(
         self,
         client: Minio,
         max_size_bytes: int | None = None,
         max_workers: int | None = None,
+        *,
+        cache_namespace: str | None = None,
+        cache: VerifiedObjectCache | None = None,
     ) -> None:
         self._client = client
         if max_size_bytes is None:
             max_size_bytes = int(
                 os.getenv("RAINPULSE_MAX_INPUT_ARTIFACT_BYTES", str(2 * 1024**3))
             )
-        if max_size_bytes <= 0:
-            raise ValueError("artifact input byte limit must be positive")
         self._max_size_bytes = max_size_bytes
         self._max_workers = _resolve_max_workers(max_workers)
-
-    def load(self, artifact_uri: str) -> dict[str, bytes]:
-        bucket, prefix = parse_s3_uri(artifact_uri)
-        prefix = prefix.rstrip("/")
-        marker = json.loads(
-            self._get_bytes(
-                bucket,
-                f"{prefix}/_SUCCESS.json",
-                max_bytes=MAX_ARTIFACT_MARKER_BYTES,
-            )
+        namespace = cache_namespace or getattr(client, "_rainpulse_cache_namespace", None)
+        if namespace is None:
+            # Unknown external clients do not share cache entries accidentally.
+            # The normal environment factory attaches a stable, non-secret scope.
+            namespace = "unshared-" + os.urandom(16).hex()
+        super().__init__(
+            self._get_bytes,
+            namespace=namespace,
+            maximum=max_size_bytes,
+            workers=self._max_workers,
+            cache=cache,
         )
-        if not isinstance(marker, dict):
-            raise RuntimeError("published artifact marker must be an object")
-        data_prefix = marker.get("data_prefix", "")
-        if data_prefix:
-            normalized_prefix = normalize_artifact_prefix(data_prefix)
-        else:
-            normalized_prefix = ""
-        manifest = marker.get("objects")
-        if not isinstance(manifest, list) or not manifest:
-            raise RuntimeError("published artifact marker has no object manifest")
-        if len(manifest) > 100_000:
-            raise RuntimeError("published artifact exceeds the object-count safety limit")
-        declared_size = marker.get("size_bytes")
-        object_sizes: list[int] = []
-        for item in manifest:
-            if not isinstance(item, dict):
-                raise RuntimeError("published artifact marker has an invalid object entry")
-            object_size = item.get("size_bytes")
-            if type(object_size) is not int or object_size < 0:
-                raise RuntimeError("published artifact marker has an invalid object size")
-            object_sizes.append(object_size)
-        manifest_size = sum(object_sizes)
-        if (
-            type(declared_size) is not int
-            or declared_size < 0
-            or manifest_size != declared_size
-        ):
-            raise RuntimeError("published artifact marker has inconsistent size metadata")
-        if declared_size > self._max_size_bytes:
-            raise RuntimeError("published artifact exceeds the configured input byte limit")
-        load_requests: list[dict[str, Any]] = []
-        seen_keys: set[str] = set()
-        for item in manifest:
-            relative_key = item.get("key")
-            if not isinstance(relative_key, str):
-                raise RuntimeError("published artifact manifest has an invalid key")
-            normalized = normalize_artifact_objects(
-                data=None,
-                objects={relative_key: b""},
-            )
-            key = next(iter(normalized))
-            if key in seen_keys:
-                raise RuntimeError(f"published artifact manifest repeats object {key}")
-            seen_keys.add(key)
-            load_requests.append(
-                {
-                    "key": key,
-                    "size_bytes": item["size_bytes"],
-                    "sha256": item.get("sha256"),
-                }
-            )
-        object_prefix = f"{prefix}/{normalized_prefix}" if normalized_prefix else prefix
-        loaded_pairs = _bounded_parallel_map(
-            load_requests,
-            worker_count=self._max_workers,
-            worker=self._load_manifest_entry(bucket, object_prefix),
-        )
-        objects = {key: value for key, value in loaded_pairs}
-        if marker.get("schema_version") == "3.0":
-            objects = _unpack_objects(objects, marker.get("packed_entries"))
-        elif "packed_entries" in marker:
-            raise RuntimeError("packed artifact requires schema 3.0")
-        if artifact_sha256(objects) != marker.get("sha256"):
-            raise RuntimeError("published artifact bundle checksum differs")
-        return objects
-
-    def _load_manifest_entry(
-        self,
-        bucket: str,
-        object_prefix: str,
-    ) -> Callable[[dict[str, Any]], tuple[str, bytes]]:
-        def load_one(item: dict[str, Any]) -> tuple[str, bytes]:
-            key = str(item["key"])
-            value = self._get_bytes(
-                bucket,
-                f"{object_prefix}/{key}",
-                max_bytes=int(item["size_bytes"]),
-            )
-            if len(value) != item.get("size_bytes"):
-                raise RuntimeError(f"published artifact size differs for {key}")
-            if hashlib.sha256(value).hexdigest() != item.get("sha256"):
-                raise RuntimeError(f"published artifact checksum differs for {key}")
-            return key, value
-
-        return load_one
 
     def _get_bytes(self, bucket: str, key: str, max_bytes: int | None = None) -> bytes:
         response = self._client.get_object(bucket, key)

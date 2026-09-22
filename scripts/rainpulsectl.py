@@ -26,6 +26,7 @@ import uuid
 BASE_FILES = ["deploy/docker-compose.yaml", "deploy/docker-compose.realtime-shadow.yaml"]
 UNIFIED_FILE = "deploy/docker-compose.unified.yaml"
 QC_SERVICE = "radar-qc-worker"
+QC_BACKGROUND_SERVICE = "radar-qc-background-worker"
 ID = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,95}$")
 SHA = re.compile(r"^[0-9a-f]{64}$")
 
@@ -142,6 +143,9 @@ class Operations:
         manifest = self.manifest()
         if (manifest["mode"] == "legacy") != legacy:
             raise OpsError("Legacy deployment requires an explicit --legacy; unified is the default")
+        if manifest.get("resource_profile"):
+            from resource_operations import validate_active
+            validate_active(self, manifest)
         files = BASE_FILES + ([] if legacy else [UNIFIED_FILE]) + manifest["overrides"]
         if len(set(files)) != len(files):
             raise OpsError("Duplicate Compose files")
@@ -251,11 +255,24 @@ class Operations:
         image_id = self.runner.run(["docker", "image", "inspect", image, "--format", "{{.Id}}"]).strip()
         if not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
             raise OpsError("Target image must already exist locally with an immutable image ID")
-        return {"schema_version": 1, "release_id": str(uuid.uuid4()), "created_at": utc_now(),
+        manifest = self.manifest()
+        groups = self.qc_services(manifest)
+        result = {"schema_version": 1, "release_id": str(uuid.uuid4()), "created_at": utc_now(),
                 "execution_mode": execution_mode, "image_reference": image, "image_id": image_id,
                 "qc_config_sha256": digest(config), "qc_flags_sha256": digest(flags),
                 "runtime_sha256": digest(self.root / "algorithms/rainpulse_algo/worker/runtime.py"),
-                "qc_replicas": self.manifest()["replicas"].get(QC_SERVICE, 1)}
+                "qc_replicas": sum(groups.values()), "qc_services": groups}
+        if manifest.get("resource_profile"):
+            result["resource_profile_sha256"] = manifest["resource_profile"]["profile_sha256"]
+        return result
+
+    @staticmethod
+    def qc_services(manifest: dict[str, Any]) -> dict[str, int]:
+        counts = manifest["replicas"]
+        result = {QC_SERVICE: counts.get(QC_SERVICE, 1)}
+        if QC_BACKGROUND_SERVICE in counts:
+            result[QC_BACKGROUND_SERVICE] = counts[QC_BACKGROUND_SERVICE]
+        return result
 
     def validate_plan(self, plan: dict[str, Any]) -> None:
         if plan.get("schema_version") != 1 or not isinstance(plan.get("release_id"), str) or not ID.fullmatch(plan["release_id"]):
@@ -265,8 +282,18 @@ class Operations:
                 raise OpsError(f"Invalid release hash: {key}")
         if not isinstance(plan.get("image_id"), str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", plan["image_id"]):
             raise OpsError("Invalid immutable image ID")
-        if plan.get("execution_mode") not in ("realtime_shadow", "operational") or type(plan.get("qc_replicas")) is not int or not 1 <= plan["qc_replicas"] <= 128:
+        if plan.get("execution_mode") not in ("realtime_shadow", "operational") or type(plan.get("qc_replicas")) is not int or not 1 <= plan["qc_replicas"] <= 256:
             raise OpsError("Invalid release mode/replicas")
+        groups = plan.get("qc_services")
+        if groups is not None:
+            if (not isinstance(groups, dict) or QC_SERVICE not in groups
+                    or set(groups) - {QC_SERVICE, QC_BACKGROUND_SERVICE}
+                    or any(type(v) is not int or not 1 <= v <= 128 for v in groups.values())
+                    or sum(groups.values()) != plan["qc_replicas"]):
+                raise OpsError("Invalid QC pool inventory")
+        resource_hash = plan.get("resource_profile_sha256")
+        if resource_hash is not None and (not isinstance(resource_hash, str) or not SHA.fullmatch(resource_hash)):
+            raise OpsError("Invalid resource profile identity")
 
     def pause(self, plan: dict[str, Any]) -> None:
         self.validate_plan(plan)
@@ -287,6 +314,8 @@ class Operations:
         with self.exclusive_gate():
             self.require_paused()
             manifest = self.manifest()
+            if manifest.get("resource_profile"):
+                raise OpsError("Resource pools are active; use resources-plan --override and resources-register so background configuration cannot drift")
             paths = [relative_file(self.root, p) for p in overrides]
             if any(p in BASE_FILES + [UNIFIED_FILE] for p in paths) or len(set(paths)) != len(paths):
                 raise OpsError("Duplicate/base overrides are not allowed")
@@ -295,7 +324,8 @@ class Operations:
             write_json(self.manifest_path, manifest)
 
     def containers(self) -> list[dict[str, Any]]:
-        ids = self.runner.run(self.compose("ps", "--all", "-q", QC_SERVICE)).split()
+        groups = self.qc_services(self.manifest())
+        ids = self.runner.run(self.compose("ps", "--all", "-q", *groups)).split()
         if not ids:
             raise OpsError("No QC workers found")
         result = json.loads(self.runner.run(["docker", "inspect", *ids]))
@@ -304,7 +334,7 @@ class Operations:
         manifest = self.manifest()
         for item in result:
             labels = item.get("Config", {}).get("Labels", {}) or {}
-            if labels.get("com.docker.compose.project") != manifest["project_name"] or labels.get("com.docker.compose.service") != QC_SERVICE:
+            if labels.get("com.docker.compose.project") != manifest["project_name"] or labels.get("com.docker.compose.service") not in groups:
                 raise OpsError("Container belongs to another stack/service")
             if item.get("State", {}).get("Running") is not True:
                 raise OpsError("Every QC replica must be running")
@@ -317,7 +347,7 @@ class Operations:
           'jobs', (SELECT count(*) FROM jobs WHERE job_type='radar.qc'
                    AND status NOT IN ('SUCCEEDED','FAILED','CANCELLED','SKIPPED')),
           'outbox', (SELECT count(*) FROM outbox_events
-                     WHERE subject='rainpulse.jobs.requested.radar_qc' AND status<>'published'),
+                     WHERE subject IN ('rainpulse.jobs.requested.radar_qc','rainpulse.jobs.requested.background.radar_qc') AND status<>'published'),
           'intents', (SELECT count(*) FROM pipeline_regeneration_requests
                       WHERE preset='forecast_all' AND status='PENDING')
                    + (SELECT count(*) FROM qc_batch_items i
@@ -333,32 +363,13 @@ class Operations:
         return value
 
     def probe(self, container_id: str) -> dict[str, Any]:
-        code = '''import asyncio,json,os,urllib.request
-import nats
-from rainpulse_algo.worker.contracts import JOB_STREAM
-from rainpulse_algo.worker.handlers import HANDLERS
-async def main():
- profile=os.environ.get("RAINPULSE_WORKER_PROFILE","")
- handler=HANDLERS[profile]
- port=int(os.environ.get("RAINPULSE_WORKER_HEALTH_ADDR","0.0.0.0:8091").rsplit(":",1)[1])
- with urllib.request.urlopen("http://127.0.0.1:%d/healthz"%port,timeout=5) as response:
-  health=json.load(response)
- nc=await nats.connect(servers=[os.environ["RAINPULSE_NATS_URL"]],connect_timeout=5,max_reconnect_attempts=0)
- try:
-  info=await nc.jetstream().consumer_info(JOB_STREAM,handler.consumer)
-  print(json.dumps({"health":health,"pending":info.num_pending,"ack_pending":info.num_ack_pending,"subject":handler.subject}))
- finally:
-  await nc.close()
-asyncio.run(main())
-'''
-        value = json.loads(self.runner.run(["docker", "exec", container_id, "python", "-c", code]))
-        if value.get("subject") != "rainpulse.jobs.requested.radar_qc":
+        from resource_operations import probe_worker
+        value = probe_worker(self, container_id, require_resources=False)
+        if value.get("subject") not in {
+            "rainpulse.jobs.requested.radar_qc",
+            "rainpulse.jobs.requested.background.radar_qc",
+        }:
             raise OpsError("Worker is consuming a different QC subject")
-        for key in ("pending", "ack_pending"):
-            if type(value.get(key)) is not int or value[key] < 0:
-                raise OpsError("Invalid NATS backlog evidence")
-        if value.get("health", {}).get("status") != "ready":
-            raise OpsError("QC worker is not ready")
         return value
 
     def verify(self, plan: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -370,9 +381,21 @@ asyncio.run(main())
         if any(backlog.values()):
             raise OpsError("QC jobs/outbox/intents have not drained; keep OLD workers and Go result processing running")
         containers = self.containers()
-        expected_count = plan["qc_replicas"] if plan else self.manifest()["replicas"].get(QC_SERVICE, 1)
+        manifest = self.manifest()
+        groups = plan.get("qc_services") if plan else None
+        groups = groups or self.qc_services(manifest)
+        expected_count = plan["qc_replicas"] if plan else sum(groups.values())
         if len(containers) != expected_count:
             raise OpsError("QC replica count differs from the declared deployment")
+        if plan and plan.get("qc_services"):
+            observed = dict.fromkeys(groups, 0)
+            for item in containers:
+                service = (item.get("Config", {}).get("Labels") or {}).get("com.docker.compose.service")
+                if service not in observed:
+                    raise OpsError("QC service differs from the declared release pool")
+                observed[service] += 1
+            if observed != groups:
+                raise OpsError("QC pool replica distribution differs")
         if plan:
             if planner.get("loaded_qc_sha256") != plan["qc_config_sha256"] or planner.get("current_qc_sha256") != plan["qc_config_sha256"]:
                 raise OpsError("Resolved Go QC configuration differs from release; update BDP/local config and restart Go")
@@ -395,6 +418,15 @@ asyncio.run(main())
                     target = str(mount.get("Destination", ""))
                     if target == "/opt/rainpulse" or target == "/opt/rainpulse/algorithms" or target.startswith("/opt/rainpulse/algorithms/"):
                         raise OpsError("Live algorithm-code mounts invalidate immutable image verification")
+        if plan:
+            resource_reference = manifest.get("resource_profile")
+            routing_enabled = planner.get("resource_routing", {}).get("enabled") is True
+            if resource_reference or routing_enabled or plan.get("resource_profile_sha256"):
+                if (not resource_reference or plan.get("resource_profile_sha256")
+                        != resource_reference.get("profile_sha256")):
+                    raise OpsError("QC release must bind the active resource profile")
+                from resource_operations import check_resources
+                check_resources(self, expect_routing="enabled")
         return {"qc_jobs": 0, "qc_outbox": 0, "qc_unmaterialized_intents": 0, "qc_pending": 0, "qc_inflight": 0,
                 "verified_replicas": len(containers), "verified_at": utc_now()}
 
@@ -434,6 +466,19 @@ def main(argv: list[str] | None = None) -> int:
     plan.add_argument("--image", required=True)
     plan.add_argument("--execution-mode", choices=["realtime_shadow", "operational"], required=True)
     plan.add_argument("--output", type=Path, required=True)
+    plan.add_argument("--resource-plan", type=Path)
+    resource = sub.add_parser("resources-template")
+    resource.add_argument("--output", type=Path, required=True)
+    resource = sub.add_parser("resources-plan")
+    resource.add_argument("--budget", type=Path, required=True)
+    resource.add_argument("--output", type=Path, required=True)
+    resource.add_argument("--override", action="append", default=None)
+    sub.add_parser("resources-schema")
+    resource = sub.add_parser("resources-register")
+    resource.add_argument("--plan", type=Path, required=True)
+    resource.add_argument("--release-plan", type=Path, required=True)
+    resource = sub.add_parser("resources-check")
+    resource.add_argument("--expect-routing", choices=["enabled", "disabled", "any"], default="enabled")
     for name in ("release-pause", "release-check", "release-resume"):
         cmd = sub.add_parser(name)
         cmd.add_argument("--plan", type=Path, required=True)
@@ -451,8 +496,28 @@ def main(argv: list[str] | None = None) -> int:
             print("Recorded override order; no containers or algorithms were changed.")
         elif command == "release-plan":
             result = ops.plan(args.qc_config, args.qc_flags, args.image, args.execution_mode)
+            if args.resource_plan is not None:
+                from resource_operations import bind_release_plan
+                result = bind_release_plan(ops, result, args.resource_plan)
+            ops.validate_plan(result)
             write_json(args.output, result)
             print(f"Release plan frozen: {result['release_id']}")
+        elif command.startswith("resources-"):
+            from resource_operations import make_template, make_plan, prepare_schema, register_plan, check_resources
+            if command == "resources-template":
+                make_template(ops, args.output)
+                print("Resource budget template written. Fill measured capacities; zeros deliberately prevent activation.")
+            elif command == "resources-plan":
+                result = make_plan(ops, args.budget, args.output, args.override)
+                print("Resource plan frozen: " + result["profile_sha256"])
+            elif command == "resources-schema":
+                prepare_schema(ops)
+                print("Additive routing columns prepared. No routing flag was enabled.")
+            elif command == "resources-register":
+                register_plan(ops, args.plan, read_json(args.release_plan))
+                print("Resource plan registered under release pause. Containers and native Go were not restarted.")
+            else:
+                print(json.dumps(check_resources(ops, expect_routing=args.expect_routing), indent=2))
         elif command.startswith("release-"):
             plan = read_json(args.plan) if hasattr(args, "plan") else None
             if command == "release-pause":

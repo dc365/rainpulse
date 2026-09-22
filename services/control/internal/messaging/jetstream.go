@@ -13,8 +13,9 @@ import (
 )
 
 type JetStream struct {
-	connection *nats.Conn
-	context    nats.JetStreamContext
+	requestRouter func(context.Context, workflow.OutboxEvent) (workflow.OutboxEvent, error)
+	connection    *nats.Conn
+	context       nats.JetStreamContext
 }
 
 func Connect(url, clientName string) (*JetStream, error) {
@@ -78,7 +79,19 @@ func jobStreamConfiguration() *nats.StreamConfig {
 	}
 }
 
+// SetRequestRouter must be called before starting dispatch/replay goroutines.
+func (stream *JetStream) SetRequestRouter(router func(context.Context, workflow.OutboxEvent) (workflow.OutboxEvent, error)) {
+	stream.requestRouter = router
+}
+
 func (stream *JetStream) Publish(ctx context.Context, event workflow.OutboxEvent) error {
+	if stream.requestRouter != nil {
+		routed, err := stream.requestRouter(ctx, event)
+		if err != nil {
+			return err
+		}
+		event = routed
+	}
 	message := nats.NewMsg(event.Subject)
 	message.Data = event.Payload
 	message.Header.Set(nats.MsgIdHdr, event.ID.String())

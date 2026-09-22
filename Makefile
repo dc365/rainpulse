@@ -255,6 +255,10 @@ deploy-up-legacy:
 test-architecture-batch1:
 	bash scripts/test_architecture_batch1.sh
 
+.PHONY: test-architecture-batch2
+test-architecture-batch2:
+	bash scripts/test_architecture_batch2.sh
+
 dev-up: build-linux build-worker-linux deploy-up
 
 dev-down:

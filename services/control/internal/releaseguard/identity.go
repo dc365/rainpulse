@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/workloads"
 )
 
 func FileSHA256(path string) (string, error) {
@@ -45,10 +47,18 @@ func PublishPlannerIdentity(configPath, loadedHash, mode string) error {
 	if err != nil {
 		return err
 	}
+	resources, err := workloads.SettingsFromEnvironment()
+	if err != nil {
+		return err
+	}
 	body, err := json.Marshal(map[string]any{
 		"schema_version": 1, "pid": os.Getpid(), "updated_at": time.Now().UTC(),
 		"gate_path": gate, "qc_config_path": configPath, "execution_mode": mode,
 		"loaded_qc_sha256": loadedHash, "current_qc_sha256": current,
+		"resource_routing": map[string]any{
+			"schema_version": 1, "enabled": resources.Enabled,
+			"realtime_max_age_seconds": int64(resources.RealtimeAge / time.Second),
+		},
 	})
 	if err != nil {
 		return err

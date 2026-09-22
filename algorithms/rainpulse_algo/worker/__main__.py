@@ -3,12 +3,16 @@ from __future__ import annotations
 import asyncio
 import signal
 
-from .handlers import handler_for_profile
 from .object_store import AtomicObjectPublisher, minio_client_from_environment
+from .resources import configure_native_threads
 from .runtime import Worker, WorkerConfig
 
 
 async def main() -> None:
+    # Native thread pools read their environment on import: configure first.
+    configure_native_threads()
+    from .handlers import handler_for_profile
+
     config = WorkerConfig.from_environment()
     client = minio_client_from_environment()
     handler = None if config.profile == "simulation" else handler_for_profile(config.profile)

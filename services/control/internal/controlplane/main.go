@@ -1723,6 +1723,11 @@ func dependencies(ctx context.Context) (*pgxpool.Pool, *postgresstore.Store, *me
 		pool.Close()
 		return nil, nil, nil, nil, err
 	}
+	if err := configureResourceRouting(bus, store); err != nil {
+		bus.Close()
+		pool.Close()
+		return nil, nil, nil, nil, err
+	}
 	return pool, store, bus, orchestration.NewService(store, orchestration.Options{}), nil
 }
 
@@ -1971,6 +1976,11 @@ func replay(ctx context.Context, store *postgresstore.Store, bus *messaging.JetS
 		return fmt.Errorf("encode replayed job request: %w", err)
 	}
 	subject, err := requestedSubject(eventType, job.ModelVersion)
+	if err != nil {
+		return err
+	}
+	// Keep the original durable route; never replay one job to two lanes.
+	subject, err = store.RequestedRouteForReplay(ctx, jobID, eventType)
 	if err != nil {
 		return err
 	}

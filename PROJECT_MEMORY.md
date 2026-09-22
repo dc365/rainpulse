@@ -7,6 +7,15 @@ rules remain in `AGENTS.md`; implementation details remain in the referenced RP
 documents. Do not add passwords, tokens, private data-source details, or raw
 operational data here.
 
+## Architecture batch 2 (source-only handoff, 2026-09-22)
+
+- Based on merged main `eb99368c07d9fce6bb41a1f2b1e46a5f005d845a`.
+- Bounded immutable-byte caching, verified selective reads, and opt-in CPU
+  realtime/background queues with explicit container budgets and frozen routes.
+- No 105 deployment, measured operational speedup, or weather-algorithm change.
+- Read `docs/ARCHITECTURE_BATCH2_20260922.md` before activation. Preserve the
+  active near-radar profile. Old packed assets retain full verification.
+
 ## Architecture batch 1 (source-only handoff, 2026-09-22)
 
 - Bounded planner reads, version-independent QC completion summary, native
