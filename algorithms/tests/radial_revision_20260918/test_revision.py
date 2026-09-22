@@ -13,7 +13,7 @@ def test_missing_flanks_are_candidate_not_clear_air():
     out, report = evaluate(n, C(mode="experiment_quarantine"), n.field_available["DBZH"])
     assert out["RV2_TOPOLOGY_MASK"][6].sum() > 200
     assert out["RV2_UNKNOWN_FLANK_MASK"][6].sum() > 200
-    assert np.array_equal(out["RV2_ACTION_PROPOSAL_MASK"], out["RV2_TOPOLOGY_MASK"])
+    assert np.array_equal(out["RV2_ACTION_PROPOSAL_MASK"], (out["RV2_TOPOLOGY_MASK"] == 1) & (out["RV2_WEAK_CANDIDATE_MASK"] == 0))
     assert not out["RV2_ACTION_PROPOSAL_MASK"][~n.field_available["DBZH"]].any()
     assert report["filled_gates"] == report["confirmed_gates"] == 0
 
@@ -198,7 +198,7 @@ def test_source_entry_and_serialized_contract():
     q, a, _ = load("source").source_additions(n, cfg, n.field_available["DBZH"], np.zeros(n.shape, "float32"))
     a["SRC_REVIEW_REFERENCE_FOLD_ID"] = n.field_available["DBZH"].astype("uint32")
     load("source_validation").validate_source_fields(a, n.field_available["DBZH"])
-    assert q[6].sum() > 200
+    assert q[6].sum() == 0
     a["RV2_ACTION_PROPOSAL_MASK"][0, 0] = 1
     with pytest.raises(ValueError): load("source_validation").validate_source_fields(a, n.field_available["DBZH"])
 
@@ -208,7 +208,10 @@ def test_serialized_tampering_rejected(change):
     n = line(); cfg = SC(narrow_enabled=False, radial_revision=C(mode="experiment_quarantine"))
     q, a, _ = load("source").source_additions(n, cfg, n.field_available["DBZH"], np.zeros(n.shape, "float32"))
     a["SRC_REVIEW_REFERENCE_FOLD_ID"] = n.field_available["DBZH"].astype("uint32")
-    if change == "mode": a["RV2_MODE_CODE"][:] = 0
+    if change == "mode":
+        a["RV2_MODE_CODE"][:] = 0
+        a["RV2_WEAK_CANDIDATE_MASK"][:] = 0
+        a["RV2_ACTION_PROPOSAL_MASK"][:] = a["RV2_CANDIDATE_MASK"]
     if change == "weak": a["RV2_WEAK_MATCH_MASK"][6, 60] = 1; a["RV2_SEGMENT_MATCH_MASK"][6, 60] = 1
     if change == "residual": a["RV2_SEGMENT_RESIDUAL_DB"][6, 60] = np.inf
     if change == "fold": a["SRC_REVIEW_REFERENCE_FOLD_ID"][:] = 0

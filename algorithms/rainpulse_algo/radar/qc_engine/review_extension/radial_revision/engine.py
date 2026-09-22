@@ -141,7 +141,9 @@ def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, confl
         legacy_match = candidate & source & ~barred
         segment_match = (out["RV2_SEGMENT_MATCH_MASK"] == 1) & candidate & ~barred & ~weak
         qualified = legacy_match | segment_match | line_source | line_morphology | line_isolated | group_polar | group_morph | residual
-        proposal = legacy_match | (segment_match & cfg.allow_segmented_quarantine) | line_source | line_morphology | line_isolated | group_polar | group_morph | residual
+        proposal = (legacy_match | (segment_match & cfg.allow_segmented_quarantine)
+                    | line_source | line_morphology | line_isolated | group_polar
+                    | group_morph | residual) & ~weak
         if cfg.mode != "experiment_quarantine":
             proposal[:] = False
         reason = out["RV2_REASON"]

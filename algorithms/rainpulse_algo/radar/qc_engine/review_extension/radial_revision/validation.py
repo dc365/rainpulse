@@ -182,12 +182,14 @@ def validate_revision_fields(group, observed, legacy_source, blocked):
                     raise ValueError('invalid missing fraction')
     if not np.array_equal(qualified, legacy | segment | line_source | morph | isolated | group_polar | group_morph | residual_objects):
         raise ValueError("radial qualification not equal to its source paths")
-    expected = (legacy | (segment & (allow == 1)) | line_source | morph | isolated | group_polar | group_morph | residual_objects) & (mode == 1)
+    weak_candidate = get("RV2_WEAK_CANDIDATE_MASK") == 1
+    weak = get("RV2_WEAK_MATCH_MASK") == 1
+    expected = ((legacy | (segment & (allow == 1)) | line_source | morph | isolated
+                 | group_polar | group_morph | residual_objects) & ~weak_candidate) & (mode == 1)
     proposal = get("RV2_ACTION_PROPOSAL_MASK") == 1
     if not np.array_equal(proposal, expected):
         raise ValueError("radial action differs from explicit policy")
-    weak = get("RV2_WEAK_MATCH_MASK") == 1
-    if np.any(weak & segment) or np.any(proposal & weak & ~legacy & ~line_source & ~morph & ~isolated & ~group_polar & ~group_morph):
+    if np.any(weak_candidate & segment) or np.any(proposal & weak_candidate & ~legacy & ~line_source & ~morph & ~isolated & ~group_polar & ~group_morph):
         raise ValueError("weak hypothesis acquired an independent censor action")
     if np.any((get("RV2_LINKED_SEGMENT_MASK") == 1) & ~candidate):
         raise ValueError("identity links filled a noncandidate interval")
