@@ -1,0 +1,6 @@
+services:
+  analysis-diagnostics-worker:
+    image: rainpulse-cpu-worker:diagnostic-cr-near-object-20260922
+    environment:
+      RAINPULSE_DIAGNOSTIC_CONFIG: /opt/rainpulse/configs/diagnostics/diagnostic-near-measurement-20260919.yaml
+      RAINPULSE_RADAR_CONFIG_DIR: /opt/rainpulse/configs/radars/fujian-20260828
