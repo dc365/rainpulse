@@ -549,3 +549,11 @@ operational data here.
   Threshold relaxation only reached 47/1,265, so temporal recurrence is not yet
   effective for the visible residual and remains out of production. See
   `docs/near-temporal-object-20260922.md`.
+
+- 2026-09-22: Implemented audit-only `residual-texture-isolation-20260922-v1`
+  with native polar multi-scale texture, object shape/area, 3 km context, polar
+  evidence, and separate textured-blob/isolated-speckle outputs. BJT 09:00 Z9598
+  replay: 3.299 s / 596.4 MiB, 4,260 blob + 2,949 isolated audit gates, but only
+  69/1,265 weak CR winners covered (62/1,019 at 10–50 km). Broad thresholds
+  reached 163/1,265 and an over-broad small-object bound 532/1,265; production
+  removal remains off. See `docs/residual-texture-isolation-20260922.md`.
