@@ -351,7 +351,7 @@ def _strong_evidence(s,cfg,base,runtime=None):
         "CF_NR_STRONG_LEFT_NEIGHBOR_ROW":np.broadcast_to(left_serial[:,None],shape).copy(),
         "CF_NR_STRONG_RIGHT_NEIGHBOR_ROW":np.broadcast_to(right_serial[:,None],shape).copy(),
         "CF_NR_STRONG_ACTION_MASK":(candidate & (c.mode=="quarantine")).astype("uint8"),
-        "CF_NR_STRONG_PROTECTED_MASK":protected.astype("uint8"),
+        "CF_NR_STRONG_PROTECTED_MASK":(protected&~temporal_object).astype("uint8"),
         "CF_NR_STRONG_STATE":state,
         "CF_NR_STRONG_REASON":reason,
         "CF_NR_STRONG_OBJECT_ID":object_id,
