@@ -537,4 +537,8 @@ operational data here.
   multi-radar maximum and records `CR_NEAR_OBJECT_WITHHELD`. It does not alter
   raw/QC/grid/mosaic/QPE. BJT 09:00 replay increased Z9598 0–10 km trusted CR
   pixels from 17 to 170 while reducing 10–50 km weak residuals. See
-  `docs/near-object-cr-20260922.md`; deployment/web acceptance remains pending.
+  `docs/near-object-cr-20260922.md`. 105 diagnostics image
+  `rainpulse-cpu-worker:diagnostic-cr-near-object-20260922`; BJT 09:00 job
+  `0fd8bdec-3668-40c9-9073-b999b6336936` succeeded and the API selects its
+  `grid-dbzh-qc` SHA `14b2daa8b6041d6b36c31a7a8b80c32e3c5f04fb129953f6192bae265d1dac92`.
+  User visual acceptance remains pending.
