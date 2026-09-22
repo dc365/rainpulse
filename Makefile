@@ -445,3 +445,7 @@ test-architecture-boundaries:
 
 test-architecture-batch3:
 	bash scripts/test_architecture_batch3.sh
+
+.PHONY: test-admin-ops
+test-admin-ops:
+	bash scripts/test_admin_ops.sh

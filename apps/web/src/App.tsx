@@ -7,7 +7,7 @@ import './route-feedback.css'
 
 const MainWorkspace = lazy(() => import('./workspace/MainWorkspace').then(m => ({ default: m.MainWorkspace })))
 const QCReviewWorkspace = lazy(() => import('./workspace/QCReviewWorkspace').then(m => ({ default: m.QCReviewWorkspace })))
-const AdminRoute = lazy(() => import('./workspace/AdminRoute'))
+const AdminRoute = lazy(() => import('./admin/AdminApp'))
 
 export default function App() {
   // Preserve the existing path contract; no router migration in batch 3.

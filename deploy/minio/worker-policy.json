@@ -34,7 +34,8 @@
         "arn:aws:s3:::rainpulse/nowcast-input/*",
         "arn:aws:s3:::rainpulse/products/*",
         "arn:aws:s3:::rainpulse/diagnostics/*",
-        "arn:aws:s3:::rainpulse/simulations/*"
+        "arn:aws:s3:::rainpulse/simulations/*",
+        "arn:aws:s3:::rainpulse/operations/*"
       ]
     }
   ]

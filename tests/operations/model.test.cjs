@@ -1,0 +1,22 @@
+// Run after compiling the actual production model.ts; no React type stand-ins.
+const {test}=require('node:test');const assert=require('node:assert/strict');
+const m=require(process.env.OPS_MODEL_JS);
+test('timezone is explicitly UTC+8',()=>assert.equal(m.toUTC('2026-09-22T23:28'),'2026-09-22T15:28:00.000Z'));
+test('local input is inverse for stated timezone',()=>assert.equal(m.localInput(new Date('2026-09-22T15:28:00Z')),'2026-09-22T23:28'));
+for(const v of ['', 'not-a-time','2026-09-22'])test('bad local time '+v,()=>assert.throws(()=>m.toUTC(v)));
+test('selection enforces bounded range',()=>assert.throws(()=>m.parseSelection('qc_preview','2026-09-20T00:00','2026-09-22T00:00','z9591','','x')));
+test('selection rejects reverse range',()=>assert.throws(()=>m.parseSelection('qc_preview','2026-09-22T01:00','2026-09-22T00:00','z9591','','x')));
+test('station casing and separators normalize',()=>assert.deepEqual(m.parseSelection('qc_preview','2026-09-22T00:00','2026-09-22T01:00','Z9591，z9598','','x').radar_ids,['z9591','z9598']));
+for(const v of ['', 'z9591,z9591','../secret'])test('invalid station '+v,()=>assert.throws(()=>m.parseSelection('qc_preview','2026-09-22T00:00','2026-09-22T01:00',v,'','x')));
+test('diagnostics requires genuine UUID not arbitrary source URL',()=>assert.throws(()=>m.parseSelection('diagnostics','2026-09-22T00:00','2026-09-22T01:00','','https://example.com','x')));
+test('missing values are not zero',()=>{assert.equal(m.bytes(null),'未采集');assert.equal(m.duration(undefined),'未采集');assert.equal(m.timestamp(null),'未记录')});
+test('zero is valid measurement',()=>{assert.equal(m.bytes(0),'0 B');assert.equal(m.duration(0),'0 ms')});
+test('nonfinite metrics are not displayed as observations',()=>{assert.equal(m.bytes(Infinity),'未采集');assert.equal(m.duration(NaN),'未采集')});
+test('journal deduplicates deliveries and sorts durable IDs',()=>{const event=id=>({id,message:String(id)});assert.deepEqual(m.mergeEvents([event(2)],[event(1),event(2)]).map(x=>x.id),[1,2])});
+test('journal is capacity bounded',()=>assert.equal(m.mergeEvents([],[1,2,3,4].map(id=>({id})),2)[0].id,3));
+test('deep links do not turn into arbitrary API paths',()=>assert.equal(m.viewFromSearch('?view=tasks&run=../../secret').run,undefined));
+test('unknown page returns task center',()=>assert.equal(m.viewFromSearch('?view=anything').page,'tasks'));
+test('clock does not reinterpret old dispatch as execution',()=>assert.equal(m.taskTiming({attempts:[],dispatched_at:'2026-01-01T00:00:00Z'}).queue,null));
+test('fresh worker readiness is explicit',()=>assert.equal(m.workerState({seen_at:'2026-09-22T00:00:00Z',ready:true,busy:false},Date.parse('2026-09-22T00:00:10Z')),'可接单'));
+test('expired worker does not appear idle',()=>assert.equal(m.workerState({seen_at:'2026-09-22T00:00:00Z',ready:true,busy:false},Date.parse('2026-09-22T00:02:00Z')),'心跳过期'));
+test('process lifetime peak has honest label',()=>assert.match(m.metricLabel('process_lifetime_peak_rss_bytes'),/生命周期/));

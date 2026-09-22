@@ -49,6 +49,11 @@ func NewHandler(options Options) (http.Handler, error) {
 			response.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			response.WriteHeader(http.StatusOK)
 			_, _ = response.Write([]byte("ok\n"))
+		case request.URL.Path == "/api/v1/admin/ops" || strings.HasPrefix(request.URL.Path, "/api/v1/admin/ops/") || strings.HasPrefix(request.URL.Path, "/internal/ops/v1/"):
+			// Preserve the caller credential. The management API authenticates
+			// operators and workers separately; never inject the admin secret.
+			_ = http.NewResponseController(response).SetWriteDeadline(time.Now().Add(130 * time.Second))
+			proxy.ServeHTTP(response, request)
 		case isAdministrativeMutation(request):
 			if options.AdminToken == "" {
 				http.Error(response, "administrative mutation is unavailable", http.StatusServiceUnavailable)

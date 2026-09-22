@@ -1,0 +1,2877 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "RainPulse Operations candidate control plane",
+    "version": "1.0.0",
+    "description": "首版任务中心、日志与可靠重算。独立候选作业；不切换业务默认产品。具体状态机与限额见 operations-v1.md。"
+  },
+  "paths": {
+    "/api/v1/admin/ops/status": {
+      "get": {
+        "summary": "管理依赖状态；未知不作健康成功解释",
+        "operationId": "admin_get__status",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ops/runs": {
+      "get": {
+        "summary": "分页查询管理作业",
+        "operationId": "admin_get__runs",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Runs"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 1024
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/ops/runs/{id}": {
+      "get": {
+        "summary": "读取作业、任务依赖及可用操作",
+        "operationId": "admin_get__runs_id",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Run"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/ops/runs/{id}/action": {
+      "post": {
+        "summary": "暂停、恢复、取消或重试失败项",
+        "operationId": "admin_post__runs_id_action",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Run"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Action"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ops/runs/{id}/events": {
+      "get": {
+        "summary": "读取作业日志和操作记录",
+        "operationId": "admin_get__runs_id_events",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Events"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/ops/tasks/{id}": {
+      "get": {
+        "summary": "任务与每次真实执行尝试",
+        "operationId": "admin_get__tasks_id",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/ops/tasks/{id}/events": {
+      "get": {
+        "summary": "幂等序号任务日志",
+        "operationId": "admin_get__tasks_id_events",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Events"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/ops/tasks/{id}/recover": {
+      "post": {
+        "summary": "仅从已提交结果恢复登记；不重跑算法",
+        "operationId": "admin_post__tasks_id_recover",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ops/tasks/{id}/abandon": {
+      "post": {
+        "summary": "原Worker退出且心跳过期后废弃执行权；不杀进程",
+        "operationId": "admin_post__tasks_id_abandon",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "worker_stopped": {
+                    "type": "boolean",
+                    "enum": [
+                      true
+                    ]
+                  }
+                },
+                "required": [
+                  "worker_stopped"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ops/tasks/{id}/asset": {
+      "get": {
+        "summary": "校验后预览本任务清单中的PNG或JSON",
+        "operationId": "admin_get__tasks_id_asset",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "key",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/ops/plans": {
+      "post": {
+        "summary": "生成15分钟有效的冻结预检查计划",
+        "operationId": "admin_post__plans",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Plan"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Selection"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ops/plans/{id}": {
+      "get": {
+        "summary": "读取冻结计划",
+        "operationId": "admin_get__plans_id",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Plan"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/ops/plans/{id}/submit": {
+      "post": {
+        "summary": "幂等受理；不在HTTP请求中执行算法",
+        "operationId": "admin_post__plans_id_submit",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "run_id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "accepted": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "run_id",
+                    "accepted"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Submit"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ops/legacy": {
+      "get": {
+        "summary": "只读查询原自动链路任务，不重写旧时钟",
+        "operationId": "admin_get__legacy",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 1024
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/ops/legacy/{id}": {
+      "get": {
+        "summary": "读取原任务、尝试、错误与消息记录",
+        "operationId": "admin_get__legacy_id",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/ops/inventory": {
+      "get": {
+        "summary": "按真实体扫目录查数据；不依赖天气产品",
+        "operationId": "admin_get__inventory",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "start",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "radar",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 1024
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/ops/workers": {
+      "get": {
+        "summary": "管理执行器身份与心跳，非整机资源监测",
+        "operationId": "admin_get__workers",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ops/logs": {
+      "get": {
+        "summary": "可选Loki：固定任务ID与最多六小时范围",
+        "operationId": "admin_get__logs",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ]
+      }
+    },
+    "/internal/ops/v1/register": {
+      "post": {
+        "summary": "登记管理Worker身份与心跳",
+        "operationId": "worker_post__register",
+        "security": [
+          {
+            "workerBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Worker"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/ops/v1/claim": {
+      "post": {
+        "summary": "CAS领取，生成唯一尝试和真实开始时间",
+        "operationId": "worker_post__claim",
+        "security": [
+          {
+            "workerBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Claim"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/ops/v1/heartbeat": {
+      "post": {
+        "summary": "执行租约与有界日志；不是数值计算进度",
+        "operationId": "worker_post__heartbeat",
+        "security": [
+          {
+            "workerBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Pulse"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/ops/v1/finish": {
+      "post": {
+        "summary": "冻结身份结果登记；旧尝试不覆盖新尝试",
+        "operationId": "worker_post__finish",
+        "security": [
+          {
+            "workerBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Finish"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/ops/v1/reconcile": {
+      "post": {
+        "summary": "无需接管执行，只尝试已提交结果登记",
+        "operationId": "worker_post__reconcile",
+        "security": [
+          {
+            "workerBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "task_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "task_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "adminBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      },
+      "workerBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "Selection": {
+        "type": "object",
+        "properties": {
+          "preset": {
+            "type": "string",
+            "enum": [
+              "qc_preview",
+              "render_only",
+              "diagnostics"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "start": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "end": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "radar_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.-]{1,96}$"
+            },
+            "maxItems": 16
+          },
+          "source_job_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "maxItems": 32
+          }
+        },
+        "required": [
+          "preset",
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "Check": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "PASS",
+              "WARN",
+              "BLOCK"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "state",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "Asset": {
+        "type": "object",
+        "properties": {
+          "uri": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "marker_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "verification": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "uri",
+          "sha256",
+          "marker_sha256",
+          "size_bytes"
+        ],
+        "additionalProperties": false
+      },
+      "Identity": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "qc",
+              "render",
+              "diagnostics"
+            ]
+          },
+          "files": {
+            "type": "object",
+            "maxProperties": 512,
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "versions": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "code_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "fingerprint": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "kind",
+          "files",
+          "versions",
+          "code_sha256",
+          "fingerprint"
+        ],
+        "additionalProperties": false
+      },
+      "Spec": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "parent_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "qc",
+              "render",
+              "diagnostics"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "source_job_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "input_uris": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "inputs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Asset"
+            }
+          },
+          "identity": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "qc",
+                  "render",
+                  "diagnostics"
+                ]
+              },
+              "files": {
+                "type": "object",
+                "maxProperties": 512,
+                "additionalProperties": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              },
+              "versions": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "code_sha256": {
+                "type": "string",
+                "pattern": "^([0-9a-f]{64})?$"
+              },
+              "fingerprint": {
+                "type": "string",
+                "pattern": "^([0-9a-f]{64})?$"
+              }
+            },
+            "required": [
+              "kind",
+              "files",
+              "versions",
+              "code_sha256",
+              "fingerprint"
+            ],
+            "additionalProperties": false,
+            "description": "Plan requirements may have empty code/fingerprint when no compatible Worker is available; such plans are BLOCKED. Worker registration and claimed execution still require complete Identity."
+          },
+          "request": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "identity",
+          "request"
+        ]
+      },
+      "Plan": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "run_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "selection": {
+            "$ref": "#/components/schemas/Selection"
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Check"
+            }
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Spec"
+            },
+            "maxItems": 128
+          },
+          "digest": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "impact": {
+            "type": "string"
+          },
+          "submittable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "run_id",
+          "selection",
+          "checks",
+          "tasks",
+          "digest",
+          "created_at",
+          "expires_at",
+          "impact",
+          "submittable"
+        ],
+        "additionalProperties": false
+      },
+      "Candidate": {
+        "type": "object",
+        "properties": {
+          "asset": {
+            "$ref": "#/components/schemas/Asset"
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finished_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "runtime_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "candidate_only": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "summary": {}
+        },
+        "required": [
+          "asset",
+          "event_id",
+          "candidate_only"
+        ],
+        "additionalProperties": false
+      },
+      "LogLine": {
+        "type": "object",
+        "properties": {
+          "sequence": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warning",
+              "error",
+              "debug"
+            ]
+          },
+          "event": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 4096
+          }
+        },
+        "required": [
+          "sequence",
+          "level",
+          "event",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "Worker": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]{1,96}$"
+          },
+          "identity": {
+            "$ref": "#/components/schemas/Identity"
+          },
+          "seen_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "busy": {
+            "type": "boolean"
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "current_task": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "identity",
+          "ready"
+        ],
+        "additionalProperties": false
+      },
+      "Attempt": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "task_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "number": {
+            "type": "integer"
+          },
+          "worker_id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "stage": {
+            "type": "string"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "heartbeat_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lease_until": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finished_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "metrics": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          "request": {
+            "type": "object"
+          },
+          "result": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Candidate"
+              }
+            ],
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "worker_id",
+          "state",
+          "stage",
+          "started_at",
+          "heartbeat_at",
+          "lease_until",
+          "metrics"
+        ]
+      },
+      "Task": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "run_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/Spec"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "WAITING",
+              "QUEUED",
+              "RUNNING",
+              "COMMITTING",
+              "SUCCEEDED",
+              "FAILED",
+              "BLOCKED",
+              "CANCELLED"
+            ]
+          },
+          "generation": {
+            "type": "integer"
+          },
+          "attempt_no": {
+            "type": "integer"
+          },
+          "current_attempt": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "error_message": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dispatched_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "result": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Candidate"
+              }
+            ],
+            "nullable": true
+          },
+          "attempts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Attempt"
+            }
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "stalled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "run_id",
+          "spec",
+          "state",
+          "attempt_no",
+          "stalled"
+        ]
+      },
+      "Run": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "plan_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "PAUSED",
+              "CANCELLED"
+            ]
+          },
+          "state": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "impact": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "counts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            }
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Task"
+            }
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "stalled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "plan_id",
+          "mode",
+          "state",
+          "actions",
+          "stalled"
+        ]
+      },
+      "Event": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "run_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "task_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "attempt_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sequence": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "level": {
+            "type": "string"
+          },
+          "event": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "run_id",
+          "level",
+          "event",
+          "message",
+          "at"
+        ],
+        "additionalProperties": false
+      },
+      "Submit": {
+        "type": "object",
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "idempotency_key"
+        ],
+        "additionalProperties": false
+      },
+      "Action": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "pause",
+              "resume",
+              "cancel",
+              "retry_failed",
+              "wake"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      },
+      "ClaimRequest": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "worker_id": {
+            "type": "string"
+          },
+          "generation": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "task_id",
+          "worker_id",
+          "generation"
+        ],
+        "additionalProperties": false
+      },
+      "Claim": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "claimed",
+              "paused",
+              "busy",
+              "terminal"
+            ]
+          },
+          "task_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "attempt_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "token": {
+            "type": "string"
+          },
+          "request": {
+            "type": "object"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "identity": {
+            "$ref": "#/components/schemas/Identity"
+          },
+          "inputs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Asset"
+            }
+          }
+        },
+        "required": [
+          "decision"
+        ]
+      },
+      "Pulse": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "attempt_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "token": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "VERIFY_INPUT",
+              "COMPUTE",
+              "UPLOAD",
+              "COMMIT",
+              "RECOVER"
+            ]
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LogLine"
+            },
+            "maxItems": 20
+          },
+          "metrics": {
+            "type": "object",
+            "maxProperties": 32,
+            "additionalProperties": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        },
+        "required": [
+          "task_id",
+          "attempt_id",
+          "token",
+          "stage"
+        ],
+        "additionalProperties": false
+      },
+      "Finish": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "attempt_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "token": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "VERIFY_INPUT",
+              "COMPUTE",
+              "UPLOAD",
+              "COMMIT",
+              "RECOVER"
+            ]
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LogLine"
+            },
+            "maxItems": 20
+          },
+          "metrics": {
+            "type": "object",
+            "maxProperties": 32,
+            "additionalProperties": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "SUCCEEDED",
+              "FAILED",
+              "BLOCKED",
+              "CANCELLED"
+            ]
+          },
+          "error_code": {
+            "type": "string",
+            "maxLength": 96
+          },
+          "error_message": {
+            "type": "string",
+            "maxLength": 2048
+          }
+        },
+        "required": [
+          "task_id",
+          "attempt_id",
+          "token",
+          "stage",
+          "outcome"
+        ],
+        "additionalProperties": false
+      },
+      "Runs": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Run"
+            }
+          },
+          "next_cursor": {
+            "type": "string"
+          },
+          "sampled_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "Events": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Event"
+            }
+          },
+          "next_after": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "has_more": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          },
+          "sampled_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "items",
+          "next_after",
+          "has_more"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

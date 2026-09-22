@@ -227,6 +227,19 @@ RETURNING aggregate_id::uuid`, eventID).Scan(&jobID)
 		return fmt.Errorf("mark outbox published: %w", err)
 	}
 
+	// Administrative candidate tasks use the existing outbox, but must not
+	// update automatic jobs, radar states or publication pointers.
+	var aggregateType string
+	if err = tx.QueryRow(ctx, `SELECT aggregate_type FROM outbox_events WHERE event_id = $1`, eventID).Scan(&aggregateType); err != nil {
+		return fmt.Errorf("read published aggregate type: %w", err)
+	}
+	if aggregateType == "ops_task" {
+		if _, err = tx.Exec(ctx, `UPDATE ops_tasks SET dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP) WHERE id = $1 AND generation = (SELECT (payload->>'generation')::integer FROM outbox_events WHERE event_id = $2)`, jobID, eventID); err != nil {
+			return fmt.Errorf("record administrative queue time: %w", err)
+		}
+		return tx.Commit(ctx)
+	}
+
 	var runID uuid.UUID
 	var jobType string
 	err = tx.QueryRow(ctx, `

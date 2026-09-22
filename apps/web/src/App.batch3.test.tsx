@@ -4,8 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 const loaded = vi.hoisted(() => [] as string[])
 vi.mock('./workspace/MainWorkspace', () => { loaded.push('main'); return { MainWorkspace: () => <div>main-ready</div> } })
 vi.mock('./workspace/QCReviewWorkspace', () => { loaded.push('qc'); return { QCReviewWorkspace: () => <div>qc-ready</div> } })
-vi.mock('./workspace/AdminWorkspace', () => { loaded.push('admin'); return { AdminWorkspace: () => <div>admin-ready</div> } })
-vi.mock('./workspace/PipelineInspector', () => { loaded.push('pipeline'); return { PipelineInspector: () => <div>pipeline-ready</div> } })
+vi.mock('./admin/AdminApp', () => { loaded.push('admin'); return { default: () => <div>admin-ready</div> } })
 afterEach(() => { cleanup(); window.history.replaceState({}, '', '/') })
 it('loads only the selected route and retains all existing route matches', async () => {
   const { default: App } = await import('./App')
@@ -23,8 +22,7 @@ it('loads only the selected route and retains all existing route matches', async
   window.history.replaceState({}, '', '/admin/settings')
   render(<App />)
   await screen.findByText('admin-ready')
-  await screen.findByText('pipeline-ready')
-  expect(loaded.slice(2).sort()).toEqual(['admin', 'pipeline'])
+  expect(loaded.slice(2)).toEqual(['admin'])
 })
 
 it('shows a manual recovery path when a lazy route fails', async () => {

@@ -70,9 +70,9 @@ func NewHandler(pool *pgxpool.Pool) (http.Handler, error) {
 		Alerts:               alertReader,
 		OperationalIssues:    store,
 	})
-	return releaseguard.Wrap(workspace.NewRuntimeHandler(coreHandler, workspace.RuntimeOptions{
+	return withOperations(releaseguard.Wrap(workspace.NewRuntimeHandler(coreHandler, workspace.RuntimeOptions{
 		Queries: queries,
 		Store:   store, ProjectionStore: store, Objects: diagnosticLayers, EnsembleRoot: ensembleRoot, NowcastNetRoot: nowcastNetRoot, AdminToken: adminToken,
-	})), nil
+	})), pool, store, diagnosticLayers, adminToken), nil
 
 }

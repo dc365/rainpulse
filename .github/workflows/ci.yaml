@@ -48,6 +48,9 @@ jobs:
       - name: Maintenance boundary regression
         if: matrix.target == 'test'
         run: make test-architecture-batch3
+      - name: Administrative task center regression
+        if: matrix.target == 'test'
+        run: make test-admin-ops
   verify:
     name: verify
     runs-on: ubuntu-latest
