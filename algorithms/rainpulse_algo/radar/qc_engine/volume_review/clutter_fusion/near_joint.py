@@ -189,7 +189,7 @@ def _temporal_low_rho(s,strong,base,runtime):
     selected=selected[:cfg.minimum_prior_snapshots]
     if len(selected)<cfg.minimum_prior_snapshots:
         return out,{"status":"INSUFFICIENT_PRIOR_SNAPSHOTS","sources":[],"rejected":rejected}
-    out["CF_NR_TEMPORAL_LOW_RHO_AVAILABLE_MASK"][:] = 1
+    out["CF_NR_TEMPORAL_LOW_RHO_AVAILABLE_MASK"][observed] = 1
     xx=ground(s.ranges[None,:],s.elevation[:,None]);hh=height(s.ranges[None,:],s.elevation[:,None])
     aa=np.broadcast_to(s.azimuth[:,None],shape)
     recurrence=[]
