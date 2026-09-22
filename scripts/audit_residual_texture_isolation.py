@@ -16,8 +16,13 @@ import numpy as np
 
 from audit_near_temporal_object import _load_selected_bundle_files
 from rainpulse_algo.diagnostics.renderer import _open_group
+from rainpulse_algo.radar.qc_engine.volume_review.clutter_fusion.context import (
+    ground,
+    height,
+)
 from rainpulse_algo.radar.qc_engine.volume_review.data import array_digest
 from rainpulse_algo.radar.qc_engine.volume_review.receipts import load_npz
+from rainpulse_algo.radar.qc_engine.volume_review.sampling import polar_targets
 from rainpulse_algo.radar.qc_engine.volume_review.residual_texture_isolation import (
     RESIDUAL_TEXTURE_ISOLATION_POLICY,
     evaluate_residual_texture_isolation,
@@ -208,6 +213,69 @@ def _winner_features(
     }
 
 
+def _vertical_context(
+    current: Mapping[str, np.ndarray],
+    donors: tuple[Mapping[str, np.ndarray], ...],
+) -> tuple[np.ndarray, np.ndarray]:
+    shape = np.asarray(current["DBZH_RAW"]).shape
+    available = np.zeros(shape, dtype=bool)
+    support = np.zeros(shape, dtype=bool)
+    target_az = np.asarray(current["azimuth"], float)[:, None]
+    target_el = np.asarray(current["elevation"], float)[:, None]
+    target_range = np.asarray(current["range"], float)[None, :]
+    target_height = height(target_range, target_el)
+    target_ground = ground(target_range, target_el)
+    ranked = sorted(
+        donors,
+        key=lambda donor: abs(
+            float(np.median(donor["elevation"]))
+            - float(np.median(current["elevation"]))
+        ),
+    )
+    for donor in ranked[: RESIDUAL_TEXTURE_ISOLATION_POLICY["maximum_vertical_donors"]]:
+        elevation_delta = abs(
+            float(np.median(donor["elevation"]))
+            - float(np.median(current["elevation"]))
+        )
+        if elevation_delta <= 0.2:
+            continue
+        ray, gate, footprint = polar_targets(
+            np.asarray(donor["azimuth"], float),
+            np.asarray(donor["range"], float),
+            target_ground,
+            target_az,
+        )
+        donor_z = np.asarray(donor["DBZH_RAW"], float)[ray, gate]
+        donor_shape = np.asarray(donor["DBZH_RAW"]).shape
+        donor_valid = _binary_array(donor.get("VALID_MASK"), donor_shape)[ray, gate]
+        donor_height = height(
+            np.asarray(donor["range"], float)[gate],
+            np.asarray(donor["elevation"], float)[ray],
+        )
+        delta = np.abs(donor_height - target_height)
+        measured = (
+            footprint
+            & donor_valid
+            & np.isfinite(donor_z)
+            & (delta >= RESIDUAL_TEXTURE_ISOLATION_POLICY["minimum_vertical_delta_m"])
+            & (delta <= RESIDUAL_TEXTURE_ISOLATION_POLICY["maximum_vertical_delta_m"])
+        )
+        available |= measured
+        support |= measured & (
+            donor_z >= RESIDUAL_TEXTURE_ISOLATION_POLICY["minimum_dbz"]
+        )
+    return available, support
+
+
+def _binary_array(value, shape: tuple[int, int]) -> np.ndarray:
+    if value is None:
+        return np.zeros(shape, dtype=bool)
+    array = np.asarray(value)
+    if array.shape != shape or not np.isin(array, (0, 1)).all():
+        raise ValueError("invalid vertical context validity mask")
+    return array.astype(bool, copy=False)
+
+
 def replay(current_uri: str, diagnostic_uri: str | None) -> dict:
     client = minio_client_from_environment()
     reader = ArtifactObjectReader(client)
@@ -231,10 +299,12 @@ def replay(current_uri: str, diagnostic_uri: str | None) -> dict:
         raise ValueError("current QC volume lacks radar_id")
     evidence_by_sweep: dict[str, dict] = {}
     summaries: list[dict] = []
+    all_sweeps = {
+        f"sweep_{number:03d}": _sweep_arrays(current_root[f"sweep_{number:03d}"])
+        for number in np.asarray(current_root["sweep_number"][:], int)
+    }
     evaluate_started = time.perf_counter()
-    for number in np.asarray(current_root["sweep_number"][:], int):
-        key = f"sweep_{number:03d}"
-        current = _sweep_arrays(current_root[key])
+    for key, current in all_sweeps.items():
         if not {"azimuth", "range", "DBZH_RAW", "RHOHV_RAW", "SNR_RAW"}.issubset(
             current
         ):
@@ -243,7 +313,13 @@ def replay(current_uri: str, diagnostic_uri: str | None) -> dict:
             )
             continue
         before = array_digest(current)
-        evidence = evaluate_residual_texture_isolation(current)
+        donors = tuple(item for name, item in all_sweeps.items() if name != key)
+        vertical_available, vertical_support = _vertical_context(current, donors)
+        evidence = evaluate_residual_texture_isolation(
+            current,
+            vertical_support=vertical_support,
+            vertical_available=vertical_available,
+        )
         after = array_digest(current)
         if before != after:
             raise RuntimeError("audit replay mutated current input")

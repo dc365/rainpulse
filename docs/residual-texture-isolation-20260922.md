@@ -20,10 +20,15 @@ Input was the current QC volume and the latest near-object CR diagnostic job
 - Accepted audit objects: 4,260 textured-blob gates and 2,949 isolated-speckle
   gates.
 - Latest weak CR winner pixels in 0–75 km: 1,265; audit object coverage was
-  69 pixels (8 blob, 61 isolated), including 62/1,019 at 10–50 km.
+  69 pixels (8 blob, 61 isolated), including 45/1,019 at 10–50 km.
 - A deliberately broad isolation threshold reached 163/1,265, while an almost
   context-free small-object rule reached 532/1,265. The latter over-selects and
   is not suitable as an action rule.
+
+A second audit pass added matched vertical-context discontinuity and object-level
+speckle fraction. It ran in 4.160 s with 729.2 MiB peak RSS and covered 78/1,265
+weak CR winners (8 blob, 70 isolated), including 53/1,019 at 10–50 km. Vertical
+support is diagnostic evidence only; it is not treated as proof of weather.
 
 Conclusion: the first version is fast enough for an offline/audit path and
 provides the requested texture/isolation evidence, but conservative coverage is

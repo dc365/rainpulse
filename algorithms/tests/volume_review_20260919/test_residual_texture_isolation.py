@@ -6,8 +6,8 @@ from volume_review.residual_texture_isolation import evaluate_residual_texture_i
 
 
 def make_case(mode: str):
-    rows, gates = 48, 180
-    az = np.arange(rows, dtype=float) * 7.5
+    rows, gates = 360, 180
+    az = np.arange(rows, dtype=float)
     r = 500.0 + np.arange(gates) * 500.0
     shape = (rows, gates)
     a = {
@@ -31,6 +31,11 @@ def make_case(mode: str):
         a["DBZH_RAW"][12:30, 35:52] = 12.0
         a["RHOHV_RAW"][12:30, 35:52] = 0.84
         a["SNR_RAW"][12:30, 35:52] = 12.0
+    elif mode == "vertical":
+        a["DBZH_RAW"][22:28, 87:93] = -5.0
+        a["DBZH_RAW"][24:26, 90:92] = 12.0
+        a["RHOHV_RAW"][24:26, 90:92] = 0.84
+        a["SNR_RAW"][24:26, 90:92] = 12.0
     elif mode == "isolated":
         a["DBZH_RAW"][24, 90] = 12.0
         a["RHOHV_RAW"][24, 90] = 0.84
@@ -62,6 +67,25 @@ def test_smooth_object_and_weather_protection_are_not_selected():
     assert not (smooth.arrays["RTI_BLOB_MASK"] == 1).any()
     protected = evaluate_residual_texture_isolation(make_case("protected"))
     assert not (protected.arrays["RTI_OBJECT_MASK"] == 1).any()
+
+
+def test_vertical_discontinuity_supports_and_vertical_weather_protects():
+    current = make_case("vertical")
+    available = np.ones_like(current["DBZH_RAW"], dtype="uint8")
+    unsupported = np.zeros_like(current["DBZH_RAW"], dtype="uint8")
+    evidence = evaluate_residual_texture_isolation(
+        current,
+        vertical_support=unsupported,
+        vertical_available=available,
+    )
+    assert (evidence.arrays["RTI_ISOLATED_MASK"] == 1).any()
+    supported = np.ones_like(current["DBZH_RAW"], dtype="uint8")
+    evidence = evaluate_residual_texture_isolation(
+        current,
+        vertical_support=supported,
+        vertical_available=available,
+    )
+    assert not (evidence.arrays["RTI_OBJECT_MASK"] == 1).any()
 
 
 def test_input_is_not_mutated():

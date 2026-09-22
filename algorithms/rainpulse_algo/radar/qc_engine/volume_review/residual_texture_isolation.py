@@ -33,6 +33,7 @@ RESIDUAL_TEXTURE_ISOLATION_POLICY = {
     "minimum_blob_neighborhood_fraction": 0.05,
     "minimum_blob_polar_fraction": 0.10,
     "minimum_blob_nonmet_fraction": 0.30,
+    "minimum_blob_speckle_fraction": 0.10,
     "maximum_isolated_gates": 8,
     "maximum_isolated_area_m2": 10_000_000.0,
     "maximum_isolated_neighborhood_fraction": 0.50,
@@ -40,6 +41,11 @@ RESIDUAL_TEXTURE_ISOLATION_POLICY = {
     "minimum_isolated_polar_fraction": 0.10,
     "isolation_ring_radius_m": 3_000.0,
     "maximum_weather_fraction": 0.10,
+    "minimum_vertical_delta_m": 200.0,
+    "maximum_vertical_delta_m": 3_000.0,
+    "maximum_vertical_donors": 2,
+    "minimum_vertical_support_fraction": 0.75,
+    "minimum_vertical_discontinuity_fraction": 0.80,
     "maximum_objects": 50_000,
     "maximum_sweep_gates": 5_000_000,
 }
@@ -91,7 +97,12 @@ def _edge_fraction(mask: np.ndarray) -> float:
     return float(boundary.sum() / max(1, mask.sum()))
 
 
-def evaluate_residual_texture_isolation(current: dict) -> ResidualTextureIsolationEvidence:
+def evaluate_residual_texture_isolation(
+    current: dict,
+    *,
+    vertical_support: np.ndarray | None = None,
+    vertical_available: np.ndarray | None = None,
+) -> ResidualTextureIsolationEvidence:
     """Evaluate one native sweep without changing measurements or qualification."""
     shape = np.asarray(current["DBZH_RAW"]).shape
     if int(np.prod(shape)) > RESIDUAL_TEXTURE_ISOLATION_POLICY["maximum_sweep_gates"]:
@@ -120,6 +131,19 @@ def evaluate_residual_texture_isolation(current: dict) -> ResidualTextureIsolati
         | _binary(current, "CF_WEATHER_PROXY_MASK", shape)
     )
     weather |= polar_available & (rho >= 0.97) & (snr >= 12.0)
+    if vertical_support is None:
+        vertical_support = np.zeros(shape, dtype=bool)
+    else:
+        vertical_support = np.asarray(vertical_support, bool)
+        if vertical_support.shape != shape:
+            raise ValueError("vertical support geometry differs")
+    if vertical_available is None:
+        vertical_available = np.zeros(shape, dtype=bool)
+    else:
+        vertical_available = np.asarray(vertical_available, bool)
+        if vertical_available.shape != shape:
+            raise ValueError("vertical availability geometry differs")
+    vertical_discontinuity = vertical_available & ~vertical_support
     domain = (
         observed
         & eligible
@@ -168,6 +192,9 @@ def evaluate_residual_texture_isolation(current: dict) -> ResidualTextureIsolati
     object_area = np.zeros(shape, dtype=np.float32)
     edge_score = np.full(shape, np.nan, dtype="float32")
     isolation_score = np.full(shape, np.nan, dtype="float32")
+    vertical_support_array = np.full(shape, np.nan, dtype="float32")
+    vertical_discontinuity_array = np.full(shape, np.nan, dtype="float32")
+    speckle_array = np.full(shape, np.nan, dtype="float32")
     polar_score_array = np.where(polar_available, polar_score, np.nan).astype("float32")
     ring_radius_m = RESIDUAL_TEXTURE_ISOLATION_POLICY["isolation_ring_radius_m"]
     ring_ray_radius = max(
@@ -220,6 +247,18 @@ def evaluate_residual_texture_isolation(current: dict) -> ResidualTextureIsolati
         echo_fraction = float(local_echo[component].mean())
         context_fraction = max(neighborhood_fraction, echo_fraction)
         edge_fraction = _edge_fraction(component)
+        vertical_values = vertical_support[slice_][component]
+        vertical_available_values = vertical_available[slice_][component]
+        vertical_support_fraction = (
+            float(np.mean(vertical_values[vertical_available_values]))
+            if vertical_available_values.any()
+            else 0.0
+        )
+        vertical_discontinuity_fraction = (
+            float(np.mean(~vertical_values[vertical_available_values]))
+            if vertical_available_values.any()
+            else 0.0
+        )
         polar_values = polar_score_array[slice_][component]
         polar_fraction = (
             float(np.mean(polar_values >= 0.5)) if np.isfinite(polar_values).any() else 0.0
@@ -239,6 +278,8 @@ def evaluate_residual_texture_isolation(current: dict) -> ResidualTextureIsolati
         edge_score[slice_][component] = edge_fraction
         isolation = (1.0 - neighborhood_fraction) * (1.0 - echo_fraction)
         isolation_score[slice_][component] = isolation
+        vertical_support_array[slice_][component] = vertical_support_fraction
+        vertical_discontinuity_array[slice_][component] = vertical_discontinuity_fraction
         object_id[slice_][component] = label_id
         object_size[slice_][component] = size
         object_area[slice_][component] = area
@@ -250,13 +291,21 @@ def evaluate_residual_texture_isolation(current: dict) -> ResidualTextureIsolati
             and size <= RESIDUAL_TEXTURE_ISOLATION_POLICY["maximum_isolated_gates"]
         )
         score_values = texture_score[slice_][component]
+        speckle_fraction = float(np.mean(score_values >= 0.30))
+        speckle_array[slice_][component] = speckle_fraction
         blob = (
             not protected
             and RESIDUAL_TEXTURE_ISOLATION_POLICY["minimum_blob_gates"]
             <= size
             <= RESIDUAL_TEXTURE_ISOLATION_POLICY["maximum_blob_gates"]
             and area >= 2_000_000.0
-            and texture_p90 >= RESIDUAL_TEXTURE_ISOLATION_POLICY["minimum_texture_db"]
+            and (
+                texture_p90 >= RESIDUAL_TEXTURE_ISOLATION_POLICY["minimum_texture_db"]
+                or speckle_fraction
+                >= RESIDUAL_TEXTURE_ISOLATION_POLICY["minimum_blob_speckle_fraction"]
+                or vertical_discontinuity_fraction
+                >= RESIDUAL_TEXTURE_ISOLATION_POLICY["minimum_vertical_discontinuity_fraction"]
+            )
             and max(
                 np.nanmax(score_values) if np.isfinite(score_values).any() else 0.0, edge_fraction
             )
@@ -267,16 +316,25 @@ def evaluate_residual_texture_isolation(current: dict) -> ResidualTextureIsolati
             and polar_fraction >= RESIDUAL_TEXTURE_ISOLATION_POLICY["minimum_blob_polar_fraction"]
             and nonmet_fraction >= RESIDUAL_TEXTURE_ISOLATION_POLICY["minimum_blob_nonmet_fraction"]
         )
+        isolation_path = (
+            neighborhood_fraction
+            <= RESIDUAL_TEXTURE_ISOLATION_POLICY["maximum_isolated_neighborhood_fraction"]
+            and echo_fraction <= RESIDUAL_TEXTURE_ISOLATION_POLICY["maximum_isolated_echo_fraction"]
+        )
+        vertical_path = (
+            vertical_available_values.any()
+            and vertical_discontinuity_fraction
+            >= RESIDUAL_TEXTURE_ISOLATION_POLICY["minimum_vertical_discontinuity_fraction"]
+        )
         isolated = (
             not protected
             and size <= RESIDUAL_TEXTURE_ISOLATION_POLICY["maximum_isolated_gates"]
             and area <= RESIDUAL_TEXTURE_ISOLATION_POLICY["maximum_isolated_area_m2"]
-            and neighborhood_fraction
-            <= RESIDUAL_TEXTURE_ISOLATION_POLICY["maximum_isolated_neighborhood_fraction"]
-            and echo_fraction <= RESIDUAL_TEXTURE_ISOLATION_POLICY["maximum_isolated_echo_fraction"]
             and polar_fraction
             >= RESIDUAL_TEXTURE_ISOLATION_POLICY["minimum_isolated_polar_fraction"]
+            and (isolation_path or vertical_path)
         )
+
         if blob:
             object_kind[slice_][component] = 1
             blob_mask[slice_][component] = True
@@ -292,6 +350,12 @@ def evaluate_residual_texture_isolation(current: dict) -> ResidualTextureIsolati
         "RTI_TEXTURE_SCORE": texture_score.astype("float32"),
         "RTI_EDGE_SCORE": edge_score,
         "RTI_ISOLATION_SCORE": isolation_score,
+        "RTI_SPECKLE_FRACTION": speckle_array,
+        "RTI_VERTICAL_AVAILABLE_MASK": vertical_available.astype("uint8"),
+        "RTI_VERTICAL_SUPPORT_MASK": vertical_support.astype("uint8"),
+        "RTI_VERTICAL_DISCONTINUITY_MASK": vertical_discontinuity.astype("uint8"),
+        "RTI_VERTICAL_SUPPORT_FRACTION": vertical_support_array,
+        "RTI_VERTICAL_DISCONTINUITY_FRACTION": vertical_discontinuity_array,
         "RTI_POLAR_SCORE": polar_score_array,
         "RTI_OBJECT_MASK": object_mask.astype("uint8"),
         "RTI_BLOB_MASK": blob_mask.astype("uint8"),

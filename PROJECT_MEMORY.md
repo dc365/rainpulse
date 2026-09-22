@@ -554,6 +554,6 @@ operational data here.
   with native polar multi-scale texture, object shape/area, 3 km context, polar
   evidence, and separate textured-blob/isolated-speckle outputs. BJT 09:00 Z9598
   replay: 3.299 s / 596.4 MiB, 4,260 blob + 2,949 isolated audit gates, but only
-  69/1,265 weak CR winners covered (62/1,019 at 10–50 km). Broad thresholds
-  reached 163/1,265 and an over-broad small-object bound 532/1,265; production
-  removal remains off. See `docs/residual-texture-isolation-20260922.md`.
+  69/1,265 weak CR winners covered (45/1,019 at 10–50 km). Broad thresholds
+  reached 163/1,265 and an over-broad small-object bound 532/1,265; A follow-up matched vertical context + speckle pass reached 78/1,265
+  (53/1,019 at 10–50 km) in 4.160 s / 729.2 MiB. Production removal remains off. See `docs/residual-texture-isolation-20260922.md`.
