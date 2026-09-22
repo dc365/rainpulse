@@ -128,6 +128,26 @@ def test_temporal_low_rho_prefers_same_named_donor_among_duplicate_elevations():
     assert e.summary['near_revision']['strong_near']['temporal_low_rho']['status']=='EVALUATED'
 
 
+def test_retrospective_boundary_disappearance_can_resolve_first_frame():
+    c=config(strong_near=StrongNearConfig(mode='quarantine',temporal_low_rho=TemporalLowRhoConfig(
+        maximum_rhohv=1.,retrospective_boundary_enabled=True,allow_disappearance_support=True,
+        disappearance_resolve_protections=True)))
+    current=scene(kind='ground',z=15.,rho=.99,snr=16.,zdr=.2,time=300.)
+    future_gates=[]
+    for scan,sha,when in (('future-1','a'*64,420.),('future-2','b'*64,480.)):
+        donor=change(current,'DBZH',missing=True)
+        donor=replace(donor,ray_time_s=np.full(current.shape[0],when,dtype=float))
+        future_gates.append(ct.PastSweep(donor,sha,scan,'site_a','processor-v1',
+                                         np.arange(current.shape[0]),True))
+    hard=np.zeros(current.shape,bool);hard[5]=True
+    e=one(current,c,near_context=RuntimeContext('site_a','test-scan','processor-v1',tuple(future_gates)),
+          protections=[(hard,np.zeros(current.shape,bool),np.zeros(current.shape,bool))])
+    selected=e.arrays['CF_NR_TEMPORAL_LOW_RHO_OBJECT_MASK']==1
+    assert selected.any()
+    assert (e.arrays['CF_NR_TEMPORAL_LOW_RHO_AVAILABLE_MASK']==1).any()
+    assert e.summary['near_revision']['strong_near']['temporal_low_rho']['semantics']=='retrospective_boundary_disappearance'
+
+
 def test_temporal_low_rho_current_high_rho_does_not_act():
     c=config(strong_near=StrongNearConfig(mode='quarantine',temporal_low_rho=TemporalLowRhoConfig()))
     current=scene(kind='ground',z=15.,rho=.99,snr=16.,zdr=.2,time=300.)

@@ -56,7 +56,7 @@ class TemporalLowRhoConfig(BaseModel):
     maximum_range_m: float = Field(default=15000., gt=0, le=30000)
     minimum_dbz: float = Field(default=7., ge=0, le=20)
     maximum_dbz: float = Field(default=30., gt=5, le=40)
-    maximum_rhohv: float = Field(default=.90, ge=.5, le=.95)
+    maximum_rhohv: float = Field(default=.90, ge=.5, le=1.)
     minimum_snr_db: float = Field(default=12., ge=8, le=25)
     maximum_age_seconds: float = Field(default=900., ge=60, le=1200)
     maximum_horizontal_error_m: float = Field(default=750., gt=0, le=1000)
@@ -67,6 +67,10 @@ class TemporalLowRhoConfig(BaseModel):
     maximum_object_gates: int = Field(default=5000, ge=1, le=50000)
     minimum_object_recurrence_fraction: float = Field(default=.50, ge=.3, le=1)
     maximum_temporal_objects: int = Field(default=20000, ge=1, le=100000)
+    retrospective_boundary_enabled: bool = False
+    allow_disappearance_support: bool = False
+    disappearance_resolve_protections: bool = False
+    maximum_boundary_age_seconds: float = Field(default=900., ge=60., le=1800)
 
 
 class StrongNearConfig(BaseModel):
