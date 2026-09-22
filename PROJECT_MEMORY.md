@@ -542,3 +542,10 @@ operational data here.
   `0fd8bdec-3668-40c9-9073-b999b6336936` succeeded and the API selects its
   `grid-dbzh-qc` SHA `14b2daa8b6041d6b36c31a7a8b80c32e3c5f04fb129953f6192bae265d1dac92`.
   User visual acceptance remains pending.
+
+- 2026-09-22: Added audit-only `near-temporal-object-20260922-v1` and read-only
+  replay script. BJT 09:00 Z9598 replay took 5.592 s / 916.8 MiB, found 415
+  objects, but covered only 40/1,265 latest weak CR winners (35/1,019 at 10-50 km).
+  Threshold relaxation only reached 47/1,265, so temporal recurrence is not yet
+  effective for the visible residual and remains out of production. See
+  `docs/near-temporal-object-20260922.md`.
