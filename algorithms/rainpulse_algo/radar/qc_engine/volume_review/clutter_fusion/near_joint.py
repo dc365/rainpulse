@@ -450,7 +450,7 @@ def validate(a,cfg):
         temporal_boundary=a['CF_NR_TEMPORAL_LOW_RHO_BOUNDARY_MODE_MASK']==1
         temporal_domain=a['CF_NR_TEMPORAL_LOW_RHO_DOMAIN_MASK']==1
         temporal_object=a['CF_NR_TEMPORAL_LOW_RHO_OBJECT_MASK']==1
-        if np.any((candidate|core|propagated|dilated|dilation_domain)&strong_barriers):
+        if np.any((core|propagated|dilated|dilation_domain)&strong_barriers):
             raise ValueError('strong near candidate crossed a protection barrier')
         if np.any(temporal_domain&temporal_barriers):
             raise ValueError('temporal near candidate crossed a protection barrier')
