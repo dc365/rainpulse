@@ -71,6 +71,7 @@ class TemporalLowRhoConfig(BaseModel):
     allow_disappearance_support: bool = False
     disappearance_resolve_protections: bool = False
     maximum_boundary_age_seconds: float = Field(default=900., ge=60., le=1800)
+    boundary_maximum_rhohv: float = Field(default=1., ge=.5, le=1.)
 
 
 class StrongNearConfig(BaseModel):

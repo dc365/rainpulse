@@ -151,7 +151,7 @@ def evidence(s,cfg,base,runtime=None):
 def _temporal_low_rho(s,strong,base,runtime):
     """Two-snapshot causal low-RHOHV recurrence for bounded near-site objects."""
     shape=s.shape
-    keys=("AVAILABLE_MASK","DOMAIN_MASK","PRIOR1_MASK","PRIOR2_MASK","SUPPORT_MASK","OBJECT_MASK")
+    keys=("AVAILABLE_MASK","BOUNDARY_MODE_MASK","DOMAIN_MASK","PRIOR1_MASK","PRIOR2_MASK","SUPPORT_MASK","OBJECT_MASK")
     out={("CF_NR_TEMPORAL_LOW_RHO_"+k):np.zeros(shape,"uint8") for k in keys}
     out.update({
         "CF_NR_TEMPORAL_LOW_RHO_OBJECT_ID":np.zeros(shape,"int32"),
@@ -162,11 +162,20 @@ def _temporal_low_rho(s,strong,base,runtime):
     if cfg is None:return out,{"status":"DISABLED","sources":[]}
     if runtime is None:return out,{"status":"NO_FROZEN_TEMPORAL_CONTEXT","sources":[]}
     if s.ray_time_s is None:return out,{"status":"CURRENT_TIME_UNAVAILABLE","sources":[]}
+    boundary=bool(cfg.retrospective_boundary_enabled and any(
+        item.radar_id.lower()==runtime.radar_id.lower()
+        and item.processing_id==runtime.processing_id
+        and item.scan_id!=runtime.scan_id
+        and item.sweep.ray_time_s is not None
+        and item.sweep.ray_time_s.max()<s.ray_time_s.min()
+        for item in runtime.past)==False)
     z,z_available=s.moment("DBZH");rho,rho_available=s.moment("RHOHV");snr,snr_available=s.moment("SNR")
     barriers=_strong_barriers(base,cfg)
     observed=base["CF_OBSERVED_MASK"]==1
+    out["CF_NR_TEMPORAL_LOW_RHO_BOUNDARY_MODE_MASK"][observed&boundary]=1
+    rho_limit=cfg.boundary_maximum_rhohv if boundary else cfg.maximum_rhohv
     domain=(observed&z_available&rho_available&snr_available&np.isfinite(z)&np.isfinite(rho)&np.isfinite(snr)
-            &(z>=cfg.minimum_dbz)&(z<=cfg.maximum_dbz)&(rho<=cfg.maximum_rhohv)&(snr>=cfg.minimum_snr_db)
+            &(z>=cfg.minimum_dbz)&(z<=cfg.maximum_dbz)&(rho<=rho_limit)&(snr>=cfg.minimum_snr_db)
             &(s.ranges[None,:]<=cfg.maximum_range_m)&~barriers)
     by_scan={}
     rejected={}
@@ -178,7 +187,7 @@ def _temporal_low_rho(s,strong,base,runtime):
         elif donor.ray_time_s is None:reason="PAST_TIME_UNAVAILABLE"
         else:
             age_span=float(s.ray_time_s.min()-donor.ray_time_s.max())
-            if cfg.retrospective_boundary_enabled:
+            if boundary:
                 if abs(age_span)>cfg.maximum_boundary_age_seconds:reason="BOUNDARY_AGE_OUT_OF_RANGE"
                 elif age_span>=0:reason="CAUSAL_DONOR_IN_BOUNDARY_MODE"
             elif age_span<=0:reason="NOT_STRICTLY_PAST"
@@ -221,7 +230,7 @@ def _temporal_low_rho(s,strong,base,runtime):
                    &(abs(donor.elevation[jj]-s.elevation[:,None])<=cfg.maximum_elevation_error_deg)&age_ok)
         donor_rho,dr_available=donor.moment("RHOHV");donor_snr,ds_available=donor.moment("SNR")
         donor_z,dz_available=donor.moment("DBZH")
-        measured=(geometric if cfg.allow_disappearance_support
+        measured=(geometric if boundary and cfg.allow_disappearance_support
                   else geometric&dr_available[jj,kk]&ds_available[jj,kk])
         values_rho=np.asarray(donor_rho[jj,kk],dtype=float)
         values_snr=np.asarray(donor_snr[jj,kk],dtype=float)
@@ -230,7 +239,7 @@ def _temporal_low_rho(s,strong,base,runtime):
                                      &np.isfinite(values_rho)&np.isfinite(values_snr)
                                      &(values_rho<=cfg.maximum_rhohv)&(values_snr>=cfg.minimum_snr_db))
                                     |((~dz_available[jj,kk])|~np.isfinite(values_z)|(values_z<cfg.minimum_dbz)
-                                      if cfg.allow_disappearance_support else False)))
+                                      if boundary and cfg.allow_disappearance_support else False)))
         sources.append({"source_index":source_index,"scan_id":item.scan_id,"sweep":donor.name,
                         "source_sha256":item.source_sha256,"ingest_time_verified":item.ingest_time_verified})
     first,second=recurrence
@@ -258,7 +267,7 @@ def _temporal_low_rho(s,strong,base,runtime):
                 "domain_gates":int(domain.sum()),"prior1_gates":int((domain&first).sum()),
                 "prior2_gates":int((domain&second).sum()),"support_gates":int(support.sum()),
                 "object_gates":int(temporal_object.sum()),"object_count":int(temporal_object.any() and len(np.unique(oid[temporal_object]))),
-                "semantics":("retrospective_boundary_disappearance" if cfg.retrospective_boundary_enabled
+                "semantics":("retrospective_boundary_disappearance" if boundary
                               else "causal_low_rho_measurement_recurrence_not_ground_truth")}
 
 
@@ -437,6 +446,7 @@ def validate(a,cfg):
         barriers=_strong_barriers(a,strong.temporal_low_rho)
         action=a['CF_NR_STRONG_ACTION_MASK']==1
         temporal_available=a['CF_NR_TEMPORAL_LOW_RHO_AVAILABLE_MASK']==1
+        temporal_boundary=a['CF_NR_TEMPORAL_LOW_RHO_BOUNDARY_MODE_MASK']==1
         temporal_domain=a['CF_NR_TEMPORAL_LOW_RHO_DOMAIN_MASK']==1
         temporal_object=a['CF_NR_TEMPORAL_LOW_RHO_OBJECT_MASK']==1
         if np.any((candidate|core|propagated|dilated|dilation_domain|temporal_domain)&barriers):
@@ -496,7 +506,9 @@ def validate(a,cfg):
                 &np.isfinite(a['CF_NR_STRONG_RANGE_M'])
                 &(a['CF_RAW_DBZH']>=strong.temporal_low_rho.minimum_dbz)
                 &(a['CF_RAW_DBZH']<=strong.temporal_low_rho.maximum_dbz)
-                &(a['CF_NR_STRONG_RHOHV']<=strong.temporal_low_rho.maximum_rhohv)
+                &(a['CF_NR_STRONG_RHOHV']<=np.where(
+                    temporal_boundary,strong.temporal_low_rho.boundary_maximum_rhohv,
+                    strong.temporal_low_rho.maximum_rhohv))
                 &(a['CF_NR_STRONG_SNR_DB']>=strong.temporal_low_rho.minimum_snr_db)
                 &(a['CF_NR_STRONG_RANGE_M']<=strong.temporal_low_rho.maximum_range_m)&~barriers)
             if not np.array_equal(temporal_domain,expected_temporal_domain):
