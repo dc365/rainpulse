@@ -11,6 +11,7 @@ import (
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/objectstore"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/orchestration"
 	postgresstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/postgres"
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/releaseguard"
 	verificationstore "github.com/fonwee/rainpulse-nowcast/services/control/internal/verification"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/workspace"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -66,8 +67,8 @@ func NewHandler(pool *pgxpool.Pool) (http.Handler, error) {
 		Alerts:               alertReader,
 		OperationalIssues:    store,
 	})
-	return workspace.NewRuntimeHandler(coreHandler, workspace.RuntimeOptions{
+	return releaseguard.Wrap(workspace.NewRuntimeHandler(coreHandler, workspace.RuntimeOptions{
 		Store: store, ProjectionStore: store, Objects: diagnosticLayers, EnsembleRoot: ensembleRoot, NowcastNetRoot: nowcastNetRoot, AdminToken: adminToken,
-	}), nil
+	})), nil
 
 }

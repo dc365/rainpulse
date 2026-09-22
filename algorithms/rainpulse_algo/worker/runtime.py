@@ -36,6 +36,7 @@ from .object_store import (
     normalize_artifact_objects,
     parse_s3_uri,
 )
+from .release_identity import capture_release_identity, report_release_identity
 from .simulation import SimulatedFailure, execute
 
 
@@ -115,6 +116,7 @@ class Worker:
         self._connection: Any = None
         self._ready = False
         self._stop = asyncio.Event()
+        self._startup_release_identity = capture_release_identity(self._handler.profile)
 
     async def run(self) -> None:
         self._connection = await nats.connect(
@@ -629,6 +631,7 @@ class Worker:
             {
                 "status": "ready" if healthy else "unavailable",
                 "profile": self._handler.profile,
+                "release": report_release_identity(self._startup_release_identity),
             }
         ).encode()
         writer.write(

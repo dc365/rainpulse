@@ -1,5 +1,22 @@
 # 部署配置
 
+## 第一批架构优化后的默认入口
+
+应用本次源码更新并完成验证后，日常容器运维使用 `scripts/rainpulsectl.py`；
+`make deploy-up` 也转到这个入口。它固定加载基础、实时影子、unified 三层，
+再加载本机显式记录的实验覆盖层；不会凭仓库默认值重置正在运行的近站配置。
+已有服务器先运行 `python3 scripts/rainpulsectl.py init --adopt-running --project-name rainpulse`
+（项目名以实际 Compose labels 为准）；只有全新部署才使用 `--new-install`。
+初始化会保留 Worker 副本数；标签不一致或缺失时拒绝猜测。
+
+QC 版本切换使用“冻结预期 → 暂停新任务 → 排空旧任务 → 更新配置/镜像并重启 →
+校验 → 恢复”，不提供跳过校验的强制恢复。Native Go 的 BDP 最终配置、所有 QC
+副本和旧任务积压都参与校验。工具不自动修改 BDP，也不代表已在 105 部署。
+完整操作、首次接入、回退和测试范围见
+`../docs/ARCHITECTURE_BATCH1_20260922.md`。
+
+下面保留单进程的部署背景；旧的直接 Compose 命令仅供明确回退使用。
+
 ## 当前推荐：单 Go 进程
 
 105 已切换为 `rainpulse.service`，Web/API/接入/编排在同一 Go 进程，CPU Workers 共用 `rainpulse-cpu-worker` 镜像。日常用 `sudo systemctl restart rainpulse` 更新 Go 服务，使用 `journalctl -u rainpulse` 查日志。
