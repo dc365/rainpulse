@@ -5,16 +5,17 @@ import { useAdminQuery, useClock } from './useAdminQuery';
 import { localInput, parseSelection, timestamp, stateLabel } from './model';
 import type { Inventory, Page, Plan, Navigate } from './model';
 import { Badge, Notice, Empty, Download, Copy } from './components';
-export function NewRun({ token, navigate, initialJob }: {
+export function NewRun({ token, navigate, initialJob, initial }: {
     token: string;
     navigate: Navigate;
     initialJob?: string;
+    initial?: { radar?: string; start?: string; end?: string; preset?: string };
 }) {
-    const [preset, setPreset] = useState(initialJob ? 'diagnostics' : 'qc_preview'), [start, setStart] = useState(() => localInput(new Date(Date.now() - 30 * 60000))), [end, setEnd] = useState(() => localInput(new Date())), [radars, setRadars] = useState(''), [jobs, setJobs] = useState(initialJob ?? ''), [name, setName] = useState(''), [plan, setPlan] = useState<Plan | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState(''), [inventoryPath, setInventoryPath] = useState<string | null>(null);
+    const [preset, setPreset] = useState(initialJob ? 'diagnostics' : initial?.preset ?? 'qc_preview'), [start, setStart] = useState(() => localInput(new Date(initial?.start ?? Date.now() - 30 * 60000))), [end, setEnd] = useState(() => localInput(new Date(initial?.end ?? Date.now()))), [radars, setRadars] = useState(initial?.radar ?? ''), [jobs, setJobs] = useState(initialJob ?? ''), [name, setName] = useState(''), [plan, setPlan] = useState<Plan | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState(''), [inventoryPath, setInventoryPath] = useState<string | null>(null);
     const inventory = useAdminQuery<Page<Inventory>>(token, inventoryPath, 0);
     const now = useClock();
     const planRevision = useRef(0);
-    useEffect(() => { const id = sessionStorage.getItem('rainpulse.ops.pendingPlan'); if (!id || initialJob)
+    useEffect(() => { const id = sessionStorage.getItem('rainpulse.ops.pendingPlan'); if (!id || initialJob || initial?.radar)
         return; const c = new AbortController(); void read<Plan>(token, `/plans/${id}`, c.signal).then(p => { if (!c.signal.aborted && planRevision.current === 0) {
         setPlan(p);
         setPreset(p.selection.preset);
@@ -25,7 +26,7 @@ export function NewRun({ token, navigate, initialJob }: {
             setStart(localInput(new Date(p.selection.start)));
             setEnd(localInput(new Date(p.selection.end)));
         }
-    } }).catch(() => { }); return () => c.abort(); }, [token, initialJob]);
+    } }).catch(() => { }); return () => c.abort(); }, [token, initialJob, initial?.radar]);
     const clearPlan = () => { planRevision.current++; setPlan(null); sessionStorage.removeItem('rainpulse.ops.pendingPlan'); };
     const check = async (e: FormEvent) => { e.preventDefault(); setBusy(true); setError(''); clearPlan(); try {
         const selection = parseSelection(preset, start, end, radars, jobs, name);

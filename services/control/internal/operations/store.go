@@ -17,7 +17,7 @@ type Store struct{ DB *sql.DB }
 
 func (s *Store) Ready(ctx context.Context) error {
 	var v int
-	if err := s.DB.QueryRowContext(ctx, "SELECT version FROM ops_schema WHERE version=1").Scan(&v); err != nil {
+	if err := s.DB.QueryRowContext(ctx, "SELECT version FROM ops_schema WHERE version=2").Scan(&v); err != nil {
 		return wrapError(err)
 	}
 	return nil
@@ -92,7 +92,7 @@ func (s *Store) Submit(ctx context.Context, p Plan, key, actor string) (string, 
 		if spec.ParentID != "" {
 			state = "WAITING"
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO ops_tasks(id,run_id,parent_id,ordinal,kind,spec,state) VALUES($1,$2,NULLIF($3,'')::uuid,$4,$5,$6,$7)`, spec.ID, p.RunID, spec.ParentID, i, spec.Kind, string(JSON(spec)), state)
+		_, err = tx.ExecContext(ctx, `INSERT INTO ops_tasks(id,run_id,parent_id,ordinal,kind,spec,state,queued_at) VALUES($1,$2,NULLIF($3,'')::uuid,$4,$5,$6,$7,CASE WHEN $7='QUEUED' THEN now() ELSE NULL END)`, spec.ID, p.RunID, spec.ParentID, i, spec.Kind, string(JSON(spec)), state)
 		if err != nil {
 			return "", err
 		}
@@ -121,14 +121,14 @@ func addEvent(ctx context.Context, tx *sql.Tx, run, task, attempt, level, event,
 	return err
 }
 
-const taskSelect = `SELECT id::text,run_id::text,spec,state,generation,attempt_no,COALESCE(current_attempt::text,''),error_code,error_message,created_at,dispatched_at,updated_at,COALESCE(result,'null'::jsonb) FROM ops_tasks `
+const taskSelect = `SELECT id::text,run_id::text,spec,state,generation,attempt_no,COALESCE(current_attempt::text,''),error_code,error_message,created_at,dispatched_at,queued_at,updated_at,COALESCE(result,'null'::jsonb) FROM ops_tasks `
 
 type scanner interface{ Scan(...any) error }
 
 func scanTask(row scanner) (Task, error) {
 	var t Task
 	var raw []byte
-	err := row.Scan(&t.ID, &t.RunID, &raw, &t.State, &t.Generation, &t.AttemptNo, &t.CurrentAttempt, &t.ErrorCode, &t.ErrorMessage, &t.CreatedAt, &t.DispatchedAt, &t.UpdatedAt, &t.Result)
+	err := row.Scan(&t.ID, &t.RunID, &raw, &t.State, &t.Generation, &t.AttemptNo, &t.CurrentAttempt, &t.ErrorCode, &t.ErrorMessage, &t.CreatedAt, &t.DispatchedAt, &t.QueuedAt, &t.UpdatedAt, &t.Result)
 	if errors.Is(err, sql.ErrNoRows) {
 		return t, ErrNotFound
 	}
@@ -142,7 +142,7 @@ func (s *Store) Task(ctx context.Context, id string) (Task, error) {
 	if err != nil {
 		return t, err
 	}
-	rows, err := s.DB.QueryContext(ctx, `SELECT id::text,task_id::text,number,worker_id,state,stage,started_at,heartbeat_at,lease_until,finished_at,request,COALESCE(result,'null'::jsonb),metrics FROM ops_attempts WHERE task_id=$1 ORDER BY number`, id)
+	rows, err := s.DB.QueryContext(ctx, `SELECT id::text,task_id::text,number,worker_id,state,stage,started_at,queued_at,heartbeat_at,lease_until,finished_at,request,COALESCE(result,'null'::jsonb),metrics FROM ops_attempts WHERE task_id=$1 ORDER BY number`, id)
 	if err != nil {
 		return t, err
 	}
@@ -151,7 +151,7 @@ func (s *Store) Task(ctx context.Context, id string) (Task, error) {
 	for rows.Next() {
 		var a Attempt
 		var metrics []byte
-		if err = rows.Scan(&a.ID, &a.TaskID, &a.Number, &a.WorkerID, &a.State, &a.Stage, &a.StartedAt, &a.HeartbeatAt, &a.LeaseUntil, &a.FinishedAt, &a.Request, &a.Result, &metrics); err != nil {
+		if err = rows.Scan(&a.ID, &a.TaskID, &a.Number, &a.WorkerID, &a.State, &a.Stage, &a.StartedAt, &a.QueuedAt, &a.HeartbeatAt, &a.LeaseUntil, &a.FinishedAt, &a.Request, &a.Result, &metrics); err != nil {
 			return t, err
 		}
 		if err = json.Unmarshal(metrics, &a.Metrics); err != nil {
@@ -285,7 +285,7 @@ func (s *Store) Register(ctx context.Context, w WorkerInfo) error {
 	return wrapError(err)
 }
 func (s *Store) Workers(ctx context.Context) ([]WorkerInfo, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT id,identity,seen_at,ready,busy,current_task FROM ops_workers ORDER BY seen_at DESC LIMIT 100`)
+	rows, err := s.DB.QueryContext(ctx, `SELECT w.id,w.identity,w.seen_at,w.ready,w.busy,w.current_task,p.mode FROM ops_workers w JOIN ops_pool_controls p ON p.kind=w.kind ORDER BY w.seen_at DESC,w.id LIMIT 100`)
 	if err != nil {
 		return nil, err
 	}
@@ -294,7 +294,7 @@ func (s *Store) Workers(ctx context.Context) ([]WorkerInfo, error) {
 	for rows.Next() {
 		var w WorkerInfo
 		var b []byte
-		if err = rows.Scan(&w.ID, &b, &w.SeenAt, &w.Ready, &w.Busy, &w.CurrentTask); err != nil {
+		if err = rows.Scan(&w.ID, &b, &w.SeenAt, &w.Ready, &w.Busy, &w.CurrentTask, &w.PoolMode); err != nil {
 			return nil, err
 		}
 		if err = json.Unmarshal(b, &w.Identity); err != nil {
@@ -366,10 +366,19 @@ func (s *Store) Claim(ctx context.Context, id, worker string, generation int) (C
 	if t.State != "QUEUED" {
 		return Claim{Decision: "busy"}, nil
 	}
+	// Pool pause and Claim are serialized by this shared row lock. Existing
+	// heartbeat/finish calls intentionally do not acquire the pool lock.
+	var poolMode string
+	if err = tx.QueryRowContext(ctx, `SELECT mode FROM ops_pool_controls WHERE kind=$1 FOR SHARE`, t.Spec.Kind).Scan(&poolMode); err != nil {
+		return Claim{}, err
+	}
+	if poolMode != "ACCEPTING" {
+		return Claim{Decision: "paused"}, nil
+	}
 	var raw []byte
 	var seen time.Time
 	var ready bool
-	if err = tx.QueryRowContext(ctx, `SELECT identity,seen_at,ready FROM ops_workers WHERE id=$1`, worker).Scan(&raw, &seen, &ready); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT identity,seen_at,ready FROM ops_workers WHERE id=$1 FOR UPDATE`, worker).Scan(&raw, &seen, &ready); err != nil {
 		return Claim{}, Conflict("Worker尚未登记")
 	}
 	var identity Identity
@@ -378,6 +387,15 @@ func (s *Store) Claim(ctx context.Context, id, worker string, generation int) (C
 	}
 	if !ready || time.Since(seen) > WorkerFreshness || identity.Fingerprint != t.Spec.Identity.Fingerprint || identity.Kind != t.Spec.Kind {
 		return Claim{}, Conflict("Worker能力或版本与冻结计划不同")
+	}
+	// The worker row lock prevents concurrent claims for the same registered
+	// process. Do not trust a heartbeat's busy=false to grant a second slot.
+	var occupied bool
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM ops_attempts WHERE worker_id=$1 AND state IN ('RUNNING','COMMITTING'))`, worker).Scan(&occupied); err != nil {
+		return Claim{}, err
+	}
+	if occupied {
+		return Claim{Decision: "busy"}, nil
 	}
 	attempt := NewID()
 	var secret [32]byte
@@ -390,7 +408,7 @@ func (s *Store) Claim(ctx context.Context, id, worker string, generation int) (C
 		return Claim{}, err
 	}
 	now := time.Now().UTC()
-	_, err = tx.ExecContext(ctx, `INSERT INTO ops_attempts(id,task_id,number,worker_id,token_sha256,state,stage,request,started_at,heartbeat_at,lease_until) VALUES($1,$2,$3,$4,$5,'RUNNING','VERIFY_INPUT',$6,$7,$7,$8)`, attempt, id, t.AttemptNo+1, worker, Digest([]byte(token)), string(req), now, now.Add(LeaseDuration))
+	_, err = tx.ExecContext(ctx, `INSERT INTO ops_attempts(id,task_id,number,worker_id,token_sha256,state,stage,request,started_at,heartbeat_at,lease_until,queued_at) VALUES($1,$2,$3,$4,$5,'RUNNING','VERIFY_INPUT',$6,$7,$7,$8,$9)`, attempt, id, t.AttemptNo+1, worker, Digest([]byte(token)), string(req), now, now.Add(LeaseDuration), t.QueuedAt)
 	if err != nil {
 		return Claim{}, err
 	}
@@ -622,7 +640,7 @@ func (s *Store) Finish(ctx context.Context, p Finish, result *Candidate, recover
 			return e
 		}
 		for _, c := range items {
-			if _, err = tx.ExecContext(ctx, `UPDATE ops_tasks SET state='QUEUED',updated_at=now() WHERE id=$1`, c.id); err != nil {
+			if _, err = tx.ExecContext(ctx, `UPDATE ops_tasks SET state='QUEUED',queued_at=now(),updated_at=now() WHERE id=$1`, c.id); err != nil {
 				return err
 			}
 			if err = enqueue(ctx, tx, c.id, c.kind, c.g); err != nil {
@@ -702,7 +720,7 @@ func (s *Store) Action(ctx context.Context, id, action, actor string) error {
 					next = "WAITING"
 				}
 			}
-			if _, err = tx.ExecContext(ctx, `UPDATE ops_tasks SET state=$2,generation=generation+1,current_attempt=NULL,error_code='',error_message='',dispatched_at=NULL,updated_at=now() WHERE id=$1`, t.ID, next); err != nil {
+			if _, err = tx.ExecContext(ctx, `UPDATE ops_tasks SET state=$2,generation=generation+1,current_attempt=NULL,error_code='',error_message='',dispatched_at=NULL,queued_at=CASE WHEN $2='QUEUED' THEN now() ELSE NULL END,updated_at=now() WHERE id=$1`, t.ID, next); err != nil {
 				return err
 			}
 			if next == "QUEUED" {

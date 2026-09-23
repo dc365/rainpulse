@@ -28,7 +28,7 @@ def test_all_openapi_references_exist_and_operations_are_unique():
             seen.add(op['operationId'])
             wanted = 'workerBearer' if path.startswith('/internal/') else 'adminBearer'
             assert op['security'] == [{wanted: []}]
-    assert len(value['paths']) == 23
+    assert len(value['paths']) == 31
 
 
 def test_commands_reject_unknown_properties_and_bound_logs():

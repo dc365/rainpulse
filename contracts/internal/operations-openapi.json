@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "RainPulse Operations candidate control plane",
-    "version": "1.0.0",
-    "description": "首版任务中心、日志与可靠重算。独立候选作业；不切换业务默认产品。具体状态机与限额见 operations-v1.md。"
+    "version": "1.1.0",
+    "description": "任务中心与独立候选重算；新增有界数据台账、来源追踪、完成标记检查、执行池接单控制、管理尝试性能和服务端日志筛选。内部消息schema_version仍为1.0；数据库需schema_v2.sql。"
   },
   "paths": {
     "/api/v1/admin/ops/status": {
@@ -326,7 +326,7 @@
     },
     "/api/v1/admin/ops/runs/{id}/events": {
       "get": {
-        "summary": "读取作业日志和操作记录",
+        "summary": "按作业／任务查询保留日志；服务端过滤，支持向前／向后读取",
         "operationId": "admin_get__runs_id_events",
         "security": [
           {
@@ -387,8 +387,8 @@
         },
         "parameters": [
           {
-            "name": "id",
             "in": "path",
+            "name": "id",
             "required": true,
             "schema": {
               "type": "string",
@@ -396,21 +396,79 @@
             }
           },
           {
-            "name": "after",
             "in": "query",
-            "schema": {
-              "type": "integer",
-              "format": "int64",
-              "minimum": 0
-            }
-          },
-          {
             "name": "limit",
-            "in": "query",
+            "required": false,
             "schema": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 500
+              "maximum": 500,
+              "default": 200
+            }
+          },
+          {
+            "in": "query",
+            "name": "direction",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "forward",
+                "backward"
+              ],
+              "default": "forward"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "in": "query",
+            "name": "level",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "debug",
+                "info",
+                "warning",
+                "error"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "attempt",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
             }
           }
         ]
@@ -492,7 +550,7 @@
     },
     "/api/v1/admin/ops/tasks/{id}/events": {
       "get": {
-        "summary": "幂等序号任务日志",
+        "summary": "按作业／任务查询保留日志；服务端过滤，支持向前／向后读取",
         "operationId": "admin_get__tasks_id_events",
         "security": [
           {
@@ -553,8 +611,8 @@
         },
         "parameters": [
           {
-            "name": "id",
             "in": "path",
+            "name": "id",
             "required": true,
             "schema": {
               "type": "string",
@@ -562,21 +620,79 @@
             }
           },
           {
-            "name": "after",
             "in": "query",
-            "schema": {
-              "type": "integer",
-              "format": "int64",
-              "minimum": 0
-            }
-          },
-          {
             "name": "limit",
-            "in": "query",
+            "required": false,
             "schema": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 500
+              "maximum": 500,
+              "default": 200
+            }
+          },
+          {
+            "in": "query",
+            "name": "direction",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "forward",
+                "backward"
+              ],
+              "default": "forward"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "in": "query",
+            "name": "level",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "debug",
+                "info",
+                "warning",
+                "error"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "attempt",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
             }
           }
         ]
@@ -1536,7 +1652,28 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "pool_mode": {
+                      "type": "string",
+                      "enum": [
+                        "ACCEPTING",
+                        "DRAINING"
+                      ]
+                    },
+                    "accepting": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "pool_mode",
+                    "accepting"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }
@@ -1894,6 +2031,859 @@
             }
           }
         }
+      }
+    },
+    "/api/v1/admin/ops/data/scans": {
+      "get": {
+        "summary": "按观测时间查询体扫阶段登记（最多24小时）",
+        "operationId": "adminDataScans",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/DataScan"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string"
+                    },
+                    "sampled_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "verification": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "next_cursor",
+                    "sampled_at",
+                    "verification"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "radar",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.-]{1,96}$"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stage",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "normalized_missing",
+                "qc_missing",
+                "grid_missing",
+                "failed"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/ops/data/summary": {
+      "get": {
+        "summary": "按站点统计登记；不按未知采集周期推算缺报",
+        "operationId": "adminDataSummary",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/StationSummary"
+                      }
+                    },
+                    "sampled_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "scope": {
+                      "type": "string"
+                    },
+                    "cadence_evaluated": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "sampled_at",
+                    "scope",
+                    "cadence_evaluated"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "radar",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.-]{1,96}$"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stage",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "normalized_missing",
+                "qc_missing",
+                "grid_missing",
+                "failed"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/ops/data/scans/{id}": {
+      "get": {
+        "summary": "体扫、候选及下游关联，各类关联最多100条",
+        "operationId": "adminScanLineage",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanLineage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/ops/data/scans/{id}/probe": {
+      "post": {
+        "summary": "由登记路径核对完成标记，不进行全数据校验",
+        "operationId": "adminCheckScanMarker",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetCheck"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "stage": {
+                    "type": "string",
+                    "enum": [
+                      "normalized",
+                      "qc",
+                      "grid"
+                    ]
+                  }
+                },
+                "required": [
+                  "stage"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ops/performance": {
+      "get": {
+        "summary": "管理尝试统计，成功尝试分位数；最多7天／10000次",
+        "operationId": "adminPerformance",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PerformanceReport"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "qc",
+                "render",
+                "diagnostics"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "fingerprint",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/ops/pools": {
+      "get": {
+        "summary": "持久化接单策略及真实活动尝试数",
+        "operationId": "adminPools",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Pool"
+                      }
+                    },
+                    "sampled_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "management_only"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "sampled_at",
+                    "scope"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": []
+      }
+    },
+    "/api/v1/admin/ops/pools/{kind}/action": {
+      "post": {
+        "summary": "乐观版本校验；排空阻止领取，不阻止已有任务提交",
+        "operationId": "adminPoolAction",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Pool"
+                      }
+                    },
+                    "sampled_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "sampled_at"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "qc",
+                "render",
+                "diagnostics"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PoolAction"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ops/pools/events": {
+      "get": {
+        "summary": "执行池操作记录（最新50条，稳定游标）",
+        "operationId": "adminPoolEvents",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；细分状态见正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PoolEvent"
+                      }
+                    },
+                    "next_before": {
+                      "type": "integer",
+                      "format": "int64"
+                    },
+                    "sampled_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "next_before",
+                    "sampled_at"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据缺失或不匹配",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、冻结计划或执行身份冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "范围、字段或业务前置条件不满足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用或发布维护暂停",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "format": "int64"
+            }
+          }
+        ]
       }
     }
   },
@@ -2319,6 +3309,13 @@
           },
           "current_task": {
             "type": "string"
+          },
+          "pool_mode": {
+            "type": "string",
+            "enum": [
+              "ACCEPTING",
+              "DRAINING"
+            ]
           }
         },
         "required": [
@@ -2383,6 +3380,11 @@
                 "$ref": "#/components/schemas/Candidate"
               }
             ],
+            "nullable": true
+          },
+          "queued_at": {
+            "type": "string",
+            "format": "date-time",
             "nullable": true
           }
         },
@@ -2476,6 +3478,11 @@
           },
           "stalled": {
             "type": "boolean"
+          },
+          "queued_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           }
         },
         "required": [
@@ -2863,12 +3870,663 @@
           "sampled_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "next_before": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "forward",
+              "backward"
+            ]
           }
         },
         "required": [
           "items",
           "next_after",
           "has_more"
+        ],
+        "additionalProperties": false
+      },
+      "DataScan": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "run_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "radar_id": {
+            "type": "string"
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "received_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "state": {
+            "type": "string"
+          },
+          "normalized_uri": {
+            "type": "string",
+            "nullable": true
+          },
+          "qc_uri": {
+            "type": "string",
+            "nullable": true
+          },
+          "grid_uri": {
+            "type": "string",
+            "nullable": true
+          },
+          "config_version": {
+            "type": "string",
+            "nullable": true
+          },
+          "verification": {
+            "type": "string",
+            "enum": [
+              "catalog_only"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "run_id",
+          "radar_id",
+          "observed_at",
+          "received_at",
+          "updated_at",
+          "state",
+          "normalized_uri",
+          "qc_uri",
+          "grid_uri",
+          "config_version",
+          "verification"
+        ],
+        "additionalProperties": false
+      },
+      "StationSummary": {
+        "type": "object",
+        "properties": {
+          "radar_id": {
+            "type": "string"
+          },
+          "registered": {
+            "type": "integer"
+          },
+          "normalized": {
+            "type": "integer"
+          },
+          "qc": {
+            "type": "integer"
+          },
+          "grid": {
+            "type": "integer"
+          },
+          "failed": {
+            "type": "integer"
+          },
+          "latest_observation": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "verification": {
+            "type": "string",
+            "enum": [
+              "catalog_only"
+            ]
+          }
+        },
+        "required": [
+          "radar_id",
+          "registered",
+          "normalized",
+          "qc",
+          "grid",
+          "failed",
+          "latest_observation",
+          "verification"
+        ],
+        "additionalProperties": false
+      },
+      "AssetCheck": {
+        "type": "object",
+        "properties": {
+          "scan_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "normalized",
+              "qc",
+              "grid"
+            ]
+          },
+          "uri": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "marker_checked",
+              "unverified"
+            ]
+          },
+          "checked_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "completion_marker_only"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "asset": {
+            "$ref": "#/components/schemas/Asset"
+          }
+        },
+        "required": [
+          "scan_id",
+          "stage",
+          "uri",
+          "state",
+          "checked_at",
+          "scope",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "LinkedTask": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "run_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "config_version": {
+            "type": "string",
+            "nullable": true
+          },
+          "fingerprint": {
+            "type": "string",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "run_id",
+          "kind",
+          "state",
+          "created_at"
+        ],
+        "additionalProperties": false
+      },
+      "DownstreamAnalysis": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "analysis_time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "grid_id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "contribution_state": {
+            "type": "string"
+          },
+          "mosaic_uri": {
+            "type": "string",
+            "nullable": true
+          },
+          "analysis_uri": {
+            "type": "string",
+            "nullable": true
+          },
+          "config_version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "analysis_time",
+          "grid_id",
+          "state",
+          "contribution_state",
+          "mosaic_uri",
+          "analysis_uri",
+          "config_version"
+        ],
+        "additionalProperties": false
+      },
+      "ScanLineage": {
+        "type": "object",
+        "properties": {
+          "scan": {
+            "$ref": "#/components/schemas/DataScan"
+          },
+          "automatic_tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LinkedTask"
+            }
+          },
+          "downstream_analyses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DownstreamAnalysis"
+            }
+          },
+          "candidate_tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LinkedTask"
+            }
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssetCheck"
+            }
+          },
+          "truncated": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "boolean"
+            }
+          },
+          "sampled_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "scan",
+          "automatic_tasks",
+          "downstream_analyses",
+          "candidate_tasks",
+          "checks",
+          "truncated",
+          "sampled_at"
+        ],
+        "additionalProperties": false
+      },
+      "Pool": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "qc",
+              "render",
+              "diagnostics"
+            ]
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "ACCEPTING",
+              "DRAINING"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "registered": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "fresh": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "ready": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "active": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "stalled": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "queued": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "oldest_queued_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "required": [
+          "kind",
+          "mode",
+          "revision",
+          "updated_at",
+          "actor",
+          "reason",
+          "registered",
+          "fresh",
+          "ready",
+          "active",
+          "stalled",
+          "queued",
+          "oldest_queued_at"
+        ],
+        "additionalProperties": false
+      },
+      "PoolAction": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "drain",
+              "resume"
+            ]
+          },
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "action",
+          "expected_revision",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "PoolEvent": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "actor": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "action",
+          "revision",
+          "actor",
+          "reason",
+          "at"
+        ],
+        "additionalProperties": false
+      },
+      "MetricDistribution": {
+        "type": "object",
+        "properties": {
+          "samples": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "p50": {
+            "type": "number",
+            "nullable": true
+          },
+          "p95": {
+            "type": "number",
+            "nullable": true
+          },
+          "maximum": {
+            "type": "number",
+            "nullable": true
+          }
+        },
+        "required": [
+          "samples",
+          "p50",
+          "p95",
+          "maximum"
+        ],
+        "additionalProperties": false
+      },
+      "PerformanceGroup": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "fingerprint": {
+            "type": "string"
+          },
+          "workers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "attempts": {
+            "type": "integer"
+          },
+          "states": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            }
+          },
+          "metrics": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/MetricDistribution"
+            }
+          }
+        },
+        "required": [
+          "kind",
+          "fingerprint",
+          "workers",
+          "attempts",
+          "states",
+          "metrics"
+        ],
+        "additionalProperties": false
+      },
+      "PerformanceSample": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "task_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "run_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "fingerprint": {
+            "type": "string"
+          },
+          "worker_id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finished_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "queued_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "metrics": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "task_id",
+          "run_id",
+          "kind",
+          "fingerprint",
+          "worker_id",
+          "state",
+          "started_at",
+          "finished_at",
+          "queued_at",
+          "metrics"
+        ],
+        "additionalProperties": false
+      },
+      "PerformanceReport": {
+        "type": "object",
+        "properties": {
+          "start": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "end": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sampled_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "management_attempts_started_in_window"
+            ]
+          },
+          "quantile_basis": {
+            "type": "string",
+            "enum": [
+              "successful_attempts_only_nearest_rank"
+            ]
+          },
+          "attempts": {
+            "type": "integer"
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PerformanceGroup"
+            }
+          },
+          "slow": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PerformanceSample"
+            }
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "sampled_at",
+          "scope",
+          "quantile_basis",
+          "attempts",
+          "groups",
+          "slow"
         ],
         "additionalProperties": false
       }

@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import math
 import os
 import signal
 import socket
@@ -18,6 +19,12 @@ import uuid
 from .engine import Engine
 from .native import NativeAdapter
 from .protocol import ControlClient, ControlError, redact
+
+
+def may_fetch(ready: bool, accepting: bool, registered_at: float, now: float) -> bool:
+    """Intake is separate from health. Missing/stale control receipts fail closed."""
+    return (ready is True and accepting is True and math.isfinite(registered_at)
+            and math.isfinite(now) and 0 <= now - registered_at < 75)
 
 
 async def main() -> None:
@@ -44,17 +51,19 @@ async def main() -> None:
             ack_wait=90, max_deliver=-1, max_ack_pending=32))
     current: dict[str, str] = {}
     ready = True
+    accepting = False
     registered_at = 0.0
 
     async def register() -> None:
-        nonlocal ready, registered_at
+        nonlocal ready, accepting, registered_at
         try:
             await asyncio.to_thread(adapter.check_identity, adapter.startup)
             ready = not stop.is_set()
         except Exception:
             ready = False
-        await asyncio.to_thread(control.post, "register", {"id": worker_id, "identity": adapter.startup,
+        receipt = await asyncio.to_thread(control.post, "register", {"id": worker_id, "identity": adapter.startup,
             "ready": ready, "busy": bool(current), "current_task": current.get("task_id", "")})
+        accepting = receipt.get("accepting") is True
         registered_at = time.monotonic()
 
     async def registration_loop() -> None:
@@ -74,7 +83,7 @@ async def main() -> None:
             healthy = (b" /healthz " in line and ready and connection.is_connected
                        and time.monotonic() - registered_at < 75)
             data = json.dumps({"status": "ready" if healthy else "unavailable", "worker_id": worker_id,
-                               "kind": args.kind, "current_task": current.get("task_id")}).encode()
+                               "kind": args.kind, "accepting": accepting, "current_task": current.get("task_id")}).encode()
             writer.write((f"HTTP/1.1 {200 if healthy else 503} Result\r\nContent-Type: application/json\r\n"
                           f"Content-Length: {len(data)}\r\nConnection: close\r\n\r\n").encode() + data)
             await writer.drain()
@@ -87,7 +96,7 @@ async def main() -> None:
     server = await asyncio.start_server(health, "0.0.0.0", int(os.getenv("RAINPULSE_OPS_HEALTH_PORT", "8095")))
     try:
         while not stop.is_set():
-            if not ready:
+            if not may_fetch(ready, accepting, registered_at, time.monotonic()):
                 await asyncio.sleep(2)
                 continue
             try:

@@ -92,7 +92,7 @@ func (s *Service) Preflight(ctx context.Context, selection Selection) (Plan, err
 func MatchWorker(expected Identity, workers []WorkerInfo, now time.Time) (Identity, error) {
 	matches := map[string]Identity{}
 	for _, w := range workers {
-		if !w.Ready || now.Sub(w.SeenAt) > WorkerFreshness || w.SeenAt.After(now.Add(5*time.Second)) || w.Identity.Kind != expected.Kind {
+		if w.PoolMode == "DRAINING" || !w.Ready || now.Sub(w.SeenAt) > WorkerFreshness || w.SeenAt.After(now.Add(5*time.Second)) || w.Identity.Kind != expected.Kind {
 			continue
 		}
 		ok := true

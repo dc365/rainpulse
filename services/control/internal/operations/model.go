@@ -228,6 +228,7 @@ type Task struct {
 	ErrorMessage   string          `json:"error_message"`
 	CreatedAt      time.Time       `json:"created_at"`
 	DispatchedAt   *time.Time      `json:"dispatched_at"`
+	QueuedAt       *time.Time      `json:"queued_at"`
 	UpdatedAt      time.Time       `json:"updated_at"`
 	Result         json.RawMessage `json:"result,omitempty"`
 	Attempts       []Attempt       `json:"attempts,omitempty"`
@@ -242,6 +243,7 @@ type Attempt struct {
 	State       string             `json:"state"`
 	Stage       string             `json:"stage"`
 	StartedAt   time.Time          `json:"started_at"`
+	QueuedAt    *time.Time         `json:"queued_at"`
 	HeartbeatAt time.Time          `json:"heartbeat_at"`
 	LeaseUntil  time.Time          `json:"lease_until"`
 	FinishedAt  *time.Time         `json:"finished_at"`
@@ -271,6 +273,7 @@ type WorkerInfo struct {
 	Busy        bool      `json:"busy"`
 	Ready       bool      `json:"ready"`
 	CurrentTask string    `json:"current_task,omitempty"`
+	PoolMode    string    `json:"pool_mode,omitempty"`
 }
 type Event struct {
 	ID        int64     `json:"id"`

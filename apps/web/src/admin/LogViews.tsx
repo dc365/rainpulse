@@ -1,44 +1,33 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { read, failure } from './api';
+import { failure } from './api';
 import { useAdminQuery } from './useAdminQuery';
-import { localInput, mergeEvents, parseSelection, timestamp } from './model';
-import type { JournalEvent, JournalPage } from './model';
+import { localInput, parseSelection, timestamp } from './model';
+import type { JournalPage } from './model';
 import { Notice, Empty, Download } from './components';
-export function Journal(props: { token: string; scope: string }) {
-    return <ScopedJournal key={props.scope} {...props} />;
+
+export function Journal({ token, scope }: { token: string; scope: string }) {
+  return <JournalFilter key={scope} token={token} scope={scope} />;
 }
-function ScopedJournal({ token, scope }: {
-    token: string;
-    scope: string;
-}) {
-    const [events, setEvents] = useState<JournalEvent[]>([]), [error, setError] = useState(''), [follow, setFollow] = useState(true), [level, setLevel] = useState(''), [attempt, setAttempt] = useState(''), [more, setMore] = useState(false), [revision, setRevision] = useState(0);
-    const cursor = useRef(0), viewport = useRef<HTMLDivElement>(null);
-    useEffect(() => { let stopped = false; let timer: ReturnType<typeof setTimeout> | undefined; const controller = new AbortController(); const load = async () => { try {
-        const page = await read<JournalPage>(token, `/${scope}/events?after=${cursor.current}&limit=200`, controller.signal);
-        if (stopped)
-            return;
-        cursor.current = page.next_after;
-        setEvents(old => mergeEvents(old, page.items));
-        setMore(page.has_more);
-        setError('');
-    }
-    catch (e) {
-        if (!stopped)
-            setError(failure(e));
-    }
-    finally {
-        if (!stopped && follow)
-            timer = setTimeout(() => { if (document.visibilityState === 'visible')
-                void load(); }, 5000);
-    } }; const visible = () => { if (follow && document.visibilityState === 'visible')
-        setRevision(n => n + 1); }; document.addEventListener('visibilitychange', visible); void load(); return () => { stopped = true; controller.abort(); clearTimeout(timer); document.removeEventListener('visibilitychange', visible); }; }, [token, scope, follow, revision]);
-    useEffect(() => { if (follow)
-        viewport.current?.scrollTo({ top: viewport.current.scrollHeight }); }, [events, follow]);
-    const shown = events.filter(e => (!level || e.level === level) && (!attempt || e.attempt_id === attempt));
-    const attempts = [...new Set(events.map(e => e.attempt_id).filter((v): v is string => !!v))];
-    return <div className="ops-journal"><div className="ops-toolbar"><div className="ops-actions"><button aria-pressed={follow} onClick={() => setFollow(!follow)}>{follow ? '暂停跟随' : '恢复跟随'}</button><button onClick={() => setRevision(n => n + 1)}>{more ? '继续读取后续记录' : '刷新'}</button><select aria-label="日志级别" value={level} onChange={e => setLevel(e.target.value)}><option value="">全部级别</option><option value="error">错误</option><option value="warning">警告</option><option value="info">信息</option><option value="debug">调试</option></select><select aria-label="执行尝试" value={attempt} onChange={e => setAttempt(e.target.value)}><option value="">全部尝试</option>{attempts.map(a => <option key={a} value={a}>{a.slice(0, 8)}</option>)}</select></div><Download value={shown.map(e => `${e.at} ${e.level} ${e.event} ${e.message}`).join('\n')} name="task-log-visible.txt" label="导出已加载记录"/></div>{error && <Notice error>日志读取失败：{error}。已有记录保留。</Notice>}<p className="ops-caption">服务端按尝试去重保存，最多2000条／尝试；本页保留最近2000条已加载记录，过滤与导出仅作用于这些记录。时间为接收时间。</p><div className="ops-log-lines" ref={viewport} tabIndex={0} aria-label="任务日志">{shown.length ? shown.map(e => <div key={e.id} className={`ops-log-line ${e.level}`}><time>{timestamp(e.at)}</time><b>{e.level.toUpperCase()}</b><span><small>{e.event}{e.attempt_id && ` · ${e.attempt_id.slice(0, 8)}`}</small>{e.message}</span></div>) : <Empty>{error ? '未能读取日志' : '尚无符合条件的已接收日志；未接入前的历史日志不会自动补齐。'}</Empty>}</div></div>;
+function JournalFilter({ token, scope }: { token: string; scope: string }) {
+  const [level, setLevel] = useState(''), [attempt, setAttempt] = useState(''), [search, setSearch] = useState(''), [filter, setFilter] = useState(''), [error, setError] = useState('');
+  const apply = (e: FormEvent) => { e.preventDefault(); if (attempt && !/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(attempt.trim())) { setError('尝试ID须为完整UUID，可从执行详情复制'); return; } setFilter(new URLSearchParams({ level, attempt: attempt.trim(), q: search }).toString()); setError(''); };
+  return <><form className="ops-journal-filter" onSubmit={apply}><label>级别<select value={level} onChange={e => setLevel(e.target.value)}><option value="">全部</option><option value="error">错误</option><option value="warning">警告</option><option value="info">信息</option><option value="debug">调试</option></select></label><label>尝试 ID<input className="ops-attempt-filter" value={attempt} onChange={e => setAttempt(e.target.value)} placeholder="可选，完整 UUID" /></label><label>日志关键字<input value={search} onChange={e => setSearch(e.target.value)} maxLength={128} placeholder="服务端搜索全部已保留记录" /></label><button>应用过滤</button></form>{error && <Notice error>{error}</Notice>}<JournalWindow key={filter} token={token} scope={scope} filter={filter} /></>;
 }
+function JournalWindow({ token, scope, filter }: { token: string; scope: string; filter: string }) {
+  const [before, setBefore] = useState(0), [stack, setStack] = useState<number[]>([]), [follow, setFollow] = useState(true);
+  const viewport = useRef<HTMLDivElement>(null);
+  const path = `/${scope}/events?direction=backward&limit=200&before=${before}&${filter}`;
+  const query = useAdminQuery<JournalPage>(token, path, follow && before === 0 ? 5000 : 0);
+  const events = query.data?.items ?? [];
+  useEffect(() => { if (follow && before === 0) viewport.current?.scrollTo({ top: viewport.current.scrollHeight }); }, [query.data, follow, before]);
+  const latest = () => { setBefore(0); setStack([]); setFollow(true); query.refresh(); };
+  return <div className="ops-journal"><div className="ops-toolbar"><div className="ops-actions"><button aria-pressed={follow} onClick={() => follow ? setFollow(false) : latest()}>{follow ? '暂停跟随' : '返回最新并跟随'}</button><button onClick={query.refresh}>刷新当前窗口</button><button disabled={!stack.length || query.loading} onClick={() => { setBefore(stack[stack.length - 1]); setStack(s => s.slice(0, -1)); }}>较新记录</button><button disabled={!query.data?.has_more || query.loading} onClick={() => { if (!query.data?.next_before) return; setStack(s => [...s, before]); setBefore(query.data.next_before); setFollow(false); }}>更早记录</button></div><Download value={events.map(e => `${e.at} ${e.level} ${e.event} ${e.message}`).join('\n')} name="task-log-window.txt" label="导出当前窗口" /></div>
+    {query.error && <Notice error>日志读取失败：{query.error}。已显示的窗口可能过期。</Notice>}<p className="ops-caption">级别、尝试和关键字均在服务端过滤后分页；每窗最多200条。跟随显示最新窗口，查看更早记录时暂停跟随。保留上限仍为2000条／尝试；时间为服务端接收时间。</p>
+    <div className="ops-log-lines" ref={viewport} tabIndex={0} aria-label="任务日志">{events.length ? events.map(e => <div key={e.id} className={`ops-log-line ${e.level}`}><time>{timestamp(e.at)}</time><b>{e.level.toUpperCase()}</b><span><small>{e.event}{e.attempt_id && ` · ${e.attempt_id.slice(0, 8)}`}</small>{e.message}</span></div>) : <Empty>{query.loading ? '读取日志窗口…' : query.error ? '日志查询未完成。' : '没有匹配的已保留日志；不代表从未发生错误。'}</Empty>}</div>
+  </div>;
+}
+
 export function SystemLogs({ token, initialJob }: {
     token: string;
     initialJob?: string;

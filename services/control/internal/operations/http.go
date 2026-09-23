@@ -167,6 +167,9 @@ func (h *Handler) admin(w http.ResponseWriter, r *http.Request, path string) (an
 	s := h.service
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	q := r.URL.Query()
+	if strings.HasPrefix(path, "/data/") || path == "/performance" || path == "/pools" || strings.HasPrefix(path, "/pools/") {
+		return h.extensions(r, path)
+	}
 	if r.Method == "GET" && path == "/status" {
 		ready := s.Store.Ready(ctx) == nil
 		workers := []WorkerInfo{}
@@ -186,7 +189,7 @@ func (h *Handler) admin(w http.ResponseWriter, r *http.Request, path string) (an
 		if h.options.LokiURL != "" {
 			logs = "configured"
 		}
-		return map[string]any{"schema_version": Version, "database_ready": ready, "worker_auth_configured": h.options.WorkerToken != "", "system_logs": logs, "workers": workers, "counts": counts, "sampled_at": s.now(), "mode": "candidate_only"}, nil
+		return map[string]any{"schema_version": Version, "database_ready": ready, "worker_auth_configured": h.options.WorkerToken != "", "system_logs": logs, "workers": workers, "counts": counts, "sampled_at": s.now(), "mode": "candidate_only", "management_schema": 2}, nil
 	}
 	if r.Method == "GET" && (path == "/legacy" || path == "/runs") {
 		limit, err := integer(q.Get("limit"), 50, 100)
@@ -382,31 +385,32 @@ func (h *Handler) admin(w http.ResponseWriter, r *http.Request, path string) (an
 	return nil, problem(404, "not_found", "管理接口不存在")
 }
 func (h *Handler) events(r *http.Request, run, task string) (any, error) {
-	after := int64(0)
-	var e error
-	if v := r.URL.Query().Get("after"); v != "" {
-		after, e = strconv.ParseInt(v, 10, 64)
-		if e != nil || after < 0 {
-			return nil, Invalid("事件游标非法")
+	f, e := ParseEventQuery(r.URL.Query(), run, task)
+	if e != nil {
+		return nil, e
+	}
+	items, e := h.service.Store.QueryEvents(r.Context(), f)
+	if e != nil {
+		return nil, e
+	}
+	more := len(items) > f.Limit
+	if more {
+		items = items[:f.Limit]
+	}
+	after, before := f.After, f.Before
+	if len(items) > 0 {
+		if f.Direction == "backward" {
+			before = items[len(items)-1].ID
+			after = items[0].ID
+			for i, j := 0, len(items)-1; i < j; i, j = i+1, j-1 {
+				items[i], items[j] = items[j], items[i]
+			}
+		} else {
+			after = items[len(items)-1].ID
+			before = items[0].ID
 		}
 	}
-	limit, e := integer(r.URL.Query().Get("limit"), 200, 500)
-	if e != nil {
-		return nil, e
-	}
-	items, e := h.service.Store.Events(r.Context(), run, task, after, limit)
-	if e != nil {
-		return nil, e
-	}
-	more := len(items) > limit
-	if more {
-		items = items[:limit]
-	}
-	next := after
-	if len(items) > 0 {
-		next = items[len(items)-1].ID
-	}
-	return map[string]any{"items": items, "next_after": next, "has_more": more, "source": "task_journal", "sampled_at": h.service.now()}, nil
+	return map[string]any{"items": items, "next_after": after, "next_before": before, "has_more": more, "direction": f.Direction, "source": "task_journal", "sampled_at": h.service.now()}, nil
 }
 func (h *Handler) internal(r *http.Request, path string) (any, error) {
 	if r.Method != "POST" {
@@ -420,7 +424,11 @@ func (h *Handler) internal(r *http.Request, path string) (any, error) {
 		if e := decodeBody(r, &w); e != nil {
 			return nil, e
 		}
-		return nil, s.Store.Register(ctx, w)
+		if e := s.Store.Register(ctx, w); e != nil {
+			return nil, e
+		}
+		mode, e := s.Store.PoolMode(ctx, w.Identity.Kind)
+		return map[string]any{"ok": true, "pool_mode": mode, "accepting": w.Ready && mode == "ACCEPTING"}, e
 	case "/claim":
 		var req struct {
 			ID         string `json:"task_id"`
