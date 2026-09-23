@@ -30,6 +30,7 @@ from .config import RadarDecoderConfig
 from .dem import DEFAULT_DEM_CACHE_BUDGET_BYTES, SharedDEMCache, default_dem_cache
 from .grid_profile import RadarGridProfile
 from .runtime_cache import ByteBudgetLRUCache, CacheLookup
+from .vertical_datum import vertical_datum_status
 
 
 class RadarGridInputError(ValueError):
@@ -578,17 +579,17 @@ def _vertical_datum_status(
     radar_config: RadarDecoderConfig,
     profile: RadarGridProfile,
 ) -> str:
-    datum = radar_config.site.get("altitude_datum")
-    if datum is None:
-        if profile.beam_geometry.unverified_vertical_datum_policy == "reject":
-            raise RadarGridInputError("radar antenna altitude datum is unverified")
-        return "unverified_engineering"
-    normalized = str(datum).strip().upper().replace(" ", "")
-    if normalized not in {"EPSG:3855", "EGM2008", "EGM2008HEIGHT"}:
+    status = vertical_datum_status(
+        radar_config.site,
+        vertical_crs=profile.dem.vertical_crs,
+    )
+    if status == "unverified_engineering" and profile.beam_geometry.unverified_vertical_datum_policy == "reject":
+        raise RadarGridInputError("radar antenna altitude datum is unverified")
+    if status.startswith("incompatible_with_"):
         raise RadarGridInputError(
-            f"radar altitude datum {datum!r} is incompatible with {profile.dem.vertical_crs}"
+            f"radar altitude datum {radar_config.site.get('altitude_datum')!r} is incompatible with {profile.dem.vertical_crs}"
         )
-    return "verified_egm2008"
+    return status
 
 
 def _operational_reasons(

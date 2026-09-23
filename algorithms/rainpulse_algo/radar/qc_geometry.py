@@ -17,6 +17,7 @@ from .blockage import (
 )
 from .config import RadarDecoderConfig
 from .grid_profile import BeamGeometryConfig, BlockageConfig
+from .vertical_datum import vertical_datum_status as _vertical_datum_status
 
 QC_GEOMETRY_VERTICAL_CRS = "EPSG:3855"
 QC_GEOMETRY_BEAM_CONFIG = BeamGeometryConfig(
@@ -91,13 +92,7 @@ def vertical_datum_status(
     *,
     vertical_crs: str = QC_GEOMETRY_VERTICAL_CRS,
 ) -> str:
-    datum = site.get("altitude_datum")
-    if datum is None:
-        return "unverified_engineering"
-    normalized = str(datum).strip().upper().replace(" ", "")
-    if normalized not in {"EPSG:3855", "EGM2008", "EGM2008HEIGHT"}:
-        return f"incompatible_with_{vertical_crs.lower().replace(':', '_')}"
-    return "verified_egm2008"
+    return _vertical_datum_status(site, vertical_crs=vertical_crs)
 
 
 def radar_beam_context_from_config(

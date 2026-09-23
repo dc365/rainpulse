@@ -1,0 +1,151 @@
+{
+  "parent_sha256": "776dd5eff66da12e855f7ea7039075a765fcb449a81778ab5a2da4f12f739024",
+  "validation_level": "full_OpenSourceQCProfile",
+  "variants": [
+    {
+      "file": "near-joint-audit.yaml",
+      "sha256": "3e7a1ce7682dceba2a2839a362b3cba49f0b0f200a460de1e4668a6ff9f1a578",
+      "near_enabled_effective": false,
+      "proposed_final_candidate": false,
+      "strong_near_mode": null,
+      "strong_near_object_propagation": false,
+      "strong_near_dilation_iterations": 0,
+      "strong_near_temporal_low_rho": false,
+      "requires_independent_acceptance": true
+    },
+    {
+      "file": "near-joint-near-on.yaml",
+      "sha256": "117a93c8deb53728bbb73322f64e95aa1209886f2af6b3499f739621a7cca674",
+      "near_enabled_effective": true,
+      "proposed_final_candidate": false,
+      "strong_near_mode": null,
+      "strong_near_object_propagation": false,
+      "strong_near_dilation_iterations": 0,
+      "strong_near_temporal_low_rho": false,
+      "requires_independent_acceptance": true
+    },
+    {
+      "file": "near-joint-near-on-tuned.yaml",
+      "sha256": "249626690ae0165cfd67ce0fdd3e7f9f1c56559973316eadb8a0346e6327a493",
+      "near_enabled_effective": true,
+      "proposed_final_candidate": false,
+      "strong_near_mode": null,
+      "strong_near_object_propagation": false,
+      "strong_near_dilation_iterations": 0,
+      "strong_near_temporal_low_rho": false,
+      "requires_independent_acceptance": true
+    },
+    {
+      "file": "near-joint-joint-cr.yaml",
+      "sha256": "6797bef1bbdb1617651d3f83663ffcfda7f0c8599220eb07e8614047f450a280",
+      "near_enabled_effective": true,
+      "proposed_final_candidate": false,
+      "strong_near_mode": null,
+      "strong_near_object_propagation": false,
+      "strong_near_dilation_iterations": 0,
+      "strong_near_temporal_low_rho": false,
+      "requires_independent_acceptance": true
+    },
+    {
+      "file": "near-joint-joint-cr-dem.yaml",
+      "sha256": "e9f588f2ccb9571dd8173c27343a20190ab009857efb616717755da44b0e4342",
+      "near_enabled_effective": true,
+      "proposed_final_candidate": true,
+      "strong_near_mode": null,
+      "strong_near_object_propagation": false,
+      "strong_near_dilation_iterations": 0,
+      "strong_near_temporal_low_rho": false,
+      "requires_independent_acceptance": true
+    },
+    {
+      "file": "near-joint-strong-audit.yaml",
+      "sha256": "264791cf8ff407d804ee40b97fbc7bf7aab48fc8f14304fdbfd7865eb11123f6",
+      "near_enabled_effective": true,
+      "proposed_final_candidate": false,
+      "strong_near_mode": "audit",
+      "strong_near_object_propagation": false,
+      "strong_near_dilation_iterations": 0,
+      "strong_near_temporal_low_rho": false,
+      "requires_independent_acceptance": true
+    },
+    {
+      "file": "near-joint-strong-quarantine.yaml",
+      "sha256": "e68f6528e368550da945ee12726383509e7f5b91fa4447fb774b300f4508489e",
+      "near_enabled_effective": true,
+      "proposed_final_candidate": false,
+      "strong_near_mode": "quarantine",
+      "strong_near_object_propagation": false,
+      "strong_near_dilation_iterations": 0,
+      "strong_near_temporal_low_rho": false,
+      "requires_independent_acceptance": true
+    },
+    {
+      "file": "near-joint-strong-object-audit.yaml",
+      "sha256": "b90bddb4ed8adfe9c12cfa4b45331086293c05b1c79c3b22011ec6605f38121a",
+      "near_enabled_effective": true,
+      "proposed_final_candidate": false,
+      "strong_near_mode": "audit",
+      "strong_near_object_propagation": true,
+      "strong_near_dilation_iterations": 0,
+      "strong_near_temporal_low_rho": false,
+      "requires_independent_acceptance": true
+    },
+    {
+      "file": "near-joint-strong-object-quarantine.yaml",
+      "sha256": "29d010f19f1763c13ec9e4d054a25cee42b7f7ba22dbe24501738b12f643c73b",
+      "near_enabled_effective": true,
+      "proposed_final_candidate": false,
+      "strong_near_mode": "quarantine",
+      "strong_near_object_propagation": true,
+      "strong_near_dilation_iterations": 0,
+      "strong_near_temporal_low_rho": false,
+      "requires_independent_acceptance": true
+    },
+    {
+      "file": "near-joint-strong-dilation-audit.yaml",
+      "sha256": "69a8f2a177fbe81c65ef18b16b4e63cf3f361d166753a1023b763188257c0fea",
+      "near_enabled_effective": true,
+      "proposed_final_candidate": false,
+      "strong_near_mode": "audit",
+      "strong_near_object_propagation": false,
+      "strong_near_dilation_iterations": 1,
+      "strong_near_temporal_low_rho": false,
+      "requires_independent_acceptance": true
+    },
+    {
+      "file": "near-joint-strong-dilation-quarantine.yaml",
+      "sha256": "8b7ca520d55bf493fbc0b50d31c764e4a431d9039b8c398ed751b5360c7dbded",
+      "near_enabled_effective": true,
+      "proposed_final_candidate": false,
+      "strong_near_mode": "quarantine",
+      "strong_near_object_propagation": false,
+      "strong_near_dilation_iterations": 1,
+      "strong_near_temporal_low_rho": false,
+      "requires_independent_acceptance": true
+    },
+    {
+      "file": "near-joint-strong-temporal-audit.yaml",
+      "sha256": "f7da81ec2866c51594b59ff1845448c73ad62609313b0e8e294068c915a9a82e",
+      "near_enabled_effective": true,
+      "proposed_final_candidate": false,
+      "strong_near_mode": "audit",
+      "strong_near_object_propagation": false,
+      "strong_near_dilation_iterations": 1,
+      "strong_near_temporal_low_rho": true,
+      "requires_independent_acceptance": true
+    },
+    {
+      "file": "near-joint-strong-temporal-quarantine.yaml",
+      "sha256": "0dc09fffc4fe2f6d169452e66d85cc81a9becacea16bd20464766a8bdc850677",
+      "near_enabled_effective": true,
+      "proposed_final_candidate": false,
+      "strong_near_mode": "quarantine",
+      "strong_near_object_propagation": false,
+      "strong_near_dilation_iterations": 1,
+      "strong_near_temporal_low_rho": true,
+      "requires_independent_acceptance": true
+    }
+  ],
+  "live_configuration_modified": false,
+  "operational_eligible": false
+}

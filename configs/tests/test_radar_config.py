@@ -161,6 +161,23 @@ def test_unknown_configuration_keys_are_rejected() -> None:
         validate(config)
 
 
+def test_egm2008_ready_height_requires_explicit_evidence() -> None:
+    config = ready_synthetic_config()
+    config["site"].update(
+        {
+            "altitude_datum": "EPSG:3855",
+            "altitude_datum_status": "converted_literature_offset",
+            "altitude_sigma_m": 0.1,
+            "altitude_evidence": "height-datum-1985-egm2008 v1.0.0",
+        }
+    )
+    validate(config)
+
+    config["site"].pop("altitude_evidence")
+    with pytest.raises(ValidationError):
+        validate(config)
+
+
 def test_z9598_real_sample_configuration_is_valid_but_not_ready() -> None:
     config = yaml.safe_load((CONFIG_ROOT / "radars" / "z9598.yaml").read_text())
 

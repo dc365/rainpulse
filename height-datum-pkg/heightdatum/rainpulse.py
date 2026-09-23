@@ -14,8 +14,19 @@ import json
 from datetime import datetime, timezone
 
 
+def _require_anchor(anchor: dict | None) -> dict:
+    required = {"gnss_ellipsoidal_h_m", "h_egm2008_m", "delta_residual_m"}
+    if not isinstance(anchor, dict) or not required.issubset(anchor):
+        raise ValueError("gnss_anchor requires a complete anchor report")
+    return anchor
+
+
 def site_yaml_snippet(radar_id: str, h_site_egm2008: float, h_antenna_egm2008: float,
-                      *, sigma_m: float, method: str) -> str:
+                      *, sigma_m: float, method: str, anchor: dict | None = None) -> str:
+    if method not in {"literature_offset", "grid_offset", "gnss_anchor"}:
+        raise ValueError("unsupported height-datum conversion method")
+    if method == "gnss_anchor":
+        _require_anchor(anchor)
     status = "verified_egm2008" if method == "gnss_anchor" else "converted_literature_offset"
     return f"""# {radar_id} 站点配置更新片段（粘贴到 configs/radars/.../{radar_id}.yaml 的 site: 段）
 site:
@@ -32,6 +43,8 @@ def evidence_json(radar_id: str, *, grid_path: str, method: str, h_1985: float,
                   h_egm2008: float, delta_m: float, sigma_m: float,
                   anchor: dict | None = None) -> str:
     """生成可追溯证据 JSON（随 QC 资产注册，支撑 datum status 翻转）。"""
+    if method == "gnss_anchor":
+        anchor = _require_anchor(anchor)
     with open(grid_path, "rb") as f:
         sha = hashlib.sha256(f.read()).hexdigest()
     payload = {
@@ -41,6 +54,7 @@ def evidence_json(radar_id: str, *, grid_path: str, method: str, h_1985: float,
         "input": {"h_1985_m": h_1985, "datum": "EPSG:5737"},
         "output": {"h_egm2008_m": h_egm2008, "datum": "EPSG:3855", "sigma_m": sigma_m},
         "conversion": {"delta_m": delta_m, "method": method},
+        "status": "verified_egm2008" if method == "gnss_anchor" else "converted_literature_offset",
         "grid": {"file": grid_path, "sha256": sha},
         "anchor": anchor,
     }

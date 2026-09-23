@@ -7,6 +7,7 @@ import pytest
 from heightdatum import (GeoidGrid, egm2008_from_1985, egm2008_from_gnss, h1985_from_egm2008,
                          h1985_from_gnss, uncertainty_budget)
 from heightdatum.convert import local_offset_from_anchor
+from heightdatum.rainpulse import evidence_json, site_yaml_snippet
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data", "egm2008_fujian_2p5.npy")
 
@@ -59,3 +60,32 @@ def test_uncertainty_budget():
     assert 0.05 < lit["total_rss"] < 0.2
     gnss = uncertainty_budget(method="gnss")
     assert gnss["total_rss"] < lit["total_rss"]
+
+
+def test_site_snippet_requires_anchor_before_verified_status():
+    snippet = site_yaml_snippet("z9598", 1692.32, 1740.32, sigma_m=0.10, method="literature_offset")
+    assert 'altitude_datum_status: "converted_literature_offset"' in snippet
+    with pytest.raises(ValueError, match="anchor"):
+        site_yaml_snippet("z9598", 1692.32, 1740.32, sigma_m=0.04, method="gnss_anchor")
+    with pytest.raises(ValueError, match="complete"):
+        site_yaml_snippet("z9598", 1692.32, 1740.32, sigma_m=0.04, method="gnss_anchor", anchor={})
+    verified = site_yaml_snippet(
+        "z9598", 1692.32, 1740.32, sigma_m=0.04, method="gnss_anchor",
+        anchor={"gnss_ellipsoidal_h_m": 1694.0, "h_egm2008_m": 1692.32, "delta_residual_m": 0.01},
+    )
+    assert 'altitude_datum_status: "verified_egm2008"' in verified
+
+
+def test_evidence_json_requires_anchor_for_verified_route(tmp_path):
+    grid = tmp_path / "grid.npy"
+    grid.write_bytes(b"grid")
+    with pytest.raises(ValueError, match="complete"):
+        evidence_json(
+            "z9598", grid_path=str(grid), method="gnss_anchor", h_1985=1740.0,
+            h_egm2008=1740.32, delta_m=0.32, sigma_m=0.04,
+        )
+    value = evidence_json(
+        "z9598", grid_path=str(grid), method="literature_offset", h_1985=1740.0,
+        h_egm2008=1740.32, delta_m=0.32, sigma_m=0.10,
+    )
+    assert '"status": "converted_literature_offset"' in value

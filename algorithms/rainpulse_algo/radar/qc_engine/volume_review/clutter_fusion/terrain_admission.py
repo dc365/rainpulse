@@ -48,7 +48,10 @@ def from_sampler(s,cfg,beam,terrain,dem_version,*,primitives=None):
     if beam is None or terrain is None:return empty(s.shape),{'status':'NO_TERRAIN_CONTEXT'}
     identity=getattr(terrain,'cache_identity',None)
     if not dem_version or not identity:return empty(s.shape),{'status':'UNVERSIONED_TERRAIN'}
-    if getattr(beam,'altitude_datum_status',None)!='verified_egm2008':
+    datum_status = getattr(beam, 'altitude_datum_status', None)
+    verified = datum_status == 'verified_egm2008'
+    audit_only_conversion = datum_status == 'converted_literature_offset' and c.dem_policy == 'audit'
+    if not verified and not audit_only_conversion:
         return empty(s.shape),{'status':'VERTICAL_DATUM_UNVERIFIED','datum_status':getattr(beam,'altitude_datum_status',None)}
     required=(beam.longitude_deg,beam.latitude_deg,beam.antenna_altitude_m,beam.beam_width_vertical_deg)
     if (not np.isfinite(required).all() or not -180<=beam.longitude_deg<=180 or
@@ -56,7 +59,7 @@ def from_sampler(s,cfg,beam,terrain,dem_version,*,primitives=None):
         raise ValueError('invalid near DEM beam geometry')
     if np.prod(s.shape)>c.maximum_dem_gates:raise ResourceLimit('near DEM gate budget')
     if primitives is None:
-        from ....blockage import beam_centre_height_m,beam_radius_m,circular_partial_blockage
+        from rainpulse_algo.radar.blockage import beam_centre_height_m,beam_radius_m,circular_partial_blockage
         primitives=(beam_centre_height_m,beam_radius_m,circular_partial_blockage)
     centre,radius,partial=primitives
     from pyproj import Geod
@@ -75,8 +78,9 @@ def from_sampler(s,cfg,beam,terrain,dem_version,*,primitives=None):
     arrays=[]
     for data in (p,b,h,t):
         full=np.full(s.shape,np.nan,'float32');full[:,:end]=data;arrays.append(full)
-    return project(s,*arrays,cfg,verified=True),{'status':'EVALUATED','dem_version':str(dem_version),
+    return project(s,*arrays,cfg,verified=verified),{'status':'EVALUATED','dem_version':str(dem_version),
          'terrain_identity':str(identity),'radar_config_version':getattr(beam,'radar_config_version',None),
-         'height_datum':'EGM2008','geometry':'effective_4_3_earth_ground_distance',
+         'height_datum':'EGM2008','datum_status':datum_status,'action_policy':'verified_only',
+         'geometry':'effective_4_3_earth_ground_distance',
          'method':'existing_RainPulse_circular_partial_blockage','calculated_range_m':float(s.ranges[end-1]),
          'obstruction_is_not_clutter_label':True}

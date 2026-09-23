@@ -1564,6 +1564,9 @@ def test_evidence_v2_worker_writes_trusted_cross_radar_support_fields(
     current_config = yaml.safe_load(make_config(tmp_path).read_text())
     current_config["ancillary"]["dem_asset_version"] = source.dem.asset_version
     current_config["site"]["altitude_datum"] = "EPSG:3855"
+    current_config["site"]["altitude_datum_status"] = "verified_egm2008"
+    current_config["site"]["altitude_sigma_m"] = 0.04
+    current_config["site"]["altitude_evidence"] = "test-height-datum-evidence-v1"
     (radar_config_dir / "z9598.yaml").write_text(yaml.safe_dump(current_config, sort_keys=False))
     neighbour_config = dict(current_config)
     neighbour_config["radar_id"] = "z9593"

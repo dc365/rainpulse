@@ -270,3 +270,19 @@ def test_confirmed_1985_configs_do_not_claim_egm2008():
         )
         assert d.availability_audit["blocking_reasons"] == ["current_vertical_datum_incompatible"]
         assert not d.available_mask.any()
+
+
+def test_explicit_height_evidence_status_is_fail_closed():
+    from rainpulse_algo.radar.qc_geometry import vertical_datum_status
+
+    converted = {
+        "altitude_datum": "EPSG:3855",
+        "altitude_datum_status": "converted_literature_offset",
+        "altitude_sigma_m": 0.1,
+        "altitude_evidence": "height-datum-1985-egm2008 v1.0.0",
+    }
+    assert vertical_datum_status(converted) == "converted_literature_offset"
+    missing = dict(converted, altitude_datum_status="verified_egm2008", altitude_evidence=None)
+    assert vertical_datum_status(missing) == "verification_evidence_missing"
+    verified = dict(converted, altitude_datum_status="verified_egm2008")
+    assert vertical_datum_status(verified) == "verified_egm2008"

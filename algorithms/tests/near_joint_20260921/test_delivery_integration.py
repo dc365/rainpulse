@@ -5,7 +5,7 @@ import copy,hashlib,importlib.util,json
 import numpy as np
 import pytest,yaml
 from fusion_helpers import scene,baseline,cfg,fixture,group,Native
-from test_near_joint import config,partial,dem
+from test_near_joint import config,partial,dem,one
 from volume_review.config import VolumeReviewConfig
 from volume_review.clutter_fusion.engine import evaluate_volume
 from volume_review.clutter_fusion.disposition import apply,CR
@@ -135,6 +135,35 @@ def test_terrain_sampler_uses_ground_coordinates_and_verified_primitives():
     a,d=ta.from_sampler(s,c,beam,Terrain(),'dem-v1',primitives=(centre,radius,pbb))
     assert a['CF_NR_DEM_SEVERE_MASK'].any() and d['height_datum']=='EGM2008'
     assert len(calls)==1 and len(calls[0][0])==np.prod(s.shape)
+
+
+def test_converted_literature_height_supports_dem_audit_but_not_action():
+    from volume_review.clutter_fusion import terrain_admission as ta
+    s=partial()
+    class Terrain:
+        cache_identity='test-dem-hash'
+        def sample(self,lon,lat): return np.full(len(lon),1000.)
+    beam=NS(longitude_deg=119.,latitude_deg=26.,antenna_altitude_m=100.,beam_width_vertical_deg=1.,
+            altitude_datum_status='converted_literature_offset',radar_config_version='p1')
+    audit, receipt = ta.from_sampler(s, config(dem_policy='audit'), beam, Terrain(), 'dem-v1')
+    assert receipt['status'] == 'EVALUATED'
+    assert audit['CF_NR_DEM_AVAILABLE_MASK'].any()
+    assert not audit['CF_NR_DEM_ACTION_AVAILABLE_MASK'].any()
+    blocked, receipt = ta.from_sampler(s, config(dem_policy='cr_withhold'), beam, Terrain(), 'dem-v1')
+    assert receipt['status'] == 'VERTICAL_DATUM_UNVERIFIED'
+    assert not blocked['CF_NR_DEM_AVAILABLE_MASK'].any()
+
+    c = config(partial_enabled=False, dem_policy='audit')
+    evaluated = one(s, c)
+    without_dem, _ = apply(baseline(s), evaluated.arrays, c, low_quality_flag=1024)
+    audit_evidence = copy.deepcopy(evaluated.arrays)
+    audit_evidence.update(audit)
+    audit_evidence.update(decide(audit_evidence, c))
+    with_audit, delta = apply(baseline(s), audit_evidence, c, low_quality_flag=1024)
+    for name in (CR, 'QPE_ELIGIBLE_MASK', 'QC_FLAGS', 'QC_ACTION', 'LOW_QUALITY_MASK', 'DBZH_USABLE'):
+        np.testing.assert_array_equal(with_audit[name], without_dem[name])
+    assert delta['near_dem_cr_loss_gates'] == 0
+    assert not with_audit['CF_NR_DEM_CR_WITHHELD_MASK'].any()
 
 
 def test_runtime_absent_stage_no_work():

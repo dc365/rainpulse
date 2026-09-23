@@ -10,6 +10,9 @@ site:
   altitude_m: null
   antenna_altitude_m: null
   altitude_datum: null
+  altitude_datum_status: null
+  altitude_sigma_m: null
+  altitude_evidence: null
 
 hardware:
   manufacturer: null

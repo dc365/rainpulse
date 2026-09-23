@@ -88,8 +88,42 @@
         "latitude_deg": { "type": ["number", "null"], "minimum": -90, "maximum": 90 },
         "altitude_m": { "type": ["number", "null"] },
         "antenna_altitude_m": { "type": ["number", "null"] },
-        "altitude_datum": { "type": ["string", "null"], "minLength": 1 }
-      }
+        "altitude_datum": { "type": ["string", "null"], "minLength": 1 },
+        "altitude_datum_status": {
+          "type": ["string", "null"],
+          "enum": ["unverified_engineering", "converted_literature_offset", "verified_egm2008", null]
+        },
+        "altitude_sigma_m": { "type": ["number", "null"], "minimum": 0 },
+        "altitude_evidence": { "type": ["string", "null"], "minLength": 1 }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "altitude_datum_status": { "const": "verified_egm2008" } },
+            "required": ["altitude_datum_status"]
+          },
+          "then": {
+            "required": ["altitude_sigma_m", "altitude_evidence"],
+            "properties": {
+              "altitude_sigma_m": { "type": "number", "minimum": 0 },
+              "altitude_evidence": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "altitude_datum_status": { "const": "converted_literature_offset" } },
+            "required": ["altitude_datum_status"]
+          },
+          "then": {
+            "required": ["altitude_sigma_m", "altitude_evidence"],
+            "properties": {
+              "altitude_sigma_m": { "type": "number", "minimum": 0 },
+              "altitude_evidence": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      ]
     },
     "readySite": {
       "allOf": [
@@ -101,7 +135,20 @@
             "altitude_m": { "type": "number" },
             "antenna_altitude_m": { "type": "number" },
             "altitude_datum": { "type": "string", "minLength": 1 }
-          }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "altitude_datum": { "enum": ["EPSG:3855", "EGM2008", "EGM2008HEIGHT"] }
+                },
+                "required": ["altitude_datum"]
+              },
+              "then": {
+                "required": ["altitude_datum_status", "altitude_sigma_m", "altitude_evidence"]
+              }
+            }
+          ]
         }
       ]
     },

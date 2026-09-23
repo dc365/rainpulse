@@ -10,7 +10,7 @@
 
 ## 步骤
 
-### 第 0 步（先做，不改状态）：只更新数值、不改 status
+### 第 0 步（先做，不改 verified 状态）：更新数值并写入证据状态
 
 按 `data/stations_egm2008.csv` 更新四站 YAML 的数值字段，datum 字段改为
 `EPSG:3855`，status 写 `converted_literature_offset`。用
@@ -23,7 +23,7 @@ site:
   altitude_datum: "EPSG:3855"
   altitude_datum_status: "converted_literature_offset"
   altitude_sigma_m: 0.10
-  altitude_evidence: "height-datum-1985-egm2008 v1.0.0; 方法=literature_offset(+0.32m)"
+  altitude_evidence: "height-datum-1985-egm2008 v1.0.0; 方法=literature_offset(+0.32m); grid_sha256=b38e0145338c31c87d2962e32056b0a1afcd13b305d627b95f7b032c021254b2"
 ```
 
 **配置版本号必须换新**（如 `z9598-fmt-20260915-height1985-v3` →
@@ -33,7 +33,8 @@ site:
 ### 第 1 步：量化影响再决定是否翻 verified
 
 运行一次成对回放（旧高程 vs 新高程，其余冻结），比较：
-- 各站各仰角 PBB/CBB 阻挡率变化（预期 |Δ| < 0.02%）；
+- 各站各仰角 PBB/CBB 与 flag/severe rate 成对变化。2026-09-23 真实 DEM
+  回放已确认系统修正影响很小，但阈值分类对 ±0.10 m 仍有离散翻转；
 - 跨雷达支撑门数从全 NaN 变为有限值（这是真正的收益）；
 - CF DEM 准入分支从弃权变为可评估。
 
@@ -46,7 +47,9 @@ site:
 - **权威格网**：取得 CQG2000/福建省精化似大地水准面格网，以路线 C 重算，
   与路线 A 结果互差 ≤0.10 m。
 
-证据 JSON 用 `heightdatum.rainpulse.evidence_json()` 生成（含格网 SHA256），
+证据 JSON 用 `heightdatum.rainpulse.evidence_json()` 生成（含格网 SHA256）；
+`site_yaml_snippet(..., method="gnss_anchor")` 必须传入 GNSS anchor report，
+否则只生成 `converted_literature_offset`，不会误写 `verified_egm2008`。
 随 QC 资产注册留存。
 
 ### 第 3 步：下游联动检查

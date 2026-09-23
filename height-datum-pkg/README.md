@@ -45,10 +45,13 @@ PYTHONPATH=. python -m heightdatum gnss 117.08056 27.00861 <h_gnss> 1740.0
 
 ## 精度结论（详见 report/）
 
-- 文献常数法：σ ≈ ±0.10 m（1σ），对波束阻挡影响 < 0.02%（远低于业务敏感度）；
+- 文献常数法：σ ≈ ±0.10 m（1σ）。真实 DEM 成对回放中，±0.10 m 引起的
+  PBB/CBB 最大变化为 0.058%，阈值分类 flag-rate 最大变化为 0.156 个百分点；
+  数值很小，但离散阈值会放大分类变化，因此仍只允许 audit，不允许动作；
 - GNSS 锚定后：σ ≈ ±0.03–0.05 m；
-- 但 rainpulse 的 `verified_egm2008` 状态建议仍按证据链纪律：文献转换标记为
-  `converted_literature_offset`，GNSS 锚定或权威部门 ζ 格网验证回执齐全后再翻 verified。
+- 但 rainpulse 的 `verified_egm2008` 状态仍按证据链纪律：文献转换标记为
+  `converted_literature_offset`；GNSS 锚定或权威部门 ζ 格网验证回执齐全后再翻 verified。
+  `site_yaml_snippet(..., method="gnss_anchor")` 必须传入 anchor report。
 
 ## 数据来源
 

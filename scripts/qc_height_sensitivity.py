@@ -37,6 +37,7 @@ def main():
     p.add_argument('--dem-root',type=Path,required=True)
     p.add_argument('--out',type=Path,required=True)
     p.add_argument('--offsets',default='-30,-10,-5,0,5,10,30')
+    p.add_argument('--config-dir',type=Path,default=None)
     args=p.parse_args(); offsets=tuple(float(x) for x in args.offsets.split(','))
     if not offsets or not all(np.isfinite(offsets)) or len(set(offsets))!=len(offsets) or 0 not in offsets:
         raise ValueError('finite unique scenarios including zero required')
@@ -47,7 +48,7 @@ def main():
     root=zarr.open_group(str(args.frozen/args.scan/'normalized.zarr'),mode='r')
     qc=zarr.open_group(str(args.frozen/args.scan/'qc.zarr'),mode='r')
     provenance=json.loads(qc.attrs['radial_context'])
-    config_dir=args.repo/'configs/radars/fujian-1985-20260915'
+    config_dir=args.config_dir or args.repo/'configs/radars/fujian-egm2008-20260923'
     def beam_for(radar):
         path=config_dir/f'{radar.lower()}.yaml'
         return radar_beam_context_from_config(load_radar_config(path)),hashlib.sha256(path.read_bytes()).hexdigest()
