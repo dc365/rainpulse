@@ -1,0 +1,8 @@
+{
+ "lon_min": 115.5,
+ "lon_max": 121.5,
+ "lat_min": 22.5,
+ "lat_max": 29.0,
+ "res_deg": 0.041666666666666664,
+ "note": "EGM2008 geoid undulation N, meters, WGS84 ellipsoid; nodes at lon=lon_min+i*res, lat=lat_max-j*res"
+}
