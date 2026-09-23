@@ -9,3 +9,9 @@
 .ops-journal-filter input{min-width:160px;}
 .ops-journal-filter .ops-attempt-filter{min-width:250px;}
 .ops-main .ops-form-row{flex-wrap:wrap;}
+
+/* Explicit maintenance forms reuse the existing compact admin layout. */
+.ops-storage-code { white-space: pre-wrap; overflow-wrap: anywhere; padding: 16px; background: #f3f5f7; border-radius: 6px; }
+.ops-app input[type=number] { max-width: 140px; }
+.ops-app .ops-toolbar[role=tablist] { margin-bottom: 16px; }
+.ops-app button[role=tab][aria-selected=true] { border-color: #17635b; font-weight: 700; }

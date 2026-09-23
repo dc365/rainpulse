@@ -58,6 +58,13 @@ func integrationStore(t *testing.T) *Store {
 	if _, err = db.ExecContext(ctx, string(upgrade)); err != nil {
 		t.Fatal(err)
 	}
+	upgrade3, err := os.ReadFile("schema_v3.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.ExecContext(ctx, string(upgrade3)); err != nil {
+		t.Fatal(err)
+	}
 	_, err = db.ExecContext(ctx, `CREATE TABLE outbox_events(
  event_id uuid PRIMARY KEY,aggregate_type text NOT NULL,aggregate_id text NOT NULL,
  event_type text NOT NULL,event_version integer NOT NULL,subject text NOT NULL,payload jsonb NOT NULL,

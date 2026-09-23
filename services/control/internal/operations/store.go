@@ -17,14 +17,35 @@ type Store struct{ DB *sql.DB }
 
 func (s *Store) Ready(ctx context.Context) error {
 	var v int
-	if err := s.DB.QueryRowContext(ctx, "SELECT version FROM ops_schema WHERE version=2").Scan(&v); err != nil {
+	if err := s.DB.QueryRowContext(ctx, "SELECT version FROM ops_schema WHERE version=3").Scan(&v); err != nil {
 		return wrapError(err)
 	}
 	return nil
 }
 func (s *Store) SavePlan(ctx context.Context, p Plan) error {
-	_, err := s.DB.ExecContext(ctx, `INSERT INTO ops_plans(id,run_id,document,digest,expires_at,created_at) VALUES($1,$2,$3,$4,$5,$6)`, p.ID, p.RunID, string(JSON(p)), p.Digest, p.ExpiresAt, p.CreatedAt)
-	return wrapError(err)
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err = storageAdmission(ctx, tx, true); err != nil {
+		return err
+	}
+	if err = liveStorageInputs(ctx, tx, p.Tasks); err != nil {
+		return err
+	}
+	// Blocked plans are still kept for diagnosis. A submittable plan freezes the
+	// default selection under a shared channel lock.
+	if p.Submittable {
+		if err = validateReleaseSelection(ctx, tx, p.Tasks); err != nil {
+			return err
+		}
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO ops_plans(id,run_id,document,digest,expires_at,created_at) VALUES($1,$2,$3,$4,$5,$6)`, p.ID, p.RunID, string(JSON(p)), p.Digest, p.ExpiresAt, p.CreatedAt)
+	if err != nil {
+		return wrapError(err)
+	}
+	return tx.Commit()
 }
 func (s *Store) Plan(ctx context.Context, id string) (Plan, error) {
 	var p Plan
@@ -56,6 +77,12 @@ func (s *Store) Submit(ctx context.Context, p Plan, key, actor string) (string, 
 		return "", wrapError(err)
 	}
 	defer tx.Rollback()
+	if err = storageAdmission(ctx, tx, true); err != nil {
+		return "", err
+	}
+	if err = liveStorageInputs(ctx, tx, p.Tasks); err != nil {
+		return "", err
+	}
 	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "ops-submit:"+key); err != nil {
 		return "", err
 	}
@@ -82,6 +109,9 @@ func (s *Store) Submit(ctx context.Context, p Plan, key, actor string) (string, 
 	}
 	if time.Now().After(expires) || !stored.Submittable || stored.Digest != p.Digest {
 		return "", Conflict("计划已过期或检查条件不一致，请重新预检查")
+	}
+	if err = liveStorageInputs(ctx, tx, stored.Tasks); err != nil {
+		return "", err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO ops_runs(id,plan_id,name,actor,impact) VALUES($1,$2,$3,$4,$5)`, p.RunID, p.ID, p.Selection.Name, actor, p.Impact)
 	if err != nil {
@@ -179,6 +209,13 @@ func (s *Store) Task(ctx context.Context, id string) (Task, error) {
 			}
 		}
 	}
+	t.StorageState, err = s.RunStorageState(ctx, t.RunID)
+	if err != nil {
+		return t, err
+	}
+	if t.StorageState != "AVAILABLE" {
+		t.Actions = []string{}
+	}
 	return t, nil
 }
 func (s *Store) Run(ctx context.Context, id string) (Run, error) {
@@ -214,7 +251,14 @@ func (s *Store) Run(ctx context.Context, id string) (Run, error) {
 	}
 	r.State = Aggregate(r.Mode, r.Counts)
 	r.Actions = AllowedActions(r.Mode, r.State)
-	return r, rows.Err()
+	r.StorageState, err = s.RunStorageState(ctx, id)
+	if err != nil {
+		return r, err
+	}
+	if r.StorageState != "AVAILABLE" {
+		r.Actions = []string{}
+	}
+	return r, nil
 }
 func (s *Store) Runs(ctx context.Context, state, q string, before time.Time, beforeID string, limit int) ([]Run, error) {
 	rows, err := s.DB.QueryContext(ctx, `SELECT r.id::text,r.plan_id::text,r.name,r.mode,r.state,r.actor,r.impact,r.created_at,r.updated_at,
@@ -353,6 +397,9 @@ func (s *Store) Claim(ctx context.Context, id, worker string, generation int) (C
 		return Claim{}, err
 	}
 	defer tx.Rollback()
+	if err = storageAdmission(ctx, tx, true); err != nil {
+		return Claim{}, err
+	}
 	t, mode, err := lockTask(ctx, tx, id)
 	if err != nil {
 		return Claim{}, err
@@ -665,6 +712,12 @@ func (s *Store) Action(ctx context.Context, id, action, actor string) error {
 		return err
 	}
 	defer tx.Rollback()
+	if err = storageAdmission(ctx, tx, action == "retry_failed" || action == "resume"); err != nil {
+		return err
+	}
+	if err = liveStorageRun(ctx, tx, id); err != nil {
+		return err
+	}
 	var mode, state string
 	if err = tx.QueryRowContext(ctx, `SELECT mode,state FROM ops_runs WHERE id=$1 FOR UPDATE`, id).Scan(&mode, &state); errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
@@ -856,6 +909,12 @@ func (s *Store) Wake(ctx context.Context, id string) error {
 		return err
 	}
 	defer tx.Rollback()
+	if err = storageAdmission(ctx, tx, true); err != nil {
+		return err
+	}
+	if err = liveStorageRun(ctx, tx, id); err != nil {
+		return err
+	}
 	var mode string
 	if err = tx.QueryRowContext(ctx, `SELECT mode FROM ops_runs WHERE id=$1 FOR UPDATE`, id).Scan(&mode); err != nil {
 		return err

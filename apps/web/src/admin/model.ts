@@ -46,6 +46,7 @@ export type Attempt = {
     result?: Candidate | null;
 };
 export type Task = {
+    storage_state?: "AVAILABLE" | "RETIRED" | "DELETED";
     id: string;
     run_id: string;
     spec: Spec;
@@ -64,6 +65,7 @@ export type Task = {
     stalled: boolean;
 };
 export type Run = {
+    storage_state?: "AVAILABLE" | "RETIRED" | "DELETED";
     id: string;
     plan_id: string;
     name: string;
@@ -170,7 +172,7 @@ export type JournalPage = {
     has_more: boolean;
 };
 export type View = {
-    page: 'tasks' | 'new' | 'workers' | 'logs' | 'data' | 'performance';
+    page: 'tasks' | 'new' | 'workers' | 'logs' | 'data' | 'performance' | 'storage';
     scan?: string;
     radar?: string;
     start?: string;
@@ -207,7 +209,7 @@ export function parseSelection(preset: string, start: string, end: string, radar
 }
 else if (!s.source_job_ids.length || s.source_job_ids.length > 32 || new Set(s.source_job_ids).size !== s.source_job_ids.length || s.source_job_ids.some(x => !/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(x)))
     throw new Error('请输入1–32个有效诊断任务ID'); return s; }
-export function viewFromSearch(search: string): View { const q = new URLSearchParams(search); const page = q.get('view'); return { page: page === 'new' || page === 'workers' || page === 'logs' || page === 'data' || page === 'performance' ? page : 'tasks', run: validViewID(q.get('run')), legacy: validViewID(q.get('legacy')), task: validViewID(q.get('task')), job: validViewID(q.get('job')), scan: validViewID(q.get('scan')), radar: /^[a-zA-Z0-9_.-]{1,96}$/.test(q.get('radar') ?? '') ? q.get('radar')! : undefined, start: validViewTime(q.get('start')), end: validViewTime(q.get('end')), preset: ['qc_preview','render_only'].includes(q.get('preset') ?? '') ? q.get('preset')! : undefined }; }
+export function viewFromSearch(search: string): View { const q = new URLSearchParams(search); const page = q.get('view'); return { page: page === 'new' || page === 'workers' || page === 'logs' || page === 'data' || page === 'performance' || page === 'storage' ? page : 'tasks', run: validViewID(q.get('run')), legacy: validViewID(q.get('legacy')), task: validViewID(q.get('task')), job: validViewID(q.get('job')), scan: validViewID(q.get('scan')), radar: /^[a-zA-Z0-9_.-]{1,96}$/.test(q.get('radar') ?? '') ? q.get('radar')! : undefined, start: validViewTime(q.get('start')), end: validViewTime(q.get('end')), preset: ['qc_preview','render_only'].includes(q.get('preset') ?? '') ? q.get('preset')! : undefined }; }
 export function viewURL(v: View) { const q = new URLSearchParams({ view: v.page }); for (const key of ['run', 'legacy', 'task', 'job', 'scan', 'radar', 'start', 'end', 'preset'] as const)
     if (v[key])
         q.set(key, v[key]!); return `/admin?${q}`; }

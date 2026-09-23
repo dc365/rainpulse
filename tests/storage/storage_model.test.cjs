@@ -1,0 +1,7 @@
+const test = require('node:test'); const assert = require('node:assert/strict'); const path = require('node:path');
+const m = require(path.resolve(process.argv[2]));
+test('separates unknown from zero bytes',()=>{assert.equal(m.storageBytes(undefined),'未知');assert.equal(m.storageBytes(NaN),'未知');assert.equal(m.storageBytes(0),'0 B');assert.equal(m.storageBytes(1024),'1.0 KiB');});
+test('stale or unsupported inode samples are not healthy',()=>{let r={sampled_at:'2026-09-23T00:00:00Z',inode_used_percent:90};let now=Date.parse(r.sampled_at);assert.equal(m.reportState(r,now),'inode 偏高');assert.equal(m.reportState(r,now+181000),'采样过期');assert.equal(m.reportState({...r,inode_used_percent:null},now),'inode 未提供');assert.equal(m.reportState({...r,inode_used_percent:100},now),'inode 告急');});
+test('uses explicit channel not version string ordering',()=>{let r={kind:'qc',fingerprint:'abc',identity:{versions:{qc_pipeline_version:'v1'}}};assert.equal(m.releaseLabel(r,[{kind:'qc',current_fingerprint:'abc',previous_fingerprint:'z'}]),'当前默认');assert.equal(m.releaseTitle(r),'v1');assert.equal(m.releaseLabel({...r,fingerprint:'z'},[{kind:'qc',current_fingerprint:'abc',previous_fingerprint:'z'}]),'上一版');});
+
+test('retirement is not physical deletion',()=>{assert.match(m.cleanupState('DELETING'),/已退役/);assert.match(m.cleanupState('COMPLETE'),/复查|核对为空/);assert.equal(m.cleanupState('new-state'),'new-state');});

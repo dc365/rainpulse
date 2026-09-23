@@ -53,11 +53,15 @@ func (s *Service) Preflight(ctx context.Context, selection Selection) (Plan, err
 	if err != nil {
 		return p, err
 	}
+	channels, err := s.Store.ReleaseChannels(ctx)
+	if err != nil {
+		return p, err
+	}
 	probed := map[string]AssetRef{}
 	problems := map[string]error{}
 	for i := range p.Tasks {
 		spec := &p.Tasks[i]
-		identity, e := MatchWorker(spec.Identity, workers, s.now())
+		identity, e := MatchWorker(PreferredIdentity(spec.Identity, channels), workers, s.now())
 		if e != nil {
 			p.Checks = append(p.Checks, Check{"worker", "BLOCK", e.Error(), spec.ID})
 		} else {

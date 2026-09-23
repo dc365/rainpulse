@@ -53,7 +53,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	timeout := 15 * time.Second
-	if strings.Contains(r.URL.Path, "/plans") || strings.HasSuffix(r.URL.Path, "/action") {
+	if strings.Contains(r.URL.Path, "/plans") || strings.HasSuffix(r.URL.Path, "/action") || strings.Contains(r.URL.Path, "/storage/cleanup/") {
 		timeout = 2 * time.Minute
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), timeout)
@@ -167,6 +167,9 @@ func (h *Handler) admin(w http.ResponseWriter, r *http.Request, path string) (an
 	s := h.service
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	q := r.URL.Query()
+	if path == "/releases" || strings.HasPrefix(path, "/releases/") || path == "/storage" || strings.HasPrefix(path, "/storage/") {
+		return h.storage(r, path)
+	}
 	if strings.HasPrefix(path, "/data/") || path == "/performance" || path == "/pools" || strings.HasPrefix(path, "/pools/") {
 		return h.extensions(r, path)
 	}
@@ -189,7 +192,7 @@ func (h *Handler) admin(w http.ResponseWriter, r *http.Request, path string) (an
 		if h.options.LokiURL != "" {
 			logs = "configured"
 		}
-		return map[string]any{"schema_version": Version, "database_ready": ready, "worker_auth_configured": h.options.WorkerToken != "", "system_logs": logs, "workers": workers, "counts": counts, "sampled_at": s.now(), "mode": "candidate_only", "management_schema": 2}, nil
+		return map[string]any{"schema_version": Version, "database_ready": ready, "worker_auth_configured": h.options.WorkerToken != "", "system_logs": logs, "workers": workers, "counts": counts, "sampled_at": s.now(), "mode": "candidate_only", "management_schema": 3}, nil
 	}
 	if r.Method == "GET" && (path == "/legacy" || path == "/runs") {
 		limit, err := integer(q.Get("limit"), 50, 100)

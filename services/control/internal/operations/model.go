@@ -217,6 +217,7 @@ func (p *Plan) Seal(now time.Time) error {
 }
 
 type Task struct {
+	StorageState   string          `json:"storage_state,omitempty"`
 	ID             string          `json:"id"`
 	RunID          string          `json:"run_id"`
 	Spec           Spec            `json:"spec"`
@@ -252,19 +253,20 @@ type Attempt struct {
 	Metrics     map[string]float64 `json:"metrics"`
 }
 type Run struct {
-	ID        string         `json:"id"`
-	PlanID    string         `json:"plan_id"`
-	Name      string         `json:"name"`
-	Mode      string         `json:"mode"`
-	State     string         `json:"state"`
-	Actor     string         `json:"actor"`
-	Impact    string         `json:"impact"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	Counts    map[string]int `json:"counts"`
-	Stalled   bool           `json:"stalled"`
-	Tasks     []Task         `json:"tasks,omitempty"`
-	Actions   []string       `json:"actions"`
+	StorageState string         `json:"storage_state,omitempty"`
+	ID           string         `json:"id"`
+	PlanID       string         `json:"plan_id"`
+	Name         string         `json:"name"`
+	Mode         string         `json:"mode"`
+	State        string         `json:"state"`
+	Actor        string         `json:"actor"`
+	Impact       string         `json:"impact"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	Counts       map[string]int `json:"counts"`
+	Stalled      bool           `json:"stalled"`
+	Tasks        []Task         `json:"tasks,omitempty"`
+	Actions      []string       `json:"actions"`
 }
 type WorkerInfo struct {
 	ID          string    `json:"id"`

@@ -153,6 +153,13 @@ func (s *Service) Asset(ctx context.Context, id, key string) ([]byte, string, er
 	if err != nil {
 		return nil, "", err
 	}
+	state, e := s.Store.RunStorageState(ctx, t.RunID)
+	if e != nil {
+		return nil, "", e
+	}
+	if state != "AVAILABLE" {
+		return nil, "", problem(410, "candidate_retired", "候选数据已退役，任务和配置记录仍保留")
+	}
 	var c Candidate
 	if err = json.Unmarshal(t.Result, &c); err != nil || c.Asset.URI == "" {
 		return nil, "", ErrNotFound

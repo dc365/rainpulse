@@ -145,7 +145,7 @@ func taskSteps(t *testing.T, id, run string) []sqlStep {
 }
 func TestDrainingPoolNeverAllocatesAnAttempt(t *testing.T) {
 	id, run := NewID(), NewID()
-	steps := taskSteps(t, id, run)
+	steps := append([]sqlStep{storageOpenStep()}, taskSteps(t, id, run)...)
 	steps = append(steps, sqlStep{Contains: "FROM ops_pool_controls WHERE kind=$1 FOR SHARE", Columns: []string{"mode"}, Rows: [][]driver.Value{{"DRAINING"}}})
 	s, d := scriptedStore(t, steps...)
 	c, e := s.Claim(context.Background(), id, "worker-qc", 1)
@@ -155,7 +155,7 @@ func TestDrainingPoolNeverAllocatesAnAttempt(t *testing.T) {
 }
 func TestBusyWorkerCannotClaimAnotherTask(t *testing.T) {
 	id, run := NewID(), NewID()
-	steps := taskSteps(t, id, run)
+	steps := append([]sqlStep{storageOpenStep()}, taskSteps(t, id, run)...)
 	steps = append(steps,
 		sqlStep{Contains: "FROM ops_pool_controls", Columns: []string{"mode"}, Rows: [][]driver.Value{{"ACCEPTING"}}},
 		sqlStep{Contains: "ops_workers WHERE id=$1 FOR UPDATE", Columns: []string{"identity", "seen_at", "ready"}, Rows: [][]driver.Value{{JSON(identity("qc")), time.Now(), true}}},

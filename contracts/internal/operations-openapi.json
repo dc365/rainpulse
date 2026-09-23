@@ -2885,6 +2885,476 @@
           }
         ]
       }
+    },
+    "/api/v1/admin/ops/releases": {
+      "get": {
+        "operationId": "listManagedReleases",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Result; cleanup begin retires metadata only, physical deletion uses server maintenance CLI",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Stale plan, protected input or maintenance conflict"
+          },
+          "422": {
+            "description": "Invalid bounded request"
+          },
+          "503": {
+            "description": "Storage service or schema unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ops/releases/{kind}/select": {
+      "post": {
+        "operationId": "selectManagedRelease",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Result; cleanup begin retires metadata only, physical deletion uses server maintenance CLI",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Stale plan, protected input or maintenance conflict"
+          },
+          "422": {
+            "description": "Invalid bounded request"
+          },
+          "503": {
+            "description": "Storage service or schema unavailable"
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "qc",
+                "render",
+                "diagnostics"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReleaseChoice"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ops/storage": {
+      "get": {
+        "operationId": "getStorageStatus",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Result; cleanup begin retires metadata only, physical deletion uses server maintenance CLI",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Stale plan, protected input or maintenance conflict"
+          },
+          "422": {
+            "description": "Invalid bounded request"
+          },
+          "503": {
+            "description": "Storage service or schema unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ops/storage/report": {
+      "post": {
+        "operationId": "recordHostStorage",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Result; cleanup begin retires metadata only, physical deletion uses server maintenance CLI",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Stale plan, protected input or maintenance conflict"
+          },
+          "422": {
+            "description": "Invalid bounded request"
+          },
+          "503": {
+            "description": "Storage service or schema unavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StorageReport"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ops/storage/pressure": {
+      "post": {
+        "operationId": "setStoragePressure",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Result; cleanup begin retires metadata only, physical deletion uses server maintenance CLI",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Stale plan, protected input or maintenance conflict"
+          },
+          "422": {
+            "description": "Invalid bounded request"
+          },
+          "503": {
+            "description": "Storage service or schema unavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PressureAction"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ops/storage/pins": {
+      "get": {
+        "operationId": "listRetentionPins",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Result; cleanup begin retires metadata only, physical deletion uses server maintenance CLI",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Stale plan, protected input or maintenance conflict"
+          },
+          "422": {
+            "description": "Invalid bounded request"
+          },
+          "503": {
+            "description": "Storage service or schema unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ops/storage/runs/{id}/pin": {
+      "post": {
+        "operationId": "pinRetentionRun",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Result; cleanup begin retires metadata only, physical deletion uses server maintenance CLI",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Stale plan, protected input or maintenance conflict"
+          },
+          "422": {
+            "description": "Invalid bounded request"
+          },
+          "503": {
+            "description": "Storage service or schema unavailable"
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetentionPin"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ops/storage/cleanup/plans": {
+      "post": {
+        "operationId": "previewCandidateRetention",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Result; cleanup begin retires metadata only, physical deletion uses server maintenance CLI",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanupPlan"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Stale plan, protected input or maintenance conflict"
+          },
+          "422": {
+            "description": "Invalid bounded request"
+          },
+          "503": {
+            "description": "Storage service or schema unavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetentionPolicy"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ops/storage/cleanup/plans/{id}": {
+      "get": {
+        "operationId": "getRetentionPlan",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Result; cleanup begin retires metadata only, physical deletion uses server maintenance CLI",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Stale plan, protected input or maintenance conflict"
+          },
+          "422": {
+            "description": "Invalid bounded request"
+          },
+          "503": {
+            "description": "Storage service or schema unavailable"
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/ops/storage/cleanup/plans/{id}/begin": {
+      "post": {
+        "operationId": "beginCandidateRetirement",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Result; cleanup begin retires metadata only, physical deletion uses server maintenance CLI",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanupPlan"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Stale plan, protected input or maintenance conflict"
+          },
+          "422": {
+            "description": "Invalid bounded request"
+          },
+          "503": {
+            "description": "Storage service or schema unavailable"
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CleanupConfirmation"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ops/storage/cleanup/plans/{id}/finish": {
+      "post": {
+        "operationId": "finishCandidatePurge",
+        "security": [
+          {
+            "adminBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Result; cleanup begin retires metadata only, physical deletion uses server maintenance CLI",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Stale plan, protected input or maintenance conflict"
+          },
+          "422": {
+            "description": "Invalid bounded request"
+          },
+          "503": {
+            "description": "Storage service or schema unavailable"
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PurgeReceipt"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3483,6 +3953,15 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "storage_state": {
+            "type": "string",
+            "enum": [
+              "AVAILABLE",
+              "RETIRED",
+              "DELETED"
+            ],
+            "description": "Payload lifecycle, independent of historical execution status."
           }
         },
         "required": [
@@ -3553,6 +4032,15 @@
           },
           "stalled": {
             "type": "boolean"
+          },
+          "storage_state": {
+            "type": "string",
+            "enum": [
+              "AVAILABLE",
+              "RETIRED",
+              "DELETED"
+            ],
+            "description": "Payload lifecycle, independent of historical execution status."
           }
         },
         "required": [
@@ -4529,6 +5017,358 @@
           "slow"
         ],
         "additionalProperties": false
+      },
+      "RetentionPolicy": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "keep_latest": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "minimum_age_hours": {
+            "type": "integer",
+            "minimum": 24,
+            "maximum": 8760
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          }
+        },
+        "required": [
+          "keep_latest",
+          "minimum_age_hours",
+          "limit"
+        ]
+      },
+      "ReleaseChoice": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "fingerprint": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "fingerprint",
+          "expected_revision",
+          "reason"
+        ]
+      },
+      "StorageReport": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 96
+          },
+          "host": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "sampled_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "device": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "total_bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "available_bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "inodes_total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "inodes_free": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "inode_used_percent": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "id",
+          "host",
+          "label",
+          "path",
+          "sampled_at",
+          "device",
+          "total_bytes",
+          "available_bytes",
+          "inodes_total",
+          "inodes_free",
+          "inode_used_percent"
+        ]
+      },
+      "PressureAction": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "report_id": {
+            "type": "string",
+            "maxLength": 96
+          },
+          "inode_stop_percent": {
+            "type": "integer",
+            "minimum": 50,
+            "maximum": 99
+          },
+          "minimum_free_bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "report_max_age_seconds": {
+            "type": "integer",
+            "minimum": 30,
+            "maximum": 3600
+          },
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "report_id",
+          "inode_stop_percent",
+          "minimum_free_bytes",
+          "report_max_age_seconds",
+          "expected_revision",
+          "reason"
+        ]
+      },
+      "RetentionPin": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "pin": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "pin",
+          "reason"
+        ]
+      },
+      "CleanupAttempt": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "task_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "qc",
+              "render",
+              "diagnostics"
+            ]
+          },
+          "prefix": {
+            "type": "string"
+          },
+          "marker_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "id",
+          "task_id",
+          "kind",
+          "prefix"
+        ]
+      },
+      "CleanupTarget": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "logical_bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "attempts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CleanupAttempt"
+            },
+            "minItems": 1,
+            "maxItems": 2048
+          }
+        },
+        "required": [
+          "run_id",
+          "name",
+          "logical_bytes",
+          "updated_at",
+          "attempts"
+        ]
+      },
+      "CleanupPlan": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/RetentionPolicy"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CleanupTarget"
+            },
+            "maxItems": 20
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "managed_candidates_only"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "object_store_endpoint": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "digest",
+          "policy",
+          "targets",
+          "scope",
+          "created_at",
+          "expires_at",
+          "object_store_endpoint"
+        ]
+      },
+      "CleanupConfirmation": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "digest"
+        ]
+      },
+      "PurgeReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "prefixes": {
+            "type": "array",
+            "maxItems": 40960,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "prefix": {
+                  "type": "string"
+                },
+                "deleted_versions": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "empty": {
+                  "type": "boolean"
+                },
+                "error": {
+                  "type": "string",
+                  "maxLength": 1024
+                }
+              },
+              "required": [
+                "prefix",
+                "deleted_versions",
+                "empty"
+              ]
+            }
+          }
+        },
+        "required": [
+          "digest",
+          "prefixes"
+        ]
       }
     }
   }

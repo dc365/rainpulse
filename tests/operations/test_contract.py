@@ -28,7 +28,8 @@ def test_all_openapi_references_exist_and_operations_are_unique():
             seen.add(op['operationId'])
             wanted = 'workerBearer' if path.startswith('/internal/') else 'adminBearer'
             assert op['security'] == [{wanted: []}]
-    assert len(value['paths']) == 31
+    assert len(value['paths']) == 42
+    assert '/api/v1/admin/ops/storage/cleanup/plans/{id}/begin' in value['paths']
 
 
 def test_commands_reject_unknown_properties_and_bound_logs():
@@ -50,3 +51,12 @@ def test_blocked_plan_identity_does_not_weaken_worker_identity():
     worker = schemas['Identity']['properties']['fingerprint']
     assert re.fullmatch(requirement['pattern'], '')
     assert not re.fullmatch(worker['pattern'], '')
+
+
+def test_retention_contract_is_candidate_only_and_never_keep_zero():
+    v=json.loads((ROOT / 'contracts/internal/operations-openapi.json').read_text())
+    schemas=v['components']['schemas']
+    assert schemas['RetentionPolicy']['properties']['keep_latest']['minimum']==1
+    assert schemas['RetentionPolicy']['properties']['minimum_age_hours']['minimum']==24
+    assert schemas['CleanupPlan']['properties']['scope']['enum']==['managed_candidates_only']
+    assert schemas['PurgeReceipt']['additionalProperties'] is False

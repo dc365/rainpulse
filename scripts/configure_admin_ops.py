@@ -93,6 +93,10 @@ def build_override(model: dict, kinds: list[str], budgets: dict[str,tuple[float,
             raise ValueError('现行QC配置路径为空')
         if kind=='diagnostics' and not env.get('RAINPULSE_DIAGNOSTIC_CONFIG'):
             raise ValueError('现行诊断配置路径为空')
+        # Storage layout only: QC bytes/digests/algorithms remain unchanged.
+        # Respect explicit operator 0; renders/diagnostics keep individual PNGs.
+        if kind == 'qc':
+            env.setdefault('RAINPULSE_QC_PACKED_STORAGE', '1')
         env.update({
             'RAINPULSE_OPS_CONTROL_URL':'${RAINPULSE_OPS_CONTROL_URL:?set native control URL}',
             'RAINPULSE_OPS_WORKER_TOKEN':'${RAINPULSE_OPS_WORKER_TOKEN:?set dedicated worker credential}',
