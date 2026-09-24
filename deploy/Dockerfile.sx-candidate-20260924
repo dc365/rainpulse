@@ -1,0 +1,5 @@
+FROM rainpulse-cpu-worker:multiband-5ecb44a
+COPY radar/fmt.py /opt/rainpulse/rainpulse_algo/radar/fmt.py
+COPY radar/zarr_volume.py /opt/rainpulse/rainpulse_algo/radar/zarr_volume.py
+COPY multiband/model.py /opt/rainpulse/rainpulse_algo/multiband/model.py
+ENTRYPOINT ["python", "-m", "rainpulse_algo.worker"]

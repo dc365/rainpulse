@@ -136,7 +136,9 @@ S只读取现有QC，并保留原硬拒绝、withheld与版本资格。X输出�
 rainpulse-history-ingest --manifest /opt/rainpulse/configs/ingest/fujian-20260828-sx-history-v1.json --source zf101-history-20260828 --start 2026-08-28T00:00:00Z --end 2026-08-28T01:00:00Z
 ```
 
-核对清单后加 `--execute` 才归档并登记；执行窗口最多一小时和 64 份文件。该命令不改变常驻实时 scanner 的状态。
+核对清单后加 `--execute` 才归档并登记；执行窗口最多一小时和 64 份文件。已存在的同站、同起止时间体扫计入 `existing_count`，不会重新归档或创建解码任务。该命令不改变常驻实时 scanner 的状态。
+
+105 候选部署使用 `rainpulse-cpu-worker:sx-candidate-20260924`，构建说明位于 `deploy/Dockerfile.sx-candidate-20260924`；`deploy/docker-compose.sx-candidate-20260924.yaml` 将候选配置挂给原解码 Worker。统一 Go 服务已加载 `5689346` 的候选代码，解码 Worker 健康。ZF101 与 ZF505 各两份真实体扫已归档、解码并在数据库中达到 `NORMALIZED`；同窗 Z9591 两份为先前登记的 S 体扫，状态分别是 `RADAR_GRID_READY` 和 `QC_READY`，历史导入复跑应返回 `existing_count=2`。
 
 尚未完成逐站 MSL、频率单位、波束与标定核验，也没有建立经核验的 S/X 空间网络。全量 24 X 站、流式 40 层融合、候选组合图和全天回放继续按本设计后续步骤实施；当前 X 配置仅限历史解码候选，空间融合与可信 QPE 保持禁用。
 

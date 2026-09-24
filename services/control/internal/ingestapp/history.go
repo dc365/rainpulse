@@ -3,6 +3,7 @@ package ingestapp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/radaringest"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // HistoryMain is a one-shot UTC import path; it never changes the live scanner
@@ -95,10 +97,31 @@ func runHistoricalImport(ctx context.Context, manifestPath, sourceID, startText,
 		return err
 	}
 	defer pool.Close()
+	registered := 0
+	existing := 0
 	for _, file := range files {
+		var alreadyRegistered bool
+		if err := pool.QueryRow(ctx, `SELECT EXISTS (
+			SELECT 1 FROM radar_scans WHERE radar_id=$1 AND volume_start_time=$2 AND volume_end_time=$3
+		)`, file.RadarID, file.Start, file.End).Scan(&alreadyRegistered); err != nil {
+			return fmt.Errorf("check existing historical scan %s: %w", file.Path, err)
+		}
+		if alreadyRegistered {
+			existing++
+			continue
+		}
 		if _, err := ingestFile(ctx, runtimes[0], file.Path, archive, service); err != nil {
+			var databaseError *pgconn.PgError
+			if errors.As(err, &databaseError) && databaseError.Code == "23505" &&
+				databaseError.ConstraintName == "radar_scan_runs_scan_id_key" {
+				existing++
+				continue
+			}
 			return fmt.Errorf("register %s: %w", file.Path, err)
 		}
+		registered++
 	}
-	return encoder.Encode(map[string]any{"registered_count": len(files), "source_id": source.SourceID})
+	return encoder.Encode(map[string]any{
+		"registered_count": registered, "existing_count": existing, "source_id": source.SourceID,
+	})
 }
