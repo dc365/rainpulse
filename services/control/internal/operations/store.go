@@ -480,6 +480,8 @@ func ArtifactName(kind string) string {
 		return "review-images"
 	case "diagnostics":
 		return "diagnostics"
+	case "multiband":
+		return "multiband"
 	}
 	return ""
 }

@@ -1,0 +1,140 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "event_type": {
+      "const": "ops.multiband.requested.v1"
+    },
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "job_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "run_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "trace_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "enum": [
+            "x_qc",
+            "sx_composite"
+          ]
+        },
+        "product_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "network_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "analysis_time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "input_cutoff": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "radar_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+              },
+              "scan_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "input_uri": {
+                "type": "string",
+                "pattern": "^s3://"
+              },
+              "volume_start": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "volume_end": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "available_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "radar_id",
+              "scan_id",
+              "input_uri",
+              "volume_start",
+              "volume_end",
+              "available_at"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 16
+        },
+        "output_prefix": {
+          "type": "string",
+          "pattern": "^s3://rainpulse/operations/"
+        },
+        "analysis_id": {
+          "type": "string"
+        },
+        "scan_id": {
+          "type": "string"
+        },
+        "radar_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        }
+      },
+      "required": [
+        "mode",
+        "product_id",
+        "network_sha256",
+        "analysis_time",
+        "input_cutoff",
+        "sources",
+        "output_prefix",
+        "analysis_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "event_type",
+    "event_id",
+    "job_id",
+    "run_id",
+    "trace_id",
+    "occurred_at",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Multi-band managed request. Frozen input markers remain in the existing ops Spec, not in arrays over HTTP."
+}

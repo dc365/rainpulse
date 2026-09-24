@@ -42,6 +42,10 @@ func (s *Service) Preflight(ctx context.Context, selection Selection) (Plan, err
 		return p, err
 	}
 	p = Plan{ID: NewID(), RunID: NewID(), Selection: selection, Tasks: specs, Checks: checks, Impact: "仅生成独立候选QC/对照图/诊断资产；不更新自动链路、格点、拼图、QPE、预报或默认展示。成功不代表获得业务资格。"}
+	if selection.Preset == "x_qc" || selection.Preset == "sx_composite" {
+		p.Impact = "生成独立的X质控／S-X组合反射率候选；一分钟产品保留真实观测年龄。不重算S质控，不改变现有QPE、预报或默认展示。"
+	}
+
 	if p.Selection.Name == "" {
 		at := selection.Start.UTC()
 		if selection.Preset == "diagnostics" {

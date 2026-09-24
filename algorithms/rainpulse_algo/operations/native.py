@@ -14,6 +14,7 @@ from uuid import UUID
 from .protocol import ConfigurationChanged, FrozenInputChanged, PinnedClient
 
 CONFIG_KEYS = {
+    "multiband": ("RAINPULSE_MULTIBAND_CONFIG", "RAINPULSE_QC_FLAG_DEFINITIONS"),
     "qc": ("RAINPULSE_RADAR_QC_CONFIG", "RAINPULSE_QC_FLAG_DEFINITIONS"),
     "render": ("RAINPULSE_QC_FLAG_DEFINITIONS",),
     "diagnostics": ("RAINPULSE_DIAGNOSTIC_CONFIG", "RAINPULSE_QC_FLAG_DEFINITIONS"),
@@ -46,7 +47,11 @@ def capture_identity(kind: str) -> dict[str, Any]:
                 for p in paths:
                     files[key + "/" + p.name] = hashlib.sha256(p.read_bytes()).hexdigest()
     versions = {"flag_definition_version": str(configs["RAINPULSE_QC_FLAG_DEFINITIONS"]["definition_version"])}
-    if kind == "qc":
+    if kind == "multiband":
+        from rainpulse_algo.multiband.model import Network
+        network = Network.load(os.environ["RAINPULSE_MULTIBAND_CONFIG"])
+        versions.update(multiband_contract="rainpulse.multiband.v1", network_release=network.release_id)
+    elif kind == "qc":
         qc = configs["RAINPULSE_RADAR_QC_CONFIG"]
         versions.update(qc_profile=str(qc["profile_version"]), qc_pipeline_version=str(qc["pipeline_version"]))
     elif kind == "diagnostics":
@@ -73,7 +78,11 @@ class NativeAdapter:
         self.client = minio_client_from_environment()
         self.publisher = AtomicObjectPublisher(self.client)
         self.startup = capture_identity(kind)
-        self.artifact_name = {"qc": "qc.zarr", "render": "review-images", "diagnostics": "diagnostics"}[kind]
+        self.artifact_name = {"qc": "qc.zarr", "render": "review-images", "diagnostics": "diagnostics", "multiband": "multiband"}[kind]
+        self.multiband = None
+        if kind == "multiband":
+            from rainpulse_algo.multiband.managed import existing_runtime_executor
+            self.multiband = existing_runtime_executor()
 
     def check_identity(self, expected) -> None:
         current = capture_identity(self.kind)
@@ -100,6 +109,13 @@ class NativeAdapter:
 
         client = PinnedClient(self.client, claim["inputs"])
         try:
+            if self.kind == "multiband":
+                from rainpulse_algo.worker.object_store import ArtifactObjectReader, artifact_sha256
+                from rainpulse_algo.worker.runtime import WorkerResult
+                objects, summary, metrics = self.multiband.execute(
+                    claim["request"], ArtifactObjectReader(client, max_size_bytes=self.multiband.network.maximum_input_bytes),
+                    artifact_digest=artifact_sha256)
+                return WorkerResult(objects=objects, diagnostics=summary, metrics={}, observability=metrics)
             if self.kind == "qc":
                 from rainpulse_algo.radar.qc_worker import _execute_basic_qc
                 from rainpulse_algo.worker.domain_contracts import RadarQCRequested

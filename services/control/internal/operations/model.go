@@ -77,6 +77,7 @@ var ErrUnavailable = &Problem{503, "unavailable", "管理服务不可用；请�
 
 type Selection struct {
 	Preset       string    `json:"preset"`
+	ProductID    string    `json:"product_id,omitempty"`
 	Start        time.Time `json:"start"`
 	End          time.Time `json:"end"`
 	RadarIDs     []string  `json:"radar_ids"`
@@ -89,7 +90,12 @@ func (s Selection) Validate() error {
 		return Invalid("名称过长")
 	}
 	switch s.Preset {
-	case "qc_preview", "render_only":
+	case "qc_preview", "render_only", "x_qc", "sx_composite":
+		if s.Preset == "x_qc" || s.Preset == "sx_composite" {
+			if s.End.Sub(s.Start) > time.Hour || !s.Start.Equal(s.Start.Truncate(time.Minute)) || !s.End.Equal(s.End.Truncate(time.Minute)) || (s.ProductID != "" && !namePattern.MatchString(s.ProductID)) {
+				return Invalid("多波段首版每次不超过一小时，起止时间对齐到分钟，产品ID必须属于网络配置")
+			}
+		}
 		if s.Start.IsZero() || s.End.IsZero() || !s.End.After(s.Start) || s.End.Sub(s.Start) > 24*time.Hour {
 			return Invalid("请选择不超过24小时的半开时间范围")
 		}
@@ -116,7 +122,7 @@ func (s Selection) Validate() error {
 			seen[id] = true
 		}
 	default:
-		return Invalid("首版支持QC与对照图、仅重建对照图、已有区域诊断任务重建")
+		return Invalid("支持QC/图件/诊断、X单站QC与S-X一分钟组合反射率预设")
 	}
 	return nil
 }
@@ -153,7 +159,9 @@ func (i Identity) Validate() error {
 	}
 	return nil
 }
-func validKind(k string) bool { return k == "qc" || k == "render" || k == "diagnostics" }
+func validKind(k string) bool {
+	return k == "qc" || k == "render" || k == "diagnostics" || k == "multiband"
+}
 
 type Spec struct {
 	ID          string          `json:"id"`

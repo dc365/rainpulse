@@ -33,7 +33,7 @@ async def main() -> None:
     from nats.js.api import AckPolicy, ConsumerConfig
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--kind", choices=("qc", "render", "diagnostics"), required=True)
+    parser.add_argument("--kind", choices=("qc", "render", "diagnostics", "multiband"), required=True)
     args = parser.parse_args()
     adapter = NativeAdapter(args.kind)
     control = ControlClient(os.environ["RAINPULSE_OPS_CONTROL_URL"], os.environ["RAINPULSE_OPS_WORKER_TOKEN"])

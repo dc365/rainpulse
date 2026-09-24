@@ -2580,7 +2580,8 @@
               "enum": [
                 "qc",
                 "render",
-                "diagnostics"
+                "diagnostics",
+                "multiband"
               ]
             }
           },
@@ -2772,7 +2773,8 @@
               "enum": [
                 "qc",
                 "render",
-                "diagnostics"
+                "diagnostics",
+                "multiband"
               ]
             }
           }
@@ -2956,7 +2958,8 @@
               "enum": [
                 "qc",
                 "render",
-                "diagnostics"
+                "diagnostics",
+                "multiband"
               ]
             }
           }
@@ -3393,7 +3396,9 @@
             "enum": [
               "qc_preview",
               "render_only",
-              "diagnostics"
+              "diagnostics",
+              "x_qc",
+              "sx_composite"
             ]
           },
           "name": {
@@ -3423,13 +3428,20 @@
               "format": "uuid"
             },
             "maxItems": 32
+          },
+          "product_id": {
+            "type": "string",
+            "maxLength": 96,
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,95}$",
+            "description": "Optional for a single configured multi-band product. Multi-band presets require a minute-aligned window of at most one hour; no future input is admitted."
           }
         },
         "required": [
           "preset",
           "name"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "Existing management presets plus bounded X QC and S/X minute-composite candidate plans. No change to automatic QPE or published weather products."
       },
       "Check": {
         "type": "object",
@@ -3498,7 +3510,8 @@
             "enum": [
               "qc",
               "render",
-              "diagnostics"
+              "diagnostics",
+              "multiband"
             ]
           },
           "files": {
@@ -3549,7 +3562,8 @@
             "enum": [
               "qc",
               "render",
-              "diagnostics"
+              "diagnostics",
+              "multiband"
             ]
           },
           "name": {
@@ -3579,7 +3593,8 @@
                 "enum": [
                   "qc",
                   "render",
-                  "diagnostics"
+                  "diagnostics",
+                  "multiband"
                 ]
               },
               "files": {
@@ -4694,7 +4709,8 @@
             "enum": [
               "qc",
               "render",
-              "diagnostics"
+              "diagnostics",
+              "multiband"
             ]
           },
           "mode": {
@@ -5209,7 +5225,8 @@
             "enum": [
               "qc",
               "render",
-              "diagnostics"
+              "diagnostics",
+              "multiband"
             ]
           },
           "prefix": {

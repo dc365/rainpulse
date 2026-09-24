@@ -1,0 +1,76 @@
+{
+  "schema_version": "1.0",
+  "release_id": "sx-local-candidate-v1",
+  "cache_max_bytes": 0,
+  "cache_ttl_seconds": 600,
+  "maximum_input_bytes": 134217728,
+  "stations": {
+    "s_example": {
+      "longitude_deg": 119.3,
+      "latitude_deg": 26.1,
+      "altitude_m_msl": 100,
+      "beam_width_h_deg": 1,
+      "beam_width_v_deg": 1,
+      "enabled": false,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "calibration_id": "unverified",
+      "quality_scale": 1,
+      "band": "S",
+      "frequency_hz": 2800000000.0,
+      "source": "s_qc_zarr",
+      "nominal_cadence_seconds": 360,
+      "maximum_age_seconds": 420,
+      "allowed_s_qc_versions": [
+        "REPLACE_WITH_VERIFIED_CURRENT_S_QC_VERSION"
+      ]
+    },
+    "x_example": {
+      "longitude_deg": 119.3,
+      "latitude_deg": 26.1,
+      "altitude_m_msl": 100,
+      "beam_width_h_deg": 1,
+      "beam_width_v_deg": 1,
+      "enabled": false,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "calibration_id": "unverified",
+      "quality_scale": 1,
+      "band": "X",
+      "frequency_hz": 9400000000.0,
+      "source": "normalized_zarr",
+      "nominal_cadence_seconds": 60,
+      "maximum_age_seconds": 120,
+      "x_qc": {
+        "attenuation": "none",
+        "require_snr": true,
+        "max_pia_db": 12,
+        "phase_window_m": 1000
+      }
+    }
+  },
+  "products": {
+    "local": {
+      "grid_id": "local-500m-candidate",
+      "crs": "EPSG:32651",
+      "west_m": 96000,
+      "south_m": 2840000,
+      "spacing_m": 500,
+      "width": 160,
+      "height": 160,
+      "levels_m_msl": [
+        250,
+        500,
+        1000,
+        1500,
+        2000,
+        3000,
+        5000,
+        8000,
+        12000
+      ],
+      "tile_rows": 16,
+      "cadence_seconds": 60
+    }
+  }
+}

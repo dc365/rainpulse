@@ -45,6 +45,9 @@ func operationsFile(name string) (string, []byte, error) {
 	return "", nil, operations.Invalid("未设置管理预检配置路径：" + name)
 }
 func (b *OperationsBuilder) ValidateConfiguration(ctx context.Context, spec operations.Spec) error {
+	if spec.Kind == "multiband" {
+		return b.validateMultiBand(ctx, spec)
+	}
 	keys := []string{"RAINPULSE_QC_FLAG_DEFINITIONS"}
 	if spec.Kind == "qc" {
 		keys = append(keys, "RAINPULSE_RADAR_QC_CONFIG")
@@ -64,6 +67,9 @@ func (b *OperationsBuilder) ValidateConfiguration(ctx context.Context, spec oper
 	return ctx.Err()
 }
 func (b *OperationsBuilder) Build(ctx context.Context, s operations.Selection) ([]operations.Spec, []operations.Check, error) {
+	if s.Preset == "x_qc" || s.Preset == "sx_composite" {
+		return b.buildMultiBand(ctx, s)
+	}
 	specs := []operations.Spec{}
 	checks := []operations.Check{}
 	_, flags, err := operationsFile("RAINPULSE_QC_FLAG_DEFINITIONS")

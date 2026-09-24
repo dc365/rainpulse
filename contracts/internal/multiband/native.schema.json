@@ -1,0 +1,138 @@
+{
+  "type": "object",
+  "properties": {
+    "contract": {
+      "const": "rainpulse.multiband.native-v1"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "radar_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "scan_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "band": {
+          "enum": [
+            "S",
+            "X"
+          ]
+        },
+        "frequency_hz": {
+          "type": "number"
+        },
+        "longitude_deg": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        "latitude_deg": {
+          "type": "number",
+          "minimum": -85,
+          "maximum": 85
+        },
+        "altitude_m_msl": {
+          "type": "number",
+          "minimum": -500,
+          "maximum": 9000
+        },
+        "height_datum": {
+          "const": "MSL"
+        },
+        "volume_start": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "volume_end": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "available_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "asset_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "scan_type": {
+          "enum": [
+            "volume",
+            "ppi",
+            "sector"
+          ]
+        },
+        "calibration_id": {
+          "type": "string"
+        },
+        "attenuation_status": {
+          "enum": [
+            "raw",
+            "corrected",
+            "unknown"
+          ]
+        }
+      },
+      "required": [
+        "radar_id",
+        "scan_id",
+        "band",
+        "frequency_hz",
+        "longitude_deg",
+        "latitude_deg",
+        "altitude_m_msl",
+        "height_datum",
+        "volume_start",
+        "volume_end",
+        "available_at",
+        "asset_sha256",
+        "scan_type"
+      ],
+      "additionalProperties": true
+    },
+    "sweeps": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "properties": {
+          "number": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4096
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+            },
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "number",
+          "fields"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "arrays_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "required": [
+    "contract",
+    "metadata",
+    "sweeps",
+    "arrays_sha256"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Canonical native volume metadata, paired with one bounded numeric-only NPZ object"
+}

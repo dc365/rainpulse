@@ -1,0 +1,346 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "release_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+    },
+    "stations": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 16,
+      "propertyNames": {
+        "pattern": "^[a-z0-9][a-z0-9_.-]{0,95}$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "band": {
+            "enum": [
+              "S",
+              "X"
+            ]
+          },
+          "frequency_hz": {
+            "type": "number",
+            "minimum": 2000000000.0,
+            "maximum": 12000000000.0
+          },
+          "longitude_deg": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "latitude_deg": {
+            "type": "number",
+            "minimum": -85,
+            "maximum": 85
+          },
+          "altitude_m_msl": {
+            "type": "number",
+            "minimum": -500,
+            "maximum": 9000
+          },
+          "beam_width_h_deg": {
+            "type": "number",
+            "minimum": 0.0001,
+            "maximum": 5
+          },
+          "beam_width_v_deg": {
+            "type": "number",
+            "minimum": 0.0001,
+            "maximum": 5
+          },
+          "source": {
+            "enum": [
+              "s_qc_zarr",
+              "normalized_zarr",
+              "native_bundle"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "geometry_verified": {
+            "type": "boolean"
+          },
+          "calibration_verified": {
+            "type": "boolean"
+          },
+          "calibration_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "nominal_cadence_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3600
+          },
+          "maximum_age_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3600
+          },
+          "quality_scale": {
+            "type": "number",
+            "minimum": 0.0001,
+            "maximum": 1
+          },
+          "allowed_s_qc_versions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "uniqueItems": true
+          },
+          "x_qc": {
+            "type": "object",
+            "properties": {
+              "attenuation": {
+                "enum": [
+                  "none",
+                  "phidp_linear",
+                  "upstream_verified"
+                ]
+              },
+              "alpha_db_per_degree": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "minimum": 1e-06,
+                    "maximum": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "max_pia_db": {
+                "type": "number",
+                "minimum": 0.0001,
+                "maximum": 30
+              },
+              "phase_window_m": {
+                "type": "number",
+                "minimum": 100,
+                "maximum": 10000
+              },
+              "max_negative_phase_step_deg": {
+                "type": "number",
+                "minimum": 0.0001,
+                "maximum": 30
+              },
+              "phase_anchor_max_range_m": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 5000
+              },
+              "snr_min_db": {
+                "type": "number",
+                "minimum": -20,
+                "maximum": 40
+              },
+              "require_snr": {
+                "type": "boolean"
+              },
+              "rho_candidate_max": {
+                "type": "number",
+                "minimum": 0.0001,
+                "maximum": 0.9999
+              },
+              "texture_candidate_db": {
+                "type": "number",
+                "minimum": 0.0001,
+                "maximum": 30
+              },
+              "max_blockage_fraction": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "band",
+          "frequency_hz",
+          "longitude_deg",
+          "latitude_deg",
+          "altitude_m_msl",
+          "beam_width_h_deg",
+          "beam_width_v_deg",
+          "source"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "enabled": {
+                  "const": true
+                }
+              },
+              "required": [
+                "enabled"
+              ]
+            },
+            "then": {
+              "properties": {
+                "geometry_verified": {
+                  "const": true
+                }
+              },
+              "required": [
+                "geometry_verified"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "band": {
+                  "const": "S"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "frequency_hz": {
+                  "type": "number",
+                  "minimum": 2000000000.0,
+                  "maximum": 4000000000.0
+                },
+                "source": {
+                  "enum": [
+                    "s_qc_zarr",
+                    "native_bundle"
+                  ]
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "frequency_hz": {
+                  "type": "number",
+                  "minimum": 8000000000.0,
+                  "maximum": 12000000000.0
+                },
+                "source": {
+                  "enum": [
+                    "normalized_zarr",
+                    "native_bundle"
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "products": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 4,
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "grid_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+          },
+          "crs": {
+            "type": "string",
+            "minLength": 1
+          },
+          "west_m": {
+            "type": "number"
+          },
+          "south_m": {
+            "type": "number"
+          },
+          "spacing_m": {
+            "type": "number",
+            "minimum": 100,
+            "maximum": 5000
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2048
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2048
+          },
+          "levels_m_msl": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": -500,
+              "maximum": 20000
+            },
+            "minItems": 1,
+            "maxItems": 32,
+            "uniqueItems": true
+          },
+          "tile_rows": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 128
+          },
+          "cadence_seconds": {
+            "const": 60
+          }
+        },
+        "required": [
+          "grid_id",
+          "crs",
+          "west_m",
+          "south_m",
+          "spacing_m",
+          "width",
+          "height",
+          "levels_m_msl"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "cache_max_bytes": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 536870912
+    },
+    "cache_ttl_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3600
+    },
+    "maximum_input_bytes": {
+      "type": "integer",
+      "minimum": 1024,
+      "maximum": 2147483648
+    }
+  },
+  "required": [
+    "schema_version",
+    "release_id",
+    "stations",
+    "products"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RainPulse S/X network release v1",
+  "description": "Candidate-only. Runtime additionally checks metre-projected CRS, sorted MSL levels, byte/cell budgets, actual geometry, and site-specific propagation/calibration prerequisites."
+}
