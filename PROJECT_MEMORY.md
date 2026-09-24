@@ -1,11 +1,24 @@
 # RainPulse Project Memory
 
-Updated: 2026-09-17 (Asia/Taipei)
+Updated: 2026-09-24 (Asia/Taipei)
 
 This file is the concise handoff for a new Codex session. Stable engineering
 rules remain in `AGENTS.md`; implementation details remain in the referenced RP
 documents. Do not add passwords, tokens, private data-source details, or raw
 operational data here.
+
+## S/X multiband candidate (2026-09-24)
+
+- Source commit `5ecb44a` is on `main`; `docs/MULTIBAND_V1_20260924.md` records
+  the candidate-only scope and acceptance boundary.
+- On 105, the unified Go binary and Web assets from `5ecb44a` are live; the
+  API reports ready. Operations schema is v4 with the `multiband` pool DRAINING.
+  Candidate image `rainpulse-cpu-worker:multiband-5ecb44a` was built and its
+  module imports checked, but no X network config or multiband Worker is active.
+- The 105 source checkout contains pre-existing uncommitted changes and is not
+  synchronized with `main`. Deployment updated runtime artifacts in place;
+  original binary/Web index backups are in `.build/multiband-rollback` there.
+  Do not infer real X data readiness from the candidate deployment.
 
 ## Architecture batch 2 (source-only handoff, 2026-09-22)
 
