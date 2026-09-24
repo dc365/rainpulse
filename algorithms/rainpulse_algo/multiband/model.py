@@ -156,8 +156,8 @@ class Grid:
             raise ValueError("grid exceeds bounded first-version resource budget")
         if min(self.tile_rows, self.height)*self.width*len(self.levels_m_msl) > 2_000_000:
             raise ValueError("height tile exceeds transient memory budget")
-        if self.cadence_seconds != 60:
-            raise ValueError("this product version has a fixed one-minute output contract")
+        if self.cadence_seconds not in {60, 360}:
+            raise ValueError("product cadence must be 60 or 360 seconds")
         h = np.asarray(self.levels_m_msl, dtype=float)
         if not 1 <= len(h) <= 32 or not np.all(np.isfinite(h)) or np.any(np.diff(h) <= 0) or h[0] < -500 or h[-1] > 20000:
             raise ValueError("invalid common MSL height levels")

@@ -2,6 +2,7 @@ import bz2
 import hashlib
 import json
 import shutil
+import struct
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -21,6 +22,10 @@ from rainpulse_algo.radar.fmt import (
     GENERIC_HEADER,
     MAGIC_NUMBER,
     MOMENT_HEADER,
+    PA_BEAM_SIZE,
+    PA_RADIAL_HEADER,
+    PA_SITE_CONFIG,
+    PA_TASK_CONFIG,
     RADIAL_HEADER,
     SITE_CONFIG,
     TASK_CONFIG,
@@ -179,6 +184,41 @@ def test_fmt_decoder_preserves_sweeps_geometry_and_missing_values(tmp_path: Path
     assert volume.sweeps[0].raw_gate_codes["DBZH"].dtype == np.dtype("uint32")
     assert volume.sweeps[0].range_m.tolist() == [500, 1500, 2500, 3500, 4500, 5500]
     assert volume.warnings and "header time is authoritative" in volume.warnings[0]
+
+
+def test_phased_array_decoder_uses_beam_table_and_64_bit_utc(tmp_path: Path) -> None:
+    config = load_radar_config(make_config(tmp_path))
+    start = int(datetime(2026, 8, 28, tzinfo=UTC).timestamp())
+    payload = bytearray(GENERIC_HEADER.pack(MAGIC_NUMBER, 2, 0, 16, 0, bytes(16)))
+    payload.extend(PA_SITE_CONFIG.pack(b"Z9598", b"PA fixture", 27.00861167907715,
+        117.08055877685547, 1740, 1692, 9900.0, 1, 1, 1, 1, bytes(54)))
+    payload.extend(PA_TASK_CONFIG.pack(b"VCP21D", b"PA fixture", 3, 0, 1, 2, 0, start, bytes(68)))
+    payload.extend(bytes(PA_BEAM_SIZE))
+    for number, elevation in enumerate((0.5, 1.5), 1):
+        cut = bytearray(256)
+        struct.pack_into("<h", cut, 0, number)
+        struct.pack_into("<f", cut, 4, elevation)
+        struct.pack_into("<f", cut, 64, 1.0)
+        struct.pack_into("<f", cut, 68, 12.0)
+        struct.pack_into("<f", cut, 72, 1000.0)
+        struct.pack_into("<f", cut, 76, 1000.0)
+        struct.pack_into("<i", cut, 80, 6000)
+        struct.pack_into("<f", cut, 108, 8.8)
+        payload.extend(cut)
+    body = bytes([5, 66, 70, 100, 0, 4])
+    for index, (state, cut) in enumerate(((3, 1), (2, 1), (0, 2), (4, 2)), 1):
+        payload.extend(PA_RADIAL_HEADER.pack(state, 0, index, index, cut, float(index),
+            0.5 if cut == 1 else 1.5, start + index, 250_000,
+            MOMENT_HEADER.size + len(body), 1, 1, 0, 0, 0, bytes(70)))
+        payload.extend(MOMENT_HEADER.pack(2, 2, 66, 1, 0, len(body), bytes(12)))
+        payload.extend(body)
+    source = tmp_path / "pa.bin.bz2"
+    with bz2.open(source, "wb") as stream:
+        stream.write(payload)
+    volume = decode_fmt_volume(source, config)
+    assert volume.ray_count == 4
+    assert volume.sweeps[0].fields["DBZH"].shape == (2, 6)
+    assert volume.sweeps[0].ray_time[0] == np.datetime64("2026-08-28T00:00:01.250000")
 
 
 def test_fmt_decoder_rejects_invalid_magic(tmp_path: Path) -> None:

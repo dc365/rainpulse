@@ -99,9 +99,19 @@ func Run(ctx context.Context, platformRuntime bdpruntime.Runtime, service *orche
 		return err
 	}
 	if platformRuntime.PlatformAvailable {
-		radarSource, sourceErr := bdpruntime.ResolveOriginalFileSource(
+		manifestResolved, sourceErr := manifest.WithResolvedSourceSettings(
 			platformRuntime.Config.RadarInput.DataCode,
-			platformRuntime.Config.RadarInput.SourceIndex,
+			platformRuntime.Config.RadarInput.ScanIntervalSeconds,
+			platformRuntime.Config.RadarInput.MinimumFileAgeSeconds,
+			platformRuntime.Config.RadarInput.LookbackHours,
+			func(dataCode string) (string, error) {
+				radarSource, resolveErr := bdpruntime.ResolveOriginalFileSource(dataCode, platformRuntime.Config.RadarInput.SourceIndex)
+				if resolveErr != nil {
+					return "", resolveErr
+				}
+				slog.Info("Ruiyun BDP radar ingest root resolved", "data_code", radarSource.DataCode, "source_index", radarSource.SourceIndex, "root", radarSource.Root)
+				return radarSource.Root, nil
+			},
 		)
 		if sourceErr != nil {
 			if platformRuntime.Required() {
@@ -110,18 +120,7 @@ func Run(ctx context.Context, platformRuntime bdpruntime.Runtime, service *orche
 			}
 			slog.Warn("Ruiyun BDP radar metadata unavailable; retaining manifest arrival root", "error", sourceErr)
 		} else {
-			manifest, err = manifest.WithSourceSettings(
-				radarSource.Root,
-				platformRuntime.Config.RadarInput.ScanIntervalSeconds,
-				platformRuntime.Config.RadarInput.MinimumFileAgeSeconds,
-				platformRuntime.Config.RadarInput.LookbackHours,
-			)
-			if err != nil {
-				slog.Error("apply Ruiyun BDP radar ingest root", "error", err)
-				return err
-			}
-			slog.Info("Ruiyun BDP radar ingest root resolved", "data_code", radarSource.DataCode,
-				"source_index", radarSource.SourceIndex, "root", radarSource.Root)
+			manifest = manifestResolved
 		}
 	}
 

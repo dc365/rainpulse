@@ -57,6 +57,7 @@ def build_zarr_store(
             "decoder_version": DECODER_VERSION,
             "source_format": config.source["format"],
             "source_format_version": config.source["format_version"],
+            "source_generic_type": volume.generic_type,
             "source_uri": source_uri,
             "source_filename": volume.source_filename,
             "input_sha256": volume.input_sha256,
@@ -76,6 +77,7 @@ def build_zarr_store(
             "altitude_evidence": config.site.get("altitude_evidence"),
             "radar_band": config.hardware.get("radar_band"),
             "frequency_mhz": volume.site.frequency_mhz,
+            "frequency_header_raw": volume.site.frequency_header_raw,
             "scan_strategy": volume.task.name,
             "volume_start_time_utc": volume.volume_start_time.isoformat(),
             "volume_end_time_utc": volume.volume_end_time.isoformat(),
@@ -84,6 +86,16 @@ def build_zarr_store(
             ),
             "canonical_fields": list(volume.canonical_fields),
             "source_cut_count": len(volume.cuts),
+            "source_beams": [
+                {
+                    "ordinal": beam.ordinal,
+                    "index": beam.index,
+                    "transmit_direction_deg": beam.transmit_direction_deg,
+                    "transmit_width_horizontal_deg": beam.transmit_width_horizontal_deg,
+                    "transmit_width_vertical_deg": beam.transmit_width_vertical_deg,
+                }
+                for beam in volume.beams
+            ],
             "source_ray_count": volume.ray_count,
             "decode_warnings": list(volume.warnings),
             "known_source_issues": list(config.known_issues),
@@ -109,6 +121,7 @@ def build_zarr_store(
     compressor = Blosc(cname="zstd", clevel=3, shuffle=Blosc.BITSHUFFLE)
     for sweep_index, sweep in enumerate(volume.sweeps):
         group = root.create_group(f"sweep_{sweep_index:03d}")
+        source_cut = volume.cuts[sweep.source_sweep_number - 1]
         group.attrs.update(
             {
                 "sweep_number": sweep_index,
@@ -119,6 +132,9 @@ def build_zarr_store(
                     str(key): value for key, value in sweep.radial_state_counts.items()
                 },
                 "nyquist_velocity_m_s": sweep.nyquist_velocity_m_s,
+                "transmit_beam_index": source_cut.transmit_beam_index,
+                "receive_beam_width_horizontal_deg": source_cut.receive_beam_width_horizontal_deg,
+                "receive_beam_width_vertical_deg": source_cut.receive_beam_width_vertical_deg,
             }
         )
         azimuth = _array(group, "azimuth", sweep.azimuth_deg, compressor)

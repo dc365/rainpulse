@@ -1,0 +1,140 @@
+schema_version: '1.0'
+config_version: zf101-x-header-candidate-v1
+radar_id: zf101
+lifecycle: draft
+display_name: ZF101 X 波段候选站
+site:
+  longitude_deg: 119.33059692382812
+  latitude_deg: 26.175800323486328
+  altitude_m: 1230
+  antenna_altitude_m: 1230
+  altitude_datum: null
+hardware:
+  manufacturer: null
+  model: YLX2-D
+  radar_band: X
+  frequency_mhz: null
+  beam_width_deg: null
+  beam_width_vertical_deg: null
+  dual_pol_available: true
+  nyquist_velocity_mps: null
+  calibration_offsets:
+    dbzh_db: null
+    zdr_db: null
+scan:
+  strategy_name: VCP21D
+  expected_update_seconds: 60
+  expected_elevations_deg:
+  - 0.9
+  - 1.8
+  - 2.7
+  - 3.6
+  - 4.5
+  - 5.4
+  - 6.3
+  - 7.2
+  - 8.1
+  - 9.0
+  - 9.9
+  - 10.8
+  - 11.7
+  - 12.6
+  - 13.5
+  - 14.4
+  - 15.3
+  - 16.2
+  - 17.1
+  - 18.0
+  - 18.9
+  - 19.8
+  - 20.7
+  - 21.6
+  - 22.5
+  - 23.4
+  - 24.3
+  - 25.2
+  - 26.1
+  - 27.0
+  - 27.9
+  - 28.8
+  - 29.7
+  - 30.6
+  - 31.5
+  - 32.4
+  - 33.3
+  - 34.2
+  - 35.1
+  - 36.0
+  expected_cut_elevations_deg:
+  - 0.9
+  - 1.8
+  - 2.7
+  - 3.6
+  - 4.5
+  - 5.4
+  - 6.3
+  - 7.2
+  - 8.1
+  - 9.0
+  - 9.9
+  - 10.8
+  - 11.7
+  - 12.6
+  - 13.5
+  - 14.4
+  - 15.3
+  - 16.2
+  - 17.1
+  - 18.0
+  - 18.9
+  - 19.8
+  - 20.7
+  - 21.6
+  - 22.5
+  - 23.4
+  - 24.3
+  - 25.2
+  - 26.1
+  - 27.0
+  - 27.9
+  - 28.8
+  - 29.7
+  - 30.6
+  - 31.5
+  - 32.4
+  - 33.3
+  - 34.2
+  - 35.1
+  - 36.0
+  azimuth_resolution_deg: 1.0
+  range_gate_m: 30.0
+  max_range_m: null
+fields:
+- canonical_name: DBZH
+  source_name: REF
+  source_unit: dBZ
+  canonical_unit: dBZ
+  missing_value: raw_codes_0_to_4
+  scale_factor: 0.5
+  add_offset: -33.0
+source:
+  format: cma-rstm-level2
+  format_version: '2.0'
+  data_code: RADA_L2_X_FMT
+  generic_type: 16
+  delivery: manual
+  uri_pattern: file:///data/Weather/RADA/RADA_L2_X_FMT/OBS_X/{yyyy}/{yyyymmdd}/ZF101/Z_RADR_I_ZF101_{filename_time}_O_DOR_YLX2-D_CRA_FMT.bin.bz2
+  timestamp_timezone: UTC
+ancillary:
+  dem_asset_version: null
+  clutter_map_version: null
+  coastline_asset_version: null
+qc:
+  profile: null
+  pipeline_version: null
+  flag_definition_version: null
+known_issues:
+- Header altitude datum and station MSL height are unverified; spatial fusion is disabled.
+- Frequency header raw value is 9406500; its units and calibration are unverified.
+- Receive beam widths vary by cut and must be validated before spatial fusion.
+- This is a historical decode candidate only; no trusted QPE or forecast eligibility.

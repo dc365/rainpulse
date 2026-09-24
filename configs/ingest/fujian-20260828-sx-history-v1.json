@@ -1,0 +1,69 @@
+{
+  "schema_version": "1.0",
+  "profile_version": "fujian-20260828-sx-history-v1",
+  "execution_mode": "realtime_shadow",
+  "interval_seconds": 15,
+  "state_directory": "/var/lib/rainpulse/ingest-history-20260828",
+  "sources": [
+    {
+      "source_id": "z9591-history-20260828",
+      "radar_id": "z9591",
+      "data_code": "RADA_L2_FMT",
+      "config_path": "/opt/rainpulse/configs/radars/fujian-20260828/z9591.yaml",
+      "arrival_root": "/data/Weather/RADA/RADA_L2_FMT/OBS_TEMP",
+      "minimum_file_age_seconds": 30,
+      "lookback_hours": 24,
+      "file_name_contains": "Z9591"
+    },
+    {
+      "source_id": "z9593-history-20260828",
+      "radar_id": "z9593",
+      "data_code": "RADA_L2_FMT",
+      "config_path": "/opt/rainpulse/configs/radars/fujian-20260828/z9593.yaml",
+      "arrival_root": "/data/Weather/RADA/RADA_L2_FMT/OBS_TEMP",
+      "minimum_file_age_seconds": 30,
+      "lookback_hours": 24,
+      "file_name_contains": "Z9593"
+    },
+    {
+      "source_id": "z9598-history-20260828",
+      "radar_id": "z9598",
+      "data_code": "RADA_L2_FMT",
+      "config_path": "/opt/rainpulse/configs/radars/fujian-20260828/z9598.yaml",
+      "arrival_root": "/data/Weather/RADA/RADA_L2_FMT/OBS_TEMP",
+      "minimum_file_age_seconds": 30,
+      "lookback_hours": 24,
+      "file_name_contains": "Z9598"
+    },
+    {
+      "source_id": "z9599-history-20260828",
+      "radar_id": "z9599",
+      "data_code": "RADA_L2_FMT",
+      "config_path": "/opt/rainpulse/configs/radars/fujian-20260828/z9599.yaml",
+      "arrival_root": "/data/Weather/RADA/RADA_L2_FMT/OBS_TEMP",
+      "minimum_file_age_seconds": 30,
+      "lookback_hours": 24,
+      "file_name_contains": "Z9599"
+    },
+    {
+      "source_id": "zf101-history-20260828",
+      "radar_id": "zf101",
+      "data_code": "RADA_L2_X_FMT",
+      "config_path": "/opt/rainpulse/configs/radars/fujian-20260828/zf101.yaml",
+      "arrival_root": "/data/Weather/RADA/RADA_L2_X_FMT/OBS_X",
+      "minimum_file_age_seconds": 30,
+      "lookback_hours": 24,
+      "file_name_contains": "ZF101"
+    },
+    {
+      "source_id": "zf505-history-20260828",
+      "radar_id": "zf505",
+      "data_code": "RADA_L2_X_FMT",
+      "config_path": "/opt/rainpulse/configs/radars/fujian-20260828/zf505.yaml",
+      "arrival_root": "/data/Weather/RADA/RADA_L2_X_FMT/OBS_X",
+      "minimum_file_age_seconds": 30,
+      "lookback_hours": 24,
+      "file_name_contains": "ZF505"
+    }
+  ]
+}

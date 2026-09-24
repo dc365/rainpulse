@@ -23,7 +23,7 @@ const (
 	RadarDecodeRequestedEventType          = "radar.decode.requested.v1"
 	RadarDecodeRequestedSubject            = "rainpulse.jobs.requested.radar_decode"
 	RadarDecodeJobType                     = "radar.decode"
-	RadarDecoderVersion                    = "cma-rstm-2.1.0"
+	RadarDecoderVersion                    = "cma-rstm-2.2.0"
 	RadarQCRequestedEventType              = "radar.qc.requested.v1"
 	RadarQCRequestedSubject                = "rainpulse.jobs.requested.radar_qc"
 	RadarQCJobType                         = "radar.qc"

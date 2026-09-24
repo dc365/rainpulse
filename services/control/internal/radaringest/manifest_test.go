@@ -101,3 +101,22 @@ func TestManifestWithSourceSettingsOverridesEverySource(t *testing.T) {
 		t.Fatal("WithSourceSettings mutated the original manifest")
 	}
 }
+
+func TestManifestWithResolvedSourceSettingsKeepsDistinctDataCodes(t *testing.T) {
+	manifest := Manifest{SchemaVersion: "1.0", ProfileVersion: "test", ExecutionMode: "realtime_shadow", IntervalSeconds: 15, StateDirectory: "/tmp/state", Sources: []ManifestSource{
+		{SourceID: "s", RadarID: "z9591", ConfigPath: "/configs/s.yaml", ArrivalRoot: "/old/s", MinAgeSeconds: 30, LookbackHours: 24},
+		{SourceID: "x", RadarID: "zf101", ConfigPath: "/configs/x.yaml", ArrivalRoot: "/old/x", DataCode: "RADA_L2_X_FMT", MinAgeSeconds: 30, LookbackHours: 24},
+	}}
+	resolved, err := manifest.WithResolvedSourceSettings("RADA_L2_FMT", 10, 45, 12, func(code string) (string, error) {
+		return "/data/Weather/RADA/" + code + "/OBS", nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Sources[0].ArrivalRoot == resolved.Sources[1].ArrivalRoot {
+		t.Fatal("source roots were conflated")
+	}
+	if resolved.Sources[0].DataCode != "" || resolved.Sources[1].DataCode != "RADA_L2_X_FMT" {
+		t.Fatal("source codes changed")
+	}
+}

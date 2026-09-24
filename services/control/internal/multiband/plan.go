@@ -117,7 +117,7 @@ func Parse(raw []byte) (Network, error) {
 		if g.TileRows == 0 {
 			g.TileRows = 32
 		}
-		if g.Cadence != 60 || g.TileRows < 1 || g.TileRows > 128 {
+		if (g.Cadence != 60 && g.Cadence != 360) || g.TileRows < 1 || g.TileRows > 128 {
 			return n, fmt.Errorf("invalid product cadence/tile")
 		}
 		for i, v := range g.Levels {
@@ -186,11 +186,12 @@ func Select(n Network, product, mode string, radars []string, start, end, cutoff
 	if _, ok := n.Products[product]; !ok {
 		return nil, nil, fmt.Errorf("unknown product")
 	}
+	cadence := time.Duration(n.Products[product].Cadence) * time.Second
 	if !end.After(start) || end.Sub(start) > time.Hour || len(radars) < 1 || len(radars) > 16 || start.After(cutoff) || end.After(cutoff.Add(time.Minute)) {
 		return nil, nil, fmt.Errorf("use a bounded, past one-hour window")
 	}
-	if !start.Equal(start.Truncate(time.Minute)) || !end.Equal(end.Truncate(time.Minute)) {
-		return nil, nil, fmt.Errorf("minute-aligned window required")
+	if !start.Equal(start.Truncate(cadence)) || !end.Equal(end.Truncate(cadence)) {
+		return nil, nil, fmt.Errorf("product-cadence-aligned window required")
 	}
 	seen := map[string]bool{}
 	for _, r := range radars {
@@ -239,9 +240,9 @@ func Select(n Network, product, mode string, radars []string, start, end, cutoff
 			seenIDs[s.ID] = true
 			// A scan ending between minute boundaries remains an actual observation;
 			// its standalone quicklook is timestamped at the following product minute.
-			at := s.End.Truncate(time.Minute)
+			at := s.End.Truncate(cadence)
 			if !at.Equal(s.End) {
-				at = at.Add(time.Minute)
+				at = at.Add(cadence)
 			}
 			if at.After(cutoff) {
 				warnings = append(warnings, "X scan waits for next analysis minute "+s.ID)
@@ -250,7 +251,7 @@ func Select(n Network, product, mode string, radars []string, start, end, cutoff
 			out = append(out, Snapshot{at, []Input{v}, s.ID})
 		}
 	} else {
-		for at := start; at.Before(end) && !at.After(cutoff); at = at.Add(time.Minute) {
+		for at := start; at.Before(end) && !at.After(cutoff); at = at.Add(cadence) {
 			snap := Snapshot{AnalysisTime: at.UTC(), Sources: []Input{}, Slot: Slot(product, at)}
 			for _, r := range ids {
 				var best Scan

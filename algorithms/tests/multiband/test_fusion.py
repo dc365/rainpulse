@@ -1,6 +1,7 @@
 # ruff: noqa: E501, E701, E702, I001, E402
 import numpy as np
 import pytest
+from dataclasses import replace
 from rainpulse_algo.multiband.quality import x_qc, accept_s_qc
 from rainpulse_algo.multiband.fusion import build_composite, _nearest_ray
 from conftest import volume, TARGET
@@ -23,6 +24,15 @@ def test_same_height_select_then_vertical_max(net):
     assert result.arrays["WINNER_AGE_SECONDS"][0,0] == 300.
     assert result.arrays["VALID_LAYER_COUNT"][0,0] == 2
     assert not result.metadata["operational_eligible"] and not result.metadata["qpe_eligible"]
+
+
+def test_six_minute_product_rejects_intermediate_minutes(net):
+    net.products["local"] = replace(net.products["local"], cadence_seconds=360)
+    s, x = processed(net)
+    with pytest.raises(ValueError, match="boundary"):
+        build_composite([s, x], net, "local", TARGET, CUTOFF)
+    out = build_composite([s, x], net, "local", "2026-09-23T00:12:00Z", "2026-09-23T00:12:10Z")
+    assert out.metadata["cadence_seconds"] == 360
 
 
 def test_new_x_wins_comparable_lower_level_and_expiry_removes_old(net):

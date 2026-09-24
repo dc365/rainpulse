@@ -15,7 +15,7 @@ import numpy as np
 from .config import FieldMapping, RadarDecoderConfig
 
 DECODER_ID = "rainpulse.cma-rstm"
-DECODER_VERSION = "cma-rstm-2.1.0"
+DECODER_VERSION = "cma-rstm-2.2.0"
 ABSENT_RAW_GATE_CODE = np.uint32(np.iinfo("uint32").max)
 MAGIC_NUMBER = 0x4D545352
 
@@ -25,6 +25,11 @@ TASK_CONFIG = struct.Struct("<32s128siiiii 9f 40s")
 CUT_CONFIG = struct.Struct("<ii ff i ffffff ii iii iii ff qq i 7f 4s iiiii 12s ii hhhh 72s")
 RADIAL_HEADER = struct.Struct("<iiiii ff iiii hhh c 13s")
 MOMENT_HEADER = struct.Struct("<iii hh i 12s")
+PA_SITE_CONFIG = struct.Struct("<8s32sffii fiii h54s")
+PA_TASK_CONFIG = struct.Struct("<32s128siiiii q68s")
+PA_BEAM_SIZE = 640
+PA_CUT_SIZE = 256
+PA_RADIAL_HEADER = struct.Struct("<iiiii ff q iii hhh i70s")
 
 SOURCE_MOMENT_NAMES = {
     1: "TREF",
@@ -58,11 +63,12 @@ class SourceSite:
     longitude_deg: float
     antenna_altitude_m: int
     ground_altitude_m: int
-    frequency_mhz: float
-    beam_width_horizontal_deg: float
-    beam_width_vertical_deg: float
+    frequency_mhz: float | None
+    beam_width_horizontal_deg: float | None
+    beam_width_vertical_deg: float | None
     rda_version: int
     radar_type_code: int
+    frequency_header_raw: float | None = None
 
 
 @dataclass(frozen=True)
@@ -86,13 +92,25 @@ class SourceCut:
     nominal_elevation_deg: float
     angular_resolution_deg: float
     scan_speed_deg_s: float
-    log_resolution_m: int
-    doppler_resolution_m: int
+    log_resolution_m: float
+    doppler_resolution_m: float
     max_range1_m: int
     max_range2_m: int
     start_range_m: int
     nyquist_velocity_m_s: float
     moments_mask: int
+    transmit_beam_index: int | None = None
+    receive_beam_width_horizontal_deg: float | None = None
+    receive_beam_width_vertical_deg: float | None = None
+
+
+@dataclass(frozen=True)
+class SourceBeam:
+    ordinal: int
+    index: int
+    transmit_direction_deg: float
+    transmit_width_horizontal_deg: float
+    transmit_width_vertical_deg: float
 
 
 @dataclass(frozen=True)
@@ -139,9 +157,11 @@ class DecodedRadarVolume:
     input_size_bytes: int
     format_major_version: int
     format_minor_version: int
+    generic_type: int
     site: SourceSite
     task: SourceTask
     cuts: tuple[SourceCut, ...]
+    beams: tuple[SourceBeam, ...]
     sweeps: tuple[DecodedSweep, ...]
     volume_start_time: datetime
     volume_end_time: datetime
@@ -199,28 +219,49 @@ def decode_fmt_volume(path: str | Path, config: RadarDecoderConfig) -> DecodedRa
             raise DecodeError(f"invalid RSTM magic number 0x{magic:08x}")
         if (major, minor) != (2, 0):
             raise DecodeError(f"unsupported RSTM version {major}.{minor}")
-        if generic_type != 1:
+        if generic_type not in {1, 16}:
             raise DecodeError(f"unsupported RSTM generic type {generic_type}")
 
-        site = _parse_site(_read_exact(stream, SITE_CONFIG.size, "site configuration"))
-        task = _parse_task(_read_exact(stream, TASK_CONFIG.size, "task configuration"))
+        if generic_type == 16:
+            site = _parse_pa_site(_read_exact(stream, PA_SITE_CONFIG.size, "site configuration"))
+            task_bytes = _read_exact(stream, PA_TASK_CONFIG.size, "task configuration")
+            task, beam_count = _parse_pa_task(task_bytes)
+            if not 1 <= beam_count <= 4096:
+                raise DecodeError(f"invalid beam count {beam_count}")
+            beams = tuple(
+                _parse_pa_beam(index + 1, _read_exact(stream, PA_BEAM_SIZE, f"beam {index + 1}"))
+                for index in range(beam_count)
+            )
+            radial_header = PA_RADIAL_HEADER
+        else:
+            site = _parse_site(_read_exact(stream, SITE_CONFIG.size, "site configuration"))
+            task = _parse_task(_read_exact(stream, TASK_CONFIG.size, "task configuration"))
+            beams = ()
+            radial_header = RADIAL_HEADER
         if not 1 <= task.cut_number <= 64:
             raise DecodeError(f"invalid cut count {task.cut_number}")
         cuts = tuple(
-            _parse_cut(number, _read_exact(stream, CUT_CONFIG.size, f"cut {number}"))
+            (_parse_pa_cut if generic_type == 16 else _parse_cut)(
+                number,
+                _read_exact(
+                    stream,
+                    PA_CUT_SIZE if generic_type == 16 else CUT_CONFIG.size,
+                    f"cut {number}",
+                ),
+            )
             for number in range(1, task.cut_number + 1)
         )
-        _validate_header(config, site, task, cuts)
+        _validate_header(config, site, task, cuts, generic_type=generic_type)
 
         builders: dict[int, _SweepBuilder] = {}
         radial_total = 0
         while True:
-            header_bytes = stream.read(RADIAL_HEADER.size)
+            header_bytes = stream.read(radial_header.size)
             if not header_bytes:
                 break
-            if len(header_bytes) != RADIAL_HEADER.size:
+            if len(header_bytes) != radial_header.size:
                 raise DecodeError("truncated radial header")
-            values = RADIAL_HEADER.unpack(header_bytes)
+            values = radial_header.unpack(header_bytes)
             (
                 radial_state,
                 _spot_blank,
@@ -243,7 +284,7 @@ def decode_fmt_volume(path: str | Path, config: RadarDecoderConfig) -> DecodedRa
                 raise DecodeError(f"radial references invalid cut {elevation_number}")
             if not 0 <= moment_number <= 64:
                 raise DecodeError(f"invalid moment count {moment_number}")
-            if zip_type != b"\x00":
+            if generic_type == 1 and zip_type != b"\x00":
                 raise DecodeError(
                     f"compressed radial blocks are not supported (zip_type={zip_type.hex()})"
                 )
@@ -272,7 +313,7 @@ def decode_fmt_volume(path: str | Path, config: RadarDecoderConfig) -> DecodedRa
                     raw=np.frombuffer(body, dtype=dtype).copy(),
                 )
                 parsed_length += MOMENT_HEADER.size + block_length
-            if data_length not in {parsed_length, parsed_length + RADIAL_HEADER.size}:
+            if data_length not in {parsed_length, parsed_length + radial_header.size}:
                 raise DecodeError(
                     f"radial data length mismatch: declared={data_length} parsed={parsed_length}"
                 )
@@ -296,9 +337,17 @@ def decode_fmt_volume(path: str | Path, config: RadarDecoderConfig) -> DecodedRa
         raise DecodeError("RSTM volume has no radials")
     if set(builders) != set(range(1, task.cut_number + 1)):
         raise DecodeError("RSTM volume is missing one or more configured cuts")
+    if generic_type == 16 and (
+        builders[1].radials[0].state not in {0, 3}
+        or builders[task.cut_number].radials[-1].state not in {2, 4, 6}
+    ):
+        raise DecodeError("phased-array volume has incomplete radial boundaries")
 
     sweeps = tuple(
-        _finalize_sweep(builders[number], cuts[number - 1], config)
+        _finalize_sweep(
+            builders[number], cuts[number - 1], config,
+            require_cut_boundaries=generic_type == 1,
+        )
         for number in range(1, task.cut_number + 1)
     )
     if not any("DBZH" in sweep.fields for sweep in sweeps):
@@ -325,9 +374,11 @@ def decode_fmt_volume(path: str | Path, config: RadarDecoderConfig) -> DecodedRa
         input_size_bytes=input_size,
         format_major_version=major,
         format_minor_version=minor,
+        generic_type=generic_type,
         site=site,
         task=task,
         cuts=cuts,
+        beams=beams,
         sweeps=sweeps,
         volume_start_time=volume_start,
         volume_end_time=volume_end,
@@ -340,10 +391,14 @@ def _finalize_sweep(
     builder: _SweepBuilder,
     cut: SourceCut,
     config: RadarDecoderConfig,
+    *,
+    require_cut_boundaries: bool = True,
 ) -> DecodedSweep:
     radials = builder.radials
     states = Counter(radial.state for radial in radials)
-    if radials[0].state not in {0, 3} or radials[-1].state not in {2, 4, 6}:
+    if require_cut_boundaries and (
+        radials[0].state not in {0, 3} or radials[-1].state not in {2, 4, 6}
+    ):
         raise DecodeError(f"cut {builder.number} has incomplete radial boundaries")
     times = np.asarray([radial.time_ns for radial in radials], dtype="int64")
     if np.any(np.diff(times) < 0):
@@ -446,8 +501,19 @@ def _validate_header(
     site: SourceSite,
     task: SourceTask,
     cuts: tuple[SourceCut, ...],
+    *,
+    generic_type: int = 1,
 ) -> None:
-    if site.code.casefold() != config.radar_id.casefold():
+    expected_generic_type = config.source.get("generic_type")
+    if expected_generic_type is not None and expected_generic_type != generic_type:
+        raise DecodeError(
+            f"source generic type {generic_type} differs from config {expected_generic_type}"
+        )
+    allowed_codes = {config.radar_id.casefold()}
+    allowed_codes.update(
+        str(value).casefold() for value in config.source.get("header_site_codes", [])
+    )
+    if site.code.casefold() not in allowed_codes:
         raise DecodeError(f"source site {site.code!r} does not match radar {config.radar_id!r}")
     checks = {
         "longitude": (site.longitude_deg, config.site.get("longitude_deg"), 1e-4),
@@ -458,15 +524,19 @@ def _validate_header(
             config.site.get("antenna_altitude_m"),
             1.0,
         ),
-        "frequency": (site.frequency_mhz, config.hardware.get("frequency_mhz"), 0.1),
+        "frequency": (
+            site.frequency_mhz,
+            config.hardware.get("frequency_mhz") if generic_type == 1 else None,
+            0.1,
+        ),
         "horizontal beam width": (
             site.beam_width_horizontal_deg,
-            config.hardware.get("beam_width_deg"),
+            config.hardware.get("beam_width_deg") if generic_type == 1 else None,
             1e-3,
         ),
         "vertical beam width": (
             site.beam_width_vertical_deg,
-            config.hardware.get("beam_width_vertical_deg"),
+            config.hardware.get("beam_width_vertical_deg") if generic_type == 1 else None,
             1e-3,
         ),
     }
@@ -506,6 +576,89 @@ def _parse_site(value: bytes) -> SourceSite:
         beam_width_vertical_deg=float(values[8]),
         rda_version=int(values[9]),
         radar_type_code=int(values[10]),
+    )
+
+
+def _parse_pa_site(value: bytes) -> SourceSite:
+    values = PA_SITE_CONFIG.unpack(value)
+    return SourceSite(
+        code=_decode_text(values[0]),
+        name=_decode_text(values[1]),
+        latitude_deg=float(values[2]),
+        longitude_deg=float(values[3]),
+        antenna_altitude_m=int(values[4]),
+        ground_altitude_m=int(values[5]),
+        frequency_mhz=None,
+        beam_width_horizontal_deg=None,
+        beam_width_vertical_deg=None,
+        rda_version=int(values[9]),
+        radar_type_code=int(values[10]),
+        frequency_header_raw=float(values[6]),
+    )
+
+
+def _parse_pa_task(value: bytes) -> tuple[SourceTask, int]:
+    values = PA_TASK_CONFIG.unpack(value)
+    try:
+        scan_start = datetime.fromtimestamp(values[7], UTC)
+    except (OverflowError, OSError, ValueError) as error:
+        raise DecodeError(f"invalid phased-array task scan time {values[7]}") from error
+    return SourceTask(
+        name=_decode_text(values[0]),
+        description=_decode_text(values[1]),
+        polarization_type=int(values[2]),
+        scan_type=int(values[3]),
+        pulse_width_ns=0,
+        scan_start_time=scan_start,
+        cut_number=int(values[5]),
+    ), int(values[4])
+
+
+def _parse_pa_cut(number: int, value: bytes) -> SourceCut:
+    def i16(offset: int) -> int:
+        return struct.unpack_from("<h", value, offset)[0]
+
+    def i32(offset: int) -> int:
+        return struct.unpack_from("<i", value, offset)[0]
+
+    def f32(offset: int) -> float:
+        return struct.unpack_from("<f", value, offset)[0]
+    declared_number = i16(0)
+    if declared_number not in {number - 1, number}:
+        raise DecodeError(f"phased-array cut index {declared_number} differs from cut {number}")
+    log_resolution = f32(72)
+    doppler_resolution = f32(76)
+    if not 0 < log_resolution <= 10000 or not 0 < doppler_resolution <= 10000:
+        raise DecodeError(f"invalid phased-array cut {number} gate resolution")
+    return SourceCut(
+        number=number,
+        process_mode=i32(24),
+        waveform=i32(28),
+        prf1_hz=f32(32),
+        prf2_hz=f32(36),
+        nominal_elevation_deg=f32(4),
+        angular_resolution_deg=f32(64),
+        scan_speed_deg_s=f32(68),
+        log_resolution_m=log_resolution,
+        doppler_resolution_m=doppler_resolution,
+        max_range1_m=i32(80),
+        max_range2_m=i32(84),
+        start_range_m=i32(88),
+        nyquist_velocity_m_s=f32(108),
+        moments_mask=struct.unpack_from("<q", value, 112)[0],
+        transmit_beam_index=i16(2),
+        receive_beam_width_horizontal_deg=f32(12),
+        receive_beam_width_vertical_deg=f32(16),
+    )
+
+
+def _parse_pa_beam(ordinal: int, value: bytes) -> SourceBeam:
+    return SourceBeam(
+        ordinal=ordinal,
+        index=struct.unpack_from("<i", value, 0)[0],
+        transmit_direction_deg=struct.unpack_from("<f", value, 12)[0],
+        transmit_width_horizontal_deg=struct.unpack_from("<f", value, 16)[0],
+        transmit_width_vertical_deg=struct.unpack_from("<f", value, 20)[0],
     )
 
 

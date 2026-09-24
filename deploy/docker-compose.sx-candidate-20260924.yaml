@@ -1,0 +1,5 @@
+services:
+  radar-decode-worker:
+    image: rainpulse-cpu-worker:sx-candidate-20260924
+    volumes:
+      - ../.build/sx-configs/radars:/opt/rainpulse/configs/radars/fujian-20260828:ro

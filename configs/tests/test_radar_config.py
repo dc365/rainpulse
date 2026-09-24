@@ -233,6 +233,21 @@ def test_fujian_four_radar_history_configs_are_valid_drafts() -> None:
             validate(promoted)
 
 
+def test_x_band_history_configs_remain_decode_only_drafts() -> None:
+    config_dir = CONFIG_ROOT / "radars" / "fujian-20260828"
+    for station, generic_type in (("zf101", 16), ("zf505", 1)):
+        config = yaml.safe_load((config_dir / f"{station}.yaml").read_text())
+        validate(config)
+        assert config["lifecycle"] == "draft"
+        assert config["source"]["data_code"] == "RADA_L2_X_FMT"
+        assert config["source"]["generic_type"] == generic_type
+        assert config["site"]["altitude_datum"] is None
+        promoted = copy.deepcopy(config)
+        promoted["lifecycle"] = "ready"
+        with pytest.raises(ValidationError):
+            validate(promoted)
+
+
 def test_qc_flag_definition_is_a_unique_uint32_bitset() -> None:
     definition = yaml.safe_load(
         (CONFIG_ROOT / "qc" / "flag-definitions.yaml").read_text()

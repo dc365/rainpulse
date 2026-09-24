@@ -42,6 +42,32 @@ func TestLatestCausalSelectionAndSReuse(t *testing.T) {
 		t.Fatal("old observation was retimestamped")
 	}
 }
+
+func TestSixMinuteSelectionKeepsMissingAndRejectsFutureSScan(t *testing.T) {
+	n := fixture(t)
+	product := n.Products["local"]
+	product.Cadence = 360
+	n.Products["local"] = product
+	x := n.Stations["x1"]
+	x.MaximumAge = 420
+	n.Stations["x1"] = x
+	start := time.Date(2026, 8, 28, 0, 0, 0, 0, time.UTC)
+	scans := []Scan{
+		scan("x-first", "x1", start.Add(time.Minute)),
+		scan("x-second", "x1", start.Add(7*time.Minute)),
+		scan("s-first", "s1", start.Add(7*time.Minute+57*time.Second)),
+	}
+	out, _, err := Select(n, "local", "sx_composite", []string{"s1", "x1"}, start, start.Add(18*time.Minute), start.Add(18*time.Minute), scans)
+	if err != nil || len(out) != 2 {
+		t.Fatalf("snapshots=%+v err=%v", out, err)
+	}
+	if !out[0].AnalysisTime.Equal(start.Add(6*time.Minute)) || len(out[0].Sources) != 1 || out[0].Sources[0].RadarID != "x1" {
+		t.Fatalf("00:06 improperly reused future S: %+v", out[0])
+	}
+	if !out[1].AnalysisTime.Equal(start.Add(12*time.Minute)) || len(out[1].Sources) != 2 {
+		t.Fatalf("00:12 source alignment differs: %+v", out[1])
+	}
+}
 func TestExpiryAndUnavailableArrival(t *testing.T) {
 	n := fixture(t)
 	at := clock()

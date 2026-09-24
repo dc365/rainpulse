@@ -67,6 +67,13 @@ meaning.
 altitude and altitude datum, radar band, scan strategy, volume start/end UTC,
 and the input SHA-256.
 
+For RSTM generic type 16, `source_generic_type=16` and each sweep records the
+source transmit beam index and receive beam widths from its cut table. The
+original site frequency number is `frequency_header_raw`; `frequency_mhz` is
+null until the device-family unit is verified. Draft X assets may therefore be
+decoded and previewed but are ineligible for spatial fusion or operational QC.
+Generic type 1 continues to use the existing site frequency in MHz.
+
 ## Validation and publication
 
 - Geometry, units, field ranges, sweep boundaries, and time coverage are

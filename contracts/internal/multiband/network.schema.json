@@ -301,7 +301,7 @@
             "maximum": 128
           },
           "cadence_seconds": {
-            "const": 60
+            "enum": [60, 360]
           }
         },
         "required": [

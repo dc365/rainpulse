@@ -14,6 +14,7 @@ import (
 )
 
 var sourceIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
+var dataCodePattern = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}$`)
 
 // Manifest is the strict runtime contract for multiple live radar arrival
 // sources. JSON is intentionally used here: it is unambiguous, supports strict
@@ -29,6 +30,7 @@ type Manifest struct {
 
 type ManifestSource struct {
 	SourceID         string `json:"source_id"`
+	DataCode         string `json:"data_code,omitempty"`
 	RadarID          string `json:"radar_id"`
 	ConfigPath       string `json:"config_path"`
 	ArrivalRoot      string `json:"arrival_root"`
@@ -78,6 +80,36 @@ func (manifest Manifest) WithSourceSettings(
 	return manifest, nil
 }
 
+// WithResolvedSourceSettings resolves each source independently. An empty
+// data_code inherits the platform default for older manifests.
+func (manifest Manifest) WithResolvedSourceSettings(defaultDataCode string, intervalSeconds, minimumFileAgeSeconds, lookbackHours int, resolve func(string) (string, error)) (Manifest, error) {
+	manifest.IntervalSeconds = intervalSeconds
+	manifest.Sources = append([]ManifestSource(nil), manifest.Sources...)
+	for index := range manifest.Sources {
+		code := manifest.Sources[index].DataCode
+		if code == "" {
+			code = defaultDataCode
+		}
+		if !dataCodePattern.MatchString(code) {
+			return Manifest{}, fmt.Errorf("invalid radar ingest data_code %q", code)
+		}
+		root, err := resolve(code)
+		if err != nil {
+			return Manifest{}, fmt.Errorf("resolve radar ingest source %s: %w", manifest.Sources[index].SourceID, err)
+		}
+		if !filepath.IsAbs(root) {
+			return Manifest{}, fmt.Errorf("radar ingest source %s root must be absolute", manifest.Sources[index].SourceID)
+		}
+		manifest.Sources[index].ArrivalRoot = filepath.Clean(root)
+		manifest.Sources[index].MinAgeSeconds = minimumFileAgeSeconds
+		manifest.Sources[index].LookbackHours = lookbackHours
+	}
+	if err := manifest.Validate(); err != nil {
+		return Manifest{}, err
+	}
+	return manifest, nil
+}
+
 // LoadManifest expands environment placeholders, resolves relative paths from
 // the manifest directory, and rejects ambiguous or duplicate source entries.
 func LoadManifest(path string) (Manifest, error) {
@@ -105,6 +137,7 @@ func LoadManifest(path string) (Manifest, error) {
 	for index := range manifest.Sources {
 		source := &manifest.Sources[index]
 		source.SourceID = strings.ToLower(strings.TrimSpace(source.SourceID))
+		source.DataCode = strings.TrimSpace(source.DataCode)
 		source.RadarID = strings.ToLower(strings.TrimSpace(source.RadarID))
 		source.ConfigPath = resolveManifestPath(base, source.ConfigPath)
 		source.ArrivalRoot = resolveManifestPath(base, source.ArrivalRoot)
@@ -155,6 +188,9 @@ func (manifest Manifest) Validate() error {
 	for _, source := range manifest.Sources {
 		if !sourceIDPattern.MatchString(source.SourceID) || !sourceIDPattern.MatchString(source.RadarID) {
 			return fmt.Errorf("radar ingest source or radar ID is invalid")
+		}
+		if source.DataCode != "" && !dataCodePattern.MatchString(source.DataCode) {
+			return fmt.Errorf("radar ingest data_code %q is invalid", source.DataCode)
 		}
 		if _, exists := seenSources[source.SourceID]; exists {
 			return fmt.Errorf("duplicate radar ingest source_id %s", source.SourceID)

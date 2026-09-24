@@ -17,6 +17,8 @@ const (
 	cutConfigSize     = 256
 	radialHeaderSize  = 64
 	momentHeaderSize  = 32
+	phasedBeamSize    = 640
+	phasedRadialSize  = 128
 	rstmMagic         = 0x4D545352
 )
 
@@ -41,6 +43,13 @@ func probeVolumeTimes(reader io.Reader) (time.Time, time.Time, error) {
 	if binary.LittleEndian.Uint32(generic[:4]) != rstmMagic {
 		return time.Time{}, time.Time{}, fmt.Errorf("invalid RSTM magic number")
 	}
+	if binary.LittleEndian.Uint16(generic[4:6]) != 2 || binary.LittleEndian.Uint16(generic[6:8]) != 0 {
+		return time.Time{}, time.Time{}, fmt.Errorf("unsupported RSTM version")
+	}
+	genericType := binary.LittleEndian.Uint32(generic[8:12])
+	if genericType != 1 && genericType != 16 {
+		return time.Time{}, time.Time{}, fmt.Errorf("unsupported RSTM generic type %d", genericType)
+	}
 	if _, err := readExact(reader, siteConfigSize, "site configuration"); err != nil {
 		return time.Time{}, time.Time{}, err
 	}
@@ -48,7 +57,26 @@ func probeVolumeTimes(reader io.Reader) (time.Time, time.Time, error) {
 	if err != nil {
 		return time.Time{}, time.Time{}, err
 	}
-	cutCount := int(int32(binary.LittleEndian.Uint32(task[176:180])))
+	cutOffset := 176
+	radialSize := radialHeaderSize
+	secondsSize := 4
+	microsecondsOffset := 32
+	momentCountOffset := 40
+	if genericType == 16 {
+		beamCount := int(int32(binary.LittleEndian.Uint32(task[168:172])))
+		if beamCount < 1 || beamCount > 4096 {
+			return time.Time{}, time.Time{}, fmt.Errorf("invalid RSTM beam count %d", beamCount)
+		}
+		if _, err := io.CopyN(io.Discard, reader, int64(beamCount*phasedBeamSize)); err != nil {
+			return time.Time{}, time.Time{}, fmt.Errorf("read RSTM beam configurations: %w", err)
+		}
+		cutOffset = 172
+		radialSize = phasedRadialSize
+		secondsSize = 8
+		microsecondsOffset = 36
+		momentCountOffset = 44
+	}
+	cutCount := int(int32(binary.LittleEndian.Uint32(task[cutOffset : cutOffset+4])))
 	if cutCount < 1 || cutCount > 64 {
 		return time.Time{}, time.Time{}, fmt.Errorf("invalid RSTM cut count %d", cutCount)
 	}
@@ -59,7 +87,7 @@ func probeVolumeTimes(reader io.Reader) (time.Time, time.Time, error) {
 	var start time.Time
 	var end time.Time
 	for radialCount := 0; ; radialCount++ {
-		header := make([]byte, radialHeaderSize)
+		header := make([]byte, radialSize)
 		count, readErr := io.ReadFull(reader, header)
 		if readErr == io.EOF && count == 0 {
 			break
@@ -67,9 +95,14 @@ func probeVolumeTimes(reader io.Reader) (time.Time, time.Time, error) {
 		if readErr != nil {
 			return time.Time{}, time.Time{}, fmt.Errorf("read RSTM radial header: %w", readErr)
 		}
-		seconds := int64(int32(binary.LittleEndian.Uint32(header[28:32])))
-		microseconds := int64(int32(binary.LittleEndian.Uint32(header[32:36])))
-		momentCount := int(int32(binary.LittleEndian.Uint32(header[40:44])))
+		var seconds int64
+		if secondsSize == 8 {
+			seconds = int64(binary.LittleEndian.Uint64(header[28:36]))
+		} else {
+			seconds = int64(int32(binary.LittleEndian.Uint32(header[28:32])))
+		}
+		microseconds := int64(int32(binary.LittleEndian.Uint32(header[microsecondsOffset : microsecondsOffset+4])))
+		momentCount := int(int32(binary.LittleEndian.Uint32(header[momentCountOffset : momentCountOffset+4])))
 		if seconds <= 0 || microseconds < 0 || microseconds >= 1_000_000 || momentCount < 0 || momentCount > 64 {
 			return time.Time{}, time.Time{}, fmt.Errorf("invalid RSTM radial time or moment count")
 		}

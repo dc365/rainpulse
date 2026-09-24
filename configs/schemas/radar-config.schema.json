@@ -284,6 +284,13 @@
       "properties": {
         "format": { "type": ["string", "null"], "minLength": 1 },
         "format_version": { "type": ["string", "null"], "minLength": 1 },
+        "data_code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,63}$" },
+        "generic_type": { "type": "integer", "enum": [1, 16] },
+        "header_site_codes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[A-Za-z0-9]{1,8}$" }
+        },
         "delivery": {
           "type": ["string", "null"],
           "enum": ["shared_directory", "http_callback", "object_store", "manual", null]

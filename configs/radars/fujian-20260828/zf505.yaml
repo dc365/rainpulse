@@ -1,0 +1,86 @@
+schema_version: '1.0'
+config_version: zf505-x-header-candidate-v1
+radar_id: zf505
+lifecycle: draft
+display_name: ZF505 X 波段候选站
+site:
+  longitude_deg: 118.11111450195312
+  latitude_deg: 25.70833396911621
+  altitude_m: 1654
+  antenna_altitude_m: 1655
+  altitude_datum: null
+hardware:
+  manufacturer: null
+  model: YLD7-D
+  radar_band: X
+  frequency_mhz: 9415.0
+  beam_width_deg: 0.9800000190734863
+  beam_width_vertical_deg: 0.9700000286102295
+  dual_pol_available: true
+  nyquist_velocity_mps: null
+  calibration_offsets:
+    dbzh_db: null
+    zdr_db: null
+scan:
+  strategy_name: VCP23D
+  expected_update_seconds: null
+  expected_elevations_deg:
+  - 0.5054
+  - 1.4941
+  - 2.395
+  - 3.4058
+  - 4.3066
+  - 5.9985
+  - 9.9097
+  - 14.5898
+  - 19.4897
+  expected_cut_elevations_deg:
+  - 0.5054
+  - 0.5054
+  - 1.4941
+  - 1.4941
+  - 2.395
+  - 3.4058
+  - 4.3066
+  - 5.9985
+  - 9.9097
+  - 14.5898
+  - 19.4897
+  azimuth_resolution_deg: 1.0
+  range_gate_m: null
+  max_range_m: null
+fields:
+- canonical_name: DBZH
+  source_name: REF
+  source_unit: dBZ
+  canonical_unit: dBZ
+  missing_value: raw_codes_0_to_4
+  scale_factor: 0.5
+  add_offset: -33.0
+- canonical_name: VR
+  source_name: VEL
+  source_unit: m s-1
+  canonical_unit: m s-1
+  missing_value: raw_codes_0_to_4
+  scale_factor: 0.5
+  add_offset: -64.5
+source:
+  format: cma-rstm-level2
+  format_version: '2.0'
+  data_code: RADA_L2_X_FMT
+  generic_type: 1
+  delivery: manual
+  uri_pattern: file:///data/Weather/RADA/RADA_L2_X_FMT/OBS_X/{yyyy}/{yyyymmdd}/ZF505/Z_RADR_I_ZF505_{filename_time}_O_DOR_YLD7-D_CAP_FMT.bin.bz2
+  timestamp_timezone: UTC
+ancillary:
+  dem_asset_version: null
+  clutter_map_version: null
+  coastline_asset_version: null
+qc:
+  profile: null
+  pipeline_version: null
+  flag_definition_version: null
+known_issues:
+- Site heights and MSL datum are header values only; spatial fusion is disabled.
+- Frequency and beam widths are from the generic-type-1 header and await station verification.
+- This is a historical decode candidate only; no trusted QPE or forecast eligibility.
