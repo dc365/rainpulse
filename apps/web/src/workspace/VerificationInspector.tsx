@@ -6,10 +6,11 @@ import { comparePoint, nativeFrameAt, verificationTimes } from './verification'
 import { SpatialVerification } from './SpatialVerification'
 
 type Comparison = ReturnType<typeof comparePoint> & { observed: number; predicted: number }
-export function VerificationInspector({ detail, algorithm, validTime, point, onClear, threshold, onThresholdChange, windowKM, onWindowChange }: {
+export function VerificationInspector({ detail, algorithm, validTime, point, onClear, threshold, onThresholdChange, windowKM, onWindowChange, onPickHistory }: {
   detail: WorkspaceCycleDetail; algorithm: string; validTime: string | null
   point: MapCoordinate | null; onClear: () => void
   threshold:number; onThresholdChange:(value:number)=>void; windowKM:number; onWindowChange:(value:number)=>void
+  onPickHistory?: () => void
 }) {
   const [result, setResult] = useState<{ key: string; value?: Comparison; error?: string } | null>(null)
   const truthPanel = detail.panels.find(p => p.panel_id === 'qpe')
@@ -46,7 +47,7 @@ export function VerificationInspector({ detail, algorithm, validTime, point, onC
       lead={validTime ? Math.round((Date.parse(validTime)-Date.parse(detail.issue_time))/60000) : 0}
       sourceKey={JSON.stringify([truthURL,forecastURL,truthFrame?.sha256,forecastFrame?.sha256])}
       threshold={threshold} windowKM={windowKM} onWindowChange={onWindowChange} enabled={comparable} />
-    {!comparable ? <p role="status">该时效暂无可配对的原生预报与实况；不插值、不使用其他周期替代。</p>
+    {!comparable ? <p role="status">该时效暂无可配对的原生预报与实况；不插值、不使用其他周期替代。{onPickHistory ? <> <button type="button" onClick={onPickHistory}>选择历史周期</button></> : null}</p>
       : !point ? <p>点击地图固定一个格点，读取同位置实况、预报、差值与命中/漏报结果。</p>
       : current?.value ? <div className="verification-values">
         <span>实况 <strong>{current.value.observed.toFixed(2)} mm/h</strong></span>

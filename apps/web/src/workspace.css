@@ -2,7 +2,7 @@
   --rp-canvas: #eef3f1;
   --rp-paper: #fbfdfc;
   --rp-ink: #18342f;
-  --rp-muted: #657771;
+  --rp-muted: #54655f; /* 4.9:1 on canvas/paper — WCAG AA for small text */
   --rp-line: #d6dfdc;
   --rp-teal: #126f63;
   --rp-teal-soft: #dcedea;
@@ -159,8 +159,9 @@ button, select { min-height: 40px; }
 
 .workspace-cycle-summary {
   min-width: 0;
+  justify-self: start;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto auto;
   align-items: baseline;
   column-gap: 8px;
   padding: 4px 10px;
@@ -404,14 +405,17 @@ button, select { min-height: 40px; }
 .quality-strip {
   display: flex;
   align-self: stretch;
+  align-items: center;
+  gap: 14px;
+  padding-inline: 12px;
   border-left: 1px solid var(--rp-line);
 }
 .quality-strip > span {
-  min-width: 78px;
+  min-width: 0;
   display: grid;
   align-content: center;
-  padding: 0 10px;
-  border-right: 1px solid var(--rp-line);
+  padding: 0;
+  border-right: 0;
 }
 .quality-strip small { color: var(--rp-muted); font-size: 11px; }
 .quality-strip strong { margin-top: 2px; font-size: 13px; font-variant-numeric: tabular-nums; }
@@ -1267,7 +1271,8 @@ button, select { min-height: 40px; }
   .map-tools button { min-height: 32px; padding-inline: 9px; }
   .map-tools label { gap: 4px; padding-left: 4px; font-size: 11px; }
   .map-tools input { width: 76px; }
-  .quality-strip > span { min-width: 70px; padding-inline: 8px; }
+  .quality-strip { gap: 10px; padding-inline: 8px; }
+  .quality-strip > span { min-width: 0; }
   .quality-strip small { font-size: 11px; }
   .quality-strip strong { margin-top: 0; font-size: 12px; }
   .workspace-topbar,
@@ -1629,3 +1634,124 @@ button, select { min-height: 40px; }
 .history-qc-table th, .history-qc-table td { text-align: left; padding: 10px; border-bottom: 1px solid var(--rp-line); }
 .history-qc-table th { position: sticky; top: 0; background: var(--rp-paper, white); }
 .history-qc-table td:last-child { font-family: monospace; overflow-wrap: anywhere; }
+
+
+/* ---------------------------------------------------------------------------
+   界面审核修订（可分享视图态 / 同格点对比 / 播放速度 / 质控提示 / 暗色模式）
+   --------------------------------------------------------------------------- */
+
+/* 同格点对比：固定右下卡片，逐面板列出同一格点的真实数值 */
+.workspace-exact-probe {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  width: min(320px, calc(100vw - 32px));
+  max-height: min(46vh, 380px);
+  overflow: auto;
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--rp-paper);
+  border: 1px solid var(--rp-line);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(16, 42, 37, .18);
+}
+.workspace-exact-probe header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.workspace-exact-probe header small { color: var(--rp-muted); font-variant-numeric: tabular-nums; }
+.workspace-probe-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.workspace-probe-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "panel value" "time time";
+  column-gap: 10px;
+  row-gap: 1px;
+  padding: 6px 8px;
+  background: var(--rp-canvas);
+  border: 1px solid var(--rp-line);
+  border-radius: 8px;
+}
+.workspace-probe-panel { grid-area: panel; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.workspace-probe-list strong { grid-area: value; font-size: 13px; font-variant-numeric: tabular-nums; }
+.workspace-probe-list small { grid-area: time; color: var(--rp-muted); font-size: 11px; }
+.workspace-exact-probe footer { color: var(--rp-muted); font-size: 11px; line-height: 1.5; }
+
+/* 播放速度选择 */
+.workspace-play-speed { display: inline-flex; align-items: center; }
+.workspace-play-speed select {
+  font: inherit;
+  font-size: 12px;
+  color: var(--rp-ink);
+  background: var(--rp-paper);
+  border: 1px solid var(--rp-line);
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+
+/* 质控排查的 T0-only 说明 */
+.qc-cadence-note {
+  margin: 0;
+  padding: 6px 12px;
+  color: var(--rp-muted);
+  font-size: 12px;
+  background: var(--rp-teal-soft);
+  border-radius: 8px;
+}
+
+/* 检验：口径说明默认折叠，避免长段小字挤压数值区 */
+.verification-notes { margin-top: 4px; }
+.verification-notes summary {
+  cursor: pointer;
+  color: var(--rp-muted);
+  font-size: 12px;
+}
+.verification-notes summary:hover { color: var(--rp-ink); }
+.verification-notes small { display: block; margin-top: 4px; line-height: 1.6; }
+.verification-history-hint button {
+  margin-left: 8px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--rp-teal);
+  background: transparent;
+  border: 1px solid var(--rp-teal);
+  border-radius: 6px;
+  padding: 2px 10px;
+  cursor: pointer;
+}
+.verification-history-hint button:hover { background: var(--rp-teal-soft); }
+
+/* 管理入口悬停反馈 */
+.admin-link:hover { text-decoration: underline; }
+
+/* 移动端可点目标不小于 44px */
+@media (max-width: 760px) {
+  .workspace-timeline-playback button {
+    min-height: 44px;
+    min-width: 32px;
+  }
+  .workspace-exact-probe { right: 8px; bottom: 8px; }
+}
+
+/* 暗色模式：跟随系统偏好，令牌整体反转 */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --rp-canvas: #101715;
+    --rp-paper: #1a2421;
+    --rp-ink: #dce7e3;
+    --rp-muted: #8fa39c;
+    --rp-line: #2c3b36;
+    --rp-teal: #4cc2b1;
+    --rp-teal-soft: #17322d;
+    --rp-risk: #e08a63;
+    --rp-risk-soft: #3a241b;
+  }
+  .workspace-map-panel,
+  .shared-timeline,
+  .workspace-exact-probe { box-shadow: 0 12px 32px rgba(0, 0, 0, .45); }
+}

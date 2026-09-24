@@ -45,8 +45,11 @@ export function SpatialVerification({ cycleID, algorithm, lead, sourceKey, thres
         <span>邻域 CSI <strong>{score(row?.neighborhood_csi)}</strong></span>
         <span>MAE <strong>{score(metrics?.mae)} mm/h</strong></span><span>RMSE <strong>{score(metrics?.rmse)} mm/h</strong></span>
       </div>
-      <small>邻域共同完整支持 {row?.neighborhood_cells.toLocaleString() ?? 0} 格；实际宽度 {row?.actual_km.map(v=>v.toFixed(1)).join(' × ')} km。
-        邻域 CSI 按窗口内有无事件计算；无事件或有效支持不足时不评分。不同算法覆盖可能不同，不宜直接排名。</small>
+      <details className="verification-notes">
+        <summary>口径说明</summary>
+        <small>邻域共同完整支持 {row?.neighborhood_cells.toLocaleString() ?? 0} 格；实际宽度 {row?.actual_km.map(v=>v.toFixed(1)).join(' × ')} km。
+          邻域 CSI 按窗口内有无事件计算；无事件或有效支持不足时不评分。不同算法覆盖可能不同，不宜直接排名。</small>
+      </details>
     </>}
   </div>
 }

@@ -368,6 +368,11 @@ interface RasterGISMapProps {
   className?: string
   sharedView?: View
   comparisonMode?: boolean
+  // Per-map zoom/reset controls: 'hidden' removes them (comparison grids keep
+  // this default), 'corner' pins the classic top-right stack, 'edge' floats the
+  // controls mid-right where they stay clear of caption, legend, attribution
+  // and comparison rails.
+  zoomControls?: 'hidden' | 'corner' | 'edge'
   basemapVisible?: boolean
   rasterStyle?: GISRasterStyle
   showRasterValues?: boolean
@@ -425,6 +430,7 @@ export function RasterGISMap({
   className = '',
   sharedView,
   comparisonMode = false,
+  zoomControls,
   basemapVisible: controlledBasemapVisible,
   rasterStyle: controlledRasterStyle,
   showRasterValues: controlledShowRasterValues,
@@ -464,6 +470,9 @@ export function RasterGISMap({
   const showRasterValuesRef = useRef(false)
   const refreshRasterValuesRef = useRef<(() => void) | null>(null)
   const [localBasemapVisible, setLocalBasemapVisible] = useState(true)
+  const [basemapFailed, setBasemapFailed] = useState(false)
+  const userMovedRef = useRef(false)
+  const refitRef = useRef<(() => void) | null>(null)
   const [coastlineVisible, setCoastlineVisible] = useState(true)
   const [localRasterStyle, setLocalRasterStyle] = useState<GISRasterStyle>('smooth')
   const [localShowRasterValues, setLocalShowRasterValues] = useState(false)
@@ -471,6 +480,7 @@ export function RasterGISMap({
   const [hoverCoordinate, setHoverCoordinate] = useState<MapCoordinate | null>(null)
   const [hoverRasterValue, setHoverRasterValue] = useState<RasterValue | null>(null)
   const basemapVisible = controlledBasemapVisible ?? localBasemapVisible
+  const zoomMode = zoomControls ?? (comparisonMode ? 'hidden' : 'corner')
   const rasterStyle = controlledRasterStyle
     ?? (controlledSmoothRaster == null
       ? localRasterStyle
@@ -624,7 +634,40 @@ export function RasterGISMap({
       ]),
     })
 
-    view.fit(domainExtent, { padding: [54, 54, 54, 54], duration: 0 })
+    // Fit once, then re-fit on resize only until the operator takes over the
+    // view themselves. The container can mount at zero size (panel tabs, mobile
+    // layout), so the padding adapts instead of clipping the domain.
+    const fitDomain = () => {
+      // Tests stub the OL map with a minimal fake; only trust the reported
+      // size when the API really exists and returns a laid-out viewport.
+      const size = typeof map.getSize === 'function' ? map.getSize() : undefined
+      const pad = size && size[0] > 0 && size[1] > 0
+        ? Math.min(54, Math.max(12, Math.floor(Math.min(size[0], size[1]) * 0.08)))
+        : 54
+      view.fit(domainExtent, { padding: [pad, pad, pad, pad], duration: 0 })
+    }
+    fitDomain()
+    refitRef.current = fitDomain
+    const markUserMoved = () => { userMovedRef.current = true }
+    const viewportEl = map.getViewport()
+    viewportEl.addEventListener('wheel', markUserMoved, { passive: true })
+    viewportEl.addEventListener('pointerdown', markUserMoved, { passive: true })
+
+    // The basemap used to fail silently: no tiles, no message. Count tile
+    // outcomes and surface a notice once failures clearly dominate.
+    const basemapSource = basemapLayer.getSource()
+    let tilesLoaded = 0
+    let tilesFailed = 0
+    const onTileEnd = () => {
+      tilesLoaded += 1
+    }
+    const onTileError = () => {
+      tilesFailed += 1
+      if (tilesFailed >= 4 && tilesLoaded === 0) setBasemapFailed(true)
+    }
+    basemapSource?.on('tileloadend', onTileEnd)
+    basemapSource?.on('tileloaderror', onTileError)
+
     const refreshRasterValues = () => updateRasterValueLayer(
       map,
       rasterValueLayer.getSource() ?? new VectorSource(),
@@ -703,6 +746,12 @@ export function RasterGISMap({
     return () => {
       unByKey([clickKey, pointerKey, moveKey])
       viewport.removeEventListener('pointerleave', clearHover)
+      viewportEl.removeEventListener('wheel', markUserMoved)
+      viewportEl.removeEventListener('pointerdown', markUserMoved)
+      basemapSource?.un('tileloadend', onTileEnd)
+      basemapSource?.un('tileloaderror', onTileError)
+      refitRef.current = null
+      userMovedRef.current = false
       map.setTarget(undefined)
       mapRef.current = null
       basemapLayerRef.current = null
@@ -723,7 +772,12 @@ export function RasterGISMap({
     const target = targetRef.current
     const map = mapRef.current
     if (!target || !map || typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(() => map.updateSize())
+    const observer = new ResizeObserver(() => {
+      map.updateSize()
+      // A late layout pass must not leave the domain fitted to a stale size;
+      // re-fit unless the operator already drove the view themselves.
+      if (!userMovedRef.current) refitRef.current?.()
+    })
     observer.observe(target)
     return () => observer.disconnect()
   }, [fitExtentKey, radarContextKey, referenceContext, sharedView])
@@ -855,6 +909,8 @@ export function RasterGISMap({
   }
 
   const resetView = () => {
+    // Explicit reset is an operator command: allow the auto re-fit to resume.
+    userMovedRef.current = false
     mapRef.current?.getView().fit(fitExtent, { padding: [54, 54, 54, 54], duration: 220 })
   }
 
@@ -911,7 +967,7 @@ export function RasterGISMap({
         <button type="button" aria-pressed={showRasterValues} onClick={() => setLocalShowRasterValues((value) => !value)}>点值</button>
         <label>
           <span>图层 {Math.round(rasterOpacity * 100)}%</span>
-          <input aria-label="栅格图层透明度" type="range" min="0.35" max="0.95" step="0.05" value={rasterOpacity} onChange={(event) => setLocalRasterOpacity(Number(event.target.value))} />
+          <input aria-label="栅格图层透明度" type="range" min="0.2" max="0.95" step="0.05" value={rasterOpacity} onChange={(event) => setLocalRasterOpacity(Number(event.target.value))} />
         </label>
       </div> : null}
 
@@ -921,11 +977,13 @@ export function RasterGISMap({
         <strong>{validTimeLabel}</strong>
       </div> : null}
 
-      {!comparisonMode ? <div className="gis-map-controls" aria-label="地图导航">
+      {zoomMode !== 'hidden' ? <div className={`gis-map-controls${zoomMode === 'edge' ? ' gis-map-controls-edge' : ''}`} aria-label="地图导航">
         <button type="button" aria-label="地图放大" onClick={() => zoomBy(1)}>+</button>
         <button type="button" aria-label="地图缩小" onClick={() => zoomBy(-1)}>−</button>
         <button type="button" aria-label={resetViewLabel} onClick={resetView}>⌖</button>
       </div> : null}
+
+      {basemapFailed ? <div className="gis-basemap-notice" role="status">底图服务暂不可用，当前仅显示海岸线与数据图层</div> : null}
 
       {!comparisonMode ? <div className="gis-coordinate-readout" aria-live="polite">
         <span>{hoverCoordinate ? '指针坐标' : point ? '当前选点' : '图层中心'}</span>

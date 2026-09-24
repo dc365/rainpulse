@@ -19,3 +19,34 @@
 .qc-review [role=alert] { color: #9e361d; }
 .qc-review :focus-visible { outline: 2px solid #136957; outline-offset: 2px; }
 @media (max-width: 760px) { .qc-review { padding: 10px; } .qc-review header { align-items: start; } .qc-review h1 { font-size: 18px; flex-basis: 100%; } .qc-review section { padding: 10px; } }
+
+
+/* ---------------------------------------------------------------------------
+   界面审核修订（返回链接按钮化 / 原生文件按钮本地化）
+   --------------------------------------------------------------------------- */
+.qc-review header > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 4px 12px;
+  border: 1px solid var(--line, #d6dfdc);
+  border-radius: 8px;
+  background: var(--paper, #fbfdfc);
+  color: var(--teal, #126f63);
+  text-decoration: none;
+  font-size: 13px;
+}
+.qc-review header > a:hover { background: var(--teal-soft, #dcedea); }
+
+.qc-review input[type="file"]::file-selector-button {
+  font: inherit;
+  min-height: 36px;
+  padding: 4px 12px;
+  margin-right: 10px;
+  border: 1px solid var(--line, #d6dfdc);
+  border-radius: 8px;
+  background: var(--paper, #fbfdfc);
+  color: var(--ink, #18342f);
+  cursor: pointer;
+}
+.qc-review input[type="file"]::file-selector-button:hover { background: var(--teal-soft, #dcedea); }

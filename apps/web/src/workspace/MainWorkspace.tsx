@@ -11,7 +11,7 @@ import {
   type GISRasterStyle,
 } from '../RasterGISMap'
 import { radarDisplayExtent, radarSiteFor } from '../radarSites'
-import { focusedPanelFromSearch, workspaceLayoutSearch } from './layoutState'
+import { workspaceLayoutSearch, workspaceViewFromSearch } from './layoutState'
 import { HistoryPicker } from './HistoryPicker'
 import { useWorkspaceData } from './useWorkspaceData'
 import { cycleAgeSeconds, isLiveCycle } from './workspaceState'
@@ -69,12 +69,15 @@ export function visibleWorkspaceWarnings(warnings: string[] = []) {
 export function MainWorkspace() {
   const { state, now, connection, refresh, requestCycle, setTime: setSelectedTime, follow, pin } = useWorkspaceData()
   const { cycles, detail, selectedTime: snapshotTime, loading } = state
+  const [initialView] = useState(() => workspaceViewFromSearch(typeof window === 'undefined' ? '' : window.location.search))
+  const pendingLinkedCycleRef = useRef(Boolean(initialView.cycleID))
+  const linkedCycleRequestedRef = useRef(false)
   const selectedCycleID = detail?.cycle_id ?? ''
   const followLatest = state.mode === 'follow'
   const error = [state.catalogError, state.detailError ? `更新失败${detail ? `，保留 ${formatLocalCycleTime(detail.issue_time)} 起报结果` : ''}：${state.detailError}` : null,
     state.stale ? '数据服务降级，当前显示缓存结果' : null, ...visibleWorkspaceWarnings(detail?.warnings)].filter(Boolean).join('；') || null
   const [probe, setProbe] = useState<MapProbeDetail | null>(null)
-  const [preset, setPreset] = useState<WorkspacePreset>('forecast')
+  const [preset, setPreset] = useState<WorkspacePreset>(initialView.preset ?? 'forecast')
   const [storedRadarID, setSelectedRadarID] = useState<string | null>(null)
   const selectedRadarID = detail && storedRadarID && radarIDs(detail).includes(storedRadarID) ? storedRadarID : detail ? radarIDs(detail)[0] ?? null : null
   const [storedSweep, setStoredSweep] = useState<number | null>(null)
@@ -87,11 +90,10 @@ export function MainWorkspace() {
   const [verificationPoint, setVerificationPoint] = useState<MapCoordinate | null>(null)
   const [qcEvidence, setQCEvidence] = useState<QCEvidenceLayer>('mosaic')
   const [mobilePanelID, setMobilePanelID] = useState<string>('qpe')
-  const [focusedPanelID, setFocusedPanelID] = useState<string | null>(() => (
-    focusedPanelFromSearch(typeof window === 'undefined' ? '' : window.location.search)
-  ))
+  const [focusedPanelID, setFocusedPanelID] = useState<string | null>(() => initialView.panelID)
   const [focusMenuOpen, setFocusMenuOpen] = useState(false)
   const [playing, setPlaying] = useState(false)
+  const [playSpeedMS, setPlaySpeedMS] = useState(1200)
   const [productMode, setProductMode] = useState<ProductMode>('rain_rate')
   const [interval, setInterval] = useState<Interval>({ start: 0, end: 60 })
   const activeProductMode = preset === 'forecast' ? productMode : 'rain_rate'
@@ -103,9 +105,25 @@ export function MainWorkspace() {
   const [layerErrors, setLayerErrors] = useState<Record<string, boolean>>({})
   const layoutPickerRef = useRef<HTMLDivElement>(null)
 
+  useEffect(() => {
+    const linked = initialView
+    if (!linked?.cycleID || !cycles.length || linkedCycleRequestedRef.current) return
+    const cycle = cycles.find(item => item.cycle_id === linked.cycleID)
+    linkedCycleRequestedRef.current = true
+    if (cycle) requestCycle(cycle, linked.time ?? undefined)
+    else pendingLinkedCycleRef.current = false
+  }, [cycles, requestCycle, initialView])
+
+  useEffect(() => {
+    const linked = initialView
+    if (pendingLinkedCycleRef.current && linked?.cycleID && detail?.cycle_id === linked.cycleID) {
+      pendingLinkedCycleRef.current = false
+    }
+  }, [detail, initialView])
+
   const updateLayerError = useCallback((panelID: string, failed: boolean) => {
     setLayerErrors((current) => updateLayerErrorState(current, panelID, failed))
-  }, [])
+  }, [setLayerErrors])
 
   const qcEvidenceChoices = useMemo(
     () => detail && preset === 'qc' ? availableQCEvidenceLayers(detail, selectedRadarID ?? '') : [],
@@ -142,12 +160,18 @@ export function MainWorkspace() {
     : null
 
   useEffect(() => {
+    if (pendingLinkedCycleRef.current) return
     if (!detail && focusedPanelID) return
-    const query = workspaceLayoutSearch(window.location.search, focusedPanel?.panel_id ?? null)
+    const query = workspaceLayoutSearch(window.location.search, {
+      panelID: focusedPanel?.panel_id ?? null,
+      preset,
+      cycleID: detail?.cycle_id ?? null,
+      time: selectedTime && detail ? selectedTime : null,
+    })
     const next = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`
     const current = `${window.location.pathname}${window.location.search}${window.location.hash}`
     if (next !== current) window.history.replaceState(window.history.state, '', next)
-  }, [detail, focusedPanel, focusedPanelID])
+  }, [detail, focusedPanel, focusedPanelID, preset, selectedTime])
 
   useEffect(() => {
     if (!focusMenuOpen) return
@@ -195,7 +219,7 @@ export function MainWorkspace() {
     if (stopPlayback) setPlaying(false)
     setSelectedTime(nextValue)
     setLayerErrors({})
-  }, [cycles, detail, preset, selectedCycleID, requestCycle, setSelectedTime, activeProductMode])
+  }, [cycles, detail, preset, selectedCycleID, requestCycle, setSelectedTime, activeProductMode, setLayerErrors, setPlaying])
 
   useEffect(() => {
     if (!playing || loading || !detail || timelineValues.length < 2) return
@@ -242,6 +266,27 @@ export function MainWorkspace() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boundsKey])
 
+  // One hover position, every panel: the inspector answers "QPE vs LK vs
+  // STEPS vs NowcastNet at this cell" instead of only the hovered map's asset.
+  const probePoint = showRasterValues && probe && detail ? probe : null
+  const probeEntries = useMemo(() => {
+    if (!probePoint || !detail) return []
+    return panels.flatMap((panel) => {
+      const { frame } = displayFrameAt(detail, panel, selectedTime)
+      if (!frame?.image_url) return []
+      return [{
+        key: [panel.panel_id, frame.asset_id ?? frame.image_url, probePoint.longitude, probePoint.latitude].join(':'),
+        assetUrl: frame.image_url,
+        panelID: panel.panel_id,
+        panelLabel: panelDisplayName(panel),
+        validTime: frame.valid_time,
+        frameKind: frame.frame_kind ?? 'native',
+        longitude: probePoint.longitude,
+        latitude: probePoint.latitude,
+      }]
+    })
+  }, [probePoint, detail, panels, selectedTime])
+
   const selectTime = useCallback((value: string) => {
     applyTimeSelection(value, true)
   }, [applyTimeSelection])
@@ -250,12 +295,12 @@ export function MainWorkspace() {
     setFocusedPanelID(panelID)
     setMobilePanelID(panelID)
     setFocusMenuOpen(false)
-  }, [])
+  }, [setFocusedPanelID, setMobilePanelID, setFocusMenuOpen])
 
   const showComparison = useCallback(() => {
     setFocusedPanelID(null)
     setFocusMenuOpen(false)
-  }, [])
+  }, [setFocusedPanelID, setFocusMenuOpen])
 
   return (
     <main className="workspace-shell">
@@ -427,14 +472,16 @@ export function MainWorkspace() {
             title="读取数值产品中的真实格点，不从图片颜色反推雨量"
             onClick={() => setShowRasterValues((value) => !value)}
           >点值</button>
-          <label><span>雨层 {Math.round(rasterOpacity * 100)}%</span><input aria-label="雨层透明度" type="range" min="0.55" max="1" step="0.05" value={rasterOpacity} onChange={(event) => setRasterOpacity(Number(event.target.value))} /></label>
+          <label><span>雨层 {Math.round(rasterOpacity * 100)}%</span><input aria-label="雨层透明度" type="range" min="0.2" max="1" step="0.05" value={rasterOpacity} onChange={(event) => setRasterOpacity(Number(event.target.value))} /></label>
         </div>
         {detail ? <QualityStrip detail={detail} /> : null}
       </section>
 
       {preset === 'verification' && detail && <VerificationInspector detail={detail} algorithm={verificationAlgorithm}
         threshold={verificationThreshold} onThresholdChange={setVerificationThreshold} windowKM={verificationWindow} onWindowChange={setVerificationWindow}
-        validTime={selectedTime} point={verificationPoint} onClear={() => setVerificationPoint(null)} />}
+        validTime={selectedTime} point={verificationPoint} onClear={() => setVerificationPoint(null)}
+        onPickHistory={() => { setPlaying(false); pin() }} />}
+      {preset === 'qc' && detail && timelineValues.length <= 1 ? <p className="qc-cadence-note" role="note">质控排查仅展示起报时刻 T0 的径向证据；时间轴与播放不可用属正常。</p> : null}
       <section className="mobile-panel-tabs" role="tablist" aria-label="移动端地图面板">
         {panels.map((panel) => (
           <button
@@ -505,6 +552,8 @@ export function MainWorkspace() {
           panels={preset === 'qc' ? panels : panelsForPreset(detail, preset, selectedRadarID, verificationAlgorithm, activeQCEvidence)}
           selectedTime={selectedTime}
           playing={playing}
+          playSpeedMS={playSpeedMS}
+          onPlaySpeedChange={setPlaySpeedMS}
           onTogglePlaying={() => { setProductMode('rain_rate'); setPlaying((value) => !value) }}
           onSelect={value => {
             setProductMode('rain_rate'); setPlaying(false); setProbe(null); setLayerErrors({})
@@ -513,8 +562,7 @@ export function MainWorkspace() {
           }}
         />
       ) : null}
-      <WorkspaceCrosshairInspector probe={showRasterValues && probe && detail && panels.some(panel =>
-        displayFrameAt(detail, panel, selectedTime).frame?.image_url === probe.assetUrl) ? probe : null} />
+      <WorkspaceCrosshairInspector probes={probeEntries} coordinate={probePoint ? { longitude: probePoint.longitude, latitude: probePoint.latitude } : null} />
     </main>
   )
 }
@@ -679,6 +727,7 @@ function MapPanel({
         point={point}
         sharedView={sharedView}
         comparisonMode
+        zoomControls={focused ? 'edge' : 'hidden'}
         basemapVisible={basemapVisible}
         rasterStyle={rasterStyle}
         showRasterValues={showRasterValues}
@@ -722,6 +771,8 @@ export function SharedTimeline({
   panels,
   selectedTime,
   playing,
+  playSpeedMS = 1200,
+  onPlaySpeedChange,
   onTogglePlaying,
   onSelect,
 }: {
@@ -737,6 +788,8 @@ export function SharedTimeline({
   panels: WorkspacePanel[]
   selectedTime: string | null
   playing: boolean
+  playSpeedMS?: number
+  onPlaySpeedChange?: (value: number) => void
   onTogglePlaying: () => void
   onSelect: (value: string) => void
 }) {
@@ -838,6 +891,18 @@ export function SharedTimeline({
             <span aria-hidden="true">{playing ? 'Ⅱ' : '▶'}</span>
             {playing ? '暂停' : '播放'}
           </button>
+          {onPlaySpeedChange ? <label className="workspace-play-speed">
+            <span className="sr-only">播放速度</span>
+            <select
+              aria-label="播放速度"
+              value={playSpeedMS}
+              onChange={(event) => onPlaySpeedChange(Number(event.target.value))}
+            >
+              <option value={2400}>慢速 · 2.4 秒/帧</option>
+              <option value={1200}>标准 · 1.2 秒/帧</option>
+              <option value={600}>快速 · 0.6 秒/帧</option>
+            </select>
+          </label> : null}
           <button
             type="button"
             onClick={() => move(1)}

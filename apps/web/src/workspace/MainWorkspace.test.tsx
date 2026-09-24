@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { focusedPanelFromSearch, workspaceLayoutSearch } from './layoutState'
+import { focusedPanelFromSearch, workspaceLayoutSearch, workspaceViewFromSearch } from './layoutState'
 import { SharedTimeline, updateLayerErrorState, visibleWorkspaceWarnings } from './MainWorkspace'
 import type { WorkspacePanel } from './model'
 
@@ -104,7 +104,10 @@ describe('workspace focus URL state', () => {
   })
 
   it('preserves unrelated URL filters when focus is entered or cleared', () => {
-    expect(workspaceLayoutSearch('?cycle=rain-1', 'steps')).toBe('cycle=rain-1&layout=single&panel=steps')
-    expect(workspaceLayoutSearch('?cycle=rain-1&layout=single&panel=steps', null)).toBe('cycle=rain-1')
+    expect(workspaceLayoutSearch('?cycle=rain-1', { panelID: 'steps', preset: null, cycleID: null, time: null })).toBe('cycle=rain-1&layout=single&panel=steps')
+    expect(workspaceLayoutSearch('?cycle=rain-1&layout=single&panel=steps', { panelID: null, preset: null, cycleID: null, time: null })).toBe('cycle=rain-1')
+    expect(workspaceLayoutSearch('', { panelID: null, preset: 'qc', cycleID: 'rain-1', time: '2026-09-24T00:18:00Z' })).toBe('preset=qc&cycle=rain-1&time=2026-09-24T00%3A18%3A00Z')
+    expect(workspaceViewFromSearch('?preset=verification&panel=lk&layout=single').preset).toBe('verification')
+    expect(workspaceViewFromSearch('?preset=bogus').preset).toBeNull()
   })
 })
