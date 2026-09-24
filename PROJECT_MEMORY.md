@@ -9,16 +9,16 @@ operational data here.
 
 ## S/X multiband candidate (2026-09-24)
 
-- Historical S/X candidate work is on `integrate/sx-20260828` starting at
-  `5689346`; `docs/SX_20260828_INTEGRATION_PLAN.md` records current scope.
-  On 105, the unified Go process reports `5689346`; the decoder Worker uses
+- Historical S/X candidate code is on `main` through `dd691f3`;
+  `docs/SX_20260828_INTEGRATION_PLAN.md` records current scope.
+  On 105, the unified Go process reports `dd691f3`; the decoder Worker uses
   `rainpulse-cpu-worker:sx-candidate-20260924` and is healthy. Two ZF101 and
   two ZF505 representative X volumes are `NORMALIZED`; the matching S volumes
   already existed in the earlier QC chain. X configs remain draft, and no X
   spatial network, trusted QPE or multiband Worker has been enabled.
 - Source commit `5ecb44a` is on `main`; `docs/MULTIBAND_V1_20260924.md` records
   the candidate-only scope and acceptance boundary.
-- On 105, the unified Go binary and Web assets from `5ecb44a` are live; the
+- On 105, Web assets from `5ecb44a` and unified Go from `dd691f3` are live; the
   API reports ready. Operations schema is v4 with the `multiband` pool DRAINING.
   Candidate image `rainpulse-cpu-worker:multiband-5ecb44a` was built and its
   module imports checked, but no X network config or multiband Worker is active.
