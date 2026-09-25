@@ -1,6 +1,6 @@
 # RainPulse Project Memory
 
-Updated: 2026-09-25 (Asia/Taipei)
+Updated: 2026-09-26 (Asia/Taipei)
 
 This file is the concise handoff for a new Codex session. Stable engineering
 rules remain in `AGENTS.md`; implementation details remain in the referenced RP
@@ -8,6 +8,21 @@ documents. Do not add passwords, tokens, private data-source details, or raw
 operational data here.
 
 ## S/X multiband candidate (2026-09-24)
+
+- Unified S/X QC workspace design and phase-A Web implementation are on local
+  `main` through `a44e105`. The QC route now uses one shell, one time axis,
+  native S/X station and sweep selection, paired raw/QC views, and candidate
+  gating for overlay/fusion. See `docs/UNIFIED_RADAR_QC_WORKSPACE_IMPLEMENTATION_20260926.md`.
+  Web lint (0 errors, 6 existing warnings), 140 tests, and build passed.
+- On 105 (`192.168.28.105`), the Web dist built from `a44e105` was deployed
+  in place; `index.html` SHA-256 is
+  `e65ff3f083c313ef73636dcf5597f6658ae974a5ec9df4b72b015c2eaff3aaa1`.
+  The prior dist is at `apps/web/.dist-rollback-before-a44e105`. Browser
+  verified the 2026-08-28 ZF101 X pair, S Z9591 at 08:06 BJT, band switching,
+  and one-map overlay gate; service remained active. No Go or Worker restart.
+- X geographic metadata/assets remain unverified; real X map overlay and
+  S/X fusion are gated. The current S timeline indicates analysis cycles, not
+  per-station raw/QC availability; a Go summary contract is needed for that lane.
 
 - 2026-09-25 UI integration candidate adds standalone productless X QC
   previews and S-only, X-only, S/X, and jointly-valid X−S outputs for one
