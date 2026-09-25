@@ -271,32 +271,44 @@ function updateRasterValueLayer(
 }
 
 async function readRasterPixels(imageUrl: string, signal: AbortSignal): Promise<RasterPixels> {
-  const response = await fetch(imageUrl, { signal })
-  if (!response.ok) throw new Error(`raster pixel request failed: ${response.status}`)
-  const blob = await response.blob()
   let source: CanvasImageSource
   let width: number
   let height: number
   let release: (() => void) | undefined
 
-  if (typeof createImageBitmap === 'function') {
-    const bitmap = await createImageBitmap(blob)
-    source = bitmap
-    width = bitmap.width
-    height = bitmap.height
-    release = () => bitmap.close()
-  } else {
-    const objectUrl = URL.createObjectURL(blob)
+  if (imageUrl.startsWith('blob:')) {
+    // Paired QC images are already decoded object URLs. Load through img-src;
+    // fetching a blob URL would require broadening the server's connect-src CSP.
     const image = new Image()
-    image.src = objectUrl
+    image.src = imageUrl
     await image.decode()
     source = image
     width = image.naturalWidth
     height = image.naturalHeight
-    release = () => URL.revokeObjectURL(objectUrl)
+  } else {
+    const response = await fetch(imageUrl, { signal })
+    if (!response.ok) throw new Error(`raster pixel request failed: ${response.status}`)
+    const blob = await response.blob()
+    if (typeof createImageBitmap === 'function') {
+      const bitmap = await createImageBitmap(blob)
+      source = bitmap
+      width = bitmap.width
+      height = bitmap.height
+      release = () => bitmap.close()
+    } else {
+      const objectUrl = URL.createObjectURL(blob)
+      const image = new Image()
+      image.src = objectUrl
+      await image.decode()
+      source = image
+      width = image.naturalWidth
+      height = image.naturalHeight
+      release = () => URL.revokeObjectURL(objectUrl)
+    }
   }
 
   try {
+    if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
     const canvas = document.createElement('canvas')
     canvas.width = width
     canvas.height = height

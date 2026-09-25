@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import ImageLayer from 'ol/layer/Image.js'
 import ImageStatic from 'ol/source/ImageStatic.js'
@@ -125,4 +125,23 @@ it('retains frames and delays slow-load feedback without flashing during quick s
   act(() => sourceFor('/D.png').dispatchEvent('imageloaderror'))
   expect(layer.getSource()).toBeNull()
   expect(props.onLayerError).toHaveBeenLastCalledWith(true)
+})
+
+
+it('reads already-decoded QC blob images without a CSP-blocked fetch', async () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
+  const fetcher = vi.fn()
+  vi.stubGlobal('fetch', fetcher)
+  const decode = vi.fn().mockResolvedValue(undefined)
+  Object.defineProperty(HTMLImageElement.prototype, 'decode', { configurable: true, value: decode })
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+    drawImage: vi.fn(), getImageData: () => ({ data: new Uint8ClampedArray() }),
+  } as unknown as CanvasRenderingContext2D)
+  render(<RasterGISMap imageUrl="blob:http://localhost/paired-qc" imageExtent={[118,25,120,27]}
+    imageDescription="X QC" validTimeLabel="T0" contextLabel="X" productLabel="QC"
+    legend={[]} footerNote="" mapLabel="map" resetViewLabel="reset" loading={false}
+    layerError={false} onLayerError={vi.fn()} comparisonMode />)
+  await waitFor(() => expect(decode).toHaveBeenCalled())
+  expect(fetcher).not.toHaveBeenCalled()
+  delete (HTMLImageElement.prototype as Partial<HTMLImageElement>).decode
 })
