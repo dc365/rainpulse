@@ -16,7 +16,7 @@ func TestRadarWorkspaceCatalogIntegration(t *testing.T) {
  CREATE TABLE radar_scans(scan_id uuid,radar_id text,volume_start_time timestamptz,volume_end_time timestamptz);
  CREATE TABLE radar_scan_runs(scan_id uuid,run_id uuid,status text,normalized_uri text,qc_uri text,grid_uri text,radar_config_version text,created_at timestamptz,updated_at timestamptz);
  INSERT INTO radars VALUES('zf101','Test X','v1'),('zf505','X no scans','v1'),('s1','S station','v1');
- INSERT INTO radar_config_versions VALUES('zf101','v1','{"hardware":{"radar_band":"X"}}'),('zf505','v1','{"hardware":{"radar_band":"X"}}'),('s1','v1','{"hardware":{"radar_band":"S"}}');
+ INSERT INTO radar_config_versions VALUES('zf101','v1','{"hardware":{"radar_band":"X"},"site":{"longitude_deg":119.3306,"latitude_deg":26.1758}}'),('zf505','v1','{"hardware":{"radar_band":"X"}}'),('s1','v1','{"hardware":{"radar_band":"S"}}');
  INSERT INTO radar_scans VALUES('12345678-1234-1234-1234-123456789abc','zf101','2026-08-28T00:00:00Z','2026-08-28T00:01:00Z'),('12345678-1234-1234-1234-123456789abd','zf101','2026-08-28T00:06:00Z','2026-08-28T00:07:00Z');
  INSERT INTO radar_scan_runs VALUES('12345678-1234-1234-1234-123456789abc','12345678-1234-1234-1234-123456789abe','NORMALIZED','s3://test/input',NULL,NULL,'v1',now(),now());`)
 	if e != nil {
@@ -59,6 +59,19 @@ func TestRadarWorkspaceCatalogIntegration(t *testing.T) {
 	}
 	if stations["start"] != "2026-08-27T16:00:00Z" {
 		t.Fatalf("wrong local day: %v", stations["start"])
+	}
+	candidate := items[0].(map[string]any)["candidate_site"].(map[string]any)
+	if items[0].(map[string]any)["geometry_status"] != "unverified" || candidate["longitude_deg"] != 119.3306 || candidate["latitude_deg"] != 26.1758 || candidate["coordinate_source"] != "draft_radar_config" || candidate["config_version"] != "v1" {
+		t.Fatalf("draft map context changed qualification: %+v", items[0])
+	}
+	if items[1].(map[string]any)["candidate_site"] != nil {
+		t.Fatalf("missing draft coordinates must not produce a site: %+v", items[1])
+	}
+	if _, e = s.DB.Exec(`UPDATE radar_config_versions SET config=jsonb_set(config,'{site,longitude_deg}','200') WHERE radar_id='zf101'`); e != nil {
+		t.Fatal(e)
+	}
+	if get("radar-stations?band=X")["items"].([]any)[0].(map[string]any)["candidate_site"] != nil {
+		t.Fatal("out-of-range draft coordinates must not be published")
 	}
 	scans := get("radar-scans?radar_id=zf101&start=2026-08-27T16:00:00Z&end=2026-08-28T16:00:00Z")["items"].([]any)
 	if len(scans) != 2 {

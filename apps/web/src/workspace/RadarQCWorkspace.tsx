@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import View from 'ol/View.js'
-import { RasterGISMap, type GISLegendEntry, type GISMapExtent } from '../RasterGISMap'
+import { RasterGISMap, type GISLegendEntry, type GISMapExtent, type GISRadarContext } from '../RasterGISMap'
 import { FUZHOU_GIS_CONTEXT } from '../GISMapContexts'
 import { radarDisplayExtent, radarSiteFor } from '../radarSites'
 import { ReflectivityLegend } from '../ReflectivityLegend'
@@ -13,7 +13,8 @@ import './radar-qc-workspace.css'
 type Band = 'S' | 'X'
 type Mode = 'single' | 'overlay' | 'fusion'
 type Layout = 'pair' | 'swipe' | 'single'
-type Station = { radar_id: string; display_name: string; geometry_status: string; registered: number; qc_ready: number }
+type CandidateSite = { longitude_deg: number; latitude_deg: number; coordinate_source: 'draft_radar_config'; config_version: string }
+type Station = { radar_id: string; display_name: string; geometry_status: string; registered: number; qc_ready: number; candidate_site?: CandidateSite | null }
 type XStations = { items: Station[]; next_cursor: string; start: string; available_range: { end: string | null } }
 type XScan = { scan_id: string; radar_id: string; volume_start: string; volume_end: string; state: string; qc_status: string; results: { result_id: string; version: string; finished_at: string }[] }
 type XScans = { items: XScan[]; next_cursor: string }
@@ -21,6 +22,7 @@ type XSweep = { sweep_number: number; sequence: number; elevation_deg: number; r
 type XResult = { result_id: string; radar_id: string; scan_id: string; legend?: { minimum_dbzh: number; rgb: [number, number, number] }[]; sweeps: XSweep[] }
 const prefix = '/api/v1/workspace/'
 const X_FLAG_LEGEND: GISLegendEntry[] = [{ label: '确认无效／污染', color: '#bf3930' }, { label: '未决，待复核', color: '#eea028' }]
+const X_REFERENCE_RADII_KM = [10, 20, 30, 40, 50] as const
 const localDay = (value: string) => new Date(Date.parse(value) + 8 * 3600_000).toISOString().slice(0, 10)
 const localClock = (value: string) => new Date(Date.parse(value) + 8 * 3600_000).toISOString().slice(11, 19)
 const dayWindow = (day: string) => {
@@ -92,6 +94,29 @@ function SMap({ title, frame, siteID, sharedView, active, note, flagLegend }: { 
       resetViewLabel="复位地图" emptyStateHint="此时刻没有匹配的原始/质控图件" loading={false} layerError={failed} onLayerError={setFailed}
       sharedView={sharedView} comparisonMode basemapVisible referenceContext={FUZHOU_GIS_CONTEXT} radarContext={site}
       rasterOpacity={1} rasterStyle="grid" zoomControls="hidden" />
+  </section>
+}
+function XReferenceMap({ station, sharedView }: { station?: Station; sharedView: View }) {
+  const candidate = station?.candidate_site
+  const coordinateAvailable = candidate && candidate.coordinate_source === 'draft_radar_config'
+    && Number.isFinite(candidate.longitude_deg) && candidate.longitude_deg >= -180 && candidate.longitude_deg <= 180
+    && Number.isFinite(candidate.latitude_deg) && candidate.latitude_deg >= -90 && candidate.latitude_deg <= 90
+  const radar: GISRadarContext | undefined = coordinateAvailable && station ? {
+    radarID: station.radar_id, displayName: station.display_name, radarBand: 'X',
+    longitude: candidate.longitude_deg, latitude: candidate.latitude_deg,
+    maximumRangeKM: 50, displayRangeRadiiKM: X_REFERENCE_RADII_KM,
+    geometryStatus: 'unverified', coordinateSource: candidate.coordinate_source, configVersion: candidate.config_version,
+  } : undefined
+  const extent: GISMapExtent = radar ? radarDisplayExtent(radar, 55) : [117.995, 24.995, 123.005, 27.005]
+  return <section className="radar-qc-map radar-qc-location-map" aria-label="X 波段站点参考地图">
+    <header><strong>站点地图</strong><span>候选位置 · 距离参考</span></header>
+    {radar ? <RasterGISMap imageDescription={`${station?.radar_id.toUpperCase()} 候选位置与距离圈`} imageExtent={extent} fitExtent={extent}
+      validTimeLabel="" contextLabel="X 波段 · 坐标待核验" productLabel="站点位置参考" legend={[]} footerNote="不表示回波覆盖"
+      mapLabel="X 波段候选位置与 10 至 50 公里参考距离圈" resetViewLabel="复位站点地图" loading={false}
+      layerError={false} onLayerError={()=>{}} sharedView={sharedView} comparisonMode referenceOnly basemapVisible
+      referenceContext={FUZHOU_GIS_CONTEXT} radarContext={radar} rasterStyle="grid" zoomControls="hidden"
+      className="workspace-comparison-map radar-qc-reference-only" />
+      : <div className="radar-qc-location-empty" role="status">该站未提供可用的候选经纬度，暂不能标注地图位置与距离圈。</div>}
   </section>
 }
 function NativeImage({ title, src, pan, zoom, onPan }: { title: string; src?: string; pan: {x:number;y:number}; zoom: number; onPan: (value:{x:number;y:number})=>void }) {
@@ -195,7 +220,8 @@ export function RadarQCWorkspace() {
     <section className="radar-qc-controls" aria-label="资料选择"><div className="radar-qc-band" role="group" aria-label="雷达波段"><span>波段</span>{(['S','X'] as const).map(value=><button key={value} aria-pressed={band===value} onClick={()=>changeBand(value)}>{value}</button>)}</div><label>站点<select aria-label="站点" value={band==='S'?selectedSID:selectedX?.radar_id??''} onChange={event=>{if(band==='S'){setSStationID(event.target.value);setSSweep(null)}else{setXStationID(event.target.value);setXScanID('');setXResultID('');setXSweep(null)}setPlaying(false)}}>{band==='S'?sIDs.map(id=><option key={id} value={id}>{id.toUpperCase()} · {radarSiteFor(id)?.displayName??'S 波段'}</option>):xStations?.data?.items.map(s=><option key={s.radar_id} value={s.radar_id}>{s.radar_id.toUpperCase()} · {s.display_name}</option>)}</select></label><label>仰角<select aria-label="仰角" value={band==='S'?selectedSSweep??'':xCut?.sweep_number??''} disabled={band==='S'?!sOptions.length:!xResult} onChange={event=>{if(band==='S')setSSweep(Number(event.target.value));else setXSweep(Number(event.target.value));setPlaying(false)}}>{band==='S'?sOptions.map(s=><option key={s.number} value={s.number}>{s.elevation.toFixed(2)}° · 编号 {s.number}</option>):xResult?.sweeps.map(s=><option key={s.sweep_number} value={s.sweep_number}>{s.elevation_deg.toFixed(2)}° · 编号 {s.sweep_number}</option>)}</select></label><label>字段<select aria-label="字段" value="dbzh" onChange={()=>{}}><option value="dbzh">反射率 · dBZ</option></select></label><div className="radar-qc-more"><button aria-label="刷新资料" onClick={()=>setRevision(n=>n+1)}>刷新</button><details><summary>更多</summary><div><a href="/qc-review">证据复核</a><a href={band==='X'?`/admin?view=new&preset=x_qc&radar=${encodeURIComponent(selectedX?.radar_id??'')}`:'/admin?view=new'}>生成／重算</a></div></details></div></section>
     {(band==='S'?sError:xError)&&<div className="radar-qc-alert" role="alert">{band==='S'?sError:xError} <button onClick={()=>setRevision(n=>n+1)}>重试</button></div>}
     <div className="radar-qc-summary"><strong>{issueText}</strong><span>{band==='X'?'X 基础质控候选 · 站点坐标待核验':'S 已定位图层 · 原始与质控结果'}</span><button onClick={()=>{setFlags(v=>!v);setPlaying(false)}} aria-pressed={flags}>{flags?'返回反射率':'质控标记'}</button></div>
-    <section className="radar-qc-stage" aria-label="质控图层">
+    <section className={`radar-qc-stage${mode==='single'&&band==='X'?' has-x-location':''}`} aria-label="质控图层">
+      {mode==='single'&&band==='X'&&<XReferenceMap station={selectedX} sharedView={sharedView}/>}
       {mode==='fusion'?<div className="radar-qc-gate"><strong>融合候选尚不能在地图验证</strong><p>X 站点的空间定位与融合资格仍待核验。已生成的候选任务可在后台查看；符合同网格、同时间及来源身份的产品进入此处后，将显示 S 贡献、X 贡献和融合结果。</p><a href="/admin?view=new&preset=sx_composite">查看候选任务</a></div>:mode==='overlay'?<div className="radar-qc-overlay"><div className="radar-qc-layer-list"><h2>同图图层</h2><label><input type="checkbox" checked={overlayS} onChange={e=>setOverlayS(e.target.checked)}/>S · {selectedSID.toUpperCase()||'选择站点'} 质控后</label><label><input type="checkbox" checked={overlayX&&xGeometryReady} disabled={!xGeometryReady} onChange={e=>setOverlayX(e.target.checked)}/>X · {selectedX?.radar_id.toUpperCase()??'选择站点'} 质控后</label><p>{overlayX&&!xGeometryReady?'X 原生图已有结果，地理配准待核验，暂不叠到地图。':''}</p></div>{overlayS&&sQC&&selectedSID?<SMap title="S 波段质控后" frame={sQC} siteID={selectedSID} sharedView={sharedView} active note="X 尚未取得地图显示资格"/>:<div className="radar-qc-gate"><strong>该时刻没有可定位的图层</strong><p>选择 S 分析时次或启用 S 图层。</p></div>}</div>:<div className={`radar-qc-pair layout-${layout}`}>
         {band==='S'&&selectedSID?<><SMap title="原始反射率" frame={sRaw} siteID={selectedSID} sharedView={sharedView} active={layout!=='single'}/><SMap title={flags?'质控标记':'质控后反射率'} frame={sQC} siteID={selectedSID} sharedView={sharedView} active note={flags?'标记颜色表示质控动作，不代表反射率强度':undefined} flagLegend={flags ? sFlagLegend : undefined}/></>:band==='X'&&scan?.results.length?<><NativeImage title="原始反射率" src={xPair?.raw} pan={pan} zoom={zoom} onPan={setPan}/><NativeImage title={flags?'质控标记':'质控后反射率'} src={xPair?.qc} pan={pan} zoom={zoom} onPan={setPan}/></>:<div className="radar-qc-gate"><strong>{band==='X'?scan?scan.qc_status:'该时刻无体扫':'该时刻无分析周期'}</strong><p>目标时刻保持不变。可在底部时间轴选择有资料的时次。</p></div>}
       </div>}
