@@ -2,7 +2,7 @@ const prefix = '/api/v1/admin/ops';
 export class AdminError extends Error {
     constructor(public status: number, public code: string, message: string) { super(message); }
 }
-async function response(token: string, path: string, options: RequestInit = {}) { const r = await fetch(prefix + path, { ...options, cache: 'no-store', headers: { 'Authorization': `Bearer ${token}`, ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers } }); if (!r.ok) {
+async function response(token: string, path: string, options: RequestInit = {}) { const headers = new Headers(options.headers); if (token) headers.set('Authorization', `Bearer ${token}`); else headers.delete('Authorization'); if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json'); const r = await fetch(prefix + path, { ...options, cache: 'no-store', headers }); if (!r.ok) {
     const v = await r.json().catch(() => ({}));
     throw new AdminError(r.status, v.code ?? 'request_failed', v.message ?? `请求失败（${r.status}）`);
 } return r; }

@@ -20,25 +20,27 @@ vi.mock('ol/Map.js', async () => {
 })
 afterEach(() => { vi.useRealTimers(); cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
-it('renders reflectivity anchors as one continuous gradient', () => {
+it('uses the fixed 14-stop reflectivity palette even when stored data carries the old 7-stop legend', () => {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
-  const colors = ['#0fa3ea', '#06d215', '#089e0a', '#f0ac14', '#e46c60', '#cb15aa', '#ad96f2']
-  const legend = [10, 20, 30, 40, 50, 60, 70].map((minimum, index) => ({
-    label: String(minimum), minimum, color: colors[index],
-  }))
+  const oldStops: [number, string][] = [
+    [10, '#0fa3ea'], [20, '#06d215'], [30, '#089e0a'], [40, '#f0ac14'],
+    [50, '#e46c60'], [60, '#cb15aa'], [70, '#ad96f2'],
+  ]
+  const legend = oldStops.map(([minimum, color]) => ({ label: `≥ ${minimum} dBZ`, minimum, color }))
   render(<RasterGISMap
     imageDescription="reflectivity" imageExtent={[118, 25, 123, 27]}
     validTimeLabel="T0" contextLabel="test" productLabel="reflectivity"
-    legend={legend} legendUnit="dBZ" footerNote="" mapLabel="reflectivity map"
+    legend={legend} legendUnit="dbz" footerNote="" mapLabel="reflectivity map"
     resetViewLabel="reset" loading={false} layerError={false}
     onLayerError={vi.fn()} comparisonMode
   />)
-  const bar = screen.getByTestId('reflectivity-gradient')
-  expect(bar.style.backgroundImage).toContain('linear-gradient')
-  expect(bar.style.backgroundImage).toContain('0%')
-  expect(bar.style.backgroundImage).toContain('100%')
+  expect(screen.getByText('dBZ')).toBeTruthy()
+  const stops = document.querySelectorAll('.reflectivity-segments span')
+  expect(stops).toHaveLength(14)
+  expect(screen.getByText('5')).toBeTruthy()
   expect(screen.getByText('10')).toBeTruthy()
   expect(screen.getByText('70')).toBeTruthy()
+  expect(stops[0]?.querySelector('i')?.getAttribute('style')).toContain('rgb(65, 155, 241)')
 })
 
 it('shows accumulation progress instead of unavailable, but retains real failure feedback', () => {

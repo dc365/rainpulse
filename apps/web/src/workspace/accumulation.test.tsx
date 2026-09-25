@@ -43,5 +43,5 @@ it('hourly timeline selects two intervals, total timeline has no playback', () =
   rerender(<SharedTimeline {...props} productMode="total_2h" values={accumulationTimes(issue, 'total_2h')} selectedTime={null} />)
   expect(screen.queryByRole('button', { name: '播放' })).toBeNull()
   expect(screen.queryByRole('button', { name: '后一时刻' })).toBeNull()
-  expect(screen.getByText('0–2 小时')).toBeTruthy()
+  expect(screen.getByText(/0–2 小时累计/)).toBeTruthy()
 })
