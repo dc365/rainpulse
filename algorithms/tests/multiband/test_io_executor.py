@@ -18,7 +18,8 @@ from rainpulse_algo.multiband.managed import Executor, VolumeCache, _validated_s
 from rainpulse_algo.multiband.execution import ExecutionOptions
 from rainpulse_algo.multiband.model import MAX_SWEEPS, Network
 from rainpulse_algo.multiband.quality import accept_s_qc, x_qc
-from rainpulse_algo.multiband.fusion import build_composite
+from rainpulse_algo.multiband.fusion import Composite, build_composite
+from rainpulse_algo.multiband.product import sx_comparison_objects
 
 CUTOFF = '2026-09-23T00:11:00Z'
 
@@ -43,6 +44,190 @@ def setup_inputs(tmp_path, *, cache=True):
         sources.append(dict(radar_id=id, scan_id=v.metadata['scan_id'], input_uri=uri, **{k: v.metadata[k] for k in ('volume_start','volume_end','available_at')}))
     request = dict(event_type='ops.multiband.requested.v1', occurred_at=CUTOFF, payload=dict(mode='sx_composite', network_sha256=network.sha256, execution_sha256=ExecutionOptions().digest, product_id='local', analysis_time=TARGET, input_cutoff=CUTOFF, sources=sources))
     return config, request, index, bundles
+
+
+@pytest.mark.parametrize("band", ["S", "X"])
+def test_sx_preview_labels_a_single_band_result_without_claiming_fusion(band):
+    echo_values = np.array([[35]], dtype=np.float32)
+    no_values = np.full((1, 1), np.nan, dtype=np.float32)
+    metadata = {
+        "cadence_seconds": 360,
+        "valid_echo_cells": 1,
+        "valid_no_echo_cells": 0,
+        "uncertain_only_cells": 0,
+        "sources": [],
+        "skipped": [],
+    }
+    result_metadata = {**metadata, "sources": [{"band": band}]}
+    result = Composite(
+        {"CR_DBZH": echo_values, "CR_UNCERTAIN_DBZH": no_values,
+         "WINNER_SOURCE": np.array([[0]], dtype=np.int32)},
+        result_metadata,
+    )
+    band_results = {
+        current: Composite(
+            {"CR_DBZH": echo_values if current == band else no_values},
+            metadata if current == band else {**metadata, "valid_echo_cells": 0},
+        )
+        for current in ("S", "X")
+    }
+    objects = sx_comparison_objects(result, band_results)
+
+    comparison = json.loads(objects["manifest.json"])["comparison"]
+    fused = next(item for item in comparison["products"] if item["product_id"] == "sx_composite")
+    assert fused["label"] == f"仅{band}贡献（未形成 S/X 融合）"
+    assert fused["contributing_bands"] == [band]
+    assert fused["echo_contributing_bands"] == [band]
+    absent = "X" if band == "S" else "S"
+    assert f"{absent} 波段没有合格贡献" in fused["reason"]
+    assert "未形成双波段融合" in fused["reason"]
+
+
+def test_sx_preview_preserves_valid_no_echo_coverage():
+    no_values = np.full((1, 1), np.nan, dtype=np.float32)
+    metadata = {
+        "cadence_seconds": 360,
+        "valid_echo_cells": 0,
+        "valid_no_echo_cells": 1,
+        "uncertain_only_cells": 0,
+        "sources": [],
+        "skipped": [],
+    }
+    s_result = Composite({"CR_DBZH": no_values}, metadata)
+    x_result = Composite({"CR_DBZH": no_values}, metadata)
+    result = Composite(
+        {"CR_DBZH": no_values, "CR_UNCERTAIN_DBZH": no_values}, metadata
+    )
+
+    objects = sx_comparison_objects(result, {"S": s_result, "X": x_result})
+
+    comparison = json.loads(objects["manifest.json"])["comparison"]
+    fused = next(item for item in comparison["products"] if item["product_id"] == "sx_composite")
+    assert fused["status"] == "no_echo"
+    assert fused["label"] == "S/X 融合（仅有效无回波像元）"
+    assert fused["contributing_bands"] == ["S", "X"]
+    assert fused["echo_contributing_bands"] == []
+    assert fused["valid_no_echo_cells"] == 1
+    assert "最终组合含 1 个有效无回波像元" in fused["reason"]
+
+
+def test_sx_preview_labels_the_final_fused_no_echo_state_not_single_band_echo():
+    no_values = np.full((1, 1), np.nan, dtype=np.float32)
+    echo = np.full((1, 1), 25, dtype=np.float32)
+    s_metadata = {
+        "cadence_seconds": 360,
+        "valid_echo_cells": 1,
+        "valid_no_echo_cells": 0,
+        "uncertain_only_cells": 0,
+        "sources": [],
+        "skipped": [],
+    }
+    x_metadata = {**s_metadata, "valid_echo_cells": 0, "valid_no_echo_cells": 1}
+    fused_metadata = {
+        **s_metadata,
+        "valid_echo_cells": 0,
+        "valid_no_echo_cells": 1,
+        "sources": [{"band": "S"}, {"band": "X"}],
+    }
+    result = Composite(
+        {"CR_DBZH": no_values, "CR_UNCERTAIN_DBZH": no_values,
+         "WINNER_SOURCE": np.full((1, 1), -1, dtype=np.int32)},
+        fused_metadata,
+    )
+    objects = sx_comparison_objects(
+        result,
+        {
+            "S": Composite({"CR_DBZH": echo}, s_metadata),
+            "X": Composite({"CR_DBZH": no_values}, x_metadata),
+        },
+    )
+
+    fused = next(
+        item for item in json.loads(objects["manifest.json"])["comparison"]["products"]
+        if item["product_id"] == "sx_composite"
+    )
+    assert fused["status"] == "no_echo"
+    assert fused["label"] == "S/X 融合（仅有效无回波像元）"
+    assert fused["echo_contributing_bands"] == []
+    assert "最终组合含 1 个有效无回波像元" in fused["reason"]
+    assert "单波段候选均有有效无回波覆盖" not in fused["reason"]
+
+
+def test_sx_preview_reports_echo_bands_selected_by_final_composite():
+    echo = np.full((1, 1), 25, dtype=np.float32)
+    no_values = np.full((1, 1), np.nan, dtype=np.float32)
+    metadata = {
+        "cadence_seconds": 360,
+        "valid_echo_cells": 1,
+        "valid_no_echo_cells": 0,
+        "uncertain_only_cells": 0,
+        "sources": [],
+        "skipped": [],
+    }
+    fused_metadata = {
+        **metadata,
+        "sources": [{"band": "S"}, {"band": "X"}],
+    }
+    result = Composite(
+        {"CR_DBZH": echo, "CR_UNCERTAIN_DBZH": no_values,
+         "WINNER_SOURCE": np.array([[1]], dtype=np.int32)},
+        fused_metadata,
+    )
+    objects = sx_comparison_objects(
+        result,
+        {
+            "S": Composite({"CR_DBZH": echo}, metadata),
+            "X": Composite({"CR_DBZH": echo}, metadata),
+        },
+    )
+
+    fused = next(
+        item for item in json.loads(objects["manifest.json"])["comparison"]["products"]
+        if item["product_id"] == "sx_composite"
+    )
+    assert fused["label"] == "S/X 融合（最终回波来自 X）"
+    assert fused["echo_contributing_bands"] == ["X"]
+
+
+def test_sx_preview_mixed_echo_and_no_echo_does_not_claim_echo_is_absent():
+    values = np.array([[25, np.nan]], dtype=np.float32)
+    metadata = {
+        "cadence_seconds": 360,
+        "valid_echo_cells": 1,
+        "valid_no_echo_cells": 1,
+        "uncertain_only_cells": 0,
+        "sources": [],
+        "skipped": [],
+    }
+    fused_metadata = {
+        **metadata,
+        "sources": [{"band": "S"}, {"band": "X"}],
+    }
+    result = Composite(
+        {
+            "CR_DBZH": values,
+            "CR_UNCERTAIN_DBZH": np.full_like(values, np.nan),
+            "WINNER_SOURCE": np.array([[1, -1]], dtype=np.int32),
+        },
+        fused_metadata,
+    )
+    objects = sx_comparison_objects(
+        result,
+        {
+            "S": Composite({"CR_DBZH": values}, metadata),
+            "X": Composite({"CR_DBZH": values}, metadata),
+        },
+    )
+
+    fused = next(
+        item for item in json.loads(objects["manifest.json"])["comparison"]["products"]
+        if item["product_id"] == "sx_composite"
+    )
+    assert fused["status"] == "available"
+    assert fused["valid_echo_cells"] == 1
+    assert fused["valid_no_echo_cells"] == 1
+    assert "但没有有效回波" not in fused["reason"]
+    assert "最终组合的有效回波来自 X" in fused["reason"]
 
 
 def test_canonical_roundtrip_and_determinism(net):
@@ -166,7 +351,7 @@ def test_x_qc_runs_geometry_free_without_spatial_products(tmp_path):
     network=Network.load(config)
     store=MemoryStore(); root=zarr.group(store=store)
     end=datetime.fromisoformat(TARGET.replace('Z','+00:00')).timestamp()
-    root.attrs.update(contract_name='rainpulse.normalized-radar-volume',radar_id='x1',scan_id='x1-40',
+    root.attrs.update(contract_name='rainpulse.normalized-radar-volume',radar_id='x1',radar_band='X',scan_id='x1-40',
                       volume_start_time_utc=datetime.fromtimestamp(end-30,UTC).isoformat(),
                       volume_end_time_utc=datetime.fromtimestamp(end,UTC).isoformat(),scan_type='volume')
     root.create_dataset('sweep_number',data=np.arange(40,dtype=np.int16))
@@ -397,7 +582,7 @@ def test_x_qc_rejects_huge_mismatched_fill_array_before_materializing():
     end=datetime.fromisoformat(TARGET.replace('Z','+00:00')).timestamp()
     start=datetime.fromtimestamp(end-30,UTC).isoformat()
     finish=datetime.fromtimestamp(end,UTC).isoformat()
-    root.attrs.update(contract_name='rainpulse.normalized-radar-volume',radar_id='x1',scan_id='x-shape',
+    root.attrs.update(contract_name='rainpulse.normalized-radar-volume',radar_id='x1',radar_band='X',scan_id='x-shape',
                       volume_start_time_utc=start,volume_end_time_utc=finish)
     root.create_dataset('sweep_number',data=np.array([0],np.int16))
     group=root.create_group('sweep_000')
@@ -411,6 +596,13 @@ def test_x_qc_rejects_huge_mismatched_fill_array_before_materializing():
     objects={key:store[key] for key in store.keys()}
     source={'radar_id':'x1','scan_id':'x-shape','volume_start':start,'volume_end':finish,
             'available_at':finish}
+    wrong_band_store=MemoryStore(); wrong_band_store.update(objects)
+    wrong_band_root=zarr.open_group(store=wrong_band_store,mode='a')
+    wrong_band_root.attrs['radar_band']='S'
+    wrong_band_objects={key:wrong_band_store[key] for key in wrong_band_store.keys()}
+    with pytest.raises(ValueError,match='radar band'):
+        read_x_qc_sweep(wrong_band_objects,station,source,0,asset_sha256=logical_digest(wrong_band_objects),
+                        maximum_bytes=512*1024**2)
     with pytest.raises(ValueError,match='shape differs'):
         read_x_qc_sweep(objects,station,source,0,asset_sha256=logical_digest(objects),
                         maximum_bytes=512*1024**2)

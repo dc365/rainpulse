@@ -20,7 +20,22 @@ from perf_helpers import (
 from rainpulse_algo.multiband.codec import decode_arrays, encode_volume
 from rainpulse_algo.multiband.execution import ExecutionOptions as Options
 from rainpulse_algo.multiband.managed import Executor
+from rainpulse_algo.multiband.stream_managed import _scratch_reservation
 from rainpulse_algo.radar.qc_engine.group_stats import recurrence_tables, seed_tables
+
+
+def test_sx_comparison_reserves_all_spilled_height_layers_before_staging():
+    mib = 1024**2
+    options = Options(
+        streaming=True,
+        maximum_scratch_bytes=600 * mib,
+        maximum_object_bytes=128 * mib,
+        layer_memory_bytes=64 * mib,
+    )
+    reserved = _scratch_reservation(60 * mib, options, comparison=True)
+    assert reserved == 308 * mib
+    # A 450 MiB input bundle must not fit in the remaining 292 MiB staging cap.
+    assert 450 * mib > options.maximum_scratch_bytes - reserved
 
 
 def request(v, net, mode):

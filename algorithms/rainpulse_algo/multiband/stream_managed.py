@@ -13,11 +13,25 @@ import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from .model import epoch, json_bytes
+from .model import MAX_SWEEPS, epoch, json_bytes
 from .product import MAX_X_QC_PREVIEW_BYTES, sx_comparison_objects, x_qc_objects
 from .quality import accept_s_qc, x_qc
 from .stream_fusion import DTYPE, build_composite_streaming
 from .stream_io import GroupCuts, NPZCuts
+
+
+def _scratch_reservation(height_bytes, options, *, comparison):
+    # S, X and fused layers all spill in comparison mode, regardless of the
+    # single-layer memory threshold. Reserve their aggregate before staging.
+    height_scratch = (
+        height_bytes
+        if comparison or height_bytes > options.layer_memory_bytes
+        else 0
+    )
+    reserved = height_scratch * 3 + options.maximum_object_bytes
+    if reserved >= options.maximum_scratch_bytes:
+        raise ValueError("execution scratch budget cannot hold selected workspace")
+    return reserved
 
 
 def execute(executor, request, reader, *, started):
@@ -29,12 +43,10 @@ def execute(executor, request, reader, *, started):
     inputs = sorted(p["sources"], key=lambda x: (x["radar_id"], x["scan_id"]))
     grid = network.products[p["product_id"]]
     height_bytes = grid.width * grid.height * len(grid.levels_m_msl) * DTYPE.itemsize
-    height_scratch = height_bytes if height_bytes > options.layer_memory_bytes else 0
-    native_output = 0
     # One station's packed source + seekable NPZ + height workspace + output coexist.
-    reserved = height_scratch * 3 + native_output + options.maximum_object_bytes
-    if reserved >= options.maximum_scratch_bytes:
-        raise ValueError("execution scratch budget cannot hold selected workspace")
+    reserved = _scratch_reservation(
+        height_bytes, options, comparison=p["mode"] == "sx_composite"
+    )
     metrics = {
         "input_read_ms": 0.0,
         "station_qc_ms": 0.0,
@@ -298,6 +310,7 @@ def _execute_x_qc(executor, request, reader, *, started):
                             mapping["volume.json"], npz_path, station, source,
                             sha256=session.index.sha256, options=options,
                             maximum_bytes=network.maximum_input_bytes,
+                            sweep_limit=MAX_SWEEPS,
                         )
                     else:
                         import zarr
@@ -308,9 +321,10 @@ def _execute_x_qc(executor, request, reader, *, started):
                             group, station, source, sha256=session.index.sha256,
                             options=options, maximum_bytes=network.maximum_input_bytes,
                             reject_mask=executor.reject_mask, flag_version=executor.flag_version,
+                            sweep_limit=MAX_SWEEPS,
                         )
                     metrics["decode_adapt_ms"] += (time.perf_counter() - adapt_mark) * 1000
-                    if len(cuts.numbers) > options.maximum_sweeps:
+                    if len(cuts.numbers) > min(options.maximum_sweeps, MAX_SWEEPS):
                         raise ValueError("X QC volume sweep count exceeds execution policy")
                     gate_total = 0
                     base_key = (

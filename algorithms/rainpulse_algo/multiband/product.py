@@ -209,19 +209,29 @@ def sx_comparison_objects(result: Composite, band_results: dict[str, Composite |
         arrays[f"CR_DBZH_{band}_ONLY"] = component.arrays["CR_DBZH"]
         component_fields[f"CR_DBZH_{band}_ONLY"] = component.arrays["CR_DBZH"]
         valid = int(component.metadata["valid_echo_cells"])
+        valid_no_echo = int(component.metadata.get("valid_no_echo_cells", 0))
         uncertain = int(component.metadata["uncertain_only_cells"])
         products.append({
             "product_id": f"{band.lower()}_only",
             "band": band,
             "label": label,
-            "status": "available" if valid else "no_qualified_echo",
+            "status": "available" if valid else "no_echo" if valid_no_echo else "no_qualified_echo",
             "object_path": path,
             "valid_echo_cells": valid,
+            "valid_no_echo_cells": valid_no_echo,
+            "contributing_bands": [band] if valid or valid_no_echo else [],
+            "echo_contributing_bands": [band] if valid else [],
             "uncertain_only_cells": uncertain,
             "source_count": len(component.metadata.get("sources", [])),
             "sources": component.metadata.get("sources", []),
             "skipped": component.metadata.get("skipped", []),
-            "reason": None if valid else f"{band} 输入没有获得融合资格的回波；不确定回波单独计数",
+            "reason": (
+                None
+                if valid
+                else f"{band} 有有效无回波覆盖，没有合格回波；不确定回波单独计数"
+                if valid_no_echo
+                else f"{band} 输入没有获得融合资格的回波；不确定回波单独计数"
+            ),
         })
         component_layers.append({
             "object_path": path,
@@ -240,17 +250,80 @@ def sx_comparison_objects(result: Composite, band_results: dict[str, Composite |
     objects[difference_path] = difference_quicklook(difference)
     joint_path = "comparison/sx_composite.png"
     objects[joint_path] = quicklook(result.arrays["CR_DBZH"])
+    contributing_bands = [
+        band
+        for band in ("S", "X")
+        if band_results.get(band) is not None
+        and (
+            int(band_results[band].metadata["valid_echo_cells"])
+            + int(band_results[band].metadata.get("valid_no_echo_cells", 0))
+        ) > 0
+    ]
+    fused_echo_cells = int(result.metadata["valid_echo_cells"])
+    fused_no_echo_cells = int(result.metadata.get("valid_no_echo_cells", 0))
+    echo_contributing_bands = []
+    winner_sources = result.arrays.get("WINNER_SOURCE")
+    reflectivity = result.arrays.get("CR_DBZH")
+    if winner_sources is not None and reflectivity is not None:
+        used_indices = np.unique(winner_sources[np.isfinite(reflectivity)])
+        source_records = result.metadata.get("sources", [])
+        echo_contributing_bands = sorted({
+            source_records[int(index)]["band"]
+            for index in used_indices
+            if 0 <= int(index) < len(source_records)
+            and source_records[int(index)].get("band") in {"S", "X"}
+        })
+    if len(contributing_bands) == 1:
+        fusion_label = (
+            f"仅{contributing_bands[0]}覆盖（仅有效无回波像元）"
+            if fused_no_echo_cells and not fused_echo_cells
+            else f"仅{contributing_bands[0]}贡献（未形成 S/X 融合）"
+        )
+    elif not contributing_bands:
+        fusion_label = "S/X 联合候选（无有效贡献）"
+    elif fused_no_echo_cells and not fused_echo_cells:
+        fusion_label = "S/X 融合（仅有效无回波像元）"
+    elif fused_echo_cells and len(echo_contributing_bands) == 2:
+        fusion_label = "S/X 融合"
+    elif fused_echo_cells and len(echo_contributing_bands) == 1:
+        fusion_label = f"S/X 融合（最终回波来自 {echo_contributing_bands[0]}）"
+    else:
+        fusion_label = "S/X 融合"
+    missing_reason = None
+    if len(contributing_bands) == 1:
+        absent_band = "X" if contributing_bands[0] == "S" else "S"
+        absent_product = next(item for item in products if item["band"] == absent_band)
+        missing_reason = (
+            f"{absent_band} 波段没有合格贡献（{absent_product['reason']}）；"
+            f"结果仅由 {contributing_bands[0]} 波段贡献，未形成双波段融合"
+        )
+    elif fused_no_echo_cells and not fused_echo_cells and len(contributing_bands) == 2:
+        missing_reason = (
+            f"最终组合含 {fused_no_echo_cells:,} 个有效无回波像元，但没有有效回波"
+        )
+    elif fused_echo_cells and len(contributing_bands) == 2 and len(echo_contributing_bands) == 1:
+        other_band = "X" if echo_contributing_bands[0] == "S" else "S"
+        missing_reason = (
+            f"最终组合的有效回波来自 {echo_contributing_bands[0]}；"
+            f"{other_band} 波段未被选为最终回波来源"
+        )
+    elif not contributing_bands:
+        missing_reason = "S 与 X 均没有获得融合资格的有效像元"
     products.append({
         "product_id": "sx_composite",
         "band": "S+X",
-        "label": "S/X 融合",
-        "status": "available" if result.metadata["valid_echo_cells"] else "no_qualified_echo",
+        "label": fusion_label,
+        "status": "available" if fused_echo_cells else "no_echo" if fused_no_echo_cells else "no_qualified_echo",
         "object_path": joint_path,
-        "valid_echo_cells": int(result.metadata["valid_echo_cells"]),
+        "valid_echo_cells": fused_echo_cells,
+        "valid_no_echo_cells": fused_no_echo_cells,
         "uncertain_only_cells": int(result.metadata["uncertain_only_cells"]),
         "source_count": len(result.metadata.get("sources", [])),
+        "contributing_bands": contributing_bands,
+        "echo_contributing_bands": echo_contributing_bands,
         "sources": result.metadata.get("sources", []),
         "skipped": result.metadata.get("skipped", []),
+        "reason": missing_reason,
     })
     products.append({
         "product_id": "x_minus_s",
@@ -266,9 +339,17 @@ def sx_comparison_objects(result: Composite, band_results: dict[str, Composite |
     objects["arrays.npz"] = arrays_object
     manifest = json.loads(objects["manifest.json"])
     manifest["arrays_sha256"] = hashlib.sha256(arrays_object).hexdigest()
-    manifest["layers"] = [*manifest["layers"], *component_layers,
-        {"object_path": joint_path, "title": "S/X 融合组合反射率候选", "field": "CR_DBZH"},
-        {"object_path": difference_path, "title": "X−S 差值；仅显示双方有效像元", "field": "DBZH_X_MINUS_S"}]
+    manifest["layers"] = [
+        *[
+            {**layer, "title": f"{fusion_label}组合反射率候选"}
+            if layer.get("object_path") == "cr.png" and layer.get("field") == "CR_DBZH"
+            else layer
+            for layer in manifest["layers"]
+        ],
+        *component_layers,
+        {"object_path": joint_path, "title": f"{fusion_label}组合反射率候选", "field": "CR_DBZH"},
+        {"object_path": difference_path, "title": "X−S 差值；仅显示双方有效像元", "field": "DBZH_X_MINUS_S"},
+    ]
     manifest["comparison"] = {
         "cadence_seconds": int(manifest["cadence_seconds"]),
         "same_grid": True,

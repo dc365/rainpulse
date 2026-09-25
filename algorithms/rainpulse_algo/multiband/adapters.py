@@ -98,6 +98,8 @@ def from_group(
     )
     if attrs.get("contract_name") != expected_contract:
         raise ValueError("selected format adapter and input contract differ")
+    if station.source == "normalized_zarr" and attrs.get("radar_band") != station.band:
+        raise ValueError("native radar band differs from frozen station configuration")
     if (
         str(attrs.get("radar_id")) != station.radar_id
         or str(attrs.get("scan_id")) != source["scan_id"]
@@ -130,7 +132,9 @@ def from_group(
         gate_count += int(np.prod(arr.shape))
         if gate_count > MAX_GATES:
             raise ValueError("native volume exceeds decoded gate budget")
-        names = FIELDS | {name for name in g.array_keys() if name.endswith("CR_WITHHELD_MASK")}
+        names = set(X_QC_FIELDS if station.band == "X" else FIELDS)
+        if station.source == "s_qc_zarr":
+            names |= {name for name in g.array_keys() if name.endswith("CR_WITHHELD_MASK")}
         to_read = {name for name in names if name in g}
         for key in (*to_read, "azimuth", "range", "elevation", "ray_time"):
             a = g[key]
@@ -289,6 +293,8 @@ def read_x_qc_sweep(objects: dict[str, bytes], station: Station, source: dict, s
     attrs = dict(root.attrs)
     if attrs.get("contract_name") != "rainpulse.normalized-radar-volume":
         raise ValueError("selected X adapter and input contract differ")
+    if attrs.get("radar_band") != station.band:
+        raise ValueError("native radar band differs from frozen station configuration")
     if str(attrs.get("radar_id")) != station.radar_id or str(attrs.get("scan_id")) != source["scan_id"]:
         raise ValueError("stored observation identity differs from frozen catalog selection")
     group_name = f"sweep_{sweep_number:03d}"

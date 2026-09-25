@@ -29,7 +29,7 @@ from .fusion import (
     tile_coordinates,
     update_tile,
 )
-from .model import Network, epoch, json_bytes
+from .model import MAX_FUSION_SWEEPS, Network, epoch, json_bytes
 
 FIELDS = ("score", "values", "winner", "wray", "wgate", "h", "age", "resolution")
 DTYPE = np.dtype(
@@ -220,7 +220,7 @@ def build_composite_streaming(
             task_gates += s.fields["DBZH"].size
             station_cuts += 1
             if (
-                station_cuts > options.maximum_sweeps
+                station_cuts > min(options.maximum_sweeps, MAX_FUSION_SWEEPS)
                 or station_gates > options.maximum_volume_gates
                 or task_gates > options.maximum_task_gates
             ):
