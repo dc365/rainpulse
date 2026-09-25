@@ -7,9 +7,9 @@ type Stations = Page<Station> & { start: string; end: string; available_range: {
 type Result = { result_id: string; version: string; finished_at: string }
 type Scan = { scan_id: string; radar_id: string; volume_start: string; volume_end: string; state: string; qc_status: string; error_message?: string; results: Result[] }
 type Sweep = { sweep_number: number; sequence: number; elevation_deg: number; raw: string; qc: string; flags: string }
-type Comparison = { result_id: string; radar_id: string; scan_id: string; volume_start: string; volume_end: string; sweeps: Sweep[] }
+type Comparison = { result_id: string; radar_id: string; scan_id: string; volume_start: string; volume_end: string; sweeps: Sweep[]; legend?: {minimum_dbzh: number; rgb: [number, number, number]}[] }
 const prefix = '/api/v1/workspace/'
-const labels: Record<string, string> = { READY: '可对照', ASSET_UNAVAILABLE: '图件不可用', WAITING_QC: '待质控', WAITING_DECODE: '待解码', FAILED: '失败', BLOCKED: '受阻', CANCELLED: '已取消', RUNNING: '计算中', COMMITTING: '发布中', QUEUED: '排队中', WAITING: '等待中' }
+const labels: Record<string, string> = { NORMALIZED: '已解码', REGISTERED: '已登记', RAW_RECEIVED: '已接收', DECODING: '解码中', READY: '可对照', ASSET_UNAVAILABLE: '图件不可用', WAITING_QC: '待质控', WAITING_DECODE: '待解码', FAILED: '失败', BLOCKED: '受阻', CANCELLED: '已取消', RUNNING: '计算中', COMMITTING: '发布中', QUEUED: '排队中', WAITING: '等待中' }
 function label(state: string) { return labels[state] ?? state }
 function localDate(value: string) { return new Date(Date.parse(value) + 8 * 3600000).toISOString().slice(0, 10) }
 function localTime(value: string) { return new Date(Date.parse(value) + 8 * 3600000).toISOString().slice(11, 19) }
@@ -130,7 +130,7 @@ export function XQCWorkspace() {
  const recomputeEnd = date ? new Date(selectedScan ? Date.parse(selectedScan.volume_end) + 1 : Date.parse(recomputeStart) + 360000).toISOString() : ''
  const shown = stations.items.filter(s => `${s.radar_id} ${s.display_name}`.toLowerCase().includes(search.toLowerCase()))
  return <main className="workspace-shell xqc-shell">
-  <header className="workspace-topbar"><a className="workspace-brand" href="/"><strong>RainPulse</strong><small>短临降水工作台</small></a><span className="xqc-context">X 波段 · 原生体扫质控</span><a className="admin-link" href="/admin">后台</a></header>
+  <header className="workspace-topbar"><a className="workspace-brand" href="/"><span aria-hidden="true"><i /><i /><i /></span><strong>RainPulse</strong><small>短临降水工作台</small></a><span className="xqc-context">X 波段 · 原生体扫质控</span><a className="admin-link" href="/admin">后台</a></header>
   <section className="workspace-controls xqc-toolbar" aria-label="工作台控制">
    <nav aria-label="工作台预设"><a href="/?preset=forecast">预报对比</a><a href="/?preset=qc&band=X" aria-current="page">质控排查</a><a href="/?preset=verification">检验回放</a></nav>
    <nav className="xqc-band" aria-label="雷达波段"><a href="/?preset=qc">S 波段</a><a href="/?preset=qc&band=X" aria-current="page">X 波段</a></nav>
@@ -155,7 +155,7 @@ export function XQCWorkspace() {
     <p className="xqc-catalog-note">清单范围：已登记 X 站点。磁盘中尚未登记的资料不计入数量。</p>
    </aside>
    <section className="xqc-content" aria-label="X 波段质控对照">
-    <div className="xqc-selection"><div><h1>{selectedStation?.radar_id.toUpperCase() ?? 'X 波段'} <span>质控前后对照</span></h1><p>{selectedScan ? `${date} ${localTime(selectedScan.volume_start)} — ${localTime(selectedScan.volume_end)} · 原始状态 ${selectedScan.state}` : '选择站点和有资料的日期'}</p></div><span className="xqc-candidate">候选结果</span></div>
+    <div className="xqc-selection"><div><h1>{selectedStation?.radar_id.toUpperCase() ?? 'X 波段'} <span>质控前后对照</span></h1><p>{selectedScan ? `${date} ${localTime(selectedScan.volume_start)} — ${localTime(selectedScan.volume_end)} · 资料状态 ${label(selectedScan.state)}` : '选择站点和有资料的日期'}</p></div><span className="xqc-candidate">候选结果</span></div>
     {selectedResult && <div className="xqc-image-controls">
      <label>仰角层<select aria-label="仰角层" value={sweep?.sweep_number ?? ''} disabled={!validDetail} onChange={e => {setSweepNumber(Number(e.target.value));setPlaying(false)}}>{validDetail?.sweeps.map(s => <option key={s.sweep_number} value={s.sweep_number}>{s.elevation_deg.toFixed(2)}° · 第 {s.sequence} 层 · 编号 {s.sweep_number}</option>)}</select></label>
      <button aria-pressed={flags} onClick={() => setFlags(v => !v)}>{flags ? '返回前后对照' : '质控标记'}</button>
@@ -168,6 +168,7 @@ export function XQCWorkspace() {
        {image.src ? <img draggable={false} src={image.src} alt={i===0?'原始反射率 PPI':flags?'质控动作 PPI':'基础质控后 PPI'} style={{transform:`translate(${pan.x}px, ${pan.y}px) scale(${zoom})`}} /> : <p role="status">{problem ? '图件不可用，请重试。' : '正在校验并读取同一扫层图对…'}</p>}
       </div></figure>)}
     </div> : <div className="xqc-empty"><strong>{selectedScan ? label(selectedScan.qc_status) : scans.data ? '本日没有已登记体扫' : '正在读取体扫目录…'}</strong><p>{selectedScan?.qc_status==='WAITING_QC' ? '该体扫已解码，等待基础质控。' : selectedScan?.qc_status==='WAITING_DECODE' ? '该体扫已登记，等待解码。' : selectedScan?.error_message || '请选择有资料日期，或刷新查看任务进度。'}</p>{stations.data?.available_range.end && <button onClick={()=>{setDay(localDate(stations.data!.available_range.end!));setScanID('');setResultID('')}}>转到最近有资料日期</button>}</div>}
+    {validDetail?.legend?.length ? <div className="xqc-legend" aria-label="反射率色标"><strong>反射率 · dBZ</strong><div>{validDetail.legend.map(entry => <span key={entry.minimum_dbzh}><i style={{backgroundColor:`rgb(${entry.rgb.join(',')})`}} /><small>{entry.minimum_dbzh}</small></span>)}</div><small>琥珀色覆盖表示待复核，不表示反射率增强。</small></div> : null}
     <p className="xqc-footnote">原生站心极坐标 · 前后图共用同一扫层和色标 · 缺测保持透明 · 可拖动任一图同步查看</p>
     {selectedScan && <details className="xqc-lineage"><summary>资料来源与结果身份</summary><dl><dt>体扫</dt><dd>{selectedScan.scan_id}</dd><dt>观测 UTC</dt><dd>{selectedScan.volume_start} — {selectedScan.volume_end}</dd><dt>结果</dt><dd>{selectedResult?.result_id ?? '尚无成功结果'}</dd><dt>空间与资格</dt><dd>坐标待核验；基础质控候选，不代表业务融合准入</dd></dl></details>}
    </section>
