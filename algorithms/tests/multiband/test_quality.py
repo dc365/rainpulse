@@ -141,3 +141,27 @@ def test_s_masks_and_values_unchanged(net):
     assert out.sweeps[0].fields["REFLECTIVITY_ELIGIBLE_FOR_CR"][0, 0] == 0
     with pytest.raises(ValueError, match="not approved"):
         accept_s_qc(v, replace(s, allowed_s_qc_versions=()), net.sha256)
+
+
+def test_x_reflectivity_palette_matches_s_renderer_and_preserves_qc_strength(net):
+    from rainpulse_algo.diagnostics.renderer import REFLECTIVITY_STOPS, _scalar_rgba
+    from rainpulse_algo.multiband.product import LEVELS, COLORS, quicklook
+    from PIL import Image
+    from io import BytesIO
+    # Exercise exact boundaries, below/above-range clamping, and missing values.
+    values = np.array([[-10., 4.9, 5., 9.9, 10., 34.9, 35., 70., 80., np.nan]])
+    pixels = np.asarray(Image.open(BytesIO(quicklook(values))))
+    expected = _scalar_rgba(values, np.isfinite(values), REFLECTIVITY_STOPS)
+    np.testing.assert_array_equal(pixels[..., 3], expected[..., 3])
+    np.testing.assert_array_equal(pixels[np.isfinite(values)], expected[np.isfinite(values)])
+    assert LEVELS.tolist() == list(range(5, 71, 5))
+    assert COLORS[6].tolist() == [231, 192, 0]
+    station = net.stations["x1"]
+    v = volume(station)
+    v.sweeps[0].fields["SNRH"][:] = -10
+    output = x_qc(v, station, net.sha256)
+    assert np.any(output.sweeps[0].fields["QC_ACTION"] == 3)
+    objects = x_qc_objects(output)
+    # Uncertain strength keeps the common color; amber only occurs in flags.
+    assert objects["sweeps/0/raw.png"] == objects["sweeps/0/qc.png"]
+    assert objects["sweeps/0/flags.png"] != objects["sweeps/0/qc.png"]

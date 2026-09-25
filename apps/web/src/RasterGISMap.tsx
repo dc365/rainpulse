@@ -1,3 +1,5 @@
+import { ReflectivityLegend } from './ReflectivityLegend'
+import { REFLECTIVITY_LEGEND } from './reflectivityPalette'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import Feature from 'ol/Feature.js'
@@ -39,17 +41,6 @@ export type GISLegendEntry = {
   sourceLabel?: string
 }
 
-const REFLECTIVITY_STOPS: readonly [number, string][] = [
-  [5, '#419bf1'], [10, '#64e8ec'], [15, '#6efb3d'], [20, '#00dc00'],
-  [25, '#019000'], [30, '#fdfe00'], [35, '#e7c000'], [40, '#ff9000'],
-  [45, '#fe0000'], [50, '#d60000'], [55, '#c00000'], [60, '#ff00f0'],
-  [65, '#9500b4'], [70, '#ae90f0'],
-]
-const REFLECTIVITY_LEGEND: GISLegendEntry[] = REFLECTIVITY_STOPS.map(([minimum, color]) => ({
-  minimum,
-  label: String(minimum),
-  color,
-}))
 export type GISRasterStyle = 'grid' | 'smooth'
 export type GISReferenceContext = {
   coastline?: { url: string, extent: GISMapExtent }
@@ -1022,20 +1013,7 @@ export function RasterGISMap({
                 ))}
               </div>
             ) : isReflectivityLegend ? (
-              <div
-                className="gis-comparison-legend-scale reflectivity-segments"
-                style={{
-                  gridTemplateColumns: `repeat(${displayLegend.length}, minmax(20px, 1fr))`,
-                  minWidth: `${displayLegend.length * 22}px`,
-                }}
-              >
-                {displayLegend.map((item) => (
-                  <span key={`${item.label}-${item.color}`} title={item.label}>
-                    <i style={{ backgroundColor: item.color }} />
-                    <small>{item.minimum ?? item.label.match(/[-+]?\d+(?:\.\d+)?/)?.[0]}</small>
-                  </span>
-                ))}
-              </div>
+              <ReflectivityLegend />
             ) : (
               <div
                 className="gis-comparison-legend-scale"
@@ -1070,20 +1048,7 @@ export function RasterGISMap({
             {displayLegend.map((item) => <span key={`${item.label}-${item.color}`} title={item.sourceLabel ? `${item.label}（${item.sourceLabel}）` : item.label}><i style={{ backgroundColor: item.color }} /><small>{item.label}</small></span>)}
           </div>
         ) : isReflectivityLegend ? (
-          <div
-            className="gis-comparison-legend-scale reflectivity-segments"
-            style={{
-              gridTemplateColumns: `repeat(${displayLegend.length}, minmax(20px, 1fr))`,
-              minWidth: `${displayLegend.length * 22}px`,
-            }}
-          >
-            {displayLegend.map((item) => (
-              <span key={`${item.label}-${item.color}`} title={item.label}>
-                <i style={{ backgroundColor: item.color }} />
-                <small>{item.minimum ?? item.label.match(/[-+]?\d+(?:\.\d+)?/)?.[0]}</small>
-              </span>
-            ))}
-          </div>
+          <ReflectivityLegend />
         ) : (
           <div className="gis-legend-cells" style={{ gridTemplateColumns: `repeat(${displayLegend.length}, minmax(0, 1fr))` }}>
             {displayLegend.map((item) => (

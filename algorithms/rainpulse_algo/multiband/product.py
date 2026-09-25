@@ -6,15 +6,17 @@ import hashlib
 import json
 import struct
 import zlib
+from importlib.resources import files
 import numpy as np
 
 from .codec import encode_arrays
 from .fusion import Composite
 from .model import json_bytes
 
-# Stable meteorological quicklook colors; this is not a plotting-library style.
-LEVELS = np.array([-10, 0, 10, 20, 30, 40, 50, 60, 70], dtype=float)
-COLORS = np.array([[185,212,242],[142,194,241],[15,163,234],[6,210,21],[8,158,10],[240,172,20],[228,108,96],[203,21,170],[173,150,242]], dtype=np.uint8)
+# Same discrete 5 dBZ palette as the S-band operational renderer and Web legend.
+_PALETTE = json.loads(files("rainpulse_algo").joinpath("reflectivity_palette.json").read_text())
+LEVELS = np.array([entry[0] for entry in _PALETTE], dtype=float)
+COLORS = np.array([[int(color[i:i+2], 16) for i in (1, 3, 5)] for _, color in _PALETTE], dtype=np.uint8)
 MAX_X_QC_PREVIEW_BYTES = 512 * 1024**2
 MAX_PPI_INTERPOLATION_GAP_DEG = 3.0
 
@@ -116,8 +118,7 @@ def x_qc_objects(volumes) -> dict[str, bytes]:
             # Confirmed rejects are removed from the display; uncertain gates retain
             # their reflectivity and are highlighted in amber in a separate layer.
             qc = np.where(action == 2, np.nan, fields["DBZH_QC"])
-            uncertain = action == 3
-            objects[qc_key] = polar_quicklook(azimuth, ranges, qc, uncertain=uncertain)
+            objects[qc_key] = polar_quicklook(azimuth, ranges, qc)
             objects[flags_key] = polar_quicklook(azimuth, ranges, raw, actions=action)
             if sum(map(len, objects.values())) > MAX_X_QC_PREVIEW_BYTES:
                 raise ValueError("X QC PPI preview exceeds 512 MiB output budget")
@@ -142,7 +143,8 @@ def x_qc_objects(volumes) -> dict[str, bytes]:
         "legend": [{"minimum_dbzh": float(n), "rgb": list(map(int, c))} for n, c in zip(LEVELS, COLORS, strict=True)],
         "flag_legend": [{"action": 2, "label": "确认无效/污染", "color": "#bf3930"},
                         {"action": 3, "label": "未决，待复核", "color": "#eea028"}],
-        "note": "确认无效/污染门从显示场剔除；琥珀色为未决门，保留原强度；缺测和径向空隙保持透明。",
+        "palette_version": "operational-reflectivity-5dbz-v3",
+        "note": "S/X 共用反射率色谱；确认无效门从显示场剔除，待复核门保留反射率，另在标记图显示；缺测透明。",
     })
     return objects
 

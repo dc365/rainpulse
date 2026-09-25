@@ -632,3 +632,11 @@ operational data here.
   docs/X_RADAR_WORKSPACE_IMPLEMENTATION_20260925.md for scope and evidence.
   Workflow: integrate and verify locally, merge local main, then deploy artifacts
   to 105. The test account supports sudo; passwords must never be persisted.
+
+- 2026-09-25: User requires X/S to share the same UI language, timeline, and
+  reflectivity palette. X now uses SharedTimeline in observation-only mode and
+  the same radar selector/control styles. A package JSON palette supplies both
+  S/X rendering and the shared Web legend (14 discrete colors, 5–70 dBZ).
+  Candidate QC intensity images retain uncertain reflectivity; actions live in
+  the separate flags layer. Historical results retain their original legends.
+  See docs/X_SHARED_WORKSPACE_20260925.md.
