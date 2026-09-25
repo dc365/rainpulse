@@ -4,6 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 const loaded = vi.hoisted(() => [] as string[])
 vi.mock('./workspace/MainWorkspace', () => { loaded.push('main'); return { MainWorkspace: () => <div>main-ready</div> } })
 vi.mock('./workspace/QCReviewWorkspace', () => { loaded.push('qc'); return { QCReviewWorkspace: () => <div>qc-ready</div> } })
+vi.mock('./workspace/RadarQCWorkspace', () => { loaded.push('radar-qc'); return { RadarQCWorkspace: () => <div>radar-qc-ready</div> } })
 vi.mock('./admin/AdminApp', () => { loaded.push('admin'); return { default: () => <div>admin-ready</div> } })
 afterEach(() => { cleanup(); window.history.replaceState({}, '', '/') })
 it('loads only the selected route and retains all existing route matches', async () => {
@@ -23,6 +24,11 @@ it('loads only the selected route and retains all existing route matches', async
   render(<App />)
   await screen.findByText('admin-ready')
   expect(loaded.slice(2)).toEqual(['admin'])
+  cleanup()
+  window.history.replaceState({}, '', '/?preset=qc&band=X')
+  render(<App />)
+  await screen.findByText('radar-qc-ready')
+  expect(loaded.at(-1)).toBe('radar-qc')
 })
 
 it('shows a manual recovery path when a lazy route fails', async () => {
