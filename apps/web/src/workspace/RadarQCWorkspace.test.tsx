@@ -2,9 +2,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, expect, it, vi } from 'vitest'
 import { RadarQCWorkspace } from './RadarQCWorkspace'
 
-vi.mock('../RasterGISMap', () => ({ RasterGISMap: ({ imageUrl, radarContext, referenceOnly }: {
-  imageUrl?: string; radarContext?: { longitude: number; latitude: number; geometryStatus?: string; displayRangeRadiiKM: readonly number[] }; referenceOnly?: boolean
-}) => <div data-testid="geo-image" data-image={imageUrl ?? ''} data-longitude={radarContext?.longitude} data-latitude={radarContext?.latitude}
+vi.mock('../RasterGISMap', () => ({ RasterGISMap: ({ imageUrl, radarContext, referenceOnly, imageExtent }: {
+  imageExtent?: number[]; imageUrl?: string; radarContext?: { longitude: number; latitude: number; geometryStatus?: string; displayRangeRadiiKM: readonly number[] }; referenceOnly?: boolean
+}) => <div data-testid="geo-image" data-image={imageUrl ?? ''} data-extent={imageExtent?.join(',')} data-longitude={radarContext?.longitude} data-latitude={radarContext?.latitude}
   data-geometry-status={radarContext?.geometryStatus} data-radii={radarContext?.displayRangeRadiiKM.join(',')} data-reference-only={referenceOnly} /> }))
 
 const morning = '2026-08-28T00:06:00Z'
@@ -32,7 +32,7 @@ const stations = { items: [
   { radar_id: 'zf505', display_name: '缺坐标站', geometry_status: 'unverified', registered: 0, qc_ready: 0, candidate_site: null },
 ], next_cursor: '', start: morning, available_range: { end: morning } }
 const scans = { items: [{ scan_id: 'scan-x', radar_id: 'zf101', volume_start: morning, volume_end: '2026-08-28T00:07:00Z', state: 'NORMALIZED', qc_status: 'READY', results: [{ result_id: 'result-x', version: 'candidate-v1', finished_at: morning }] }], next_cursor: '' }
-const result = { result_id: 'result-x', radar_id: 'zf101', scan_id: 'scan-x', sweeps: [{ sweep_number: 3, sequence: 1, elevation_deg: 0.9, raw: '/raw-x.png', qc: '/qc-x.png', flags: '/flags-x.png' }] }
+const result = { result_id: 'result-x', radar_id: 'zf101', scan_id: 'scan-x', sweeps: [{ sweep_number: 3, sequence: 1, elevation_deg: 0.9, map: { crs: 'EPSG:4326', bounds: [118.8,25.7,119.8,26.7], longitude_deg: 119.3306, latitude_deg: 26.1758, maximum_range_km: 75, coordinate_source: 'normalized_volume_site', projection_version: 'wgs84-geodesic-4over3-v1', raw: '/map-raw-x.png', qc: '/map-qc-x.png', flags: '/map-flags-x.png' }, raw: '/raw-x.png', qc: '/qc-x.png', flags: '/flags-x.png' }] }
 
 function setup() {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
@@ -55,7 +55,7 @@ it('keeps the six-minute target and native sweep identity across S→X→S', asy
   render(<RadarQCWorkspace />)
   await waitFor(() => expect(document.querySelectorAll('[data-image="/dbzh_raw-z9591.png"]')).toHaveLength(1))
   fireEvent.click(screen.getByRole('button', { name: 'X' }))
-  await screen.findByRole('img', { name: '原始反射率 PPI' })
+  await waitFor(() => expect(document.querySelectorAll('[data-image="blob:comparison"]')).toHaveLength(2))
   expect((screen.getByRole('combobox', { name: '仰角' }) as HTMLSelectElement).value).toBe('3')
   expect(window.location.search).toContain('time=2026-08-28T00%3A06%3A00Z')
   fireEvent.click(screen.getByRole('button', { name: 'S' }))
@@ -86,14 +86,21 @@ it('shows one geo map in overlay mode and gates the unverified X layer and fusio
   expect(screen.getByText('融合候选尚不能在地图验证')).toBeTruthy()
 })
 
-it('places candidate X coordinates and real distance rings on the shared map without treating PPI as georeferenced', async () => {
+it('overlays X raw and QC rasters on exactly two maps using the result geometry', async () => {
   setup()
   window.history.replaceState({}, '', '/?preset=qc&band=X&date=2026-08-28&time=2026-08-28T00:06:00Z&station=zf101')
   render(<RadarQCWorkspace />)
-  await screen.findByRole('img', { name: '原始反射率 PPI' })
-  const map = screen.getByRole('region', { name: 'X 波段站点参考地图' }).querySelector('[data-testid="geo-image"]') as HTMLElement
-  expect(map.dataset).toMatchObject({ image: '', longitude: '119.3306', latitude: '26.1758',
-    geometryStatus: 'unverified', radii: '10,20,30,40,50', referenceOnly: 'true' })
-  fireEvent.change(screen.getByRole('combobox', { name: '站点' }), { target: { value: 'zf505' } })
-  expect(screen.getByText('该站未提供可用的候选经纬度，暂不能标注地图位置与距离圈。')).toBeTruthy()
+  await waitFor(() => expect(document.querySelectorAll('[data-image="blob:comparison"]')).toHaveLength(2))
+  const maps = screen.getAllByTestId('geo-image')
+  expect(maps).toHaveLength(2)
+  for (const map of maps) expect(map.dataset).toMatchObject({ image: 'blob:comparison', longitude: '119.3306', latitude: '26.1758',
+    geometryStatus: 'unverified', radii: '10,20,30,40,50', extent: '118.8,25.7,119.8,26.7' })
+  expect(fetch).toHaveBeenCalledWith('/map-raw-x.png', expect.anything())
+  expect(fetch).toHaveBeenCalledWith('/map-qc-x.png', expect.anything())
+  expect(screen.queryByRole('region', { name: 'X 波段站点参考地图' })).toBeNull()
+  expect(screen.queryByLabelText('原生图缩放')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '质控标记' }))
+  await waitFor(() => expect(fetch).toHaveBeenCalledWith('/map-flags-x.png', expect.anything()))
+  fireEvent.click(screen.getByRole('button', { name: '单图' }))
+  expect(document.querySelector('.radar-qc-pair.layout-single')).toBeTruthy()
 })

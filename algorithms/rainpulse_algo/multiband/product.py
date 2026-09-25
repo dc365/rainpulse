@@ -43,7 +43,7 @@ def quicklook(values: np.ndarray) -> bytes:
 
 def polar_quicklook(azimuth_deg: np.ndarray, range_m: np.ndarray, values: np.ndarray,
                     *, uncertain: np.ndarray | None = None, actions: np.ndarray | None = None,
-                    size: int = 720) -> bytes:
+                    size: int = 720, map_sampling=None, elevation_deg=None) -> bytes:
     """Render one polar sweep into a station-centred PPI without site geometry."""
     az = np.asarray(azimuth_deg, dtype=float) % 360
     ranges = np.asarray(range_m, dtype=float)
@@ -55,6 +55,8 @@ def polar_quicklook(azimuth_deg: np.ndarray, range_m: np.ndarray, values: np.nda
     xx, yy = np.meshgrid(axis, axis)
     distance = np.hypot(xx, yy)
     bearing = np.rad2deg(np.arctan2(xx, yy)) % 360
+    if map_sampling is not None:
+        distance, bearing = map_sampling
     # Binary-search sorted azimuths instead of allocating a pixels-by-rays cube.
     order = np.argsort(az)
     ordered = az[order]
@@ -72,6 +74,14 @@ def polar_quicklook(azimuth_deg: np.ndarray, range_m: np.ndarray, values: np.nda
         if np.any(circular_steps > 0) else 0.1,
         MAX_PPI_INTERPOLATION_GAP_DEG,
     )
+    if map_sampling is not None:
+        # Invert the 4/3-Earth ground-arc equation using each selected ray's
+        # actual elevation. No MSL height is assumed for this display mapping.
+        effective_radius = 6371008.8 * 4 / 3
+        angle = distance / effective_radius
+        elevation = np.deg2rad(np.broadcast_to(elevation_deg, az.shape)[rays])
+        denominator = np.cos(elevation + angle)
+        distance = np.where(denominator > 0, effective_radius * np.sin(angle) / denominator, np.inf)
     gates = np.searchsorted(ranges, distance, side="left")
     valid = (distance <= radius) & (gates < len(ranges)) & (angular_distance <= angular_limit)
     gates = np.clip(gates, 0, len(ranges) - 1)
@@ -127,8 +137,9 @@ def x_qc_objects(volumes) -> dict[str, bytes]:
                 {"object_path": qc_key, "title": f"基础质控后 · 第{sequence}层（扫层编号 {number}）", "field": "DBZH_QC_DISPLAY", "sweep_number": number},
                 {"object_path": flags_key, "title": f"疑似/确认标记 · 第{sequence}层（扫层编号 {number}）", "field": "QC_ACTION", "sweep_number": number},
             ])
+            map_layer = geographic_sweep_preview(sweep, volume.metadata, raw, qc, action, objects)
             comparisons.append({"sweep_number": number, "sequence": sequence, "raw": raw_key, "qc": qc_key, "flags": flags_key,
-                                "elevation_deg": float(np.nanmedian(sweep.elevation_deg))})
+                                "elevation_deg": float(np.nanmedian(sweep.elevation_deg)), **({"map": map_layer} if map_layer else {})})
         del volume
     if metadata is None or not comparisons:
         raise ValueError("X QC preview requires at least one reflectivity sweep")
@@ -136,7 +147,7 @@ def x_qc_objects(volumes) -> dict[str, bytes]:
         "contract": "rainpulse.multiband.x-qc-preview-v1",
         "radar_id": metadata["radar_id"], "scan_id": metadata["scan_id"],
         "volume_start": metadata["volume_start"], "volume_end": metadata["volume_end"],
-        "geometry": "station-centred polar; no geographic site geometry applied",
+        "geometry": "station-centred polar; optional candidate EPSG:4326 map sampled from native site/ray geometry",
         "candidate_only": True, "operational_eligible": False, "qpe_enabled": False,
         "comparison": {"sweeps": comparisons},
         "layers": layers,
@@ -147,6 +158,51 @@ def x_qc_objects(volumes) -> dict[str, bytes]:
         "note": "S/X 共用反射率色谱；确认无效门从显示场剔除，待复核门保留反射率，另在标记图显示；缺测透明。",
     })
     return objects
+
+
+def geographic_sweep_preview(sweep, metadata, raw, qc, action, objects, size=720):
+    """Sample native polar gates onto a north-up EPSG:4326 display raster.
+
+    Site coordinates come from the normalized volume frozen in this task.
+    This candidate display does not change numerical QC or fusion eligibility.
+    """
+    from pyproj import Geod
+
+    lon, lat = metadata.get("longitude_deg"), metadata.get("latitude_deg")
+    if lon is None or lat is None:
+        return None
+    if not np.isfinite([lon, lat]).all() or not -180 < lon < 180 or not -89 < lat < 89:
+        return None
+    ranges = np.asarray(sweep.range_m, dtype=float)
+    elevations = np.asarray(sweep.elevation_deg, dtype=float)
+    if not np.isfinite(ranges).all() or ranges[-1] <= 0 or not np.isfinite(elevations).all():
+        raise ValueError("invalid native map range/elevation")
+    re = 6371008.8 * 4 / 3
+    elevation = np.deg2rad(elevations)
+    ground = re * np.arctan2(ranges[-1] * np.cos(elevation), re + ranges[-1] * np.sin(elevation))
+    radius = float(np.max(ground))
+    if radius <= 0:
+        return None
+    geod = Geod(ellps="WGS84")
+    bearings = np.arange(360, dtype=float)
+    ring_lon, ring_lat, _ = geod.fwd(np.full(360, lon), np.full(360, lat), bearings, np.full(360, radius))
+    west, south, east, north = float(min(ring_lon)), float(min(ring_lat)), float(max(ring_lon)), float(max(ring_lat))
+    if east - west > 180:  # Antimeridian splitting needs a separate asset contract.
+        return None
+    xs = west + (np.arange(size) + .5) * (east - west) / size
+    ys = south + (np.arange(size) + .5) * (north - south) / size
+    xx, yy = np.meshgrid(xs, ys)
+    azimuth, _, distance = geod.inv(np.full_like(xx, lon), np.full_like(yy, lat), xx, yy)
+    sampling = (distance, azimuth % 360)
+    paths = {name: f"sweeps/{sweep.number}/map_{name}.png" for name in ("raw", "qc", "flags")}
+    for name, values, actions in (("raw", raw, None), ("qc", qc, None), ("flags", raw, action)):
+        objects[paths[name]] = polar_quicklook(sweep.azimuth_deg, ranges, values, actions=actions,
+                                              size=size, map_sampling=sampling, elevation_deg=elevations)
+    if sum(map(len, objects.values())) > MAX_X_QC_PREVIEW_BYTES:
+        raise ValueError("X QC map preview exceeds 512 MiB output budget")
+    return {"crs": "EPSG:4326", "bounds": [west, south, east, north],
+            "longitude_deg": float(lon), "latitude_deg": float(lat), "maximum_range_km": radius / 1000,
+            "coordinate_source": "normalized_volume_site", "projection_version": "wgs84-geodesic-4over3-v1", **paths}
 
 
 def composite_objects(result: Composite) -> dict[str, bytes]:

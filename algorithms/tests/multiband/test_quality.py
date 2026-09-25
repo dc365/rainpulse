@@ -165,3 +165,47 @@ def test_x_reflectivity_palette_matches_s_renderer_and_preserves_qc_strength(net
     # Uncertain strength keeps the common color; amber only occurs in flags.
     assert objects["sweeps/0/raw.png"] == objects["sweeps/0/qc.png"]
     assert objects["sweeps/0/flags.png"] != objects["sweeps/0/qc.png"]
+
+
+def test_geographic_preview_places_cardinal_echoes_and_uses_native_site(net):
+    from io import BytesIO
+    from PIL import Image
+    from pyproj import Geod
+    from rainpulse_algo.multiband.product import geographic_sweep_preview, COLORS, LEVELS
+    station = net.stations["x1"]
+    v = volume(station)
+    cut = v.sweeps[0]
+    cut.azimuth_deg = np.arange(360.)
+    cut.elevation_deg = np.full(360, 30.)
+    cut.range_m = np.arange(250., 50250., 250.)
+    raw = np.full((360, 200), np.nan)
+    raw[:4, :] = 35.  # North; deliberately retain the wraparound gap.
+    raw[88:93, :] = 50.  # East.
+    qc = raw.copy()
+    qc[88:93, :] = np.nan
+    actions = np.where(np.isfinite(raw) & ~np.isfinite(qc), 2, 0).astype(np.uint8)
+    objects = {}
+    info = geographic_sweep_preview(cut, v.metadata, raw, qc, actions, objects)
+    west, south, east, north = info["bounds"]
+    geod = Geod(ellps="WGS84")
+    # Independent forward beam calculation: a gate 25 km along a 30-degree ray.
+    re = 6371008.8 * 4 / 3
+    slant = 25000.
+    height = np.sqrt(re**2 + slant**2 + 2*re*slant*np.sin(np.pi/6)) - re
+    ground = re * np.arcsin(slant*np.cos(np.pi/6)/(re+height))
+    def pixel(bearing):
+        lon, lat, _ = geod.fwd(station.longitude_deg, station.latitude_deg, bearing, ground)
+        return (int((north-lat)/(north-south)*720), int((lon-west)/(east-west)*720))
+    raw_png = np.asarray(Image.open(BytesIO(objects[info["raw"]])))
+    qc_png = np.asarray(Image.open(BytesIO(objects[info["qc"]])))
+    flag_png = np.asarray(Image.open(BytesIO(objects[info["flags"]])))
+    for bearing, value in ((1,35), (90,50)):
+        row, col = pixel(bearing)
+        assert raw_png[row,col,3] == 255
+        np.testing.assert_array_equal(raw_png[row,col,:3], COLORS[np.searchsorted(LEVELS,value,side="right")-1])
+    assert qc_png[pixel(90)][3] == 0
+    assert flag_png[pixel(90)][3] == 255
+    assert raw_png[pixel(180)][3] == 0
+    assert raw_png[0,0,3] == 0
+    assert info["maximum_range_km"] < 44  # Slant range is not ground distance.
+    assert geographic_sweep_preview(cut, {}, raw, qc, actions, {}) is None

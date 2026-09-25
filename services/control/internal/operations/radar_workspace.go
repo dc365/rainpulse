@@ -198,13 +198,35 @@ func (h *Handler) radarScans(r *http.Request) (any, error) {
 	return map[string]any{"items": items, "next_cursor": next}, nil
 }
 
+type radarMap struct {
+	CRS               string    `json:"crs"`
+	Bounds            []float64 `json:"bounds"`
+	Longitude         float64   `json:"longitude_deg"`
+	Latitude          float64   `json:"latitude_deg"`
+	MaximumRangeKM    float64   `json:"maximum_range_km"`
+	CoordinateSource  string    `json:"coordinate_source"`
+	ProjectionVersion string    `json:"projection_version"`
+	Raw               string    `json:"raw"`
+	QC                string    `json:"qc"`
+	Flags             string    `json:"flags"`
+}
+
+func (s *radarSweep) paths() []*string {
+	paths := []*string{&s.Raw, &s.QC, &s.Flags}
+	if s.Map != nil {
+		paths = append(paths, &s.Map.Raw, &s.Map.QC, &s.Map.Flags)
+	}
+	return paths
+}
+
 type radarSweep struct {
-	Number    int     `json:"sweep_number"`
-	Sequence  int     `json:"sequence"`
-	Elevation float64 `json:"elevation_deg"`
-	Raw       string  `json:"raw"`
-	QC        string  `json:"qc"`
-	Flags     string  `json:"flags"`
+	Map       *radarMap `json:"map,omitempty"`
+	Number    int       `json:"sweep_number"`
+	Sequence  int       `json:"sequence"`
+	Elevation float64   `json:"elevation_deg"`
+	Raw       string    `json:"raw"`
+	QC        string    `json:"qc"`
+	Flags     string    `json:"flags"`
 }
 type radarManifest struct {
 	Radar       string          `json:"radar_id"`
@@ -231,8 +253,20 @@ func parseRadarManifest(raw []byte, radar, scan string) (radarManifest, error) {
 			return m, Conflict("扫层编号或仰角非法")
 		}
 		seen[s.Number] = true
-		for _, k := range []string{s.Raw, s.QC, s.Flags} {
-			if !safeKey(k) || !strings.HasSuffix(k, ".png") {
+		if geo := s.Map; geo != nil {
+			valid := geo.CRS == "EPSG:4326" && len(geo.Bounds) == 4 && geo.CoordinateSource == "normalized_volume_site" && geo.ProjectionVersion == "wgs84-geodesic-4over3-v1" && geo.Raw != geo.QC && geo.MaximumRangeKM > 0 && geo.MaximumRangeKM <= 1000
+			for _, v := range append(append([]float64{}, geo.Bounds...), geo.Longitude, geo.Latitude, geo.MaximumRangeKM) {
+				valid = valid && !math.IsNaN(v) && !math.IsInf(v, 0)
+			}
+			if valid {
+				valid = geo.Bounds[0] >= -180 && geo.Bounds[2] <= 180 && geo.Bounds[1] >= -90 && geo.Bounds[3] <= 90 && geo.Bounds[0] < geo.Longitude && geo.Longitude < geo.Bounds[2] && geo.Bounds[1] < geo.Latitude && geo.Latitude < geo.Bounds[3]
+			}
+			if !valid {
+				return m, Conflict("地图几何或投影版本非法")
+			}
+		}
+		for _, k := range s.paths() {
+			if !safeKey(*k) || !strings.HasSuffix(*k, ".png") {
 				return m, Conflict("图件路径非法")
 			}
 		}
@@ -283,8 +317,10 @@ func (h *Handler) radarProduct(w http.ResponseWriter, r *http.Request, parts []s
 		key := string(b)
 		allowed := false
 		for _, s := range m.Comparison.Sweeps {
-			if key == s.Raw || key == s.QC || key == s.Flags {
-				allowed = true
+			for _, path := range s.paths() {
+				if key == *path {
+					allowed = true
+				}
 			}
 		}
 		if !allowed {
@@ -300,7 +336,7 @@ func (h *Handler) radarProduct(w http.ResponseWriter, r *http.Request, parts []s
 	}
 	for i := range m.Comparison.Sweeps {
 		s := &m.Comparison.Sweeps[i]
-		for _, key := range []*string{&s.Raw, &s.QC, &s.Flags} {
+		for _, key := range s.paths() {
 			*key = radarWorkspacePrefix + "radar-products/" + parts[1] + "/assets/" + base64.RawURLEncoding.EncodeToString([]byte(*key))
 		}
 	}

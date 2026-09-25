@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestRadarManifestPreservesNativeSweepIdentity(t *testing.T) {
@@ -40,5 +41,34 @@ func TestRadarWorkspaceRejectsWritesAndBadIdentityWithoutAdmin(t *testing.T) {
 		if w.Code != 422 {
 			t.Fatalf("%s: %d", p, w.Code)
 		}
+	}
+}
+
+func TestRadarMapGeometryAndAssetPaths(t *testing.T) {
+	m := radarManifest{Radar: "zf101", Scan: "scan", Start: time.Now(), Candidate: true}
+	m.End = m.Start
+	geo := &radarMap{CRS: "EPSG:4326", Bounds: []float64{119, 25, 120, 27}, Longitude: 119.3, Latitude: 26.1, MaximumRangeKM: 75, CoordinateSource: "normalized_volume_site", ProjectionVersion: "wgs84-geodesic-4over3-v1", Raw: "sweeps/0/map_raw.png", QC: "sweeps/0/map_qc.png", Flags: "sweeps/0/map_flags.png"}
+	m.Comparison.Sweeps = []radarSweep{{Number: 0, Sequence: 1, Elevation: .9, Raw: "sweeps/0/raw.png", QC: "sweeps/0/qc.png", Flags: "sweeps/0/flags.png", Map: geo}}
+	parsed, err := parseRadarManifest(JSON(m), "zf101", "scan")
+	if err != nil || len(parsed.Comparison.Sweeps[0].paths()) != 6 {
+		t.Fatalf("map paths lost: %v", err)
+	}
+	geo.Raw = "../bad.png"
+	if _, err = parseRadarManifest(JSON(m), "zf101", "scan"); err == nil {
+		t.Fatal("unsafe map asset accepted")
+	}
+	geo.Raw = "sweeps/0/map_raw.png"
+	geo.Bounds = []float64{120, 25, 119, 27}
+	if _, err = parseRadarManifest(JSON(m), "zf101", "scan"); err == nil {
+		t.Fatal("reversed map bounds accepted")
+	}
+	geo.Bounds = []float64{118, 25, 119, 27}
+	if _, err = parseRadarManifest(JSON(m), "zf101", "scan"); err == nil {
+		t.Fatal("site outside map accepted")
+	}
+	geo.Bounds = []float64{119, 25, 120, 27}
+	geo.ProjectionVersion = "unknown"
+	if _, err = parseRadarManifest(JSON(m), "zf101", "scan"); err == nil {
+		t.Fatal("unknown projection accepted")
 	}
 }
