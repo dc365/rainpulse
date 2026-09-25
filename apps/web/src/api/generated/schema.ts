@@ -890,6 +890,22 @@ export interface components {
                 qc: string;
                 /** @description Read-only verified PNG URL */
                 flags: string;
+                /** @description Candidate geographic display derived from native site and ray geometry; does not confer fusion eligibility. */
+                map?: {
+                    /** @enum {string} */
+                    crs: "EPSG:4326";
+                    bounds: number[];
+                    longitude_deg: number;
+                    latitude_deg: number;
+                    maximum_range_km: number;
+                    /** @enum {string} */
+                    coordinate_source: "normalized_volume_site";
+                    /** @enum {string} */
+                    projection_version: "wgs84-geodesic-4over3-v1";
+                    raw: string;
+                    qc: string;
+                    flags: string;
+                };
             }[];
         };
         /** @enum {string} */

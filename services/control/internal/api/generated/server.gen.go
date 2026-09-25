@@ -524,6 +524,51 @@ func (e RadarComparisonOperationalEligible) Valid() bool {
 	}
 }
 
+// Defines values for RadarComparisonSweepsMapCoordinateSource.
+const (
+	NormalizedVolumeSite RadarComparisonSweepsMapCoordinateSource = "normalized_volume_site"
+)
+
+// Valid indicates whether the value is a known member of the RadarComparisonSweepsMapCoordinateSource enum.
+func (e RadarComparisonSweepsMapCoordinateSource) Valid() bool {
+	switch e {
+	case NormalizedVolumeSite:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RadarComparisonSweepsMapCrs.
+const (
+	RadarComparisonSweepsMapCrsEPSG4326 RadarComparisonSweepsMapCrs = "EPSG:4326"
+)
+
+// Valid indicates whether the value is a known member of the RadarComparisonSweepsMapCrs enum.
+func (e RadarComparisonSweepsMapCrs) Valid() bool {
+	switch e {
+	case RadarComparisonSweepsMapCrsEPSG4326:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RadarComparisonSweepsMapProjectionVersion.
+const (
+	Wgs84Geodesic4over3V1 RadarComparisonSweepsMapProjectionVersion = "wgs84-geodesic-4over3-v1"
+)
+
+// Valid indicates whether the value is a known member of the RadarComparisonSweepsMapProjectionVersion enum.
+func (e RadarComparisonSweepsMapProjectionVersion) Valid() bool {
+	switch e {
+	case Wgs84Geodesic4over3V1:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RadarGridMetricsVerticalDatumStatus.
 const (
 	UnverifiedEngineering RadarGridMetricsVerticalDatumStatus = "unverified_engineering"
@@ -1692,6 +1737,20 @@ type RadarComparison struct {
 		// Flags Read-only verified PNG URL
 		Flags string `json:"flags"`
 
+		// Map Candidate geographic display derived from native site and ray geometry; does not confer fusion eligibility.
+		Map *struct {
+			Bounds            []float32                                 `json:"bounds"`
+			CoordinateSource  RadarComparisonSweepsMapCoordinateSource  `json:"coordinate_source"`
+			Crs               RadarComparisonSweepsMapCrs               `json:"crs"`
+			Flags             string                                    `json:"flags"`
+			LatitudeDeg       float32                                   `json:"latitude_deg"`
+			LongitudeDeg      float32                                   `json:"longitude_deg"`
+			MaximumRangeKm    float32                                   `json:"maximum_range_km"`
+			ProjectionVersion RadarComparisonSweepsMapProjectionVersion `json:"projection_version"`
+			Qc                string                                    `json:"qc"`
+			Raw               string                                    `json:"raw"`
+		} `json:"map,omitempty"`
+
 		// Qc Read-only verified PNG URL
 		Qc string `json:"qc"`
 
@@ -1709,6 +1768,15 @@ type RadarComparisonCandidateOnly bool
 
 // RadarComparisonOperationalEligible defines model for RadarComparison.OperationalEligible.
 type RadarComparisonOperationalEligible bool
+
+// RadarComparisonSweepsMapCoordinateSource defines model for RadarComparison.Sweeps.Map.CoordinateSource.
+type RadarComparisonSweepsMapCoordinateSource string
+
+// RadarComparisonSweepsMapCrs defines model for RadarComparison.Sweeps.Map.Crs.
+type RadarComparisonSweepsMapCrs string
+
+// RadarComparisonSweepsMapProjectionVersion defines model for RadarComparison.Sweeps.Map.ProjectionVersion.
+type RadarComparisonSweepsMapProjectionVersion string
 
 // RadarFieldAvailability defines model for RadarFieldAvailability.
 type RadarFieldAvailability struct {

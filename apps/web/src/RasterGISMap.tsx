@@ -111,7 +111,7 @@ function createRadarReferenceLayer(radar: GISRadarContext) {
     ...geometry.labels.map((label) => new Feature({
       geometry: new Point([...label.coordinate]),
       kind: 'radar-range-label',
-      label: `${candidate ? '参考 ' : ''}${label.radiusKM} km`,
+      label: String(label.radiusKM),
     })),
     new Feature({
       geometry: new Point([radar.longitude, radar.latitude]),

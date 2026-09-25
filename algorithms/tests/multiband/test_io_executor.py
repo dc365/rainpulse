@@ -322,10 +322,14 @@ def test_executor_standalone_x_writes_polar_qc(tmp_path):
     req['payload'].update(mode='x_qc',sources=req['payload']['sources'][1:])
     req['payload'].pop('product_id')
     objects, _, _ = Executor(config).execute(req,LocalReader(tmp_path,index,512*1024**2),artifact_digest=logical_digest)
-    assert len(objects)==4
+    assert len(objects)==7
     manifest=json.loads(objects['manifest.json'])
     assert manifest['contract']=='rainpulse.multiband.x-qc-preview-v1'
     assert manifest['geometry'].startswith('station-centred polar')
+    mapping=manifest['comparison']['sweeps'][0]['map']
+    assert mapping['crs']=='EPSG:4326'
+    assert all(mapping[k] in objects for k in ('raw','qc','flags'))
+    assert manifest['operational_eligible'] is False
     assert 'native_arrays.npz' not in objects
 
 
