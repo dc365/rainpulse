@@ -818,6 +818,14 @@ export interface components {
                 qc_ready: number;
                 /** @enum {string} */
                 geometry_status: "unverified";
+                /** @description Draft station coordinates for map context only; never a georeferenced radar product or fusion qualification. */
+                candidate_site?: {
+                    longitude_deg: number;
+                    latitude_deg: number;
+                    /** @enum {string} */
+                    coordinate_source: "draft_radar_config";
+                    config_version: string;
+                } | null;
             }[];
             /** Format: date-time */
             start: string;

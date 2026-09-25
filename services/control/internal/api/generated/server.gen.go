@@ -704,6 +704,21 @@ func (e RadarStationPageItemsBand) Valid() bool {
 	}
 }
 
+// Defines values for RadarStationPageItemsCandidateSiteCoordinateSource.
+const (
+	DraftRadarConfig RadarStationPageItemsCandidateSiteCoordinateSource = "draft_radar_config"
+)
+
+// Valid indicates whether the value is a known member of the RadarStationPageItemsCandidateSiteCoordinateSource enum.
+func (e RadarStationPageItemsCandidateSiteCoordinateSource) Valid() bool {
+	switch e {
+	case DraftRadarConfig:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RadarStationPageItemsGeometryStatus.
 const (
 	Unverified RadarStationPageItemsGeometryStatus = "unverified"
@@ -1839,7 +1854,15 @@ type RadarStationPage struct {
 	End            time.Time                      `json:"end"`
 	InventoryScope RadarStationPageInventoryScope `json:"inventory_scope"`
 	Items          []struct {
-		Band           RadarStationPageItemsBand           `json:"band"`
+		Band RadarStationPageItemsBand `json:"band"`
+
+		// CandidateSite Draft station coordinates for map context only; never a georeferenced radar product or fusion qualification.
+		CandidateSite *struct {
+			ConfigVersion    string                                             `json:"config_version"`
+			CoordinateSource RadarStationPageItemsCandidateSiteCoordinateSource `json:"coordinate_source"`
+			LatitudeDeg      float32                                            `json:"latitude_deg"`
+			LongitudeDeg     float32                                            `json:"longitude_deg"`
+		} `json:"candidate_site,omitempty"`
 		DisplayName    *string                             `json:"display_name,omitempty"`
 		GeometryStatus RadarStationPageItemsGeometryStatus `json:"geometry_status"`
 		Normalized     int                                 `json:"normalized"`
@@ -1856,6 +1879,9 @@ type RadarStationPageInventoryScope string
 
 // RadarStationPageItemsBand defines model for RadarStationPage.Items.Band.
 type RadarStationPageItemsBand string
+
+// RadarStationPageItemsCandidateSiteCoordinateSource defines model for RadarStationPage.Items.CandidateSite.CoordinateSource.
+type RadarStationPageItemsCandidateSiteCoordinateSource string
 
 // RadarStationPageItemsGeometryStatus defines model for RadarStationPage.Items.GeometryStatus.
 type RadarStationPageItemsGeometryStatus string

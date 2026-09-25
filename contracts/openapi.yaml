@@ -1223,6 +1223,16 @@ components:
               normalized: {type: integer}
               qc_ready: {type: integer}
               geometry_status: {type: string, enum: [unverified]}
+              candidate_site:
+                description: Draft station coordinates for map context only; never a georeferenced radar product or fusion qualification.
+                nullable: true
+                type: object
+                required: [longitude_deg, latitude_deg, coordinate_source, config_version]
+                properties:
+                  longitude_deg: {type: number, minimum: -180, maximum: 180}
+                  latitude_deg: {type: number, minimum: -90, maximum: 90}
+                  coordinate_source: {type: string, enum: [draft_radar_config]}
+                  config_version: {type: string}
         start: {type: string, format: date-time}
         end: {type: string, format: date-time}
         available_range:

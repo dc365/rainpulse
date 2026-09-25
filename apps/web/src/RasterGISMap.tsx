@@ -30,7 +30,7 @@ import {
   type RasterPixels,
   type RasterValue,
 } from './rasterSampling'
-import { radarRangeGeometry, type RadarSiteMetadata } from './radarSites'
+import { radarRangeGeometry, type RadarRangeSite, type RadarSiteMetadata } from './radarSites'
 
 export type MapCoordinate = { longitude: number, latitude: number }
 export type GISMapExtent = [number, number, number, number]
@@ -46,7 +46,11 @@ export type GISReferenceContext = {
   coastline?: { url: string, extent: GISMapExtent }
   places?: readonly { name: string, coordinate: readonly [number, number] }[]
 }
-export type GISRadarContext = RadarSiteMetadata & {
+export type GISRadarContext = RadarRangeSite & Pick<RadarSiteMetadata, 'radarID' | 'displayName' | 'radarBand'>
+  & Partial<Pick<RadarSiteMetadata, 'siteAltitudeM' | 'antennaAltitudeM' | 'frequencyMHz' | 'scanStrategy' | 'expectedUpdateSeconds'>> & {
+  geometryStatus?: 'verified' | 'unverified'
+  coordinateSource?: string
+  configVersion?: string
   timeOffsetSeconds?: number
   meanQualityIndex?: number
 }
@@ -94,6 +98,7 @@ function createReferenceLayer(places: NonNullable<GISReferenceContext['places']>
 
 function createRadarReferenceLayer(radar: GISRadarContext) {
   const geometry = radarRangeGeometry(radar)
+  const candidate = radar.geometryStatus === 'unverified'
   const features = [
     ...geometry.rings.map((ring) => new Feature({
       geometry: new Polygon([ring.coordinates.map((coordinate) => [...coordinate])]),
@@ -106,7 +111,7 @@ function createRadarReferenceLayer(radar: GISRadarContext) {
     ...geometry.labels.map((label) => new Feature({
       geometry: new Point([...label.coordinate]),
       kind: 'radar-range-label',
-      label: `${label.radiusKM} km`,
+      label: `${candidate ? '参考 ' : ''}${label.radiusKM} km`,
     })),
     new Feature({
       geometry: new Point([radar.longitude, radar.latitude]),
@@ -123,7 +128,7 @@ function createRadarReferenceLayer(radar: GISRadarContext) {
         return new Style({
           image: new CircleStyle({
             radius: 4.5,
-            fill: new Fill({ color: '#073f38' }),
+            fill: new Fill({ color: candidate ? '#a96730' : '#073f38' }),
             stroke: new Stroke({ color: 'rgba(250,252,250,.96)', width: 2 }),
           }),
         })
@@ -148,6 +153,7 @@ function createRadarReferenceLayer(radar: GISRadarContext) {
             ? 'rgba(14,65,58,.38)'
             : 'rgba(14,65,58,.48)',
           width: kind === 'radar-range-axis' ? 1 : 1.15,
+          lineDash: candidate ? [4, 4] : undefined,
         }),
       })
     },
@@ -359,6 +365,7 @@ interface RasterGISMapProps {
   resetViewLabel: string
   point?: MapCoordinate
   emptyStateHint?: string
+  referenceOnly?: boolean
   bbox?: readonly number[]
   loading: boolean
   loadingLabel?: string
@@ -402,6 +409,7 @@ export function RasterGISMap({
   resetViewLabel,
   point,
   emptyStateHint,
+  referenceOnly = false,
   bbox,
   loading,
   loadingLabel = '正在读取降水图层',
@@ -521,7 +529,7 @@ export function RasterGISMap({
   const fitExtentKey = fitExtent.join(',')
   const imageExtentKey = imageExtent.join(',')
   const radarContextKey = radarContext
-    ? `${radarContext.radarID}:${radarContext.longitude}:${radarContext.latitude}:${radarContext.displayRangeRadiiKM.join(',')}`
+    ? `${radarContext.radarID}:${radarContext.longitude}:${radarContext.latitude}:${radarContext.maximumRangeKM}:${radarContext.geometryStatus}:${radarContext.displayRangeRadiiKM.join(',')}`
     : ''
 
   useEffect(() => {
@@ -926,15 +934,16 @@ export function RasterGISMap({
           <header>
             <strong>{radarContext.displayName}</strong>
             <b>{radarContext.radarID.toUpperCase()}</b>
-            <span>{radarContext.radarBand}波段</span>
+            <span>{radarContext.radarBand}波段{radarContext.geometryStatus === 'unverified' ? ' · 候选位置' : ''}</span>
           </header>
-          <p>经度 {radarContext.longitude.toFixed(3)}°E · 纬度 {radarContext.latitude.toFixed(3)}°N</p>
-          <p>站高 {radarContext.siteAltitudeM} m · 天线 {radarContext.antennaAltitudeM} m · 范围 {radarContext.maximumRangeKM} km</p>
-          <small>
-            {radarContext.scanStrategy} · {radarContext.frequencyMHz} MHz · 体扫 {radarContext.expectedUpdateSeconds} s
-            {radarContext.timeOffsetSeconds == null ? '' : ` · 时差 ${radarContext.timeOffsetSeconds > 0 ? '+' : ''}${radarContext.timeOffsetSeconds} s`}
-            {radarContext.meanQualityIndex == null ? '' : ` · QI ${radarContext.meanQualityIndex.toFixed(3)}`}
-          </small>
+          <p>{radarContext.geometryStatus === 'unverified' ? '候选坐标 ' : '经度 '}{radarContext.longitude.toFixed(3)}°E · 纬度 {radarContext.latitude.toFixed(3)}°N</p>
+          {radarContext.geometryStatus === 'unverified'
+            ? <small>站点配置候选坐标 · 待核验；距离圈仅供位置参考，不表示回波覆盖或融合资格{radarContext.configVersion ? ` · ${radarContext.configVersion}` : ''}</small>
+            : <><p>站高 {radarContext.siteAltitudeM} m · 天线 {radarContext.antennaAltitudeM} m · 范围 {radarContext.maximumRangeKM} km</p><small>
+              {radarContext.scanStrategy} · {radarContext.frequencyMHz} MHz · 体扫 {radarContext.expectedUpdateSeconds} s
+              {radarContext.timeOffsetSeconds == null ? '' : ` · 时差 ${radarContext.timeOffsetSeconds > 0 ? '+' : ''}${radarContext.timeOffsetSeconds} s`}
+              {radarContext.meanQualityIndex == null ? '' : ` · QI ${radarContext.meanQualityIndex.toFixed(3)}`}
+            </small></>}
         </aside>
       ) : null}
 
@@ -1059,7 +1068,7 @@ export function RasterGISMap({
         <footer><span>{basemapLabel}</span><small>{footerNote}</small></footer>
       </div> : null}
 
-      {(!imageUrl || layerError) ? (
+      {(!referenceOnly && (!imageUrl || layerError)) ? (
         <div className="gis-layer-empty" role="status">
           <strong>{loading ? loadingLabel : '降水图层暂不可用'}</strong>
           <small>{layerError ? '图层校验或网络请求失败' : (emptyStateHint ?? '等待已发布的透明 PNG 产品')}</small>

@@ -21,6 +21,9 @@ export type RadarRangeGeometry = {
   labels: readonly { radiusKM: number, coordinate: readonly [number, number] }[]
 }
 
+export type RadarRangeSite = Pick<RadarSiteMetadata,
+  'longitude' | 'latitude' | 'maximumRangeKM' | 'displayRangeRadiiKM'>
+
 const EARTH_RADIUS_KM = 6371.0088
 const DISPLAY_RANGE_RADII_KM = [50, 100, 150, 200, 250] as const
 
@@ -111,7 +114,7 @@ export function destinationCoordinate(
   ]
 }
 
-export function radarRangeGeometry(site: RadarSiteMetadata): RadarRangeGeometry {
+export function radarRangeGeometry(site: RadarRangeSite): RadarRangeGeometry {
   const center: [number, number] = [site.longitude, site.latitude]
   const radii = site.displayRangeRadiiKM.filter((radius) => radius <= site.maximumRangeKM)
   const outerRadius = radii.at(-1) ?? Math.min(250, site.maximumRangeKM)
@@ -139,7 +142,7 @@ export function radarRangeGeometry(site: RadarSiteMetadata): RadarRangeGeometry 
   }
 }
 
-export function radarDisplayExtent(site: RadarSiteMetadata, radiusKM = 250): GISMapExtent {
+export function radarDisplayExtent(site: RadarRangeSite, radiusKM = 250): GISMapExtent {
   const center: [number, number] = [site.longitude, site.latitude]
   const west = destinationCoordinate(center, radiusKM, 270)
   const south = destinationCoordinate(center, radiusKM, 180)

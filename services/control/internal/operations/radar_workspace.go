@@ -115,11 +115,18 @@ func (h *Handler) radarStations(r *http.Request) (any, error) {
  FROM radar_scans s `+currentScanJoin+` WHERE s.volume_end_time >= $1 AND s.volume_end_time < $2
  ) SELECT jsonb_build_object('radar_id',d.radar_id,'display_name',COALESCE(d.display_name,d.radar_id),
  'band','X','geometry_status','unverified','registered',count(v.scan_id),
+ 'candidate_site',CASE WHEN jsonb_typeof(c.config#>'{site,longitude_deg}')='number'
+ AND jsonb_typeof(c.config#>'{site,latitude_deg}')='number' THEN CASE WHEN
+ (c.config#>>'{site,longitude_deg}')::numeric BETWEEN -180 AND 180 AND
+ (c.config#>>'{site,latitude_deg}')::numeric BETWEEN -90 AND 90 THEN jsonb_build_object(
+ 'longitude_deg',c.config#>'{site,longitude_deg}',
+ 'latitude_deg',c.config#>'{site,latitude_deg}',
+ 'coordinate_source','draft_radar_config','config_version',d.current_config_version) ELSE NULL END ELSE NULL END,
  'normalized',count(NULLIF(v.normalized_uri,'')),'qc_ready',count(*) FILTER(WHERE v.ready),
  'latest_observation',max(v.volume_end_time))
  FROM radars d JOIN radar_config_versions c ON c.radar_id=d.radar_id AND c.radar_config_version=d.current_config_version
  LEFT JOIN volumes v ON v.radar_id=d.radar_id WHERE `+xBandPredicate+` AND d.radar_id>$3
- GROUP BY d.radar_id,d.display_name ORDER BY d.radar_id LIMIT 101`, start, end, after)
+ GROUP BY d.radar_id,d.display_name,d.current_config_version,c.config ORDER BY d.radar_id LIMIT 101`, start, end, after)
 	if err != nil {
 		return nil, err
 	}
