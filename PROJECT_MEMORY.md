@@ -622,3 +622,13 @@ operational data here.
   69/1,265 weak CR winners covered (45/1,019 at 10–50 km). Broad thresholds
   reached 163/1,265 and an over-broad small-object bound 532/1,265; A follow-up matched vertical context + speckle pass reached 78/1,265
   (53/1,019 at 10–50 km) in 4.160 s / 729.2 MiB. Production removal remains off. See `docs/residual-texture-isolation-20260922.md`.
+
+- 2026-09-25: X native-QC browsing now has independent read-only station/scan/result
+  APIs and `/?preset=qc&band=X`; it does not depend on S forecast cycles. Current
+  registered X stations on 105 are ZF101 and ZF505, each with two successful
+  candidate scans after acceptance run 81fa570b-9724-4514-8d8d-3e38d47c8689.
+  The remaining 22 disk-inventory stations still require identity/config registration;
+  do not claim full-network or spatial-fusion readiness. See
+  docs/X_RADAR_WORKSPACE_IMPLEMENTATION_20260925.md for scope and evidence.
+  Workflow: integrate and verify locally, merge local main, then deploy artifacts
+  to 105. The test account supports sudo; passwords must never be persisted.
