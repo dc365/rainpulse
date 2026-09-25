@@ -4,6 +4,74 @@
  */
 
 export interface paths {
+    "/workspace/radar-stations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Registered X stations, including stations without QC; defaults to latest observed UTC+8 day. */
+        get: operations["listWorkspaceRadarStations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspace/radar-scans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Independent observed scans with candidate QC versions; at most 24 hours and 100 scans per page. */
+        get: operations["listWorkspaceRadarScans"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspace/radar-products/{result_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Validated native polar comparison, pinned to task and attempt; no operational promotion. */
+        get: operations["getWorkspaceRadarProduct"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspace/radar-products/{result_id}/assets/{asset_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Only image assets listed in the verified comparison manifest. */
+        get: operations["getWorkspaceRadarProductAsset"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/runs/latest": {
         parameters: {
             query?: never;
@@ -739,6 +807,83 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        RadarStationPage: {
+            items: {
+                radar_id: string;
+                display_name?: string;
+                /** @enum {string} */
+                band: "X";
+                registered: number;
+                normalized: number;
+                qc_ready: number;
+                /** @enum {string} */
+                geometry_status: "unverified";
+            }[];
+            /** Format: date-time */
+            start: string;
+            /** Format: date-time */
+            end: string;
+            available_range: {
+                /** Format: date-time */
+                start?: string | null;
+                /** Format: date-time */
+                end?: string | null;
+            };
+            next_cursor: string;
+            /** @enum {string} */
+            inventory_scope: "registered_catalog";
+        };
+        WorkspaceRadarScanPage: {
+            items: {
+                /** Format: uuid */
+                scan_id: string;
+                radar_id: string;
+                /** Format: date-time */
+                volume_start: string;
+                /** Format: date-time */
+                volume_end: string;
+                state: string;
+                qc_status: string;
+                results: {
+                    /** @description Immutable task UUID plus attempt UUID */
+                    result_id: string;
+                    /** Format: date-time */
+                    finished_at: string;
+                    version: string;
+                }[];
+            }[];
+            next_cursor: string;
+        };
+        RadarComparison: {
+            result_id: string;
+            radar_id: string;
+            /** Format: uuid */
+            scan_id: string;
+            /** Format: date-time */
+            volume_start: string;
+            /** Format: date-time */
+            volume_end: string;
+            /** @enum {boolean} */
+            candidate_only: true;
+            /** @enum {boolean} */
+            operational_eligible: false;
+            geometry?: string;
+            legend?: {
+                minimum_dbzh?: number;
+                rgb?: number[];
+            }[];
+            sweeps: {
+                sweep_number: number;
+                sequence: number;
+                elevation_deg: number;
+                /** @description Read-only verified PNG URL */
+                raw: string;
+                /** @description Read-only verified PNG URL */
+                qc: string;
+                /** @description Read-only verified PNG URL */
+                flags: string;
+            }[];
+        };
         /** @enum {string} */
         RunStatus: "WAITING" | "RECEIVED" | "VALIDATING" | "PREPROCESSING" | "INPUT_READY" | "BASELINE_RUNNING" | "BASELINE_READY" | "ENHANCED_RUNNING" | "PRODUCT_BUILDING" | "PUBLISHED" | "VERIFYING" | "VERIFIED" | "DEGRADED" | "FAILED" | "SKIPPED";
         /** @enum {string} */
@@ -1877,6 +2022,105 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listWorkspaceRadarStations: {
+        parameters: {
+            query?: {
+                band?: string;
+                start?: string;
+                end?: string;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verified result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RadarStationPage"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listWorkspaceRadarScans: {
+        parameters: {
+            query: {
+                radar_id: string;
+                start: string;
+                end: string;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verified result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceRadarScanPage"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getWorkspaceRadarProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                result_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verified result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RadarComparison"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getWorkspaceRadarProductAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                result_id: string;
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verified result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
     getLatestRun: {
         parameters: {
             query?: never;

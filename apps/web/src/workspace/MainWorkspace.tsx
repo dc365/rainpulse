@@ -408,7 +408,7 @@ export function MainWorkspace() {
             <option value="lk">LK 确定性</option><option value="steps">STEPS P50</option><option value="nowcastnet">NowcastNet</option>
           </select></label>}
         <div className="map-tools" role="group" aria-label="地图显示">
-          {preset === 'qc' ? <><a href="/qc-review">QC 证据复核</a><a href="/admin?view=new&preset=x_qc">X 波段质控对比</a></> : null}
+          {preset === 'qc' ? <><a href="/?preset=qc" aria-current="page">S 波段</a><a href="/qc-review">QC 证据复核</a><a href="/?preset=qc&band=X">X 波段质控对比</a></> : null}
           <a href="/admin?view=new&preset=sx_composite">S/X 六分钟区域对照</a>
           <div className="workspace-layout-picker" ref={layoutPickerRef}>
             <button
@@ -790,6 +790,7 @@ export function SharedTimeline({
   onSelect: (value: string) => void
 }) {
   const railRef = useRef<HTMLDivElement>(null)
+  const [railViewportWidth, setRailViewportWidth] = useState(0)
   const gesture = useRef<{ lead: number; x: number; moved: boolean; end: number } | null>(null)
   const [draftInterval, setDraftInterval] = useState<Interval | null>(null)
   const highlighted = draftInterval ?? selectedInterval
@@ -825,7 +826,7 @@ export function SharedTimeline({
   const activeIsIssue = Date.parse(activeValue) === Date.parse(issueTime)
   const railWidth = Math.max(0, (timelineEndMS - timelineStartMS) / 60_000 * 4)
   const markerDistancePx = Math.abs(timelinePosition(activeValue) - issuePosition)
-    * Math.max(railWidth, railRef.current?.clientWidth ?? 0) / 100
+    * Math.max(railWidth, railViewportWidth) / 100
   const originLabelCompact = !activeIsIssue && markerDistancePx < 120
   const intervalMinutes = values.length > 1
     ? Math.max(1, Math.round((Date.parse(values[1]) - Date.parse(values[0])) / 60_000))
@@ -840,6 +841,7 @@ export function SharedTimeline({
       ?? rail?.querySelector<HTMLElement>(`[data-lead="${selectedInterval?.end}"]`)
     if (!rail || !active) return
     const center = () => {
+      setRailViewportWidth(rail.clientWidth)
       const left = active.offsetLeft - (rail.clientWidth - active.clientWidth) / 2
       rail.scrollLeft = left
     }
