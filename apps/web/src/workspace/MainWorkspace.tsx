@@ -302,6 +302,28 @@ export function MainWorkspace() {
     setFocusMenuOpen(false)
   }, [setFocusedPanelID, setFocusMenuOpen])
 
+  const cycleControls = <div className="workspace-timeline-cycle" aria-label="起报时间控制">
+    <div className="workspace-data-mode" role="group" aria-label="数据模式">
+      <button type="button" className={followLatest ? 'active' : ''} aria-pressed={followLatest}
+        title={realtimeAvailable ? '跟随最新实时周期' : '当前没有新鲜的实时周期'}
+        onClick={() => {
+          setPlaying(false)
+          if (preset === 'verification') setPreset('forecast')
+          follow()
+        }}>
+        <i aria-hidden="true" />实时监测
+      </button>
+      <button type="button" className={!followLatest ? 'active' : ''} aria-pressed={!followLatest}
+        onClick={() => { pin(); setPlaying(false) }}>历史案例</button>
+    </div>
+    {!followLatest ? <HistoryPicker cycles={historicalCycles} selectedID={selectedCycleID}
+      onSelect={(cycle) => { setPlaying(false); requestCycle(cycle) }}
+    /> : <section className={`workspace-cycle-summary${isRealtimeView ? ' live' : ''}`} aria-label="当前周期">
+      <span>{isRealtimeView ? '实时周期' : '保留结果'}</span>
+      <strong>{selectedCycle ? formatLocalCycleTime(selectedCycle.issue_time) : '读取周期中'}</strong>
+    </section>}
+  </div>
+
   return (
     <main className="workspace-shell">
       <header className="workspace-topbar">
@@ -310,45 +332,15 @@ export function MainWorkspace() {
           <strong>RainPulse</strong>
           <small>短临降水工作台</small>
         </a>
-        <div className="workspace-data-mode" role="group" aria-label="数据模式">
-          <button
-            type="button"
-            className={followLatest ? 'active' : ''}
-            aria-pressed={followLatest}
-            title={realtimeAvailable ? '跟随最新实时周期' : '当前没有新鲜的实时周期'}
-            onClick={() => {
-              setPlaying(false)
-              if (preset === 'verification') setPreset('forecast')
-              follow()
-            }}
-          >
-            <i aria-hidden="true" />
-            实时监测
-          </button>
-          <button type="button" className={!followLatest ? 'active' : ''} aria-pressed={!followLatest} onClick={() => { pin(); setPlaying(false) }}>历史案例</button>
-          <span className="workspace-data-mode-note">
-            {followLatest ? realtimeAvailable ? '跟随最新' : '等待新资料 · 自动恢复' : '固定历史起报'}
-          </span>
-        </div>
-        {!followLatest ? <HistoryPicker cycles={historicalCycles} selectedID={selectedCycleID}
-            onSelect={(cycle) => {
-              setPlaying(false)
-              requestCycle(cycle)
-            }}
-          /> : <section className={`workspace-cycle-summary${isRealtimeView ? ' live' : ''}`} aria-label="当前周期">
-          <span>{isRealtimeView ? '实时周期' : '保留结果'}</span>
-          <strong>{selectedCycle ? formatLocalCycleTime(selectedCycle.issue_time) : '读取周期中'}</strong>
-          <small>{selectedCycle ? formatUTCCycleTime(selectedCycle.issue_time) : '—'}</small>
-        </section>}
         <div className="workspace-freshness" aria-label="数据时效">
           <i className={isRealtimeView ? 'fresh' : ''} />
           <span>{followLatest ? connection === 'connected' ? '自动跟随 · 已连接' : '自动跟随 · 轮询恢复' : '历史回放 · 固定起报'}</span>
           <strong>{followLatest && detail ? ageLabel(cycleAgeSeconds(detail, now)) : selectedCycle ? capabilityText(selectedCycle) : '读取中'}</strong>
         </div>
+        {error ? <button type="button" className="workspace-warning-compact" title={error} aria-label={`部分数据源不可用，重试。${error}`} onClick={refresh}>数据异常 · 重试</button> : null}
         <a className="admin-link" href="/admin">后台</a>
       </header>
 
-      {error ? <div className="workspace-warning" role="status">{error} <button type="button" onClick={refresh}>重试</button></div> : null}
       {loading && detail ? <div className="workspace-pending" role="status">正在读取所选周期；当前仍显示 {formatLocalCycleTime(detail.issue_time)} 起报结果。</div> : null}
 
       <section className={`workspace-controls${preset === 'qc' ? ' qc-controls' : ''}`} aria-label="工作台控制">
@@ -540,6 +532,7 @@ export function MainWorkspace() {
         }} />}
       {detail ? (
         <SharedTimeline
+          cycleControls={cycleControls}
           selectedInterval={activeProductMode !== 'rain_rate' ? interval : null}
           intervalBusy={accumulation.busy}
           onInterval={preset === 'forecast' ? (value) => {
@@ -561,7 +554,7 @@ export function MainWorkspace() {
             else selectTime(value)
           }}
         />
-      ) : null}
+      ) : <section className="shared-timeline workspace-timeline-empty" aria-label="统一有效时间轴">{cycleControls}</section>}
       <WorkspaceCrosshairInspector probes={probeEntries} coordinate={probePoint ? { longitude: probePoint.longitude, latitude: probePoint.latitude } : null} />
     </main>
   )
@@ -759,6 +752,7 @@ export function updateLayerErrorState(
 }
 
 export function SharedTimeline({
+  cycleControls,
   productMode = 'rain_rate',
   onProductMode,
   selectedInterval = null,
@@ -776,6 +770,7 @@ export function SharedTimeline({
   onTogglePlaying,
   onSelect,
 }: {
+  cycleControls?: React.ReactNode
   productMode?: ProductMode
   onProductMode?: (mode: ProductMode) => void
   selectedInterval?: Interval | null
@@ -809,6 +804,28 @@ export function SharedTimeline({
   const selectedIndex = values.findIndex(value => Date.parse(value) === Date.parse(selectedTime ?? issueTime))
   const activeIndex = selectedIndex >= 0 ? selectedIndex : 0
   const activeValue = values[activeIndex] ?? selectedTime ?? issueTime
+  const timelineStartMS = Date.parse(values[0] ?? issueTime)
+  const timelineEndMS = Date.parse(values.at(-1) ?? issueTime)
+  const timelineDurationMS = Math.max(60_000, timelineEndMS - timelineStartMS)
+  const timelinePosition = (value: string) => Math.max(0, Math.min(100,
+    (Date.parse(value) - timelineStartMS) / timelineDurationMS * 100))
+  const hourMarks: { time: number; label: string; date?: string }[] = []
+  const firstHour = Math.ceil(timelineStartMS / 3_600_000) * 3_600_000
+  for (let time = firstHour; time <= timelineEndMS; time += 3_600_000) {
+    const date = new Date(time)
+    const hour = timelineHour(date)
+    hourMarks.push({
+      time,
+      label: `${hour}时`,
+      date: hour === 0 ? timelineDate(date) : undefined,
+    })
+  }
+  const issuePosition = timelinePosition(issueTime)
+  const activeIsIssue = Date.parse(activeValue) === Date.parse(issueTime)
+  const railWidth = Math.max(0, (timelineEndMS - timelineStartMS) / 60_000 * 4)
+  const markerDistancePx = Math.abs(timelinePosition(activeValue) - issuePosition)
+    * Math.max(railWidth, railRef.current?.clientWidth ?? 0) / 100
+  const originLabelCompact = !activeIsIssue && markerDistancePx < 120
   const intervalMinutes = values.length > 1
     ? Math.max(1, Math.round((Date.parse(values[1]) - Date.parse(values[0])) / 60_000))
     : 0
@@ -829,7 +846,7 @@ export function SharedTimeline({
     const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(center)
     observer?.observe(rail)
     return () => observer?.disconnect()
-  }, [activeIndex, selectedInterval?.end])
+  }, [activeIndex, activeValue, issueTime, selectedInterval?.end])
 
   const move = (step: number) => {
     const next = values[Math.min(values.length - 1, Math.max(0, activeIndex + step))]
@@ -837,6 +854,7 @@ export function SharedTimeline({
   }
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if ((event.target as HTMLElement).closest('.workspace-timeline-cycle')) return
     if (event.key === 'ArrowLeft') {
       event.preventDefault()
       move(-1)
@@ -862,6 +880,7 @@ export function SharedTimeline({
       onKeyDown={handleKeyDown}
     >
       <div className="workspace-timeline-context">
+        {cycleControls}
         {onInterval && <div className="interval-shortcuts" role="group" aria-label="累计快捷区间">
           {[[-60,0],[0,60],[60,120],[120,180],[0,120],[0,180]].map(([start,end]) => <button type="button" key={`${start}-${end}`}
             aria-pressed={selectedInterval?.start === start && selectedInterval.end === end}
@@ -921,13 +940,12 @@ export function SharedTimeline({
             ? `播放中 · ${activeIndex + 1}/${values.length} 帧`
             : productMode !== 'rain_rate' ? `${values.length} 个累计区间`
             : `${values.length} 帧${intervalMinutes ? ` · ${intervalMinutes} 分钟间隔` : ''}`}</span>
-          <span className="workspace-timeline-issue"><small>起报</small>{formatCycleTime(issueTime)}</span>
-          <strong>{highlighted ? `${intervalLabel(issueTime, highlighted)}${intervalBusy && !draftInterval ? ' · 计算中…' : ''}` : productMode === 'rain_rate' ? `${leadLabel(issueTime, activeValue)} · ${formatValidTime(activeValue)}`
-            : accumulationLabel(issueTime, activeValue, productMode)}</strong>
+          {!cycleControls && <span className="workspace-timeline-issue"><small>起报</small>{formatCycleTime(issueTime)}</span>}
+          <strong>{highlighted ? `${intervalLabel(issueTime, highlighted)}${intervalBusy && !draftInterval ? ' · 计算中…' : ''}` : productMode === 'rain_rate' ? `${timelineDateTime(new Date(activeValue))} 北京时间`
+            : `${accumulationLabel(issueTime, activeValue, productMode)} · ${timelineDateTime(new Date(activeValue))} 北京时间`}</strong>
         </div>
       </div>
 
-      {onInterval && <div className="timeline-period-heading"><span>过去 1 小时 · 实况</span><span>未来 3 小时 · 预报</span></div>}
       <div className={`workspace-timeline-rail${onInterval ? ' selectable-timeline' : ''}${productMode !== 'rain_rate' ? ' accumulation-rail' : ''}`} ref={railRef}
         onPointerDown={event => {
           if (!onInterval || event.button !== 0 || event.isPrimary === false) return
@@ -957,30 +975,53 @@ export function SharedTimeline({
         }}
         onPointerCancel={cancelGesture}
         onLostPointerCapture={cancelGesture}>
+        <div className="workspace-timeline-track" style={{
+          width: `max(100%, ${railWidth}px)`,
+          background: `linear-gradient(90deg, #edf2f5 0% ${issuePosition}%, var(--rp-teal-soft) ${issuePosition}% 100%)`,
+        }}>
+        {onInterval && <div className="timeline-period-labels" aria-hidden="true">
+          <span style={{ left: 0, width: `${issuePosition}%` }}>过去 1 小时 · 实况</span>
+          <span style={{ left: `${issuePosition}%`, width: `${100 - issuePosition}%` }}>未来 3 小时 · 预报</span>
+        </div>}
+        <div className="workspace-timeline-hour-scale" aria-hidden="true">
+          {hourMarks.map(mark => <span key={mark.time} className="workspace-timeline-hour-mark"
+            style={{ left: `${timelinePosition(new Date(mark.time).toISOString())}%` }}>
+            <i />{mark.date && <small>{mark.date}</small>}<b>{mark.label}</b>
+          </span>)}
+        </div>
+        <span className={`workspace-timeline-origin-marker${originLabelCompact ? ' compact' : ''}`}
+          role="img" aria-label={`起报时刻 ${timelineDateTime(new Date(issueTime))} 北京时间`}
+          title={`起报时刻 ${timelineDateTime(new Date(issueTime))} 北京时间`}
+          style={{ left: `${issuePosition}%` }}>
+          <i aria-hidden="true" /><b aria-hidden="true">起报 {timelineClock(new Date(issueTime))}</b>
+        </span>
         {values.map((value, index) => {
           const leadMinutes = Math.round((Date.parse(value) - Date.parse(issueTime)) / 60_000)
-          const active = !highlighted && index === activeIndex
-          const major = leadMinutes % 30 === 0
+          const active = index === activeIndex
+          const position = timelinePosition(value)
+          const previous = index > 0 ? Date.parse(values[index - 1]) : timelineStartMS
+          const next = index < values.length - 1 ? Date.parse(values[index + 1]) : timelineEndMS
+          const leftEdge = index === 0 ? timelineStartMS : (previous + Date.parse(value)) / 2
+          const rightEdge = index === values.length - 1 ? timelineEndMS : (Date.parse(value) + next) / 2
+          const cellWidth = Math.max(0, (rightEdge - leftEdge) / timelineDurationMS * 100)
+          const alignment = index === 0 ? 'translateX(0)' : index === values.length - 1 ? 'translateX(-100%)' : 'translateX(-50%)'
           return (
             <button
               type="button"
-              className={active ? 'active' : ''}
+              className={`workspace-timeline-frame${active ? ' active' : ''}`}
               key={value}
               onClick={event => { if (!onInterval || event.detail === 0) onSelect(value) }}
+              style={{ left: `${position}%`, width: `max(24px, ${cellWidth}%)`, transform: alignment }}
               data-lead={leadMinutes}
               data-period={leadMinutes < 0 ? 'past' : leadMinutes === 0 ? 'issue' : 'future'}
               data-available={panels.some(panel => isDisplayAvailable(panel, value))}
               data-selected={Boolean(highlighted && leadMinutes >= highlighted.start && leadMinutes <= highlighted.end)}
               aria-current={active ? 'step' : undefined}
-              aria-label={productMode === 'rain_rate' ? `${leadLabel(issueTime, value)}，${formatValidTime(value)}` : accumulationLabel(issueTime, value, productMode)}
+              aria-label={productMode === 'rain_rate' ? `${timelineDateTime(new Date(value))} 北京时间` : `${accumulationLabel(issueTime, value, productMode)}，${timelineDateTime(new Date(value))} 北京时间`}
               title={`${formatValidTime(value)} · ${panels.filter((panel) => isDisplayAvailable(panel, value)).length}/${panels.length} 面板可用`}
-              data-major={major}
             >
-              {leadMinutes === 0 && <span className="timeline-origin">起报时刻</span>}
               <i className="workspace-timeline-node" aria-hidden="true" />
-              <span className="workspace-timeline-lead">{productMode === 'rain_rate'
-                ? leadMinutes === 0 ? '0' : major || active ? `${leadMinutes > 0 ? '+' : ''}${leadMinutes}` : '·'
-                : `${productMode === 'total_2h' ? 0 : leadMinutes / 60 - 1}–${leadMinutes / 60} 小时`}</span>
+              {active && !activeIsIssue && <span className="timeline-selected-time">{timelineClockLabel(new Date(value), new Date(issueTime))}</span>}
               <span className="workspace-timeline-lanes" aria-hidden="true">
                 {panels.map((panel) => (
                   <i key={panel.panel_id} data-ready={isDisplayAvailable(panel, value)} />
@@ -989,6 +1030,7 @@ export function SharedTimeline({
             </button>
           )
         })}
+        </div>
       </div>
 
       <div className="workspace-timeline-availability" aria-label="图层可用性">
@@ -1024,6 +1066,33 @@ function capabilityText(cycle: CycleSummary) {
   ].filter(Boolean).join('/') || '分析中'
 }
 
+function timelineClock(date: Date) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).format(date)
+}
+
+function timelineDate(date: Date) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit',
+  }).format(date)
+}
+
+function timelineHour(date: Date) {
+  return Number(new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai', hour: '2-digit', hourCycle: 'h23',
+  }).formatToParts(date).find(part => part.type === 'hour')?.value)
+}
+
+function timelineDateTime(date: Date) {
+  return `${timelineDate(date)} ${timelineClock(date)}`
+}
+
+function timelineClockLabel(date: Date, reference: Date) {
+  const clock = timelineClock(date)
+  return timelineDate(date) === timelineDate(reference) ? clock : `${timelineDate(date)} ${clock}`
+}
+
 function formatLocalCycleTime(value: string) {
   return new Intl.DateTimeFormat('zh-CN', {
     timeZone: 'Asia/Taipei',
@@ -1033,17 +1102,6 @@ function formatLocalCycleTime(value: string) {
     minute: '2-digit',
     hour12: false,
   }).format(new Date(value)) + ' CST'
-}
-
-function formatUTCCycleTime(value: string) {
-  return new Intl.DateTimeFormat('zh-CN', {
-    timeZone: 'UTC',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(new Date(value)) + ' UTC'
 }
 
 function roleLabel(panel: WorkspacePanel) {

@@ -38,6 +38,18 @@ export type GISLegendEntry = {
   minimum?: number
   sourceLabel?: string
 }
+
+const REFLECTIVITY_STOPS: readonly [number, string][] = [
+  [5, '#419bf1'], [10, '#64e8ec'], [15, '#6efb3d'], [20, '#00dc00'],
+  [25, '#019000'], [30, '#fdfe00'], [35, '#e7c000'], [40, '#ff9000'],
+  [45, '#fe0000'], [50, '#d60000'], [55, '#c00000'], [60, '#ff00f0'],
+  [65, '#9500b4'], [70, '#ae90f0'],
+]
+const REFLECTIVITY_LEGEND: GISLegendEntry[] = REFLECTIVITY_STOPS.map(([minimum, color]) => ({
+  minimum,
+  label: String(minimum),
+  color,
+}))
 export type GISRasterStyle = 'grid' | 'smooth'
 export type GISReferenceContext = {
   coastline?: { url: string, extent: GISMapExtent }
@@ -383,25 +395,6 @@ interface RasterGISMapProps {
   picker?: ReactNode
 }
 
-function reflectivityLegendPosition(
-  legend: readonly GISLegendEntry[],
-  index: number,
-): number {
-  const values = legend.map((entry) => entry.minimum)
-  const minimum = values[0]
-  const maximum = values[values.length - 1]
-  if (minimum != null && maximum != null && maximum > minimum && values.every(Number.isFinite)) {
-    return ((values[index]! - minimum) / (maximum - minimum)) * 100
-  }
-  return legend.length > 1 ? (index / (legend.length - 1)) * 100 : 0
-}
-
-function reflectivityLegendGradient(legend: readonly GISLegendEntry[]): string {
-  const stops = legend.map((entry, index) =>
-    `${entry.color} ${reflectivityLegendPosition(legend, index)}%`)
-  return `linear-gradient(90deg, ${stops.join(', ')})`
-}
-
 export function RasterGISMap({
   imageUrl,
   imageDescription,
@@ -440,6 +433,9 @@ export function RasterGISMap({
   motionVisible = false,
   picker,
 }: RasterGISMapProps) {
+  const isReflectivityLegend = legendUnit.trim().toLowerCase() === 'dbz'
+  const displayLegendUnit = isReflectivityLegend ? 'dBZ' : legendUnit
+  const displayLegend = isReflectivityLegend ? REFLECTIVITY_LEGEND : legend
   const targetRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<OLMap | null>(null)
   const basemapLayerRef = useRef<TileLayer<XYZ> | null>(null)
@@ -464,7 +460,7 @@ export function RasterGISMap({
   const fitExtentRef = useRef(fitExtent)
   const referenceContextRef = useRef(referenceContext)
   const radarContextRef = useRef(radarContext)
-  const legendRef = useRef(legend)
+  const legendRef = useRef(displayLegend)
   const rasterPixelsRef = useRef<RasterPixels | null>(null)
   const rasterStyleRef = useRef<GISRasterStyle>('smooth')
   const showRasterValuesRef = useRef(false)
@@ -516,9 +512,9 @@ export function RasterGISMap({
   }, [imageExtent])
 
   useEffect(() => {
-    legendRef.current = legend
+    legendRef.current = displayLegend
     refreshRasterValuesRef.current?.()
-  }, [legend])
+  }, [displayLegend])
 
   useEffect(() => {
     rasterStyleRef.current = rasterStyle
@@ -1009,13 +1005,13 @@ export function RasterGISMap({
 
       {!comparisonMode ? <div ref={pickerRef} className="gis-picker-wrap">{point ? picker : null}</div> : null}
 
-      {comparisonMode && legend.length ? (
-        <div className={`gis-comparison-legend ${legendMode}${legendUnit === 'dBZ' ? ' reflectivity-legend' : ''}`} aria-label={`${productLabel}图例`} tabIndex={0}>
-          {legendUnit ? <header><strong>{legendUnit === 'dBZ' ? '基本反射率 · dBZ' : legendUnit}</strong></header> : null}
+      {comparisonMode && displayLegend.length ? (
+        <div className={`gis-comparison-legend ${legendMode}${isReflectivityLegend ? ' reflectivity-legend' : ''}`} aria-label={`${productLabel}图例`} tabIndex={0}>
+          {displayLegendUnit ? <header><strong>{displayLegendUnit}</strong></header> : null}
           <div className="gis-comparison-legend-scroll">
             {legendMode === 'categorical' ? (
               <div className="gis-comparison-legend-list">
-                {legend.map((item) => (
+                {displayLegend.map((item) => (
                   <span
                     key={`${item.label}-${item.color}`}
                     title={item.sourceLabel ? `${item.label}（${item.sourceLabel}）` : item.label}
@@ -1025,33 +1021,30 @@ export function RasterGISMap({
                   </span>
                 ))}
               </div>
-            ) : legendUnit === 'dBZ' ? (
-              <div className="gis-comparison-reflectivity-scale">
-                <i
-                  aria-hidden="true"
-                  data-testid="reflectivity-gradient"
-                  style={{ backgroundImage: reflectivityLegendGradient(legend) }}
-                />
-                <div>
-                  {legend.map((item, index) => (
-                    <small
-                      key={`${item.label}-${item.color}`}
-                      style={{ left: `${reflectivityLegendPosition(legend, index)}%` }}
-                    >
-                      {item.label}
-                    </small>
-                  ))}
-                </div>
+            ) : isReflectivityLegend ? (
+              <div
+                className="gis-comparison-legend-scale reflectivity-segments"
+                style={{
+                  gridTemplateColumns: `repeat(${displayLegend.length}, minmax(20px, 1fr))`,
+                  minWidth: `${displayLegend.length * 22}px`,
+                }}
+              >
+                {displayLegend.map((item) => (
+                  <span key={`${item.label}-${item.color}`} title={item.label}>
+                    <i style={{ backgroundColor: item.color }} />
+                    <small>{item.minimum ?? item.label.match(/[-+]?\d+(?:\.\d+)?/)?.[0]}</small>
+                  </span>
+                ))}
               </div>
             ) : (
               <div
                 className="gis-comparison-legend-scale"
                 style={{
-                  gridTemplateColumns: `repeat(${legend.length}, minmax(26px, 1fr))`,
-                  minWidth: `${legend.length * 26}px`,
+                  gridTemplateColumns: `repeat(${displayLegend.length}, minmax(26px, 1fr))`,
+                  minWidth: `${displayLegend.length * 26}px`,
                 }}
               >
-                {legend.map((item) => (
+                {displayLegend.map((item) => (
                   <span
                     key={`${item.label}-${item.color}`}
                     title={item.sourceLabel ? `${item.label}（${item.sourceLabel}）` : item.label}
@@ -1071,28 +1064,29 @@ export function RasterGISMap({
       ) : null}
 
       {!comparisonMode ? <div className={`gis-legend ${legendMode}`} aria-label={`${productLabel}图例`} tabIndex={0}>
-        <header><span>{productLabel}</span><strong>{legendUnit}</strong></header>
+        <header><span>{productLabel}</span><strong>{displayLegendUnit}</strong></header>
         {legendMode === 'categorical' ? (
           <div className="gis-legend-list">
-            {legend.map((item) => <span key={`${item.label}-${item.color}`} title={item.sourceLabel ? `${item.label}（${item.sourceLabel}）` : item.label}><i style={{ backgroundColor: item.color }} /><small>{item.label}</small></span>)}
+            {displayLegend.map((item) => <span key={`${item.label}-${item.color}`} title={item.sourceLabel ? `${item.label}（${item.sourceLabel}）` : item.label}><i style={{ backgroundColor: item.color }} /><small>{item.label}</small></span>)}
           </div>
-        ) : legendUnit === 'dBZ' ? (
-          <div className="gis-comparison-reflectivity-scale">
-            <i aria-hidden="true" style={{ backgroundImage: reflectivityLegendGradient(legend) }} />
-            <div>
-              {legend.map((item, index) => (
-                <small
-                  key={`${item.label}-${item.color}`}
-                  style={{ left: `${reflectivityLegendPosition(legend, index)}%` }}
-                >
-                  {item.label}
-                </small>
-              ))}
-            </div>
+        ) : isReflectivityLegend ? (
+          <div
+            className="gis-comparison-legend-scale reflectivity-segments"
+            style={{
+              gridTemplateColumns: `repeat(${displayLegend.length}, minmax(20px, 1fr))`,
+              minWidth: `${displayLegend.length * 22}px`,
+            }}
+          >
+            {displayLegend.map((item) => (
+              <span key={`${item.label}-${item.color}`} title={item.label}>
+                <i style={{ backgroundColor: item.color }} />
+                <small>{item.minimum ?? item.label.match(/[-+]?\d+(?:\.\d+)?/)?.[0]}</small>
+              </span>
+            ))}
           </div>
         ) : (
-          <div className="gis-legend-cells" style={{ gridTemplateColumns: `repeat(${legend.length}, minmax(0, 1fr))` }}>
-            {legend.map((item) => (
+          <div className="gis-legend-cells" style={{ gridTemplateColumns: `repeat(${displayLegend.length}, minmax(0, 1fr))` }}>
+            {displayLegend.map((item) => (
               <span key={`${item.label}-${item.color}`} title={item.sourceLabel ? `${item.label}（${item.sourceLabel}）` : item.label}><i style={{ backgroundColor: item.color }} /><small>{item.label}</small></span>
             ))}
           </div>

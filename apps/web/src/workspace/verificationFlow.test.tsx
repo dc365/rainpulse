@@ -12,6 +12,10 @@ vi.mock('./useWorkspaceData', () => ({ useWorkspaceData: () => ({ state, now: 0,
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 it('pins the displayed cycle on entering verification and exits verification when following live again', () => {
   render(<MainWorkspace />)
+  const timeline = screen.getByRole('region', { name: '统一有效时间轴' })
+  const realtime = screen.getByRole('button', { name: '实时监测' })
+  expect(timeline.contains(realtime)).toBe(true)
+  expect(document.querySelector('.workspace-topbar')?.contains(realtime)).toBe(false)
   fireEvent.click(screen.getByRole('tab', { name: '检验回放' }))
   expect(pin).toHaveBeenCalledOnce()
   expect(screen.getByRole('tab', { name: '检验回放' }).getAttribute('aria-selected')).toBe('true')

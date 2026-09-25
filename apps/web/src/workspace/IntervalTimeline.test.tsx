@@ -16,7 +16,7 @@ it('uses the original time ticks and the six shortcuts', () => {
   expect(screen.queryByRole('slider')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: '1–2 时' }))
   expect(commit).toHaveBeenLastCalledWith({ start: 60, end: 120 })
-  fireEvent.click(screen.getByRole('button',{name:/^\+18 min，/}))
+  fireEvent.click(screen.getByRole('button',{name:/08\/28 16:48 北京时间/}))
   expect(select).toHaveBeenLastCalledWith(props.values[13])
 })
 

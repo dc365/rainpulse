@@ -72,7 +72,7 @@ describe('SharedTimeline', () => {
     )
 
     expect((screen.getByRole('button', { name: '前一时刻' }) as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getByRole('button', { name: /\+5 min/ }).getAttribute('aria-current')).toBeNull()
+    expect(screen.getByRole('button', { name: /09\/01 09:05 北京时间/ }).getAttribute('aria-current')).toBeNull()
     expect(container.querySelectorAll('.workspace-timeline-lanes i')).toHaveLength(values.length * panels.length)
     expect(container.querySelector('.workspace-timeline-toolbar')).toBeNull()
     expect(container.querySelector('.workspace-timeline-context .workspace-timeline-playback')).not.toBeNull()
