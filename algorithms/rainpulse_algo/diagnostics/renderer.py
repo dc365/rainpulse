@@ -5,6 +5,7 @@ import json
 import re
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
+from importlib.resources import files
 from typing import Any
 from uuid import UUID
 
@@ -25,17 +26,10 @@ class DiagnosticInputError(ValueError):
     pass
 
 
-REFLECTIVITY_STOPS = (
-    # Seven anchors in the supplied operational legend.  The renderer blends
-    # continuously between anchors, while the legend labels stay at 10 dBZ.
-    (10.0, "#0fa3ea"),
-    (20.0, "#06d215"),
-    (30.0, "#089e0a"),
-    (40.0, "#f0ac14"),
-    (50.0, "#e46c60"),
-    (60.0, "#cb15aa"),
-    (70.0, "#ad96f2"),
-)
+# Shared with X candidate rendering and the Web legend.
+REFLECTIVITY_STOPS = tuple((float(value), color) for value, color in json.loads(
+    files("rainpulse_algo").joinpath("reflectivity_palette.json").read_text()
+))
 
 RATE_STOPS = (
     (0.0, "#dce9ee"),
@@ -133,7 +127,7 @@ def build_diagnostic_bundle(
         ("grid-beam-height", "波束高度", "BEAM_HEIGHT", "scalar", "m", BEAM_STOPS),
     )
     for layer_id, title, field, rendering, unit, stops in grid_specs:
-        rgba = _scalar_rgba(analysis[field][:], valid, stops, smooth=unit == "dBZ")
+        rgba = _scalar_rgba(analysis[field][:], valid, stops)
         rgba = _north_up_scaled(rgba, grid_scale)
         layers.append(
             _store_layer(
@@ -285,7 +279,7 @@ def build_diagnostic_bundle(
                         if "QPE_ELIGIBLE_MASK" not in group:
                             raise DiagnosticInputError("v2 QC lacks quantitative eligibility")
                         field_valid &= group["QPE_ELIGIBLE_MASK"][:] == 1
-                rgba = _scalar_rgba(group[field][:], field_valid, stops, smooth=unit == "dBZ")
+                rgba = _scalar_rgba(group[field][:], field_valid, stops)
                 projected = projector(
                     rgba,
                     group["azimuth"][:],
@@ -359,7 +353,7 @@ def build_diagnostic_bundle(
         layer = _store_layer(
             objects, layer_id="grid-dbzh-qc", title="雷达组合反射率",
             scope="grid", field="DBZH_QC", rendering="scalar", unit="dBZ",
-            rgba=_scalar_rgba(composite, np.isfinite(composite), REFLECTIVITY_STOPS, smooth=True),
+            rgba=_scalar_rgba(composite, np.isfinite(composite), REFLECTIVITY_STOPS),
             palette_version=profile.palette_version,
             legend=_numeric_legend(REFLECTIVITY_STOPS, "dBZ"), bounds=composite_bounds,
         )

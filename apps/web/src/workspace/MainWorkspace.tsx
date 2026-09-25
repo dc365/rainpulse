@@ -753,6 +753,7 @@ export function updateLayerErrorState(
 }
 
 export function SharedTimeline({
+  observationOnly = false,
   cycleControls,
   productMode = 'rain_rate',
   onProductMode,
@@ -771,6 +772,7 @@ export function SharedTimeline({
   onTogglePlaying,
   onSelect,
 }: {
+  observationOnly?: boolean
   cycleControls?: React.ReactNode
   productMode?: ProductMode
   onProductMode?: (mode: ProductMode) => void
@@ -934,7 +936,7 @@ export function SharedTimeline({
             <span aria-hidden="true">▶</span>
           </button>
         </div>}
-        {productMode === 'rain_rate' && !onProductMode && !onInterval && <div className="workspace-timeline-periods" aria-hidden="true">
+        {!observationOnly && productMode === 'rain_rate' && !onProductMode && !onInterval && <div className="workspace-timeline-periods" aria-hidden="true">
           <span>未来 0–1 小时</span>
           <span>未来 1–2 小时</span>
         </div>}
@@ -942,8 +944,8 @@ export function SharedTimeline({
           <span>{playing ? <i aria-hidden="true" /> : null}{playing
             ? `播放中 · ${activeIndex + 1}/${values.length} 帧`
             : productMode !== 'rain_rate' ? `${values.length} 个累计区间`
-            : `${values.length} 帧${intervalMinutes ? ` · ${intervalMinutes} 分钟间隔` : ''}`}</span>
-          {!cycleControls && <span className="workspace-timeline-issue"><small>起报</small>{formatCycleTime(issueTime)}</span>}
+            : observationOnly ? `${values.length} 体扫 · 真实观测时间` : `${values.length} 帧${intervalMinutes ? ` · ${intervalMinutes} 分钟间隔` : ''}`}</span>
+          {!observationOnly && !cycleControls && <span className="workspace-timeline-issue"><small>起报</small>{formatCycleTime(issueTime)}</span>}
           <strong>{highlighted ? `${intervalLabel(issueTime, highlighted)}${intervalBusy && !draftInterval ? ' · 计算中…' : ''}` : productMode === 'rain_rate' ? `${timelineDateTime(new Date(activeValue))} 北京时间`
             : `${accumulationLabel(issueTime, activeValue, productMode)} · ${timelineDateTime(new Date(activeValue))} 北京时间`}</strong>
         </div>
@@ -992,12 +994,12 @@ export function SharedTimeline({
             <i />{mark.date && <small>{mark.date}</small>}<b>{mark.label}</b>
           </span>)}
         </div>
-        <span className={`workspace-timeline-origin-marker${originLabelCompact ? ' compact' : ''}`}
+        {!observationOnly && <span className={`workspace-timeline-origin-marker${originLabelCompact ? ' compact' : ''}`}
           role="img" aria-label={`起报时刻 ${timelineDateTime(new Date(issueTime))} 北京时间`}
           title={`起报时刻 ${timelineDateTime(new Date(issueTime))} 北京时间`}
           style={{ left: `${issuePosition}%` }}>
           <i aria-hidden="true" /><b aria-hidden="true">起报 {timelineClock(new Date(issueTime))}</b>
-        </span>
+        </span>}
         {values.map((value, index) => {
           const leadMinutes = Math.round((Date.parse(value) - Date.parse(issueTime)) / 60_000)
           const active = index === activeIndex
@@ -1016,7 +1018,7 @@ export function SharedTimeline({
               onClick={event => { if (!onInterval || event.detail === 0) onSelect(value) }}
               style={{ left: `${position}%`, width: `max(24px, ${cellWidth}%)`, transform: alignment }}
               data-lead={leadMinutes}
-              data-period={leadMinutes < 0 ? 'past' : leadMinutes === 0 ? 'issue' : 'future'}
+              data-period={observationOnly ? 'past' : leadMinutes < 0 ? 'past' : leadMinutes === 0 ? 'issue' : 'future'}
               data-available={panels.some(panel => isDisplayAvailable(panel, value))}
               data-selected={Boolean(highlighted && leadMinutes >= highlighted.start && leadMinutes <= highlighted.end)}
               aria-current={active ? 'step' : undefined}
@@ -1024,7 +1026,7 @@ export function SharedTimeline({
               title={`${formatValidTime(value)} · ${panels.filter((panel) => isDisplayAvailable(panel, value)).length}/${panels.length} 面板可用`}
             >
               <i className="workspace-timeline-node" aria-hidden="true" />
-              {active && !activeIsIssue && <span className="timeline-selected-time">{timelineClockLabel(new Date(value), new Date(issueTime))}</span>}
+              {active && (observationOnly || !activeIsIssue) && <span className="timeline-selected-time">{timelineClockLabel(new Date(value), new Date(issueTime))}</span>}
               <span className="workspace-timeline-lanes" aria-hidden="true">
                 {panels.map((panel) => (
                   <i key={panel.panel_id} data-ready={isDisplayAvailable(panel, value)} />

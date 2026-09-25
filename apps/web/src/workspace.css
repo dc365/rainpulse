@@ -675,9 +675,12 @@ button, select { min-height: 40px; }
   padding-top: 3px;
 }
 .reflectivity-segments {
+  display: grid;
   gap: 0;
 }
 .reflectivity-segments span {
+  display: grid;
+  min-width: 0;
   gap: 2px;
 }
 .reflectivity-segments span i {
