@@ -55,7 +55,7 @@ it('keeps the six-minute target and native sweep identity across S→X→S', asy
   render(<RadarQCWorkspace />)
   await waitFor(() => expect(document.querySelectorAll('[data-image="/dbzh_raw-z9591.png"]')).toHaveLength(1))
   fireEvent.click(screen.getByRole('button', { name: 'X' }))
-  await waitFor(() => expect(document.querySelectorAll('[data-image="blob:comparison"]')).toHaveLength(2))
+  await waitFor(() => expect(document.querySelectorAll('[data-image^="/map-"]')).toHaveLength(2))
   expect((screen.getByRole('combobox', { name: '仰角' }) as HTMLSelectElement).value).toBe('3')
   expect(window.location.search).toContain('time=2026-08-28T00%3A06%3A00Z')
   fireEvent.click(screen.getByRole('button', { name: 'S' }))
@@ -90,10 +90,11 @@ it('overlays X raw and QC rasters on exactly two maps using the result geometry'
   setup()
   window.history.replaceState({}, '', '/?preset=qc&band=X&date=2026-08-28&time=2026-08-28T00:06:00Z&station=zf101')
   render(<RadarQCWorkspace />)
-  await waitFor(() => expect(document.querySelectorAll('[data-image="blob:comparison"]')).toHaveLength(2))
+  await waitFor(() => expect(document.querySelectorAll('[data-image^="/map-"]')).toHaveLength(2))
   const maps = screen.getAllByTestId('geo-image')
   expect(maps).toHaveLength(2)
-  for (const map of maps) expect(map.dataset).toMatchObject({ image: 'blob:comparison', longitude: '119.3306', latitude: '26.1758',
+  expect(maps.map(map => map.dataset.image)).toEqual(['/map-raw-x.png', '/map-qc-x.png'])
+  for (const map of maps) expect(map.dataset).toMatchObject({ longitude: '119.3306', latitude: '26.1758',
     geometryStatus: 'unverified', radii: '10,20,30,40,50', extent: '118.8,25.7,119.8,26.7' })
   expect(fetch).toHaveBeenCalledWith('/map-raw-x.png', expect.anything())
   expect(fetch).toHaveBeenCalledWith('/map-qc-x.png', expect.anything())

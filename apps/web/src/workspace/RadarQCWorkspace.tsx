@@ -62,7 +62,6 @@ function useXPair(sweep: XSweep | undefined, resultID: string | undefined, flags
   useEffect(() => {
     if (!key || !sweep) return
     const controller = new AbortController()
-    const urls: string[] = []
     const load = async (path: string) => {
       const response = await fetch(path, { signal: controller.signal })
       if (!response.ok) throw new Error(`图件读取失败（${response.status}）`)
@@ -70,16 +69,15 @@ function useXPair(sweep: XSweep | undefined, resultID: string | undefined, flags
       if (blob.type !== 'image/png') throw new Error('图件格式不是 PNG')
       if (controller.signal.aborted) return ''
       const url = URL.createObjectURL(blob)
-      urls.push(url)
       const image = new Image()
       image.src = url
-      await image.decode()
-      return url
+      try { await image.decode() } finally { URL.revokeObjectURL(url) }
+      return path
     }
     void Promise.all([load(sweep.map?.raw ?? sweep.raw), load(flags ? sweep.map?.flags ?? sweep.flags : sweep.map?.qc ?? sweep.qc)]).then(([raw, qc]) => {
       if (!controller.signal.aborted) setState({ key, raw, qc })
     }).catch(error => { if (!controller.signal.aborted) setState({ key, error: String(error) }) })
-    return () => { controller.abort(); urls.forEach(URL.revokeObjectURL) }
+    return () => controller.abort()
   }, [key, sweep, flags])
   return state?.key === key ? state : undefined
 }
