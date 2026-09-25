@@ -9,6 +9,17 @@ operational data here.
 
 ## S/X multiband candidate (2026-09-24)
 
+- 2026-09-26: X single-station QC now shows a shared basemap with a draft
+  station position and 10/20/30/40/50 km reference rings beside the native
+  raw/QC PPI pair. Local `main` merged `17e3501`; the 105 Go service reports
+  `17e3501f16f5` and is ready. Both ZF101 and ZF505 return candidate site
+  coordinates from their current draft config while `geometry_status` remains
+  `unverified`. Web index SHA-256 is
+  `d8ac607188de449ad5673ea9b8de859e8269e300eb7919e8484958d1fd60b6ea`.
+  Browser verified both stations' maps/PPI, S switching, 375px width, and no
+  console warnings. Binary/Web rollback copies are `rainpulse.rollback-before-17e3501`
+  and `apps/web/.dist-rollback-before-17e3501` on 105. Real X echo map overlay
+  and fusion remain gated pending verified georeferenced products.
 - Unified S/X QC workspace design and phase-A Web implementation are on local
   `main` through `a44e105`. The QC route now uses one shell, one time axis,
   native S/X station and sweep selection, paired raw/QC views, and candidate
