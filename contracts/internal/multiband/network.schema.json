@@ -64,6 +64,9 @@
           "enabled": {
             "type": "boolean"
           },
+          "x_qc_enabled": {
+            "type": "boolean"
+          },
           "geometry_verified": {
             "type": "boolean"
           },
@@ -170,12 +173,6 @@
         },
         "required": [
           "band",
-          "frequency_hz",
-          "longitude_deg",
-          "latitude_deg",
-          "altitude_m_msl",
-          "beam_width_h_deg",
-          "beam_width_v_deg",
           "source"
         ],
         "additionalProperties": false,
@@ -240,13 +237,60 @@
                 }
               }
             }
+          },
+          {
+            "if": {
+              "properties": {
+                "geometry_verified": {
+                  "const": true
+                }
+              },
+              "required": [
+                "geometry_verified"
+              ]
+            },
+            "then": {
+              "required": [
+                "frequency_hz",
+                "longitude_deg",
+                "latitude_deg",
+                "altitude_m_msl",
+                "beam_width_h_deg",
+                "beam_width_v_deg"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "x_qc_enabled": {
+                  "const": true
+                }
+              },
+              "required": [
+                "x_qc_enabled"
+              ]
+            },
+            "then": {
+              "properties": {
+                "band": {
+                  "const": "X"
+                },
+                "source": {
+                  "enum": [
+                    "normalized_zarr",
+                    "native_bundle"
+                  ]
+                }
+              }
+            }
           }
         ]
       }
     },
     "products": {
       "type": "object",
-      "minProperties": 1,
+      "minProperties": 0,
       "maxProperties": 4,
       "propertyNames": {
         "type": "string",

@@ -5,6 +5,7 @@ import pytest
 
 from rainpulse_algo.multiband.quality import x_qc, accept_s_qc, phase_linear, Flag
 from rainpulse_algo.multiband.model import XProfile
+from rainpulse_algo.multiband.product import polar_quicklook, x_qc_objects
 from conftest import volume
 
 
@@ -20,6 +21,41 @@ def test_upstream_correction_not_applied_twice(net):
         x_qc(v, replace(s, x_qc=XProfile(attenuation="phidp_linear", alpha_db_per_degree=.2)), net.sha256)
 
 
+def test_expanded_sweep_limit_applies_only_to_streamed_x_qc(net):
+    station = net.stations["x1"]
+    v = volume(station)
+    v.sweeps = [replace(v.sweeps[0], number=i) for i in range(33)]
+    v.validate(station, require_geometry=False)
+    with pytest.raises(ValueError, match="unsupported or incomplete"):
+        v.validate(station)
+
+
+def test_polar_preview_keeps_large_azimuth_gaps_transparent():
+    import struct
+    import zlib
+
+    def alpha(image, x, y):
+        offset = 8
+        compressed = bytearray()
+        while offset < len(image):
+            size = struct.unpack_from('>I', image, offset)[0]
+            name = image[offset + 4:offset + 8]
+            payload = image[offset + 8:offset + 8 + size]
+            offset += 12 + size
+            if name == b'IDAT':
+                compressed.extend(payload)
+        stride = 1 + 101 * 4
+        rows = zlib.decompress(compressed)
+        return rows[y * stride + 1 + x * 4 + 3]
+
+    ranges = np.array([100., 500.])
+    one = polar_quicklook(np.array([0.]), ranges, np.full((1, 2), 30.), size=101)
+    two = polar_quicklook(np.array([0., 180.]), ranges, np.full((2, 2), 30.), size=101)
+    assert alpha(one, 50, 50) == 255
+    assert alpha(one, 100, 50) == 0
+    assert alpha(two, 100, 50) == 0
+
+
 def test_unknown_attenuation_is_uncertain_not_missing_or_no_rain(net):
     s = replace(net.stations["x1"], x_qc=XProfile())
     v = volume(s); v.metadata["attenuation_status"] = "unknown"
@@ -27,6 +63,7 @@ def test_unknown_attenuation_is_uncertain_not_missing_or_no_rain(net):
     assert np.all(f["OBSERVED_MASK"] == 1) and not np.any(f["NO_ECHO_MASK"])
     assert np.all(f["DBZH_QC"] == 35) and not np.any(f["REFLECTIVITY_ELIGIBLE_FOR_CR"])
     assert np.all(f["CR_UNCERTAIN_MASK"] == 1)
+    assert np.all(f["QC_ACTION"] == 3) and np.all(f["DBZH_QC_DISPLAY"] == 35)
 
 
 @pytest.mark.parametrize("noecho,missing", [(False, True), (True, False)])
@@ -56,6 +93,25 @@ def test_low_rho_alone_does_not_delete_hail_or_weak_weather(net):
     f = x_qc(v, s, net.sha256).sweeps[0].fields
     assert np.all(f["REFLECTIVITY_ELIGIBLE_FOR_CR"] == 1)
     assert not np.any(f["MB_QC_FLAGS"] & int(Flag.NONMET_CONFIRMED))
+
+
+def test_x_qc_preview_keeps_uncertain_echo_and_marks_confirmed_reject(net):
+    s = net.stations["x1"]
+    v = volume(s)
+    v.sweeps[0].fields["SNRH"][0, 0] = -10
+    v.sweeps[0].fields["CONFIRMED_NONMET_MASK"] = np.zeros_like(v.sweeps[0].fields["OBSERVED_MASK"])
+    v.sweeps[0].fields["CONFIRMED_NONMET_MASK"][0, 1] = 1
+    f = x_qc(v, s, net.sha256).sweeps[0].fields
+    assert f["QC_ACTION"][0, 0] == 3
+    assert f["QC_ACTION"][0, 1] == 2
+    assert f["DBZH_QC_DISPLAY"][0, 0] == f["DBZH_RAW"][0, 0]
+    assert np.isnan(f["DBZH_QC_DISPLAY"][0, 1])
+    objects = x_qc_objects(x_qc(v, s, net.sha256))
+    manifest = __import__("json").loads(objects["manifest.json"])
+    assert manifest["comparison"]["sweeps"][0]["raw"] in objects
+    assert manifest["comparison"]["sweeps"][0]["qc"] in objects
+    assert manifest["comparison"]["sweeps"][0]["flags"] in objects
+    assert all(objects[key].startswith(b"\x89PNG\r\n\x1a\n") for key in manifest["comparison"]["sweeps"][0].values() if isinstance(key, str) and key.endswith(".png"))
 
 
 def test_phase_scaling_break_and_limit(net):

@@ -29,6 +29,7 @@ type Station struct {
 	BeamV               float64         `json:"beam_width_v_deg"`
 	Source              string          `json:"source"`
 	Enabled             bool            `json:"enabled"`
+	XQCEnabled          bool            `json:"x_qc_enabled"`
 	GeometryVerified    bool            `json:"geometry_verified"`
 	CalibrationVerified bool            `json:"calibration_verified"`
 	CalibrationID       string          `json:"calibration_id"`
@@ -74,15 +75,12 @@ func Parse(raw []byte) (Network, error) {
 	if e := d.Decode(new(any)); e != io.EOF {
 		return n, fmt.Errorf("trailing network JSON")
 	}
-	if n.Schema != "1.0" || !namePattern.MatchString(n.Release) || len(n.Stations) < 1 || len(n.Stations) > 16 || len(n.Products) < 1 || len(n.Products) > 4 {
+	if n.Schema != "1.0" || !namePattern.MatchString(n.Release) || len(n.Stations) < 1 || len(n.Stations) > 16 || len(n.Products) > 4 {
 		return n, fmt.Errorf("invalid network identity/inventory")
 	}
 	for id, s := range n.Stations {
 		if !namePattern.MatchString(id) || strings.ToLower(id) != id || (s.Band != "S" && s.Band != "X") {
 			return n, fmt.Errorf("invalid station %s", id)
-		}
-		if (s.Band == "S" && (s.Frequency < 2e9 || s.Frequency > 4e9)) || (s.Band == "X" && (s.Frequency < 8e9 || s.Frequency > 12e9)) {
-			return n, fmt.Errorf("station band/frequency differs")
 		}
 		if s.Source != "s_qc_zarr" && s.Source != "normalized_zarr" && s.Source != "native_bundle" {
 			return n, fmt.Errorf("unsupported input adapter")
@@ -99,10 +97,10 @@ func Parse(raw []byte) (Network, error) {
 		if s.QualityScale == 0 {
 			s.QualityScale = 1
 		}
-		if s.Cadence < 1 || s.Cadence > 3600 || s.MaximumAge < 1 || s.MaximumAge > 3600 || s.Enabled && !s.GeometryVerified {
+		if s.Cadence < 1 || s.Cadence > 3600 || s.MaximumAge < 1 || s.MaximumAge > 3600 || s.Enabled && !s.GeometryVerified || s.XQCEnabled && s.Band != "X" {
 			return n, fmt.Errorf("station cadence/geometry not verified")
 		}
-		if s.Longitude < -180 || s.Longitude > 180 || s.Latitude <= -85 || s.Latitude >= 85 || s.Altitude < -500 || s.Altitude > 9000 || s.BeamH <= 0 || s.BeamH > 5 || s.BeamV <= 0 || s.BeamV > 5 || s.QualityScale <= 0 || s.QualityScale > 1 {
+		if s.GeometryVerified && ((s.Band == "S" && (s.Frequency < 2e9 || s.Frequency > 4e9)) || (s.Band == "X" && (s.Frequency < 8e9 || s.Frequency > 12e9)) || s.Longitude < -180 || s.Longitude > 180 || s.Latitude <= -85 || s.Latitude >= 85 || s.Altitude < -500 || s.Altitude > 9000 || s.BeamH <= 0 || s.BeamH > 5 || s.BeamV <= 0 || s.BeamV > 5) || s.QualityScale <= 0 || s.QualityScale > 1 {
 			return n, fmt.Errorf("station geometry/quality out of bounds")
 		}
 		n.Stations[id] = s
@@ -183,10 +181,16 @@ func Select(n Network, product, mode string, radars []string, start, end, cutoff
 	if mode != "x_qc" && mode != "sx_composite" {
 		return nil, nil, fmt.Errorf("unsupported multiband mode")
 	}
-	if _, ok := n.Products[product]; !ok {
-		return nil, nil, fmt.Errorf("unknown product")
+	cadence := 60 * time.Second
+	if mode == "sx_composite" {
+		grid, ok := n.Products[product]
+		if !ok {
+			return nil, nil, fmt.Errorf("unknown product")
+		}
+		cadence = time.Duration(grid.Cadence) * time.Second
+	} else if product != "" {
+		return nil, nil, fmt.Errorf("standalone X QC does not select a spatial product")
 	}
-	cadence := time.Duration(n.Products[product].Cadence) * time.Second
 	if !end.After(start) || end.Sub(start) > time.Hour || len(radars) < 1 || len(radars) > 16 || start.After(cutoff) || end.After(cutoff.Add(time.Minute)) {
 		return nil, nil, fmt.Errorf("use a bounded, past one-hour window")
 	}
@@ -196,7 +200,11 @@ func Select(n Network, product, mode string, radars []string, start, end, cutoff
 	seen := map[string]bool{}
 	for _, r := range radars {
 		s, ok := n.Stations[r]
-		if !ok || !s.Enabled || seen[r] || mode == "x_qc" && s.Band != "X" {
+		available := s.Enabled
+		if mode == "x_qc" {
+			available = s.Enabled || s.XQCEnabled
+		}
+		if !ok || !available || seen[r] || mode == "x_qc" && s.Band != "X" {
 			return nil, nil, fmt.Errorf("disabled, duplicate or wrong-band station %s", r)
 		}
 		seen[r] = true
@@ -249,6 +257,9 @@ func Select(n Network, product, mode string, radars []string, start, end, cutoff
 				continue
 			}
 			out = append(out, Snapshot{at, []Input{v}, s.ID})
+		}
+		if len(out) > 8 {
+			return nil, warnings, fmt.Errorf("X QC plans are limited to 8 scans; narrow the time window")
 		}
 	} else {
 		for at := start; at.Before(end) && !at.After(cutoff); at = at.Add(cadence) {

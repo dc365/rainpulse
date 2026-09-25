@@ -86,7 +86,7 @@ func TestSOnlyFallbackAndActualXTiming(t *testing.T) {
 		t.Fatal(out, w, e)
 	}
 	x := scan("x", "x1", at.Add(12*time.Second))
-	out, _, e = Select(n, "local", "x_qc", []string{"x1"}, at, at.Add(time.Minute), at.Add(2*time.Minute), []Scan{x})
+	out, _, e = Select(n, "", "x_qc", []string{"x1"}, at, at.Add(time.Minute), at.Add(2*time.Minute), []Scan{x})
 	if e != nil || len(out) != 1 || !out[0].AnalysisTime.Equal(at.Add(time.Minute)) || !out[0].Sources[0].End.Equal(x.End) {
 		t.Fatal(out, e)
 	}
@@ -157,5 +157,33 @@ func TestNetworkExplicitGeometryAndBand(t *testing.T) {
 	}
 	if _, e := Parse([]byte(strings.Repeat(" ", 1<<20+1))); e == nil {
 		t.Fatal("oversized JSON")
+	}
+}
+
+func TestStandaloneXQCNeedsNoFusionGeometryOrGrid(t *testing.T) {
+	n := fixture(t)
+	n.Products = map[string]Grid{}
+	x := n.Stations["x1"]
+	x.Enabled = false
+	x.XQCEnabled = true
+	x.GeometryVerified = false
+	x.Frequency, x.Longitude, x.Latitude, x.Altitude, x.BeamH, x.BeamV = 0, 0, 0, 0, 0, 0
+	x.Source = "normalized_zarr"
+	n.Stations["x1"] = x
+	raw, err := json.Marshal(n)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := clock()
+	out, _, err := Select(parsed, "", "x_qc", []string{"x1"}, at, at.Add(time.Minute), at.Add(2*time.Minute), []Scan{scan("x-raw", "x1", at)})
+	if err != nil || len(out) != 1 || out[0].Sources[0].RadarID != "x1" {
+		t.Fatalf("snapshots=%+v err=%v", out, err)
+	}
+	if _, _, err = Select(parsed, "", "sx_composite", []string{"x1"}, at, at.Add(time.Minute), at.Add(2*time.Minute), nil); err == nil {
+		t.Fatal("S/X fusion accepted a station without spatial admission")
 	}
 }

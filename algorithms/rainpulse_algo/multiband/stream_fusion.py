@@ -11,6 +11,7 @@ import shutil
 import time
 from collections import OrderedDict
 from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -28,7 +29,7 @@ from .fusion import (
     tile_coordinates,
     update_tile,
 )
-from .model import Network, epoch, json_bytes
+from .model import MAX_FUSION_SWEEPS, Network, epoch, json_bytes
 
 FIELDS = ("score", "values", "winner", "wray", "wgate", "h", "age", "resolution")
 DTYPE = np.dtype(
@@ -152,6 +153,7 @@ def build_composite_streaming(
     options: ExecutionOptions,
     directory,
     metrics=None,
+    comparison=False,
 ):
     """Consume one-cut Volume objects in stable (station, scan, cut) order."""
     if product not in network.products:
@@ -166,8 +168,26 @@ def build_composite_streaming(
     out = allocate_output(grid)
     transform = Transformer.from_crs(grid.crs, "EPSG:4326", always_xy=True)
     geometry = GeometryCache(options.geometry_cache_bytes)
-    workspace = LayerWorkspace(grid, options, directory)
+    workspace_options = replace(options, layer_memory_bytes=0) if comparison else options
+    main_root = Path(directory) / "layers-sx" if comparison else directory
+    if comparison:
+        main_root.mkdir()
+    workspace = LayerWorkspace(grid, workspace_options, main_root)
+    band_out = {band: allocate_output(grid) for band in ("S", "X")} if comparison else {}
+    band_workspaces = {}
+    if comparison:
+        if workspace.bytes * 3 > options.maximum_scratch_bytes:
+            raise ValueError("S/X comparison height state exceeds aggregate scratch budget")
+        if workspace.bytes * 3 > shutil.disk_usage(directory).free:
+            raise ValueError("insufficient scratch space for S/X comparison state")
+        for band in ("S", "X"):
+            band_root = Path(directory) / f"layers-{band.lower()}"
+            band_root.mkdir()
+            band_workspaces[band] = LayerWorkspace(grid, workspace_options, band_root)
     sources, skipped = [], []
+    band_sources = {"S": [], "X": []}
+    band_skipped = {"S": [], "X": []}
+    seen_bands = set()
     seen, last_order, station_identity = set(), None, None
     station_gates = station_cuts = task_gates = 0
     compute_seconds += time.perf_counter() - compute_start
@@ -200,7 +220,7 @@ def build_composite_streaming(
             task_gates += s.fields["DBZH"].size
             station_cuts += 1
             if (
-                station_cuts > options.maximum_sweeps
+                station_cuts > min(options.maximum_sweeps, MAX_FUSION_SWEEPS)
                 or station_gates > options.maximum_volume_gates
                 or task_gates > options.maximum_task_gates
             ):
@@ -223,7 +243,10 @@ def build_composite_streaming(
                 reason = "expired"
             if reason:
                 if new_station:
-                    skipped.append({"radar_id": sid, "reason": reason})
+                    item = {"radar_id": sid, "reason": reason}
+                    skipped.append(item)
+                    if comparison:
+                        band_skipped[station.band].append(item)
                 del v, s
                 compute_seconds += time.perf_counter() - compute_start
                 continue
@@ -234,8 +257,7 @@ def build_composite_streaming(
             if np.any(~np.isfinite(q)) or np.any((q < 0) | (q > 1)):
                 raise ValueError("invalid fusion quality score")
             index = len(sources)
-            sources.append(
-                {
+            source_record = {
                     "index": index,
                     "radar_id": sid,
                     "band": station.band,
@@ -254,7 +276,15 @@ def build_composite_streaming(
                     "calibration_id": station.calibration_id,
                     "network_sha256": network.sha256,
                 }
-            )
+            sources.append(source_record)
+            if comparison:
+                seen_bands.add(station.band)
+                band_record = {
+                    **source_record,
+                    "index": len(band_sources[station.band]),
+                }
+                band_sources[station.band].append(band_record)
+                band_index = band_record["index"]
             prepared = prepare_polar(s)
             for row in range(0, grid.height, grid.tile_rows):
                 stop = min(row + grid.tile_rows, grid.height)
@@ -278,6 +308,19 @@ def build_composite_streaming(
                         grid,
                         backend=options.selection_backend,
                     )
+                if comparison:
+                    with band_workspaces[station.band].tile(row, stop) as layers:
+                        update_tile(
+                            layers,
+                            band_out[station.band],
+                            sl,
+                            fp,
+                            s,
+                            station,
+                            band_index,
+                            grid,
+                            backend=options.selection_backend,
+                        )
             del v, s, prepared, fp, q
             compute_seconds += time.perf_counter() - compute_start
         compute_start = time.perf_counter()
@@ -287,9 +330,14 @@ def build_composite_streaming(
             stop = min(row + grid.tile_rows, grid.height)
             with workspace.tile(row, stop, write=False) as layers:
                 finish_tile(layers, out, np.s_[row:stop, :], grid)
+            if comparison:
+                for band in ("S", "X"):
+                    with band_workspaces[band].tile(row, stop, write=False) as layers:
+                        finish_tile(layers, band_out[band], np.s_[row:stop, :], grid)
         stats.update(
-            height_state_bytes=workspace.bytes,
-            layer_scratch_bytes=workspace.scratch_bytes,
+            height_state_bytes=workspace.bytes * (3 if comparison else 1),
+            layer_scratch_bytes=workspace.scratch_bytes
+            + sum(item.scratch_bytes for item in band_workspaces.values()),
             peak_height_tile_bytes=workspace.peak_tile_bytes,
             layer_file_read_bytes=workspace.read_bytes,
             layer_file_write_bytes=workspace.write_bytes,
@@ -301,8 +349,26 @@ def build_composite_streaming(
         result = finish_composite(
             out, grid, network, product, analysis_time, cutoff, sources, skipped
         )
+        if comparison:
+            result.band_comparisons = {
+                band: finish_composite(
+                    band_out[band],
+                    grid,
+                    network,
+                    product,
+                    analysis_time,
+                    cutoff,
+                    band_sources[band],
+                    band_skipped[band],
+                )
+                if band in seen_bands
+                else None
+                for band in ("S", "X")
+            }
         compute_seconds += time.perf_counter() - compute_start
         stats["fusion_ms"] = compute_seconds * 1000
         return result
     finally:
         workspace.close()
+        for item in band_workspaces.values():
+            item.close()

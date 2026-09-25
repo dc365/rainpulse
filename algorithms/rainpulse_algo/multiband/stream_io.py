@@ -16,8 +16,8 @@ from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 import numpy as np
 
-from .adapters import FIELDS, from_group
-from .model import NAME, Sweep, Volume, epoch, json_bytes
+from .adapters import FIELDS, X_QC_FIELDS, from_group
+from .model import MAX_FUSION_SWEEPS, NAME, Sweep, Volume, epoch, json_bytes
 
 COORDINATES = ("azimuth_deg", "range_m", "elevation_deg", "ray_time_epoch")
 STREAM_CONTRACT = "rainpulse.multiband.native-stream-v1"
@@ -72,15 +72,17 @@ class GroupCuts:
         maximum_bytes,
         reject_mask=0,
         flag_version="",
+        sweep_limit=MAX_FUSION_SWEEPS,
     ):
         self.root, self.station, self.source = root, station, source
         self.sha, self.options = sha256, options
         self.maximum = min(maximum_bytes, options.maximum_cut_bytes)
         self.reject_mask, self.flag_version = reject_mask, flag_version
         numbers = root["sweep_number"]
+        sweep_limit = min(options.maximum_sweeps, sweep_limit)
         if (
             len(numbers.shape) != 1
-            or not 1 <= math.prod(numbers.shape) <= options.maximum_sweeps
+            or not 1 <= math.prod(numbers.shape) <= sweep_limit
             or np.dtype(numbers.dtype).kind not in "iu"
         ):
             raise ValueError("invalid or oversized streamed cut index")
@@ -95,15 +97,38 @@ class GroupCuts:
             if field not in group:
                 continue
             array = group[field]
-            if len(array.shape) != 2:
+            if (
+                len(array.shape) != 2
+                or not 1 <= array.shape[0] <= 4096
+                or not 1 <= array.shape[1] <= 16384
+            ):
                 raise ValueError("invalid streamed reflectivity dimensions")
+            expected_shapes = {
+                **{
+                    key: array.shape
+                    for key in (
+                        X_QC_FIELDS if station.band == "X" else FIELDS
+                    )
+                    if key in group
+                },
+                "azimuth": (array.shape[0],),
+                "elevation": (array.shape[0],),
+                "ray_time": (array.shape[0],),
+                "range": (array.shape[1],),
+            }
+            for key, expected in expected_shapes.items():
+                if tuple(group[key].shape) != tuple(expected):
+                    raise ValueError("streamed field shape differs from DBZH coordinates")
             count = math.prod(array.shape)
             total += count
             if total > options.maximum_volume_gates or count > 8_000_000:
                 raise ValueError("streamed native gate budget exceeded")
-            selected = (
-                FIELDS | {k for k in group.array_keys() if k.endswith("CR_WITHHELD_MASK")}
-            ) & set(group.array_keys())
+            allowed_fields = X_QC_FIELDS if station.band == "X" else FIELDS
+            selected = allowed_fields & set(group.array_keys())
+            if station.source == "s_qc_zarr":
+                selected |= {
+                    k for k in group.array_keys() if k.endswith("CR_WITHHELD_MASK")
+                }
             required = selected | {"azimuth", "range", "elevation", "ray_time"}
             size = 0
             for key in required:
@@ -133,7 +158,18 @@ class GroupCuts:
 
 
 class NPZCuts:
-    def __init__(self, metadata, path, station, source, *, sha256, options, maximum_bytes):
+    def __init__(
+        self,
+        metadata,
+        path,
+        station,
+        source,
+        *,
+        sha256,
+        options,
+        maximum_bytes,
+        sweep_limit=MAX_FUSION_SWEEPS,
+    ):
         self.path, self.options = Path(path), options
         self.maximum = min(maximum_bytes, options.maximum_cut_bytes)
         self.manifest = _json(metadata)
@@ -153,11 +189,9 @@ class NPZCuts:
         if epoch(source["available_at"]) > epoch(self.metadata["available_at"]):
             self.metadata["available_at"] = source["available_at"]
         items = self.manifest.get("sweeps")
-        cap = (
-            min(options.maximum_sweeps, 32)
-            if contract.endswith("native-v1")
-            else options.maximum_sweeps
-        )
+        cap = min(options.maximum_sweeps, sweep_limit)
+        if contract.endswith("native-v1"):
+            cap = min(cap, MAX_FUSION_SWEEPS)
         if not isinstance(items, list) or not 1 <= len(items) <= cap:
             raise ValueError("native sweep count exceeds its contract")
         self.fields, expected = {}, set()
@@ -220,6 +254,23 @@ class NPZCuts:
                     raise ValueError("reflectivity must be 2D")
                 size = sum(self.headers[f"s{n}_{k}.npy"][1] for k in (*COORDINATES, *fields))
                 count = math.prod(shape)
+                if (
+                    shape[0] > 4096
+                    or shape[1] > 16384
+                ):
+                    raise ValueError("native reflectivity dimensions exceed contract")
+                expected_shapes = {
+                    **{f"s{n}_{key}.npy": shape for key in fields},
+                    f"s{n}_azimuth_deg.npy": (shape[0],),
+                    f"s{n}_elevation_deg.npy": (shape[0],),
+                    f"s{n}_ray_time_epoch.npy": (shape[0],),
+                    f"s{n}_range_m.npy": (shape[1],),
+                }
+                if any(
+                    self.headers[key][0] != expected
+                    for key, expected in expected_shapes.items()
+                ):
+                    raise ValueError("native array shape differs from DBZH coordinates")
                 total += count
                 if size > self.maximum or count > 8_000_000 or total > options.maximum_volume_gates:
                     raise ValueError("native decoded cut/volume exceeds streaming budget")

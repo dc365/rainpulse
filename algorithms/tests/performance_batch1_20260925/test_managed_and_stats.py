@@ -20,7 +20,22 @@ from perf_helpers import (
 from rainpulse_algo.multiband.codec import decode_arrays, encode_volume
 from rainpulse_algo.multiband.execution import ExecutionOptions as Options
 from rainpulse_algo.multiband.managed import Executor
+from rainpulse_algo.multiband.stream_managed import _scratch_reservation
 from rainpulse_algo.radar.qc_engine.group_stats import recurrence_tables, seed_tables
+
+
+def test_sx_comparison_reserves_all_spilled_height_layers_before_staging():
+    mib = 1024**2
+    options = Options(
+        streaming=True,
+        maximum_scratch_bytes=600 * mib,
+        maximum_object_bytes=128 * mib,
+        layer_memory_bytes=64 * mib,
+    )
+    reserved = _scratch_reservation(60 * mib, options, comparison=True)
+    assert reserved == 308 * mib
+    # A 450 MiB input bundle must not fit in the remaining 292 MiB staging cap.
+    assert 450 * mib > options.maximum_scratch_bytes - reserved
 
 
 def request(v, net, mode):
@@ -32,54 +47,70 @@ def request(v, net, mode):
             "sources": [source(v)],
             "product_id": "demo",
             "network_sha256": net.sha256,
+            "execution_sha256": Options().digest,
             "input_cutoff": "2026-08-28T00:12:00Z",
             "analysis_time": "2026-08-28T00:06:00Z",
         },
     }
 
 
-@pytest.mark.parametrize("mode", ["x_qc", "sx_composite"])
 @pytest.mark.parametrize("schema", ["2.0", "3.0"])
 @pytest.mark.parametrize("backend", ["numpy", "numba"])
-def test_existing_executor_stream_integration(mode, schema, backend, tmp_path):
+def test_existing_executor_stream_integration(schema, backend, tmp_path):
     if backend == "numba":
         pytest.importorskip("numba")
     st = station()
     v = volume(st, cuts=3, rays=45, gates=60)
     net = write_network(tmp_path / "net.json", replace(network(), cache_max_bytes=16 * 1024**2))
     store = Store(encode_volume(v), schema=schema, pack_bytes=1024 * 1024)
-    req = request(v, net, mode)
+    req = request(v, net, "sx_composite")
     old = reference("managed").Executor(tmp_path / "net.json")
     expected, oldsummary, _ = old.execute(req, store.reader(), artifact_digest=lambda x: store.sha)
+    eager_request = copy.deepcopy(req)
+    eager, eager_summary, _ = Executor(tmp_path / "net.json").execute(
+        eager_request, store.reader(), artifact_digest=lambda x: store.sha
+    )
+    options = Options(
+        streaming=True,
+        scratch_parent=str(tmp_path),
+        layer_memory_bytes=0,
+        selection_backend=backend,
+    )
     executor = Executor(
         tmp_path / "net.json",
-        execution=Options(
-            streaming=True,
-            scratch_parent=str(tmp_path),
-            layer_memory_bytes=0,
-            selection_backend=backend,
-        ),
+        execution=options,
     )
+    req["payload"]["execution_sha256"] = executor.execution_policy_sha256
     objects, summary, metrics = executor.execute(
         req, store.reader(), artifact_digest=lambda x: store.sha
     )
-    assert set(objects) == set(expected)
-    assert_arrays(
-        decode_arrays(objects["arrays.npz"], maximum_bytes=1024**2),
-        decode_arrays(expected["arrays.npz"], maximum_bytes=1024**2),
-    )
+    assert set(objects) > set(expected)
+    streamed_arrays = decode_arrays(objects["arrays.npz"], maximum_bytes=1024**2)
+    expected_arrays = decode_arrays(expected["arrays.npz"], maximum_bytes=1024**2)
+    assert_arrays({key: streamed_arrays[key] for key in expected_arrays}, expected_arrays)
+    assert objects["arrays.npz"] == eager["arrays.npz"]
+    assert {key: objects[key] for key in eager if key != "manifest.json"} == {
+        key: eager[key] for key in eager if key != "manifest.json"
+    }
     assert (
         objects["cr.png"] == expected["cr.png"]
         and objects["uncertain.png"] == expected["uncertain.png"]
     )
     manifest = json.loads(objects["manifest.json"])
+    eager_manifest = json.loads(eager["manifest.json"])
     m0 = json.loads(expected["manifest.json"])
     receipt = manifest.pop("execution")
+    assert manifest == eager_manifest
     assert receipt["streaming"]
-    assert manifest == m0
+    assert all(
+        manifest[key] == value
+        for key, value in m0.items()
+        if key not in {"arrays_sha256", "layers"}
+    )
     s = summary.copy()
     s.pop("execution")
     assert s == oldsummary
+    assert eager_summary == oldsummary
     assert metrics["qc_executions"] == 3
     assert not list(tmp_path.glob("rainpulse-multiband-*"))
     o2, _, m2 = executor.execute(req, store.reader(), artifact_digest=lambda x: store.sha)
@@ -97,18 +128,29 @@ def test_execution_identity_and_default_legacy(tmp_path):
     p = tmp_path / "exec.json"
     p.write_text(json.dumps(asdict(options)))
     executor = Executor(tmp_path / "net.json", execution_path=p)
+    req["payload"]["execution_sha256"] = executor.execution_policy_sha256
     p.write_text(json.dumps(asdict(replace(options, maximum_sweeps=63))))
     with pytest.raises(ValueError, match="execution"):
         executor.execute(req, store.reader(), artifact_digest=lambda x: store.sha)
     a, _, _ = Executor(tmp_path / "net.json").execute(
-        req, store.reader(), artifact_digest=lambda x: store.sha
+        {**req, "payload": {**req["payload"], "execution_sha256": Options().digest}},
+        store.reader(), artifact_digest=lambda x: store.sha
     )
     b, _, _ = (
         reference("managed")
         .Executor(tmp_path / "net.json")
         .execute(req, store.reader(), artifact_digest=lambda x: store.sha)
     )
-    assert a == b
+    new_arrays = decode_arrays(a["arrays.npz"], maximum_bytes=1024**2)
+    old_arrays = decode_arrays(b["arrays.npz"], maximum_bytes=1024**2)
+    assert_arrays({key: new_arrays[key] for key in old_arrays}, old_arrays)
+    assert a["cr.png"] == b["cr.png"] and a["uncertain.png"] == b["uncertain.png"]
+    new_manifest, old_manifest = json.loads(a["manifest.json"]), json.loads(b["manifest.json"])
+    assert all(
+        new_manifest[key] == value
+        for key, value in old_manifest.items()
+        if key not in {"arrays_sha256", "layers"}
+    )
 
 
 @pytest.mark.parametrize(
@@ -195,22 +237,33 @@ def test_streaming_late_input_corruption_does_not_return_product(tmp_path):
     store = Store(objects, schema="3.0", pack_bytes=4096)
     key = sorted(k for k in store.data if not k.endswith("_SUCCESS.json"))[-1]
     store.data[key] = b"X" * len(store.data[key])
+    options = Options(streaming=True, scratch_parent=str(tmp_path))
     executor = Executor(
-        tmp_path / "net.json", execution=Options(streaming=True, scratch_parent=str(tmp_path))
+        tmp_path / "net.json", execution=options
     )
+    req = request(v, net, "x_qc")
+    req["payload"].pop("product_id")
+    req["payload"]["execution_sha256"] = executor.execution_policy_sha256
     with pytest.raises(RuntimeError, match="checksum"):
         executor.execute(
-            request(v, net, "x_qc"), store.reader(), artifact_digest=lambda x: store.sha
+            req, store.reader(), artifact_digest=lambda x: store.sha
         )
     assert not list(tmp_path.glob("rainpulse-multiband-*"))
 
 
 def test_40cut_native_managed_really_runs_same_executor(tmp_path):
-    from rainpulse_algo.multiband.model import Volume
+    from rainpulse_algo.multiband.model import Station, Volume
     from rainpulse_algo.multiband.stream_io import NativeStreamWriter
 
-    net = write_network(tmp_path / "net.json", network(width=8, height=8))
-    v = volume(cuts=1, rays=12, gates=16)
+    x_station = Station(
+        "x1", "X", "native_bundle", frequency_hz=9.4e9, enabled=False,
+        x_qc_enabled=True, geometry_verified=False, calibration_verified=False,
+        calibration_id="unverified", x_qc=station().x_qc,
+    )
+    net = write_network(
+        tmp_path / "net.json", replace(network([x_station], width=8, height=8), products={})
+    )
+    v = volume(x_station, cuts=1, rays=12, gates=16)
     w = NativeStreamWriter(tmp_path / "source.npz", 8 * 1024**2)
     for n in range(40):
         w.add(
@@ -225,16 +278,19 @@ def test_40cut_native_managed_really_runs_same_executor(tmp_path):
         schema="3.0",
         pack_bytes=128 * 1024,
     )
+    options = Options(streaming=True, scratch_parent=str(tmp_path), layer_memory_bytes=0)
     executor = Executor(
         tmp_path / "net.json",
-        execution=Options(streaming=True, scratch_parent=str(tmp_path), layer_memory_bytes=0),
+        execution=options,
     )
+    req = request(v, net, "x_qc")
+    req["payload"].pop("product_id")
+    req["payload"]["execution_sha256"] = executor.execution_policy_sha256
     objects, _, metrics = executor.execute(
-        request(v, net, "x_qc"), store.reader(), artifact_digest=lambda x: store.sha
+        req, store.reader(), artifact_digest=lambda x: store.sha
     )
-    assert metrics["processed_cuts"] == 40 and metrics["qc_executions"] == 40
-    assert len(json.loads(objects["native_volume.json"])["sweeps"]) == 40
-    assert len(json.loads(objects["manifest.json"])["sources"]) == 40
+    assert metrics["gate_count"] == 40 * 12 * 16 and metrics["qc_executions"] == 40
+    assert len(json.loads(objects["manifest.json"])["comparison"]["sweeps"]) == 40
     assert not list(tmp_path.glob("rainpulse-multiband-*"))
     assert metrics["packed_staged_bytes"] > 0
 

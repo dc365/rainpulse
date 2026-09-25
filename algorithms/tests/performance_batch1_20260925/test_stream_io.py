@@ -144,35 +144,51 @@ def test_npz_cut_roundtrip(contract, tmp_path):
         reader.close()
 
 
-def test_native_stream_supports_40cuts_without_eager_limit_change(tmp_path):
-    from rainpulse_algo.multiband.model import MAX_SWEEPS
+@pytest.mark.parametrize("member", ["s0_range_m.npy", "s0_RHOHV.npy"])
+def test_npz_rejects_mismatched_array_header_before_read(member, tmp_path):
+    v = volume(cuts=1)
+    writer = NativeStreamWriter(tmp_path / "writer.npz", 16 * 1024**2)
+    writer.add(v)
+    out = writer.finish()
 
-    assert MAX_SWEEPS == 32
+    malformed_path = tmp_path / "malformed.npz"
+    replacement = io.BytesIO()
+    np.lib.format.write_array(
+        replacement, np.zeros(1_000_000, dtype=np.float32), allow_pickle=False
+    )
+    with ZipFile(io.BytesIO(out["native_arrays.npz"])) as source_archive:
+        with ZipFile(malformed_path, "w", compression=ZIP_DEFLATED) as target_archive:
+            for entry in source_archive.infolist():
+                value = (
+                    replacement.getvalue()
+                    if entry.filename == member
+                    else source_archive.read(entry.filename)
+                )
+                target_archive.writestr(entry.filename, value)
+
+    arrays = malformed_path.read_bytes()
+    manifest = json.loads(out["native_volume.json"])
+    manifest["arrays_sha256"] = hashlib.sha256(arrays).hexdigest()
+    with pytest.raises(ValueError, match="shape differs"):
+        NPZCuts(
+            json.dumps(manifest).encode(), malformed_path, station(), source(v),
+            sha256="a" * 64, options=Options(streaming=True), maximum_bytes=16 * 1024**2,
+        )
+
+
+def test_native_stream_fusion_stays_within_32_cut_geometry_contract(tmp_path):
+    from rainpulse_algo.multiband.model import MAX_FUSION_SWEEPS
+
+    assert MAX_FUSION_SWEEPS == 32
     v = volume(cuts=1, rays=6, gates=10)
     w = NativeStreamWriter(tmp_path / "v.npz", 1024**2)
-    for n in range(40):
+    for n in range(MAX_FUSION_SWEEPS + 1):
         w.add(Volume(copy.deepcopy(v.metadata), [replace(v.sweeps[0], number=n)]))
     out = w.finish()
-    p = tmp_path / "v.npz"
-    reader = NPZCuts(
-        out["native_volume.json"],
-        p,
-        station(),
-        source(v),
-        sha256="a" * 64,
-        options=Options(streaming=True),
-        maximum_bytes=1024**2,
-    )
-    assert len(reader.numbers) == 40
-    for n in reader.numbers:
-        reader.read(n).validate(station())
-    reader.close()
-    m = json.loads(out["native_volume.json"])
-    m["contract"] = "rainpulse.multiband.native-v1"
     with pytest.raises(ValueError, match="count"):
         NPZCuts(
-            json.dumps(m).encode(),
-            p,
+            out["native_volume.json"],
+            tmp_path / "v.npz",
             station(),
             source(v),
             sha256="a" * 64,
@@ -274,6 +290,7 @@ def root_fixture(v, st):
     root.attrs = {
         "contract_name": "rainpulse.normalized-radar-volume",
         "radar_id": st.radar_id,
+        "radar_band": st.band,
         "scan_id": v.metadata["scan_id"],
     }
     root["sweep_number"] = Array(np.array([s.number for s in v.sweeps], np.int32))
@@ -292,17 +309,59 @@ def root_fixture(v, st):
 
 def test_group_preflight_does_not_materialize_all_cuts():
     st = replace(station(), source="normalized_zarr")
-    v = volume(st, cuts=40, rays=8, gates=8)
+    v = volume(st, cuts=32, rays=8, gates=8)
     r = root_fixture(v, st)
     c = GroupCuts(
         r, st, source(v), sha256="a" * 64, options=Options(streaming=True), maximum_bytes=1024**2
     )
-    assert len(c.numbers) == 40
-    assert all(r[f"sweep_{i:03d}"]["DBZH"].reads == 0 for i in range(40))
+    assert len(c.numbers) == 32
+    assert all(r[f"sweep_{i:03d}"]["DBZH"].reads == 0 for i in range(32))
     x = c.read(3)
     x.validate(st)
     assert r["sweep_003"]["DBZH"].reads > 0
     assert r["sweep_004"]["DBZH"].reads == 0
+
+
+def test_x_qc_ignores_unapproved_cr_withheld_arrays():
+    class LazyArray:
+        shape = (512, 512)
+        dtype = np.dtype("uint8")
+        attrs = {}
+
+        def __init__(self):
+            self.reads = 0
+
+        def __getitem__(self, _):
+            self.reads += 1
+            return np.zeros(self.shape, dtype=self.dtype)
+
+    st = replace(station(), source="normalized_zarr")
+    v = volume(st, cuts=1, rays=8, gates=8)
+    r = root_fixture(v, st)
+    withheld = LazyArray()
+    r["sweep_000"]["CR_WITHHELD_MASK"] = withheld
+    cuts = GroupCuts(
+        r, st, source(v), sha256="a" * 64,
+        options=Options(streaming=True), maximum_bytes=4 * 1024**2,
+    )
+
+    decoded = cuts.read(0)
+
+    decoded.validate(st)
+    assert withheld.reads == 0
+    assert "CR_WITHHELD_MASK" not in decoded.sweeps[0].fields
+
+
+def test_group_preflight_rejects_33rd_cut_before_materializing():
+    st = replace(station(), source="normalized_zarr")
+    v = volume(st, cuts=33, rays=8, gates=8)
+    r = root_fixture(v, st)
+    with pytest.raises(ValueError, match="cut index"):
+        GroupCuts(
+            r, st, source(v), sha256="a" * 64,
+            options=Options(streaming=True), maximum_bytes=1024**2
+        )
+    assert all(r[f"sweep_{i:03d}"]["DBZH"].reads == 0 for i in range(33))
 
 
 def test_real_zarr_roundtrip(tmp_path):
@@ -321,6 +380,7 @@ def test_real_zarr_roundtrip(tmp_path):
     r.attrs.update(
         contract_name="rainpulse.normalized-radar-volume",
         radar_id=st.radar_id,
+        radar_band=st.band,
         scan_id=v.metadata["scan_id"],
     )
     r.create_dataset("sweep_number", data=np.arange(2, dtype="int32"))
