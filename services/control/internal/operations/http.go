@@ -37,6 +37,10 @@ func authorized(value, token string) bool {
 	return token != "" && subtle.ConstantTimeCompare([]byte(value), []byte("Bearer "+token)) == 1
 }
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == radarWorkspacePrefix+"radar-stations" || r.URL.Path == radarWorkspacePrefix+"radar-scans" || strings.HasPrefix(r.URL.Path, radarWorkspacePrefix+"radar-products/") {
+		h.radarWorkspace(w, r)
+		return
+	}
 	const admin = "/api/v1/admin/ops"
 	const internal = "/internal/ops/v1"
 	worker := strings.HasPrefix(r.URL.Path, internal+"/")

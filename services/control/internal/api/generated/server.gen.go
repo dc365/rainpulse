@@ -494,6 +494,36 @@ func (e ProductType) Valid() bool {
 	}
 }
 
+// Defines values for RadarComparisonCandidateOnly.
+const (
+	True RadarComparisonCandidateOnly = true
+)
+
+// Valid indicates whether the value is a known member of the RadarComparisonCandidateOnly enum.
+func (e RadarComparisonCandidateOnly) Valid() bool {
+	switch e {
+	case True:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RadarComparisonOperationalEligible.
+const (
+	RadarComparisonOperationalEligibleFalse RadarComparisonOperationalEligible = false
+)
+
+// Valid indicates whether the value is a known member of the RadarComparisonOperationalEligible enum.
+func (e RadarComparisonOperationalEligible) Valid() bool {
+	switch e {
+	case RadarComparisonOperationalEligibleFalse:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RadarGridMetricsVerticalDatumStatus.
 const (
 	UnverifiedEngineering RadarGridMetricsVerticalDatumStatus = "unverified_engineering"
@@ -638,6 +668,51 @@ func (e RadarScanRunStatus) Valid() bool {
 	case RadarScanRunStatusRAWVALIDATING:
 		return true
 	case RadarScanRunStatusSKIPPED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RadarStationPageInventoryScope.
+const (
+	RegisteredCatalog RadarStationPageInventoryScope = "registered_catalog"
+)
+
+// Valid indicates whether the value is a known member of the RadarStationPageInventoryScope enum.
+func (e RadarStationPageInventoryScope) Valid() bool {
+	switch e {
+	case RegisteredCatalog:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RadarStationPageItemsBand.
+const (
+	X RadarStationPageItemsBand = "X"
+)
+
+// Valid indicates whether the value is a known member of the RadarStationPageItemsBand enum.
+func (e RadarStationPageItemsBand) Valid() bool {
+	switch e {
+	case X:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RadarStationPageItemsGeometryStatus.
+const (
+	Unverified RadarStationPageItemsGeometryStatus = "unverified"
+)
+
+// Valid indicates whether the value is a known member of the RadarStationPageItemsGeometryStatus enum.
+func (e RadarStationPageItemsGeometryStatus) Valid() bool {
+	switch e {
+	case Unverified:
 		return true
 	default:
 		return false
@@ -1584,6 +1659,42 @@ type Radar struct {
 	UpdatedAt     time.Time      `json:"updated_at"`
 }
 
+// RadarComparison defines model for RadarComparison.
+type RadarComparison struct {
+	CandidateOnly RadarComparisonCandidateOnly `json:"candidate_only"`
+	Geometry      *string                      `json:"geometry,omitempty"`
+	Legend        *[]struct {
+		MinimumDbzh *float32 `json:"minimum_dbzh,omitempty"`
+		Rgb         *[]int   `json:"rgb,omitempty"`
+	} `json:"legend,omitempty"`
+	OperationalEligible RadarComparisonOperationalEligible `json:"operational_eligible"`
+	RadarId             string                             `json:"radar_id"`
+	ResultId            string                             `json:"result_id"`
+	ScanId              openapi_types.UUID                 `json:"scan_id"`
+	Sweeps              []struct {
+		ElevationDeg float32 `json:"elevation_deg"`
+
+		// Flags Read-only verified PNG URL
+		Flags string `json:"flags"`
+
+		// Qc Read-only verified PNG URL
+		Qc string `json:"qc"`
+
+		// Raw Read-only verified PNG URL
+		Raw         string `json:"raw"`
+		Sequence    int    `json:"sequence"`
+		SweepNumber int    `json:"sweep_number"`
+	} `json:"sweeps"`
+	VolumeEnd   time.Time `json:"volume_end"`
+	VolumeStart time.Time `json:"volume_start"`
+}
+
+// RadarComparisonCandidateOnly defines model for RadarComparison.CandidateOnly.
+type RadarComparisonCandidateOnly bool
+
+// RadarComparisonOperationalEligible defines model for RadarComparison.OperationalEligible.
+type RadarComparisonOperationalEligible bool
+
 // RadarFieldAvailability defines model for RadarFieldAvailability.
 type RadarFieldAvailability struct {
 	Available           bool    `json:"available"`
@@ -1719,6 +1830,36 @@ type RadarScanPage struct {
 // RadarScanRunStatus defines model for RadarScanRunStatus.
 type RadarScanRunStatus string
 
+// RadarStationPage defines model for RadarStationPage.
+type RadarStationPage struct {
+	AvailableRange struct {
+		End   *time.Time `json:"end,omitempty"`
+		Start *time.Time `json:"start,omitempty"`
+	} `json:"available_range"`
+	End            time.Time                      `json:"end"`
+	InventoryScope RadarStationPageInventoryScope `json:"inventory_scope"`
+	Items          []struct {
+		Band           RadarStationPageItemsBand           `json:"band"`
+		DisplayName    *string                             `json:"display_name,omitempty"`
+		GeometryStatus RadarStationPageItemsGeometryStatus `json:"geometry_status"`
+		Normalized     int                                 `json:"normalized"`
+		QcReady        int                                 `json:"qc_ready"`
+		RadarId        string                              `json:"radar_id"`
+		Registered     int                                 `json:"registered"`
+	} `json:"items"`
+	NextCursor string    `json:"next_cursor"`
+	Start      time.Time `json:"start"`
+}
+
+// RadarStationPageInventoryScope defines model for RadarStationPage.InventoryScope.
+type RadarStationPageInventoryScope string
+
+// RadarStationPageItemsBand defines model for RadarStationPage.Items.Band.
+type RadarStationPageItemsBand string
+
+// RadarStationPageItemsGeometryStatus defines model for RadarStationPage.Items.GeometryStatus.
+type RadarStationPageItemsGeometryStatus string
+
 // RadarStatusSummary defines model for RadarStatusSummary.
 type RadarStatusSummary struct {
 	ConfigVersion                 string              `json:"config_version"`
@@ -1786,6 +1927,26 @@ type VerificationSummary struct {
 
 // VerificationSummaryStatus defines model for VerificationSummary.Status.
 type VerificationSummaryStatus string
+
+// WorkspaceRadarScanPage defines model for WorkspaceRadarScanPage.
+type WorkspaceRadarScanPage struct {
+	Items []struct {
+		QcStatus string `json:"qc_status"`
+		RadarId  string `json:"radar_id"`
+		Results  []struct {
+			FinishedAt time.Time `json:"finished_at"`
+
+			// ResultId Immutable task UUID plus attempt UUID
+			ResultId string `json:"result_id"`
+			Version  string `json:"version"`
+		} `json:"results"`
+		ScanId      openapi_types.UUID `json:"scan_id"`
+		State       string             `json:"state"`
+		VolumeEnd   time.Time          `json:"volume_end"`
+		VolumeStart time.Time          `json:"volume_start"`
+	} `json:"items"`
+	NextCursor string `json:"next_cursor"`
+}
 
 // AnalysisId defines model for AnalysisId.
 type AnalysisId = openapi_types.UUID
@@ -1932,6 +2093,22 @@ type GetVerificationSummaryParams struct {
 	RunId openapi_types.UUID `form:"run_id" json:"run_id"`
 }
 
+// ListWorkspaceRadarScansParams defines parameters for ListWorkspaceRadarScans.
+type ListWorkspaceRadarScansParams struct {
+	RadarId string  `form:"radar_id" json:"radar_id"`
+	Start   string  `form:"start" json:"start"`
+	End     string  `form:"end" json:"end"`
+	Cursor  *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ListWorkspaceRadarStationsParams defines parameters for ListWorkspaceRadarStations.
+type ListWorkspaceRadarStationsParams struct {
+	Band   *string `form:"band,omitempty" json:"band,omitempty"`
+	Start  *string `form:"start,omitempty" json:"start,omitempty"`
+	End    *string `form:"end,omitempty" json:"end,omitempty"`
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // RerunForecastRunJSONRequestBody defines body for RerunForecastRun for application/json ContentType.
 type RerunForecastRunJSONRequestBody = RegenerationRequest
 
@@ -2066,6 +2243,18 @@ type ServerInterface interface {
 	// GetVerificationSummary Get verification summary for one run
 	// (GET /verification/summary)
 	GetVerificationSummary(w http.ResponseWriter, r *http.Request, params GetVerificationSummaryParams)
+	// GetWorkspaceRadarProduct Validated native polar comparison, pinned to task and attempt; no operational promotion.
+	// (GET /workspace/radar-products/{result_id})
+	GetWorkspaceRadarProduct(w http.ResponseWriter, r *http.Request, resultId string)
+	// GetWorkspaceRadarProductAsset Only image assets listed in the verified comparison manifest.
+	// (GET /workspace/radar-products/{result_id}/assets/{asset_id})
+	GetWorkspaceRadarProductAsset(w http.ResponseWriter, r *http.Request, resultId string, assetId string)
+	// ListWorkspaceRadarScans Independent observed scans with candidate QC versions; at most 24 hours and 100 scans per page.
+	// (GET /workspace/radar-scans)
+	ListWorkspaceRadarScans(w http.ResponseWriter, r *http.Request, params ListWorkspaceRadarScansParams)
+	// ListWorkspaceRadarStations Registered X stations, including stations without QC; defaults to latest observed UTC+8 day.
+	// (GET /workspace/radar-stations)
+	ListWorkspaceRadarStations(w http.ResponseWriter, r *http.Request, params ListWorkspaceRadarStationsParams)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -2327,6 +2516,30 @@ func (_ Unimplemented) GetSystemStatus(w http.ResponseWriter, r *http.Request) {
 // GetVerificationSummary Get verification summary for one run
 // (GET /verification/summary)
 func (_ Unimplemented) GetVerificationSummary(w http.ResponseWriter, r *http.Request, params GetVerificationSummaryParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetWorkspaceRadarProduct Validated native polar comparison, pinned to task and attempt; no operational promotion.
+// (GET /workspace/radar-products/{result_id})
+func (_ Unimplemented) GetWorkspaceRadarProduct(w http.ResponseWriter, r *http.Request, resultId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetWorkspaceRadarProductAsset Only image assets listed in the verified comparison manifest.
+// (GET /workspace/radar-products/{result_id}/assets/{asset_id})
+func (_ Unimplemented) GetWorkspaceRadarProductAsset(w http.ResponseWriter, r *http.Request, resultId string, assetId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListWorkspaceRadarScans Independent observed scans with candidate QC versions; at most 24 hours and 100 scans per page.
+// (GET /workspace/radar-scans)
+func (_ Unimplemented) ListWorkspaceRadarScans(w http.ResponseWriter, r *http.Request, params ListWorkspaceRadarScansParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListWorkspaceRadarStations Registered X stations, including stations without QC; defaults to latest observed UTC+8 day.
+// (GET /workspace/radar-stations)
+func (_ Unimplemented) ListWorkspaceRadarStations(w http.ResponseWriter, r *http.Request, params ListWorkspaceRadarStationsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3972,6 +4185,211 @@ func (siw *ServerInterfaceWrapper) GetVerificationSummary(w http.ResponseWriter,
 	handler.ServeHTTP(w, r)
 }
 
+// GetWorkspaceRadarProduct operation middleware
+func (siw *ServerInterfaceWrapper) GetWorkspaceRadarProduct(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "result_id" -------------
+	var resultId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "result_id", chi.URLParam(r, "result_id"), &resultId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "result_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetWorkspaceRadarProduct(w, r, resultId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetWorkspaceRadarProductAsset operation middleware
+func (siw *ServerInterfaceWrapper) GetWorkspaceRadarProductAsset(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "result_id" -------------
+	var resultId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "result_id", chi.URLParam(r, "result_id"), &resultId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "result_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "asset_id" -------------
+	var assetId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "asset_id", chi.URLParam(r, "asset_id"), &assetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "asset_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetWorkspaceRadarProductAsset(w, r, resultId, assetId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListWorkspaceRadarScans operation middleware
+func (siw *ServerInterfaceWrapper) ListWorkspaceRadarScans(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListWorkspaceRadarScansParams
+
+	// ------------- Required query parameter "radar_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "radar_id", r.URL.Query(), &params.RadarId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "radar_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "radar_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "start" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "start", r.URL.Query(), &params.Start, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "start"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "start", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "end" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "end", r.URL.Query(), &params.End, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "end"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "end", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListWorkspaceRadarScans(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListWorkspaceRadarStations operation middleware
+func (siw *ServerInterfaceWrapper) ListWorkspaceRadarStations(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListWorkspaceRadarStationsParams
+
+	// ------------- Optional query parameter "band" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "band", r.URL.Query(), &params.Band, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "band"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "band", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "start" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "start", r.URL.Query(), &params.Start, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "start"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "start", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "end" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "end", r.URL.Query(), &params.End, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "end"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "end", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListWorkspaceRadarStations(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -4085,6 +4503,18 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/workspace/radar-stations", wrapper.ListWorkspaceRadarStations)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/workspace/radar-scans", wrapper.ListWorkspaceRadarScans)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/workspace/radar-products/{result_id}", wrapper.GetWorkspaceRadarProduct)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/workspace/radar-products/{result_id}/assets/{asset_id}", wrapper.GetWorkspaceRadarProductAsset)
+	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/runs/latest", wrapper.GetLatestRun)
 	})
