@@ -129,6 +129,61 @@ func TestAuthenticationAndUnknownRoutes(t *testing.T) {
 		}
 	}
 }
+
+func TestValidationModeDisablesOnlyAdminCredentialChecks(t *testing.T) {
+	next := http.NotFoundHandler()
+	h := NewHandler(nil, next, HTTPOptions{AdminToken: "admin", WorkerToken: "worker", AdminAuthMode: AdminAuthModeValidation})
+
+	modeRequest := httptest.NewRequest(http.MethodGet, "/api/v1/admin/ops/auth-mode", nil)
+	modeResponse := httptest.NewRecorder()
+	h.ServeHTTP(modeResponse, modeRequest)
+	if modeResponse.Code != http.StatusOK {
+		t.Fatalf("auth mode endpoint: %d", modeResponse.Code)
+	}
+	var mode map[string]string
+	if err := json.Unmarshal(modeResponse.Body.Bytes(), &mode); err != nil || mode["mode"] != AdminAuthModeValidation {
+		t.Fatalf("unexpected auth mode response: %s (%v)", modeResponse.Body.String(), err)
+	}
+
+	adminRequest := httptest.NewRequest(http.MethodGet, "/api/v1/admin/ops/unknown", nil)
+	adminResponse := httptest.NewRecorder()
+	h.ServeHTTP(adminResponse, adminRequest)
+	if adminResponse.Code != http.StatusNotFound {
+		t.Fatalf("validation admin request should pass auth and reach routing: %d", adminResponse.Code)
+	}
+
+	workerRequest := httptest.NewRequest(http.MethodGet, "/internal/ops/v1/unknown", nil)
+	workerResponse := httptest.NewRecorder()
+	h.ServeHTTP(workerResponse, workerRequest)
+	if workerResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("validation mode must preserve worker auth: %d", workerResponse.Code)
+	}
+	workerRequest = httptest.NewRequest(http.MethodGet, "/internal/ops/v1/unknown", nil)
+	workerRequest.Header.Set("Authorization", "Bearer admin")
+	workerResponse = httptest.NewRecorder()
+	h.ServeHTTP(workerResponse, workerRequest)
+	if workerResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("admin token must not authorize worker routes: %d", workerResponse.Code)
+	}
+}
+
+func TestAdminAuthModeDefaultsToCredential(t *testing.T) {
+	h := NewHandler(nil, http.NotFoundHandler(), HTTPOptions{AdminToken: "admin"})
+	modeRequest := httptest.NewRequest(http.MethodGet, "/api/v1/admin/ops/auth-mode", nil)
+	modeResponse := httptest.NewRecorder()
+	h.ServeHTTP(modeResponse, modeRequest)
+	var mode map[string]string
+	if err := json.Unmarshal(modeResponse.Body.Bytes(), &mode); err != nil || mode["mode"] != "credential" {
+		t.Fatalf("unexpected default auth mode response: %s (%v)", modeResponse.Body.String(), err)
+	}
+	adminRequest := httptest.NewRequest(http.MethodGet, "/api/v1/admin/ops/unknown", nil)
+	adminResponse := httptest.NewRecorder()
+	h.ServeHTTP(adminResponse, adminRequest)
+	if adminResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("credential mode should continue requiring admin auth: %d", adminResponse.Code)
+	}
+}
+
 func TestAdmissionPauseAndTelemetryBoundary(t *testing.T) {
 	calls := 0
 	h := NewHandler(nil, http.NotFoundHandler(), HTTPOptions{AdminToken: "a", WorkerToken: "w", Admit: func(context.Context) (func(), error) { calls++; return nil, errors.New("paused") }})

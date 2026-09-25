@@ -1,8 +1,10 @@
 package apiapp
 
 import (
+	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/controlplane"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/operations"
@@ -17,5 +19,9 @@ import (
 func withOperations(next http.Handler, pool *pgxpool.Pool, store *postgresstore.Store, objects operations.ObjectReader, adminToken string) http.Handler {
 	db := stdlib.OpenDBFromPool(pool)
 	service := &operations.Service{Store: &operations.Store{DB: db}, Builder: controlplane.NewOperationsBuilder(store, db), Objects: objects}
-	return operations.NewHandler(service, next, operations.HTTPOptions{AdminToken: adminToken, WorkerToken: os.Getenv("RAINPULSE_OPS_WORKER_TOKEN"), Admit: releaseguard.Acquire, LokiURL: os.Getenv("RAINPULSE_OPS_LOKI_URL")})
+	adminAuthMode := strings.TrimSpace(os.Getenv("RAINPULSE_ADMIN_AUTH_MODE"))
+	if adminAuthMode == operations.AdminAuthModeValidation {
+		slog.Warn("RainPulse admin credential check is disabled in validation mode; keep the management endpoint on a trusted network")
+	}
+	return operations.NewHandler(service, next, operations.HTTPOptions{AdminToken: adminToken, AdminAuthMode: adminAuthMode, WorkerToken: os.Getenv("RAINPULSE_OPS_WORKER_TOKEN"), Admit: releaseguard.Acquire, LokiURL: os.Getenv("RAINPULSE_OPS_LOKI_URL")})
 }

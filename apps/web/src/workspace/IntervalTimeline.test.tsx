@@ -26,7 +26,7 @@ it('separates observed history from forecast and supports cross-origin ranges', 
   expect(container.querySelectorAll('[data-lead]')).toHaveLength(41)
   expect(container.querySelectorAll('[data-period="past"]')).toHaveLength(10)
   expect(container.querySelectorAll('[data-period="future"]')).toHaveLength(30)
-  expect(screen.getByText('起报时刻')).toBeTruthy()
+  expect(screen.getByRole('img', { name: /起报时刻 08\/28 16:30 北京时间/ })).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: '过去1时' }))
   expect(commit).toHaveBeenLastCalledWith({ start: -60, end: 0 })
   fireEvent.click(screen.getByRole('button', { name: '0–3 时' }))

@@ -15,11 +15,15 @@ import (
 )
 
 type HTTPOptions struct {
-	AdminToken  string
-	WorkerToken string
-	Admit       func(context.Context) (func(), error)
-	LokiURL     string
+	AdminToken    string
+	AdminAuthMode string
+	WorkerToken   string
+	Admit         func(context.Context) (func(), error)
+	LokiURL       string
 }
+
+const AdminAuthModeValidation = "validation"
+
 type Handler struct {
 	service *Service
 	options HTTPOptions
@@ -44,11 +48,19 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if isAdmin && r.Method == http.MethodGet && r.URL.Path == admin+"/auth-mode" {
+		mode := "credential"
+		if h.options.AdminAuthMode == AdminAuthModeValidation {
+			mode = AdminAuthModeValidation
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"mode": mode})
+		return
+	}
 	token := h.options.AdminToken
 	if worker {
 		token = h.options.WorkerToken
 	}
-	if !authorized(r.Header.Get("Authorization"), token) {
+	if !(isAdmin && h.options.AdminAuthMode == AdminAuthModeValidation) && !authorized(r.Header.Get("Authorization"), token) {
 		writeProblem(w, problem(401, "unauthorized", "请使用已配置的管理凭据"))
 		return
 	}

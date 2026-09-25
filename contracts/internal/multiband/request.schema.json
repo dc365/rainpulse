@@ -44,6 +44,11 @@
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
         },
+        "execution_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "Frozen CPU execution policy identity; not a meteorological product policy."
+        },
         "analysis_time": {
           "type": "string",
           "format": "date-time"
@@ -111,16 +116,42 @@
           "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
         }
       },
-      "required": [
-        "mode",
-        "product_id",
-        "network_sha256",
+        "required": [
+          "mode",
+          "network_sha256",
+          "execution_sha256",
         "analysis_time",
         "input_cutoff",
         "sources",
         "output_prefix",
         "analysis_id"
-      ],
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "mode": {
+                  "const": "sx_composite"
+                }
+              },
+              "required": [
+                "mode"
+              ]
+            },
+            "then": {
+              "required": [
+                "product_id"
+              ]
+            },
+            "else": {
+              "not": {
+                "required": [
+                  "product_id"
+                ]
+              }
+            }
+          }
+        ],
       "additionalProperties": false
     }
   },

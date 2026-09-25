@@ -49,8 +49,20 @@ def capture_identity(kind: str) -> dict[str, Any]:
     versions = {"flag_definition_version": str(configs["RAINPULSE_QC_FLAG_DEFINITIONS"]["definition_version"])}
     if kind == "multiband":
         from rainpulse_algo.multiband.model import Network
+        from rainpulse_algo.multiband.execution import ExecutionOptions
+
         network = Network.load(os.environ["RAINPULSE_MULTIBAND_CONFIG"])
-        versions.update(multiband_contract="rainpulse.multiband.v1", network_release=network.release_id)
+        execution_path = os.getenv("RAINPULSE_MULTIBAND_EXECUTION_CONFIG")
+        if execution_path:
+            execution_sha256 = hashlib.sha256(Path(execution_path).read_bytes()).hexdigest()
+            files["RAINPULSE_MULTIBAND_EXECUTION_CONFIG"] = execution_sha256
+        else:
+            execution_sha256 = ExecutionOptions().digest
+        versions.update(
+            multiband_contract="rainpulse.multiband.v1",
+            network_release=network.release_id,
+            execution_policy_sha256=execution_sha256,
+        )
     elif kind == "qc":
         qc = configs["RAINPULSE_RADAR_QC_CONFIG"]
         versions.update(qc_profile=str(qc["profile_version"]), qc_pipeline_version=str(qc["pipeline_version"]))

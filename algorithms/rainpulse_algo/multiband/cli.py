@@ -87,9 +87,12 @@ def replay(network: Path, request_path: Path, root: Path, index_path: Path, outp
         directory = Path(staging) / 'product'
         directory.mkdir()
         for name, data in objects.items():
-            if PurePosixPath(name).name != name:
-                raise ValueError('unexpected local output key')
-            (directory / name).write_bytes(data)
+            relative = PurePosixPath(name)
+            if not name or relative.is_absolute() or any(part in {'', '.', '..'} for part in relative.parts):
+                raise ValueError('unsafe local output key')
+            target = directory.joinpath(*relative.parts)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
         receipt = dict(summary=summary, metrics=metrics, artifact_sha256=logical_digest(objects), mode='offline-reference-not-operational')
         (directory / 'replay-receipt.json').write_bytes(json_bytes(receipt))
         # Do not replace an existing destination created by another operator.
@@ -97,7 +100,10 @@ def replay(network: Path, request_path: Path, root: Path, index_path: Path, outp
         # is last so clients never mistake an incomplete output for success.
         output.mkdir()
         for name in sorted(objects):
-            os.replace(directory / name, output / name)
+            relative = PurePosixPath(name)
+            target = output.joinpath(*relative.parts)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(directory.joinpath(*relative.parts), target)
         os.replace(directory / 'replay-receipt.json', output / 'replay-receipt.json')
     return receipt
 

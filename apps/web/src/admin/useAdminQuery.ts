@@ -10,7 +10,7 @@ export function useAdminQuery<T>(token: string, path: string | null, interval = 
     const [revision, setRevision] = useState(0);
     const refresh = useCallback(() => setRevision(n => n + 1), []);
     useEffect(() => {
-        if (!path || !token)
+        if (!path)
             return;
         const controller = new AbortController();
         let timer: ReturnType<typeof setTimeout> | undefined;

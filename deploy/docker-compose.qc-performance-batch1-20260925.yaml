@@ -1,0 +1,3 @@
+services:
+  radar-qc-worker:
+    image: rainpulse-cpu-worker:qc-perf-batch1-47c7876

@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Streaming native bundle; new explicit contract, not native-v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "metadata",
+    "sweeps",
+    "arrays_sha256"
+  ],
+  "properties": {
+    "contract": {
+      "const": "rainpulse.multiband.native-stream-v1"
+    },
+    "metadata": {
+      "type": "object",
+      "required": [
+        "radar_id",
+        "scan_id",
+        "band",
+        "frequency_hz",
+        "longitude_deg",
+        "latitude_deg",
+        "altitude_m_msl",
+        "height_datum",
+        "volume_start",
+        "volume_end",
+        "available_at",
+        "asset_sha256",
+        "scan_type"
+      ]
+    },
+    "sweeps": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "number",
+          "fields"
+        ],
+        "properties": {
+          "number": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4096
+          },
+          "fields": {
+            "type": "array",
+            "minItems": 3,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+            }
+          }
+        }
+      }
+    },
+    "arrays_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

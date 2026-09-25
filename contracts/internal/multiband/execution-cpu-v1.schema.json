@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Multiband CPU execution policy v1 (not a meteorological network release)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": "multiband-cpu-stream-20260925-v1"
+    },
+    "streaming": {
+      "type": "boolean",
+      "default": false
+    },
+    "selection_backend": {
+      "enum": [
+        "numpy",
+        "numba"
+      ],
+      "default": "numpy"
+    },
+    "scratch_parent": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "maximum_scratch_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 4294967296,
+      "maximum": 68719476736
+    },
+    "maximum_object_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 134217728,
+      "maximum": 2147483648
+    },
+    "maximum_cut_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 268435456,
+      "maximum": 2147483648
+    },
+    "maximum_qc_cut_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 536870912,
+      "maximum": 4294967296
+    },
+    "maximum_output_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 268435456,
+      "maximum": 2147483648
+    },
+    "maximum_tile_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 134217728,
+      "maximum": 2147483648
+    },
+    "layer_memory_bytes": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 67108864,
+      "maximum": 2147483648
+    },
+    "maximum_sweeps": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 64,
+      "maximum": 64
+    },
+    "maximum_volume_gates": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 64000000,
+      "maximum": 64000000
+    },
+    "maximum_task_gates": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 256000000,
+      "maximum": 1024000000
+    },
+    "geometry_cache_bytes": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 33554432,
+      "maximum": 268435456
+    },
+    "maximum_cut_cache_entries": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 128,
+      "maximum": 1024
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "selection_backend": {
+            "const": "numba"
+          }
+        },
+        "required": [
+          "selection_backend"
+        ]
+      },
+      "then": {
+        "required": [
+          "streaming"
+        ],
+        "properties": {
+          "streaming": {
+            "const": true
+          }
+        }
+      }
+    }
+  ]
+}

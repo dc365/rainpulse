@@ -11,9 +11,24 @@ function respond(value: unknown, status = 200) { return Promise.resolve(new Resp
 it('requires a real credential check and displays authentication failure', async () => {
   vi.stubGlobal('fetch', vi.fn(() => respond({ code: 'unauthorized', message: '管理凭据不正确' }, 401)))
   render(<AdminApp />)
+  await screen.findByLabelText('管理凭据')
   fireEvent.change(screen.getByLabelText('管理凭据'), { target: { value: 'wrong' } })
   fireEvent.click(screen.getByRole('button', { name: '进入后台' }))
   await screen.findByText('管理凭据不正确')
+  expect(sessionStorage.getItem('rainpulse.ops.adminToken')).toBeNull()
+})
+it('enters the backend without a credential when validation mode is enabled', async () => {
+  const calls: {url: string; authorization?: string}[] = []
+  vi.stubGlobal('fetch', vi.fn((url: string, options: RequestInit = {}) => {
+    calls.push({url, authorization: new Headers(options.headers).get('Authorization') ?? undefined})
+    if (url.endsWith('/auth-mode')) return respond({mode: 'validation'})
+    if (url.endsWith('/status')) return respond(health)
+    return respond({items: [], next_cursor: ''})
+  }))
+  render(<AdminApp />)
+  await screen.findByText(/验证模式：/)
+  await waitFor(() => expect(calls.some(call => call.url.endsWith('/status') && call.authorization === undefined)).toBe(true))
+  expect(screen.queryByLabelText('管理凭据')).toBeNull()
   expect(sessionStorage.getItem('rainpulse.ops.adminToken')).toBeNull()
 })
 it('shows query failure rather than presenting an empty healthy task list', async () => {

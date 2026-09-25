@@ -24,7 +24,7 @@ def test_actual_normalized_zarr_adapter_preserves_coordinates(net):
     station=replace(net.stations['x1'],source='normalized_zarr')
     v=volume(station);s=v.sweeps[0]
     store=MemoryStore();root=zarr.group(store=store,overwrite=True)
-    root.attrs.update(contract_name='rainpulse.normalized-radar-volume',radar_id=station.radar_id,scan_id=v.metadata['scan_id'],calibration_id=station.calibration_id,attenuation_status='corrected',scan_type='volume')
+    root.attrs.update(contract_name='rainpulse.normalized-radar-volume',radar_id=station.radar_id,radar_band=station.band,scan_id=v.metadata['scan_id'],calibration_id=station.calibration_id,attenuation_status='corrected',scan_type='volume')
     root.create_dataset('sweep_number',data=np.array([0],np.int32))
     g=root.create_group('sweep_000')
     for name,data in [('azimuth',s.azimuth_deg),('range',s.range_m),('elevation',s.elevation_deg),('ray_time',s.ray_time_epoch),*s.fields.items()]:
