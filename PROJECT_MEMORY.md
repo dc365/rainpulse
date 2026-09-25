@@ -9,17 +9,25 @@ operational data here.
 
 ## S/X multiband candidate (2026-09-24)
 
-- 2026-09-26: X single-station QC now shows a shared basemap with a draft
-  station position and 10/20/30/40/50 km reference rings beside the native
-  raw/QC PPI pair. Local `main` merged `17e3501`; the 105 Go service reports
-  `17e3501f16f5` and is ready. Both ZF101 and ZF505 return candidate site
-  coordinates from their current draft config while `geometry_status` remains
-  `unverified`. Web index SHA-256 is
-  `d8ac607188de449ad5673ea9b8de859e8269e300eb7919e8484958d1fd60b6ea`.
-  Browser verified both stations' maps/PPI, S switching, 375px width, and no
-  console warnings. Binary/Web rollback copies are `rainpulse.rollback-before-17e3501`
-  and `apps/web/.dist-rollback-before-17e3501` on 105. Real X echo map overlay
-  and fusion remain gated pending verified georeferenced products.
+- 2026-09-26 correction: X QC now uses the same two basemaps as S, with
+  raw/QC/flag echoes sampled from native site, azimuth, per-ray elevation and
+  gate ranges onto EPSG:4326 (WGS84 geodesic, 4/3-Earth ground geometry).
+  The separate third station map is removed. Both bands' range-ring labels
+  are numbers only; X ring spacing follows the actual sweep range. Map geometry
+  and immutable asset URLs are attached to each result/sweep; old results need
+  “刷新资料” to load the newly generated map result.
+  Source is merged into local main through `076e568`. On 105 the Go service
+  reports `17d3b1eaf374` (ready), and the healthy candidate Worker image is
+  `rainpulse-cpu-worker:x-map-17d3b1e`. Four ZF101/ZF505 scans at 00:00/00:06 UTC
+  succeeded in run `48b87c0c-21dd-4c15-86ee-cdbf24fe8ad5`, publishing map assets
+  for all 98 sweeps. The final Web index SHA-256 is
+  `0ceeb7c5d2aa9a7b1b4503af5815d1626288e66dab2cd36c3ae9de3d3f8bb6a5`.
+  Numerical cardinal-direction/mask tests, Python multiband tests, Go test/vet,
+  generated contracts, Web tests/build and real-browser checks passed.
+  Native site coordinates remain unverified; candidate map display does not
+  enable cross-station overlay, trusted fusion, QPE, or forecast eligibility.
+  Runtime rollback is `.build/rollback-x-map-17d3b1e`; previous Worker image
+  is `rainpulse-cpu-worker:x-shared-5aa638b`.
 - Unified S/X QC workspace design and phase-A Web implementation are on local
   `main` through `a44e105`. The QC route now uses one shell, one time axis,
   native S/X station and sweep selection, paired raw/QC views, and candidate
@@ -31,8 +39,8 @@ operational data here.
   The prior dist is at `apps/web/.dist-rollback-before-a44e105`. Browser
   verified the 2026-08-28 ZF101 X pair, S Z9591 at 08:06 BJT, band switching,
   and one-map overlay gate; service remained active. No Go or Worker restart.
-- X geographic metadata/assets remain unverified; real X map overlay and
-  S/X fusion are gated. The current S timeline indicates analysis cycles, not
+- X site metadata remains unverified; single-station candidate map display is
+  enabled, while cross-station overlay and S/X fusion remain gated. The current S timeline indicates analysis cycles, not
   per-station raw/QC availability; a Go summary contract is needed for that lane.
 
 - 2026-09-25 UI integration candidate adds standalone productless X QC
