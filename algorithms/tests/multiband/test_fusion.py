@@ -87,6 +87,8 @@ def test_sector_gap_and_circular_azimuth(net):
     assert list(offsets)==[1.,1.]
     _,x=processed(net)
     x.sweeps[0].azimuth_deg=(x.sweeps[0].azimuth_deg+20)%360
+    # QC shares source fields as read-only views; copy for this synthetic gap.
+    x.sweeps[0].fields["OBSERVED_MASK"] = x.sweeps[0].fields["OBSERVED_MASK"].copy()
     x.sweeps[0].fields["OBSERVED_MASK"][:]=0
     # Only northward rays observed; cannot fill an eastward sector hole.
     x.sweeps[0].fields["OBSERVED_MASK"][340,:]=1

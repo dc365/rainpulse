@@ -5,6 +5,7 @@ can be verified against the exact whole-artifact identity without downloading
 unrelated objects. Schema 3 commits to physical packs, but has no per-logical-
 object hashes: selected reads deliberately fall back to full verification.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -26,8 +27,7 @@ _SHA = re.compile(r"^[0-9a-f]{64}$")
 
 def artifact_digest(objects: Mapping[str, bytes]) -> str:
     return manifest_digest(
-        Entry(key, len(value), hashlib.sha256(value).hexdigest())
-        for key, value in objects.items()
+        Entry(key, len(value), hashlib.sha256(value).hexdigest()) for key, value in objects.items()
     )
 
 
@@ -53,8 +53,12 @@ def _key(value: object) -> str:
     if not isinstance(value, str) or not value or "\x00" in value or "\\" in value:
         raise RuntimeError("published artifact has an invalid key")
     path = PurePosixPath(value)
-    if (path.is_absolute() or ".." in path.parts or str(path) != value
-            or value in (".", "_SUCCESS.json")):
+    if (
+        path.is_absolute()
+        or ".." in path.parts
+        or str(path) != value
+        or value in (".", "_SUCCESS.json")
+    ):
         raise RuntimeError("published artifact has an unsafe key")
     return value
 
@@ -68,8 +72,13 @@ def _sha(value: object) -> str:
 def _uri(value: str) -> tuple[str, str]:
     parsed = urlparse(value)
     key = parsed.path.strip("/")
-    if (parsed.scheme != "s3" or not parsed.netloc or parsed.username is not None
-            or parsed.query or parsed.fragment):
+    if (
+        parsed.scheme != "s3"
+        or not parsed.netloc
+        or parsed.username is not None
+        or parsed.query
+        or parsed.fragment
+    ):
         raise ValueError("expected an s3 artifact URI")
     return parsed.netloc, _key(key)
 
@@ -104,8 +113,10 @@ class ManifestIndex:
         # Current immutable publisher embeds the digest in this path. Other
         # historical relative prefixes remain supported but are never trusted
         # in place of manifest/object checksum verification.
-        if (self.data_prefix.startswith("_objects/")
-                and self.data_prefix != f"_objects/{self.sha256}"):
+        if (
+            self.data_prefix.startswith("_objects/")
+            and self.data_prefix != f"_objects/{self.sha256}"
+        ):
             raise RuntimeError("artifact content prefix differs from bundle SHA-256")
         size = marker.get("size_bytes")
         if type(size) is not int or size < 0:
@@ -137,10 +148,16 @@ class ManifestIndex:
                     raise RuntimeError("invalid packed artifact entry")
                 key, pack, offset, count = item
                 key = _key(key)
-                if (not isinstance(pack, str) or pack not in self.physical or key in self.logical
-                        or type(offset) is not int or type(count) is not int or count < 0
-                        or offset != positions[pack]
-                        or offset + count > self.physical[pack].size):
+                if (
+                    not isinstance(pack, str)
+                    or pack not in self.physical
+                    or key in self.logical
+                    or type(offset) is not int
+                    or type(count) is not int
+                    or count < 0
+                    or offset != positions[pack]
+                    or offset + count > self.physical[pack].size
+                ):
                     raise RuntimeError("invalid packed artifact bounds or duplicate key")
                 self.logical[key] = (pack, offset, count)
                 positions[pack] += count
@@ -177,16 +194,31 @@ class ManifestIndex:
 
 class ArtifactSession:
     """One validated manifest snapshot; repeat selections cannot mix revisions."""
-    def __init__(self, *, index: ManifestIndex, bucket: str, prefix: str,
-                 namespace: str, read_bytes: Callable[[str, str, int], bytes],
-                 cache: VerifiedObjectCache, workers: int):
+
+    def __init__(
+        self,
+        *,
+        index: ManifestIndex,
+        bucket: str,
+        prefix: str,
+        namespace: str,
+        read_bytes: Callable[[str, str, int], bytes],
+        cache: VerifiedObjectCache,
+        workers: int,
+    ):
         self.index, self.bucket, self.prefix = index, bucket, prefix
         self.namespace, self.read_bytes = namespace, read_bytes
         self.cache, self.workers = cache, workers
         self._lock = threading.Lock()
-        self.stats = {"object_gets": 0, "download_bytes": 0, "cache_hits": 0,
-                      "shared_reads": 0, "selected_objects": 0, "selected_bytes": 0,
-                      "packed_full_fallback": 0}
+        self.stats = {
+            "object_gets": 0,
+            "download_bytes": 0,
+            "cache_hits": 0,
+            "shared_reads": 0,
+            "selected_objects": 0,
+            "selected_bytes": 0,
+            "packed_full_fallback": 0,
+        }
 
     def _read_entry(self, entry: Entry) -> tuple[str, bytes]:
         path = "/".join(filter(None, (self.prefix, self.index.data_prefix, entry.key)))
@@ -202,8 +234,24 @@ class ArtifactSession:
                 self.stats["shared_reads"] += 1
         return entry.key, loaded.data
 
-    def load(self, *, keys: Iterable[str] | None = None,
-             prefixes: Iterable[str] | None = None) -> dict[str, bytes]:
+    def staged(
+        self, *, directory=None, maximum_disk_bytes, maximum_object_bytes, keys=None, prefixes=None
+    ):
+        """Context-managed, read-only bounded access to this exact manifest."""
+        from .asset_stream import staged
+
+        return staged(
+            self,
+            directory=directory,
+            maximum_disk_bytes=maximum_disk_bytes,
+            maximum_object_bytes=maximum_object_bytes,
+            keys=keys,
+            prefixes=prefixes,
+        )
+
+    def load(
+        self, *, keys: Iterable[str] | None = None, prefixes: Iterable[str] | None = None
+    ) -> dict[str, bytes]:
         selected = self.index.select(keys, prefixes)
         if self.index.schema == "3.0":
             # Legacy pack index has no logical-object hashes. Full verification
@@ -213,16 +261,16 @@ class ArtifactSession:
                 self.stats["packed_full_fallback"] += 1
         else:
             to_read = selected
-        physical = dict(_parallel(
-            [self.index.physical[key] for key in to_read], self._read_entry, self.workers
-        ))
+        physical = dict(
+            _parallel([self.index.physical[key] for key in to_read], self._read_entry, self.workers)
+        )
         if self.index.schema == "3.0":
             # Do not materialize all unpacked bytes: hash views over each pack
             # and only copy selected logical objects into the returned mapping.
             digest = hashlib.sha256()
             for key in sorted(self.index.logical):
                 pack, offset, size = self.index.logical[key]
-                value = memoryview(physical[pack])[offset:offset + size]
+                value = memoryview(physical[pack])[offset : offset + size]
                 encoded = key.encode()
                 digest.update(len(encoded).to_bytes(4, "big"))
                 digest.update(encoded)
@@ -233,7 +281,7 @@ class ArtifactSession:
             result = {}
             for key in selected:
                 pack, offset, size = self.index.logical[key]
-                result[key] = bytes(memoryview(physical[pack])[offset:offset + size])
+                result[key] = bytes(memoryview(physical[pack])[offset : offset + size])
         else:
             result = {key: physical[key] for key in selected}
         self.stats["selected_objects"] += len(result)
@@ -266,9 +314,15 @@ def _parallel(items: list[Entry], function: Callable, workers: int) -> list[tupl
 
 
 class VerifiedArtifactReader:
-    def __init__(self, read_bytes: Callable[[str, str, int], bytes], *, namespace: str,
-                 maximum: int = 2 * 1024**3, workers: int = 4,
-                 cache: VerifiedObjectCache | None = None):
+    def __init__(
+        self,
+        read_bytes: Callable[[str, str, int], bytes],
+        *,
+        namespace: str,
+        maximum: int = 2 * 1024**3,
+        workers: int = 4,
+        cache: VerifiedObjectCache | None = None,
+    ):
         if type(maximum) is not int or maximum <= 0:
             raise ValueError("artifact input byte limit must be positive")
         if type(workers) is not int or not 1 <= workers <= 32:
@@ -286,18 +340,29 @@ class VerifiedArtifactReader:
         # marker must be visible even if verified object bytes remain cached.
         raw = self.read_bytes(bucket, prefix + "/_SUCCESS.json", MAX_MARKER_BYTES)
         index = ManifestIndex(raw, self.maximum, expected_sha256)
-        session = ArtifactSession(index=index, bucket=bucket, prefix=prefix,
-                                  namespace=self.namespace, read_bytes=self.read_bytes,
-                                  cache=self.cache, workers=self.workers)
+        session = ArtifactSession(
+            index=index,
+            bucket=bucket,
+            prefix=prefix,
+            namespace=self.namespace,
+            read_bytes=self.read_bytes,
+            cache=self.cache,
+            workers=self.workers,
+        )
         self.last_session = session
         return session
 
     def load(self, artifact_uri: str, *, expected_sha256: str | None = None) -> dict[str, bytes]:
         return self.open(artifact_uri, expected_sha256=expected_sha256).load()
 
-    def load_selected(self, artifact_uri: str, *, keys: Iterable[str] | None = None,
-                      prefixes: Iterable[str] | None = None,
-                      expected_sha256: str | None = None) -> dict[str, bytes]:
+    def load_selected(
+        self,
+        artifact_uri: str,
+        *,
+        keys: Iterable[str] | None = None,
+        prefixes: Iterable[str] | None = None,
+        expected_sha256: str | None = None,
+    ) -> dict[str, bytes]:
         if keys is None and prefixes is None:
             raise ValueError("load_selected requires keys or prefixes")
         return self.open(artifact_uri, expected_sha256=expected_sha256).load(

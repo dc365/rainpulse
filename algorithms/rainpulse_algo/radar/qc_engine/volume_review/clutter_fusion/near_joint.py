@@ -255,13 +255,11 @@ def _temporal_low_rho(s,strong,base,runtime):
         raise ResourceLimit("temporal low-rho object count budget")
     oid=out["CF_NR_TEMPORAL_LOW_RHO_OBJECT_ID"];size=out["CF_NR_TEMPORAL_LOW_RHO_OBJECT_SIZE"]
     fraction=out["CF_NR_TEMPORAL_LOW_RHO_OBJECT_FRACTION"]
-    for value in range(1,int(count)+1):
-        component=labels==value;members=int(component.sum())
-        recurrence_fraction=min(float(first[component].mean()),float(second[component].mean()))
-        oid[component]=value;size[component]=members;fraction[component]=recurrence_fraction
-        if (members>=cfg.minimum_object_gates and members<=cfg.maximum_object_gates
-                and recurrence_fraction>=cfg.minimum_object_recurrence_fraction):
-            temporal_object|=component
+    from ...group_stats import recurrence_tables
+    ids, sizes, fractions, temporal_object = recurrence_tables(
+        labels, int(count), first, second, cfg.minimum_object_gates,
+        cfg.maximum_object_gates, cfg.minimum_object_recurrence_fraction)
+    oid[:]=ids;size[:]=sizes;fraction[:]=fractions
     out["CF_NR_TEMPORAL_LOW_RHO_OBJECT_MASK"][temporal_object]=1
     return out,{"status":"EVALUATED","sources":sources,"rejected":rejected,
                 "domain_gates":int(domain.sum()),"prior1_gates":int((domain&first).sum()),
@@ -311,15 +309,10 @@ def _strong_evidence(s,cfg,base,runtime=None):
         if count>c.maximum_strong_objects:
             from ..data import ResourceLimit
             raise ResourceLimit("strong near object count budget")
-        for value in range(1,int(count)+1):
-            component=labels==value;size=int(component.sum());seeds=int((component&core).sum())
-            fraction=seeds/size if size else 0.
-            object_id[component]=value;object_size[component]=size;object_fraction[component]=fraction
-            if (c.object_propagation
-                    and seeds>=c.minimum_object_seed_gates
-                    and fraction>=c.minimum_object_seed_fraction
-                    and size<=c.maximum_object_gates):
-                propagated|=component&~core
+        from ...group_stats import seed_tables
+        object_id, object_size, object_fraction, propagated = seed_tables(
+            labels, int(count), core, c.minimum_object_seed_gates,
+            c.minimum_object_seed_fraction, c.maximum_object_gates, c.object_propagation)
         if c.object_dilation_iterations:
             dilated=_neighbor_dilation(core,object_domain,left_rows,right_rows,
                                        c.object_dilation_gates,c.object_dilation_iterations)
