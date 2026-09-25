@@ -13,8 +13,10 @@ from configure_multiband import MIB, multiband_override
 
 def write_network(tmp_path):
     value=json.loads((ROOT/'configs/multiband/network.example.json').read_text())
-    for s in value['stations'].values():
-        s['enabled']=True;s['geometry_verified']=True
+    # Only S has the placeholder fusion geometry in this fixture. X remains
+    # enabled for standalone QC without pretending its spatial metadata is known.
+    value['stations']['s_example']['enabled']=True
+    value['stations']['s_example']['geometry_verified']=True
     path=tmp_path/'network.json';path.write_text(json.dumps(value));return path
 
 def effective():

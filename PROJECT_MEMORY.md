@@ -9,6 +9,21 @@ operational data here.
 
 ## S/X multiband candidate (2026-09-24)
 
+- 2026-09-25 UI integration candidate adds standalone productless X QC
+  previews and S-only, X-only, S/X, and jointly-valid X−S outputs for one
+  frozen six-minute task grid. The workspace links to the comparison task
+  flow; task details render four projected-grid quicklooks. This is not the
+  planned product catalog or a georeferenced workspace-map layer.
+- Candidate is being finalized in an isolated worktree on top of
+  `origin/main` `98ebe0c`. `bash scripts/test_multiband.sh`, Web test/build,
+  and Ruff pass. PostgreSQL integration is skipped without a disposable
+  database; full Go test/vet/build, release gate, push/CI, and 105 deployment
+  remain outstanding.
+- 105 has no verified X geometry/MSL/frequency/calibration config. Publish
+  candidate code only; do not enable spatial X fusion or claim real-data
+  acceptance until the 20260828 paired S/X volumes pass numerical and resource
+  checks. Do not modify the dirty 105 source checkout.
+
 - Performance batch 1 was merged to `main` at `47c7876` on 2026-09-25.
   On 105, both active radar QC Workers run
   `rainpulse-cpu-worker:qc-perf-batch1-47c7876` with the grouped CF statistics

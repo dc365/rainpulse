@@ -2,17 +2,21 @@
 import copy
 import io
 import json
+from datetime import UTC, datetime
+from types import SimpleNamespace
 from zipfile import ZipFile
 
 import numpy as np
 import pytest
+from jsonschema import Draft202012Validator
 
 from conftest import TARGET, network_document, volume
-from rainpulse_algo.multiband.adapters import ray_seconds, read_volume
+from rainpulse_algo.multiband.adapters import ray_seconds, read_volume, read_x_qc_sweep
 from rainpulse_algo.multiband.cli import LocalReader, logical_digest, replay
 from rainpulse_algo.multiband.codec import decode_arrays, decode_volume, encode_arrays, encode_volume
-from rainpulse_algo.multiband.managed import Executor, VolumeCache
-from rainpulse_algo.multiband.model import Network
+from rainpulse_algo.multiband.managed import Executor, VolumeCache, _validated_sweep_numbers
+from rainpulse_algo.multiband.execution import ExecutionOptions
+from rainpulse_algo.multiband.model import MAX_SWEEPS, Network
 from rainpulse_algo.multiband.quality import accept_s_qc, x_qc
 from rainpulse_algo.multiband.fusion import build_composite
 
@@ -37,7 +41,7 @@ def setup_inputs(tmp_path, *, cache=True):
         index[uri] = id
         bundles[uri] = objects
         sources.append(dict(radar_id=id, scan_id=v.metadata['scan_id'], input_uri=uri, **{k: v.metadata[k] for k in ('volume_start','volume_end','available_at')}))
-    request = dict(event_type='ops.multiband.requested.v1', occurred_at=CUTOFF, payload=dict(mode='sx_composite', network_sha256=network.sha256, product_id='local', analysis_time=TARGET, input_cutoff=CUTOFF, sources=sources))
+    request = dict(event_type='ops.multiband.requested.v1', occurred_at=CUTOFF, payload=dict(mode='sx_composite', network_sha256=network.sha256, execution_sha256=ExecutionOptions().digest, product_id='local', analysis_time=TARGET, input_cutoff=CUTOFF, sources=sources))
     return config, request, index, bundles
 
 
@@ -117,9 +121,13 @@ def test_executor_full_numerical_path_and_repeat(tmp_path):
     first, summary, m = e.execute(req,reader,artifact_digest=logical_digest)
     second, _, m2 = e.execute(req,reader,artifact_digest=logical_digest)
     assert first == second and summary['candidate_only'] is True
-    assert len(first)==4 and first['cr.png'].startswith(b'\x89PNG')
+    assert len(first)==8 and first['cr.png'].startswith(b'\x89PNG')
     arrays = decode_arrays(first['arrays.npz'],maximum_bytes=10*1024**2)
     assert arrays['CR_DBZH'].item()==35
+    assert arrays['DBZH_X_MINUS_S'].shape == arrays['CR_DBZH'].shape
+    comparison = json.loads(first['manifest.json'])['comparison']
+    assert comparison['same_grid'] and comparison['cadence_seconds'] == 60
+    assert {p['product_id'] for p in comparison['products']} == {'s_only','x_only','sx_composite','x_minus_s'}
     assert m2['decoded_cache_hits']==2
     assert m2['decoded_cache_bytes'] <= e.network.cache_max_bytes
 
@@ -127,11 +135,117 @@ def test_executor_full_numerical_path_and_repeat(tmp_path):
 def test_executor_standalone_x_writes_polar_qc(tmp_path):
     config, req, index, _ = setup_inputs(tmp_path)
     req['payload'].update(mode='x_qc',sources=req['payload']['sources'][1:])
+    req['payload'].pop('product_id')
     objects, _, _ = Executor(config).execute(req,LocalReader(tmp_path,index,512*1024**2),artifact_digest=logical_digest)
-    assert len(objects)==6
-    v = decode_volume({'volume.json':objects['native_volume.json'],'arrays.npz':objects['native_arrays.npz']},maximum_bytes=10*1024**2,asset_sha256='a'*64)
-    assert not v.metadata['operational_eligible']
-    assert not v.sweeps[0].fields['QPE_ELIGIBLE_MASK'].any()
+    assert len(objects)==4
+    manifest=json.loads(objects['manifest.json'])
+    assert manifest['contract']=='rainpulse.multiband.x-qc-preview-v1'
+    assert manifest['geometry'].startswith('station-centred polar')
+    assert 'native_arrays.npz' not in objects
+
+
+def test_standalone_x_qc_rejects_input_after_frozen_cutoff(tmp_path):
+    config, req, index, _ = setup_inputs(tmp_path)
+    req['payload'].update(mode='x_qc',sources=req['payload']['sources'][1:])
+    req['payload']['sources'][0]['available_at']='2026-09-23T00:12:00Z'
+    with pytest.raises(ValueError,match='frozen task cutoff'):
+        Executor(config).execute(req,LocalReader(tmp_path,index,512*1024**2),artifact_digest=logical_digest)
+
+
+def test_x_qc_runs_geometry_free_without_spatial_products(tmp_path):
+    import zarr
+    from zarr.storage import MemoryStore
+
+    document={
+      'schema_version':'1.0','release_id':'x-only-fixture',
+      'stations':{'x1':{'band':'X','source':'normalized_zarr','x_qc_enabled':True,
+                        'geometry_verified':False,'calibration_verified':False,'calibration_id':'unverified'}},
+      'products':{},'maximum_input_bytes':128*1024**2,
+    }
+    config=tmp_path/'x-only-network.json'; config.write_text(json.dumps(document))
+    network=Network.load(config)
+    store=MemoryStore(); root=zarr.group(store=store)
+    end=datetime.fromisoformat(TARGET.replace('Z','+00:00')).timestamp()
+    root.attrs.update(contract_name='rainpulse.normalized-radar-volume',radar_id='x1',scan_id='x1-40',
+                      volume_start_time_utc=datetime.fromtimestamp(end-30,UTC).isoformat(),
+                      volume_end_time_utc=datetime.fromtimestamp(end,UTC).isoformat(),scan_type='volume')
+    root.create_dataset('sweep_number',data=np.arange(40,dtype=np.int16))
+    for number in range(40):
+        group=root.create_group(f'sweep_{number:03d}')
+        az=np.arange(8,dtype=np.float32)*45
+        ranges=np.arange(8,dtype=np.float32)*250+125
+        shape=(len(az),len(ranges))
+        group.create_dataset('azimuth',data=az)
+        group.create_dataset('range',data=ranges)
+        group.create_dataset('elevation',data=np.full(len(az),number*.2+0.1,np.float32))
+        group.create_dataset('ray_time',data=np.full(len(az),end,np.float64))
+        group.create_dataset('DBZH',data=np.full(shape,35,np.float32))
+        group.create_dataset('OBSERVED_MASK',data=np.ones(shape,np.uint8))
+        group.create_dataset('NO_ECHO_MASK',data=np.zeros(shape,np.uint8))
+        group.create_dataset('SNR',data=np.full(shape,20,np.float32))
+        group.create_dataset('RHOHV',data=np.full(shape,.99,np.float32))
+    objects={key:store[key] for key in store.keys()}
+    source={'radar_id':'x1','scan_id':'x1-40','input_uri':'s3://fixture/x1',
+            'volume_start':datetime.fromtimestamp(end-30,UTC).isoformat(),
+            'volume_end':datetime.fromtimestamp(end,UTC).isoformat(),
+            'available_at':datetime.fromtimestamp(end,UTC).isoformat()}
+    decoded, _ = read_x_qc_sweep(
+        objects, network.stations['x1'], source, 0,
+        asset_sha256=logical_digest(objects), maximum_bytes=128*1024**2)
+    np.testing.assert_array_equal(decoded.sweeps[0].fields['SNRH'], decoded.sweeps[0].fields['SNR'])
+
+    index=SimpleNamespace(schema='2.0',sha256=logical_digest(objects),
+                          logical={key:(key,0,len(value)) for key,value in objects.items()})
+    loads=[]
+    class Session:
+        def __init__(self): self.index=index
+        def load(self,*,keys):
+            loads.append(tuple(keys))
+            return {key:objects[key] for key in keys}
+    class Reader:
+        def open(self,uri): return Session()
+
+    at=datetime.fromtimestamp(end,UTC).isoformat().replace('+00:00','Z')
+    before=datetime.fromtimestamp(end-30,UTC).isoformat().replace('+00:00','Z')
+    request={'event_type':'ops.multiband.requested.v1','occurred_at':CUTOFF,
+             'payload':{'mode':'x_qc','network_sha256':network.sha256,'execution_sha256':ExecutionOptions().digest,'input_cutoff':CUTOFF,
+                        'sources':[{'radar_id':'x1','scan_id':'x1-40','input_uri':'s3://fixture/x1',
+                                    'volume_start':before,'volume_end':at,'available_at':at}]}}
+    output,summary,metrics=Executor(config).execute(request,Reader(),artifact_digest=logical_digest)
+    assert summary['sweeps']==40
+    assert len(output)==121
+    assert metrics['resident_input_bytes'] < metrics['decoded_input_bytes']
+    assert json.loads(output['manifest.json'])['comparison']['sweeps'][-1]['sweep_number']==39
+    assert len(loads)==41  # root index once, then one object selection per sweep
+
+
+def test_network_and_task_schemas_allow_only_geometry_free_x_qc():
+    from pathlib import Path
+    root=Path(__file__).resolve().parents[3]
+    network_schema=json.loads((root/'contracts/internal/multiband/network.schema.json').read_text())
+    request_schema=json.loads((root/'contracts/internal/multiband/request.schema.json').read_text())
+    example=json.loads((root/'configs/multiband/network.example.json').read_text())
+    Draft202012Validator(network_schema).validate(example)
+    Network.from_bytes(json.dumps(example).encode())
+    document={'schema_version':'1.0','release_id':'x-preview-v1',
+              'stations':{'x1':{'band':'X','source':'normalized_zarr','x_qc_enabled':True}},'products':{}}
+    Draft202012Validator(network_schema).validate(document)
+    fusion={**document,'stations':{'x1':{'band':'X','source':'normalized_zarr','enabled':True,
+                                         'geometry_verified':False}}}
+    assert list(Draft202012Validator(network_schema).iter_errors(fusion))
+    request={'schema_version':'1.0','event_type':'ops.multiband.requested.v1',
+             'event_id':'00000000-0000-4000-8000-000000000001',
+             'job_id':'00000000-0000-4000-8000-000000000002',
+             'run_id':'00000000-0000-4000-8000-000000000003',
+             'trace_id':'00000000-0000-4000-8000-000000000004','occurred_at':TARGET,
+             'payload':{'mode':'x_qc','network_sha256':'a'*64,'execution_sha256':ExecutionOptions().digest,'analysis_time':TARGET,
+                        'input_cutoff':CUTOFF,'sources':[{'radar_id':'x1','scan_id':'x1-scan',
+                          'input_uri':'s3://rainpulse/input','volume_start':TARGET,'volume_end':TARGET,
+                          'available_at':TARGET}], 'output_prefix':'s3://rainpulse/operations/x/',
+                        'analysis_id':'x1-scan'}}
+    Draft202012Validator(request_schema).validate(request)
+    composite={**request,'payload':{**request['payload'],'mode':'sx_composite'}}
+    assert list(Draft202012Validator(request_schema).iter_errors(composite))
 
 
 def test_executor_config_change_and_duplicate_refused(tmp_path):
@@ -159,6 +273,18 @@ def test_offline_replay_never_overwrites(tmp_path):
     with pytest.raises(FileExistsError): replay(config,q,tmp_path,idx,out)
 
 
+def test_offline_replay_publishes_nested_x_qc_preview_paths(tmp_path):
+    config, request, index, _ = setup_inputs(tmp_path)
+    request['payload'].update(mode='x_qc', sources=request['payload']['sources'][1:])
+    request['payload'].pop('product_id')
+    q, idx, out = tmp_path/'x-request.json',tmp_path/'x-index.json',tmp_path/'x-result'
+    q.write_text(json.dumps(request)); idx.write_text(json.dumps(index))
+    replay(config,q,tmp_path,idx,out)
+    assert (out/'sweeps/0/raw.png').is_file()
+    assert (out/'sweeps/0/qc.png').is_file()
+    assert (out/'sweeps/0/flags.png').is_file()
+
+
 def test_local_reader_does_not_follow_external_paths(tmp_path):
     with pytest.raises(ValueError): LocalReader(tmp_path,{'s3://b/a':'../escape'},1000).load('s3://b/a')
 
@@ -172,7 +298,8 @@ def test_unverified_geometry_and_geographic_grid_refused():
 
 def test_altitude_datum_required(net):
     v = volume(net.stations['x1']); v.metadata['height_datum']='ellipsoid'
-    with pytest.raises(ValueError): x_qc(v,net.stations['x1'],net.sha256)
+    # Native station-centred X preview does not use site height or datum.
+    assert x_qc(v,net.stations['x1'],net.sha256).metadata['operational_eligible'] is False
 
 
 def test_uncertain_layer_is_not_column_no_echo(net):
@@ -248,3 +375,51 @@ def test_local_manifest_read_is_bounded(tmp_path):
     idx.write_text(json.dumps(index))
     with pytest.raises(ValueError, match='oversized'):
         replay(config, request, tmp_path, idx, tmp_path/'output')
+
+
+def test_x_qc_sweep_index_is_bounded_and_identity_checked():
+    assert _validated_sweep_numbers(np.array([0, 2, 1], dtype=np.int16)) == [0, 1, 2]
+    with pytest.raises(ValueError, match='duplicate or invalid'):
+        _validated_sweep_numbers(np.array([0, 0], dtype=np.int16))
+    with pytest.raises(ValueError, match='invalid or oversized'):
+        _validated_sweep_numbers(np.array([1.5], dtype=np.float32))
+
+
+def test_x_qc_rejects_huge_mismatched_fill_array_before_materializing():
+    import zarr
+    from zarr.storage import MemoryStore
+
+    document={'schema_version':'1.0','release_id':'x-shape-v1',
+              'stations':{'x1':{'band':'X','source':'normalized_zarr','x_qc_enabled':True}},
+              'products':{}}
+    station = Network.from_bytes(json.dumps(document).encode()).stations['x1']
+    store=MemoryStore(); root=zarr.group(store=store)
+    end=datetime.fromisoformat(TARGET.replace('Z','+00:00')).timestamp()
+    start=datetime.fromtimestamp(end-30,UTC).isoformat()
+    finish=datetime.fromtimestamp(end,UTC).isoformat()
+    root.attrs.update(contract_name='rainpulse.normalized-radar-volume',radar_id='x1',scan_id='x-shape',
+                      volume_start_time_utc=start,volume_end_time_utc=finish)
+    root.create_dataset('sweep_number',data=np.array([0],np.int16))
+    group=root.create_group('sweep_000')
+    shape=(4,3)
+    group.create_dataset('DBZH',data=np.ones(shape,np.float32))
+    group.create_dataset('azimuth',data=np.arange(4,dtype=np.float32)*90)
+    group.create_dataset('elevation',data=np.ones(4,np.float32))
+    group.create_dataset('ray_time',data=np.full(4,end,np.float64))
+    group.create_dataset('range',data=np.arange(3,dtype=np.float32)*250+125)
+    group.create_dataset('RHOHV',shape=(400_000_000,),chunks=(4096,),dtype='u1',fill_value=255)
+    objects={key:store[key] for key in store.keys()}
+    source={'radar_id':'x1','scan_id':'x-shape','volume_start':start,'volume_end':finish,
+            'available_at':finish}
+    with pytest.raises(ValueError,match='shape differs'):
+        read_x_qc_sweep(objects,station,source,0,asset_sha256=logical_digest(objects),
+                        maximum_bytes=512*1024**2)
+
+    class HugeSparseIndex:
+        shape = (MAX_SWEEPS + 1,)
+        dtype = np.dtype('uint8')
+        def __getitem__(self, _):
+            raise AssertionError('oversized sweep index must be rejected before materialization')
+
+    with pytest.raises(ValueError, match='invalid or oversized'):
+        _validated_sweep_numbers(HugeSparseIndex())

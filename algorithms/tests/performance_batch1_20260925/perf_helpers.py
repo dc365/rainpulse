@@ -59,13 +59,13 @@ def station(sid="x1", *, band="X", attenuation="upstream_verified", longitude=12
     return Station(
         sid,
         band,
-        9.4e9 if band == "X" else 2.9e9,
-        longitude,
-        26.0,
-        120.0,
-        2.0,
-        1.0,
         "native_bundle",
+        frequency_hz=9.4e9 if band == "X" else 2.9e9,
+        longitude_deg=longitude,
+        latitude_deg=26.0,
+        altitude_m_msl=120.0,
+        beam_width_h_deg=2.0,
+        beam_width_v_deg=1.0,
         enabled=True,
         geometry_verified=True,
         calibration_verified=True,
@@ -194,9 +194,12 @@ def cuts(volumes):
 
 
 def write_network(path, net):
-    stations = {
-        k: {n: v for n, v in asdict(s).items() if n != "radar_id"} for k, s in net.stations.items()
-    }
+    stations = {}
+    for key, station_config in net.stations.items():
+        values = {n: v for n, v in asdict(station_config).items() if n != "radar_id"}
+        if not values.get("x_qc_enabled"):
+            values.pop("x_qc_enabled", None)  # keep the baseline numerical oracle readable
+        stations[key] = values
     raw = json.dumps(
         {
             "schema_version": "1.0",

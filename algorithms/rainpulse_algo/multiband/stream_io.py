@@ -16,7 +16,7 @@ from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 import numpy as np
 
-from .adapters import FIELDS, from_group
+from .adapters import FIELDS, X_QC_FIELDS, from_group
 from .model import NAME, Sweep, Volume, epoch, json_bytes
 
 COORDINATES = ("azimuth_deg", "range_m", "elevation_deg", "ray_time_epoch")
@@ -95,14 +95,35 @@ class GroupCuts:
             if field not in group:
                 continue
             array = group[field]
-            if len(array.shape) != 2:
+            if (
+                len(array.shape) != 2
+                or not 1 <= array.shape[0] <= 4096
+                or not 1 <= array.shape[1] <= 16384
+            ):
                 raise ValueError("invalid streamed reflectivity dimensions")
+            expected_shapes = {
+                **{
+                    key: array.shape
+                    for key in (
+                        X_QC_FIELDS if station.band == "X" else FIELDS
+                    )
+                    if key in group
+                },
+                "azimuth": (array.shape[0],),
+                "elevation": (array.shape[0],),
+                "ray_time": (array.shape[0],),
+                "range": (array.shape[1],),
+            }
+            for key, expected in expected_shapes.items():
+                if tuple(group[key].shape) != tuple(expected):
+                    raise ValueError("streamed field shape differs from DBZH coordinates")
             count = math.prod(array.shape)
             total += count
             if total > options.maximum_volume_gates or count > 8_000_000:
                 raise ValueError("streamed native gate budget exceeded")
+            allowed_fields = X_QC_FIELDS if station.band == "X" else FIELDS
             selected = (
-                FIELDS | {k for k in group.array_keys() if k.endswith("CR_WITHHELD_MASK")}
+                allowed_fields | {k for k in group.array_keys() if k.endswith("CR_WITHHELD_MASK")}
             ) & set(group.array_keys())
             required = selected | {"azimuth", "range", "elevation", "ray_time"}
             size = 0

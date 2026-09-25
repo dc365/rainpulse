@@ -16,8 +16,11 @@ from pyproj import CRS
 
 NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$")
 SHA = re.compile(r"^[0-9a-f]{64}$")
-MAX_GATES = 8_000_000
-MAX_SWEEPS = 32
+# Per-sweep decoded limits. Whole-volume X QC is streamed by sweep; its larger
+# sweep-count cap does not change the spatial fusion input contract.
+MAX_GATES = 8_000_000  # per sweep
+MAX_SWEEPS = 64       # streamed X QC volume limit
+MAX_FUSION_SWEEPS = 32
 
 
 def utc(value: str) -> datetime:
@@ -81,14 +84,15 @@ class XProfile:
 class Station:
     radar_id: str
     band: str
-    frequency_hz: float
-    longitude_deg: float
-    latitude_deg: float
-    altitude_m_msl: float
-    beam_width_h_deg: float
-    beam_width_v_deg: float
     source: str
+    frequency_hz: float | None = None
+    longitude_deg: float | None = None
+    latitude_deg: float | None = None
+    altitude_m_msl: float | None = None
+    beam_width_h_deg: float | None = None
+    beam_width_v_deg: float | None = None
     enabled: bool = False
+    x_qc_enabled: bool = False
     geometry_verified: bool = False
     calibration_verified: bool = False
     calibration_id: str = "unverified"
@@ -101,15 +105,22 @@ class Station:
     def __post_init__(self) -> None:
         if not NAME.fullmatch(self.radar_id) or self.radar_id != self.radar_id.lower():
             raise ValueError("radar_id must be a lowercase stable identifier")
-        limits = {"S": (2e9, 4e9), "X": (8e9, 12e9)}
-        if self.band not in limits or not limits[self.band][0] <= finite(self.frequency_hz, "frequency") <= limits[self.band][1]:
-            raise ValueError("band and actual operating frequency are inconsistent")
-        for name in ("longitude_deg", "latitude_deg", "altitude_m_msl", "beam_width_h_deg", "beam_width_v_deg", "quality_scale"):
-            finite(getattr(self, name), name)
-        if not (-180 <= self.longitude_deg <= 180 and -85 < self.latitude_deg < 85 and -500 <= self.altitude_m_msl <= 9000):
-            raise ValueError("invalid verified site coordinates")
-        if not (0 < self.beam_width_h_deg <= 5 and 0 < self.beam_width_v_deg <= 5 and 0 < self.quality_scale <= 1):
-            raise ValueError("invalid beam widths or quality scale")
+        if self.band not in {"S", "X"}:
+            raise ValueError("unsupported radar band")
+        if self.geometry_verified:
+            limits = {"S": (2e9, 4e9), "X": (8e9, 12e9)}
+            if self.frequency_hz is None or not limits[self.band][0] <= finite(self.frequency_hz, "frequency") <= limits[self.band][1]:
+                raise ValueError("band and actual operating frequency are inconsistent")
+            for name in ("longitude_deg", "latitude_deg", "altitude_m_msl", "beam_width_h_deg", "beam_width_v_deg"):
+                if getattr(self, name) is None:
+                    raise ValueError(f"verified station geometry requires {name}")
+                finite(getattr(self, name), name)
+            if not (-180 <= self.longitude_deg <= 180 and -85 < self.latitude_deg < 85 and -500 <= self.altitude_m_msl <= 9000):
+                raise ValueError("invalid verified site coordinates")
+            if not (0 < self.beam_width_h_deg <= 5 and 0 < self.beam_width_v_deg <= 5):
+                raise ValueError("invalid beam widths")
+        if not (0 < finite(self.quality_scale, "quality_scale") <= 1):
+            raise ValueError("invalid quality scale")
         if type(self.nominal_cadence_seconds) is not int or not 1 <= self.nominal_cadence_seconds <= 3600 or type(self.maximum_age_seconds) is not int or not 1 <= self.maximum_age_seconds <= 3600:
             raise ValueError("invalid station cadence/age")
         if self.source not in {"s_qc_zarr", "normalized_zarr", "native_bundle"}:
@@ -118,11 +129,13 @@ class Station:
             raise ValueError("legacy QC adapter cannot masquerade as X QC")
         if self.band == "S" and self.source == "normalized_zarr":
             raise ValueError("S observations must pass the existing S QC first")
-        for name in ("enabled", "geometry_verified", "calibration_verified"):
+        for name in ("enabled", "x_qc_enabled", "geometry_verified", "calibration_verified"):
             if type(getattr(self, name)) is not bool:
                 raise ValueError(f"{name} must be boolean")
         if self.enabled and not self.geometry_verified:
             raise ValueError("an enabled station requires verified MSL geometry")
+        if self.x_qc_enabled and self.band != "X":
+            raise ValueError("standalone X QC can only be enabled for X band")
         if not isinstance(self.calibration_id, str) or not self.calibration_id or len(self.calibration_id) > 128:
             raise ValueError("calibration identity required")
 
@@ -195,7 +208,7 @@ class Network:
             if not NAME.fullmatch(name):
                 raise ValueError("invalid product name")
             products[name] = Grid(**values)
-        if not 1 <= len(stations) <= 16 or not 1 <= len(products) <= 4:
+        if not 1 <= len(stations) <= 16 or len(products) > 4:
             raise ValueError("network inventory exceeds bounds")
         kwargs = {n: data[n] for n in ("cache_max_bytes", "cache_ttl_seconds", "maximum_input_bytes") if n in data}
         for n, v in kwargs.items():
@@ -252,25 +265,30 @@ class Volume:
     metadata: dict[str, Any]
     sweeps: list[Sweep]
 
-    def validate(self, station: Station) -> None:
+    def validate(self, station: Station, *, require_geometry: bool = True) -> None:
         m = self.metadata
-        for key in ("radar_id", "scan_id", "band", "frequency_hz", "volume_start", "volume_end", "available_at", "asset_sha256", "scan_type", "longitude_deg", "latitude_deg", "altitude_m_msl", "height_datum"):
+        required = ("radar_id", "scan_id", "band", "volume_start", "volume_end", "available_at", "asset_sha256", "scan_type")
+        if require_geometry:
+            required += ("frequency_hz", "longitude_deg", "latitude_deg", "altitude_m_msl", "height_datum")
+        for key in required:
             if key not in m:
                 raise ValueError(f"native metadata missing {key}")
         if m["radar_id"] != station.radar_id or m["band"] != station.band or not SHA.fullmatch(m["asset_sha256"]):
             raise ValueError("observation station/band/content identity differs")
-        for key in ("frequency_hz", "longitude_deg", "latitude_deg", "altitude_m_msl"):
-            finite(float(m[key]), key)
-        if m["height_datum"] != "MSL" or abs(float(m["altitude_m_msl"])-station.altitude_m_msl) > 1:
-            raise ValueError("observation altitude differs from the verified common MSL datum")
-        if abs(float(m["frequency_hz"]) - station.frequency_hz) > station.frequency_hz * .01:
-            raise ValueError("observation and configured frequency differ")
-        if abs(float(m["longitude_deg"]) - station.longitude_deg) > .0001 or abs(float(m["latitude_deg"]) - station.latitude_deg) > .0001:
-            raise ValueError("native coordinates differ from verified station")
+        if require_geometry:
+            for key in ("frequency_hz", "longitude_deg", "latitude_deg", "altitude_m_msl"):
+                finite(float(m[key]), key)
+            if m["height_datum"] != "MSL" or station.altitude_m_msl is None or abs(float(m["altitude_m_msl"])-station.altitude_m_msl) > 1:
+                raise ValueError("observation altitude differs from the verified common MSL datum")
+            if station.frequency_hz is None or abs(float(m["frequency_hz"]) - station.frequency_hz) > station.frequency_hz * .01:
+                raise ValueError("observation and configured frequency differ")
+            if station.longitude_deg is None or station.latitude_deg is None or abs(float(m["longitude_deg"]) - station.longitude_deg) > .0001 or abs(float(m["latitude_deg"]) - station.latitude_deg) > .0001:
+                raise ValueError("native coordinates differ from verified station")
         start, end, available = (epoch(m[k]) for k in ("volume_start", "volume_end", "available_at"))
         if end < start or end - start > 3600 or available < end:
             raise ValueError("invalid acquisition/availability time interval")
-        if m["scan_type"] not in {"volume", "ppi", "sector"} or not 1 <= len(self.sweeps) <= MAX_SWEEPS:
+        sweep_limit = MAX_SWEEPS if not require_geometry else MAX_FUSION_SWEEPS
+        if m["scan_type"] not in {"volume", "ppi", "sector"} or not 1 <= len(self.sweeps) <= sweep_limit:
             raise ValueError("unsupported or incomplete native scan description")
         numbers = set()
         total = 0

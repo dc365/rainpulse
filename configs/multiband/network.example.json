@@ -3,7 +3,7 @@
   "release_id": "sx-local-candidate-v1",
   "cache_max_bytes": 0,
   "cache_ttl_seconds": 600,
-  "maximum_input_bytes": 134217728,
+  "maximum_input_bytes": 536870912,
   "stations": {
     "s_example": {
       "longitude_deg": 119.3,
@@ -26,18 +26,13 @@
       ]
     },
     "x_example": {
-      "longitude_deg": 119.3,
-      "latitude_deg": 26.1,
-      "altitude_m_msl": 100,
-      "beam_width_h_deg": 1,
-      "beam_width_v_deg": 1,
       "enabled": false,
+      "x_qc_enabled": true,
       "geometry_verified": false,
       "calibration_verified": false,
       "calibration_id": "unverified",
       "quality_scale": 1,
       "band": "X",
-      "frequency_hz": 9400000000.0,
       "source": "normalized_zarr",
       "nominal_cadence_seconds": 60,
       "maximum_age_seconds": 120,
@@ -70,7 +65,7 @@
         12000
       ],
       "tile_rows": 16,
-      "cadence_seconds": 60
+      "cadence_seconds": 360
     }
   }
 }

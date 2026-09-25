@@ -28,7 +28,9 @@ def test_qc_exact_reference(mode, dtype, missing):
     actual = x_qc(v, st, "b" * 64)
     assert actual.metadata == expected.metadata
     for old, new, ref, raw in zip(v.sweeps, actual.sweeps, expected.sweeps, before.sweeps):
-        assert_arrays(new.fields, ref.fields)
+        assert_arrays({key: new.fields[key] for key in ref.fields}, ref.fields)
+        assert new.fields["QC_ACTION"].shape == raw.fields["DBZH"].shape
+        assert new.fields["DBZH_QC_DISPLAY"].shape == raw.fields["DBZH"].shape
         assert_arrays(old.fields, raw.fields)
         assert np.shares_memory(new.fields["DBZH"], old.fields["DBZH"])
         assert not new.fields["DBZH"].flags.writeable

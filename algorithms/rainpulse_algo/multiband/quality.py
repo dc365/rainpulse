@@ -130,7 +130,7 @@ def phase_linear(
 
 
 def x_qc(volume: Volume, station: Station, release_sha256: str) -> Volume:
-    volume.validate(station)
+    volume.validate(station, require_geometry=False)
     if station.band != "X":
         raise ValueError("X QC cannot be applied to an S observation")
     cfg = station.x_qc
@@ -234,11 +234,23 @@ def x_qc(volume: Volume, station: Station, release_sha256: str) -> Volume:
             flags[observed] |= int(Flag.CALIBRATION_UNKNOWN)
         eligible = base & snr_good & ~blocked & propagation_good & ~candidate & calibrated
         eligible &= noecho | np.isfinite(corrected)
+        uncertain = observed & ~invalid & ~confirmed & ~snr_good
+        uncertain |= observed & ~invalid & ~confirmed & blocked
+        uncertain |= candidate
+        uncertain |= observed & ~propagation_good
+        if not calibrated:
+            uncertain |= observed
+        action = np.zeros(shape, np.uint8)
+        action[observed] = 1
+        action[invalid | (confirmed & observed)] = 2
+        action[uncertain & observed & ~invalid & ~confirmed] = 3
         score = np.where(eligible, station.quality_scale, 0.0).astype(np.float32)
         if blockage is not None:
             score *= 1 - np.nan_to_num(blockage, nan=1)
         if rho is None:
             score *= 0.8
+        display_value = np.where(np.isfinite(corrected), corrected, f["DBZH"]).astype(np.float32)
+        display_value[action == 2] = np.nan
         f.update(
             DBZH_RAW=_shared(f["DBZH"], np.float32),
             DBZH_QC=np.where(
@@ -248,6 +260,8 @@ def x_qc(volume: Volume, station: Station, release_sha256: str) -> Volume:
             MB_QC_FLAGS=flags,
             REFLECTIVITY_ELIGIBLE_FOR_CR=eligible.astype(np.uint8),
             CR_UNCERTAIN_MASK=(observed & ~eligible & ~confirmed).astype(np.uint8),
+            QC_ACTION=action,
+            DBZH_QC_DISPLAY=display_value,
             QUALITY_SCORE=score,
             QPE_ELIGIBLE_MASK=np.zeros(shape, np.uint8),
         )

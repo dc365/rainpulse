@@ -49,6 +49,11 @@ FIELDS = {
     "NMR_NONMET_FRACTION",
     "NMR_POL_SAMPLE_COUNT",
 }
+X_QC_FIELDS = {
+    "DBZH", "OBSERVED_MASK", "NO_ECHO_MASK", "VALID_MASK", "RHOHV", "PHIDP", "SNRH", "SNR",
+    "PHASE_VALID_MASK", "LIQUID_MASK", "ATTENUATION_VALID_MASK", "ATTENUATION_UNRELIABLE_MASK",
+    "PIA_DB", "CONFIRMED_NONMET_MASK", "WEATHER_PROTECTED_MASK", "BLOCKAGE_FRACTION",
+}
 
 
 def ray_seconds(values: np.ndarray, units: str | None) -> np.ndarray:
@@ -116,7 +121,11 @@ def from_group(
         if field not in g:
             continue  # No reflectivity is manufactured for Doppler-only cuts.
         arr = g[field]
-        if len(arr.shape) != 2:
+        if (
+            len(arr.shape) != 2
+            or not 1 <= arr.shape[0] <= 4096
+            or not 1 <= arr.shape[1] <= 16384
+        ):
             raise ValueError("unexpected native moment dimensions")
         gate_count += int(np.prod(arr.shape))
         if gate_count > MAX_GATES:
@@ -126,6 +135,15 @@ def from_group(
         for key in (*to_read, "azimuth", "range", "elevation", "ray_time"):
             a = g[key]
             dtype = np.dtype(a.dtype)
+            expected_shape = (
+                arr.shape
+                if key in to_read
+                else (arr.shape[1],)
+                if key == "range"
+                else (arr.shape[0],)
+            )
+            if tuple(a.shape) != tuple(expected_shape):
+                raise ValueError("native field shape differs from reflectivity coordinates")
             if dtype.kind not in "buifM" or len(a.shape) > 2:
                 raise ValueError("unsupported native array type")
             byte_count += int(np.prod(a.shape)) * dtype.itemsize
@@ -253,3 +271,89 @@ def read_volume(
         s_reject_mask=s_reject_mask,
         expected_flag_version=expected_flag_version,
     )
+
+
+def read_x_qc_sweep(objects: dict[str, bytes], station: Station, source: dict, sweep_number: int, *, asset_sha256: str, maximum_bytes: int) -> tuple[Volume | None, int]:
+    """Decode one X sweep and only the moments consumed by standalone QC.
+
+    The caller bounds the sum of decoded bytes across a full volume. Keeping a
+    single sweep resident makes 39/40-cut PPI previews practical in the Worker.
+    """
+    if station.band != "X" or station.source != "normalized_zarr":
+        raise ValueError("sweep streaming requires a normalized X Zarr source")
+    import zarr
+    from zarr.storage import MemoryStore
+    store = MemoryStore()
+    store.update(objects)
+    root = zarr.open_group(store=store, mode="r")
+    attrs = dict(root.attrs)
+    if attrs.get("contract_name") != "rainpulse.normalized-radar-volume":
+        raise ValueError("selected X adapter and input contract differ")
+    if str(attrs.get("radar_id")) != station.radar_id or str(attrs.get("scan_id")) != source["scan_id"]:
+        raise ValueError("stored observation identity differs from frozen catalog selection")
+    group_name = f"sweep_{sweep_number:03d}"
+    if group_name not in root:
+        raise ValueError("native sweep is absent")
+    group = root[group_name]
+    if "DBZH" not in group:
+        return None, 0
+    reflectivity = group["DBZH"]
+    if (
+        len(reflectivity.shape) != 2
+        or not 1 <= reflectivity.shape[0] <= 4096
+        or not 1 <= reflectivity.shape[1] <= 16384
+    ):
+        raise ValueError("unexpected native moment dimensions")
+    gates = int(np.prod(reflectivity.shape))
+    if gates > MAX_GATES:
+        raise ValueError("native sweep exceeds decoded gate budget")
+    names = {name for name in X_QC_FIELDS if name in group}
+    fields_to_read = names | {"DBZH"}
+    expected_shapes = {
+        **{key: reflectivity.shape for key in fields_to_read},
+        "azimuth": (reflectivity.shape[0],),
+        "elevation": (reflectivity.shape[0],),
+        "ray_time": (reflectivity.shape[0],),
+        "range": (reflectivity.shape[1],),
+    }
+    byte_count = 0
+    for key, expected_shape in expected_shapes.items():
+        array = group[key]
+        dtype = np.dtype(array.dtype)
+        if tuple(array.shape) != tuple(expected_shape):
+            raise ValueError("native X array shape differs from DBZH coordinates")
+        if dtype.kind not in "buifM" or len(array.shape) > 2:
+            raise ValueError("unsupported native array type")
+        byte_count += int(np.prod(array.shape)) * dtype.itemsize
+        if byte_count > maximum_bytes:
+            raise ValueError("selected decoded X sweep exceeds memory budget")
+    fields = {name: np.asarray(group[name][:]) for name in fields_to_read}
+    if "SNRH" not in fields and "SNR" in fields:
+        fields["SNRH"] = fields["SNR"]
+    noecho = fields.get("NO_ECHO_MASK", np.zeros(reflectivity.shape, np.uint8))
+    if "OBSERVED_MASK" not in fields:
+        observed = np.isfinite(fields["DBZH"]) | (noecho == 1)
+        if "VALID_MASK" in fields:
+            observed &= fields["VALID_MASK"] == 1
+        fields["OBSERVED_MASK"] = observed.astype(np.uint8)
+    fields["NO_ECHO_MASK"] = noecho
+    start, end = source["volume_start"], source["volume_end"]
+    for key, expected in (("volume_start_time_utc", start), ("volume_end_time_utc", end)):
+        if attrs.get(key) is not None and epoch(attrs[key]) != epoch(expected):
+            raise ValueError("native time and catalog time differ")
+    metadata = {"radar_id": station.radar_id, "scan_id": source["scan_id"], "band": "X",
+                "frequency_hz": attrs.get("frequency_hz", station.frequency_hz),
+                "altitude_m_msl": station.altitude_m_msl, "height_datum": "MSL",
+                "longitude_deg": attrs.get("site_longitude_deg", station.longitude_deg),
+                "latitude_deg": attrs.get("site_latitude_deg", station.latitude_deg),
+                "volume_start": start, "volume_end": end, "available_at": source["available_at"],
+                "asset_sha256": asset_sha256, "scan_type": attrs.get("scan_type", "volume"),
+                "calibration_id": attrs.get("calibration_id", "unverified"),
+                "attenuation_status": attrs.get("attenuation_status", "unknown"),
+                "phase_anchor_verified": attrs.get("phase_anchor_verified") is True,
+                "pia_at_first_gate_db": attrs.get("pia_at_first_gate_db"),
+                "no_echo_semantics": "explicit_mask_or_unknown_no_return"}
+    sweep = Sweep(sweep_number, np.asarray(group["azimuth"][:], dtype=float), np.asarray(group["range"][:], dtype=float),
+                  np.asarray(group["elevation"][:], dtype=float),
+                  ray_seconds(np.asarray(group["ray_time"][:]), dict(group["ray_time"].attrs).get("units")), fields)
+    return Volume(metadata, [sweep]), byte_count

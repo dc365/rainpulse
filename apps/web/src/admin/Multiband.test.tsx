@@ -14,7 +14,7 @@ it('shows separate band-aware presets without submitting on selection', () => {
   const select = screen.getByLabelText('重算预设');
   fireEvent.change(select, { target: { value: 'sx_composite' } });
   expect(screen.getByPlaceholderText('网络配置只有一个产品时可留空')).toBeTruthy();
-  expect(screen.getByText(/不是自动实时跟随开关/)).toBeTruthy();
+  expect(screen.getByText(/这里创建历史候选任务/)).toBeTruthy();
   expect(post).not.toHaveBeenCalled();
 });
 it('checks selected product through the existing plan endpoint', async () => {
@@ -24,4 +24,13 @@ it('checks selected product through the existing plan endpoint', async () => {
   fireEvent.click(screen.getByRole('button', { name: '2. 生成预检查计划' }));
   await screen.findByText(/fixture stop/);
   expect(post).toHaveBeenCalledWith('test', '/plans', expect.objectContaining({ preset: 'sx_composite', product_id: 'local', radar_ids: ['s1','x1'] }));
+});
+it('plans standalone X QC without asking for a spatial product', async () => {
+  post.mockRejectedValue(new Error('fixture stop after checking request'));
+  render(<NewRun token="test" navigate={vi.fn()} initial={{ preset: 'x_qc', radar: 'zf101', start: '2026-08-28T00:00:00Z', end: '2026-08-28T00:06:00Z' }} />);
+  expect(screen.queryByLabelText('产品 ID')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '2. 生成预检查计划' }));
+  await screen.findByText(/fixture stop/);
+  expect(post).toHaveBeenCalledWith('test', '/plans', expect.objectContaining({ preset: 'x_qc', radar_ids: ['zf101'] }));
+  expect(post.mock.calls[0][2]).not.toHaveProperty('product_id');
 });
