@@ -2,9 +2,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, expect, it, vi } from 'vitest'
 import { RadarQCWorkspace } from './RadarQCWorkspace'
 
-vi.mock('../RasterGISMap', () => ({ RasterGISMap: ({ imageUrl, radarContext, referenceOnly, imageExtent }: {
-  imageExtent?: number[]; imageUrl?: string; radarContext?: { longitude: number; latitude: number; geometryStatus?: string; displayRangeRadiiKM: readonly number[] }; referenceOnly?: boolean
-}) => <div data-testid="geo-image" data-image={imageUrl ?? ''} data-extent={imageExtent?.join(',')} data-longitude={radarContext?.longitude} data-latitude={radarContext?.latitude}
+vi.mock('../RasterGISMap', () => ({ RasterGISMap: ({ imageUrl, imageLayers, radarContext, referenceOnly, imageExtent }: {
+  imageLayers?: {id:string;url:string}[]; imageExtent?: number[]; imageUrl?: string; radarContext?: { longitude: number; latitude: number; geometryStatus?: string; displayRangeRadiiKM: readonly number[] }; referenceOnly?: boolean
+}) => <div data-testid="geo-image" data-layers={imageLayers?.map(l=>l.url).join(",")} data-image={imageUrl ?? ''} data-extent={imageExtent?.join(',')} data-longitude={radarContext?.longitude} data-latitude={radarContext?.latitude}
   data-geometry-status={radarContext?.geometryStatus} data-radii={radarContext?.displayRangeRadiiKM.join(',')} data-reference-only={referenceOnly} /> }))
 
 const morning = '2026-08-28T00:06:00Z'
@@ -47,7 +47,7 @@ function setup() {
     return { ok: true, json: async () => data, blob: async () => new Blob(['png'], { type: 'image/png' }) }
   }))
 }
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState({}, '', '/') })
+afterEach(() => { cleanup(); sessionStorage.clear(); vi.unstubAllGlobals(); window.history.replaceState({}, '', '/') })
 
 it('keeps the six-minute target and native sweep identity across S→X→S', async () => {
   setup()
@@ -74,16 +74,19 @@ it('keeps the selected S station when the next cycle has no matching frames', as
   expect(window.location.search).toContain('station=z9591')
 })
 
-it('shows one geo map in overlay mode and gates the unverified X layer and fusion', async () => {
+it('selects S and X together without requiring trusted fusion geometry', async () => {
   setup()
   window.history.replaceState({}, '', '/?preset=qc&band=S&date=2026-08-28&time=2026-08-28T00:06:00Z&station=z9591')
   render(<RadarQCWorkspace />)
   await waitFor(() => expect(document.querySelectorAll('[data-image="/dbzh_qc-z9591.png"]')).toHaveLength(1))
-  fireEvent.click(screen.getByRole('button', { name: '同图叠加' }))
-  expect(document.querySelectorAll('[data-testid="geo-image"]')).toHaveLength(1)
-  expect((screen.getByRole('checkbox', { name: /X · ZF101/ }) as HTMLInputElement).disabled).toBe(true)
-  fireEvent.click(screen.getByRole('button', { name: '融合验证' }))
-  expect(screen.getByText('融合候选尚不能在地图验证')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '多站叠加' }))
+  fireEvent.click(screen.getByRole('button', { name: 'S 全部' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: /ZF101/ }))
+  await waitFor(() => expect(document.querySelector('[data-layers="/dbzh_qc-z9591.png,/map-qc-x.png"]')).toBeTruthy())
+  fireEvent.change(screen.getByRole('combobox', {name:'筛选波段'}), {target:{value:'S'}})
+  expect(document.querySelector('[data-layers="/dbzh_qc-z9591.png,/map-qc-x.png"]')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: /08\/28 18:36 北京时间/ }))
+  await waitFor(() => expect(document.querySelector('[data-layers*="map-qc-x"]')).toBeNull())
 })
 
 it('overlays X raw and QC rasters on exactly two maps using the result geometry', async () => {

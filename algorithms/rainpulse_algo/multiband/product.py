@@ -197,6 +197,34 @@ def difference_quicklook(values: np.ndarray) -> bytes:
     return png(rgba[::-1])
 
 
+def geographic_composite_preview(values: np.ndarray, metadata: dict) -> tuple[dict, bytes]:
+    """Nearest-neighbour map preview; scientific arrays remain on the frozen grid."""
+    from pyproj import Transformer
+
+    width, height = int(metadata["width"]), int(metadata["height"])
+    if values.shape != (height, width) or width < 1 or height < 1:
+        raise ValueError("composite shape does not match grid")
+    spacing = float(metadata["spacing_m"])
+    west, south = float(metadata["west_m"]), float(metadata["south_m"])
+    if spacing <= 0 or metadata["row_order"] != "south_to_north":
+        raise ValueError("unsupported composite grid")
+    forward = Transformer.from_crs(metadata["crs"], "EPSG:4326", always_xy=True)
+    bounds = forward.transform_bounds(west, south, west + width * spacing,
+                                      south + height * spacing, densify_pts=41)
+    if not np.all(np.isfinite(bounds)) or bounds[0] >= bounds[2] or bounds[1] >= bounds[3]:
+        raise ValueError("invalid map bounds")
+    size = min(1024, max(width, height, 256))
+    lon = bounds[0] + (np.arange(size) + .5) * (bounds[2] - bounds[0]) / size
+    lat = bounds[1] + (np.arange(size) + .5) * (bounds[3] - bounds[1]) / size
+    xx, yy = Transformer.from_crs("EPSG:4326", metadata["crs"], always_xy=True).transform(*np.meshgrid(lon, lat))
+    cols = np.floor((xx - west) / spacing).astype(np.int64)
+    rows = np.floor((yy - south) / spacing).astype(np.int64)
+    valid = (cols >= 0) & (cols < width) & (rows >= 0) & (rows < height)
+    sampled = np.full((size, size), np.nan, np.float32)
+    sampled[valid] = values[rows[valid], cols[valid]]
+    return {"crs": "EPSG:4326", "bounds": list(bounds), "resampling": "nearest", "source_grid_id": metadata["grid_id"]}, quicklook(sampled)
+
+
 @_perf_timed("fusion.comparison_encoding")
 def sx_comparison_objects(result: Composite, band_results: dict[str, Composite | None]) -> dict[str, bytes]:
     """Attach S-only, X-only and joint-grid comparisons to one frozen task result."""
@@ -376,5 +404,15 @@ def sx_comparison_objects(result: Composite, band_results: dict[str, Composite |
         "products": products,
         "display_note": "同一冻结输入、投影网格与六分钟时次；快视图遵循网格 south_to_north 行序，非经纬度瓦片。",
     }
+    for product_entry in products:
+        field = {"s_only": "CR_DBZH_S_ONLY", "x_only": "CR_DBZH_X_ONLY", "sx_composite": "CR_DBZH"}.get(product_entry["product_id"])
+        if field is None or product_entry.get("object_path") is None or "crs" not in result.metadata:
+            continue
+        geometry, preview = geographic_composite_preview(arrays[field], result.metadata)
+        path = f"map/{product_entry['product_id']}.png"
+        objects[path] = preview
+        product_entry["map"] = {**geometry, "object_path": path}
+        manifest["layers"].append({"object_path": path, "title": product_entry["label"], "field": field})
+    manifest["comparison"]["comparison_group"] = hashlib.sha256(arrays_object).hexdigest()
     objects["manifest.json"] = json_bytes(manifest)
     return objects

@@ -674,3 +674,14 @@ operational data here.
   Candidate QC intensity images retain uncertain reflectivity; actions live in
   the separate flags layer. Historical results retain their original legends.
   See docs/X_SHARED_WORKSPACE_20260925.md.
+
+## 2026-09-27 多站 S/X 地图首批部署
+
+- 已按本地合并再部署流程，将 `feat/multistation-sx-workspace` 合入 main：`fe04d7d45065`。新增多站混合地图、每站图层控制、S 已发布组合和同次 S/S+X 地图产品接口。
+- 105 为 `192.168.28.105`，账号 yons 通过 sudo 重启服务；认证信息不得写入仓库。应用路径仍为 `/home/yons/hwapp/ruiyun-bdp/bdp-dp/bdp-dp-rada/bdp-dp-rada-rainpulse`。
+- 应用在线版本 `fe04d7d45065+fe04d7d45065bc454bb117a07fa290d9c1d10918`，Worker 为 `rainpulse-cpu-worker:multistation-fe04d7d`，健康。部署目录 `.build/multistation-fe04d7d`，回滚 `.build/rollback-multistation-fe04d7d`；原 Worker image `rainpulse-cpu-worker:x-map-17d3b1e`。
+- 健康检查须兼容 `Version+Revision` 返回形式。首次切换因精确字符串匹配触发自动回滚，修正后再次切换成功。
+- 线上 08:06 实测 4 S + 2 X 目录，2 S + 2 X 地图可用，2 S 缺测显式保留；多站站点选择不改变计算产品来源。组合入口把站点/六分钟时间传入现有预检查计划。
+- 当前冻结网络只有 zf101/zf505，enabled=false、geometry_verified=false、calibration_verified=false，products={}。地图候选叠加已开放，数值 S+X 不能声称启用；没有组合产品时明确 X 未参与。
+- 本批验证：143 前端测试；60 多波段 Python 测试；Go 全包测试/vet；专用临时数据库站点/组合目录 SQL 集成测试；实际 Worker 地图预览 smoke；1440×1000、375×812 浏览器。
+- 批量源数值点查、贡献专题图、像素缓存预算及 4 S + 11 X 压力测试尚未完成，详见 `docs/MULTISTATION_SX_IMPLEMENTATION_20260927.md`。本批未新增 batch-resolution API，复用现有只读目录解析。
