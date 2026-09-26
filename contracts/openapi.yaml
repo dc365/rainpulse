@@ -17,11 +17,61 @@ tags:
   - name: system
   - name: admin
 paths:
+  /workspace/radar-composites:
+    get:
+      operationId: listWorkspaceRadarComposites
+      tags: [radars]
+      summary: Latest 100 successful, non-retired S/X comparison results in a bounded analysis window.
+      parameters:
+        - {name: start, in: query, required: true, schema: {type: string, format: date-time}}
+        - {name: end, in: query, required: true, schema: {type: string, format: date-time}}
+      responses:
+        "200":
+          description: Frozen task attempt identities and analysis times.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [result_id, analysis_time]
+                      properties:
+                        result_id: {type: string}
+                        analysis_time: {type: string, format: date-time}
+  /workspace/radar-composites/{result_id}:
+    get:
+      operationId: getWorkspaceRadarComposite
+      tags: [radars]
+      parameters:
+        - {name: result_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: Same-run S, X and S+X comparison; optional EPSG4326 map bounds and allowlisted image URLs. Missing map metadata is never inferred.
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+  /workspace/radar-composites/{result_id}/assets/{asset_id}:
+    get:
+      operationId: getWorkspaceRadarCompositeAsset
+      tags: [radars]
+      parameters:
+        - {name: result_id, in: path, required: true, schema: {type: string}}
+        - {name: asset_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: Manifest-allowlisted, integrity-checked PNG preview.
+          content:
+            image/png:
+              schema: {type: string, format: binary}
   /workspace/radar-stations:
     get:
       operationId: listWorkspaceRadarStations
       tags: [radars]
-      summary: Registered X stations, including stations without QC; defaults to latest observed UTC+8 day.
+      summary: Registered S/X stations, including stations without QC; defaults to latest observed UTC+8 day.
       parameters:
         - name: band
           in: query
@@ -1218,7 +1268,7 @@ components:
             properties:
               radar_id: {type: string}
               display_name: {type: string}
-              band: {type: string, enum: [X]}
+              band: {type: string, enum: [S, X]}
               registered: {type: integer}
               normalized: {type: integer}
               qc_ready: {type: integer}

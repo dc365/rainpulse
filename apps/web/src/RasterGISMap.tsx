@@ -104,7 +104,7 @@ function createRadarReferenceLayer(radar: GISRadarContext) {
       geometry: new Polygon([ring.coordinates.map((coordinate) => [...coordinate])]),
       kind: 'radar-range-ring',
     })),
-    ...geometry.axes.map((coordinates) => new Feature({
+    ...(radar.displayRangeRadiiKM.length ? geometry.axes : []).map((coordinates) => new Feature({
       geometry: new LineString(coordinates.map((coordinate) => [...coordinate])),
       kind: 'radar-range-axis',
     })),
@@ -361,7 +361,11 @@ function expandExtent(extent: GISMapExtent, ratio = 0.12): GISMapExtent {
   ]
 }
 
+export type GISImageLayer = { id: string; url: string; extent: GISMapExtent; opacity: number }
+
 interface RasterGISMapProps {
+  imageLayers?: readonly GISImageLayer[]
+  radarContexts?: readonly GISRadarContext[]
   imageUrl?: string
   imageDescription: string
   imageExtent: GISMapExtent
@@ -406,6 +410,8 @@ interface RasterGISMapProps {
 }
 
 export function RasterGISMap({
+  imageLayers,
+  radarContexts,
   imageUrl,
   imageDescription,
   imageExtent,
@@ -790,6 +796,32 @@ export function RasterGISMap({
   }, [fitExtentKey, radarContextKey, referenceContext, sharedView])
 
   useEffect(() => {
+    const map = mapRef.current
+    if (!map || !imageLayers) return
+    const layers = imageLayers.map((entry, index) => {
+      const source = new ImageStatic({ url: entry.url, imageExtent: [...entry.extent], projection: 'EPSG:4326', interpolate: false, crossOrigin: 'anonymous' })
+      const layer = new ImageLayer({ source, opacity: entry.opacity, zIndex: 10 + index })
+      source.on('imageloaderror', () => onLayerErrorRef.current(true))
+      map.addLayer(layer)
+      return layer
+    })
+    onLayerErrorRef.current(false)
+    return () => layers.forEach(layer => { map.removeLayer(layer); layer.setSource(null); layer.dispose() })
+  }, [imageLayers, fitExtentKey, radarContextKey, referenceContext, sharedView])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !radarContexts) return
+    const layers = radarContexts.map(radar => {
+      const layer = createRadarReferenceLayer(radar)
+      layer.setZIndex(100)
+      map.addLayer(layer)
+      return layer
+    })
+    return () => layers.forEach(layer => { map.removeLayer(layer); layer.dispose() })
+  }, [radarContexts, fitExtentKey, radarContextKey, referenceContext, sharedView])
+
+  useEffect(() => {
     const controller = new AbortController()
     rasterPixelsRef.current = null
     probeOverlayRef.current?.setPosition(undefined)
@@ -1080,7 +1112,7 @@ export function RasterGISMap({
         <footer><span>{basemapLabel}</span><small>{footerNote}</small></footer>
       </div> : null}
 
-      {(!referenceOnly && (!imageUrl || layerError)) ? (
+      {(!referenceOnly && ((!imageUrl && !imageLayers?.length) || layerError)) ? (
         <div className="gis-layer-empty" role="status">
           <strong>{loading ? loadingLabel : '降水图层暂不可用'}</strong>
           <small>{layerError ? '图层校验或网络请求失败' : (emptyStateHint ?? '等待已发布的透明 PNG 产品')}</small>

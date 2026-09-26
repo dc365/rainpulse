@@ -27,3 +27,22 @@
 
 .radar-qc-map .gis-comparison-legend{display:none}
 .radar-qc-controls label{white-space:nowrap}
+
+.multi-station-workspace{display:grid;grid-template-columns:270px minmax(0,1fr);width:100%;min-height:0;flex:1;gap:6px}
+.multi-station-sidebar{padding:10px;background:var(--panel-bg,#fafdfc);border:1px solid #d6e2df;overflow:auto;min-height:0;font-size:12px}
+.multi-station-sidebar summary{font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px}
+.multi-station-sidebar input[type=search],.multi-station-sidebar input:not([type]){width:100%;box-sizing:border-box}
+.multi-station-actions{display:flex;gap:4px;flex-wrap:wrap;margin:8px 0;align-items:center}
+.multi-station-actions button{padding:5px;font-size:12px}
+.multi-station-directory{max-height:190px;overflow:auto;display:grid;gap:7px}
+.multi-station-directory label{display:flex;align-items:center;gap:5px}
+.multi-station-directory b{color:#147b70;font-size:11px}
+.multi-station-sidebar h3{font-size:13px;margin:16px 0 8px}.multi-station-sidebar h3 small{font-weight:400;color:#697a75}
+.multi-station-layer{border-top:1px solid #d6e2df;padding:8px 0;display:grid;gap:6px}.multi-station-layer>div{display:flex;gap:4px;align-items:center}.multi-station-layer button{padding:3px 7px}.multi-station-layer small{color:#697a75}.multi-station-layer label{display:flex;gap:5px;align-items:center}.multi-station-layer input[type=range]{width:110px}
+.multi-station-content{min-width:0;display:flex;flex-direction:column}.multi-station-content>.radar-qc-pair,.multi-station-content>.radar-qc-map{flex:1;min-height:0}.multi-station-content .radar-qc-map{min-width:0}.multi-station-content>p{font-size:12px;color:#697a75;padding:4px 10px}
+@media(max-width:700px){.multi-station-workspace{grid-template-columns:minmax(0,1fr)}.multi-station-sidebar{max-height:260px}.multi-station-content>.radar-qc-pair,.multi-station-content>.radar-qc-map{min-height:500px}.multi-station-content .layout-pair{grid-template-columns:1fr}}
+
+.mode-overlay>.radar-qc-controls>.radar-qc-band,.mode-overlay>.radar-qc-controls>label,.mode-fusion>.radar-qc-controls>.radar-qc-band,.mode-fusion>.radar-qc-controls>label{display:none}
+.mode-overlay>.radar-qc-summary,.mode-fusion>.radar-qc-summary{display:none}
+.multi-station-sidebar button,.multi-station-sidebar select,.multi-station-sidebar input:not([type=checkbox]):not([type=range]),.multi-station-content select{border:1px solid var(--rp-line);border-radius:5px;background:var(--rp-paper);color:var(--rp-ink);min-height:30px;padding:4px 6px}
+.multi-station-sidebar button[aria-pressed=true]{background:var(--rp-teal-soft);color:var(--rp-teal)}

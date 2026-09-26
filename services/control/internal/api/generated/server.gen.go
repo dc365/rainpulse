@@ -736,12 +736,15 @@ func (e RadarStationPageInventoryScope) Valid() bool {
 
 // Defines values for RadarStationPageItemsBand.
 const (
+	S RadarStationPageItemsBand = "S"
 	X RadarStationPageItemsBand = "X"
 )
 
 // Valid indicates whether the value is a known member of the RadarStationPageItemsBand enum.
 func (e RadarStationPageItemsBand) Valid() bool {
 	switch e {
+	case S:
+		return true
 	case X:
 		return true
 	default:
@@ -2187,6 +2190,12 @@ type GetVerificationSummaryParams struct {
 	RunId openapi_types.UUID `form:"run_id" json:"run_id"`
 }
 
+// ListWorkspaceRadarCompositesParams defines parameters for ListWorkspaceRadarComposites.
+type ListWorkspaceRadarCompositesParams struct {
+	Start time.Time `form:"start" json:"start"`
+	End   time.Time `form:"end" json:"end"`
+}
+
 // ListWorkspaceRadarScansParams defines parameters for ListWorkspaceRadarScans.
 type ListWorkspaceRadarScansParams struct {
 	RadarId string  `form:"radar_id" json:"radar_id"`
@@ -2337,6 +2346,15 @@ type ServerInterface interface {
 	// GetVerificationSummary Get verification summary for one run
 	// (GET /verification/summary)
 	GetVerificationSummary(w http.ResponseWriter, r *http.Request, params GetVerificationSummaryParams)
+	// ListWorkspaceRadarComposites Latest 100 successful, non-retired S/X comparison results in a bounded analysis window.
+	// (GET /workspace/radar-composites)
+	ListWorkspaceRadarComposites(w http.ResponseWriter, r *http.Request, params ListWorkspaceRadarCompositesParams)
+
+	// (GET /workspace/radar-composites/{result_id})
+	GetWorkspaceRadarComposite(w http.ResponseWriter, r *http.Request, resultId string)
+
+	// (GET /workspace/radar-composites/{result_id}/assets/{asset_id})
+	GetWorkspaceRadarCompositeAsset(w http.ResponseWriter, r *http.Request, resultId string, assetId string)
 	// GetWorkspaceRadarProduct Validated native polar comparison, pinned to task and attempt; no operational promotion.
 	// (GET /workspace/radar-products/{result_id})
 	GetWorkspaceRadarProduct(w http.ResponseWriter, r *http.Request, resultId string)
@@ -2346,7 +2364,7 @@ type ServerInterface interface {
 	// ListWorkspaceRadarScans Independent observed scans with candidate QC versions; at most 24 hours and 100 scans per page.
 	// (GET /workspace/radar-scans)
 	ListWorkspaceRadarScans(w http.ResponseWriter, r *http.Request, params ListWorkspaceRadarScansParams)
-	// ListWorkspaceRadarStations Registered X stations, including stations without QC; defaults to latest observed UTC+8 day.
+	// ListWorkspaceRadarStations Registered S/X stations, including stations without QC; defaults to latest observed UTC+8 day.
 	// (GET /workspace/radar-stations)
 	ListWorkspaceRadarStations(w http.ResponseWriter, r *http.Request, params ListWorkspaceRadarStationsParams)
 }
@@ -2613,6 +2631,22 @@ func (_ Unimplemented) GetVerificationSummary(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// ListWorkspaceRadarComposites Latest 100 successful, non-retired S/X comparison results in a bounded analysis window.
+// (GET /workspace/radar-composites)
+func (_ Unimplemented) ListWorkspaceRadarComposites(w http.ResponseWriter, r *http.Request, params ListWorkspaceRadarCompositesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /workspace/radar-composites/{result_id})
+func (_ Unimplemented) GetWorkspaceRadarComposite(w http.ResponseWriter, r *http.Request, resultId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /workspace/radar-composites/{result_id}/assets/{asset_id})
+func (_ Unimplemented) GetWorkspaceRadarCompositeAsset(w http.ResponseWriter, r *http.Request, resultId string, assetId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // GetWorkspaceRadarProduct Validated native polar comparison, pinned to task and attempt; no operational promotion.
 // (GET /workspace/radar-products/{result_id})
 func (_ Unimplemented) GetWorkspaceRadarProduct(w http.ResponseWriter, r *http.Request, resultId string) {
@@ -2631,7 +2665,7 @@ func (_ Unimplemented) ListWorkspaceRadarScans(w http.ResponseWriter, r *http.Re
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// ListWorkspaceRadarStations Registered X stations, including stations without QC; defaults to latest observed UTC+8 day.
+// ListWorkspaceRadarStations Registered S/X stations, including stations without QC; defaults to latest observed UTC+8 day.
 // (GET /workspace/radar-stations)
 func (_ Unimplemented) ListWorkspaceRadarStations(w http.ResponseWriter, r *http.Request, params ListWorkspaceRadarStationsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -4279,6 +4313,113 @@ func (siw *ServerInterfaceWrapper) GetVerificationSummary(w http.ResponseWriter,
 	handler.ServeHTTP(w, r)
 }
 
+// ListWorkspaceRadarComposites operation middleware
+func (siw *ServerInterfaceWrapper) ListWorkspaceRadarComposites(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListWorkspaceRadarCompositesParams
+
+	// ------------- Required query parameter "start" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "start", r.URL.Query(), &params.Start, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "start"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "start", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "end" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "end", r.URL.Query(), &params.End, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "end"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "end", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListWorkspaceRadarComposites(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetWorkspaceRadarComposite operation middleware
+func (siw *ServerInterfaceWrapper) GetWorkspaceRadarComposite(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "result_id" -------------
+	var resultId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "result_id", chi.URLParam(r, "result_id"), &resultId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "result_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetWorkspaceRadarComposite(w, r, resultId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetWorkspaceRadarCompositeAsset operation middleware
+func (siw *ServerInterfaceWrapper) GetWorkspaceRadarCompositeAsset(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "result_id" -------------
+	var resultId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "result_id", chi.URLParam(r, "result_id"), &resultId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "result_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "asset_id" -------------
+	var assetId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "asset_id", chi.URLParam(r, "asset_id"), &assetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "asset_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetWorkspaceRadarCompositeAsset(w, r, resultId, assetId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetWorkspaceRadarProduct operation middleware
 func (siw *ServerInterfaceWrapper) GetWorkspaceRadarProduct(w http.ResponseWriter, r *http.Request) {
 
@@ -4597,6 +4738,15 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/workspace/radar-composites", wrapper.ListWorkspaceRadarComposites)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/workspace/radar-composites/{result_id}", wrapper.GetWorkspaceRadarComposite)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/workspace/radar-composites/{result_id}/assets/{asset_id}", wrapper.GetWorkspaceRadarCompositeAsset)
+	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/workspace/radar-stations", wrapper.ListWorkspaceRadarStations)
 	})
