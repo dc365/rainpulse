@@ -4,6 +4,55 @@
  */
 
 export interface paths {
+    "/workspace/radar-composites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Latest 100 successful, non-retired S/X comparison results in a bounded analysis window. */
+        get: operations["listWorkspaceRadarComposites"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspace/radar-composites/{result_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getWorkspaceRadarComposite"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspace/radar-composites/{result_id}/assets/{asset_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getWorkspaceRadarCompositeAsset"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workspace/radar-stations": {
         parameters: {
             query?: never;
@@ -11,7 +60,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Registered X stations, including stations without QC; defaults to latest observed UTC+8 day. */
+        /** Registered S/X stations, including stations without QC; defaults to latest observed UTC+8 day. */
         get: operations["listWorkspaceRadarStations"];
         put?: never;
         post?: never;
@@ -812,7 +861,7 @@ export interface components {
                 radar_id: string;
                 display_name?: string;
                 /** @enum {string} */
-                band: "X";
+                band: "S" | "X";
                 registered: number;
                 normalized: number;
                 qc_ready: number;
@@ -2046,6 +2095,82 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listWorkspaceRadarComposites: {
+        parameters: {
+            query: {
+                start: string;
+                end: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Frozen task attempt identities and analysis times. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: {
+                            result_id: string;
+                            /** Format: date-time */
+                            analysis_time: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    getWorkspaceRadarComposite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                result_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Same-run S, X and S+X comparison; optional EPSG4326 map bounds and allowlisted image URLs. Missing map metadata is never inferred. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    getWorkspaceRadarCompositeAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                result_id: string;
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Manifest-allowlisted, integrity-checked PNG preview. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                };
+            };
+        };
+    };
     listWorkspaceRadarStations: {
         parameters: {
             query?: {

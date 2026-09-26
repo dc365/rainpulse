@@ -306,7 +306,9 @@ def test_executor_full_numerical_path_and_repeat(tmp_path):
     first, summary, m = e.execute(req,reader,artifact_digest=logical_digest)
     second, _, m2 = e.execute(req,reader,artifact_digest=logical_digest)
     assert first == second and summary['candidate_only'] is True
-    assert len(first)==8 and first['cr.png'].startswith(b'\x89PNG')
+    assert len(first)==11 and first['cr.png'].startswith(b'\x89PNG')
+    assert all(first[f'map/{name}.png'].startswith(b'\x89PNG') for name in ('s_only', 'x_only', 'sx_composite'))
+    assert all(p['map']['crs'] == 'EPSG:4326' for p in json.loads(first['manifest.json'])['comparison']['products'] if 'map' in p)
     arrays = decode_arrays(first['arrays.npz'],maximum_bytes=10*1024**2)
     assert arrays['CR_DBZH'].item()==35
     assert arrays['DBZH_X_MINUS_S'].shape == arrays['CR_DBZH'].shape

@@ -52,6 +52,15 @@ func TestRadarWorkspaceCatalogIntegration(t *testing.T) {
 		_ = json.Unmarshal(w.Body.Bytes(), &result)
 		return result
 	}
+	if len(get("radar-stations?band=all")["items"].([]any)) != 3 {
+		t.Fatal("all bands not included")
+	}
+	if len(get("radar-stations?band=S")["items"].([]any)) != 1 {
+		t.Fatal("S filter failed")
+	}
+	if len(get("radar-composites?start=2026-08-28T00:00:00Z&end=2026-08-28T01:00:00Z")["items"].([]any)) != 0 {
+		t.Fatal("X QC result leaked into composite directory")
+	}
 	stations := get("radar-stations?band=X")
 	items := stations["items"].([]any)
 	if len(items) != 2 || items[0].(map[string]any)["qc_ready"].(float64) != 1 || items[1].(map[string]any)["registered"].(float64) != 0 {

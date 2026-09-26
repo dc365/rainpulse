@@ -52,7 +52,11 @@ func (h *Handler) radarWorkspace(w http.ResponseWriter, r *http.Request) {
 	case "radar-scans":
 		value, err = h.radarScans(r)
 	default:
-		value, err = h.radarProduct(w, r, strings.Split(path, "/"))
+		if strings.HasPrefix(path, "radar-composites") {
+			value, err = h.radarComposites(w, r, strings.Split(path, "/"))
+		} else {
+			value, err = h.radarProduct(w, r, strings.Split(path, "/"))
+		}
 	}
 	if err == errResponseWritten {
 		return
@@ -66,8 +70,19 @@ func (h *Handler) radarWorkspace(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) radarStations(r *http.Request) (any, error) {
 	q := r.URL.Query()
-	if q.Get("band") != "" && q.Get("band") != "X" {
-		return nil, Invalid("当前独立目录支持 X 波段")
+	band := q.Get("band")
+	if band == "" {
+		band = "X"
+	}
+	predicate := xBandPredicate
+	switch band {
+	case "X":
+	case "S":
+		predicate = ` c.config#>>'{hardware,radar_band}'='S' `
+	case "all":
+		predicate = ` c.config#>>'{hardware,radar_band}' IN ('S','X') `
+	default:
+		return nil, Invalid("波段必须是 S、X 或 all")
 	}
 	var start, end time.Time
 	var err error
@@ -78,7 +93,7 @@ func (h *Handler) radarStations(r *http.Request) (any, error) {
 		}
 	}
 	var earliest, latest sql.NullTime
-	err = h.service.Store.DB.QueryRowContext(r.Context(), `SELECT min(s.volume_end_time),max(s.volume_end_time) FROM radar_scans s `+xStationJoin+` WHERE `+xBandPredicate).Scan(&earliest, &latest)
+	err = h.service.Store.DB.QueryRowContext(r.Context(), `SELECT min(s.volume_end_time),max(s.volume_end_time) FROM radar_scans s `+xStationJoin+` WHERE `+predicate).Scan(&earliest, &latest)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +107,7 @@ func (h *Handler) radarStations(r *http.Request) (any, error) {
 		start = time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, loc).UTC()
 		end = start.Add(24 * time.Hour)
 	}
-	filter := Digest([]byte(start.String() + end.String() + "X"))
+	filter := Digest([]byte(start.String() + end.String() + band))
 	after := ""
 	if cursor := q.Get("cursor"); cursor != "" {
 		b, e := base64.RawURLEncoding.DecodeString(cursor)
@@ -106,7 +121,7 @@ func (h *Handler) radarStations(r *http.Request) (any, error) {
 		after = p[1]
 	}
 	rows, err := h.service.Store.DB.QueryContext(r.Context(), `WITH volumes AS (
- SELECT s.radar_id,s.scan_id,s.volume_end_time,r.normalized_uri,
+ SELECT s.radar_id,s.scan_id,s.volume_end_time,r.normalized_uri,r.qc_uri,
  EXISTS(SELECT 1 FROM ops_tasks t WHERE t.kind='multiband' AND t.state='SUCCEEDED'
  AND t.spec#>>'{request,payload,mode}'='x_qc' AND t.spec#>>'{request,payload,scan_id}'=s.scan_id::text
  AND lower(t.spec#>>'{request,payload,radar_id}')=lower(s.radar_id)
@@ -114,7 +129,7 @@ func (h *Handler) radarStations(r *http.Request) (any, error) {
  AND NOT EXISTS(SELECT 1 FROM ops_retired_runs rr WHERE rr.run_id=t.run_id)) ready
  FROM radar_scans s `+currentScanJoin+` WHERE s.volume_end_time >= $1 AND s.volume_end_time < $2
  ) SELECT jsonb_build_object('radar_id',d.radar_id,'display_name',COALESCE(d.display_name,d.radar_id),
- 'band','X','geometry_status','unverified','registered',count(v.scan_id),
+ 'band',c.config#>>'{hardware,radar_band}','geometry_status','unverified','registered',count(v.scan_id),
  'candidate_site',CASE WHEN jsonb_typeof(c.config#>'{site,longitude_deg}')='number'
  AND jsonb_typeof(c.config#>'{site,latitude_deg}')='number' THEN CASE WHEN
  (c.config#>>'{site,longitude_deg}')::numeric BETWEEN -180 AND 180 AND
@@ -122,10 +137,10 @@ func (h *Handler) radarStations(r *http.Request) (any, error) {
  'longitude_deg',c.config#>'{site,longitude_deg}',
  'latitude_deg',c.config#>'{site,latitude_deg}',
  'coordinate_source','draft_radar_config','config_version',d.current_config_version) ELSE NULL END ELSE NULL END,
- 'normalized',count(NULLIF(v.normalized_uri,'')),'qc_ready',count(*) FILTER(WHERE v.ready),
+ 'normalized',count(NULLIF(v.normalized_uri,'')),'qc_ready',count(*) FILTER(WHERE v.ready OR (c.config#>>'{hardware,radar_band}'='S' AND NULLIF(v.qc_uri,'') IS NOT NULL)),
  'latest_observation',max(v.volume_end_time))
  FROM radars d JOIN radar_config_versions c ON c.radar_id=d.radar_id AND c.radar_config_version=d.current_config_version
- LEFT JOIN volumes v ON v.radar_id=d.radar_id WHERE `+xBandPredicate+` AND d.radar_id>$3
+ LEFT JOIN volumes v ON v.radar_id=d.radar_id WHERE `+predicate+` AND d.radar_id>$3
  GROUP BY d.radar_id,d.display_name,d.current_config_version,c.config ORDER BY d.radar_id LIMIT 101`, start, end, after)
 	if err != nil {
 		return nil, err
