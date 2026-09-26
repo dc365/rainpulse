@@ -449,3 +449,7 @@ test-architecture-batch3:
 .PHONY: test-admin-ops
 test-admin-ops:
 	bash scripts/test_admin_ops.sh
+
+.PHONY: test-performance-ab
+test-performance-ab:
+	uv run --project algorithms bash scripts/test_performance_ab.sh -q

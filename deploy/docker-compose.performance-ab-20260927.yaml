@@ -1,0 +1,4 @@
+# Targeted X rollout only. S QC release remains blocked by stale RUNNING jobs.
+services:
+  ops-multiband-worker:
+    image: rainpulse-cpu-worker:performance-ab-bbf5cb2

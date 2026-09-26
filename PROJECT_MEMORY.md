@@ -685,3 +685,11 @@ operational data here.
 - 当前冻结网络只有 zf101/zf505，enabled=false、geometry_verified=false、calibration_verified=false，products={}。地图候选叠加已开放，数值 S+X 不能声称启用；没有组合产品时明确 X 未参与。
 - 本批验证：143 前端测试；60 多波段 Python 测试；Go 全包测试/vet；专用临时数据库站点/组合目录 SQL 集成测试；实际 Worker 地图预览 smoke；1440×1000、375×812 浏览器。
 - 批量源数值点查、贡献专题图、像素缓存预算及 4 S + 11 X 压力测试尚未完成，详见 `docs/MULTISTATION_SX_IMPLEMENTATION_20260927.md`。本批未新增 batch-resolution API，复用现有只读目录解析。
+
+## 2026-09-27 S/X performance A+B
+
+- Integrated the recipe-based package against c5c7b47, preserving main's multistation map changes. Runtime timings remain outside frozen identities; grouped S validation, X ray pruning, shared preview sampling and layout warmup preserve product semantics. Selected NaN object IDs now fail closed, with helper and full disposition regressions.
+- 105 X image `rainpulse-cpu-worker:performance-ab-bbf5cb2` is based on its live multistation-fe04d7d image; the targeted overlay is `deploy/docker-compose.performance-ab-20260927.yaml`. Use the active container's complete Compose file chain plus `deploy/.env`; never replace the dirty server checkout. Roll back X to multistation-fe04d7d if necessary.
+- Read-only real paired X replay: ZF101 (40 sweeps/240 PNG) 21.092s -> 13.225s; ZF505 (9 sweeps/54 PNG) 4.944s -> 3.330s. Every output object hash matches; telemetry-off also matches. These are single samples, not throughput or p95 evidence. No spatial S+X eligibility is enabled.
+- S candidate image `rainpulse-cpu-worker:qc-performance-ab-bbf5cb2` overlays only modules verified against the live S baseline. Do not switch automatic S QC until its release drain passes: 28 radar.qc jobs remain RUNNING since September 22. Existing operations-QC is a different older image and is not covered by this rollout.
+- AB regression: 146 passed, 7 Numba skips locally. Clutter-fusion 110 and volume-review 87 passed; multiband suite passed. Existing radar-QC 3 failures, batch1 3 failures and object-store 2 failures reproduce at pre-change b4d7818. Full CI remains red on existing contracts/identity/lint failures; dedicated test-performance-ab is now a separate CI matrix target.
