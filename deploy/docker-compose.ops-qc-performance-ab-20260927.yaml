@@ -1,0 +1,7 @@
+# Managed S candidate QC uses the same reviewed source as the multiband image.
+# Real full-volume QC used 24-34 GiB on 105; the former 6 GiB cap is insufficient.
+services:
+  ops-qc-worker:
+    image: rainpulse-cpu-worker:performance-ab-bbf5cb2
+    mem_limit: 40g
+    memswap_limit: 40g

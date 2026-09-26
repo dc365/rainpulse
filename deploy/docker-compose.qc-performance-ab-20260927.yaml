@@ -1,0 +1,4 @@
+# Apply only after the coordinated QC release gate confirms a drained pool.
+services:
+  radar-qc-worker:
+    image: rainpulse-cpu-worker:qc-performance-ab-bbf5cb2

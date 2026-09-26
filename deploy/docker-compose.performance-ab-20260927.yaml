@@ -1,4 +1,4 @@
-# Targeted X rollout only. S QC release remains blocked by stale RUNNING jobs.
+# Targeted X rollout. S uses docker-compose.qc-performance-ab-20260927.yaml.
 services:
   ops-multiband-worker:
     image: rainpulse-cpu-worker:performance-ab-bbf5cb2
