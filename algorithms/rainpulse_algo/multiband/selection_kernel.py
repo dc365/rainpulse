@@ -6,9 +6,10 @@ The reference expression is the existing candidate/age/resolution tie rule.
 
 from __future__ import annotations
 
-from rainpulse_algo.performance import (timed as _perf_timed, observe as _perf_observe)
-
 import numpy as np
+
+from rainpulse_algo.performance import observe as _perf_observe
+from rainpulse_algo.performance import timed as _perf_timed
 
 _COMPILED = None
 

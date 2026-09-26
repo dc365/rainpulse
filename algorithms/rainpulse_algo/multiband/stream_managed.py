@@ -6,14 +6,14 @@ stay fresh and frozen; private scratch is removed on success and exceptions.
 
 from __future__ import annotations
 
-from rainpulse_algo.performance import (timed as _perf_timed)
-
 import importlib.metadata
 import json
 import platform
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
+
+from rainpulse_algo.performance import timed as _perf_timed
 
 from .model import MAX_SWEEPS, epoch, json_bytes
 from .product import MAX_X_QC_PREVIEW_BYTES, sx_comparison_objects, x_qc_objects

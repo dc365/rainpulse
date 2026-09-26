@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from rainpulse_algo.performance import (timed as _perf_timed)
-
 import hashlib
 import json
 import os
@@ -20,6 +18,7 @@ from minio.error import S3Error
 from pyproj import Geod
 from zarr.storage import MemoryStore
 
+from rainpulse_algo.performance import timed as _perf_timed
 from rainpulse_algo.worker.domain_contracts import RadarQCRequested
 from rainpulse_algo.worker.object_store import (
     ArtifactObjectReader,

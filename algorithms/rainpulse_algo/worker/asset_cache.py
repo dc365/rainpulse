@@ -6,8 +6,6 @@ loads share a hard in-flight limit, including oversized/bypass objects.
 """
 from __future__ import annotations
 
-from rainpulse_algo.performance import (timed as _perf_timed, measure as _perf_measure, observe as _perf_observe)
-
 import hashlib
 import math
 import os
@@ -18,6 +16,10 @@ from collections import OrderedDict
 from collections.abc import Callable
 from concurrent.futures import Future
 from dataclasses import dataclass
+
+from rainpulse_algo.performance import measure as _perf_measure
+from rainpulse_algo.performance import observe as _perf_observe
+from rainpulse_algo.performance import timed as _perf_timed
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 

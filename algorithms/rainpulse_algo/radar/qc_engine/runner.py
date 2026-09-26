@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from rainpulse_algo.performance import (timed as _perf_timed, observe as _perf_observe)
-
 import json
 import logging
 from datetime import UTC, datetime
 from time import perf_counter
 
 import numpy as np
+
+from rainpulse_algo.performance import observe as _perf_observe
+from rainpulse_algo.performance import timed as _perf_timed
 
 from ..qc import QCInputError, QCModuleRecord, QCResult, QCSweep
 from ..qc_geometry import build_vertical_consistency_diagnostics
@@ -351,8 +352,8 @@ def run_open_source_qc(
                 ].donor_unknown.astype("uint8")
         nonprecip_record = None
         if profile.nonprecip_review is not None:
-            from .review_extension.runtime import apply_nonprecip_review
             from .review_extension.observation_match import paired_doppler
+            from .review_extension.runtime import apply_nonprecip_review
 
             paired = paired_doppler(sweep, native, profile.nonprecip_review)
             nonprecip_context = {**context, **{k:sweep.restore(v) for k,v in paired.items()}}

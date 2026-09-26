@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from rainpulse_algo.performance import (timed as _perf_timed)
-
 import hashlib
 import io
 import json
@@ -17,6 +15,8 @@ from uuid import UUID
 
 from minio import Minio
 from minio.error import S3Error
+
+from rainpulse_algo.performance import timed as _perf_timed
 
 from .asset_access import VerifiedArtifactReader
 from .asset_cache import VerifiedObjectCache

@@ -7,8 +7,6 @@ a failure in the last cut cannot publish the preceding partial product.
 
 from __future__ import annotations
 
-from rainpulse_algo.performance import (timed as _perf_timed)
-
 import shutil
 import time
 from collections import OrderedDict
@@ -18,6 +16,8 @@ from pathlib import Path
 
 import numpy as np
 from pyproj import Transformer
+
+from rainpulse_algo.performance import timed as _perf_timed
 
 from .execution import ExecutionOptions
 from .fusion import (

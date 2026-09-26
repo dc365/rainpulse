@@ -4,19 +4,24 @@ The median/minimum windows have shape (1,n): different rays never contribute to
 one another. Potential-target rays keep their ENTIRE range axis and original
 nearest-edge rule. This is not sparse gate filtering or meteorological tuning.
 """
+
 from __future__ import annotations
 
 import numpy as np
 from scipy.ndimage import median_filter, minimum_filter1d
-from rainpulse_algo.performance import timed, observe
+
+from rainpulse_algo.performance import observe, timed
 
 
 @timed("x.candidate")
 def nonmet_candidate(fields, echo, snr_good, cfg, range_m):
     shape = echo.shape
     rho = fields["RHOHV"]
-    weather = (np.asarray(fields["WEATHER_PROTECTED_MASK"], dtype=bool)
-               if "WEATHER_PROTECTED_MASK" in fields else np.zeros(shape, bool))
+    weather = (
+        np.asarray(fields["WEATHER_PROTECTED_MASK"], dtype=bool)
+        if "WEATHER_PROTECTED_MASK" in fields
+        else np.zeros(shape, bool)
+    )
     potential = echo & snr_good & np.isfinite(rho) & (rho < cfg.rho_candidate_max) & ~weather
     rows = np.flatnonzero(potential.any(axis=1))
     observe("x.candidate_total_rays", int(shape[0]))
@@ -34,7 +39,9 @@ def nonmet_candidate(fields, echo, snr_good, cfg, range_m):
     supported_echo = echo[index]
     measured = np.where(supported_echo, fields["DBZH"][index], np.nan)
     med = median_filter(np.where(supported_echo, measured, 0.0), size=(1, n), mode="nearest")
-    supported = minimum_filter1d(supported_echo.astype(np.uint8), size=n, axis=1, mode="nearest") == 1
+    supported = (
+        minimum_filter1d(supported_echo.astype(np.uint8), size=n, axis=1, mode="nearest") == 1
+    )
     texture = np.abs(measured - med)
     chosen = potential[index] & supported & (texture > cfg.texture_candidate_db)
     observe("x.candidate_filtered_rays", int(shape[0] if all_rows else len(rows)))

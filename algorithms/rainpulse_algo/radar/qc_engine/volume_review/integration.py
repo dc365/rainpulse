@@ -1,12 +1,16 @@
 """Thin adapters for RainPulse QCResult/NativeSweep; heavy imports remain lazy."""
 
-from rainpulse_algo.performance import (timed as _perf_timed, measure as _perf_measure)
 from dataclasses import replace
+
 import numpy as np
+
+from rainpulse_algo.performance import measure as _perf_measure
+from rainpulse_algo.performance import timed as _perf_timed
+
 from . import VERSION
 from .data import Sweep, json_bytes
-from .engine import evaluate
 from .disposition import dispose
+from .engine import evaluate
 
 
 def from_native(native):

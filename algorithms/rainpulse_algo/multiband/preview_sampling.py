@@ -3,11 +3,14 @@
 Native PPI and geographic map remain different plans. Finite-value/action masks
 are evaluated on each rendered field, NOT copied from raw. No cross-task cache.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
+
 import numpy as np
-from rainpulse_algo.performance import timed, observe
+
+from rainpulse_algo.performance import observe, timed
 
 MAX_PPI_INTERPOLATION_GAP_DEG = 3.0
 
@@ -22,8 +25,9 @@ class PolarSampling:
 
 
 @timed("preview.sampling")
-def prepare_polar_sampling(azimuth_deg, range_m, *, size=720, map_sampling=None,
-                           elevation_deg=None):
+def prepare_polar_sampling(
+    azimuth_deg, range_m, *, size=720, map_sampling=None, elevation_deg=None
+):
     az = np.asarray(azimuth_deg, dtype=float) % 360
     ranges = np.asarray(range_m, dtype=float)
     if len(az) == 0 or len(ranges) == 0:
@@ -49,7 +53,8 @@ def prepare_polar_sampling(azimuth_deg, range_m, *, size=720, map_sampling=None,
     circular_steps = np.diff(np.concatenate((ordered, [ordered[0] + 360])))
     angular_limit = min(
         max(float(np.median(circular_steps[circular_steps > 0])) * 1.5, 0.1)
-        if np.any(circular_steps > 0) else 0.1,
+        if np.any(circular_steps > 0)
+        else 0.1,
         MAX_PPI_INTERPOLATION_GAP_DEG,
     )
     if map_sampling is not None:
@@ -68,15 +73,20 @@ def prepare_polar_sampling(azimuth_deg, range_m, *, size=720, map_sampling=None,
 
 
 @timed("preview.color_and_png")
-def render_polar_sampling(plan, values, levels, colors, encode_png, *, uncertain=None,
-                          actions=None):
+def render_polar_sampling(
+    plan, values, levels, colors, encode_png, *, uncertain=None, actions=None
+):
     data = np.asarray(values)
     if data.shape != plan.source_shape:
         raise ValueError("polar quicklook coordinates and field differ")
     sample = data[plan.rays, plan.gates]
     valid = plan.support & np.isfinite(sample)
     rgba = np.zeros((plan.size, plan.size, 4), np.uint8)
-    index = np.clip(np.searchsorted(levels, np.nan_to_num(sample, nan=-100), side="right") - 1, 0, len(levels) - 1)
+    index = np.clip(
+        np.searchsorted(levels, np.nan_to_num(sample, nan=-100), side="right") - 1,
+        0,
+        len(levels) - 1,
+    )
     rgba[:, :, :3] = colors[index]
     rgba[:, :, 3] = np.where(valid, 255, 0)
     if uncertain is not None:

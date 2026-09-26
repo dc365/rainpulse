@@ -5,10 +5,13 @@ validator recurses once on this view without extension attrs, preserving the
 legacy checks byte-for-byte, then validates the actual new action projection.
 """
 
-from rainpulse_algo.performance import (measure as _perf_measure)
 from collections.abc import Mapping
+
 import numpy as np
-from .disposition import validate_fields, DERIVED_FIELDS, derived_invalidation
+
+from rainpulse_algo.performance import measure as _perf_measure
+
+from .disposition import DERIVED_FIELDS, derived_invalidation, validate_fields
 
 
 class LegacyView(Mapping):

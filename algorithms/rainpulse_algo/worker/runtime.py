@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from rainpulse_algo.performance import (timed as _perf_timed)
-
 import asyncio
 import json
 import os
@@ -17,6 +15,8 @@ from minio.error import S3Error
 from nats.errors import TimeoutError as NATSTimeoutError
 from nats.js.api import AckPolicy, ConsumerConfig
 from pydantic import BaseModel, ValidationError
+
+from rainpulse_algo.performance import timed as _perf_timed
 
 from .asset_cache import process_asset_cache, process_cache_metrics
 from .contracts import (

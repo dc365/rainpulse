@@ -8,8 +8,6 @@ object hashes: selected reads deliberately fall back to full verification.
 
 from __future__ import annotations
 
-from rainpulse_algo.performance import (timed as _perf_timed, submit_with_context as _perf_submit)
-
 import hashlib
 import json
 import re
@@ -19,6 +17,9 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from urllib.parse import urlparse
+
+from rainpulse_algo.performance import submit_with_context as _perf_submit
+from rainpulse_algo.performance import timed as _perf_timed
 
 from .asset_cache import ObjectIdentity, VerifiedObjectCache, process_asset_cache
 

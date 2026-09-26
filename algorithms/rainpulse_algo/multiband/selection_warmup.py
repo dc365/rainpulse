@@ -3,12 +3,26 @@
 Independent of stream_fusion to avoid circular imports. The structured record is
 identical to its 36-byte DTYPE, tested explicitly. No parallelism or fastmath.
 """
+
 from __future__ import annotations
+
 import numpy as np
+
 from rainpulse_algo.performance import measure, observe
 
-STATE_DTYPE = np.dtype([(k, 'float64' if k=='score' else 'int32' if k in ('winner','wray','wgate') else 'float32')
-                       for k in ('score','values','winner','wray','wgate','h','age','resolution')])
+STATE_DTYPE = np.dtype(
+    [
+        (
+            k,
+            "float64"
+            if k == "score"
+            else "int32"
+            if k in ("winner", "wray", "wgate")
+            else "float32",
+        )
+        for k in ("score", "values", "winner", "wray", "wgate", "h", "age", "resolution")
+    ]
+)
 
 
 def prewarm(select_winners, require_numba, backend):
@@ -30,9 +44,12 @@ def prewarm(select_winners, require_numba, backend):
                     state = tuple(record[name][0] for name in STATE_DTYPE.names)
                     state[0][:] = -np.inf
                 else:
-                    state = (np.full((2, 3), -np.inf), np.zeros((2, 3), np.float32),
-                             *[np.zeros((2, 3), np.int32) for _ in range(3)],
-                             *[np.zeros((2, 3), np.float32) for _ in range(3)])
+                    state = (
+                        np.full((2, 3), -np.inf),
+                        np.zeros((2, 3), np.float32),
+                        *[np.zeros((2, 3), np.int32) for _ in range(3)],
+                        *[np.zeros((2, 3), np.float32) for _ in range(3)],
+                    )
                 select_winners(b, f, ~b, z, i, i, f, f, f, 0, *state, backend=backend)
         observe("numba.warmup_signatures_before", int(before), maximum=True)
         observe("numba.warmup_signatures_after", int(len(kernel.signatures)), maximum=True)

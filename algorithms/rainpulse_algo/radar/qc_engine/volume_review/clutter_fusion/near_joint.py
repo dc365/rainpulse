@@ -1,11 +1,14 @@
 """Near revision evidence/decision within the existing CF disposition owner."""
 
-from rainpulse_algo.performance import (timed as _perf_timed)
-from enum import IntEnum,IntFlag
+from enum import IntEnum, IntFlag
+
 import numpy as np
-from scipy.ndimage import binary_dilation,label
-from . import partial_moments,causal_temporal,terrain_admission
-from .context import ground,height,sample_ground
+from scipy.ndimage import binary_dilation, label
+
+from rainpulse_algo.performance import timed as _perf_timed
+
+from . import causal_temporal, partial_moments, terrain_admission
+from .context import ground, height, sample_ground
 
 
 class State(IntEnum):

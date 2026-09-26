@@ -8,8 +8,6 @@ No new marker schema; no weakening of the historical checksum contract.
 
 from __future__ import annotations
 
-from rainpulse_algo.performance import (timed as _perf_timed)
-
 import hashlib
 import shutil
 from collections import OrderedDict
@@ -17,6 +15,8 @@ from collections.abc import MutableMapping
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
+
+from rainpulse_algo.performance import timed as _perf_timed
 
 BLOCK = 1024 * 1024
 

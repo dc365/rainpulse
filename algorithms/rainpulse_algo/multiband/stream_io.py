@@ -7,8 +7,6 @@ native-stream-v1 output is deliberately distinct from the <=32-cut eager format.
 
 from __future__ import annotations
 
-from rainpulse_algo.performance import (timed as _perf_timed)
-
 import copy
 import hashlib
 import json
@@ -17,6 +15,8 @@ from pathlib import Path, PurePosixPath
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 import numpy as np
+
+from rainpulse_algo.performance import timed as _perf_timed
 
 from .adapters import FIELDS, X_QC_FIELDS, from_group
 from .model import MAX_FUSION_SWEEPS, NAME, Sweep, Volume, epoch, json_bytes

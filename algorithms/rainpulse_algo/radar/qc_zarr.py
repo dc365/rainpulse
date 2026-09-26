@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from rainpulse_algo.performance import (timed as _perf_timed)
-
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -12,6 +10,8 @@ import numpy as np
 import zarr
 from numcodecs import Blosc
 from zarr.storage import MemoryStore
+
+from rainpulse_algo.performance import timed as _perf_timed
 
 from .attenuation import (
     ATTENUATION_CORRECTION_SHADOW_FIELD,
