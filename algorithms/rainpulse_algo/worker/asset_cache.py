@@ -6,6 +6,8 @@ loads share a hard in-flight limit, including oversized/bypass objects.
 """
 from __future__ import annotations
 
+from rainpulse_algo.performance import (timed as _perf_timed, measure as _perf_measure, observe as _perf_observe)
+
 import hashlib
 import math
 import os
@@ -90,6 +92,7 @@ class VerifiedObjectCache:
              "bypasses", "errors", "store_bytes", "peak_bytes", "peak_inflight"), 0
         )
 
+    @_perf_timed("io.cache_and_verify")
     def read(self, identity: ObjectIdentity, loader: Callable[[], bytes]) -> CacheRead:
         owner = False
         with self._condition:
@@ -100,6 +103,7 @@ class VerifiedObjectCache:
                     if self._clock() < expires:
                         self._entries.move_to_end(identity)
                         self._counters["hits"] += 1
+                        _perf_observe("io.retained_cache_hits", 1)
                         return CacheRead(value, "cache")
                     self._drop(identity)
                     self._counters["expirations"] += 1
@@ -120,13 +124,17 @@ class VerifiedObjectCache:
                 self._counters["capacity_waits"] += 1
                 self._condition.wait()
         if not owner:
+            _perf_observe("io.shared_cache_waits", 1)
             return CacheRead(future.result(), "shared")
         try:
-            data = loader()
-            if not isinstance(data, bytes) or len(data) != identity.size:
-                raise RuntimeError("published artifact size differs")
-            if hashlib.sha256(data).hexdigest() != identity.sha256:
-                raise RuntimeError("published artifact checksum differs")
+            with _perf_measure("io.download"):
+                data = loader()
+            _perf_observe("io.downloaded_bytes", int(len(data)) if isinstance(data, bytes) else 0)
+            with _perf_measure("io.checksum"):
+                if not isinstance(data, bytes) or len(data) != identity.size:
+                    raise RuntimeError("published artifact size differs")
+                if hashlib.sha256(data).hexdigest() != identity.sha256:
+                    raise RuntimeError("published artifact checksum differs")
             with self._condition:
                 self._counters["store_bytes"] += len(data)
                 if (generation == self._generation and self.limits.max_bytes > 0

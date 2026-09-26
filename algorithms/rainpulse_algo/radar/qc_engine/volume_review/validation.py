@@ -4,6 +4,8 @@ Do not weaken NP/OC1/V7 validators to accommodate a later stage. The public
 validator recurses once on this view without extension attrs, preserving the
 legacy checks byte-for-byte, then validates the actual new action projection.
 """
+
+from rainpulse_algo.performance import (measure as _perf_measure)
 from collections.abc import Mapping
 import numpy as np
 from .disposition import validate_fields, DERIVED_FIELDS, derived_invalidation
@@ -24,13 +26,16 @@ class LegacyView(Mapping):
 def validate_serialized(group,attrs,legacy_validator):
     if attrs.get("qc_clutter_fusion_version") is not None or any(k.startswith("CF_") for k in group):
         from .clutter_fusion.validation import validate_serialized as validate_clutter
-        return validate_clutter(group, attrs, lambda g, a: validate_serialized(g, a, legacy_validator))
+        with _perf_measure("s.validate.cf"):
+            return validate_clutter(group, attrs, lambda g, a: validate_serialized(g, a, legacy_validator))
     if attrs.get("qc_receiver_domain_version") is not None or any(k.startswith("RDR_") for k in group):
         from .receiver_domain.validation import validate_serialized as validate_receiver
-        return validate_receiver(group, attrs, lambda g, a: validate_serialized(g, a, legacy_validator))
+        with _perf_measure("s.validate.rdr"):
+            return validate_receiver(group, attrs, lambda g, a: validate_serialized(g, a, legacy_validator))
     if attrs.get("qc_near_measurement_version") is not None or any(k.startswith("NMR_") for k in group):
         from .near_measurement.validation import validate_serialized as validate_near
-        return validate_near(group, attrs, lambda g, a: validate_serialized(g, a, legacy_validator))
+        with _perf_measure("s.validate.nmr"):
+            return validate_near(group, attrs, lambda g, a: validate_serialized(g, a, legacy_validator))
     if attrs.get("qc_volume_review_version")!="volume-object-review-20260919-v1" or attrs.get("operational_eligible") is not False:
         raise ValueError("unsupported volume extension identity")
     if attrs.get("qc_volume_review_mode") not in ("audit","experiment_quarantine"):

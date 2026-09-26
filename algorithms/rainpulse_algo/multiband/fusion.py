@@ -7,6 +7,8 @@ No temporal advection in v1: held S observations retain their measured age.
 
 from __future__ import annotations
 
+from rainpulse_algo.performance import (timed as _perf_timed)
+
 from dataclasses import dataclass
 
 import numpy as np
@@ -42,6 +44,7 @@ def beam_height(
     )
 
 
+@_perf_timed("geometry.geodesic")
 def ground_geometry(station, longitude, latitude):
     # pyproj's scalar fast path does not accept a length-one ndarray safely.
     if longitude.size == 1:
@@ -85,6 +88,7 @@ class Footprint:
     age: np.ndarray
 
 
+@_perf_timed("geometry.footprint")
 def footprint(
     s: Sweep,
     station: Station,
@@ -151,6 +155,7 @@ class Composite:
     metadata: dict
 
 
+@_perf_timed("fusion.eager")
 def build_composite(
     volumes: list[Volume], network: Network, product: str, analysis_time: str, cutoff: str
 ) -> Composite:
@@ -292,6 +297,7 @@ def allocate_layers(grid, tile_shape):
     return (score, values, winner, wray, wgate, h, age, resolution)
 
 
+@_perf_timed("fusion.update_tile")
 def update_tile(layers, out, sl, fp, sweep, station, index, grid, *, backend="numpy"):
     from .selection_kernel import select_winners
 
@@ -343,6 +349,7 @@ def update_tile(layers, out, sl, fp, sweep, station, index, grid, *, backend="nu
         )
 
 
+@_perf_timed("fusion.finish_tile")
 def finish_tile(layers, out, sl, grid):
     score, values, winner, wray, wgate, h, age, resolution = layers
     for li, level in enumerate(grid.levels_m_msl):

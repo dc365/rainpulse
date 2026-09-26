@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from rainpulse_algo.performance import (timed as _perf_timed)
+
 import hashlib
 import io
 import json
@@ -94,6 +96,7 @@ class AtomicObjectPublisher:
             raise
         return JobCompleted.model_validate(marker["completion_event"])
 
+    @_perf_timed("io.atomic_publication")
     def publish(
         self,
         *,
@@ -219,6 +222,7 @@ class AtomicObjectPublisher:
 
         return publish_one
 
+    @_perf_timed("io.marker_commit")
     def _put_marker_if_absent(self, bucket: str, key: str, data: bytes) -> Any:
         return self._client._put_object(  # noqa: SLF001 - MinIO exposes no public conditional PUT
             bucket,
@@ -372,6 +376,7 @@ def normalize_artifact_prefix(prefix: str) -> str:
     return prefix.rstrip("/")
 
 
+@_perf_timed("io.artifact_digest")
 def artifact_sha256(objects: Mapping[str, bytes]) -> str:
     digest = hashlib.sha256()
     for key, value in sorted(objects.items()):
@@ -415,6 +420,7 @@ def _resolve_max_workers(max_workers: int | None) -> int:
     return max_workers
 
 
+@_perf_timed("io.parallel_upload")
 def _bounded_parallel_map(
     items: list[Any],
     *,

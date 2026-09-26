@@ -2,6 +2,8 @@
 """Bounded, deterministic NPZ objects: no per-gate filesystem objects or pickle."""
 from __future__ import annotations
 
+from rainpulse_algo.performance import (timed as _perf_timed)
+
 import hashlib
 import io
 import json
@@ -15,6 +17,7 @@ from .model import Sweep, Volume, json_bytes
 MAX_ARRAYS = 2048
 
 
+@_perf_timed("io.npz_encoding")
 def encode_arrays(arrays: dict[str, np.ndarray]) -> bytes:
     out = io.BytesIO()
     if len(arrays) > MAX_ARRAYS:
@@ -34,6 +37,7 @@ def encode_arrays(arrays: dict[str, np.ndarray]) -> bytes:
     return out.getvalue()
 
 
+@_perf_timed("io.npz_decoding")
 def decode_arrays(raw: bytes, *, maximum_bytes: int) -> dict[str, np.ndarray]:
     if len(raw) > maximum_bytes:
         raise ValueError("compressed array object exceeds budget")

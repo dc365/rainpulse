@@ -2,6 +2,8 @@
 """One attempt, one numerical invocation; durable completion is a separate step."""
 from __future__ import annotations
 
+from rainpulse_algo.performance import (timed as _perf_timed)
+
 import contextlib
 import io
 import math
@@ -146,6 +148,7 @@ class Engine:
             raise CancelRequested("operator cancellation or execution right revoked")
         self.adapter.check_identity(self.claim["identity"])
 
+    @_perf_timed("operations.attempt", root=True)
     def run(self, claim: dict[str, Any]) -> bool:
         self.claim = claim
         heartbeat = threading.Thread(target=self._heartbeat, daemon=True)
@@ -205,6 +208,7 @@ class Engine:
             self.finished.set()
             heartbeat.join(timeout=15)
 
+    @_perf_timed("operations.result_registration")
     def _finish(self, outcome: str, code: str = "", message: str = "") -> bool:
         try:
             # Flush a bounded backlog while keeping stable sequence numbers on retries.

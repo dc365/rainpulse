@@ -6,6 +6,8 @@ stay fresh and frozen; private scratch is removed on success and exceptions.
 
 from __future__ import annotations
 
+from rainpulse_algo.performance import (timed as _perf_timed)
+
 import importlib.metadata
 import json
 import platform
@@ -34,6 +36,7 @@ def _scratch_reservation(height_bytes, options, *, comparison):
     return reserved
 
 
+@_perf_timed("multiband.streaming_pipeline")
 def execute(executor, request, reader, *, started):
     p, options, network = request["payload"], executor.execution, executor.network
     if not hasattr(reader, "open"):
@@ -242,6 +245,7 @@ def execute(executor, request, reader, *, started):
         return objects, summary, {k: float(v) for k, v in metrics.items()}
 
 
+@_perf_timed("x.streaming_standalone")
 def _execute_x_qc(executor, request, reader, *, started):
     """Run geometry-free X QC inside the same bounded streaming Worker path."""
     p, options, network = request["payload"], executor.execution, executor.network

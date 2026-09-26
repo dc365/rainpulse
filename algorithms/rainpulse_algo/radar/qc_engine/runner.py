@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from rainpulse_algo.performance import (timed as _perf_timed, observe as _perf_observe)
+
 import json
 import logging
 from datetime import UTC, datetime
@@ -39,6 +41,7 @@ QI_NAMES = (
 )
 
 
+@_perf_timed("s.qc_compute", root=True)
 def run_open_source_qc(
     objects,
     profile,
@@ -589,7 +592,10 @@ def run_open_source_qc(
             ),
             "operational_eligible": False,
         }
-    timings["total_compute_ms"] = (perf_counter() - started) * 1000
+    timings["base_compute_ms"] = (perf_counter() - started) * 1000
+    # Legacy total_compute_ms historically stopped before VOR/NMR/RDR/CF.
+    # Keep that key compatible; complete_compute_ms below is the full scope.
+    timings["total_compute_ms"] = timings["base_compute_ms"]
     # Runtime telemetry must not alter immutable artifact hashes.
     if kwargs.get("timing_sink") is not None:
         kwargs["timing_sink"].update(timings)
@@ -604,5 +610,13 @@ def run_open_source_qc(
     if getattr(profile, "volume_review", None) is not None:
         from .volume_review.integration import review_result
 
+        extension_started = perf_counter()
         result = review_result(result, native, near_clutter_context=kwargs.get("near_clutter_context"))
+        timings["volume_extensions_ms"] = (perf_counter() - extension_started) * 1000
+    timings["complete_compute_ms"] = (perf_counter() - started) * 1000
+    if kwargs.get("timing_sink") is not None:
+        kwargs["timing_sink"].update(timings)
+    _perf_observe("s.sweeps", int(len(native)))
+    _perf_observe("s.raw_gates", int(sum(np.prod(n.shape) for n in native)))
+    logging.getLogger(__name__).info("qc_complete_compute_timing timings=%s", json.dumps(timings, sort_keys=True))
     return result

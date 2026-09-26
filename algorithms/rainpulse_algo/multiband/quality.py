@@ -7,11 +7,13 @@ an uncertain measurement, never fabricated rain/no-rain or an unlimited correcti
 
 from __future__ import annotations
 
+from rainpulse_algo.performance import (timed as _perf_timed)
+
 from enum import IntFlag
 import copy
 
 import numpy as np
-from scipy.ndimage import median_filter, minimum_filter1d
+from scipy.ndimage import median_filter
 
 from .model import Station, Sweep, Volume, XProfile
 
@@ -45,6 +47,7 @@ def _shared(values: np.ndarray, dtype=None) -> np.ndarray:
     return value
 
 
+@_perf_timed("x.phase_attenuation")
 def phase_linear(
     s: Sweep, profile: XProfile, *, anchor_verified: bool, initial_pia_db: float | None
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -129,6 +132,7 @@ def phase_linear(
     return pia, kdp, limited
 
 
+@_perf_timed("x.qc")
 def x_qc(volume: Volume, station: Station, release_sha256: str) -> Volume:
     volume.validate(station, require_geometry=False)
     if station.band != "X":
@@ -206,23 +210,8 @@ def x_qc(volume: Volume, station: Station, release_sha256: str) -> Volume:
         candidate = np.zeros(shape, bool)
         rho = f.get("RHOHV")
         if rho is not None and shape[1] >= 3:
-            dr = float(np.median(np.diff(sweep.range_m)))
-            n = min(501, max(3, int(round(cfg.phase_window_m / dr))))
-            n += n % 2 == 0
-            measured = np.where(echo, f["DBZH"], np.nan)
-            # Finite support around the target is required; NaN is not zero.
-            med = median_filter(np.where(echo, measured, 0.0), size=(1, n), mode="nearest")
-            supported = minimum_filter1d(echo.astype(np.uint8), size=n, axis=1, mode="nearest") == 1
-            texture = np.abs(measured - med)
-            candidate = (
-                echo
-                & supported
-                & snr_good
-                & np.isfinite(rho)
-                & (rho < cfg.rho_candidate_max)
-                & (texture > cfg.texture_candidate_db)
-                & ~_mask(f, "WEATHER_PROTECTED_MASK", shape)
-            )
+            from .candidate_kernel import nonmet_candidate
+            candidate = nonmet_candidate(f, echo, snr_good, cfg, sweep.range_m)
         else:
             flags[echo] |= int(Flag.INCOMPLETE_POLARIMETRY)
         flags[candidate] |= int(Flag.NONMET_CANDIDATE)
@@ -287,6 +276,7 @@ def x_qc(volume: Volume, station: Station, release_sha256: str) -> Volume:
     return result
 
 
+@_perf_timed("s.accept_existing_qc")
 def accept_s_qc(volume: Volume, station: Station, network_sha256: str) -> Volume:
     """Translate an already-QC S volume without changing its reflectivity/masks."""
     volume.validate(station)

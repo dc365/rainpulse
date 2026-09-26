@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from rainpulse_algo.performance import (timed as _perf_timed)
+
 import hashlib
 import json
 import os
@@ -111,6 +113,7 @@ def _clutter_context_contract(beam: Any, request: RadarQCRequested) -> dict[str,
     }
 
 
+@_perf_timed("s.worker_compute", root=True)
 def _execute_basic_qc(request: RadarQCRequested, client: Minio) -> WorkerResult:
     profile = load_qc_profile(
         _required_file("RAINPULSE_RADAR_QC_CONFIG"),
@@ -239,6 +242,7 @@ def _completion_qc_summary(summary):
     return compact_qc_summary(summary)
 
 
+@_perf_timed("s.prepare_context")
 def prepare_qc_inputs(request, normalized, profile, client, *, reader=None, ancillary_maps=None):
     """One preparation path for online QC and frozen scientific replay."""
     if getattr(profile, "engine", None) == "open_source":

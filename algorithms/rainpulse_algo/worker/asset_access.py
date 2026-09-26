@@ -8,6 +8,8 @@ object hashes: selected reads deliberately fall back to full verification.
 
 from __future__ import annotations
 
+from rainpulse_algo.performance import (timed as _perf_timed, submit_with_context as _perf_submit)
+
 import hashlib
 import json
 import re
@@ -220,6 +222,7 @@ class ArtifactSession:
             "packed_full_fallback": 0,
         }
 
+    @_perf_timed("io.object_verified")
     def _read_entry(self, entry: Entry) -> tuple[str, bytes]:
         path = "/".join(filter(None, (self.prefix, self.index.data_prefix, entry.key)))
         identity = ObjectIdentity(self.namespace, self.bucket, path, entry.sha256, entry.size)
@@ -249,6 +252,7 @@ class ArtifactSession:
             prefixes=prefixes,
         )
 
+    @_perf_timed("io.load_verified")
     def load(
         self, *, keys: Iterable[str] | None = None, prefixes: Iterable[str] | None = None
     ) -> dict[str, bytes]:
@@ -295,7 +299,7 @@ def _parallel(items: list[Entry], function: Callable, workers: int) -> list[tupl
     result = []
     iterator = iter(items)
     with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="rp-asset") as pool:
-        pending = {pool.submit(function, entry) for entry in items[:workers]}
+        pending = {_perf_submit(pool, function, entry) for entry in items[:workers]}
         for _ in range(min(workers, len(items))):
             next(iterator)
         while pending:
@@ -305,7 +309,7 @@ def _parallel(items: list[Entry], function: Callable, workers: int) -> list[tupl
                     result.append(future.result())
                     entry = next(iterator, None)
                     if entry is not None:
-                        pending.add(pool.submit(function, entry))
+                        pending.add(_perf_submit(pool, function, entry))
             except BaseException:
                 for future in pending:
                     future.cancel()
@@ -334,6 +338,7 @@ class VerifiedArtifactReader:
         self.cache = cache if cache is not None else process_asset_cache()
         self.last_session: ArtifactSession | None = None
 
+    @_perf_timed("io.marker")
     def open(self, uri: str, *, expected_sha256: str | None = None) -> ArtifactSession:
         bucket, prefix = _uri(uri)
         # Never use a cached success marker: a missing, corrupt or replaced

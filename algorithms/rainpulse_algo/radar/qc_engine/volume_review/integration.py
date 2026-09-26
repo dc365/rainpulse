@@ -1,4 +1,6 @@
 """Thin adapters for RainPulse QCResult/NativeSweep; heavy imports remain lazy."""
+
+from rainpulse_algo.performance import (timed as _perf_timed, measure as _perf_measure)
 from dataclasses import replace
 import numpy as np
 from . import VERSION
@@ -17,6 +19,7 @@ def from_native(native):
                  native.fields,native.field_available,native.geometry_good,native.gap_after,times)
 
 
+@_perf_timed("s.volume_extensions")
 def review_result(result, native, *, near_clutter_context=None):
     cfg=getattr(result.profile,"volume_review",None)
     if cfg is None:
@@ -35,7 +38,8 @@ def review_result(result, native, *, near_clutter_context=None):
                 score=np.asarray(a[k])[n.original_indices]
                 wx |= np.isfinite(score)&(score>=result.profile.context.strong_support)
         protected.append(wx)
-    ev=evaluate(sweeps,cfg,protected=protected)
+    with _perf_measure("s.vor_evidence"):
+        ev=evaluate(sweeps,cfg,protected=protected)
     updated=[]; summary=dict(result.summary); records={k:dict(v) for k,v in summary["sweeps"].items()}
     dispositions=[]
     for n,new in zip(native,ev.arrays,strict=True):
@@ -87,13 +91,16 @@ def review_result(result, native, *, near_clutter_context=None):
     reviewed = replace(result,sweeps=tuple(updated),summary=summary,volume_review_artifacts=artifacts)
     if cfg.near_measurement is not None:
         from .near_measurement.integration import review_result as review_near_result
-        reviewed = review_near_result(reviewed, native)
+        with _perf_measure("s.nmr"):
+            reviewed = review_near_result(reviewed, native)
     if cfg.receiver_domain is not None:
         from .receiver_domain.integration import review_result as review_receiver
-        reviewed = review_receiver(reviewed, native)
+        with _perf_measure("s.rdr"):
+            reviewed = review_receiver(reviewed, native)
     if cfg.clutter_fusion is not None:
         from .clutter_fusion.integration import review_result as review_clutter
-        reviewed = review_clutter(reviewed, native, near_context=near_clutter_context)
+        with _perf_measure("s.cf"):
+            reviewed = review_clutter(reviewed, native, near_context=near_clutter_context)
     return reviewed
 
 

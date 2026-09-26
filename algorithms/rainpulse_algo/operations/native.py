@@ -2,6 +2,8 @@
 """Thin adapters to existing QC, diagnostics and immutable publication contracts."""
 from __future__ import annotations
 
+from rainpulse_algo.performance import (timed as _perf_timed)
+
 import hashlib
 import json
 import os
@@ -96,11 +98,13 @@ class NativeAdapter:
             from rainpulse_algo.multiband.managed import existing_runtime_executor
             self.multiband = existing_runtime_executor()
 
+    @_perf_timed("operations.verify_identity")
     def check_identity(self, expected) -> None:
         current = capture_identity(self.kind)
         if current != self.startup or current["fingerprint"] != expected["fingerprint"]:
             raise ConfigurationChanged("mounted code/configuration differs from frozen worker identity")
 
+    @_perf_timed("operations.check_existing")
     def existing(self, claim) -> bool:
         from rainpulse_algo.worker.object_store import ArtifactObjectReader
 
@@ -116,6 +120,7 @@ class NativeAdapter:
             ArtifactObjectReader(self.client).load(asset.uri)
         return True
 
+    @_perf_timed("operations.compute")
     def execute(self, claim):
         from minio.error import S3Error
 
@@ -147,6 +152,7 @@ class NativeAdapter:
     def metrics(result) -> dict[str, float]:
         return dict(result.observability)
 
+    @_perf_timed("operations.publication")
     def publish(self, claim, result, started_tick: float) -> None:
         from minio.error import S3Error
         from rainpulse_algo.worker.contracts import CompletedAsset, JobCompleted, JobCompletedPayload, result_event_id

@@ -8,6 +8,8 @@ No new marker schema; no weakening of the historical checksum contract.
 
 from __future__ import annotations
 
+from rainpulse_algo.performance import (timed as _perf_timed)
+
 import hashlib
 import shutil
 from collections import OrderedDict
@@ -104,6 +106,7 @@ class StagedArtifact(MutableMapping):
         self.stats["logical_reads"] += 1
         return value
 
+    @_perf_timed("io.local_stage")
     def copy_logical_to(self, key, destination):
         """Bounded local copy, primarily for a seekable legacy NPZ container."""
         self._ensure_open()
@@ -128,6 +131,7 @@ class StagedArtifact(MutableMapping):
                 out.write(data)
         return size
 
+    @_perf_timed("io.verify_packed_asset")
     def verify_packs(self):
         index = self.session.index
         for number, key in enumerate(sorted(index.physical)):

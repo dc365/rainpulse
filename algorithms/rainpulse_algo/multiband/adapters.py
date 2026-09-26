@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from rainpulse_algo.performance import (timed as _perf_timed)
+
 import numpy as np
 
 from .codec import decode_volume
@@ -238,6 +240,7 @@ def from_group(
     return Volume(metadata, result)
 
 
+@_perf_timed("input.decode_adapt")
 def read_volume(
     objects: dict[str, bytes],
     station: Station,
@@ -277,6 +280,7 @@ def read_volume(
     )
 
 
+@_perf_timed("input.decode_adapt_x")
 def read_x_qc_sweep(objects: dict[str, bytes], station: Station, source: dict, sweep_number: int, *, asset_sha256: str, maximum_bytes: int) -> tuple[Volume | None, int]:
     """Decode one X sweep and only the moments consumed by standalone QC.
 

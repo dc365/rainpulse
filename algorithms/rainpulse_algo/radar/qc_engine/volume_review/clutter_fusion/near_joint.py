@@ -1,4 +1,6 @@
 """Near revision evidence/decision within the existing CF disposition owner."""
+
+from rainpulse_algo.performance import (timed as _perf_timed)
 from enum import IntEnum,IntFlag
 import numpy as np
 from scipy.ndimage import binary_dilation,label
@@ -397,6 +399,7 @@ def decision(a,cfg):
     return result
 
 
+@_perf_timed("s.validate.near_joint")
 def validate(a,cfg):
     if cfg.near_revision is None:return
     c=cfg.near_revision;obs=a['CF_OBSERVED_MASK']==1
@@ -467,12 +470,11 @@ def validate(a,cfg):
             raise ValueError('strong near object bookkeeping differs')
         if np.any(propagated&(oid==0)):
             raise ValueError('strong near propagation lacks an object identity')
-        for value in np.unique(oid[propagated]):
-            component=oid==value;members=int(component.sum());seeds=int((component&core).sum())
-            if members!=int(size[component][0]) or not np.allclose(fraction[component],seeds/members):
-                raise ValueError('strong near object size or seed fraction differs')
-            if members>strong.maximum_object_gates or seeds<strong.minimum_object_seed_gates or seeds/members<strong.minimum_object_seed_fraction:
-                raise ValueError('strong near object lacks sufficient bounded seed support')
+        from ...group_validation import validate_seed_objects
+        validate_seed_objects(oid, size, fraction, core, propagated,
+            maximum_object_gates=strong.maximum_object_gates,
+            minimum_seed_gates=strong.minimum_object_seed_gates,
+            minimum_seed_fraction=strong.minimum_object_seed_fraction)
         prior1=a['CF_NR_TEMPORAL_LOW_RHO_PRIOR1_MASK']==1
         prior2=a['CF_NR_TEMPORAL_LOW_RHO_PRIOR2_MASK']==1
         temporal_support=a['CF_NR_TEMPORAL_LOW_RHO_SUPPORT_MASK']==1
@@ -488,14 +490,12 @@ def validate(a,cfg):
             raise ValueError('temporal low-rho object bookkeeping differs')
         if np.any(temporal_object&(temporal_oid==0)):
             raise ValueError('temporal low-rho object identity differs')
-        for value in np.unique(temporal_oid[temporal_object]):
-            component=temporal_oid==value;members=int(component.sum())
-            if members!=int(temporal_size[component][0]):
-                raise ValueError('temporal low-rho object size differs')
-            if (members<strong.temporal_low_rho.minimum_object_gates
-                    or members>strong.temporal_low_rho.maximum_object_gates
-                    or float(temporal_fraction[component][0])+1e-6<strong.temporal_low_rho.minimum_object_recurrence_fraction):
-                raise ValueError('temporal low-rho object lacks recurrent support')
+        if np.any(temporal_object):
+            from ...group_validation import validate_temporal_objects
+            validate_temporal_objects(temporal_oid, temporal_size, temporal_fraction,
+                temporal_object, minimum_gates=strong.temporal_low_rho.minimum_object_gates,
+                maximum_gates=strong.temporal_low_rho.maximum_object_gates,
+                minimum_recurrence_fraction=strong.temporal_low_rho.minimum_object_recurrence_fraction)
         if strong.temporal_low_rho is not None and temporal_available.any():
             expected_temporal_domain=(obs&np.isfinite(a['CF_RAW_DBZH'])
                 &np.isfinite(a['CF_NR_STRONG_RHOHV'])&np.isfinite(a['CF_NR_STRONG_SNR_DB'])

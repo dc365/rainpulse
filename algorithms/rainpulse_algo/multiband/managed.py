@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from rainpulse_algo.performance import (timed as _perf_timed)
+
 from collections import OrderedDict
 from pathlib import Path
 import os
@@ -117,6 +119,7 @@ class Executor:
             maximum_entries=self.execution.maximum_cut_cache_entries,
         )
 
+    @_perf_timed("multiband.execute", root=True)
     def execute(self, request: dict, reader, *, artifact_digest: Callable[[dict], str]):
         started = time.perf_counter()
         p = request["payload"]
@@ -270,6 +273,7 @@ class Executor:
         }
         return objects, summary, metrics
 
+    @_perf_timed("x.standalone")
     def _execute_x_qc(self, request: dict, reader, artifact_digest: Callable[[dict], str], started: float):
         p = request["payload"]
         source = p["sources"][0]
@@ -375,6 +379,7 @@ def selected_source_keys(keys, source_format: str, *, x_qc_only: bool = False) -
     return sorted(selected)
 
 
+@_perf_timed("x.read_next_cut")
 def _x_qc_sweeps(session, raw_objects: dict[str, bytes] | None, station, source: dict, sha: str, maximum_bytes: int):
     """Yield decoded X sweeps, loading one normalized Zarr sweep at a time."""
     if session is None:

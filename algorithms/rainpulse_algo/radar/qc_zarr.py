@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from rainpulse_algo.performance import (timed as _perf_timed)
+
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -98,6 +100,7 @@ def build_qc_zarr_store(
     return objects
 
 
+@_perf_timed("s.serialize_validate")
 def build_validated_qc_zarr_store(
     normalized_objects: Mapping[str, bytes],
     result: QCResult,
@@ -118,6 +121,7 @@ def build_validated_qc_zarr_store(
     return objects, validate_qc_zarr_store(objects)
 
 
+@_perf_timed("s.zarr_encoding")
 def _build_qc_zarr_store_objects(
     normalized_objects: Mapping[str, bytes],
     result: QCResult,
@@ -262,6 +266,7 @@ def _build_qc_zarr_store_objects(
     return {str(key): bytes(value) for key, value in output_store.items()}
 
 
+@_perf_timed("s.zarr_validation")
 def validate_qc_zarr_store(objects: Mapping[str, bytes]) -> dict[str, Any]:
     if ".zgroup" not in objects or ".zattrs" not in objects or "qc/summary.json" not in objects:
         raise QCInputError("QC Zarr store is missing root metadata or summary")

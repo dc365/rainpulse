@@ -7,6 +7,8 @@ a failure in the last cut cannot publish the preceding partial product.
 
 from __future__ import annotations
 
+from rainpulse_algo.performance import (timed as _perf_timed)
+
 import shutil
 import time
 from collections import OrderedDict
@@ -143,6 +145,7 @@ class LayerWorkspace:
         self.paths.clear()
 
 
+@_perf_timed("fusion.consume_stream")
 def build_composite_streaming(
     volumes,
     network: Network,

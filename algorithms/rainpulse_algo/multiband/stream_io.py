@@ -7,6 +7,8 @@ native-stream-v1 output is deliberately distinct from the <=32-cut eager format.
 
 from __future__ import annotations
 
+from rainpulse_algo.performance import (timed as _perf_timed)
+
 import copy
 import hashlib
 import json
@@ -143,6 +145,7 @@ class GroupCuts:
         if not self.numbers:
             raise ValueError("no reflectivity cuts")
 
+    @_perf_timed("input.zarr_cut")
     def read(self, number):
         if number not in self.gates:
             raise KeyError(number)
@@ -280,6 +283,7 @@ class NPZCuts:
             self.archive.close()
             raise
 
+    @_perf_timed("input.npz_cut")
     def read(self, number):
         if number not in self.gates:
             raise KeyError(number)

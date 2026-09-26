@@ -2,6 +2,8 @@
 """A numerical candidate and small quicklooks; rendering never changes QC values."""
 from __future__ import annotations
 
+from rainpulse_algo.performance import (timed as _perf_timed)
+
 import hashlib
 import json
 import struct
@@ -21,6 +23,7 @@ MAX_X_QC_PREVIEW_BYTES = 512 * 1024**2
 MAX_PPI_INTERPOLATION_GAP_DEG = 3.0
 
 
+@_perf_timed("preview.png_encoding")
 def png(rgba: np.ndarray) -> bytes:
     if rgba.ndim != 3 or rgba.shape[2] != 4 or rgba.dtype != np.uint8:
         raise ValueError("RGBA uint8 required")
@@ -44,67 +47,17 @@ def quicklook(values: np.ndarray) -> bytes:
 def polar_quicklook(azimuth_deg: np.ndarray, range_m: np.ndarray, values: np.ndarray,
                     *, uncertain: np.ndarray | None = None, actions: np.ndarray | None = None,
                     size: int = 720, map_sampling=None, elevation_deg=None) -> bytes:
-    """Render one polar sweep into a station-centred PPI without site geometry."""
-    az = np.asarray(azimuth_deg, dtype=float) % 360
-    ranges = np.asarray(range_m, dtype=float)
-    data = np.asarray(values)
-    if data.shape != (len(az), len(ranges)) or len(az) == 0 or len(ranges) == 0:
+    """Backward-compatible single-view API; multi-field callers share one plan."""
+    from .preview_sampling import prepare_polar_sampling, render_polar_sampling
+    if np.asarray(values).shape != (len(azimuth_deg), len(range_m)) or not len(azimuth_deg) or not len(range_m):
         raise ValueError("polar quicklook coordinates and field differ")
-    radius = max(float(ranges[-1]), 1.0)
-    axis = (np.arange(size, dtype=float) - (size - 1) / 2) * (2 * radius / size)
-    xx, yy = np.meshgrid(axis, axis)
-    distance = np.hypot(xx, yy)
-    bearing = np.rad2deg(np.arctan2(xx, yy)) % 360
-    if map_sampling is not None:
-        distance, bearing = map_sampling
-    # Binary-search sorted azimuths instead of allocating a pixels-by-rays cube.
-    order = np.argsort(az)
-    ordered = az[order]
-    extended = np.concatenate(([ordered[-1] - 360], ordered, [ordered[0] + 360]))
-    ray_order = np.concatenate(([order[-1]], order, [order[0]]))
-    right = np.searchsorted(extended, bearing, side="left")
-    left = np.clip(right - 1, 0, len(extended) - 1)
-    right = np.clip(right, 0, len(extended) - 1)
-    choose_right = np.abs(extended[right] - bearing) < np.abs(extended[left] - bearing)
-    rays = ray_order[np.where(choose_right, right, left)]
-    angular_distance = np.minimum(np.abs(az[rays] - bearing), 360 - np.abs(az[rays] - bearing))
-    circular_steps = np.diff(np.concatenate((ordered, [ordered[0] + 360])))
-    angular_limit = min(
-        max(float(np.median(circular_steps[circular_steps > 0])) * 1.5, 0.1)
-        if np.any(circular_steps > 0) else 0.1,
-        MAX_PPI_INTERPOLATION_GAP_DEG,
-    )
-    if map_sampling is not None:
-        # Invert the 4/3-Earth ground-arc equation using each selected ray's
-        # actual elevation. No MSL height is assumed for this display mapping.
-        effective_radius = 6371008.8 * 4 / 3
-        angle = distance / effective_radius
-        elevation = np.deg2rad(np.broadcast_to(elevation_deg, az.shape)[rays])
-        denominator = np.cos(elevation + angle)
-        distance = np.where(denominator > 0, effective_radius * np.sin(angle) / denominator, np.inf)
-    gates = np.searchsorted(ranges, distance, side="left")
-    valid = (distance <= radius) & (gates < len(ranges)) & (angular_distance <= angular_limit)
-    gates = np.clip(gates, 0, len(ranges) - 1)
-    sample = data[rays, gates]
-    valid &= np.isfinite(sample)
-    rgba = np.zeros((size, size, 4), np.uint8)
-    index = np.clip(np.searchsorted(LEVELS, np.nan_to_num(sample, nan=-100), side="right") - 1, 0, len(LEVELS) - 1)
-    rgba[:, :, :3] = COLORS[index]
-    rgba[:, :, 3] = np.where(valid, 255, 0)
-    if uncertain is not None:
-        mask = np.asarray(uncertain, dtype=bool)[rays, gates] & valid
-        # Amber pixels identify provisional/uncertain gates without hiding echo strength.
-        rgba[mask, :3] = np.array([238, 160, 40], dtype=np.uint8)
-    if actions is not None:
-        action = np.asarray(actions, dtype=np.uint8)[rays, gates]
-        rejected = (action == 2) & valid
-        uncertain_gate = (action == 3) & valid
-        rgba[:, :, 3] = np.where(rejected | uncertain_gate, 255, 0)
-        rgba[rejected, :3] = np.array([191, 57, 48], dtype=np.uint8)
-        rgba[uncertain_gate, :3] = np.array([238, 160, 40], dtype=np.uint8)
-    return png(rgba[::-1])
+    plan = prepare_polar_sampling(azimuth_deg, range_m, size=size,
+        map_sampling=map_sampling, elevation_deg=elevation_deg)
+    return render_polar_sampling(plan, values, LEVELS, COLORS, png,
+                                 uncertain=uncertain, actions=actions)
 
 
+@_perf_timed("x.preview")
 def x_qc_objects(volumes) -> dict[str, bytes]:
     """Small, geometry-independent raw/QC PPI comparisons from sweep volumes."""
     if hasattr(volumes, "sweeps"):
@@ -124,12 +77,14 @@ def x_qc_objects(volumes) -> dict[str, bytes]:
             ranges = sweep.range_m
             raw = fields["DBZH_RAW"]
             action = fields["QC_ACTION"]
-            objects[raw_key] = polar_quicklook(azimuth, ranges, raw)
+            from .preview_sampling import prepare_polar_sampling, render_polar_sampling
+            plan = prepare_polar_sampling(azimuth, ranges)
+            objects[raw_key] = render_polar_sampling(plan, raw, LEVELS, COLORS, png)
             # Confirmed rejects are removed from the display; uncertain gates retain
             # their reflectivity and are highlighted in amber in a separate layer.
             qc = np.where(action == 2, np.nan, fields["DBZH_QC"])
-            objects[qc_key] = polar_quicklook(azimuth, ranges, qc)
-            objects[flags_key] = polar_quicklook(azimuth, ranges, raw, actions=action)
+            objects[qc_key] = render_polar_sampling(plan, qc, LEVELS, COLORS, png)
+            objects[flags_key] = render_polar_sampling(plan, raw, LEVELS, COLORS, png, actions=action)
             if sum(map(len, objects.values())) > MAX_X_QC_PREVIEW_BYTES:
                 raise ValueError("X QC PPI preview exceeds 512 MiB output budget")
             layers.extend([
@@ -160,6 +115,7 @@ def x_qc_objects(volumes) -> dict[str, bytes]:
     return objects
 
 
+@_perf_timed("x.map_preview")
 def geographic_sweep_preview(sweep, metadata, raw, qc, action, objects, size=720):
     """Sample native polar gates onto a north-up EPSG:4326 display raster.
 
@@ -195,9 +151,11 @@ def geographic_sweep_preview(sweep, metadata, raw, qc, action, objects, size=720
     azimuth, _, distance = geod.inv(np.full_like(xx, lon), np.full_like(yy, lat), xx, yy)
     sampling = (distance, azimuth % 360)
     paths = {name: f"sweeps/{sweep.number}/map_{name}.png" for name in ("raw", "qc", "flags")}
+    from .preview_sampling import prepare_polar_sampling, render_polar_sampling
+    plan = prepare_polar_sampling(sweep.azimuth_deg, ranges, size=size,
+                                 map_sampling=sampling, elevation_deg=elevations)
     for name, values, actions in (("raw", raw, None), ("qc", qc, None), ("flags", raw, action)):
-        objects[paths[name]] = polar_quicklook(sweep.azimuth_deg, ranges, values, actions=actions,
-                                              size=size, map_sampling=sampling, elevation_deg=elevations)
+        objects[paths[name]] = render_polar_sampling(plan, values, LEVELS, COLORS, png, actions=actions)
     if sum(map(len, objects.values())) > MAX_X_QC_PREVIEW_BYTES:
         raise ValueError("X QC map preview exceeds 512 MiB output budget")
     return {"crs": "EPSG:4326", "bounds": [west, south, east, north],
@@ -205,6 +163,7 @@ def geographic_sweep_preview(sweep, metadata, raw, qc, action, objects, size=720
             "coordinate_source": "normalized_volume_site", "projection_version": "wgs84-geodesic-4over3-v1", **paths}
 
 
+@_perf_timed("fusion.product_encoding")
 def composite_objects(result: Composite) -> dict[str, bytes]:
     arrays = encode_arrays(result.arrays)
     objects = {"arrays.npz": arrays, "cr.png": quicklook(result.arrays["CR_DBZH"]),
@@ -238,6 +197,7 @@ def difference_quicklook(values: np.ndarray) -> bytes:
     return png(rgba[::-1])
 
 
+@_perf_timed("fusion.comparison_encoding")
 def sx_comparison_objects(result: Composite, band_results: dict[str, Composite | None]) -> dict[str, bytes]:
     """Attach S-only, X-only and joint-grid comparisons to one frozen task result."""
     objects = composite_objects(result)

@@ -6,8 +6,6 @@ The reference expression is the existing candidate/age/resolution tie rule.
 
 from __future__ import annotations
 
-from rainpulse_algo.performance import (timed as _perf_timed, observe as _perf_observe)
-
 import numpy as np
 
 _COMPILED = None
@@ -67,7 +65,6 @@ def require_numba():
     return _COMPILED
 
 
-@_perf_timed("fusion.selection")
 def select_winners(
     admitted,
     candidate,
@@ -111,12 +108,7 @@ def select_winners(
         resolution,
     )
     if backend == "numba":
-        compiled = require_numba()
-        signatures = len(compiled.signatures)
-        compiled(*args)
-        added = len(compiled.signatures) - signatures
-        if added:
-            _perf_observe("numba.runtime_new_signatures", int(added))
+        require_numba()(*args)
         return
     if backend != "numpy":
         raise ValueError("unknown selection backend")
@@ -136,6 +128,23 @@ def select_winners(
 
 
 def warmup(backend):
-    """Compile the actual contiguous and structured state layouts before tasks."""
-    from .selection_warmup import prewarm
-    return prewarm(select_winners, require_numba, backend)
+    """Warm the common float32-observation signature before taking tasks."""
+    if backend == "numpy":
+        return
+    if backend != "numba":
+        raise ValueError("unknown selection backend")
+    b = np.ones((2, 2), bool)
+    f = np.ones((2, 2), np.float64)
+    z = f.astype(np.float32)
+    i = np.zeros((2, 2), np.int64)
+    state = (
+        np.full((2, 2), -np.inf),
+        z.copy(),
+        i.astype(np.int32),
+        i.astype(np.int32),
+        i.astype(np.int32),
+        z.copy(),
+        z.copy(),
+        z.copy(),
+    )
+    select_winners(b, f, ~b, z, i, i, f, f, f, 0, *state, backend=backend)

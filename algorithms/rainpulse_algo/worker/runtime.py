@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from rainpulse_algo.performance import (timed as _perf_timed)
+
 import asyncio
 import json
 import os
@@ -194,6 +196,7 @@ class Worker:
             with suppress(asyncio.CancelledError):
                 await heartbeat
 
+    @_perf_timed("worker.request", root=True)
     async def _process_request(self, message: Any, jetstream: Any, request: Any) -> None:
         delivery_attempt = self._delivery_attempt(message)
 
@@ -387,6 +390,7 @@ class Worker:
             headers=headers,
         )
 
+    @_perf_timed("worker.completion")
     def _build_completion(
         self,
         *,
