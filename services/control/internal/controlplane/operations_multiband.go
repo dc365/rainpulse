@@ -123,9 +123,9 @@ func (b *OperationsBuilder) buildMultiBand(ctx context.Context, s operations.Sel
 				if scan.QCURI != nil {
 					item.QCURI = *scan.QCURI
 				}
-				// QC may have completed after raw ingest. Freeze the later catalog update,
-				// rather than pretend a newly derived asset existed at original ingest.
-				if station.Band == "S" && scan.UpdatedAt.After(item.AvailableAt) {
+				// Both normalized X and QC S assets can finish after raw ingest (or be rebuilt).
+				// Freeze the later catalog update as actual derived-input availability.
+				if scan.UpdatedAt.After(item.AvailableAt) {
 					item.AvailableAt = scan.UpdatedAt
 				}
 				scans = append(scans, item)

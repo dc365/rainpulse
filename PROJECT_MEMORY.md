@@ -7,6 +7,40 @@ rules remain in `AGENTS.md`; implementation details remain in the referenced RP
 documents. Do not add passwords, tokens, private data-source details, or raw
 operational data here.
 
+## Current S/X mainline: Priority 1 (2026-09-27)
+
+- User requires Priority 1 (source completeness / full-day availability / per-frame
+  evidence) to finish before Priority 2 (QC and fusion effect quantification).
+  Do not mix algorithm tuning, QPE/forecast enablement or unrelated redesign.
+  Acceptance and remaining work: `docs/SX_PRIORITY1_20260927.md`.
+- Source work is in `/tmp/rainpulse-sx-completion`; changes are fast-forwarded to
+  local main and pushed. Preserve unrelated dirty files in the original main.
+- All 5,466 X file headers audited; 24 candidate station configs created with
+  complete observed moment mapping. 22 stations have normalized real samples;
+  ZF703/ZF801 remain failed due to native subsecond time reversals. Do not guess
+  time units or claim these are valid/verified stations.
+- Twelve S QC rebuilds succeeded; repaired three mixed-generation cycles and
+  verified source-probe diagnostic coverage 106/106 existing analysis times.
+- 105 control is `67a3dc2`, Web `21bd294`; full-network config and 1 km regional
+  experimental grid are active. Decoder is `sx-priority1-decode-3d460f4`, two
+  replicas limited to 8 GiB / 2 CPU each. Normalized packed storage is enabled;
+  real sample reduced publication from ~23 s / 13,790 objects to ~22 ms / 1 object.
+- Multiband still `sx-priority1-multiband-21bd294` until its current work drains;
+  `sx-priority1-multiband-41ea4b2` is built and awaits activation. It fixes ZF504
+  standalone duplicate-bearing rejection while preserving native rows; spatial
+  validation remains strict and map sampling chooses the last native row.
+- First 7 full-field X QC samples succeeded; remaining sample runs and full-network
+  composite are recorded under `.build/sx-priority1` and `/tmp/sx-priority1-*` on
+  105. Full-network test run: `af9ebd66-22ef-4347-853b-0b64c1e709fe`.
+- First-hour X import is running via `.build/sx-priority1/backfill.py 1`, with
+  `.build/sx-priority1/backfill/state.json` and per-batch receipts. Queue bounded,
+  120 GiB disk reserve, stop on newly failed decode; two time-invalid stations
+  excluded explicitly. All-day S/X QC/products are NOT yet completed.
+- Next: verify full-network numeric/source coverage result, activate duplicate-ray
+  fix and regenerate failed X sample, verify packed-source QC, then continue
+  bounded full-day import/QC/composite and validate UI/time coverage. Only after
+  Priority 1 acceptance proceed to Priority 2.
+
 ## S/X multiband candidate (2026-09-24)
 
 - 2026-09-26 correction: X QC now uses the same two basemaps as S, with
