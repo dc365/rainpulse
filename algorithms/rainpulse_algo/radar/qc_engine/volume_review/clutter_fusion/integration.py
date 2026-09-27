@@ -3,6 +3,7 @@ from dataclasses import replace
 import hashlib
 import numpy as np
 from ..data import Sweep,json_bytes,array_digest
+from rainpulse_algo.radar.qc_engine.raw_reuse import shared_native_view
 from .context import ContextMetadata
 from .background import for_native
 from .classifier import protections,EchoClass,Family,Reason
@@ -17,6 +18,7 @@ def attributes(cfg,low_quality_flag):
             "qc_clutter_fusion_low_quality_flag":int(low_quality_flag)}
 
 
+@shared_native_view("cf-explicit-time-and-original-index-policy")
 def raw_sweep(n):
     times=np.asarray(n.ray_time)
     if times.dtype.kind=="M":

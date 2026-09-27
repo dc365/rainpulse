@@ -171,22 +171,18 @@ def build_composite_streaming(
     out = allocate_output(grid)
     transform = Transformer.from_crs(grid.crs, "EPSG:4326", always_xy=True)
     geometry = GeometryCache(options.geometry_cache_bytes)
-    workspace_options = replace(options, layer_memory_bytes=0) if comparison else options
-    main_root = Path(directory) / "layers-sx" if comparison else directory
-    if comparison:
-        main_root.mkdir()
-    workspace = LayerWorkspace(grid, workspace_options, main_root)
-    band_out = {band: allocate_output(grid) for band in ("S", "X")} if comparison else {}
-    band_workspaces = {}
-    if comparison:
-        if workspace.bytes * 3 > options.maximum_scratch_bytes:
-            raise ValueError("S/X comparison height state exceeds aggregate scratch budget")
-        if workspace.bytes * 3 > shutil.disk_usage(directory).free:
-            raise ValueError("insufficient scratch space for S/X comparison state")
-        for band in ("S", "X"):
-            band_root = Path(directory) / f"layers-{band.lower()}"
-            band_root.mkdir()
-            band_workspaces[band] = LayerWorkspace(grid, workspace_options, band_root)
+    from .workspace_pool import WorkspacePool, report_workspace_metrics
+
+    # One aggregate budget, including SX, S and X. No forced spill for a small
+    # comparison product and no independent per-workspace cache allowance.
+    pool = WorkspacePool(grid, options, directory, comparison=comparison)
+    workspace = pool.workspace("SX")
+    band_workspaces = {band: pool.workspace(band) for band in ("S", "X")} if comparison else {}
+    try:
+        band_out = {band: allocate_output(grid) for band in ("S", "X")} if comparison else {}
+    except BaseException:
+        pool.close()
+        raise
     sources, skipped = [], []
     band_sources = {"S": [], "X": []}
     band_skipped = {"S": [], "X": []}
@@ -311,6 +307,7 @@ def build_composite_streaming(
                         grid,
                         backend=options.selection_backend,
                     )
+                del layers  # borrowed views must not retain an evicted tile
                 if comparison:
                     with band_workspaces[station.band].tile(row, stop) as layers:
                         update_tile(
@@ -324,6 +321,7 @@ def build_composite_streaming(
                             grid,
                             backend=options.selection_backend,
                         )
+                    del layers
             del v, s, prepared, fp, q
             compute_seconds += time.perf_counter() - compute_start
         compute_start = time.perf_counter()
@@ -333,22 +331,15 @@ def build_composite_streaming(
             stop = min(row + grid.tile_rows, grid.height)
             with workspace.tile(row, stop, write=False) as layers:
                 finish_tile(layers, out, np.s_[row:stop, :], grid)
+            del layers
             if comparison:
                 for band in ("S", "X"):
                     with band_workspaces[band].tile(row, stop, write=False) as layers:
                         finish_tile(layers, band_out[band], np.s_[row:stop, :], grid)
-        stats.update(
-            height_state_bytes=workspace.bytes * (3 if comparison else 1),
-            layer_scratch_bytes=workspace.scratch_bytes
-            + sum(item.scratch_bytes for item in band_workspaces.values()),
-            peak_height_tile_bytes=workspace.peak_tile_bytes,
-            layer_file_read_bytes=workspace.read_bytes,
-            layer_file_write_bytes=workspace.write_bytes,
-            geometry_cache_peak_bytes=geometry.peak,
-            geometry_hits=geometry.hits,
-            geometry_misses=geometry.misses,
-            layer_state_in_memory=int(workspace.in_memory),
-        )
+                    del layers
+        stats.update(pool.metrics())
+        stats.update(geometry_cache_peak_bytes=geometry.peak,
+                     geometry_hits=geometry.hits, geometry_misses=geometry.misses)
         result = finish_composite(
             out, grid, network, product, analysis_time, cutoff, sources, skipped
         )
@@ -372,6 +363,12 @@ def build_composite_streaming(
         stats["fusion_ms"] = compute_seconds * 1000
         return result
     finally:
-        workspace.close()
-        for item in band_workspaces.values():
-            item.close()
+        # Only fully reduced outputs leave this function. Scratch/cache contents
+        # are private intermediates and are discarded on both success and error.
+        try:
+            stats.update(pool.metrics())
+        finally:
+            pool.close()
+            stats["layer_discarded_dirty_tiles"] = sum(v["discarded_dirty_tiles"] for v in pool.stats.values())
+            stats["layer_cleanup_complete"] = 1
+            report_workspace_metrics(stats)

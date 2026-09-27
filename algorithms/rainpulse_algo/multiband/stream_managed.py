@@ -15,26 +15,23 @@ from tempfile import TemporaryDirectory
 
 from rainpulse_algo.performance import timed as _perf_timed
 
-from .model import MAX_SWEEPS, epoch, json_bytes
+from .model import MAX_FUSION_SWEEPS, MAX_SWEEPS, epoch, json_bytes
+from .input_reuse import cached_source, remember_source
 from .product import MAX_X_QC_PREVIEW_BYTES, sx_comparison_objects, x_qc_objects
 from .quality import accept_s_qc, x_qc
 from .stream_fusion import DTYPE, build_composite_streaming
 from .stream_io import GroupCuts, NPZCuts
 
 
-def _scratch_reservation(height_bytes, options, *, comparison):
-    # S, X and fused layers all spill in comparison mode, regardless of the
-    # single-layer memory threshold. Reserve their aggregate before staging.
-    height_scratch = (
-        height_bytes
-        if comparison or height_bytes > options.layer_memory_bytes
-        else 0
-    )
-    reserved = height_scratch * 3 + options.maximum_object_bytes
+def _scratch_reservation(height_bytes, options, *, comparison, tile_bytes=0):
+    count = 3 if comparison else 1
+    total = height_bytes * count
+    # Intermediate replacement needs at most one extra tile while renaming.
+    height_scratch = total + tile_bytes if total > options.layer_memory_bytes else 0
+    reserved = height_scratch + options.maximum_object_bytes
     if reserved >= options.maximum_scratch_bytes:
         raise ValueError("execution scratch budget cannot hold selected workspace")
     return reserved
-
 
 @_perf_timed("multiband.streaming_pipeline")
 def execute(executor, request, reader, *, started):
@@ -48,7 +45,8 @@ def execute(executor, request, reader, *, started):
     height_bytes = grid.width * grid.height * len(grid.levels_m_msl) * DTYPE.itemsize
     # One station's packed source + seekable NPZ + height workspace + output coexist.
     reserved = _scratch_reservation(
-        height_bytes, options, comparison=p["mode"] == "sx_composite"
+        height_bytes, options, comparison=p["mode"] == "sx_composite",
+        tile_bytes=grid.width * min(grid.tile_rows, grid.height) * len(grid.levels_m_msl) * DTYPE.itemsize,
     )
     metrics = {
         "input_read_ms": 0.0,
@@ -88,6 +86,16 @@ def execute(executor, request, reader, *, started):
                 session = reader.open(source["input_uri"])
                 if not hasattr(session, "staged"):
                     raise ValueError("verified reader lacks bounded staging support")
+                source_identity, reused = cached_source(
+                    executor, session, source, purpose="sx_composite",
+                    maximum_cuts=min(options.maximum_sweeps, MAX_FUSION_SWEEPS),
+                    maximum_gates=options.maximum_volume_gates, metrics=metrics)
+                if reused is not None:
+                    metrics["input_read_ms"] += (time.perf_counter() - mark) * 1000
+                    for value in reused:
+                        yield value
+                    del reused, value
+                    continue
                 keys = selected_source_keys(
                     session.index.logical, station.source, x_qc_only=station.band == "X"
                 )
@@ -174,6 +182,8 @@ def execute(executor, request, reader, *, started):
                                 metrics["decoded_cut_cache_hits"] += 1
                             yield value
                             del value
+                        remember_source(executor, source_identity, base_key, cuts.numbers,
+                                        [cuts.gates[n] for n in cuts.numbers], metrics)
                     finally:
                         if isinstance(cuts, NPZCuts):
                             cuts.close()
@@ -300,7 +310,17 @@ def _execute_x_qc(executor, request, reader, *, started):
             keys=keys,
         )
 
+        source_identity, reused = cached_source(
+            executor, session, source, purpose="x_qc",
+            maximum_cuts=min(options.maximum_sweeps, MAX_SWEEPS),
+            maximum_gates=gate_limit, metrics=metrics)
+
         def qc_volumes():
+            if reused is not None:
+                for value in reused:
+                    metrics["gate_count"] += value.sweeps[0].fields["DBZH"].size
+                    yield value
+                return
             with staged as mapping:
                 metrics["input_read_ms"] += (time.perf_counter() - mark) * 1000
                 metrics["packed_staged_bytes"] += mapping.stats["staged_bytes"]
@@ -369,6 +389,8 @@ def _execute_x_qc(executor, request, reader, *, started):
                         metrics["gate_count"] = gate_total
                         yield value
                         del value
+                    remember_source(executor, source_identity, base_key, cuts.numbers,
+                                    [cuts.gates[n] for n in cuts.numbers], metrics)
                 finally:
                     if isinstance(cuts, NPZCuts):
                         cuts.close()
@@ -383,7 +405,11 @@ def _execute_x_qc(executor, request, reader, *, started):
                 )
 
         mark = time.perf_counter()
-        objects = x_qc_objects(qc_volumes())
+        stream = qc_volumes()
+        try:
+            objects = x_qc_objects(stream)
+        finally:
+            stream.close()
         metrics["encode_ms"] = max(
             0.0,
             (time.perf_counter() - mark) * 1000

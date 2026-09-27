@@ -14,6 +14,7 @@ import numpy as np
 from ..data import ResourceLimit, array_digest, json_bytes
 from ..geometry import wrap, runs
 from .core import domains, fit_fold, supported_indices, intervals, MOMENTS
+from .reuse_geometry import ExcludedRowMask, FamilyGeometry
 
 
 class Reason(IntFlag):
@@ -116,7 +117,7 @@ def _compatible_models(s, models, cfg):
     return True
 
 
-def _own_states(s, row, block, shared, cfg, prepared, budget):
+def _own_states(s, row, block, shared, cfg, prepared, budget, geometry=None):
     """Keep physical range order. Group supported stable runs, never fill gaps.
 
     Each 2 km cell has explicit actual sample support. Unstable cells, missing
@@ -125,7 +126,8 @@ def _own_states(s, row, block, shared, cfg, prepared, budget):
     criterion. All states are built without reading the current target.
     """
     f, a = prepared; fc = cfg.source_family; r = s.ranges
-    bix = (r//cfg.block_m).astype(int); fine = (r//fc.local_block_m).astype(int)
+    geometry = FamilyGeometry(s, cfg) if geometry is None else geometry
+    bix, fine = geometry.blocks, geometry.fine
     train = (r >= cfg.minimum_range_m) & (abs(bix-block) > cfg.guard_blocks)
     ok = train.copy()
     for k in MOMENTS:
@@ -208,19 +210,20 @@ def _own_states(s, row, block, shared, cfg, prepared, budget):
     return states, 'FITTED' if states else 'OWN_STATE_INSUFFICIENT'
 
 
-def fit_family(s, row, block, cfg, prepared=None, *, donor_prepared=None, budget=None):
+def fit_family(s, row, block, cfg, prepared=None, *, donor_prepared=None, budget=None, geometry=None):
     """Target-independent source reference. No recursive borrowing allowed."""
     f, a = domains(s, cfg) if prepared is None else prepared
     fc = cfg.source_family; budget = Budget() if budget is None else budget
     if fc is None:
         return None, 'DISABLED'
     if donor_prepared is None:
-        aa = dict(a); aa['SNR'] = a['SNR'].copy(); aa['SNR'][row] = False
+        aa = dict(a); aa['SNR'] = ExcludedRowMask(a['SNR'], row)
         donor_prepared = f, aa
+    geometry = FamilyGeometry(s, cfg) if geometry is None else geometry
     models = []
-    for donor in near_rows(s, row, cfg):
+    for donor in geometry.neighbors(row, lambda: near_rows(s, row, cfg)):
         budget.take('donor_trials', fc.maximum_donor_trials)
-        m, _ = fit_fold(s, donor, block, cfg, donor_prepared)
+        m, _ = fit_fold(s, donor, block, cfg, donor_prepared, range_blocks=geometry.blocks)
         if m is not None:
             models.append(m)
     if len(models) < fc.minimum_donors:
@@ -249,10 +252,10 @@ def fit_family(s, row, block, cfg, prepared=None, *, donor_prepared=None, budget
               'phase_center_deg': float(np.angle(np.mean(np.exp(1j*np.deg2rad([m['phase_center_deg'] for m in models]))), deg=True)),
               'zdr_center_db': float(np.median([m['zdr_center_db'] for m in models])),
               'rho_bounds': [float(min(m['rho_bounds'][0] for m in models)), float(max(m['rho_bounds'][1] for m in models))]}
-    states, status = _own_states(s, row, block, shared, cfg, (f,a), budget)
+    states, status = _own_states(s, row, block, shared, cfg, (f,a), budget, geometry)
     if not states:
         return None, status
-    pool = (s.ranges >= cfg.minimum_range_m) & (abs((s.ranges//cfg.block_m).astype(int)-block) > cfg.guard_blocks)
+    pool = (s.ranges >= cfg.minimum_range_m) & (abs(geometry.blocks-block) > cfg.guard_blocks)
     digest = array_digest({'range': s.ranges[pool], **{k: np.where(a[k][row,pool], f[k][row,pool], np.nan) for k in MOMENTS}})
     rec = {'ray': int(row), 'target_block': int(block), 'guard_blocks': cfg.guard_blocks,
         'reference_route': 'shared_coherent_source_family', 'reference_policy': 'all_rays_target_guard_excluded_target_ray_not_donor',
@@ -340,16 +343,18 @@ def extend(s, cfg, prepared, domain, out, records):
     own = out['RDR_MODEL_AVAILABLE_MASK'] == 1
     out['RDR_FAMILY_PARENT_AVAILABLE_MASK'][:] = own
     candidates = domain & ~own & a['SNR'] & (f['SNR'] >= cfg.minimum_snr_db)
-    bix = (s.ranges//cfg.block_m).astype(int)
+    geometry = FamilyGeometry(s, cfg)
+    bix = geometry.blocks
+    donor_veto = (out['RDR_INDEPENDENT_WEATHER_MASK'] == 1) | (out['RDR_UNKNOWN_PROTECTION_MASK'] == 1)
     for row in np.flatnonzero(s.good & candidates.any(axis=1)):
-        aa = dict(a); aa['SNR'] = a['SNR'].copy(); aa['SNR'][row] = False
+        aa = dict(a); aa['SNR'] = ExcludedRowMask(a['SNR'], row)
         for block in np.unique(bix[candidates[row]]):
             budget.take('folds', fc.maximum_family_folds)
             # Evaluate all measured parent-unmodeled targets in the nominated block,
             # including measured weak/contradictory targets, for closure accounting.
             j = np.flatnonzero(domain[row] & ~own[row] & (bix == block))
             out['RDR_FAMILY_ATTEMPTED_MASK'][row,j] = 1
-            model, status = fit_family(s, int(row), int(block), cfg, prepared, donor_prepared=(f,aa), budget=budget)
+            model, status = fit_family(s, int(row), int(block), cfg, prepared, donor_prepared=(f,aa), budget=budget, geometry=geometry)
             if model is None:
                 failures[status] += 1
                 bit = (Reason.DONOR_FAMILY_AMBIGUOUS if 'AMBIGUOUS_DONOR' in status else
@@ -360,7 +365,6 @@ def extend(s, cfg, prepared, domain, out, records):
             budget.take('objects', fc.maximum_family_models)
             model_id = len(records)+1
             records.append({'id': model_id, **model})
-            donor_veto = (out['RDR_INDEPENDENT_WEATHER_MASK'] == 1) | (out['RDR_UNKNOWN_PROTECTION_MASK'] == 1)
             v = project_family(s, row, j, model, cfg, prepared, donor_veto=donor_veto)
             for key, value in (
                 ('FULL_MATCH_MASK', v['full']), ('PARTIAL_MATCH_MASK', v['partial']),

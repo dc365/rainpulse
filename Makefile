@@ -453,3 +453,7 @@ test-admin-ops:
 .PHONY: test-performance-ab
 test-performance-ab:
 	uv run --project algorithms bash scripts/test_performance_ab.sh -q
+
+.PHONY: test-performance-cd
+test-performance-cd:
+	uv run --project algorithms bash scripts/test_performance_cd.sh

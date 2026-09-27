@@ -1,0 +1,11 @@
+# C/D overlay; apply after draining managed QC/multiband and the automatic QC gate.
+# Preserve existing streaming/cache opt-ins and frozen science configuration.
+services:
+  radar-qc-worker:
+    image: rainpulse-cpu-worker:performance-cd-qc-20260927
+  ops-qc-worker:
+    image: rainpulse-cpu-worker:performance-cd-full-20260927
+    mem_limit: 40g
+    memswap_limit: 40g
+  ops-multiband-worker:
+    image: rainpulse-cpu-worker:performance-cd-full-20260927

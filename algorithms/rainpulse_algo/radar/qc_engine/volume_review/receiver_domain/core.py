@@ -68,11 +68,11 @@ def intervals(indices, n):
     return [[int(lo), int(hi)] for lo, hi in runs(mask)]
 
 
-def fit_fold(s, row, block, cfg, prepared=None, restrict_snr_to_dbzh=False):
+def fit_fold(s, row, block, cfg, prepared=None, restrict_snr_to_dbzh=False, *, range_blocks=None):
     """All membership, shoulders, statistics and digests exclude target AND guards."""
     f, a = domains(s, cfg) if prepared is None else prepared
     r, az = s.ranges, s.azimuth
-    bix = (r // cfg.block_m).astype(int)
+    bix = (r // cfg.block_m).astype(int) if range_blocks is None else range_blocks
     train = (r >= cfg.minimum_range_m) & (abs(bix-block) > cfg.guard_blocks)
     sa = a["SNR"] if not restrict_snr_to_dbzh else a["SNR"] & a["DBZH"]
     idx = supported_indices(np.flatnonzero(train & sa[row]), bix, cfg.minimum_samples_per_reference_block)
@@ -194,7 +194,7 @@ def evaluate(s, cfg, *, independent_weather=None, local_coherence=None,
                 trials += 1
                 if trials > cfg.maximum_folds:
                     raise ResourceLimit("receiver-domain fold budget exceeded; no partial result")
-                model, status = fit_fold(s, row, int(block), cfg, (f, a), restrict_snr_to_dbzh)
+                model, status = fit_fold(s, row, int(block), cfg, (f, a), restrict_snr_to_dbzh, range_blocks=bix)
                 if model is None:
                     failures[status] += 1
                     if cfg.segment_reference is not None:

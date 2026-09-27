@@ -14,9 +14,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [test, lint, build, test-prelaunch, test-qc-opensource, test-qc-rfi-objects, test-qc-paper-comparison, test-qc-crossradar-v5, test-qc-residual-v6, test-performance-ab]
+        target: [test, lint, build, test-prelaunch, test-qc-opensource, test-qc-rfi-objects, test-qc-paper-comparison, test-qc-crossradar-v5, test-qc-residual-v6, test-performance-ab, test-performance-cd]
     steps:
       - uses: actions/checkout@v5
+      - name: Fetch immutable C/D comparison baseline
+        if: matrix.target == 'test-performance-cd'
+        run: git fetch --no-tags origin 4c87cc83dc0036b303d904c108d292894dd39f28
       - name: Install system test tools
         run: sudo apt-get update && sudo apt-get install --yes ripgrep
       - uses: actions/setup-go@v6

@@ -16,19 +16,8 @@ def json_bytes(value):
 
 
 def array_digest(arrays):
-    h = hashlib.sha256()
-    for key in sorted(arrays):
-        a = np.asarray(arrays[key])
-        if a.dtype.hasobject:
-            raise ValueError("object arrays are not allowed")
-        # Canonical endian and NaN payloads; numeric identity, not NPZ zip metadata.
-        a = np.array(a, dtype=a.dtype.newbyteorder("<"), order="C", copy=True)
-        if a.dtype.kind in "fc":
-            a[np.isnan(a)] = np.nan
-        header = json_bytes([key, a.dtype.str, list(a.shape)])
-        h.update(len(header).to_bytes(8, "little")); h.update(header); h.update(a.tobytes())
-    return h.hexdigest()
-
+    from rainpulse_algo.radar.qc_engine.raw_reuse import array_digest as digest_blocks
+    return digest_blocks(arrays)
 
 def checked_mask(value, shape, name):
     a = np.asarray(value)
@@ -38,12 +27,8 @@ def checked_mask(value, shape, name):
 
 
 def frozen(value, dtype=None):
-    a = np.array(value, dtype=dtype, copy=True)
-    if a.dtype.hasobject:
-        raise ValueError("object arrays forbidden")
-    a.flags.writeable = False
-    return a
-
+    from rainpulse_algo.radar.qc_engine.raw_reuse import immutable_array
+    return immutable_array(value, dtype)
 
 @dataclass(frozen=True)
 class Sweep:

@@ -9,10 +9,12 @@ from rainpulse_algo.performance import timed as _perf_timed
 
 from . import VERSION
 from .data import Sweep, json_bytes
+from rainpulse_algo.radar.qc_engine.raw_reuse import shared_native_scope, shared_native_view
 from .disposition import dispose
 from .engine import evaluate
 
 
+@shared_native_view("vor-original-time-policy")
 def from_native(native):
     times=np.asarray(native.ray_time)
     if times.dtype.kind=="M":
@@ -24,6 +26,7 @@ def from_native(native):
 
 
 @_perf_timed("s.volume_extensions")
+@shared_native_scope
 def review_result(result, native, *, near_clutter_context=None):
     cfg=getattr(result.profile,"volume_review",None)
     if cfg is None:

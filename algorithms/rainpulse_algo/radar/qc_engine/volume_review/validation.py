@@ -12,6 +12,7 @@ import numpy as np
 from rainpulse_algo.performance import measure as _perf_measure
 
 from .disposition import DERIVED_FIELDS, derived_invalidation, validate_fields
+from rainpulse_algo.radar.qc_engine.validation_reads import shared_validation_reads
 
 
 class LegacyView(Mapping):
@@ -26,6 +27,7 @@ class LegacyView(Mapping):
         return self.group[source] if source in self.group else self.group[key]
 
 
+@shared_validation_reads
 def validate_serialized(group,attrs,legacy_validator):
     if attrs.get("qc_clutter_fusion_version") is not None or any(k.startswith("CF_") for k in group):
         from .clutter_fusion.validation import validate_serialized as validate_clutter
