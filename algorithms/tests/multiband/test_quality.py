@@ -209,3 +209,21 @@ def test_geographic_preview_places_cardinal_echoes_and_uses_native_site(net):
     assert raw_png[0,0,3] == 0
     assert info["maximum_range_km"] < 44  # Slant range is not ground distance.
     assert geographic_sweep_preview(cut, {}, raw, qc, actions, {}) is None
+
+
+def test_native_x_qc_preserves_duplicate_rays_but_spatial_validation_rejects(net):
+    station = net.stations['x1']
+    v = volume(station)
+    v.sweeps[0].azimuth_deg[1] = v.sweeps[0].azimuth_deg[0]
+    original = v.sweeps[0].fields['DBZH'].copy()
+    result = x_qc(v, station, net.sha256)
+    np.testing.assert_array_equal(result.sweeps[0].fields['DBZH'], original)
+    with pytest.raises(ValueError, match='duplicate azimuth'):
+        result.validate(station)
+
+
+def test_preview_duplicate_bearing_uses_last_native_row_without_reindexing():
+    from rainpulse_algo.multiband.preview_sampling import prepare_polar_sampling
+    plan = prepare_polar_sampling(np.array([0.,90.,0.]), np.array([100.,200.]),
+        map_sampling=(np.array([[100.]]), np.array([[0.]])), elevation_deg=np.zeros(3))
+    assert plan.rays.item() == 2

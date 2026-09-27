@@ -134,7 +134,7 @@ def phase_linear(
 
 @_perf_timed("x.qc")
 def x_qc(volume: Volume, station: Station, release_sha256: str) -> Volume:
-    volume.validate(station, require_geometry=False)
+    volume.validate(station, require_geometry=False, native_polar_qc=True)
     if station.band != "X":
         raise ValueError("X QC cannot be applied to an S observation")
     cfg = station.x_qc
@@ -146,6 +146,7 @@ def x_qc(volume: Volume, station: Station, release_sha256: str) -> Volume:
     if cfg.attenuation == "upstream_verified" and upstream != "corrected":
         raise ValueError("upstream-corrected mode requires explicit observed correction provenance")
     result = Volume(copy.deepcopy(volume.metadata), [])
+    result.metadata["duplicate_azimuth_policy"] = "preserve_native_rows_map_last_row"
     for sweep in volume.sweeps:
         f = {k: _shared(v) for k, v in sweep.fields.items()}
         shape = f["DBZH"].shape

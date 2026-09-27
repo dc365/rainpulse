@@ -238,7 +238,7 @@ class Sweep:
     ray_time_epoch: np.ndarray
     fields: dict[str, np.ndarray]
 
-    def validate(self) -> None:
+    def validate(self, *, allow_duplicate_azimuth: bool = False) -> None:
         az, r, el, t = (np.asarray(x) for x in (self.azimuth_deg, self.range_m, self.elevation_deg, self.ray_time_epoch))
         if type(self.number) is not int or self.number < 0 or self.number > 4096:
             raise ValueError("invalid sweep identity")
@@ -246,7 +246,7 @@ class Sweep:
             raise ValueError("invalid native ray/gate geometry")
         if not all(np.all(np.isfinite(x)) for x in (az, r, el, t)) or np.any((az < 0) | (az >= 360)) or np.any((el < -2) | (el >= 89)) or np.any(np.diff(r) <= 0) or r[0] < 0:
             raise ValueError("nonfinite/nonmonotone native geometry")
-        if len(np.unique(az)) != len(az):
+        if not allow_duplicate_azimuth and len(np.unique(az)) != len(az):
             raise ValueError("duplicate azimuth rays need explicit decoder resolution")
         shape = (len(az), len(r))
         for k, arr in self.fields.items():
@@ -269,7 +269,9 @@ class Volume:
     metadata: dict[str, Any]
     sweeps: list[Sweep]
 
-    def validate(self, station: Station, *, require_geometry: bool = True) -> None:
+    def validate(self, station: Station, *, require_geometry: bool = True, native_polar_qc: bool = False) -> None:
+        if native_polar_qc and (require_geometry or station.band != "X"):
+            raise ValueError("native polar QC validation is restricted to nonspatial X inputs")
         m = self.metadata
         required = ("radar_id", "scan_id", "band", "volume_start", "volume_end", "available_at", "asset_sha256", "scan_type")
         if require_geometry:
@@ -297,7 +299,7 @@ class Volume:
         numbers = set()
         total = 0
         for s in self.sweeps:
-            s.validate()
+            s.validate(allow_duplicate_azimuth=native_polar_qc)
             if s.number in numbers or np.any(np.rint(s.ray_time_epoch * 1e6) < round(start * 1e6)) or np.any(np.rint(s.ray_time_epoch * 1e6) > round(end * 1e6)):
                 raise ValueError("duplicate sweep or ray outside acquisition interval")
             numbers.add(s.number)

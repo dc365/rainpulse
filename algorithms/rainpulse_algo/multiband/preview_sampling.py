@@ -40,8 +40,12 @@ def prepare_polar_sampling(
         bearing = np.rad2deg(np.arctan2(xx, yy)) % 360
     else:
         distance, bearing = map_sampling
-    order = np.argsort(az)
+    # Repeated native bearings retain their original row identity. Both raw
+    # and QC maps select the last row for the same bearing deterministically.
+    order = np.argsort(az, kind="stable")
     ordered = az[order]
+    keep = np.r_[ordered[1:] != ordered[:-1], True]
+    order, ordered = order[keep], ordered[keep]
     extended = np.concatenate(([ordered[-1] - 360], ordered, [ordered[0] + 360]))
     ray_order = np.concatenate(([order[-1]], order, [order[0]]))
     right = np.searchsorted(extended, bearing, side="left")
