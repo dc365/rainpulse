@@ -45,7 +45,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Latest 100 successful, non-retired S/X comparison results in a bounded analysis window. */
+        /** Latest successful, non-retired S/X comparison per analysis time in a maximum 24-hour window (up to 1500 frames). */
         get: operations["listWorkspaceRadarComposites"];
         put?: never;
         post?: never;

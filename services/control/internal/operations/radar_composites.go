@@ -76,7 +76,7 @@ func (h *Handler) radarComposites(w http.ResponseWriter, r *http.Request, parts 
 		if err != nil {
 			return nil, err
 		}
-		rows, err := h.service.Store.DB.QueryContext(r.Context(), `SELECT t.id::text||'.'||t.current_attempt::text,t.spec#>>'{request,payload,analysis_time}' FROM ops_tasks t WHERE t.kind='multiband' AND t.spec#>>'{request,payload,mode}'='sx_composite' AND t.state='SUCCEEDED' AND t.current_attempt IS NOT NULL AND t.result#>>'{asset,uri}' IS NOT NULL AND (t.spec#>>'{request,payload,analysis_time}')::timestamptz >= $1 AND (t.spec#>>'{request,payload,analysis_time}')::timestamptz < $2 AND NOT EXISTS(SELECT 1 FROM ops_retired_runs rr WHERE rr.run_id=t.run_id) ORDER BY t.updated_at DESC,t.id DESC LIMIT 100`, start, end)
+		rows, err := h.service.Store.DB.QueryContext(r.Context(), compositeTimelineSQL, start, end)
 		if err != nil {
 			return nil, err
 		}
@@ -154,3 +154,5 @@ func (h *Handler) radarComposites(w http.ResponseWriter, r *http.Request, parts 
 	}
 	return map[string]any{"result_id": parts[1], "manifest": m}, nil
 }
+
+const compositeTimelineSQL = `SELECT DISTINCT ON ((t.spec#>>'{request,payload,analysis_time}')::timestamptz) t.id::text||'.'||t.current_attempt::text,t.spec#>>'{request,payload,analysis_time}' FROM ops_tasks t WHERE t.kind='multiband' AND t.spec#>>'{request,payload,mode}'='sx_composite' AND t.state='SUCCEEDED' AND t.current_attempt IS NOT NULL AND t.result#>>'{asset,uri}' IS NOT NULL AND (t.spec#>>'{request,payload,analysis_time}')::timestamptz >= $1 AND (t.spec#>>'{request,payload,analysis_time}')::timestamptz < $2 AND NOT EXISTS(SELECT 1 FROM ops_retired_runs rr WHERE rr.run_id=t.run_id) ORDER BY (t.spec#>>'{request,payload,analysis_time}')::timestamptz DESC,t.updated_at DESC,t.id DESC LIMIT 1500`

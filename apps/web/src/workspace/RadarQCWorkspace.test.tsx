@@ -41,7 +41,7 @@ function setup() {
   URL.revokeObjectURL = vi.fn()
   vi.stubGlobal('fetch', vi.fn(async (input: string, options?: {body?:string}) => {
     const url = String(input)
-    const data = url.includes('radar-layer-resolutions') ? {items:JSON.parse(options?.body??'{}').time===evening?[{id:'zf101',sweeps:[],error:'该窗口无体扫'}]:[{id:'zf101',scan:scans.items[0],sweeps:result.sweeps}],times:[morning]} : url.includes('radar-stations') ? stations : url.includes('radar-scans') ? scans
+    const data = url.includes('radar-composites/') ? {result_id:'late-composite',manifest:{analysis_time:'2026-08-28T15:54:00Z',comparison:{products:[]}}} : url.includes('radar-composites') ? {items:[{result_id:'late-composite',analysis_time:'2026-08-28T15:54:00Z'}]} : url.includes('radar-layer-resolutions') ? {items:JSON.parse(options?.body??'{}').time===evening?[{id:'zf101',sweeps:[],error:'该窗口无体扫'}]:[{id:'zf101',scan:scans.items[0],sweeps:result.sweeps}],times:[morning]} : url.includes('radar-stations') ? stations : url.includes('radar-scans') ? scans
       : url.includes('radar-products') ? result : url.includes('cycles/cycle-') ? cycleDetail(Number(url.at(-1)))
         : { schema_version: '1.0', items: cycles, generated_at: morning, next_cursor: null }
     return { ok: true, json: async () => data, blob: async () => new Blob(['png'], { type: 'image/png' }) }
@@ -107,4 +107,13 @@ it('overlays X raw and QC rasters on exactly two maps using the result geometry'
   await waitFor(() => expect(fetch).toHaveBeenCalledWith('/map-flags-x.png', expect.anything()))
   fireEvent.click(screen.getByRole('button', { name: '单图' }))
   expect(document.querySelector('.radar-qc-pair.layout-single')).toBeTruthy()
+})
+
+it('shows composite times beyond the S catalog without selected station layers', async()=>{
+ setup()
+ window.history.replaceState({}, '', '/?preset=qc&band=S&mode=fusion&date=2026-08-28&time=2026-08-28T00:06:00Z')
+ render(<RadarQCWorkspace />)
+ const late=await screen.findByRole('button',{name:/08\/28 23:54 北京时间/})
+ fireEvent.click(late)
+ await waitFor(()=>expect(new URLSearchParams(window.location.search).get('time')).toBe('2026-08-28T15:54:00.000Z'))
 })

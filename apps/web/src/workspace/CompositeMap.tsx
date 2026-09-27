@@ -22,3 +22,23 @@ export function useComposite(time: string, revision: number) {
   },[key,time])
   return state?.key===key?state:undefined
 }
+
+export function useCompositeTimeline(day: string, revision: number) {
+  const key=`${day}/${revision}`
+  const [state,setState]=useState<{key:string;times:string[];error?:string}>()
+  useEffect(()=>{
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(day))return
+    const controller=new AbortController()
+    const start=new Date(`${day}T00:00:00+08:00`).toISOString()
+    const end=new Date(Date.parse(start)+86400000).toISOString()
+    void fetch(`/api/v1/workspace/radar-composites?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,{signal:controller.signal,cache:'no-store'})
+      .then(async response=>{
+        if(!response.ok)throw new Error(`组合时间轴读取失败（${response.status}）`)
+        const page=await response.json() as {items:{analysis_time:string}[]}
+        const times=[...new Set(page.items.map(item=>new Date(item.analysis_time).toISOString()))].sort()
+        if(!controller.signal.aborted)setState({key,times})
+      }).catch(error=>{if(!controller.signal.aborted)setState({key,times:[],error:String(error)})})
+    return()=>controller.abort()
+  },[day,key])
+  return state?.key===key?state:undefined
+}

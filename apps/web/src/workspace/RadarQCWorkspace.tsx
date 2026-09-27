@@ -9,6 +9,7 @@ import { panelByID, qcFlagLabel, qcSweepOptions, radarIDs, type CycleList, type 
 import { readCycleCatalog } from './readCycleCatalog'
 import { SharedTimeline } from './MainWorkspace'
 import './radar-qc-workspace.css'
+import { useCompositeTimeline } from './CompositeMap'
 import { MultiStationMap } from './MultiStationMap'
 
 type Band = 'S' | 'X'
@@ -139,6 +140,7 @@ export function RadarQCWorkspace() {
   const xStations = useJSON<XStations>(`${prefix}radar-stations?band=all${dayWindow(day)}`, revision)
   const linkedCycle = initial.get('cycle') ? catalog?.data?.items.find(c=>c.cycle_id===initial.get('cycle')) : undefined
   const date = day || (band === 'X' ? xStations?.data ? localDay(xStations.data.start) : '' : linkedCycle ? localDay(linkedCycle.issue_time) : catalog?.data?.items[0] ? localDay(catalog.data.items[0].issue_time) : '')
+  const compositeTimeline = useCompositeTimeline(mode==='fusion'?date:'',revision)
   const sTimes = (catalog?.data?.items ?? []).filter(c=>localDay(c.issue_time)===date && c.capabilities.radar).sort((a,b)=>Date.parse(a.issue_time)-Date.parse(b.issue_time))
   const sCycle = target ? sTimes.find(c=>slot(c.issue_time)===slot(target)) : linkedCycle ?? sTimes.at(-1)
   const sDetailState = useJSON<WorkspaceCycleDetail>(sCycle ? `/api/v1/workspace/cycles/${encodeURIComponent(sCycle.cycle_id)}` : '', revision)
@@ -163,10 +165,11 @@ export function RadarQCWorkspace() {
   const sRaw = sRawPanel?.frames.find(f=>f.sweep_number===selectedSSweep && f.valid_time===sCycle?.issue_time)
   const sQC = (flags ? sFlagPanel : sQCPanel)?.frames.find(f=>f.sweep_number===selectedSSweep && f.scan_id===sRaw?.scan_id && f.valid_time===sRaw?.valid_time)
   const xUnifiedPalette = xResult?.legend?.length===REFLECTIVITY_STOPS.length && xResult.legend.every((entry,i)=>entry.minimum_dbzh===REFLECTIVITY_STOPS[i][0] && `#${entry.rgb.map(c=>c.toString(16).padStart(2,'0')).join('')}`===REFLECTIVITY_STOPS[i][1])
-  const activeTime = target || (band==='S' ? sCycle?.issue_time : scan?.volume_start) || ''
-  const timeline = mode!=='single' ? [...new Set([...sTimes.map(c=>c.issue_time),...multiTimes.filter(t=>localDay(t)===date)].map(t=>new Date(Date.parse(t)).toISOString()))].sort() : band==='S' ? sTimes.map(c=>c.issue_time) : scans.map(s=>s.volume_start)
+  const activeTime = target || (mode==='fusion' ? compositeTimeline?.times.at(-1) : undefined) || (band==='S' ? sCycle?.issue_time : scan?.volume_start) || ''
+  const timeline = mode!=='single' ? [...new Set([...sTimes.map(c=>c.issue_time),...(compositeTimeline?.times??[]),...multiTimes.filter(t=>localDay(t)===date)].map(t=>new Date(Date.parse(t)).toISOString()))].sort() : band==='S' ? sTimes.map(c=>c.issue_time) : scans.map(s=>s.volume_start)
   const activeTimelineTime = mode!=='single' ? activeTime : band==='S' ? sCycle?.issue_time : scan?.volume_start
-  const timelinePanels:WorkspacePanel[] = band==='S' ? [{panel_id:'s-analysis',algorithm_id:'s-qc',display_name:'S 分析周期',role:'qc',lifecycle:'analysis',data_kind:'reflectivity',cadence_minutes:6,status:'ready',frames:sTimes.map(c=>({asset_id:c.cycle_id,valid_time:c.issue_time,lead_time_minutes:0,image_url:c.cycle_id,media_type:'application/json'}))}] : [{panel_id:'x-qc',algorithm_id:'x-qc',display_name:'X 质控结果',role:'qc',lifecycle:'shadow',data_kind:'reflectivity',cadence_minutes:6,status:'ready',frames:scans.filter(s=>s.results.length).map(s=>({asset_id:s.scan_id,valid_time:s.volume_start,lead_time_minutes:0,image_url:s.results[0].result_id,media_type:'image/png'}))}]
+  const timelinePanels:WorkspacePanel[] = (mode==='fusion'||band==='S') ? [{panel_id:'s-analysis',algorithm_id:'s-qc',display_name:'S 分析周期',role:'qc',lifecycle:'analysis',data_kind:'reflectivity',cadence_minutes:6,status:'ready',frames:sTimes.map(c=>({asset_id:c.cycle_id,valid_time:c.issue_time,lead_time_minutes:0,image_url:c.cycle_id,media_type:'application/json'}))}] : [{panel_id:'x-qc',algorithm_id:'x-qc',display_name:'X 质控结果',role:'qc',lifecycle:'shadow',data_kind:'reflectivity',cadence_minutes:6,status:'ready',frames:scans.filter(s=>s.results.length).map(s=>({asset_id:s.scan_id,valid_time:s.volume_start,lead_time_minutes:0,image_url:s.results[0].result_id,media_type:'image/png'}))}]
+  if(mode==='fusion')timelinePanels.push({panel_id:'sx-composites',algorithm_id:'sx-composites',display_name:'S/X 组合产品',role:'qc',lifecycle:'shadow',data_kind:'reflectivity',cadence_minutes:6,status:'ready',frames:(compositeTimeline?.times??[]).map(time=>({asset_id:time,valid_time:time,lead_time_minutes:0,image_url:time,media_type:'application/json'}))})
   const issue = timeline[0] ?? `${date || '2026-08-28'}T00:00:00+08:00`
   const selectable = band==='S' ? Boolean(sRaw&&sQC) : Boolean(xPair?.raw&&xPair.qc)
   useEffect(()=>{
@@ -207,6 +210,7 @@ export function RadarQCWorkspace() {
     <section className="radar-qc-map-tools" aria-label="地图工具"><div role="group" aria-label="对照布局">{(['pair','swipe','single'] as const).map(value=><button key={value} aria-pressed={layout===value} onClick={()=>setLayout(value)} disabled={mode==='fusion'}>{({pair:'双图',swipe:'卷帘',single:'单图'} as const)[value]}</button>)}</div>{flags&&mode==='single'?<div className="radar-qc-flag-legend" aria-label="质控标记图例">{(band==='X'?X_FLAG_LEGEND:sFlagLegend).map(item=><span key={item.label}><i style={{background:item.color}}/>{item.label}</span>)}</div>:band==='X'&&xResult?.legend?.length&&mode==='single'?<div className="radar-qc-palette"><strong>dBZ</strong><ReflectivityLegend entries={xResult.legend.map(e=>({minimum:e.minimum_dbzh,label:String(e.minimum_dbzh),color:`rgb(${e.rgb.join(',')})`}))}/></div>:(mode!=='fusion'&&(band==='S'||mode!=='single'))?<div className="radar-qc-palette"><strong>dBZ</strong><ReflectivityLegend/></div>:null}</section>
     {band==='X'&&xResult&&!xUnifiedPalette&&<p className="radar-qc-legacy">所选历史结果使用旧色谱，图件与色标均保持原版本。</p>}
     <details className="radar-qc-details"><summary>资料详情</summary><dl><dt>目标时间</dt><dd>{activeTime||'未选择'}</dd><dt>结果</dt><dd>{band==='X'?xSelectedResult?.result_id??'无':sCycle?.cycle_id??'无'}</dd><dt>站点资格</dt><dd>{band==='X'?'按体扫站点坐标、逐射线方位/仰角和距离门定位；站点坐标及业务融合资格待核验':'S 站点已定位'}</dd></dl></details>
-    <SharedTimeline observationOnly observationLabel={band==='S'?'分析周期':'体扫'} issueTime={issue} values={timeline} panels={timelinePanels} selectedTime={activeTimelineTime??null} playing={playing} playSpeedMS={speed} onPlaySpeedChange={setSpeed} onTogglePlaying={()=>{if(!playing&&!selectable){const first=timeline[0];if(first)chooseTime(first)}setPlaying(v=>!v)}} onSelect={chooseTime} cycleControls={<div className="radar-qc-time-context"><strong>{mode==='single'?'单站验证':mode==='overlay'?'多站叠加':'组合反射率'}</strong><label>历史资料日期<input aria-label="资料日期" type="date" value={date} onChange={e=>{setDay(e.target.value);setTarget('');setXScanID('');setXResultID('');setPlaying(false)}}/></label><span>{mode!=='single'?'S/X 资料窗口':band==='S'?'S 分析周期':'X 真实体扫'} · 北京时间 UTC+8</span></div>}/>
+    {compositeTimeline?.error&&<div className="radar-qc-alert" role="alert">{compositeTimeline.error} <button onClick={()=>setRevision(n=>n+1)}>重试</button></div>}
+    <SharedTimeline observationOnly observationLabel={mode==='fusion'?'组合时次':band==='S'?'分析周期':'体扫'} issueTime={issue} values={timeline} panels={timelinePanels} selectedTime={activeTimelineTime??null} playing={playing} playSpeedMS={speed} onPlaySpeedChange={setSpeed} onTogglePlaying={()=>{if(!playing&&!selectable){const first=timeline[0];if(first)chooseTime(first)}setPlaying(v=>!v)}} onSelect={chooseTime} cycleControls={<div className="radar-qc-time-context"><strong>{mode==='single'?'单站验证':mode==='overlay'?'多站叠加':'组合反射率'}</strong><label>历史资料日期<input aria-label="资料日期" type="date" value={date} onChange={e=>{setDay(e.target.value);setTarget('');setXScanID('');setXResultID('');setPlaying(false)}}/></label><span>{mode!=='single'?'S/X 资料窗口':band==='S'?'S 分析周期':'X 真实体扫'} · 北京时间 UTC+8</span></div>}/>
   </main>
 }

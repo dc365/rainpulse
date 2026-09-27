@@ -82,7 +82,7 @@ paths:
     get:
       operationId: listWorkspaceRadarComposites
       tags: [radars]
-      summary: Latest 100 successful, non-retired S/X comparison results in a bounded analysis window.
+      summary: Latest successful, non-retired S/X comparison per analysis time in a maximum 24-hour window (up to 1500 frames).
       parameters:
         - {name: start, in: query, required: true, schema: {type: string, format: date-time}}
         - {name: end, in: query, required: true, schema: {type: string, format: date-time}}

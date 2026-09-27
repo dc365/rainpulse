@@ -2379,7 +2379,7 @@ type ServerInterface interface {
 	// GetVerificationSummary Get verification summary for one run
 	// (GET /verification/summary)
 	GetVerificationSummary(w http.ResponseWriter, r *http.Request, params GetVerificationSummaryParams)
-	// ListWorkspaceRadarComposites Latest 100 successful, non-retired S/X comparison results in a bounded analysis window.
+	// ListWorkspaceRadarComposites Latest successful, non-retired S/X comparison per analysis time in a maximum 24-hour window (up to 1500 frames).
 	// (GET /workspace/radar-composites)
 	ListWorkspaceRadarComposites(w http.ResponseWriter, r *http.Request, params ListWorkspaceRadarCompositesParams)
 
@@ -2670,7 +2670,7 @@ func (_ Unimplemented) GetVerificationSummary(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// ListWorkspaceRadarComposites Latest 100 successful, non-retired S/X comparison results in a bounded analysis window.
+// ListWorkspaceRadarComposites Latest successful, non-retired S/X comparison per analysis time in a maximum 24-hour window (up to 1500 frames).
 // (GET /workspace/radar-composites)
 func (_ Unimplemented) ListWorkspaceRadarComposites(w http.ResponseWriter, r *http.Request, params ListWorkspaceRadarCompositesParams) {
 	w.WriteHeader(http.StatusNotImplemented)
