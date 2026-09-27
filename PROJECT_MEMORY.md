@@ -43,6 +43,16 @@ operational data here.
 - At 2026-09-27 09:02Z: X raw imports49 station-hours complete (hour02),
   X QC18 quarter-hour station batches complete, S40 station-hours complete
   (hour10 waiting QC), composite waiting first-hour QC. All-day NOT complete.
+- 10:05Z follow-up: new ZF401 03:12:19Z scan failed with `cut 2 radial
+  times are not monotonic`, job bff93645-5f8b-5e2b-8a96-842db95e240b.
+  Retained FAILED; explicit review ledger `backfill/reviewed-failures.json`
+  allows subsequent imports without suppressing new/unreviewed failures.
+  Backfill guard now subtracts only reviewed job IDs. X QC resumed at ZF503.
+  S reached44 station-hours, X76; no full-day acceptance yet.
+  Available RAM fell to7GiB; radar-qc-worker-2 retained51.5GiB after completing
+  all QC jobs (SQL pending/running radar.qc=0). Restarted only that idle
+  container preserving image/settings to release retained memory. Monitor
+  recurrent growth before any algorithm/performance configuration change.
 - Full-day composite catalog/timeline fix deployed: latest non-retired result
   per analysis time, max1500 frames/24h. Isolated PostgreSQL240-frame test,
   seven targeted Web tests, Web build and Go operations tests passed. Live
