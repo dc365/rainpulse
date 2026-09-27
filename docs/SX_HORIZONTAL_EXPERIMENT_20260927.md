@@ -30,3 +30,7 @@ Reproduce unit/regression checks from repository root:
 PYTHONPATH=algorithms algorithms/.venv/bin/python -m pytest algorithms/tests/test_experimental_composite.py algorithms/tests/multiband -q
 bash scripts/go_control.sh test ./internal/multiband ./internal/controlplane ./internal/operations ./internal/radarprobe
 ```
+
+### X standalone QC completion
+
+All 20 standalone QC tasks succeeded in runs `5ffa0879-999c-4571-aa80-46b69b6c6a67` (7), `0ae08e54-856a-4419-b63c-2ac96652fb4f` (7), and `219741b2-331a-47d8-ae9b-ce556d1582af` (6). The public scan API reports 10/10 READY with result assets for each of ZF101 and ZF505. The temporary three-worker acceleration was restored to one healthy `rainpulse-cpu-worker:sx-experiment-71084d7` replica after completion.
