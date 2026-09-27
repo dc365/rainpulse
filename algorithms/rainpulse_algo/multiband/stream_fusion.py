@@ -11,7 +11,6 @@ import shutil
 import time
 from collections import OrderedDict
 from contextlib import contextmanager
-from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -369,6 +368,7 @@ def build_composite_streaming(
             stats.update(pool.metrics())
         finally:
             pool.close()
-            stats["layer_discarded_dirty_tiles"] = sum(v["discarded_dirty_tiles"] for v in pool.stats.values())
+            stats["layer_discarded_dirty_tiles"] = sum(
+                v["discarded_dirty_tiles"] for v in pool.stats.values())
             stats["layer_cleanup_complete"] = 1
             report_workspace_metrics(stats)

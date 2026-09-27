@@ -15,8 +15,8 @@ from tempfile import TemporaryDirectory
 
 from rainpulse_algo.performance import timed as _perf_timed
 
-from .model import MAX_FUSION_SWEEPS, MAX_SWEEPS, epoch, json_bytes
 from .input_reuse import cached_source, remember_source
+from .model import MAX_FUSION_SWEEPS, MAX_SWEEPS, epoch, json_bytes
 from .product import MAX_X_QC_PREVIEW_BYTES, sx_comparison_objects, x_qc_objects
 from .quality import accept_s_qc, x_qc
 from .stream_fusion import DTYPE, build_composite_streaming
@@ -46,7 +46,8 @@ def execute(executor, request, reader, *, started):
     # One station's packed source + seekable NPZ + height workspace + output coexist.
     reserved = _scratch_reservation(
         height_bytes, options, comparison=p["mode"] == "sx_composite",
-        tile_bytes=grid.width * min(grid.tile_rows, grid.height) * len(grid.levels_m_msl) * DTYPE.itemsize,
+        tile_bytes=(grid.width * min(grid.tile_rows, grid.height)
+                    * len(grid.levels_m_msl) * DTYPE.itemsize),
     )
     metrics = {
         "input_read_ms": 0.0,
