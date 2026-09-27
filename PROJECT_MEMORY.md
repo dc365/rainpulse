@@ -726,3 +726,4 @@ operational data here.
 - Go 105 当前 `f82d18c`，Web 含 `675b4cd` 色谱修复；试验发布目录 `.build/sx-experiment-108e920`，其 `compose.json` 追加完整历史链。最新 Worker 发布应以现场容器 image/labels 为准，后续镜像包含 `71084d7` 时间精度修复。网络仅四 S + 两 X，网格 1 km、6 分钟，不能声称 24 X 全部接入。
 - 两 X 站 00:00–01:00 UTC 各 10 份体扫已通过正式历史导入并全部 NORMALIZED。连续组合验收仍需以最新 operations 运行状态为准；早期缺资料或修复前失败尝试保留。
 - S 点值补建 v16 成功 99/106；4 个超大消息失败已用 v17 新任务全部补建成功，自动诊断已缩回一副本。另 3 个周期实际混用不同 clutter-fusion generations，未绕过一致性校验，需统一 QC 输入后补建。v17 当前配置/Compose 为 `deploy/*diagnostic-source-probe-retry-20260927.yaml`。
+- 最终一小时组合 run `126aaf50-043a-4acd-b276-509259e0773c`：10/10 成功，逐数组验证 joint=fmax(S,X)，X 获胜格点均带不确定标记。08:06 仅有因果可用 X；08:12–09:00 九帧均有 S/X 获胜。最后 Worker 为 `rainpulse-cpu-worker:sx-experiment-71084d7`，健康；Go `f82d18c`。X 单站图件补建分为三批（每计划最多8体扫），运行状态另查对应 operations 记录。

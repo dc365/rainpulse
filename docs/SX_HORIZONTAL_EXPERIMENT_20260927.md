@@ -19,3 +19,14 @@ Real-data corrections: exact duplicate bearings are resolved by latest acquisiti
 - The native catalog stores microsecond timestamps; floating-point ray conversion could differ by one float ULP (about 0.24 microseconds). Validation now compares at catalog microsecond precision, with a regression that still rejects a genuine 10-microsecond overrun.
 - Two X sites each now have ten normalized volumes for UTC 00:00–01:00 through the existing history-ingest CLI. Earlier missing-input or failed runs remain traceable. New plans must be built after the updated Worker registers its fingerprint.
 - Targeted Python experimental + multiband suite: 69 passed. Related Go operations/planner/control-plane/probe tests passed; frontend build and 5 focused workspace tests passed. Actual source-value API and rendered map checks supplement these tests.
+
+### One-hour numeric acceptance
+
+Run `126aaf50-043a-4acd-b276-509259e0773c`: all 10 six-minute products succeeded (08:06–09:00 Beijing time). All decoded joint arrays equal the missing-aware maximum of same-run S-only and X-only arrays; every X-winning echo retains the uncertainty mask. The first target has only causal X inputs; the other nine have six sources and both winning bands. X-winning echo counts across the nine joint targets are 3614, 2882, 5040, 4164, 4590, 5141, 5889, 5992 and 6449. This is real hourly acceptance, not a claim of full-day/all-station readiness.
+
+Reproduce unit/regression checks from repository root:
+
+```sh
+PYTHONPATH=algorithms algorithms/.venv/bin/python -m pytest algorithms/tests/test_experimental_composite.py algorithms/tests/multiband -q
+bash scripts/go_control.sh test ./internal/multiband ./internal/controlplane ./internal/operations ./internal/radarprobe
+```
