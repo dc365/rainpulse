@@ -1,0 +1,182 @@
+schema_version: '1.0'
+config_version: zf201-x-full-fields-v2
+radar_id: zf201
+lifecycle: draft
+display_name: ZF201 X 波段候选站
+site:
+  longitude_deg: 118.00491333007812
+  latitude_deg: 24.507104873657227
+  altitude_m: 389
+  antenna_altitude_m: 389
+  altitude_datum: null
+hardware:
+  manufacturer: null
+  model: YLX2-D
+  radar_band: X
+  frequency_mhz: null
+  beam_width_deg: null
+  beam_width_vertical_deg: null
+  dual_pol_available: true
+  nyquist_velocity_mps: null
+  calibration_offsets:
+    dbzh_db: null
+    zdr_db: null
+scan:
+  strategy_name: VCP21D
+  expected_update_seconds: null
+  expected_elevations_deg:
+  - 0.8999999761581421
+  - 1.7999999523162842
+  - 2.700000047683716
+  - 3.5999999046325684
+  - 4.5
+  - 5.400000095367432
+  - 6.300000190734863
+  - 7.199999809265137
+  - 8.100000381469727
+  - 9.0
+  - 9.899999618530273
+  - 10.800000190734863
+  - 11.699999809265137
+  - 12.600000381469727
+  - 13.5
+  - 14.399999618530273
+  - 15.300000190734863
+  - 16.200000762939453
+  - 17.100000381469727
+  - 18.0
+  - 18.899999618530273
+  - 19.799999237060547
+  - 20.700000762939453
+  - 21.600000381469727
+  - 22.5
+  - 23.399999618530273
+  - 24.299999237060547
+  - 25.200000762939453
+  - 26.100000381469727
+  - 27.0
+  - 27.899999618530273
+  - 28.799999237060547
+  - 29.700000762939453
+  - 30.600000381469727
+  - 31.5
+  - 32.400001525878906
+  - 33.29999923706055
+  - 34.20000076293945
+  - 35.099998474121094
+  - 36.0
+  expected_cut_elevations_deg:
+  - 0.8999999761581421
+  - 1.7999999523162842
+  - 2.700000047683716
+  - 3.5999999046325684
+  - 4.5
+  - 5.400000095367432
+  - 6.300000190734863
+  - 7.199999809265137
+  - 8.100000381469727
+  - 9.0
+  - 9.899999618530273
+  - 10.800000190734863
+  - 11.699999809265137
+  - 12.600000381469727
+  - 13.5
+  - 14.399999618530273
+  - 15.300000190734863
+  - 16.200000762939453
+  - 17.100000381469727
+  - 18.0
+  - 18.899999618530273
+  - 19.799999237060547
+  - 20.700000762939453
+  - 21.600000381469727
+  - 22.5
+  - 23.399999618530273
+  - 24.299999237060547
+  - 25.200000762939453
+  - 26.100000381469727
+  - 27.0
+  - 27.899999618530273
+  - 28.799999237060547
+  - 29.700000762939453
+  - 30.600000381469727
+  - 31.5
+  - 32.400001525878906
+  - 33.29999923706055
+  - 34.20000076293945
+  - 35.099998474121094
+  - 36.0
+  azimuth_resolution_deg: null
+  range_gate_m: 30.0
+  max_range_m: null
+fields:
+- canonical_name: DBZH
+  source_name: REF
+  source_unit: dBZ
+  canonical_unit: dBZ
+  missing_value: raw_codes_0_to_4
+  scale_factor: 0.5
+  add_offset: -33.0
+- canonical_name: VR
+  source_name: VEL
+  source_unit: m s-1
+  canonical_unit: m s-1
+  missing_value: raw_codes_0_to_4
+  scale_factor: 0.5
+  add_offset: -64.5
+- canonical_name: SW
+  source_name: SW
+  source_unit: m s-1
+  canonical_unit: m s-1
+  missing_value: raw_codes_0_to_4
+  scale_factor: 0.5
+  add_offset: -64.5
+- canonical_name: ZDR
+  source_name: ZDR
+  source_unit: dB
+  canonical_unit: dB
+  missing_value: raw_codes_0_to_4
+  scale_factor: 0.0625
+  add_offset: -8.125
+- canonical_name: RHOHV
+  source_name: RHO
+  source_unit: '1'
+  canonical_unit: '1'
+  missing_value: raw_codes_0_to_4
+  scale_factor: 0.005
+  add_offset: -0.025
+- canonical_name: PHIDP
+  source_name: PHI
+  source_unit: degree
+  canonical_unit: degree
+  missing_value: raw_codes_0_to_4
+  scale_factor: 0.01
+  add_offset: -0.5
+- canonical_name: SNR
+  source_name: SNRH
+  source_unit: dB
+  canonical_unit: dB
+  missing_value: raw_codes_0_to_4
+  scale_factor: 0.5
+  add_offset: -10.0
+source:
+  format: cma-rstm-level2
+  format_version: '2.0'
+  data_code: RADA_L2_X_FMT
+  generic_type: 16
+  delivery: manual
+  uri_pattern: file:///data/Weather/RADA/RADA_L2_X_FMT/OBS_X/{yyyy}/{yyyymmdd}/ZF201/Z_RADR_I_ZF201_{filename_time}_O_DOR_YLX2-D_CRA_FMT.bin.bz2
+  timestamp_timezone: UTC
+ancillary:
+  dem_asset_version: null
+  clutter_map_version: null
+  coastline_asset_version: null
+qc:
+  profile: null
+  pipeline_version: null
+  flag_definition_version: null
+known_issues:
+- Candidate native-header geometry only; height datum, station calibration and attenuation
+  remain unverified.
+- Field mapping includes observed SNR and polarimetry. Missing fields remain missing;
+  no trusted QPE or forecast eligibility.

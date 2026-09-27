@@ -272,6 +272,29 @@ func TestCreateRadarQCUsesNormalizedInputAndStableIdentity(t *testing.T) {
 		t.Fatalf("manual QC regeneration identity was not isolated: job=%#v request=%#v", regenerated, regeneratedRequest)
 	}
 
+	rebuiltInput := input
+	rebuiltInput.RebuildID = uuid.MustParse("8f1c6a4a-a27c-4c09-a7c1-48e4b6d17f91")
+	rebuilt, err := service.CreateRadarQC(context.Background(), rebuiltInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rebuildRequest RadarQCRequested
+	if err := json.Unmarshal(repository.radarQC.Outbox.Payload, &rebuildRequest); err != nil {
+		t.Fatal(err)
+	}
+	if rebuilt.ID == job.ID || repository.radarQC.RegenerationRequestID != nil ||
+		!strings.Contains(rebuildRequest.Payload.OutputPrefix, "/rebuilds/"+rebuiltInput.RebuildID.String()+"/") {
+		t.Fatal("QC-only rebuild must isolate output without a full-pipeline foreign key")
+	}
+	repeated, err := service.CreateRadarQC(context.Background(), rebuiltInput)
+	if err != nil || repeated.ID != rebuilt.ID {
+		t.Fatal("QC rebuild idempotency changed")
+	}
+	rebuiltInput.RegenerationID = regenerationID
+	if _, err := service.CreateRadarQC(context.Background(), rebuiltInput); err == nil {
+		t.Fatal("ambiguous QC attempt identity accepted")
+	}
+
 	input.Health = workflow.RadarHealthUnavailable
 	if _, err := service.CreateRadarQC(context.Background(), input); err == nil {
 		t.Fatal("unavailable radar health must not enter QC")

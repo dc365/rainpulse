@@ -74,6 +74,8 @@ type RadarQCInput struct {
 	QCConfig              json.RawMessage
 	QCConfigSHA256        string
 	RegenerationID        uuid.UUID
+	// RebuildID isolates an operator-requested QC-only attempt from full-pipeline regeneration.
+	RebuildID uuid.UUID
 }
 
 type RadarGridInput struct {
@@ -428,6 +430,9 @@ func (service *Service) CreateRadarQC(
 	if input.RegenerationID != uuid.Nil {
 		identity = append(identity, input.RegenerationID.String())
 	}
+	if input.RebuildID != uuid.Nil {
+		identity = append(identity, "qc-only-rebuild", input.RebuildID.String())
+	}
 	jobID := stableID(append([]string{"radar-qc-job"}, identity...)...)
 	traceID := stableID(append([]string{"radar-qc-trace"}, identity...)...)
 	eventID := stableID("radar-qc-request", jobID.String())
@@ -439,6 +444,9 @@ func (service *Service) CreateRadarQC(
 	)
 	if input.RegenerationID != uuid.Nil {
 		outputPrefix += "regenerations/" + input.RegenerationID.String() + "/"
+	}
+	if input.RebuildID != uuid.Nil {
+		outputPrefix += "rebuilds/" + input.RebuildID.String() + "/"
 	}
 	profileHash := ""
 	if strings.HasPrefix(input.QCPipelineVersion, "qc-opensource-") {
@@ -505,6 +513,9 @@ func (service *Service) CreateRadarQC(
 }
 
 func validateRadarQCInput(input RadarQCInput) error {
+	if input.RebuildID != uuid.Nil && input.RegenerationID != uuid.Nil {
+		return fmt.Errorf("QC rebuild and full-pipeline regeneration cannot be combined")
+	}
 	if input.ScanID == uuid.Nil || input.RunID == uuid.Nil || input.RadarID == "" ||
 		input.RadarConfigVersion == "" || input.QCProfile == "" ||
 		input.QCPipelineVersion == "" || input.FlagDefinitionVersion == "" {

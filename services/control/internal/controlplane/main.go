@@ -158,6 +158,27 @@ func Main() {
 			slog.Error("create radar QC workflow", "error", err)
 			os.Exit(1)
 		}
+	case "radar-qc-rebuild":
+		if len(os.Args) != 5 {
+			slog.Error("radar-qc-rebuild requires scan UUID, QC config YAML and nonzero rebuild UUID")
+			os.Exit(2)
+		}
+		id, err := uuid.Parse(os.Args[4])
+		if err != nil || id == uuid.Nil {
+			slog.Error("invalid QC rebuild UUID")
+			os.Exit(2)
+		}
+		scan, job, err := createRadarQC(ctx, store, service, os.Args[2], os.Args[3], uuid.Nil, id)
+		if err != nil {
+			slog.Error("rebuild radar QC", "error", err)
+			os.Exit(1)
+		}
+		if err := json.NewEncoder(os.Stdout).Encode(map[string]string{
+			"scan_id": scan.ID.String(), "job_id": job.ID.String(), "rebuild_id": id.String(),
+		}); err != nil {
+			slog.Error("write QC rebuild receipt", "error", err)
+			os.Exit(1)
+		}
 	case "radar-grid":
 		if len(os.Args) != 4 {
 			slog.Error("radar-grid requires a scan UUID and grid profile YAML")
@@ -757,7 +778,15 @@ func createRadarQC(
 	rawScanID string,
 	configPath string,
 	regenerationID uuid.UUID,
+	rebuildIDs ...uuid.UUID,
 ) (workflow.RadarScan, workflow.Job, error) {
+	var rebuildID uuid.UUID
+	if len(rebuildIDs) > 1 {
+		return workflow.RadarScan{}, workflow.Job{}, fmt.Errorf("at most one QC rebuild identity")
+	}
+	if len(rebuildIDs) == 1 {
+		rebuildID = rebuildIDs[0]
+	}
 	scanID, err := uuid.Parse(rawScanID)
 	if err != nil {
 		return workflow.RadarScan{}, workflow.Job{}, fmt.Errorf("parse radar scan UUID: %w", err)
@@ -823,6 +852,7 @@ func createRadarQC(
 		QCConfig:              configJSON,
 		QCConfigSHA256:        fmt.Sprintf("%x", configHash),
 		RegenerationID:        regenerationID,
+		RebuildID:             rebuildID,
 	})
 	if err != nil {
 		return workflow.RadarScan{}, workflow.Job{}, err

@@ -411,3 +411,38 @@ def test_real_worker_rejects_raw_archive_checksum_mismatch(
 
     with pytest.raises(ValueError, match="SHA-256"):
         execute_fmt_decode(RadarDecodeRequested.model_validate(value))
+
+
+def test_draft_null_strategy_matches_only_empty_native_task(tmp_path):
+    config = load_radar_config(make_config(tmp_path))
+    source = make_fmt_fixture(tmp_path)
+    data = bytearray(bz2.decompress(source.read_bytes()))
+    offset = GENERIC_HEADER.size + SITE_CONFIG.size
+    data[offset:offset + 32] = bytes(32)
+    source.write_bytes(bz2.compress(data))
+    draft = replace(config, lifecycle='draft', scan={**config.scan, 'strategy_name': None})
+    assert decode_fmt_volume(source, draft).task.name == ''
+    with pytest.raises(DecodeError, match='source task'):
+        decode_fmt_volume(source, config)
+    source = make_fmt_fixture(tmp_path)
+    with pytest.raises(DecodeError, match='source task'):
+        decode_fmt_volume(source, draft)
+
+
+
+def test_explicit_reserved_tail_does_not_invent_noise_or_relax_default(tmp_path):
+    config = load_radar_config(make_config(tmp_path))
+    source = make_fmt_fixture(tmp_path)
+    data = bytearray(bz2.decompress(source.read_bytes()))
+    offset = GENERIC_HEADER.size + SITE_CONFIG.size + TASK_CONFIG.size + 2 * CUT_CONFIG.size
+    while offset < len(data):
+        radial = RADIAL_HEADER.unpack_from(data, offset)
+        data[offset + 44:offset + 64] = b'legacy reserved data'
+        offset += RADIAL_HEADER.size + radial[9]
+    source.write_bytes(bz2.compress(data))
+    with pytest.raises(DecodeError, match='compressed radial'):
+        decode_fmt_volume(source, config)
+    explicit = replace(config, source={**config.source, 'radial_header_layout': 'reserved_tail_20'})
+    volume = decode_fmt_volume(source, explicit)
+    assert np.isfinite(volume.sweeps[0].fields['DBZH']).any()
+    assert all(np.isnan(s.horizontal_noise_dbm).all() and np.isnan(s.vertical_noise_dbm).all() for s in volume.sweeps)

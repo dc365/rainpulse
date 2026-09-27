@@ -222,6 +222,13 @@ def decode_fmt_volume(path: str | Path, config: RadarDecoderConfig) -> DecodedRa
         if generic_type not in {1, 16}:
             raise DecodeError(f"unsupported RSTM generic type {generic_type}")
 
+        radial_layout = config.source.get("radial_header_layout", "noise_and_compression")
+        if radial_layout not in {"noise_and_compression", "reserved_tail_20"}:
+            raise DecodeError("unknown configured radial header layout")
+        if radial_layout == "reserved_tail_20" and generic_type != 1:
+            raise DecodeError("reserved-tail layout requires generic type 1")
+        if radial_layout == "reserved_tail_20":
+            warnings.append("Explicit reserved 20-byte radial tail: noise and compression metadata are unavailable")
         if generic_type == 16:
             site = _parse_pa_site(_read_exact(stream, PA_SITE_CONFIG.size, "site configuration"))
             task_bytes = _read_exact(stream, PA_TASK_CONFIG.size, "task configuration")
@@ -280,6 +287,11 @@ def decode_fmt_volume(path: str | Path, config: RadarDecoderConfig) -> DecodedRa
                 zip_type,
                 _reserved2,
             ) = values
+            if radial_layout == "reserved_tail_20":
+                # This layout declares only the first 44 bytes. Native moment
+                # headers, lengths, scales and cut boundaries remain mandatory.
+                horizontal_noise = vertical_noise = -32768
+                zip_type = b"\x00"
             if not 1 <= elevation_number <= task.cut_number:
                 raise DecodeError(f"radial references invalid cut {elevation_number}")
             if not 0 <= moment_number <= 64:
@@ -543,7 +555,9 @@ def _validate_header(
     for label, (actual, expected, tolerance) in checks.items():
         if expected is not None and abs(float(actual) - float(expected)) > tolerance:
             raise DecodeError(f"source {label} {actual} differs from config {expected}")
-    if config.scan.get("strategy_name") != task.name:
+    expected_task = config.scan.get("strategy_name")
+    empty_draft_task = config.lifecycle == "draft" and expected_task is None and task.name == ""
+    if not empty_draft_task and expected_task != task.name:
         raise DecodeError(f"source task {task.name!r} differs from radar configuration")
     expected_cuts = config.scan.get("expected_cut_elevations_deg")
     actual_cuts = [cut.nominal_elevation_deg for cut in cuts]

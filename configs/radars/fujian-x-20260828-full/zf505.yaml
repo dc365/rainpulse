@@ -1,0 +1,122 @@
+schema_version: '1.0'
+config_version: zf505-x-full-fields-v2
+radar_id: zf505
+lifecycle: draft
+display_name: ZF505 X 波段候选站
+site:
+  longitude_deg: 118.11111450195312
+  latitude_deg: 25.70833396911621
+  altitude_m: 1654
+  antenna_altitude_m: 1655
+  altitude_datum: null
+hardware:
+  manufacturer: null
+  model: YLD7-D
+  radar_band: X
+  frequency_mhz: 9415.0
+  beam_width_deg: 0.9800000190734863
+  beam_width_vertical_deg: 0.9700000286102295
+  dual_pol_available: true
+  nyquist_velocity_mps: null
+  calibration_offsets:
+    dbzh_db: null
+    zdr_db: null
+scan:
+  strategy_name: VCP23D
+  expected_update_seconds: null
+  expected_elevations_deg:
+  - 0.50537109375
+  - 1.494140625
+  - 2.39501953125
+  - 3.40576171875
+  - 4.306640625
+  - 5.99853515625
+  - 9.90966796875
+  - 14.58984375
+  - 19.48974609375
+  expected_cut_elevations_deg:
+  - 0.50537109375
+  - 0.50537109375
+  - 1.494140625
+  - 1.494140625
+  - 2.39501953125
+  - 3.40576171875
+  - 4.306640625
+  - 5.99853515625
+  - 9.90966796875
+  - 14.58984375
+  - 19.48974609375
+  azimuth_resolution_deg: null
+  range_gate_m: 75
+  max_range_m: null
+fields:
+- canonical_name: DBZH
+  source_name: REF
+  source_unit: dBZ
+  canonical_unit: dBZ
+  missing_value: raw_codes_0_to_4
+  scale_factor: 0.5
+  add_offset: -33.0
+- canonical_name: VR
+  source_name: VEL
+  source_unit: m s-1
+  canonical_unit: m s-1
+  missing_value: raw_codes_0_to_4
+  scale_factor: 0.5
+  add_offset: -64.5
+- canonical_name: SW
+  source_name: SW
+  source_unit: m s-1
+  canonical_unit: m s-1
+  missing_value: raw_codes_0_to_4
+  scale_factor: 0.5
+  add_offset: -64.5
+- canonical_name: ZDR
+  source_name: ZDR
+  source_unit: dB
+  canonical_unit: dB
+  missing_value: raw_codes_0_to_4
+  scale_factor: 0.0625
+  add_offset: -8.125
+- canonical_name: RHOHV
+  source_name: RHO
+  source_unit: '1'
+  canonical_unit: '1'
+  missing_value: raw_codes_0_to_4
+  scale_factor: 0.005
+  add_offset: -0.025
+- canonical_name: PHIDP
+  source_name: PHI
+  source_unit: degree
+  canonical_unit: degree
+  missing_value: raw_codes_0_to_4
+  scale_factor: 0.01
+  add_offset: -0.5
+- canonical_name: SNR
+  source_name: SNRH
+  source_unit: dB
+  canonical_unit: dB
+  missing_value: raw_codes_0_to_4
+  scale_factor: 0.5
+  add_offset: -10.0
+source:
+  format: cma-rstm-level2
+  format_version: '2.0'
+  data_code: RADA_L2_X_FMT
+  generic_type: 1
+  delivery: manual
+  uri_pattern: file:///data/Weather/RADA/RADA_L2_X_FMT/OBS_X/{yyyy}/{yyyymmdd}/ZF505/Z_RADR_I_ZF505_{filename_time}_O_DOR_YLD7-D_CAP_FMT.bin.bz2
+  timestamp_timezone: UTC
+ancillary:
+  dem_asset_version: null
+  clutter_map_version: null
+  coastline_asset_version: null
+qc:
+  profile: null
+  pipeline_version: null
+  flag_definition_version: null
+known_issues:
+- Candidate native-header geometry only; height datum, station calibration and attenuation
+  remain unverified.
+- Field mapping includes observed SNR and polarimetry. Missing fields remain missing;
+  no trusted QPE or forecast eligibility.
