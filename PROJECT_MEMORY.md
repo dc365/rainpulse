@@ -716,3 +716,13 @@ operational data here.
 - 105 部署目录 `.build/sx-probes-b91b81b`，回滚 `.build/rollback-sx-probes-b91b81b`；现场 Compose 完整链后追加该发布目录的 `compose.json`。X/自动 diagnostics/managed diagnostics 镜像分别 `rainpulse-cpu-worker:sx-probes-b91b81b-0/-1/-2`。S QC、render 与 C/D 参数保持既有版本。
 - 实际 X 验收 run `5d65e5bf-75a5-472d-9a5f-c22179b08342` 两任务成功（ZF101 40 层、ZF505 9 层）；真实点查数值与校验后的数值块相符。管理池恢复 ACCEPTING，无活动/排队任务。
 - 旧 S 历史图件无数值索引，须由更新后的 diagnostics 生成新资产，不覆盖历史。4 S + 11 X 仅完成合成缓存负载测试；实际目录仍仅 2 X。真实 S+X 数值融合仍受站点几何/标定和空产品配置限制。
+
+## 2026-09-27 S+X 未标定水平试验
+
+- 用户同意继续尽量完成 S+X，验证阶段可使用明确标注的未标定试验。105 实际地址为 `192.168.28.105`；`yons` 可用 sudo 管理服务，认证信息不写入仓库。
+- 新增独立 `experimental_horizontal_max` 产品方法和 `experimental_enabled` 站点开关，沿用 operations、现有地图/色谱/六分钟轴。未修改 verified 标记或可信等高融合准入；QPE/预报不接入该产品。
+- 真实四 S + ZF101/ZF505 于 08:12 北京时间数值组合成功：S 36,359 格点、X 9,496 格点、联合 37,087 格点，最终有 S 和 X 获胜。X 缺少 SNR 时保留不确定候选，实测低 SNR/污染/阻塞继续排除。源值样本 25 dBZ 与数组一致，返回 low_quality、原射线/距离门/仰角编号，未知高度/质量为 null。
+- 已修复重复方位角（最新射线、同刻取原始首索引）、浮点秒与微秒目录边界比较、API 遗漏试验标识、有限值不确定点错误标为 valid、组合色谱 CSS 冲突。
+- Go 105 当前 `f82d18c`，Web 含 `675b4cd` 色谱修复；试验发布目录 `.build/sx-experiment-108e920`，其 `compose.json` 追加完整历史链。最新 Worker 发布应以现场容器 image/labels 为准，后续镜像包含 `71084d7` 时间精度修复。网络仅四 S + 两 X，网格 1 km、6 分钟，不能声称 24 X 全部接入。
+- 两 X 站 00:00–01:00 UTC 各 10 份体扫已通过正式历史导入并全部 NORMALIZED。连续组合验收仍需以最新 operations 运行状态为准；早期缺资料或修复前失败尝试保留。
+- S 点值补建 v16 成功 99/106；4 个超大消息失败已用 v17 新任务全部补建成功，自动诊断已缩回一副本。另 3 个周期实际混用不同 clutter-fusion generations，未绕过一致性校验，需统一 QC 输入后补建。v17 当前配置/Compose 为 `deploy/*diagnostic-source-probe-retry-20260927.yaml`。

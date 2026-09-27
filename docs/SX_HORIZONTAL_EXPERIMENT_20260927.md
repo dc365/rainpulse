@@ -11,3 +11,11 @@ Same-run S-only, X-only and S+X arrays feed the existing map, colour scale, sour
 Validation: targeted Python experiments/multiband regression, Go planner/control-plane tests and frontend build. Real deployment acceptance must additionally verify actual S and X contribution counts and source-value probes.
 
 Real-data corrections: exact duplicate bearings are resolved by latest acquisition (first original index on ties), preserving original ray indices. Both deployed X inputs omit SNR entirely. This experimental method retains such gates as uncertain candidates; a present SNR field that is low or invalid remains excluded. The existing X QC flags and trusted fusion eligibility are unchanged, X quality scores remain unknown, and the displayed warning explicitly identifies the missing SNR condition.
+
+## Real acceptance
+
+- Four S stations plus ZF101/ZF505, 2026-08-28 08:12 Beijing time: S 36,359 echo cells, X 9,496 and joint 37,087, with both bands selected as final winners. The source probe returns 25 dBZ at a verified X-winning sample, with low-quality state and original sweep/ray/gate indices; unknown height and quality remain null.
+- Desktop and 375px mobile maps inspected. Reflectivity uses the shared segmented S palette; winner-band view shows distinct S/X contributions. Fixed a composite-specific CSS rule that had compressed the shared colour bar.
+- The native catalog stores microsecond timestamps; floating-point ray conversion could differ by one float ULP (about 0.24 microseconds). Validation now compares at catalog microsecond precision, with a regression that still rejects a genuine 10-microsecond overrun.
+- Two X sites each now have ten normalized volumes for UTC 00:00–01:00 through the existing history-ingest CLI. Earlier missing-input or failed runs remain traceable. New plans must be built after the updated Worker registers its fingerprint.
+- Targeted Python experimental + multiband suite: 69 passed. Related Go operations/planner/control-plane/probe tests passed; frontend build and 5 focused workspace tests passed. Actual source-value API and rendered map checks supplement these tests.
