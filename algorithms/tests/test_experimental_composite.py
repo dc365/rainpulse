@@ -65,3 +65,10 @@ def test_float_epoch_rounding_respects_catalog_microsecond_precision():
     sweep.ray_time_epoch[1]=epoch(end)+.00001
     with pytest.raises(ValueError,match='acquisition interval'):
         v.validate(station,require_geometry=False)
+
+
+def test_requested_coverage_preserves_absent_stations_and_old_requests():
+    from rainpulse_algo.multiband.experimental import missing_sources
+    payload = {'sources': [{'radar_id': 's1'}], 'requested_radars': ['s1', 'x1']}
+    assert missing_sources(payload) == [{'radar_id': 'x1', 'reason': 'no_usable_causal_input'}]
+    assert missing_sources({'sources': payload['sources']}) == []

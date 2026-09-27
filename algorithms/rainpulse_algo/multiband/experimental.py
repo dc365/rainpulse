@@ -59,6 +59,12 @@ def unique_rays(sweep):
                  {key:value[chosen] for key,value in sweep.fields.items()}), chosen
 
 
+def missing_sources(payload):
+    present = {source['radar_id'] for source in payload['sources']}
+    return [{'radar_id': radar, 'reason': 'no_usable_causal_input'}
+            for radar in sorted(set(payload.get('requested_radars', [])) - present)]
+
+
 def execute(executor, request, reader, *, started):
     import zarr
     from zarr.storage import KVStore
@@ -72,7 +78,7 @@ def execute(executor, request, reader, *, started):
     outputs = {key:allocate_output(grid) for key in ('S','X','S+X')}
     for output in outputs.values():
         output['WINNER_SWEEP_NUMBER'] = np.full((grid.height, grid.width), -1, np.int32)
-    sources, skipped = [], []
+    sources, skipped = [], missing_sources(p)
     total_gates = 0
     with TemporaryDirectory(prefix='rainpulse-horizontal-', dir=options.scratch_parent) as scratch:
         for src in sorted(p['sources'], key=lambda s:s['radar_id']):

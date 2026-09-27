@@ -114,44 +114,54 @@
         "radar_id": {
           "type": "string",
           "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "requested_radars": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+          }
         }
       },
-        "required": [
-          "mode",
-          "network_sha256",
-          "execution_sha256",
+      "required": [
+        "mode",
+        "network_sha256",
+        "execution_sha256",
         "analysis_time",
         "input_cutoff",
         "sources",
         "output_prefix",
         "analysis_id"
-        ],
-        "allOf": [
-          {
-            "if": {
-              "properties": {
-                "mode": {
-                  "const": "sx_composite"
-                }
-              },
-              "required": [
-                "mode"
-              ]
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "sx_composite"
+              }
             },
-            "then": {
+            "required": [
+              "mode"
+            ]
+          },
+          "then": {
+            "required": [
+              "product_id"
+            ]
+          },
+          "else": {
+            "not": {
               "required": [
                 "product_id"
               ]
-            },
-            "else": {
-              "not": {
-                "required": [
-                  "product_id"
-                ]
-              }
             }
           }
-        ],
+        }
+      ],
       "additionalProperties": false
     }
   },

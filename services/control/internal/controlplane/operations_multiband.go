@@ -161,6 +161,7 @@ func (b *OperationsBuilder) buildMultiBand(ctx context.Context, s operations.Sel
 			"execution_sha256": executionSHA}
 		if s.Preset == "sx_composite" {
 			payload["product_id"] = product
+			payload["requested_radars"] = ids
 		}
 		if s.Preset == "x_qc" {
 			payload["scan_id"] = snap.Sources[0].ScanID

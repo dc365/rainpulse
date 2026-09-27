@@ -134,6 +134,13 @@ class Executor:
         inputs = p["sources"]
         if not 1 <= len(inputs) <= 32 or len({s["radar_id"] for s in inputs}) != len(inputs):
             raise ValueError("invalid/duplicate station inputs")
+        requested = p.get("requested_radars")
+        if requested is not None:
+            if (not isinstance(requested, list) or not 1 <= len(requested) <= 32
+                    or any(not isinstance(r, str) or r not in self.network.stations for r in requested)
+                    or len(set(requested)) != len(requested)
+                    or not {s["radar_id"] for s in inputs}.issubset(requested)):
+                raise ValueError("invalid requested station coverage")
         if epoch(p["input_cutoff"]) > epoch(request["occurred_at"]):
             raise ValueError("input cutoff cannot exceed the frozen task creation time")
         if p["mode"] == "x_qc" and len(inputs) != 1:
