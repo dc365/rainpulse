@@ -2,11 +2,11 @@
 services:
   analysis-diagnostics-worker:
     environment:
-      RAINPULSE_DIAGNOSTIC_CONFIG: /opt/rainpulse/configs/diagnostics/diagnostic-source-probe-20260927.yaml
+      RAINPULSE_DIAGNOSTIC_CONFIG: /opt/rainpulse/diagnostic-source-probe-20260927.yaml
     volumes:
-      - ./diagnostic-source-probe-20260927.yaml:/opt/rainpulse/configs/diagnostics/diagnostic-source-probe-20260927.yaml:ro
+      - ./diagnostic-source-probe-20260927.yaml:/opt/rainpulse/diagnostic-source-probe-20260927.yaml:ro
   ops-diagnostics-worker:
     environment:
-      RAINPULSE_DIAGNOSTIC_CONFIG: /opt/rainpulse/configs/diagnostics/diagnostic-source-probe-20260927.yaml
+      RAINPULSE_DIAGNOSTIC_CONFIG: /opt/rainpulse/diagnostic-source-probe-20260927.yaml
     volumes:
-      - ./diagnostic-source-probe-20260927.yaml:/opt/rainpulse/configs/diagnostics/diagnostic-source-probe-20260927.yaml:ro
+      - ./diagnostic-source-probe-20260927.yaml:/opt/rainpulse/diagnostic-source-probe-20260927.yaml:ro
