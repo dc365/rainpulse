@@ -38,13 +38,15 @@ def experimental_fields(fields, band, *, allow_missing_snr=False):
     return values, admitted, quality
 
 
-def update_samples(out, values, admitted, ray, gate, age, quality, index):
+def update_samples(out, values, admitted, ray, gate, age, quality, index, sweep_number=-1):
     out['OBSERVED_MASK'] |= admitted.astype(np.uint8)
     replace = admitted & np.isfinite(values) & (~np.isfinite(out['CR_DBZH']) | (values > out['CR_DBZH']))
     for key, value in [('CR_DBZH', values), ('WINNER_RAY', ray), ('WINNER_GATE', gate),
                        ('WINNER_AGE_SECONDS', age), ('WINNER_QUALITY_SCORE', quality)]:
         out[key][replace] = value[replace]
     out['WINNER_SOURCE'][replace] = index
+    if 'WINNER_SWEEP_NUMBER' in out:
+        out['WINNER_SWEEP_NUMBER'][replace] = sweep_number
 
 
 def unique_rays(sweep):
@@ -68,6 +70,8 @@ def execute(executor, request, reader, *, started):
     if target > cutoff or target % grid.cadence_seconds:
         raise ValueError('invalid experimental target time')
     outputs = {key:allocate_output(grid) for key in ('S','X','S+X')}
+    for output in outputs.values():
+        output['WINNER_SWEEP_NUMBER'] = np.full((grid.height, grid.width), -1, np.int32)
     sources, skipped = [], []
     total_gates = 0
     with TemporaryDirectory(prefix='rainpulse-horizontal-', dir=options.scratch_parent) as scratch:
@@ -126,12 +130,16 @@ def execute(executor, request, reader, *, started):
                         support=(offset<=1.0)&(denominator>0)&(abs(slant-ranges[gate])<=widths[gate]/2)&(age>=0)&(age<=station.maximum_age_seconds)
                         valid=support&admitted[ray,gate]
                         for band in (station.band,'S+X'):
-                            update_samples({k:v[sl] for k,v in outputs[band].items()},values[ray,gate],valid,native_ray[ray],gate,age,quality[ray,gate],index)
+                            update_samples({k:v[sl] for k,v in outputs[band].items()},values[ray,gate],valid,native_ray[ray],gate,age,quality[ray,gate],index,sweep.number)
                     del volume,values,admitted,quality
     results={}
     for band,out in outputs.items():
         result=finish_composite(out,grid,net,p['product_id'],p['analysis_time'],p['input_cutoff'],sources,skipped)
-        result.metadata.update(method='experimental_horizontal_max_v1',levels_m_msl=[],
+        x_indices = [i for i, source in enumerate(sources) if source['band'] == 'X']
+        uncertain = np.isin(out['WINNER_SOURCE'], x_indices) & np.isfinite(out['CR_DBZH'])
+        out['UNCERTAIN_MASK'][uncertain] = 1
+        out['CR_UNCERTAIN_DBZH'][uncertain] = out['CR_DBZH'][uncertain]
+        result.metadata.update(experimental_uncertain_echo_cells=int(uncertain.sum()), method='experimental_horizontal_max_v1',levels_m_msl=[],
             vertical_coverage='not_height_aligned',observed_mask_semantics='at_least_one_admitted_native_cut',
             experimental=True,calibration_status='unverified',coordinate_status='native_header_unverified',
             missing_snr_policy='retain_as_uncertain_only_when_field_absent',angular_tolerance_deg=1.,duplicate_ray_policy='latest_acquisition_first_index_on_tie',display_warning='未标定试验 · X 缺少 SNR 时保留候选 · 非等高融合')

@@ -491,7 +491,7 @@ def sx_comparison_objects(result: Composite, band_results: dict[str, Composite |
         _, scalar = geographic_composite_sample(arrays[field], result.metadata)
         fields = {field: scalar[::-1]}
         if entry['product_id'] == 'sx_composite':
-            for name in ('WINNER_SOURCE','WINNER_RAY','WINNER_GATE','WINNER_AGE_SECONDS','WINNER_QUALITY_SCORE','WINNER_HEIGHT_MSL_M','OBSERVED_MASK','NO_ECHO_MASK','UNCERTAIN_MASK'):
+            for name in ('WINNER_SOURCE','WINNER_SWEEP_NUMBER','WINNER_RAY','WINNER_GATE','WINNER_AGE_SECONDS','WINNER_QUALITY_SCORE','WINNER_HEIGHT_MSL_M','OBSERVED_MASK','NO_ECHO_MASK','UNCERTAIN_MASK'):
                 if name in arrays:
                     _, values = geographic_composite_sample(arrays[name], result.metadata)
                     fields[name] = values[::-1]
