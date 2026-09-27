@@ -1156,6 +1156,7 @@ export interface components {
             expected_sweep_count: number;
             actual_sweep_count: number;
             missing_sweep_numbers: number[];
+            /** @description Zero denotes unknown nominal geometry, only for draft unavailable scans with SCAN_GEOMETRY_UNKNOWN. */
             expected_radial_count: number;
             actual_radial_count: number;
             missing_radial_count: number;
@@ -2240,7 +2241,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Same-run S, X and S+X comparison; optional EPSG4326 map bounds and allowlisted image URLs. Missing map metadata is never inferred. */
+            /** @description Same-run S, X and S+X comparison; optional EPSG4326 map bounds and allowlisted image URLs. Experimental results expose experimental=true and display_warning; product valid_echo_cells and echo_contributing_bands report actual contributions. Missing map metadata is never inferred. */
             200: {
                 headers: {
                     [name: string]: unknown;

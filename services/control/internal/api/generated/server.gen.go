@@ -1820,30 +1820,32 @@ type RadarGridMetricsVerticalDatumStatus string
 
 // RadarHealthMetrics defines model for RadarHealthMetrics.
 type RadarHealthMetrics struct {
-	ActualRadialCount      int                             `json:"actual_radial_count"`
-	ActualSweepCount       int                             `json:"actual_sweep_count"`
-	AnomalyCount           int64                           `json:"anomaly_count"`
-	ChannelStatus          RadarHealthMetricsChannelStatus `json:"channel_status"`
-	ExpectedRadialCount    int                             `json:"expected_radial_count"`
-	ExpectedSweepCount     int                             `json:"expected_sweep_count"`
-	FieldAvailability      []RadarFieldAvailability        `json:"field_availability"`
-	FieldAvailabilityRatio float32                         `json:"field_availability_ratio"`
-	Health                 RadarHealthState                `json:"health"`
-	HealthProfileVersion   string                          `json:"health_profile_version"`
-	HealthReasons          []string                        `json:"health_reasons"`
-	LayerAnomalies         []map[string]interface{}        `json:"layer_anomalies"`
-	MaximumAzimuthGapDeg   float32                         `json:"maximum_azimuth_gap_deg"`
-	MeasuredAt             time.Time                       `json:"measured_at"`
-	MissingRadialCount     int                             `json:"missing_radial_count"`
-	MissingSweepNumbers    []int                           `json:"missing_sweep_numbers"`
-	NoiseLevel             RadarNoiseLevel                 `json:"noise_level"`
-	OutOfRangeGateCount    int64                           `json:"out_of_range_gate_count"`
-	OutOfRangeGateRatio    float32                         `json:"out_of_range_gate_ratio"`
-	RadarConfigVersion     string                          `json:"radar_config_version"`
-	RadarId                string                          `json:"radar_id"`
-	ScanCompleteness       float32                         `json:"scan_completeness"`
-	ScanId                 openapi_types.UUID              `json:"scan_id"`
-	Warnings               []string                        `json:"warnings"`
+	ActualRadialCount int                             `json:"actual_radial_count"`
+	ActualSweepCount  int                             `json:"actual_sweep_count"`
+	AnomalyCount      int64                           `json:"anomaly_count"`
+	ChannelStatus     RadarHealthMetricsChannelStatus `json:"channel_status"`
+
+	// ExpectedRadialCount Zero denotes unknown nominal geometry, only for draft unavailable scans with SCAN_GEOMETRY_UNKNOWN.
+	ExpectedRadialCount    int                      `json:"expected_radial_count"`
+	ExpectedSweepCount     int                      `json:"expected_sweep_count"`
+	FieldAvailability      []RadarFieldAvailability `json:"field_availability"`
+	FieldAvailabilityRatio float32                  `json:"field_availability_ratio"`
+	Health                 RadarHealthState         `json:"health"`
+	HealthProfileVersion   string                   `json:"health_profile_version"`
+	HealthReasons          []string                 `json:"health_reasons"`
+	LayerAnomalies         []map[string]interface{} `json:"layer_anomalies"`
+	MaximumAzimuthGapDeg   float32                  `json:"maximum_azimuth_gap_deg"`
+	MeasuredAt             time.Time                `json:"measured_at"`
+	MissingRadialCount     int                      `json:"missing_radial_count"`
+	MissingSweepNumbers    []int                    `json:"missing_sweep_numbers"`
+	NoiseLevel             RadarNoiseLevel          `json:"noise_level"`
+	OutOfRangeGateCount    int64                    `json:"out_of_range_gate_count"`
+	OutOfRangeGateRatio    float32                  `json:"out_of_range_gate_ratio"`
+	RadarConfigVersion     string                   `json:"radar_config_version"`
+	RadarId                string                   `json:"radar_id"`
+	ScanCompleteness       float32                  `json:"scan_completeness"`
+	ScanId                 openapi_types.UUID       `json:"scan_id"`
+	Warnings               []string                 `json:"warnings"`
 }
 
 // RadarHealthMetricsChannelStatus defines model for RadarHealthMetrics.ChannelStatus.

@@ -776,7 +776,7 @@ func applyRadarDecodeCompletion(
 		return fmt.Errorf("%w: invalid radar health state %q", orchestration.ErrInvalidEvent, health.Health)
 	}
 	if health.ScanCompleteness < 0 || health.ScanCompleteness > 1 || health.ExpectedSweepCount <= 0 ||
-		health.ExpectedRadialCount <= 0 || health.MaximumAzimuthGapDeg < 0 || health.MaximumAzimuthGapDeg > 360 {
+		health.ExpectedRadialCount < 0 || health.MaximumAzimuthGapDeg < 0 || health.MaximumAzimuthGapDeg > 360 {
 		return fmt.Errorf("%w: invalid radar health metrics", orchestration.ErrInvalidEvent)
 	}
 
@@ -791,6 +791,16 @@ FROM radar_scan_runs WHERE run_id = $1 FOR UPDATE`, event.RunID).
 	if health.RadarID != radarID || health.RadarConfigVersion != configVersion {
 		return fmt.Errorf("%w: radar health identity does not match scan", orchestration.ErrInvalidEvent)
 	}
+	if health.ExpectedRadialCount == 0 {
+		var draft bool
+		if err := tx.QueryRow(ctx, `SELECT config->>'lifecycle' = 'draft' FROM radar_config_versions WHERE radar_id=$1 AND radar_config_version=$2`, radarID, configVersion).Scan(&draft); err != nil {
+			return fmt.Errorf("read unknown geometry lifecycle: %w", err)
+		}
+		if !unknownDraftGeometry(health, draft) {
+			return fmt.Errorf("%w: unknown scan geometry requires unavailable draft evidence", orchestration.ErrInvalidEvent)
+		}
+	}
+
 	health.ScanID = scanID
 	health.MeasuredAt = event.Payload.FinishedAt
 	fields, err := json.Marshal(health.FieldAvailability)
@@ -1646,4 +1656,16 @@ func scanJob(row rowScanner) (workflow.Job, error) {
 		return workflow.Job{}, fmt.Errorf("scan forecast job: %w", err)
 	}
 	return job, nil
+}
+
+func unknownDraftGeometry(health workflow.RadarHealthMetrics, draft bool) bool {
+	if !draft || health.ExpectedRadialCount != 0 || health.ScanCompleteness != 0 || health.Health != workflow.RadarHealthUnavailable {
+		return false
+	}
+	for _, reason := range health.HealthReasons {
+		if reason == "SCAN_GEOMETRY_UNKNOWN" {
+			return true
+		}
+	}
+	return false
 }

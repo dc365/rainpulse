@@ -1874,7 +1874,8 @@ components:
             minimum: 1
         expected_radial_count:
           type: integer
-          minimum: 1
+          minimum: 0
+          description: Zero denotes unknown nominal geometry, only for draft unavailable scans with SCAN_GEOMETRY_UNKNOWN.
         actual_radial_count:
           type: integer
           minimum: 0
