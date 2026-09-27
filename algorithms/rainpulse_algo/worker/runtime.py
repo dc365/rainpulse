@@ -384,6 +384,24 @@ class Worker:
     ) -> None:
         subject = JOB_COMPLETED_SUBJECT if isinstance(event, JobCompleted) else JOB_FAILED_SUBJECT
         headers = {} if replay else {"Nats-Msg-Id": str(event.event_id)}
+        if isinstance(event, JobCompleted):
+            diagnostics = event.payload.diagnostics
+            manifest = diagnostics.get("analysis_diagnostics")
+            if isinstance(manifest, dict) and isinstance(manifest.get("layers"), list):
+                # Numeric tile directories stay in the immutable object manifest.
+                # Strip only this optional index from transport, including replay
+                # of older committed markers; preserve event and asset identities.
+                compact = {
+                    **manifest,
+                    "layers": [
+                        {key: value for key, value in layer.items() if key != "probe"}
+                        if isinstance(layer, dict) else layer
+                        for layer in manifest["layers"]
+                    ],
+                }
+                event = event.model_copy(update={"payload": event.payload.model_copy(
+                    update={"diagnostics": {**diagnostics, "analysis_diagnostics": compact}}
+                )})
         await jetstream.publish(
             subject,
             event.model_dump_json().encode(),
