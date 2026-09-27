@@ -298,7 +298,7 @@ class Volume:
         total = 0
         for s in self.sweeps:
             s.validate()
-            if s.number in numbers or np.any(s.ray_time_epoch < start) or np.any(s.ray_time_epoch > end):
+            if s.number in numbers or np.any(np.rint(s.ray_time_epoch * 1e6) < round(start * 1e6)) or np.any(np.rint(s.ray_time_epoch * 1e6) > round(end * 1e6)):
                 raise ValueError("duplicate sweep or ray outside acquisition interval")
             numbers.add(s.number)
             total += s.fields["DBZH"].size

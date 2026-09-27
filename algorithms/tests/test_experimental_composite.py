@@ -51,3 +51,17 @@ def test_missing_snr_experiment_is_distinct_from_measured_low_snr():
     assert experimental_fields(f,'X',allow_missing_snr=True)[1].item()
     f['SNRH']=np.array([[0.]])
     assert not experimental_fields(f,'X',allow_missing_snr=True)[1].item()
+
+
+def test_float_epoch_rounding_respects_catalog_microsecond_precision():
+    import pytest
+    from rainpulse_algo.multiband.model import Station,Sweep,Volume,epoch
+    station=Station('s1','S','s_qc_zarr')
+    start='2026-08-28T00:14:59.580104Z'; end='2026-08-28T00:20:09.988932Z'
+    times=np.array([np.nextafter(epoch(start),-np.inf),np.nextafter(epoch(end),np.inf)])
+    sweep=Sweep(0,np.array([0.,1.]),np.array([100.,200.]),np.ones(2),times,{'DBZH':np.ones((2,2)),'OBSERVED_MASK':np.ones((2,2)),'NO_ECHO_MASK':np.zeros((2,2))})
+    v=Volume({'radar_id':'s1','scan_id':'s','band':'S','volume_start':start,'volume_end':end,'available_at':end,'asset_sha256':'a'*64,'scan_type':'volume'},[sweep])
+    v.validate(station,require_geometry=False)
+    sweep.ray_time_epoch[1]=epoch(end)+.00001
+    with pytest.raises(ValueError,match='acquisition interval'):
+        v.validate(station,require_geometry=False)
