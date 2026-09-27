@@ -11,7 +11,7 @@
     "stations": {
       "type": "object",
       "minProperties": 1,
-      "maxProperties": 16,
+      "maxProperties": 32,
       "propertyNames": {
         "pattern": "^[a-z0-9][a-z0-9_.-]{0,95}$"
       },

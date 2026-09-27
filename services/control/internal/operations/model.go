@@ -99,8 +99,12 @@ func (s Selection) Validate() error {
 		if s.Start.IsZero() || s.End.IsZero() || !s.End.After(s.Start) || s.End.Sub(s.Start) > 24*time.Hour {
 			return Invalid("请选择不超过24小时的半开时间范围")
 		}
-		if len(s.RadarIDs) < 1 || len(s.RadarIDs) > 16 {
-			return Invalid("请选择1至16个雷达站")
+		limit := 16
+		if s.Preset == "sx_composite" {
+			limit = 32
+		}
+		if len(s.RadarIDs) < 1 || len(s.RadarIDs) > limit {
+			return Invalid(fmt.Sprintf("请选择1至%d个雷达站", limit))
 		}
 		seen := map[string]bool{}
 		for _, id := range s.RadarIDs {

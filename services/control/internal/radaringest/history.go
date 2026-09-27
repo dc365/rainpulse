@@ -32,7 +32,23 @@ var historicalFilenameStamp = regexp.MustCompile(`_(\d{14})_`)
 
 // DiscoverHistoricalFiles inspects an explicit UTC day and accepts only direct
 // station folders. File names and immutable headers must identify the source.
+type HistoricalIssue struct {
+	Path   string `json:"path"`
+	Reason string `json:"reason"`
+}
+
 func DiscoverHistoricalFiles(root, radarID string, day time.Time, from, until time.Time) ([]HistoricalFile, error) {
+	return discoverHistoricalFiles(root, radarID, day, from, until, nil)
+}
+
+// Report mode isolates invalid files but never hides directory I/O failures.
+func DiscoverHistoricalFilesReport(root, radarID string, day, from, until time.Time) ([]HistoricalFile, []HistoricalIssue, error) {
+	issues := []HistoricalIssue{}
+	files, err := discoverHistoricalFiles(root, radarID, day, from, until, &issues)
+	return files, issues, err
+}
+
+func discoverHistoricalFiles(root, radarID string, day time.Time, from, until time.Time, rejected *[]HistoricalIssue) ([]HistoricalFile, error) {
 	if !filepath.IsAbs(root) || !from.Before(until) ||
 		!day.Equal(time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, time.UTC)) {
 		return nil, fmt.Errorf("invalid historical radar discovery parameters")
@@ -47,7 +63,7 @@ func DiscoverHistoricalFiles(root, radarID string, day time.Time, from, until ti
 		return nil, fmt.Errorf("historical date directory is unavailable: %s", dateRoot)
 	}
 	result := make([]HistoricalFile, 0)
-	err := filepath.WalkDir(dateRoot, func(path string, entry fs.DirEntry, walkErr error) error {
+	inspect := func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -101,6 +117,14 @@ func DiscoverHistoricalFiles(root, radarID string, day time.Time, from, until ti
 		}
 		result = append(result, HistoricalFile{Path: path, RadarID: station, HeaderCode: code, GenericType: genericType, Start: start, End: end, SizeBytes: info.Size()})
 		return nil
+	}
+	err := filepath.WalkDir(dateRoot, func(path string, entry fs.DirEntry, walkErr error) error {
+		err := inspect(path, entry, walkErr)
+		if err != nil && rejected != nil && walkErr == nil && entry != nil && !entry.IsDir() {
+			*rejected = append(*rejected, HistoricalIssue{Path: path, Reason: err.Error()})
+			return nil
+		}
+		return err
 	})
 	if err != nil {
 		return nil, fmt.Errorf("discover historical radar files: %w", err)
@@ -147,4 +171,29 @@ func ProbeHeaderIdentity(path string) (string, uint32, error) {
 		return "", 0, fmt.Errorf("empty RSTM site code")
 	}
 	return code, genericType, nil
+}
+
+// SelectHistoricalCadence keeps the first complete native volume in each UTC
+// start-time bucket. Discovery sorts by true header start time and path.
+func SelectHistoricalCadence(files []HistoricalFile, cadence time.Duration) ([]HistoricalFile, []HistoricalFile) {
+	selected := []HistoricalFile{}
+	omitted := []HistoricalFile{}
+	seen := map[time.Time]bool{}
+	ordered := append([]HistoricalFile(nil), files...)
+	sort.Slice(ordered, func(i, j int) bool {
+		if ordered[i].Start.Equal(ordered[j].Start) {
+			return ordered[i].Path < ordered[j].Path
+		}
+		return ordered[i].Start.Before(ordered[j].Start)
+	})
+	for _, f := range ordered {
+		slot := f.Start.Truncate(cadence)
+		if seen[slot] {
+			omitted = append(omitted, f)
+		} else {
+			seen[slot] = true
+			selected = append(selected, f)
+		}
+	}
+	return selected, omitted
 }

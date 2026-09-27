@@ -165,7 +165,7 @@ def build_composite(
     target, deadline = epoch(analysis_time), epoch(cutoff)
     if target > deadline or target % grid.cadence_seconds != 0:
         raise ValueError("target must be a minute boundary no later than input cutoff")
-    if not 1 <= len(volumes) <= 16:
+    if not 1 <= len(volumes) <= 32:
         raise ValueError("one to sixteen unique station observations are required")
     volumes = sorted(volumes, key=lambda v: (v.metadata["radar_id"], v.metadata["scan_id"]))
     seen = set()

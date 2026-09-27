@@ -207,7 +207,7 @@ def build_composite_streaming(
                 raise ValueError("stream is duplicated or not in canonical source order")
             new_station = last_order is None or sid != last_order[0]
             if new_station:
-                if sid in seen or len(seen) >= 16:
+                if sid in seen or len(seen) >= 32:
                     raise ValueError("one to sixteen unique station observations are required")
                 seen.add(sid)
                 station_gates = station_cuts = 0

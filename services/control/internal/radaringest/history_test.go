@@ -44,9 +44,28 @@ func TestDiscoverHistoricalFilesRequiresDirectStationAndHeaderIdentity(t *testin
 	if _, err := DiscoverHistoricalFiles(root, "zf101", day, day, day.Add(6*time.Minute)); err == nil {
 		t.Fatal("mismatched header was accepted")
 	}
+	valid, rejected, err := DiscoverHistoricalFilesReport(root, "zf101", day, day, day.Add(6*time.Minute))
+	if err != nil || len(valid) != 1 || len(rejected) != 1 || rejected[0].Reason == "" {
+		t.Fatalf("invalid-file report incomplete: %v %v %v", valid, rejected, err)
+	}
+	if _, err = os.Stat(rejected[0].Path); err != nil {
+		t.Fatal("source file changed", err)
+	}
 	makeFile("ZF602", "Z_RADR_I_ZF602_20260828000100_O_FMT.bin", "XMKG1")
 	aliasFiles, err := DiscoverHistoricalFiles(root, "zf602", day, day, day.Add(6*time.Minute))
 	if err != nil || len(aliasFiles) != 1 || aliasFiles[0].HeaderCode != "XMKG1" {
 		t.Fatalf("approved header alias not accepted: files=%+v err=%v", aliasFiles, err)
+	}
+}
+
+func TestHistoricalCadenceUsesHeaderTimeAndStableTieBreak(t *testing.T) {
+	day := time.Date(2026, 8, 28, 0, 0, 0, 0, time.UTC)
+	files := []HistoricalFile{{Path: "late", Start: day.Add(5 * time.Minute)}, {Path: "b", Start: day}, {Path: "a", Start: day}, {Path: "next", Start: day.Add(6 * time.Minute)}}
+	selected, omitted := SelectHistoricalCadence(files, 6*time.Minute)
+	if len(selected) != 2 || selected[0].Path != "a" || selected[1].Path != "next" || len(omitted) != 2 {
+		t.Fatalf("cadence selection: %v %v", selected, omitted)
+	}
+	if files[0].Path != "late" {
+		t.Fatal("input inventory reordered")
 	}
 }

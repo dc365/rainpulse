@@ -56,6 +56,8 @@ type RadarDecodeInput struct {
 	InputSizeBytes  int64
 	VolumeStartTime time.Time
 	VolumeEndTime   time.Time
+	RebuildID       uuid.UUID
+	ExistingRunID   uuid.UUID
 }
 
 type RadarQCInput struct {
@@ -314,12 +316,20 @@ func (service *Service) CreateRadarDecode(
 	assetID := stableID("radar-asset", input.InputSHA256)
 	scanID := stableID("radar-scan", input.RadarID, start.Format(time.RFC3339Nano), end.Format(time.RFC3339Nano))
 	runID := stableID("radar-scan-run", scanID.String(), input.ConfigVersion, RadarDecoderVersion)
-	jobID := stableID("radar-decode-job", runID.String())
-	traceID := stableID("radar-decode-trace", runID.String())
+	identity := runID.String()
+	if input.RebuildID != uuid.Nil {
+		runID = input.ExistingRunID
+		identity = stableID("radar-decode-rebuild", runID.String(), input.ConfigVersion, input.ConfigSHA256, input.RebuildID.String()).String()
+	}
+	jobID := stableID("radar-decode-job", identity)
+	traceID := stableID("radar-decode-trace", identity)
 	eventID := stableID("radar-decode-request", jobID.String())
 	sourceID := stableID("radar-source", input.RadarID)
 	outputPrefix := fmt.Sprintf("s3://rainpulse/radar/normalized/%s/%s/", input.RadarID, scanID)
 
+	if input.RebuildID != uuid.Nil {
+		outputPrefix += "rebuilds/" + identity + "/"
+	}
 	request := RadarDecodeRequested{
 		SchemaVersion: SchemaVersion,
 		EventID:       eventID,
@@ -359,6 +369,7 @@ func (service *Service) CreateRadarDecode(
 		RequestPayload: payload, CreatedAt: now,
 	}
 	bundle := workflow.RadarDecodeBundle{
+		Rebuild: input.RebuildID != uuid.Nil,
 		Radar: workflow.Radar{
 			ID: input.RadarID, DisplayName: input.DisplayName, Lifecycle: input.Lifecycle,
 			ConfigVersion: input.ConfigVersion, CreatedAt: now, UpdatedAt: now,
@@ -383,6 +394,20 @@ func (service *Service) CreateRadarDecode(
 }
 
 func validateRadarDecodeInput(input RadarDecodeInput) error {
+	if (input.RebuildID == uuid.Nil) != (input.ExistingRunID == uuid.Nil) {
+		return fmt.Errorf("decode rebuild requires both attempt and existing run identities")
+	}
+	if input.RebuildID != uuid.Nil {
+		var cfg struct {
+			Hardware struct {
+				Band string `json:"radar_band"`
+			} `json:"hardware"`
+		}
+		if err := json.Unmarshal(input.Config, &cfg); err != nil || cfg.Hardware.Band != "X" || input.Lifecycle != workflow.RadarDraft {
+			return fmt.Errorf("decode rebuild is restricted to draft X stations")
+		}
+	}
+
 	if input.RadarID == "" || input.ConfigVersion == "" || input.SourceFormat == "" {
 		return fmt.Errorf("radar ID, config version and source format are required")
 	}

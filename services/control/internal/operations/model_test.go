@@ -301,3 +301,23 @@ func TestEmptyBlockedPlanUsesArrays(t *testing.T) {
 		t.Fatal("checks must be an array")
 	}
 }
+
+func TestCompositeStationBudgetSupportsFullNetwork(t *testing.T) {
+	at := time.Date(2026, 8, 28, 0, 0, 0, 0, time.UTC)
+	s := Selection{Preset: "sx_composite", Start: at, End: at.Add(time.Hour)}
+	for i := 0; i < 32; i++ {
+		s.RadarIDs = append(s.RadarIDs, "x"+strings.Repeat("a", i+1))
+	}
+	if err := s.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	s.RadarIDs = append(s.RadarIDs, "overflow")
+	if err := s.Validate(); err == nil {
+		t.Fatal("unbounded composite request")
+	}
+	s.RadarIDs = s.RadarIDs[:17]
+	s.Preset = "x_qc"
+	if err := s.Validate(); err == nil {
+		t.Fatal("standalone batch bound changed")
+	}
+}

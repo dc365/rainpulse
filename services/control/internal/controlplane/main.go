@@ -131,6 +131,15 @@ func Main() {
 			slog.Error("create radar decode workflow", "error", err)
 			os.Exit(1)
 		}
+	case "radar-decode-rebuild":
+		if len(os.Args) != 5 {
+			slog.Error("radar-decode-rebuild requires scan UUID, config YAML and rebuild UUID")
+			os.Exit(2)
+		}
+		if err := radarDecodeRebuild(ctx, store, service, os.Args[2], os.Args[3], os.Args[4]); err != nil {
+			slog.Error("rebuild draft X decode", "error", err)
+			os.Exit(1)
+		}
 	case "radar-ingest":
 		if len(os.Args) != 4 {
 			slog.Error("radar-ingest requires config YAML and input path")

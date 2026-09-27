@@ -132,7 +132,7 @@ class Executor:
         }:
             raise ValueError("invalid multi-band task contract")
         inputs = p["sources"]
-        if not 1 <= len(inputs) <= 16 or len({s["radar_id"] for s in inputs}) != len(inputs):
+        if not 1 <= len(inputs) <= 32 or len({s["radar_id"] for s in inputs}) != len(inputs):
             raise ValueError("invalid/duplicate station inputs")
         if epoch(p["input_cutoff"]) > epoch(request["occurred_at"]):
             raise ValueError("input cutoff cannot exceed the frozen task creation time")

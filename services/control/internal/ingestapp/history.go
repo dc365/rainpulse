@@ -21,15 +21,32 @@ func HistoryMain() {
 	sourceID := flag.String("source", "", "manifest source_id")
 	startText := flag.String("start", "", "inclusive UTC RFC3339 time")
 	endText := flag.String("end", "", "exclusive UTC RFC3339 time")
+	cadence := flag.Int("cadence-seconds", 0, "0 retains all; 360 selects first native volume per six-minute UTC bucket")
+	skipInvalid := flag.Bool("skip-invalid", false, "report invalid files individually and continue")
 	execute := flag.Bool("execute", false, "archive and register the previewed files")
 	flag.Parse()
-	if err := runHistoricalImport(context.Background(), *manifestPath, *sourceID, *startText, *endText, *execute); err != nil {
+	if err := runHistoricalImport(context.Background(), *manifestPath, *sourceID, *startText, *endText, *execute, historyOptions{CadenceSeconds: *cadence, SkipInvalid: *skipInvalid}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func runHistoricalImport(ctx context.Context, manifestPath, sourceID, startText, endText string, execute bool) error {
+type historyOptions struct {
+	CadenceSeconds int
+	SkipInvalid    bool
+}
+
+func runHistoricalImport(ctx context.Context, manifestPath, sourceID, startText, endText string, execute bool, options ...historyOptions) error {
+	var opts historyOptions
+	if len(options) > 1 {
+		return fmt.Errorf("one history options object required")
+	}
+	if len(options) == 1 {
+		opts = options[0]
+	}
+	if opts.CadenceSeconds != 0 && opts.CadenceSeconds != 360 {
+		return fmt.Errorf("cadence-seconds must be 0 or 360")
+	}
 	start, err := time.Parse(time.RFC3339, startText)
 	if err != nil {
 		return fmt.Errorf("parse historical start UTC: %w", err)
@@ -62,14 +79,29 @@ func runHistoricalImport(ctx context.Context, manifestPath, sourceID, startText,
 		return fmt.Errorf("historical source_id %q is absent from manifest", sourceID)
 	}
 	day := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, time.UTC)
-	files, err := radaringest.DiscoverHistoricalFiles(source.ArrivalRoot, source.RadarID, day, start, end)
+	var files []radaringest.HistoricalFile
+	var rejected []radaringest.HistoricalIssue
+	if opts.SkipInvalid {
+		files, rejected, err = radaringest.DiscoverHistoricalFilesReport(source.ArrivalRoot, source.RadarID, day, start, end)
+	} else {
+		files, err = radaringest.DiscoverHistoricalFiles(source.ArrivalRoot, source.RadarID, day, start, end)
+	}
 	if err != nil {
 		return err
+	}
+	var omitted []radaringest.HistoricalFile
+	if opts.CadenceSeconds != 0 {
+		files, omitted = radaringest.SelectHistoricalCadence(files, time.Duration(opts.CadenceSeconds)*time.Second)
 	}
 	if execute && len(files) > 64 {
 		return fmt.Errorf("execute window contains %d files; limit is 64", len(files))
 	}
 	encoder := json.NewEncoder(os.Stdout)
+	if opts.SkipInvalid || opts.CadenceSeconds != 0 {
+		if err := encoder.Encode(map[string]any{"inventory_report": true, "rejected": rejected, "cadence_omitted": omitted, "selected_count": len(files)}); err != nil {
+			return err
+		}
+	}
 	for _, file := range files {
 		if err := encoder.Encode(file); err != nil {
 			return err

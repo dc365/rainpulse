@@ -77,7 +77,7 @@ func Parse(raw []byte) (Network, error) {
 	if e := d.Decode(new(any)); e != io.EOF {
 		return n, fmt.Errorf("trailing network JSON")
 	}
-	if n.Schema != "1.0" || !namePattern.MatchString(n.Release) || len(n.Stations) < 1 || len(n.Stations) > 16 || len(n.Products) > 4 {
+	if n.Schema != "1.0" || !namePattern.MatchString(n.Release) || len(n.Stations) < 1 || len(n.Stations) > 32 || len(n.Products) > 4 {
 		return n, fmt.Errorf("invalid network identity/inventory")
 	}
 	for id, s := range n.Stations {
@@ -196,7 +196,7 @@ func Select(n Network, product, mode string, radars []string, start, end, cutoff
 	} else if product != "" {
 		return nil, nil, fmt.Errorf("standalone X QC does not select a spatial product")
 	}
-	if !end.After(start) || end.Sub(start) > time.Hour || len(radars) < 1 || len(radars) > 16 || start.After(cutoff) || end.After(cutoff.Add(time.Minute)) {
+	if !end.After(start) || end.Sub(start) > time.Hour || len(radars) < 1 || len(radars) > 32 || start.After(cutoff) || end.After(cutoff.Add(time.Minute)) {
 		return nil, nil, fmt.Errorf("use a bounded, past one-hour window")
 	}
 	if !start.Equal(start.Truncate(cadence)) || !end.Equal(end.Truncate(cadence)) {

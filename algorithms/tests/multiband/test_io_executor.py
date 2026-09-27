@@ -639,3 +639,13 @@ def test_contribution_arrays_preserve_overlap_and_no_echo_coverage():
     np.testing.assert_equal(arrays['X_ADDED_COVERAGE'],[[np.nan,1.,1.]])
     np.testing.assert_equal(arrays['WINNER_BAND'],[[2.,np.nan,2.]])
     np.testing.assert_equal(arrays['WINNER_SITE'],[[1.,np.nan,1.]])
+
+
+def test_network_accepts_full_28_station_inventory_and_retains_bound():
+    doc = network_document()
+    template = doc['stations']['x1']
+    doc['stations'] = {'x'+str(i): copy.deepcopy(template) for i in range(32)}
+    assert len(Network.from_bytes(json.dumps(doc).encode()).stations) == 32
+    doc['stations']['x32'] = copy.deepcopy(template)
+    with pytest.raises(ValueError, match='inventory exceeds bounds'):
+        Network.from_bytes(json.dumps(doc).encode())

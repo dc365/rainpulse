@@ -73,7 +73,7 @@ def replay(network: Path, request_path: Path, root: Path, index_path: Path, outp
     if len(request_raw) > 1024**2 or len(index_raw) > 1024**2:
         raise ValueError('oversized local replay manifest')
     request, index = json.loads(request_raw), json.loads(index_raw)
-    if not isinstance(index, dict) or len(index) > 16:
+    if not isinstance(index, dict) or len(index) > 32:
         raise ValueError('local input index exceeds network limits')
     executor = Executor(network)
     objects, summary, metrics = executor.execute(request, LocalReader(root, index, executor.network.maximum_input_bytes), artifact_digest=logical_digest)

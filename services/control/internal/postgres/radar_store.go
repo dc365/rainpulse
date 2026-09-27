@@ -21,6 +21,30 @@ func (store *Store) CreateRadarDecodeBundle(ctx context.Context, bundle workflow
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	if bundle.Rebuild {
+		var scanID, assetID uuid.UUID
+		var radarID, status, lifecycle string
+		err = tx.QueryRow(ctx, `SELECT r.scan_id,s.raw_asset_id,r.radar_id,r.status,d.lifecycle
+FROM radar_scan_runs r JOIN radar_scans s USING(scan_id) JOIN radars d ON d.radar_id=r.radar_id
+WHERE r.run_id=$1 FOR UPDATE OF r`, bundle.Scan.RunID).Scan(&scanID, &assetID, &radarID, &status, &lifecycle)
+		if err != nil {
+			return fmt.Errorf("lock decode rebuild source: %w", err)
+		}
+		if scanID != bundle.Scan.ID || assetID != bundle.Asset.ID || radarID != bundle.Radar.ID || lifecycle != "draft" {
+			return fmt.Errorf("decode rebuild source identity or lifecycle differs")
+		}
+		var exists bool
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM jobs WHERE job_id=$1)`, bundle.Job.ID).Scan(&exists); err != nil {
+			return err
+		}
+		if exists {
+			return tx.Commit(ctx)
+		}
+		if status != "NORMALIZED" && status != "FAILED" {
+			return fmt.Errorf("decode rebuild requires idle draft normalized/failed source, got %s", status)
+		}
+	}
+
 	if _, err = tx.Exec(ctx, `
 INSERT INTO config_versions (config_version, sha256, config, description, created_at)
 VALUES ($1, $2, $3, 'Radar configuration registered by RP-007 decode workflow', $4)
@@ -158,6 +182,15 @@ ON CONFLICT (event_id) DO NOTHING`,
 		bundle.Outbox.Subject, bundle.Outbox.Payload, bundle.Job.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("insert radar decode outbox event: %w", err)
+	}
+
+	if bundle.Rebuild {
+		_, err = tx.Exec(ctx, `UPDATE radar_scan_runs SET radar_config_version=$2,status='RAW_VALIDATING',
+normalized_uri=NULL,qc_uri=NULL,grid_uri=NULL,degraded_reason=NULL,scan_completeness=NULL,mean_quality_index=NULL,updated_at=CURRENT_TIMESTAMP
+WHERE run_id=$1`, bundle.Scan.RunID, bundle.Radar.ConfigVersion)
+		if err != nil {
+			return fmt.Errorf("admit decode rebuild: %w", err)
+		}
 	}
 
 	if err = tx.Commit(ctx); err != nil {

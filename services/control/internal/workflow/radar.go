@@ -171,6 +171,7 @@ type RawRadarAsset struct {
 }
 
 type RadarDecodeBundle struct {
+	Rebuild      bool
 	Radar        Radar
 	Config       json.RawMessage
 	ConfigSHA256 string

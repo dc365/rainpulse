@@ -212,7 +212,7 @@ class Network:
             if not NAME.fullmatch(name):
                 raise ValueError("invalid product name")
             products[name] = Grid(**values)
-        if not 1 <= len(stations) <= 16 or len(products) > 4:
+        if not 1 <= len(stations) <= 32 or len(products) > 4:
             raise ValueError("network inventory exceeds bounds")
         kwargs = {n: data[n] for n in ("cache_max_bytes", "cache_ttl_seconds", "maximum_input_bytes") if n in data}
         for n, v in kwargs.items():
