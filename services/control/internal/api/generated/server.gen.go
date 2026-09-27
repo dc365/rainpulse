@@ -2196,6 +2196,31 @@ type ListWorkspaceRadarCompositesParams struct {
 	End   time.Time `form:"end" json:"end"`
 }
 
+// ProbeWorkspaceRadarLayersJSONBody defines parameters for ProbeWorkspaceRadarLayers.
+type ProbeWorkspaceRadarLayersJSONBody struct {
+	Layers []struct {
+		AssetUrl    *string `json:"asset_url,omitempty"`
+		Id          string  `json:"id"`
+		ProductId   *string `json:"product_id,omitempty"`
+		ResultId    *string `json:"result_id,omitempty"`
+		SweepNumber *int    `json:"sweep_number,omitempty"`
+
+		// X Fraction from west edge of displayed immutable image.
+		X float32 `json:"x"`
+
+		// Y Fraction from north edge of displayed immutable image.
+		Y float32 `json:"y"`
+	} `json:"layers"`
+}
+
+// ResolveWorkspaceRadarLayersJSONBody defines parameters for ResolveWorkspaceRadarLayers.
+type ResolveWorkspaceRadarLayersJSONBody struct {
+	CycleId  *string            `json:"cycle_id,omitempty"`
+	Day      openapi_types.Date `json:"day"`
+	RadarIds []string           `json:"radar_ids"`
+	Time     time.Time          `json:"time"`
+}
+
 // ListWorkspaceRadarScansParams defines parameters for ListWorkspaceRadarScans.
 type ListWorkspaceRadarScansParams struct {
 	RadarId string  `form:"radar_id" json:"radar_id"`
@@ -2214,6 +2239,12 @@ type ListWorkspaceRadarStationsParams struct {
 
 // RerunForecastRunJSONRequestBody defines body for RerunForecastRun for application/json ContentType.
 type RerunForecastRunJSONRequestBody = RegenerationRequest
+
+// ProbeWorkspaceRadarLayersJSONRequestBody defines body for ProbeWorkspaceRadarLayers for application/json ContentType.
+type ProbeWorkspaceRadarLayersJSONRequestBody ProbeWorkspaceRadarLayersJSONBody
+
+// ResolveWorkspaceRadarLayersJSONRequestBody defines body for ResolveWorkspaceRadarLayers for application/json ContentType.
+type ResolveWorkspaceRadarLayersJSONRequestBody ResolveWorkspaceRadarLayersJSONBody
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -2355,6 +2386,12 @@ type ServerInterface interface {
 
 	// (GET /workspace/radar-composites/{result_id}/assets/{asset_id})
 	GetWorkspaceRadarCompositeAsset(w http.ResponseWriter, r *http.Request, resultId string, assetId string)
+	// ProbeWorkspaceRadarLayers Read native scalar values bound to each displayed image pixel, never colours.
+	// (POST /workspace/radar-layer-probes)
+	ProbeWorkspaceRadarLayers(w http.ResponseWriter, r *http.Request)
+	// ResolveWorkspaceRadarLayers Resolve up to 16 registered stations against one six-minute display window with per-station failure isolation.
+	// (POST /workspace/radar-layer-resolutions)
+	ResolveWorkspaceRadarLayers(w http.ResponseWriter, r *http.Request)
 	// GetWorkspaceRadarProduct Validated native polar comparison, pinned to task and attempt; no operational promotion.
 	// (GET /workspace/radar-products/{result_id})
 	GetWorkspaceRadarProduct(w http.ResponseWriter, r *http.Request, resultId string)
@@ -2644,6 +2681,18 @@ func (_ Unimplemented) GetWorkspaceRadarComposite(w http.ResponseWriter, r *http
 
 // (GET /workspace/radar-composites/{result_id}/assets/{asset_id})
 func (_ Unimplemented) GetWorkspaceRadarCompositeAsset(w http.ResponseWriter, r *http.Request, resultId string, assetId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ProbeWorkspaceRadarLayers Read native scalar values bound to each displayed image pixel, never colours.
+// (POST /workspace/radar-layer-probes)
+func (_ Unimplemented) ProbeWorkspaceRadarLayers(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ResolveWorkspaceRadarLayers Resolve up to 16 registered stations against one six-minute display window with per-station failure isolation.
+// (POST /workspace/radar-layer-resolutions)
+func (_ Unimplemented) ResolveWorkspaceRadarLayers(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -4420,6 +4469,34 @@ func (siw *ServerInterfaceWrapper) GetWorkspaceRadarCompositeAsset(w http.Respon
 	handler.ServeHTTP(w, r)
 }
 
+// ProbeWorkspaceRadarLayers operation middleware
+func (siw *ServerInterfaceWrapper) ProbeWorkspaceRadarLayers(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ProbeWorkspaceRadarLayers(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ResolveWorkspaceRadarLayers operation middleware
+func (siw *ServerInterfaceWrapper) ResolveWorkspaceRadarLayers(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ResolveWorkspaceRadarLayers(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetWorkspaceRadarProduct operation middleware
 func (siw *ServerInterfaceWrapper) GetWorkspaceRadarProduct(w http.ResponseWriter, r *http.Request) {
 
@@ -4738,6 +4815,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/workspace/radar-layer-resolutions", wrapper.ResolveWorkspaceRadarLayers)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/workspace/radar-layer-probes", wrapper.ProbeWorkspaceRadarLayers)
+	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/workspace/radar-composites", wrapper.ListWorkspaceRadarComposites)
 	})

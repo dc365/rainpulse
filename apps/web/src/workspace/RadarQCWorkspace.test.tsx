@@ -39,9 +39,9 @@ function setup() {
   vi.stubGlobal('Image', class { src = ''; decode() { return Promise.resolve() } })
   URL.createObjectURL = vi.fn(() => 'blob:comparison')
   URL.revokeObjectURL = vi.fn()
-  vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+  vi.stubGlobal('fetch', vi.fn(async (input: string, options?: {body?:string}) => {
     const url = String(input)
-    const data = url.includes('radar-stations') ? stations : url.includes('radar-scans') ? scans
+    const data = url.includes('radar-layer-resolutions') ? {items:JSON.parse(options?.body??'{}').time===evening?[{id:'zf101',sweeps:[],error:'该窗口无体扫'}]:[{id:'zf101',scan:scans.items[0],sweeps:result.sweeps}],times:[morning]} : url.includes('radar-stations') ? stations : url.includes('radar-scans') ? scans
       : url.includes('radar-products') ? result : url.includes('cycles/cycle-') ? cycleDetail(Number(url.at(-1)))
         : { schema_version: '1.0', items: cycles, generated_at: morning, next_cursor: null }
     return { ok: true, json: async () => data, blob: async () => new Blob(['png'], { type: 'image/png' }) }

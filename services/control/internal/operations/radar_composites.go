@@ -3,6 +3,7 @@ package operations
 import (
 	"encoding/base64"
 	"encoding/json"
+	"github.com/fonwee/rainpulse-nowcast/services/control/internal/radarprobe"
 	"math"
 	"net/http"
 	"strings"
@@ -10,24 +11,29 @@ import (
 )
 
 type compositeMap struct {
-	CRS        string    `json:"crs"`
-	Bounds     []float64 `json:"bounds"`
-	ObjectPath string    `json:"object_path"`
+	Probe      radarprobe.Index `json:"probe,omitempty"`
+	CRS        string           `json:"crs"`
+	Bounds     []float64        `json:"bounds"`
+	ObjectPath string           `json:"object_path"`
 }
 type compositeProduct struct {
-	ProductID         string        `json:"product_id"`
-	Label             string        `json:"label"`
-	Status            string        `json:"status"`
-	Reason            *string       `json:"reason"`
-	ContributingBands []string      `json:"contributing_bands"`
-	Map               *compositeMap `json:"map,omitempty"`
+	Unit              string          `json:"unit"`
+	Legend            json.RawMessage `json:"legend,omitempty"`
+	ProductID         string          `json:"product_id"`
+	Label             string          `json:"label"`
+	Status            string          `json:"status"`
+	Reason            *string         `json:"reason"`
+	ContributingBands []string        `json:"contributing_bands"`
+	Map               *compositeMap   `json:"map,omitempty"`
 }
 type compositeManifest struct {
-	Contract     string `json:"contract"`
-	AnalysisTime string `json:"analysis_time"`
-	GridID       string `json:"grid_id"`
-	Method       string `json:"method"`
-	NetworkSHA   string `json:"network_sha256"`
+	Sources      json.RawMessage `json:"sources"`
+	Skipped      json.RawMessage `json:"skipped"`
+	Contract     string          `json:"contract"`
+	AnalysisTime string          `json:"analysis_time"`
+	GridID       string          `json:"grid_id"`
+	Method       string          `json:"method"`
+	NetworkSHA   string          `json:"network_sha256"`
 	Comparison   struct {
 		Group    string             `json:"comparison_group"`
 		SameGrid bool               `json:"same_grid"`

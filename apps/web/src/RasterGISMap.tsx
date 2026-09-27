@@ -1,3 +1,4 @@
+import { radarImagePool } from './radarImagePool'
 import { ReflectivityLegend } from './ReflectivityLegend'
 import { REFLECTIVITY_LEGEND } from './reflectivityPalette'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
@@ -565,6 +566,7 @@ export function RasterGISMap({
   useEffect(() => {
     if (!targetRef.current || typeof ResizeObserver === 'undefined') return
 
+    const attachedMultiLayers = multiLayersRef.current
     const domainExtent = fitExtentRef.current
     const mapReference = referenceContextRef.current
     const radarReference = radarContextRef.current
@@ -769,6 +771,8 @@ export function RasterGISMap({
       mapRef.current = null
       basemapLayerRef.current = null
       coastlineLayerRef.current = null
+      for(const entry of attachedMultiLayers.values()){entry.release();entry.layer.dispose()}
+      attachedMultiLayers.clear()
       rasterLayerRef.current = null
       rasterValueLayerRef.current = null
       motionLayerRef.current = null
@@ -795,19 +799,33 @@ export function RasterGISMap({
     return () => observer.disconnect()
   }, [fitExtentKey, radarContextKey, referenceContext, sharedView])
 
+  const multiLayersRef = useRef(new Map<string, { layer: ImageLayer<ImageStatic>; key: string; release: () => void }>())
   useEffect(() => {
     const map = mapRef.current
     if (!map || !imageLayers) return
-    const layers = imageLayers.map((entry, index) => {
-      const source = new ImageStatic({ url: entry.url, imageExtent: [...entry.extent], projection: 'EPSG:4326', interpolate: false, crossOrigin: 'anonymous' })
-      const layer = new ImageLayer({ source, opacity: entry.opacity, zIndex: 10 + index })
-      source.on('imageloaderror', () => onLayerErrorRef.current(true))
-      map.addLayer(layer)
-      return layer
+    const entries=multiLayersRef.current
+    const wanted=new Set(imageLayers.map(entry=>entry.id))
+    for(const [id,entry] of entries)if(!wanted.has(id)){map.removeLayer(entry.layer);entry.release();entry.layer.dispose();entries.delete(id)}
+    imageLayers.forEach((entry,index)=>{
+      const key=`${entry.url}/${entry.extent.join(',')}`
+      let existing=entries.get(entry.id)
+      if(existing?.key!==key){
+        if(existing){map.removeLayer(existing.layer);existing.release();existing.layer.dispose()}
+        let active=true
+        const resource=radarImagePool.acquire(entry.url)
+        const source=new ImageStatic({url:entry.url,imageExtent:[...entry.extent],projection:'EPSG:4326',interpolate:false,
+          imageLoadFunction:(image)=>{void resource.promise.then(value=>{if(active)(image.getImage() as HTMLImageElement).src=value.url}).catch(()=>{if(active)onLayerErrorRef.current(true)})}})
+        // Observe errors even if an offscreen source never invokes its loader.
+        void resource.promise.catch(()=>{if(active)onLayerErrorRef.current(true)})
+        const layer=new ImageLayer({source})
+        existing={layer,key,release:()=>{active=false;resource.release();layer.setSource(null)}}
+        entries.set(entry.id,existing);map.addLayer(layer)
+      }
+      existing.layer.setOpacity(entry.opacity);existing.layer.setZIndex(10+index)
     })
     onLayerErrorRef.current(false)
-    return () => layers.forEach(layer => { map.removeLayer(layer); layer.setSource(null); layer.dispose() })
   }, [imageLayers, fitExtentKey, radarContextKey, referenceContext, sharedView])
+  useEffect(()=>()=>{for(const entry of multiLayersRef.current.values()){entry.release();entry.layer.dispose()}multiLayersRef.current.clear();radarImagePool.clearIdle()},[])
 
   useEffect(() => {
     const map = mapRef.current

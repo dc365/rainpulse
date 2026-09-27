@@ -152,3 +152,5 @@ def bind_renderer_layer(objects,layer,group,qc_binding,field,valid,polar_rgba):
     prefix="volume_review/polar/"+hashlib.sha256(json_bytes([identity,field])).hexdigest()
     objects[prefix+".npz"]=snapshot; objects[prefix+".json"]=json_bytes(receipt)
     layer.update(bound_source_path=prefix+".npz",bound_receipt_path=prefix+".json",numeric_source_sha256=receipt["numeric_sha256"])
+    from rainpulse_algo.diagnostics.radar_probe import attach_bound_polar_probe
+    attach_bound_polar_probe(objects, layer, arrays, valid, receipt["image_size"])

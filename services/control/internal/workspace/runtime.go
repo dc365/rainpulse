@@ -108,6 +108,9 @@ func NewRuntimeHandler(core http.Handler, options RuntimeOptions) http.Handler {
 
 func (handler *runtimeHandler) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 	switch {
+	case request.URL.Path == "/api/v1/workspace/radar-source-probe":
+		handler.radarSourceProbe(response, request)
+		return
 	case request.URL.Path == "/api/v1/admin/qc-batches":
 		handler.qcBatch(response, request)
 		return

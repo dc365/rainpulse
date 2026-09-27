@@ -37,6 +37,14 @@ func authorized(value, token string) bool {
 	return token != "" && subtle.ConstantTimeCompare([]byte(value), []byte("Bearer "+token)) == 1
 }
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == radarWorkspacePrefix+"radar-layer-resolutions" {
+		h.radarResolutions(w, r)
+		return
+	}
+	if r.URL.Path == radarWorkspacePrefix+"radar-layer-probes" {
+		h.radarProbes(w, r)
+		return
+	}
 	if r.URL.Path == radarWorkspacePrefix+"radar-composites" || strings.HasPrefix(r.URL.Path, radarWorkspacePrefix+"radar-composites/") || r.URL.Path == radarWorkspacePrefix+"radar-stations" || r.URL.Path == radarWorkspacePrefix+"radar-scans" || strings.HasPrefix(r.URL.Path, radarWorkspacePrefix+"radar-products/") {
 		h.radarWorkspace(w, r)
 		return

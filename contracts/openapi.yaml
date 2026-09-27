@@ -17,6 +17,67 @@ tags:
   - name: system
   - name: admin
 paths:
+  /workspace/radar-layer-resolutions:
+    post:
+      operationId: resolveWorkspaceRadarLayers
+      tags: [radars]
+      summary: Resolve up to 16 registered stations against one six-minute display window with per-station failure isolation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [time, day, radar_ids]
+              properties:
+                time: {type: string, format: date-time}
+                day: {type: string, format: date}
+                cycle_id: {type: string}
+                radar_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 16
+                  items: {type: string}
+      responses:
+        "200":
+          description: Source-bound raw/QC sweep assets or explicit per-station missing/error state and available times.
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+  /workspace/radar-layer-probes:
+    post:
+      operationId: probeWorkspaceRadarLayers
+      tags: [radars]
+      summary: Read native scalar values bound to each displayed image pixel, never colours.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [layers]
+              properties:
+                layers:
+                  type: array
+                  minItems: 1
+                  maxItems: 16
+                  items:
+                    type: object
+                    required: [id, x, y]
+                    properties:
+                      id: {type: string}
+                      asset_url: {type: string}
+                      result_id: {type: string}
+                      sweep_number: {type: integer}
+                      product_id: {type: string}
+                      x: {type: number, description: Fraction from west edge of displayed immutable image.}
+                      y: {type: number, description: Fraction from north edge of displayed immutable image.}
+      responses:
+        "200":
+          description: Per-layer source scalars, ray/gate indices, identity and explicit unavailable/outside state; NaN values remain null.
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
   /workspace/radar-composites:
     get:
       operationId: listWorkspaceRadarComposites

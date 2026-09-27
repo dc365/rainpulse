@@ -98,6 +98,8 @@ def x_qc_objects(volumes) -> dict[str, bytes]:
         del volume
     if metadata is None or not comparisons:
         raise ValueError("X QC preview requires at least one reflectivity sweep")
+    if sum(map(len, objects.values())) > MAX_X_QC_PREVIEW_BYTES:
+        raise ValueError("X QC preview and numeric indices exceed output budget")
     objects["manifest.json"] = json_bytes({
         "contract": "rainpulse.multiband.x-qc-preview-v1",
         "radar_id": metadata["radar_id"], "scan_id": metadata["scan_id"],
@@ -158,9 +160,20 @@ def geographic_sweep_preview(sweep, metadata, raw, qc, action, objects, size=720
         objects[paths[name]] = render_polar_sampling(plan, values, LEVELS, COLORS, png, actions=actions)
     if sum(map(len, objects.values())) > MAX_X_QC_PREVIEW_BYTES:
         raise ValueError("X QC map preview exceeds 512 MiB output budget")
+    from rainpulse_algo.diagnostics.radar_probe import attach_probe
+    probe_fields = {name: np.where(plan.support, values[plan.rays, plan.gates], np.nan)[::-1]
+                    for name, values in (("DBZH_RAW", raw), ("DBZH_QC", qc), ("QC_ACTION", action))}
+    for name in ("QUALITY_INDEX", "QC_FLAGS", "NO_ECHO_MASK"):
+        if name in sweep.fields and np.shape(sweep.fields[name]) == np.shape(raw):
+            probe_fields[name] = np.where(plan.support, sweep.fields[name][plan.rays, plan.gates], np.nan)[::-1]
+    probe_fields["DISPLAY_VALID"] = (plan.support & np.isfinite(qc[plan.rays, plan.gates]))[::-1].astype(float)
+    probe_fields["SOURCE_RAY"] = np.where(plan.support, plan.rays, np.nan)[::-1]
+    probe_fields["SOURCE_GATE"] = np.where(plan.support, plan.gates, np.nan)[::-1]
+    probe = attach_probe(objects, f"query/sweeps/{sweep.number}", probe_fields, image_path=paths["qc"],
+                         identity={"radar_id": metadata["radar_id"], "scan_id": metadata["scan_id"], "sweep_number": sweep.number})
     return {"crs": "EPSG:4326", "bounds": [west, south, east, north],
             "longitude_deg": float(lon), "latitude_deg": float(lat), "maximum_range_km": radius / 1000,
-            "coordinate_source": "normalized_volume_site", "projection_version": "wgs84-geodesic-4over3-v1", **paths}
+            "coordinate_source": "normalized_volume_site", "projection_version": "wgs84-geodesic-4over3-v1", "probe": probe, **paths}
 
 
 @_perf_timed("fusion.product_encoding")
@@ -197,7 +210,7 @@ def difference_quicklook(values: np.ndarray) -> bytes:
     return png(rgba[::-1])
 
 
-def geographic_composite_preview(values: np.ndarray, metadata: dict) -> tuple[dict, bytes]:
+def geographic_composite_sample(values: np.ndarray, metadata: dict):
     """Nearest-neighbour map preview; scientific arrays remain on the frozen grid."""
     from pyproj import Transformer
 
@@ -222,7 +235,20 @@ def geographic_composite_preview(values: np.ndarray, metadata: dict) -> tuple[di
     valid = (cols >= 0) & (cols < width) & (rows >= 0) & (rows < height)
     sampled = np.full((size, size), np.nan, np.float32)
     sampled[valid] = values[rows[valid], cols[valid]]
-    return {"crs": "EPSG:4326", "bounds": list(bounds), "resampling": "nearest", "source_grid_id": metadata["grid_id"]}, quicklook(sampled)
+    return {"crs": "EPSG:4326", "bounds": list(bounds), "resampling": "nearest", "source_grid_id": metadata["grid_id"]}, sampled
+
+
+def geographic_composite_preview(values: np.ndarray, metadata: dict) -> tuple[dict, bytes]:
+    geometry, sampled = geographic_composite_sample(values, metadata)
+    return geometry, quicklook(sampled)
+
+
+def categorical_preview(values, legend):
+    rgba = np.zeros((*values.shape, 4), np.uint8)
+    for entry in legend:
+        color = entry['color'].lstrip('#')
+        rgba[values == entry['minimum']] = [*[int(color[i:i+2], 16) for i in (0, 2, 4)], 255]
+    return png(rgba[::-1])
 
 
 @_perf_timed("fusion.comparison_encoding")
@@ -381,6 +407,43 @@ def sx_comparison_objects(result: Composite, band_results: dict[str, Composite |
         "unit": "dBZ",
         "reason": None if np.any(both) else "S 与 X 单独产品没有共同的有效像元；缺测未按 0 处理",
     })
+    joint = result.arrays["CR_DBZH"]
+    overlap = np.isfinite(joint) & np.isfinite(s_values)
+    arrays["DBZH_SX_MINUS_S"] = np.where(overlap, joint - s_values, np.nan)
+    s_component, x_component = band_results.get("S"), band_results.get("X")
+    s_observed = s_component.arrays.get("OBSERVED_MASK", np.isfinite(s_values)) if s_component else np.zeros(joint.shape, bool)
+    x_observed = x_component.arrays.get("OBSERVED_MASK", np.isfinite(x_values)) if x_component else np.zeros(joint.shape, bool)
+    arrays["X_ADDED_COVERAGE"] = np.where(np.asarray(x_observed, bool) & ~np.asarray(s_observed, bool), 1., np.nan)
+    sources = result.metadata.get("sources", [])
+    winner = result.arrays.get("WINNER_SOURCE", np.full(joint.shape, -1))
+    band_field = np.full(joint.shape, np.nan)
+    for index, source in enumerate(sources):
+        band_field[(winner == index) & np.isfinite(joint)] = 1 if source.get("band") == "S" else 2
+    arrays["WINNER_BAND"] = band_field
+    arrays["WINNER_SITE"] = np.where(np.isfinite(joint) & (winner >= 0), winner, np.nan)
+    analysis_products = [
+        ("sx_minus_s", "S+X−S 差值", "DBZH_SX_MINUS_S", "dBZ", [{'minimum':v,'label':str(v),'color':c} for v,c in zip((-20,-15,-10,-5,0,5,10,15,20),('#1f5bab','#4084c8','#7eb7dd','#c4deeb','#f6f6ef','#f5cdaa','#e08969','#c04c3f','#8e1f32'),strict=True)]),
+        ("x_added_coverage", "X 新增有效覆盖", "X_ADDED_COVERAGE", "", [{'minimum':1,'label':'X 新增覆盖','color':'#b469cc'}]),
+        ("winner_band", "获胜波段", "WINNER_BAND", "", [{'minimum':1,'label':'S','color':'#147d92'},{'minimum':2,'label':'X','color':'#b469cc'}]),
+        ("winner_site", "获胜站点", "WINNER_SITE", "", [{'minimum':i,'label':src.get('radar_id',str(i)),'color':('#147d92','#b469cc','#d09a32','#4c9957','#ce6161','#5979c2')[i%6]} for i,src in enumerate(sources)]),
+        ("winner_age", "观测年龄", "WINNER_AGE_SECONDS", "s", [{'minimum':v,'label':str(v),'color':c} for v,c in zip((0,60,120,240,420),('#e8f1ef','#83c6bc','#3e9c92','#d2b36d','#bd604a'),strict=True)]),
+        ("winner_quality", "质量得分", "WINNER_QUALITY_SCORE", "", [{'minimum':v,'label':str(v),'color':c} for v,c in zip((0,.25,.5,.75,1),('#bd604a','#d2b36d','#83c6bc','#3e9c92','#147467'),strict=True)]),
+    ]
+    if "crs" in result.metadata:
+        for product_id, label, field, unit, legend in analysis_products:
+            if field not in arrays:
+                continue
+            geometry, sampled = geographic_composite_sample(arrays[field], result.metadata)
+            if product_id in ('winner_age', 'winner_quality'):
+                classified = np.full(sampled.shape, np.nan)
+                for entry in legend:
+                    classified[sampled >= entry['minimum']] = entry['minimum']
+            else:
+                classified = sampled
+            path = f'map/{product_id}.png'
+            objects[path] = difference_quicklook(sampled) if product_id == 'sx_minus_s' else categorical_preview(classified, legend)
+            products.append({'product_id':product_id,'label':label,'status':'available' if np.isfinite(sampled).any() else 'no_coverage',
+                             'unit':unit,'legend':legend,'map':{**geometry,'object_path':path},'field':field})
     arrays_object = encode_arrays(arrays)
     objects["arrays.npz"] = arrays_object
     manifest = json.loads(objects["manifest.json"])
@@ -393,6 +456,7 @@ def sx_comparison_objects(result: Composite, band_results: dict[str, Composite |
             for layer in manifest["layers"]
         ],
         *component_layers,
+ *[{"object_path": p["map"]["object_path"], "title":p["label"], "field":p["field"]} for p in products if p.get("map") and p.get("field")],
         {"object_path": joint_path, "title": f"{fusion_label}组合反射率候选", "field": "CR_DBZH"},
         {"object_path": difference_path, "title": "X−S 差值；仅显示双方有效像元", "field": "DBZH_X_MINUS_S"},
     ]
@@ -413,6 +477,22 @@ def sx_comparison_objects(result: Composite, band_results: dict[str, Composite |
         objects[path] = preview
         product_entry["map"] = {**geometry, "object_path": path}
         manifest["layers"].append({"object_path": path, "title": product_entry["label"], "field": field})
+    from rainpulse_algo.diagnostics.radar_probe import attach_probe
+    for entry in products:
+        if not entry.get('map'):
+            continue
+        field = entry.get('field') or {'s_only':'CR_DBZH_S_ONLY','x_only':'CR_DBZH_X_ONLY','sx_composite':'CR_DBZH'}.get(entry['product_id'])
+        if field not in arrays:
+            continue
+        _, scalar = geographic_composite_sample(arrays[field], result.metadata)
+        fields = {field: scalar[::-1]}
+        if entry['product_id'] == 'sx_composite':
+            for name in ('WINNER_SOURCE','WINNER_RAY','WINNER_GATE','WINNER_AGE_SECONDS','WINNER_QUALITY_SCORE','WINNER_HEIGHT_MSL_M','OBSERVED_MASK','NO_ECHO_MASK','UNCERTAIN_MASK'):
+                if name in arrays:
+                    _, values = geographic_composite_sample(arrays[name], result.metadata)
+                    fields[name] = values[::-1]
+        entry['map']['probe'] = attach_probe(objects, f"query/composite/{entry['product_id']}", fields,
+                                             image_path=entry['map']['object_path'], identity={'analysis_time':result.metadata['analysis_time'],'product_id':entry['product_id'],'grid_id':result.metadata['grid_id']})
     manifest["comparison"]["comparison_group"] = hashlib.sha256(arrays_object).hexdigest()
     objects["manifest.json"] = json_bytes(manifest)
     return objects

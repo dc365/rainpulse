@@ -4,6 +4,40 @@
  */
 
 export interface paths {
+    "/workspace/radar-layer-resolutions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve up to 16 registered stations against one six-minute display window with per-station failure isolation. */
+        post: operations["resolveWorkspaceRadarLayers"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspace/radar-layer-probes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Read native scalar values bound to each displayed image pixel, never colours. */
+        post: operations["probeWorkspaceRadarLayers"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workspace/radar-composites": {
         parameters: {
             query?: never;
@@ -2095,6 +2129,77 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    resolveWorkspaceRadarLayers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: date-time */
+                    time: string;
+                    /** Format: date */
+                    day: string;
+                    cycle_id?: string;
+                    radar_ids: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Source-bound raw/QC sweep assets or explicit per-station missing/error state and available times. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    probeWorkspaceRadarLayers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    layers: {
+                        id: string;
+                        asset_url?: string;
+                        result_id?: string;
+                        sweep_number?: number;
+                        product_id?: string;
+                        /** @description Fraction from west edge of displayed immutable image. */
+                        x: number;
+                        /** @description Fraction from north edge of displayed immutable image. */
+                        y: number;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description Per-layer source scalars, ray/gate indices, identity and explicit unavailable/outside state; NaN values remain null. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
     listWorkspaceRadarComposites: {
         parameters: {
             query: {

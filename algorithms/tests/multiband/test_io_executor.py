@@ -306,7 +306,7 @@ def test_executor_full_numerical_path_and_repeat(tmp_path):
     first, summary, m = e.execute(req,reader,artifact_digest=logical_digest)
     second, _, m2 = e.execute(req,reader,artifact_digest=logical_digest)
     assert first == second and summary['candidate_only'] is True
-    assert len(first)==11 and first['cr.png'].startswith(b'\x89PNG')
+    assert any(k.startswith('query/composite/') for k in first) and first['cr.png'].startswith(b'\x89PNG')
     assert all(first[f'map/{name}.png'].startswith(b'\x89PNG') for name in ('s_only', 'x_only', 'sx_composite'))
     assert all(p['map']['crs'] == 'EPSG:4326' for p in json.loads(first['manifest.json'])['comparison']['products'] if 'map' in p)
     arrays = decode_arrays(first['arrays.npz'],maximum_bytes=10*1024**2)
@@ -314,7 +314,7 @@ def test_executor_full_numerical_path_and_repeat(tmp_path):
     assert arrays['DBZH_X_MINUS_S'].shape == arrays['CR_DBZH'].shape
     comparison = json.loads(first['manifest.json'])['comparison']
     assert comparison['same_grid'] and comparison['cadence_seconds'] == 60
-    assert {p['product_id'] for p in comparison['products']} == {'s_only','x_only','sx_composite','x_minus_s'}
+    assert {p['product_id'] for p in comparison['products']} == {'s_only','x_only','sx_composite','x_minus_s','sx_minus_s','x_added_coverage','winner_band','winner_site','winner_age','winner_quality'}
     assert m2['decoded_cache_hits']==2
     assert m2['decoded_cache_bytes'] <= e.network.cache_max_bytes
 
@@ -324,7 +324,8 @@ def test_executor_standalone_x_writes_polar_qc(tmp_path):
     req['payload'].update(mode='x_qc',sources=req['payload']['sources'][1:])
     req['payload'].pop('product_id')
     objects, _, _ = Executor(config).execute(req,LocalReader(tmp_path,index,512*1024**2),artifact_digest=logical_digest)
-    assert len(objects)==7
+    assert len([k for k in objects if not k.startswith('query/')])==7
+    assert any(k.startswith('query/sweeps/') for k in objects)
     manifest=json.loads(objects['manifest.json'])
     assert manifest['contract']=='rainpulse.multiband.x-qc-preview-v1'
     assert manifest['geometry'].startswith('station-centred polar')
@@ -621,3 +622,20 @@ def test_x_qc_rejects_huge_mismatched_fill_array_before_materializing():
 
     with pytest.raises(ValueError, match='invalid or oversized'):
         _validated_sweep_numbers(HugeSparseIndex())
+
+
+def test_contribution_arrays_preserve_overlap_and_no_echo_coverage():
+    meta = dict(cadence_seconds=360, valid_echo_cells=2, valid_no_echo_cells=1,
+                uncertain_only_cells=0, sources=[{'radar_id':'s1','band':'S'}, {'radar_id':'x1','band':'X'}], skipped=[])
+    s = np.array([[20., np.nan, np.nan]], dtype=np.float32)
+    x = np.array([[30., np.nan, 35.]], dtype=np.float32)
+    joint = np.array([[30., np.nan, 35.]], dtype=np.float32)
+    result = Composite({'CR_DBZH':joint, 'CR_UNCERTAIN_DBZH':np.full_like(joint,np.nan),
+                        'WINNER_SOURCE':np.array([[1,-1,1]])},meta)
+    components = {'S':Composite({'CR_DBZH':s,'OBSERVED_MASK':np.array([[1,0,0]])},meta),
+                  'X':Composite({'CR_DBZH':x,'OBSERVED_MASK':np.array([[1,1,1]])},meta)}
+    arrays = decode_arrays(sx_comparison_objects(result,components)['arrays.npz'], maximum_bytes=1024*1024)
+    np.testing.assert_equal(arrays['DBZH_SX_MINUS_S'],[[10.,np.nan,np.nan]])
+    np.testing.assert_equal(arrays['X_ADDED_COVERAGE'],[[np.nan,1.,1.]])
+    np.testing.assert_equal(arrays['WINNER_BAND'],[[2.,np.nan,2.]])
+    np.testing.assert_equal(arrays['WINNER_SITE'],[[1.,np.nan,1.]])
