@@ -709,3 +709,10 @@ operational data here.
 - Real paired S: 149.379→149.168 s, all 28,614 metadata/decompressed chunks equal; no material whole-worker gain. Real X: 3.558→3.244 s, all 55 object bytes equal. Linux C synthetic full-budget case 1047.2→149.7 ms with identical products and zero height scratch writes. These are single samples, not p95/throughput claims. Streaming remains false and decoded cache zero on the live X configuration; spatial S+X eligibility remains disabled.
 - Live acceptance succeeded: X run `9fbe671b-46d2-4a78-98f2-7d5e49ac2f5c` (one task), S QC+preview `97e547af-4413-4f19-9ad2-3208b0ece676` (two tasks). Final managed image revision only changes unused imports/import ordering/line wrapping and passed the same Linux suite.
 - C/D 131 passed/3 Numba skips locally and in Linux images; actual Zarr 2 executed. Existing A/B, multiband, VOR, RDR, CF, worker/contracts tests and relevant Go suites passed. Dedicated CI C/D target uses fixed Git reference source rather than delivery ZIPs. New C/D lint is clean; existing algorithm lint is 3349 vs baseline 3350. Existing OpenAPI and RFI/paper identity CI failures remain under the previously accepted exception. See `docs/PERFORMANCE_CD_20260927.md` for invariants and measurements.
+
+## 2026-09-27 多站续批：源值点查与贡献分析
+
+- `b91b81b` 已合入本地 main 并部署 105（Go/Web）。新增 16 站批量解析与点查，内容绑定数值块、贡献专题图、并发 4 和 128 MiB 图片缓存驻留预算。详见 `docs/MULTISTATION_SX_IMPLEMENTATION_20260927.md`。
+- 105 部署目录 `.build/sx-probes-b91b81b`，回滚 `.build/rollback-sx-probes-b91b81b`；现场 Compose 完整链后追加该发布目录的 `compose.json`。X/自动 diagnostics/managed diagnostics 镜像分别 `rainpulse-cpu-worker:sx-probes-b91b81b-0/-1/-2`。S QC、render 与 C/D 参数保持既有版本。
+- 实际 X 验收 run `5d65e5bf-75a5-472d-9a5f-c22179b08342` 两任务成功（ZF101 40 层、ZF505 9 层）；真实点查数值与校验后的数值块相符。管理池恢复 ACCEPTING，无活动/排队任务。
+- 旧 S 历史图件无数值索引，须由更新后的 diagnostics 生成新资产，不覆盖历史。4 S + 11 X 仅完成合成缓存负载测试；实际目录仍仅 2 X。真实 S+X 数值融合仍受站点几何/标定和空产品配置限制。
