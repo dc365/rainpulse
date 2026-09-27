@@ -18,3 +18,10 @@ func TestCompositeMapManifest(t *testing.T) {
 		}
 	}
 }
+
+func TestCompositeExperimentMetadataPreserved(t *testing.T) {
+	m, err := parseCompositeManifest([]byte(`{"contract":"rainpulse.multiband.composite-v1","experimental":true,"display_warning":"未标定试验","valid_echo_cells":12,"comparison":{"same_grid":true,"products":[{"product_id":"sx_composite","valid_echo_cells":12,"echo_contributing_bands":["S","X"]}]}}`))
+	if err != nil || !m.Experimental || m.DisplayWarning == "" || m.ValidEchoCells != 12 || len(m.Comparison.Products[0].EchoContributingBands) != 2 {
+		t.Fatalf("lost experiment metadata: %+v %v", m, err)
+	}
+}

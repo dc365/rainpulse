@@ -111,7 +111,7 @@ paths:
         - {name: result_id, in: path, required: true, schema: {type: string}}
       responses:
         "200":
-          description: Same-run S, X and S+X comparison; optional EPSG4326 map bounds and allowlisted image URLs. Missing map metadata is never inferred.
+          description: Same-run S, X and S+X comparison; optional EPSG4326 map bounds and allowlisted image URLs. Experimental results expose experimental=true and display_warning; product valid_echo_cells and echo_contributing_bands report actual contributions. Missing map metadata is never inferred.
           content:
             application/json:
               schema: {type: object, additionalProperties: true}

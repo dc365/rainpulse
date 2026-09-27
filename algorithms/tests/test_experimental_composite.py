@@ -43,3 +43,11 @@ def test_duplicate_bearings_use_latest_ray_with_original_index():
     selected, original=unique_rays(sweep)
     assert original.tolist()==[1,2]
     assert selected.fields['DBZH'][:,0].tolist()==[20.,30.]
+
+
+def test_missing_snr_experiment_is_distinct_from_measured_low_snr():
+    f={'DBZH_QC_DISPLAY':np.array([[20.]]),'OBSERVED_MASK':np.ones((1,1)),
+       'NO_ECHO_MASK':np.zeros((1,1)), 'MB_QC_FLAGS':np.array([[int(Flag.LOW_SNR|Flag.CALIBRATION_UNKNOWN)]])}
+    assert experimental_fields(f,'X',allow_missing_snr=True)[1].item()
+    f['SNRH']=np.array([[0.]])
+    assert not experimental_fields(f,'X',allow_missing_snr=True)[1].item()

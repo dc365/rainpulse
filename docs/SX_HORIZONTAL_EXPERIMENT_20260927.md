@@ -9,3 +9,5 @@ Sampling uses native ray elevation/range, WGS84 horizontal coordinates and the e
 Same-run S-only, X-only and S+X arrays feed the existing map, colour scale, source probes and contribution panels. This comparison S field uses the horizontal maximum method too; the previously published operational S product remains separate.
 
 Validation: targeted Python experiments/multiband regression, Go planner/control-plane tests and frontend build. Real deployment acceptance must additionally verify actual S and X contribution counts and source-value probes.
+
+Real-data corrections: exact duplicate bearings are resolved by latest acquisition (first original index on ties), preserving original ray indices. Both deployed X inputs omit SNR entirely. This experimental method retains such gates as uncertain candidates; a present SNR field that is low or invalid remains excluded. The existing X QC flags and trusted fusion eligibility are unchanged, X quality scores remain unknown, and the displayed warning explicitly identifies the missing SNR condition.

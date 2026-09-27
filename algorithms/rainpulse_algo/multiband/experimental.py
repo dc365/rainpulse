@@ -16,11 +16,13 @@ from .quality import Flag, x_qc
 from .stream_io import GroupCuts
 
 
-def experimental_fields(fields, band):
+def experimental_fields(fields, band, *, allow_missing_snr=False):
     observed = fields['OBSERVED_MASK'] == 1
     if band == 'X':
         reject = int(Flag.MISSING | Flag.LOW_SNR | Flag.NONMET_CONFIRMED |
                      Flag.NONMET_CANDIDATE | Flag.BLOCKED | Flag.INVALID_MOMENT | Flag.ATTENUATION_LIMIT)
+        if allow_missing_snr and 'SNRH' not in fields:
+            reject &= ~int(Flag.LOW_SNR)
         admitted = observed & ((fields['MB_QC_FLAGS'].astype(np.uint32) & reject) == 0)
         values = fields['DBZH_QC_DISPLAY']
         quality = np.full(values.shape, np.nan)
@@ -103,7 +105,7 @@ def execute(executor, request, reader, *, started):
                     if lon is None or lat is None or not np.isfinite([lon,lat]).all() or not -180<=lon<=180 or not -85<lat<85:
                         raise ValueError('missing/invalid native horizontal coordinates')
                     sweep=volume.sweeps[0]
-                    values,admitted,quality=experimental_fields(sweep.fields,station.band)
+                    values,admitted,quality=experimental_fields(sweep.fields,station.band,allow_missing_snr=True)
                     if len(sweep.range_m)<2:
                         continue
                     for y in range(0,grid.height,grid.tile_rows):
@@ -132,7 +134,7 @@ def execute(executor, request, reader, *, started):
         result.metadata.update(method='experimental_horizontal_max_v1',levels_m_msl=[],
             vertical_coverage='not_height_aligned',observed_mask_semantics='at_least_one_admitted_native_cut',
             experimental=True,calibration_status='unverified',coordinate_status='native_header_unverified',
-            angular_tolerance_deg=1.,duplicate_ray_policy='latest_acquisition_first_index_on_tie',display_warning='未标定试验 · 水平最大值组合 · 非等高融合')
+            missing_snr_policy='retain_as_uncertain_only_when_field_absent',angular_tolerance_deg=1.,duplicate_ray_policy='latest_acquisition_first_index_on_tie',display_warning='未标定试验 · X 缺少 SNR 时保留候选 · 非等高融合')
         results[band]=result
     objects=sx_comparison_objects(results['S+X'],{'S':results['S'],'X':results['X']})
     if sum(map(len,objects.values()))>options.maximum_output_bytes:
