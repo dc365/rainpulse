@@ -20,7 +20,7 @@ def main():
         ).splitlines()
         counts = {line.split('|')[0]: int(line.split('|')[1]) for line in lines}
         terminal = sum(counts.get(key, 0) for key in ('SUCCEEDED', 'FAILED', 'SKIPPED'))
-        report = {'expected': expected, 'counts': counts, 'complete': terminal >= expected}
+        report = {'expected': expected, 'counts': counts, 'complete': counts.get('SUCCEEDED', 0) >= expected, 'settled': terminal >= expected}
         (STATE / 'backfill-status.json').write_text(json.dumps(report, indent=2) + '\n')
         if terminal >= expected:
             # Extra workers may already have taken another request. Wait for
