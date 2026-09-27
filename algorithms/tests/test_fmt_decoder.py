@@ -446,3 +446,17 @@ def test_explicit_reserved_tail_does_not_invent_noise_or_relax_default(tmp_path)
     volume = decode_fmt_volume(source, explicit)
     assert np.isfinite(volume.sweeps[0].fields['DBZH']).any()
     assert all(np.isnan(s.horizontal_noise_dbm).all() and np.isnan(s.vertical_noise_dbm).all() for s in volume.sweeps)
+
+
+def test_draft_unknown_azimuth_resolution_keeps_health_unknown(tmp_path: Path) -> None:
+    path = make_config(tmp_path)
+    document = yaml.safe_load(path.read_text())
+    document['scan']['azimuth_resolution_deg'] = None
+    document['lifecycle'] = 'draft'
+    path.write_text(yaml.safe_dump(document))
+    config = load_radar_config(path)
+    volume = decode_fmt_volume(make_fmt_fixture(tmp_path), config)
+    health = assess_volume_health(volume, config, load_radar_health_config(HEALTH_CONFIG))
+    assert health.value['expected_radial_count'] == 0
+    assert health.value['scan_completeness'] == 0
+    assert 'SCAN_GEOMETRY_UNKNOWN' in health.value['health_reasons']

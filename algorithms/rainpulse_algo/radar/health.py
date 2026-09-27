@@ -115,8 +115,11 @@ def assess_volume_health(
     missing_sweeps = [
         number for number in range(1, expected_sweeps + 1) if number not in actual_by_number
     ]
-    expected_rays_per_sweep = max(
-        1, round(360.0 / float(radar_config.scan["azimuth_resolution_deg"]))
+    resolution = radar_config.scan.get("azimuth_resolution_deg")
+    # Draft stations may lack a verified nominal angular spacing. Do not infer
+    # expected coverage from the very rays whose completeness is being judged.
+    expected_rays_per_sweep = (
+        max(1, round(360.0 / float(resolution))) if resolution is not None else 0
     )
     expected_radials = expected_rays_per_sweep * expected_sweeps
     actual_radials = volume.ray_count
@@ -140,7 +143,7 @@ def assess_volume_health(
             )
             continue
         gap = _maximum_azimuth_gap(sweep.azimuth_deg)
-        coverage = min(1.0, sweep.ray_count / expected_rays_per_sweep)
+        coverage = min(1.0, sweep.ray_count / expected_rays_per_sweep) if expected_rays_per_sweep else 0.0
         missing = max(0, expected_rays_per_sweep - sweep.ray_count)
         missing_radials += missing
         azimuth_coverages.append(coverage)
@@ -232,6 +235,8 @@ def assess_volume_health(
         channel_status = "OK" if np.all((all_noise >= lower) & (all_noise <= upper)) else "DEGRADED"
 
     reasons: list[str] = []
+    if resolution is None:
+        reasons.append("SCAN_GEOMETRY_UNKNOWN")
     dbzh_available = any(
         item["field"] == "DBZH" and item["available"] for item in field_availability
     )
@@ -241,7 +246,7 @@ def assess_volume_health(
         reasons.append("SCAN_INCOMPLETE")
     allowed_gap = max(
         health_config.maximum_azimuth_gap_deg,
-        float(radar_config.scan["azimuth_resolution_deg"]) * 1.5,
+        float(resolution) * 1.5 if resolution is not None else 0.0,
     )
     if maximum_gap > allowed_gap:
         reasons.append("AZIMUTH_GAP")
