@@ -21,25 +21,42 @@ operational data here.
   time units or claim these are valid/verified stations.
 - Twelve S QC rebuilds succeeded; repaired three mixed-generation cycles and
   verified source-probe diagnostic coverage 106/106 existing analysis times.
-- 105 control is `67a3dc2`, Web `21bd294`; full-network config and 1 km regional
-  experimental grid are active. Decoder is `sx-priority1-decode-3d460f4`, two
-  replicas limited to 8 GiB / 2 CPU each. Normalized packed storage is enabled;
-  real sample reduced publication from ~23 s / 13,790 objects to ~22 ms / 1 object.
-- Multiband still `sx-priority1-multiband-21bd294` until its current work drains;
-  `sx-priority1-multiband-41ea4b2` is built and awaits activation. It fixes ZF504
-  standalone duplicate-bearing rejection while preserving native rows; spatial
-  validation remains strict and map sampling chooses the last native row.
-- First 7 full-field X QC samples succeeded; remaining sample runs and full-network
-  composite are recorded under `.build/sx-priority1` and `/tmp/sx-priority1-*` on
-  105. Full-network test run: `af9ebd66-22ef-4347-853b-0b64c1e709fe`.
-- First-hour X import is running via `.build/sx-priority1/backfill.py 1`, with
-  `.build/sx-priority1/backfill/state.json` and per-batch receipts. Queue bounded,
-  120 GiB disk reserve, stop on newly failed decode; two time-invalid stations
-  excluded explicitly. All-day S/X QC/products are NOT yet completed.
-- Next: verify full-network numeric/source coverage result, activate duplicate-ray
-  fix and regenerate failed X sample, verify packed-source QC, then continue
-  bounded full-day import/QC/composite and validate UI/time coverage. Only after
-  Priority 1 acceptance proceed to Priority 2.
+- Source main/origin includes `7307d05`; 105 control and Web are `7307d05`.
+  Full-network config and 1 km experimental regional grid remain active.
+  Decoder image `sx-priority1-decode-3d460f4`: 2 replicas, 8 GiB/2 CPU each,
+  packed normalized storage enabled. Multiband `sx-priority1-multiband-41ea4b2`:
+  2 replicas, 6 GiB/2 CPU each. Preserve existing S QC performance workers.
+- All 22 usable X station representative QC samples passed, including fixed
+  ZF504 duplicate bearings. Packed X and S real-data QC passed. Full-network
+  run `af9ebd66-22ef-4347-853b-0b64c1e709fe` passed numeric/source checks:
+  requested28 = used23 + skipped5; S+X exactly fmax(S,X); all 14,507 X-winning
+  cells uncertain. Candidate horizontal composite is not trusted fusion.
+- 105 active bounded systemd units: `rainpulse-sx-priority1-x-backfill`,
+  `rainpulse-sx-priority1-x-qc`, `rainpulse-sx-priority1-s-backfill`,
+  `rainpulse-sx-priority1-composites`. Scripts/checkpoints/receipts are under
+  `.build/sx-priority1/{backfill,qc-backfill,s-backfill,composite-backfill}`;
+  script names respectively backfill.py, qc-backfill.py, s-backfill.py,
+  composite-backfill.py. UTC source day 2026-08-28 spans BJT Aug28 08:00 to
+  Aug29 08:00. X imports target24hours (state.hours=1 is old milestone).
+  Units reserve120GiB and stop on failures; do not blindly restart without
+  inspecting retained receipt. Composite waits for each hour's S/X QC.
+- At 2026-09-27 09:02Z: X raw imports49 station-hours complete (hour02),
+  X QC18 quarter-hour station batches complete, S40 station-hours complete
+  (hour10 waiting QC), composite waiting first-hour QC. All-day NOT complete.
+- Full-day composite catalog/timeline fix deployed: latest non-retired result
+  per analysis time, max1500 frames/24h. Isolated PostgreSQL240-frame test,
+  seven targeted Web tests, Web build and Go operations tests passed. Live
+  catalog returned10 unique existing frames; new full-day products pending.
+- Next P1 work: monitor/fix full-day runs, handle X next-midnight QC tail,
+  generate S single-station diagnostics beyond old106 cycles, resolve16-layer
+  UI/API selection/probe cap versus28 stations, verify every frame's sources,
+  missing/age and numerical identities, both BJT dates and browser playback.
+  ZF703/ZF801 format docs are optional pending user info, remain excluded.
+  Raw extra S Z9595 is outside configured4S network; do not silently add it.
+- Hourly current-task heartbeat `rainpulse-s-x` is active for authorized P1
+  follow-through; quiet unless meaningful milestone/failure/input/completion.
+  Do not alter unrelated NowcastNet automation `rainpulse`. P2 only after P1
+  acceptance. Temporary PostgreSQL DB `sx_priority1_test_20260927` remains.
 
 ## S/X multiband candidate (2026-09-24)
 
