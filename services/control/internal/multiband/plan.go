@@ -20,6 +20,7 @@ import (
 var namePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,95}$`)
 
 type Station struct {
+	ExperimentalEnabled bool            `json:"experimental_enabled"`
 	Band                string          `json:"band"`
 	Frequency           float64         `json:"frequency_hz"`
 	Longitude           float64         `json:"longitude_deg"`
@@ -40,6 +41,7 @@ type Station struct {
 	XQC                 json.RawMessage `json:"x_qc"`
 }
 type Grid struct {
+	Method   string    `json:"method,omitempty"`
 	ID       string    `json:"grid_id"`
 	CRS      string    `json:"crs"`
 	West     float64   `json:"west_m"`
@@ -106,6 +108,9 @@ func Parse(raw []byte) (Network, error) {
 		n.Stations[id] = s
 	}
 	for id, g := range n.Products {
+		if g.Method != "" && g.Method != "quality_height" && g.Method != "experimental_horizontal_max" {
+			return n, fmt.Errorf("unsupported composite method")
+		}
 		if !namePattern.MatchString(id) || !namePattern.MatchString(g.ID) || g.CRS == "" || g.Spacing < 100 || g.Spacing > 5000 || g.Width < 1 || g.Width > 2048 || g.Height < 1 || g.Height > 2048 || g.Width*g.Height > 1000000 || len(g.Levels) < 1 || len(g.Levels) > 32 {
 			return n, fmt.Errorf("product grid exceeds limits")
 		}
@@ -200,7 +205,7 @@ func Select(n Network, product, mode string, radars []string, start, end, cutoff
 	seen := map[string]bool{}
 	for _, r := range radars {
 		s, ok := n.Stations[r]
-		available := s.Enabled
+		available := s.Enabled || mode == "sx_composite" && n.Products[product].Method == "experimental_horizontal_max" && s.ExperimentalEnabled
 		if mode == "x_qc" {
 			available = s.Enabled || s.XQCEnabled
 		}

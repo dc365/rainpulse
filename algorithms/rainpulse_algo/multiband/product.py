@@ -361,6 +361,10 @@ def sx_comparison_objects(result: Composite, band_results: dict[str, Composite |
         fusion_label = f"S/X 融合（最终回波来自 {echo_contributing_bands[0]}）"
     else:
         fusion_label = "S/X 融合"
+    if result.metadata.get("experimental"):
+        fusion_label = "S+X 未标定试验组合" if len(contributing_bands) == 2 else fusion_label + " · 未标定试验"
+        for entry in products:
+            entry["label"] += " · 水平试验"
     missing_reason = None
     if len(contributing_bands) == 1:
         absent_band = "X" if contributing_bands[0] == "S" else "S"

@@ -169,6 +169,10 @@
             },
             "required": [],
             "additionalProperties": false
+          },
+          "experimental_enabled": {
+            "type": "boolean",
+            "default": false
           }
         },
         "required": [
@@ -345,7 +349,17 @@
             "maximum": 128
           },
           "cadence_seconds": {
-            "enum": [60, 360]
+            "enum": [
+              60,
+              360
+            ]
+          },
+          "method": {
+            "enum": [
+              "quality_height",
+              "experimental_horizontal_max"
+            ],
+            "default": "quality_height"
           }
         },
         "required": [

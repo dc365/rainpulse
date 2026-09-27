@@ -99,7 +99,7 @@ func (b *OperationsBuilder) buildMultiBand(ctx context.Context, s operations.Sel
 	for _, rawID := range s.RadarIDs {
 		id := strings.ToLower(rawID)
 		station, ok := n.Stations[id]
-		available := station.Enabled
+		available := station.Enabled || s.Preset == "sx_composite" && n.Products[product].Method == "experimental_horizontal_max" && station.ExperimentalEnabled
 		if s.Preset == "x_qc" {
 			available = station.Enabled || station.XQCEnabled
 		}
@@ -148,7 +148,7 @@ func (b *OperationsBuilder) buildMultiBand(ctx context.Context, s operations.Sel
 	if e != nil {
 		return nil, nil, operations.Invalid(e.Error())
 	}
-	checks := []operations.Check{{Code: "multiband_scope", State: "WARN", Message: "S复用已登记QC；X单站任务只运行原生极坐标候选质控，不要求融合几何；区域组合仍须完整核验几何与标定。仅候选，不改变QPE/预报/默认展示。"},
+	checks := []operations.Check{{Code: "multiband_scope", State: "WARN", Message: "S复用已登记QC；X单站任务只运行原生极坐标候选质控，不要求融合几何；等高组合须完整核验几何与标定；未标定水平试验仅作资料对照。仅候选，不改变QPE/预报/默认展示。"},
 		{Code: "cutoff", State: "WARN", Message: "输入按本次预检可见目录冻结；历史计划不等于当时实时到报可得性回放。"}}
 	for _, warning := range warnings {
 		checks = append(checks, operations.Check{Code: "station_availability", State: "WARN", Message: warning})

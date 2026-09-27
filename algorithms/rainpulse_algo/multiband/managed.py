@@ -151,6 +151,9 @@ class Executor:
                 raise ValueError("execution settings differ from worker startup")
         if p.get("execution_sha256") != self.execution_policy_sha256:
             raise ValueError("execution settings differ from frozen task")
+        if p["mode"] == "sx_composite" and self.network.products[p["product_id"]].method == "experimental_horizontal_max":
+            from .experimental import execute
+            return execute(self, request, reader, started=started)
         if p["mode"] == "x_qc" and not self.execution.streaming:
             return self._execute_x_qc(request, reader, artifact_digest, started)
         if self.execution.streaming:

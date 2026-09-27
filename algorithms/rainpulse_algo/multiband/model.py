@@ -93,6 +93,7 @@ class Station:
     beam_width_v_deg: float | None = None
     enabled: bool = False
     x_qc_enabled: bool = False
+    experimental_enabled: bool = False
     geometry_verified: bool = False
     calibration_verified: bool = False
     calibration_id: str = "unverified"
@@ -129,7 +130,7 @@ class Station:
             raise ValueError("legacy QC adapter cannot masquerade as X QC")
         if self.band == "S" and self.source == "normalized_zarr":
             raise ValueError("S observations must pass the existing S QC first")
-        for name in ("enabled", "x_qc_enabled", "geometry_verified", "calibration_verified"):
+        for name in ("enabled", "x_qc_enabled", "experimental_enabled", "geometry_verified", "calibration_verified"):
             if type(getattr(self, name)) is not bool:
                 raise ValueError(f"{name} must be boolean")
         if self.enabled and not self.geometry_verified:
@@ -152,8 +153,11 @@ class Grid:
     levels_m_msl: tuple[float, ...]
     tile_rows: int = 32
     cadence_seconds: int = 60
+    method: str = "quality_height"
 
     def __post_init__(self) -> None:
+        if self.method not in {"quality_height", "experimental_horizontal_max"}:
+            raise ValueError("unsupported composite method")
         if not NAME.fullmatch(self.grid_id):
             raise ValueError("invalid grid identity")
         crs = CRS.from_user_input(self.crs)
