@@ -1,0 +1,485 @@
+{
+  "schema_version": "1.0",
+  "release_id": "sx-full-fields-20260828-v2",
+  "cache_max_bytes": 0,
+  "cache_ttl_seconds": 600,
+  "maximum_input_bytes": 536870912,
+  "stations": {
+    "zf101": {
+      "band": "X",
+      "source": "normalized_zarr",
+      "enabled": false,
+      "x_qc_enabled": true,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "calibration_id": "unverified",
+      "nominal_cadence_seconds": 60,
+      "maximum_age_seconds": 420,
+      "x_qc": {
+        "attenuation": "none",
+        "require_snr": true
+      },
+      "experimental_enabled": true
+    },
+    "zf505": {
+      "band": "X",
+      "source": "normalized_zarr",
+      "enabled": false,
+      "x_qc_enabled": true,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "calibration_id": "unverified",
+      "nominal_cadence_seconds": 60,
+      "maximum_age_seconds": 420,
+      "x_qc": {
+        "attenuation": "none",
+        "require_snr": true
+      },
+      "experimental_enabled": true
+    },
+    "z9591": {
+      "band": "S",
+      "source": "s_qc_zarr",
+      "experimental_enabled": true,
+      "enabled": false,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "nominal_cadence_seconds": 360,
+      "maximum_age_seconds": 600,
+      "longitude_deg": 119.54055786132812,
+      "latitude_deg": 25.99138832092285,
+      "allowed_s_qc_versions": [
+        "qc-opensource-7.3.9"
+      ]
+    },
+    "z9593": {
+      "band": "S",
+      "source": "s_qc_zarr",
+      "experimental_enabled": true,
+      "enabled": false,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "nominal_cadence_seconds": 360,
+      "maximum_age_seconds": 600,
+      "longitude_deg": 120.21778106689453,
+      "latitude_deg": 26.95222282409668,
+      "allowed_s_qc_versions": [
+        "qc-opensource-7.3.9"
+      ]
+    },
+    "z9598": {
+      "band": "S",
+      "source": "s_qc_zarr",
+      "experimental_enabled": true,
+      "enabled": false,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "nominal_cadence_seconds": 360,
+      "maximum_age_seconds": 600,
+      "longitude_deg": 117.08055877685547,
+      "latitude_deg": 27.00861167907715,
+      "allowed_s_qc_versions": [
+        "qc-opensource-7.3.9"
+      ]
+    },
+    "z9599": {
+      "band": "S",
+      "source": "s_qc_zarr",
+      "experimental_enabled": true,
+      "enabled": false,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "nominal_cadence_seconds": 360,
+      "maximum_age_seconds": 600,
+      "longitude_deg": 118.19388580322266,
+      "latitude_deg": 27.327777862548828,
+      "allowed_s_qc_versions": [
+        "qc-opensource-7.3.9"
+      ]
+    },
+    "zf102": {
+      "band": "X",
+      "source": "normalized_zarr",
+      "enabled": false,
+      "x_qc_enabled": true,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "calibration_id": "unverified",
+      "nominal_cadence_seconds": 60,
+      "maximum_age_seconds": 420,
+      "x_qc": {
+        "attenuation": "none",
+        "require_snr": true
+      },
+      "experimental_enabled": true
+    },
+    "zf103": {
+      "band": "X",
+      "source": "normalized_zarr",
+      "enabled": false,
+      "x_qc_enabled": true,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "calibration_id": "unverified",
+      "nominal_cadence_seconds": 60,
+      "maximum_age_seconds": 420,
+      "x_qc": {
+        "attenuation": "none",
+        "require_snr": true
+      },
+      "experimental_enabled": true
+    },
+    "zf104": {
+      "band": "X",
+      "source": "normalized_zarr",
+      "enabled": false,
+      "x_qc_enabled": true,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "calibration_id": "unverified",
+      "nominal_cadence_seconds": 60,
+      "maximum_age_seconds": 420,
+      "x_qc": {
+        "attenuation": "none",
+        "require_snr": true
+      },
+      "experimental_enabled": true
+    },
+    "zf105": {
+      "band": "X",
+      "source": "normalized_zarr",
+      "enabled": false,
+      "x_qc_enabled": true,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "calibration_id": "unverified",
+      "nominal_cadence_seconds": 60,
+      "maximum_age_seconds": 420,
+      "x_qc": {
+        "attenuation": "none",
+        "require_snr": true
+      },
+      "experimental_enabled": true
+    },
+    "zf201": {
+      "band": "X",
+      "source": "normalized_zarr",
+      "enabled": false,
+      "x_qc_enabled": true,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "calibration_id": "unverified",
+      "nominal_cadence_seconds": 60,
+      "maximum_age_seconds": 420,
+      "x_qc": {
+        "attenuation": "none",
+        "require_snr": true
+      },
+      "experimental_enabled": true
+    },
+    "zf202": {
+      "band": "X",
+      "source": "normalized_zarr",
+      "enabled": false,
+      "x_qc_enabled": true,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "calibration_id": "unverified",
+      "nominal_cadence_seconds": 60,
+      "maximum_age_seconds": 420,
+      "x_qc": {
+        "attenuation": "none",
+        "require_snr": true
+      },
+      "experimental_enabled": true
+    },
+    "zf203": {
+      "band": "X",
+      "source": "normalized_zarr",
+      "enabled": false,
+      "x_qc_enabled": true,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "calibration_id": "unverified",
+      "nominal_cadence_seconds": 60,
+      "maximum_age_seconds": 420,
+      "x_qc": {
+        "attenuation": "none",
+        "require_snr": true
+      },
+      "experimental_enabled": true
+    },
+    "zf401": {
+      "band": "X",
+      "source": "normalized_zarr",
+      "enabled": false,
+      "x_qc_enabled": true,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "calibration_id": "unverified",
+      "nominal_cadence_seconds": 60,
+      "maximum_age_seconds": 420,
+      "x_qc": {
+        "attenuation": "none",
+        "require_snr": true
+      },
+      "experimental_enabled": true
+    },
+    "zf402": {
+      "band": "X",
+      "source": "normalized_zarr",
+      "enabled": false,
+      "x_qc_enabled": true,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "calibration_id": "unverified",
+      "nominal_cadence_seconds": 60,
+      "maximum_age_seconds": 420,
+      "x_qc": {
+        "attenuation": "none",
+        "require_snr": true
+      },
+      "experimental_enabled": true
+    },
+    "zf501": {
+      "band": "X",
+      "source": "normalized_zarr",
+      "enabled": false,
+      "x_qc_enabled": true,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "calibration_id": "unverified",
+      "nominal_cadence_seconds": 60,
+      "maximum_age_seconds": 420,
+      "x_qc": {
+        "attenuation": "none",
+        "require_snr": true
+      },
+      "experimental_enabled": true
+    },
+    "zf502": {
+      "band": "X",
+      "source": "normalized_zarr",
+      "enabled": false,
+      "x_qc_enabled": true,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "calibration_id": "unverified",
+      "nominal_cadence_seconds": 60,
+      "maximum_age_seconds": 420,
+      "x_qc": {
+        "attenuation": "none",
+        "require_snr": true
+      },
+      "experimental_enabled": true
+    },
+    "zf503": {
+      "band": "X",
+      "source": "normalized_zarr",
+      "enabled": false,
+      "x_qc_enabled": true,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "calibration_id": "unverified",
+      "nominal_cadence_seconds": 60,
+      "maximum_age_seconds": 420,
+      "x_qc": {
+        "attenuation": "none",
+        "require_snr": true
+      },
+      "experimental_enabled": true
+    },
+    "zf504": {
+      "band": "X",
+      "source": "normalized_zarr",
+      "enabled": false,
+      "x_qc_enabled": true,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "calibration_id": "unverified",
+      "nominal_cadence_seconds": 60,
+      "maximum_age_seconds": 420,
+      "x_qc": {
+        "attenuation": "none",
+        "require_snr": true
+      },
+      "experimental_enabled": true
+    },
+    "zf602": {
+      "band": "X",
+      "source": "normalized_zarr",
+      "enabled": false,
+      "x_qc_enabled": true,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "calibration_id": "unverified",
+      "nominal_cadence_seconds": 60,
+      "maximum_age_seconds": 420,
+      "x_qc": {
+        "attenuation": "none",
+        "require_snr": true
+      },
+      "experimental_enabled": true
+    },
+    "zf603": {
+      "band": "X",
+      "source": "normalized_zarr",
+      "enabled": false,
+      "x_qc_enabled": true,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "calibration_id": "unverified",
+      "nominal_cadence_seconds": 60,
+      "maximum_age_seconds": 420,
+      "x_qc": {
+        "attenuation": "none",
+        "require_snr": true
+      },
+      "experimental_enabled": true
+    },
+    "zf604": {
+      "band": "X",
+      "source": "normalized_zarr",
+      "enabled": false,
+      "x_qc_enabled": true,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "calibration_id": "unverified",
+      "nominal_cadence_seconds": 60,
+      "maximum_age_seconds": 420,
+      "x_qc": {
+        "attenuation": "none",
+        "require_snr": true
+      },
+      "experimental_enabled": true
+    },
+    "zf605": {
+      "band": "X",
+      "source": "normalized_zarr",
+      "enabled": false,
+      "x_qc_enabled": true,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "calibration_id": "unverified",
+      "nominal_cadence_seconds": 60,
+      "maximum_age_seconds": 420,
+      "x_qc": {
+        "attenuation": "none",
+        "require_snr": true
+      },
+      "experimental_enabled": true
+    },
+    "zf701": {
+      "band": "X",
+      "source": "normalized_zarr",
+      "enabled": false,
+      "x_qc_enabled": true,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "calibration_id": "unverified",
+      "nominal_cadence_seconds": 60,
+      "maximum_age_seconds": 420,
+      "x_qc": {
+        "attenuation": "none",
+        "require_snr": true
+      },
+      "experimental_enabled": true
+    },
+    "zf702": {
+      "band": "X",
+      "source": "normalized_zarr",
+      "enabled": false,
+      "x_qc_enabled": true,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "calibration_id": "unverified",
+      "nominal_cadence_seconds": 60,
+      "maximum_age_seconds": 420,
+      "x_qc": {
+        "attenuation": "none",
+        "require_snr": true
+      },
+      "experimental_enabled": true
+    },
+    "zf703": {
+      "band": "X",
+      "source": "normalized_zarr",
+      "enabled": false,
+      "x_qc_enabled": true,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "calibration_id": "unverified",
+      "nominal_cadence_seconds": 60,
+      "maximum_age_seconds": 420,
+      "x_qc": {
+        "attenuation": "none",
+        "require_snr": true
+      },
+      "experimental_enabled": true
+    },
+    "zf801": {
+      "band": "X",
+      "source": "normalized_zarr",
+      "enabled": false,
+      "x_qc_enabled": true,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "calibration_id": "unverified",
+      "nominal_cadence_seconds": 60,
+      "maximum_age_seconds": 420,
+      "x_qc": {
+        "attenuation": "none",
+        "require_snr": true
+      },
+      "experimental_enabled": true
+    },
+    "zf900": {
+      "band": "X",
+      "source": "normalized_zarr",
+      "enabled": false,
+      "x_qc_enabled": true,
+      "geometry_verified": false,
+      "calibration_verified": false,
+      "calibration_id": "unverified",
+      "nominal_cadence_seconds": 60,
+      "maximum_age_seconds": 420,
+      "x_qc": {
+        "attenuation": "none",
+        "require_snr": true
+      },
+      "experimental_enabled": true
+    }
+  },
+  "products": {
+    "sx-horizontal-test": {
+      "grid_id": "fujian-horizontal-1km-v1",
+      "crs": "EPSG:32651",
+      "west_m": -5000,
+      "south_m": 2774000,
+      "spacing_m": 1000,
+      "width": 510,
+      "height": 260,
+      "levels_m_msl": [
+        0
+      ],
+      "tile_rows": 32,
+      "cadence_seconds": 360,
+      "method": "experimental_horizontal_max"
+    },
+    "sx-fujian-full-test": {
+      "grid_id": "fujian-full-horizontal-1km-v2",
+      "crs": "EPSG:32651",
+      "west_m": -291000,
+      "south_m": 2544000,
+      "spacing_m": 1000,
+      "width": 625,
+      "height": 656,
+      "levels_m_msl": [
+        0
+      ],
+      "tile_rows": 32,
+      "cadence_seconds": 360,
+      "method": "experimental_horizontal_max"
+    }
+  }
+}
