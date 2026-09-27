@@ -34,3 +34,12 @@ def test_s_hard_rejection_still_applies():
     f={'DBZH_QC':np.array([[20.,30.]]),'OBSERVED_MASK':np.ones((1,2)), 'NO_ECHO_MASK':np.zeros((1,2)),
        'REFLECTIVITY_ELIGIBLE_FOR_CR':np.ones((1,2)), 'QUALITY_INDEX':np.ones((1,2)), 'CR_WITHHELD_MASK':np.array([[0,1]])}
     assert experimental_fields(f,'S')[1].tolist()==[[True,False]]
+
+
+def test_duplicate_bearings_use_latest_ray_with_original_index():
+    from rainpulse_algo.multiband.experimental import unique_rays
+    from rainpulse_algo.multiband.model import Sweep
+    sweep=Sweep(0,np.array([0.,1.,0.]),np.array([100.,200.]),np.ones(3),np.array([1.,2.,3.]),{'DBZH':np.array([[10.,10.],[20.,20.],[30.,30.]])})
+    selected, original=unique_rays(sweep)
+    assert original.tolist()==[1,2]
+    assert selected.fields['DBZH'][:,0].tolist()==[20.,30.]

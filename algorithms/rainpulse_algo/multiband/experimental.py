@@ -11,7 +11,7 @@ import numpy as np
 from pyproj import Transformer
 
 from .fusion import EARTH_EFFECTIVE_M, GEOD, _nearest_ray, allocate_output, finish_composite
-from .model import epoch
+from .model import Sweep, epoch
 from .quality import Flag, x_qc
 from .stream_io import GroupCuts
 
@@ -43,6 +43,16 @@ def update_samples(out, values, admitted, ray, gate, age, quality, index):
                        ('WINNER_AGE_SECONDS', age), ('WINNER_QUALITY_SCORE', quality)]:
         out[key][replace] = value[replace]
     out['WINNER_SOURCE'][replace] = index
+
+
+def unique_rays(sweep):
+    """Resolve exact duplicate bearings by latest acquisition, first index on ties."""
+    order = np.lexsort((np.arange(len(sweep.azimuth_deg)), -sweep.ray_time_epoch, sweep.azimuth_deg))
+    _, positions = np.unique(sweep.azimuth_deg[order], return_index=True)
+    chosen = np.sort(order[positions])
+    return Sweep(sweep.number, sweep.azimuth_deg[chosen], sweep.range_m,
+                 sweep.elevation_deg[chosen], sweep.ray_time_epoch[chosen],
+                 {key:value[chosen] for key,value in sweep.fields.items()}), chosen
 
 
 def execute(executor, request, reader, *, started):
@@ -82,6 +92,8 @@ def execute(executor, request, reader, *, started):
                                 'geometry_verified':station.geometry_verified,'calibration_verified':station.calibration_verified})
                 for number in cuts.numbers:
                     volume=cuts.read(number)
+                    resolved, native_ray = unique_rays(volume.sweeps[0])
+                    volume.sweeps = [resolved]
                     volume.validate(station,require_geometry=False)
                     if station.band=='X':
                         volume=x_qc(volume,station,net.sha256)
@@ -112,7 +124,7 @@ def execute(executor, request, reader, *, started):
                         support=(offset<=1.0)&(denominator>0)&(abs(slant-ranges[gate])<=widths[gate]/2)&(age>=0)&(age<=station.maximum_age_seconds)
                         valid=support&admitted[ray,gate]
                         for band in (station.band,'S+X'):
-                            update_samples({k:v[sl] for k,v in outputs[band].items()},values[ray,gate],valid,ray,gate,age,quality[ray,gate],index)
+                            update_samples({k:v[sl] for k,v in outputs[band].items()},values[ray,gate],valid,native_ray[ray],gate,age,quality[ray,gate],index)
                     del volume,values,admitted,quality
     results={}
     for band,out in outputs.items():
@@ -120,7 +132,7 @@ def execute(executor, request, reader, *, started):
         result.metadata.update(method='experimental_horizontal_max_v1',levels_m_msl=[],
             vertical_coverage='not_height_aligned',observed_mask_semantics='at_least_one_admitted_native_cut',
             experimental=True,calibration_status='unverified',coordinate_status='native_header_unverified',
-            angular_tolerance_deg=1.,display_warning='未标定试验 · 水平最大值组合 · 非等高融合')
+            angular_tolerance_deg=1.,duplicate_ray_policy='latest_acquisition_first_index_on_tie',display_warning='未标定试验 · 水平最大值组合 · 非等高融合')
         results[band]=result
     objects=sx_comparison_objects(results['S+X'],{'S':results['S'],'X':results['X']})
     if sum(map(len,objects.values()))>options.maximum_output_bytes:
