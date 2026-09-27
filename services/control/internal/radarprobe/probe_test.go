@@ -45,3 +45,21 @@ func TestExactMissingAndBounds(t *testing.T) {
 		t.Fatal("unsafe key accepted")
 	}
 }
+
+func TestFiniteExperimentalValueRetainsUncertainty(t *testing.T) {
+	values := make([]byte, 16)
+	binary.LittleEndian.PutUint64(values, math.Float64bits(25))
+	binary.LittleEndian.PutUint64(values[8:], math.Float64bits(1))
+	var compressed bytes.Buffer
+	writer := zlib.NewWriter(&compressed)
+	_, _ = writer.Write(values)
+	_ = writer.Close()
+	fields := []string{"CR_DBZH", "UNCERTAIN_MASK"}
+	raw, _ := json.Marshal(map[string]any{"encoding": "zlib-f64le", "width": 1, "height": 1, "fields": fields, "data": base64.StdEncoding.EncodeToString(compressed.Bytes())})
+	hash := sha256.Sum256(raw)
+	index := Index{Contract: "rainpulse.radar-probe-v1", Width: 1, Height: 1, TileSize: 64, Fields: fields, RowOrder: "north_to_south", Tiles: map[string]Tile{"0_0": {Path: "query/test.json", SHA256: hex.EncodeToString(hash[:])}}}
+	result, err := Sample(context.Background(), index, .5, .5, func(context.Context, string) ([]byte, error) { return raw, nil })
+	if err != nil || result["state"] != "low_quality" || result["values"].(map[string]any)["CR_DBZH"] != float64(25) {
+		t.Fatalf("%+v %v", result, err)
+	}
+}

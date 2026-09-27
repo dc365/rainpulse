@@ -112,7 +112,7 @@ func Sample(ctx context.Context, index Index, x, y float64, read Read) (map[stri
 		if result["UNCERTAIN_MASK"] == float64(1) {
 			state = "low_quality"
 		}
-	} else if result["QC_ACTION"] == float64(3) || result["LOW_QUALITY_MASK"] == float64(1) {
+	} else if result["UNCERTAIN_MASK"] == float64(1) || result["QC_ACTION"] == float64(3) || result["LOW_QUALITY_MASK"] == float64(1) {
 		state = "low_quality"
 	} else if result["DISPLAY_VALID"] == float64(0) {
 		state = "rejected"
