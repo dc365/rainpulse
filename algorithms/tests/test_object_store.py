@@ -259,7 +259,7 @@ def test_atomic_publish_rejects_completion_for_different_bundle_bytes() -> None:
         )
 
 
-@pytest.mark.parametrize("packed", [False, True])
+@pytest.mark.parametrize("packed", [False, "qc", "normalized"])
 def test_atomic_publish_commits_multi_object_zarr_bundle_before_marker(monkeypatch, packed) -> None:
     from rainpulse_algo.worker.contracts import JobRequested
     from rainpulse_algo.worker.runtime import WorkerResult
@@ -274,9 +274,12 @@ def test_atomic_publish_commits_multi_object_zarr_bundle_before_marker(monkeypat
         ".zattrs": b'{"contract_name":"rainpulse.normalized-radar-volume"}',
         "sweep_000/DBZH/0.0": b"compressed-radar-bytes",
     }
-    if packed:
+    if packed == "qc":
         monkeypatch.setenv("RAINPULSE_QC_PACKED_STORAGE", "1")
         objects["qc/summary.json"] = b"{}"
+    elif packed == "normalized":
+        monkeypatch.setenv("RAINPULSE_NORMALIZED_PACKED_STORAGE", "1")
+        objects["health/summary.json"] = b"{}"
     result = WorkerResult(objects=objects, metrics={"sweep_count": 1.0})
     completion = worker._build_completion(  # noqa: SLF001
         request=request,

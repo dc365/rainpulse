@@ -114,7 +114,14 @@ class AtomicObjectPublisher:
         digest = artifact_sha256(payloads)
         total_size = sum(len(value) for value in payloads.values())
         packed_entries = None
-        if os.getenv("RAINPULSE_QC_PACKED_STORAGE", "0") == "1" and "qc/summary.json" in payloads:
+        pack_qc = os.getenv("RAINPULSE_QC_PACKED_STORAGE", "0") == "1" and "qc/summary.json" in payloads
+        pack_normalized = (
+            os.getenv("RAINPULSE_NORMALIZED_PACKED_STORAGE", "0") == "1"
+            and artifact_name == "volume.zarr"
+            and "health/summary.json" in payloads
+            and "qc/summary.json" not in payloads
+        )
+        if pack_qc or pack_normalized:
             payloads, packed_entries = _pack_objects(payloads)
         data_prefix = f"_objects/{digest}"
         expected_asset_uri = f"s3://{bucket}/{prefix}/{artifact_name}"
