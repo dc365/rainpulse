@@ -29,6 +29,15 @@ operational data here.
 - 质控排查页 http://192.168.28.105:4173/?preset=qc&band=X 复核：全天 QC 数据完整（zf101 79/79、zf701 70/70、zf402 46/46 NORMALIZED）；qc-backfill state.json 的 RUNNING 为死提交器陈旧状态（receipt 到 01-45，后续结果由其他路径完成），保留原状未改。
 
 
+## 2026-09-28 X 径向质控调参 r3 + 全 X 站扩展 r4（d88469b）
+
+- 用户目标：X 波段径向质控普遍无效（S 波段正常），需修复且不得影响 S（X/S 参数分开）。根因两条：(1) S 接收域核心在 X 上结构性弃权——X 参考块 SNR 实测 mu≈-5dB/p90 散布 4-12dB，对其硬契约 mu≥20dB（ge=20）、spread≤2dB（le=2）不可能满足，config 边界也无法放宽，属设计上只适用 S SNR 语义；(2) v2 径向确认合取过紧——用户帧 zf701 93d2d253 上 1230 几何候选仅确认 84 门（RHOHV≤0.8 只留 40%，抖动≥20° 只留 33%，SNR≥12 只留 67%，双侧翼 8dB/6° 再杀 70% 幸存者；真实辐条 RHOHV 0.63-0.88、弱辐条反差仅 6-13dB）。
+- r3 修复（本地 main `d88469b`，纯网络调参无镜像重建）：`xqc_v2/profiles.py` 增 `RADIAL_TUNING`（rho≤.90、jitter≥10°、dbzh<45、侧翼反差 6dB、SNR≥8、侧翼窗 10°），仅写入生成网络的 `station.x_qc.enhancement`；新增 `algorithms/tests/xqc_v2_20260928/test_profiles.py` 2 测试（调参随档携带、守保守边界）。雨的结构保护不变：rho>0.90 永不标记（雨 ~0.95+）、天气保护/代理掩码排除、几何+双侧翼实测+极化证据仍全部必需，强度单独永不触发。
+- 105 r3 验证：三窗口重算全 SUCCEEDED（zf701 9c86a900/32772fd3、zf101 6d65fbff）；用户帧拒绝门 2658→25379（9 cut），cut0 2529 门/104 射线全覆盖方位角，无 rho>0.9 误杀，DBZH_QC 在拒绝门全 NaN；map_qc 对比 map_raw：辐条明显稀疏/部分消失、南部降水楔完整保留。最强 spokes 仍有点状残余——证据不足门按设计保留，不得为截图继续放宽。
+- r4 扩展：tuned enhancement 从 zf701+zf101 扩至全部 22 个合格 X 站（zf101-105/201-203/401-402/501-505/602-605/701-702/900；排除 zf703/zf801——全天仅 1 条扫描，ray 时间缺陷）。网络 `.build/x-qc-v2-network-20260928/profiles-r4/`（all-quarantine SHA fea09e38…），活跃网络已切换；三 ops workers 重建健康（注意：compose up 会丢 multiband 副本 2，须 `--scale ops-multiband-worker=2` 恢复）。抽查：zf702 run d944c0b3、zf605 run 6ea71dc9 全 SUCCEEDED；zf702 cut2 径向模块确认 6187 门（新站生效），原始图无成片降水（仅辐条/点杂波/发散条带楔）故无降雨可伤，强楔形按设计保留；zf605 干净站三卷仅 33/0/19 门动作。S 四站无 enhancement、radar-qc workers 未重启。
+- 回执与回滚：`.build/x-qc-v2-e549510/release.json` 已记 r3/r4 块；r3 切换前备份 `active-r3-backup-20260928T150141Z.json`（SHA d312dd65…）。遗留：ZF101 海上强回波环为孤立对象 audit 模式，需单独策略决策才可行动。
+
+
 ## Current S/X mainline: Priority 1 (2026-09-27)
 
 - 2026-09-28 ~06:01Z follow-up: S and X failed decode recovery verified,
