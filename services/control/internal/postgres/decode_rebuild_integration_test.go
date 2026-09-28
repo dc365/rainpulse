@@ -102,4 +102,49 @@ CREATE TEMP TABLE outbox_events(event_id uuid PRIMARY KEY,aggregate_type text,ag
 	if _, _, err = service.CreateRadarDecode(ctx, input); err == nil {
 		t.Fatal("trusted radar rebuild accepted")
 	}
+
+	sInput := orchestration.RadarDecodeInput{RadarID: "z9598", Lifecycle: workflow.RadarDraft,
+		ConfigVersion: "s-v1", Config: json.RawMessage(`{"hardware":{"radar_band":"S"}}`),
+		ConfigSHA256: strings.Repeat("e", 64), SourceFormat: "cma-rstm-level2",
+		InputURI: "s3://rainpulse/radar/raw/z9598/frozen.bz2", InputSHA256: strings.Repeat("f", 64),
+		InputSizeBytes: 123, VolumeStartTime: time.Now().Add(-2 * time.Hour), VolumeEndTime: time.Now().Add(-119 * time.Minute)}
+	sScan, sOld, err := service.CreateRadarDecode(ctx, sInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, `UPDATE radar_scan_runs SET status='FAILED' WHERE run_id=$1`, sScan.RunID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, `UPDATE jobs SET status='FAILED' WHERE job_id=$1`, sOld.ID); err != nil {
+		t.Fatal(err)
+	}
+	sInput.ExistingRunID, sInput.RebuildID = sScan.RunID, uuid.New()
+	_, sNew, err := service.CreateRadarDecode(ctx, sInput)
+	if err != nil {
+		t.Fatalf("frozen failed S decode rejected: %v", err)
+	}
+	if sNew.ID == sOld.ID {
+		t.Fatal("failed S job reused")
+	}
+	var sStatus string
+	var sURI *string
+	if err = pool.QueryRow(ctx, `SELECT status,normalized_uri FROM radar_scan_runs WHERE run_id=$1`, sScan.RunID).Scan(&sStatus, &sURI); err != nil {
+		t.Fatal(err)
+	}
+	if sStatus != "RAW_VALIDATING" || sURI != nil {
+		t.Fatal("rebuild did not isolate S result")
+	}
+	if _, _, err = service.CreateRadarDecode(ctx, sInput); err != nil {
+		t.Fatalf("S rebuild lost idempotency: %v", err)
+	}
+	if _, err = pool.Exec(ctx, `UPDATE radar_scan_runs SET status='FAILED' WHERE run_id=$1`, sScan.RunID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, `UPDATE jobs SET status='SUCCEEDED' WHERE job_id=$1`, sOld.ID); err != nil {
+		t.Fatal(err)
+	}
+	sInput.RebuildID = uuid.New()
+	if _, _, err = service.CreateRadarDecode(ctx, sInput); err == nil {
+		t.Fatal("S rebuild accepted without failed original decode")
+	}
 }

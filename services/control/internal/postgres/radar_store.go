@@ -23,10 +23,10 @@ func (store *Store) CreateRadarDecodeBundle(ctx context.Context, bundle workflow
 
 	if bundle.Rebuild {
 		var scanID, assetID uuid.UUID
-		var radarID, status, lifecycle string
-		err = tx.QueryRow(ctx, `SELECT r.scan_id,s.raw_asset_id,r.radar_id,r.status,d.lifecycle
+		var radarID, status, lifecycle, configVersion string
+		err = tx.QueryRow(ctx, `SELECT r.scan_id,s.raw_asset_id,r.radar_id,r.status,d.lifecycle,r.radar_config_version
 FROM radar_scan_runs r JOIN radar_scans s USING(scan_id) JOIN radars d ON d.radar_id=r.radar_id
-WHERE r.run_id=$1 FOR UPDATE OF r`, bundle.Scan.RunID).Scan(&scanID, &assetID, &radarID, &status, &lifecycle)
+WHERE r.run_id=$1 FOR UPDATE OF r`, bundle.Scan.RunID).Scan(&scanID, &assetID, &radarID, &status, &lifecycle, &configVersion)
 		if err != nil {
 			return fmt.Errorf("lock decode rebuild source: %w", err)
 		}
@@ -39,6 +39,26 @@ WHERE r.run_id=$1 FOR UPDATE OF r`, bundle.Scan.RunID).Scan(&scanID, &assetID, &
 		}
 		if exists {
 			return tx.Commit(ctx)
+		}
+		var config struct {
+			Hardware struct {
+				Band string `json:"radar_band"`
+			} `json:"hardware"`
+		}
+		if err = json.Unmarshal(bundle.Config, &config); err != nil {
+			return fmt.Errorf("decode rebuild config: %w", err)
+		}
+		if config.Hardware.Band == "S" {
+			if status != "FAILED" || configVersion != bundle.Radar.ConfigVersion {
+				return fmt.Errorf("S decode rebuild requires failed scan and frozen config")
+			}
+			var failedOriginal bool
+			if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM jobs WHERE run_id=$1 AND job_type='radar.decode' AND status='FAILED' AND request_payload->'payload'->>'input_sha256'=$2 AND request_payload->'payload'->>'input_uri'=$3)`, bundle.Scan.RunID, bundle.Asset.SHA256, bundle.Asset.ObjectURI).Scan(&failedOriginal); err != nil {
+				return err
+			}
+			if !failedOriginal {
+				return fmt.Errorf("S decode rebuild requires failed frozen source job")
+			}
 		}
 		if status != "NORMALIZED" && status != "FAILED" {
 			return fmt.Errorf("decode rebuild requires idle draft normalized/failed source, got %s", status)

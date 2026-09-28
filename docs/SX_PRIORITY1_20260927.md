@@ -80,3 +80,14 @@ comparison shows complete product extent. Server receipt
 `.build/sx-priority1/full-extent-validation.json`. All ten previously published frames UTC00:06–01:00 have `SUCCEEDED` receipts;
 the live catalog returns full grid v3 and identical complete geographic bounds
 for each. This does not establish full-day completion.
+
+## Failed S decode storage recovery
+
+The 105 storage incident left one S decode job failed at object publication.
+`radar-decode-rebuild` now accepts a draft S station only when the scan is
+`FAILED`, the original decode job is `FAILED`, the raw URI and SHA-256 match that
+job, and the scan's radar configuration version is unchanged. Its output uses
+an isolated rebuild prefix, retains the old failed job, and remains idempotent.
+Draft X behavior is unchanged. A unit regression and an isolated PostgreSQL
+integration test verify S admission, failed-source checks, idempotency, and
+rejection of ready stations. Real 105 success must be checked separately.

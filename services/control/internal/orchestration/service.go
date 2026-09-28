@@ -403,8 +403,8 @@ func validateRadarDecodeInput(input RadarDecodeInput) error {
 				Band string `json:"radar_band"`
 			} `json:"hardware"`
 		}
-		if err := json.Unmarshal(input.Config, &cfg); err != nil || cfg.Hardware.Band != "X" || input.Lifecycle != workflow.RadarDraft {
-			return fmt.Errorf("decode rebuild is restricted to draft X stations")
+		if err := json.Unmarshal(input.Config, &cfg); err != nil || (cfg.Hardware.Band != "X" && cfg.Hardware.Band != "S") || input.Lifecycle != workflow.RadarDraft {
+			return fmt.Errorf("decode rebuild requires a draft S or X station")
 		}
 	}
 

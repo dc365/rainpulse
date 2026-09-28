@@ -14,8 +14,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Rebuild only normalized draft X input. Old immutable objects and job receipts
-// remain available; the catalog returns missing while the new decoder runs.
+// Rebuild draft X input or a failed draft S decode from its frozen raw source.
+// Old immutable objects and job receipts remain available.
 func radarDecodeRebuild(ctx context.Context, store *postgresstore.Store, service *orchestration.Service, scanText, configPath, attemptText string) error {
 	scanID, err := uuid.Parse(scanText)
 	if err != nil {
