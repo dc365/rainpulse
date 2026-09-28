@@ -38,6 +38,14 @@ operational data here.
 - 回执与回滚：`.build/x-qc-v2-e549510/release.json` 已记 r3/r4 块；r3 切换前备份 `active-r3-backup-20260928T150141Z.json`（SHA d312dd65…）。遗留：ZF101 海上强回波环为孤立对象 audit 模式，需单独策略决策才可行动。
 
 
+## 2026-09-28 X 径向片段补全 r5（8f8c79d）：S 关联契约移植
+
+- 用户追问"是否需要重新出图；S 用 scikit-image 识别径向形态并去除效果好，X 是否一样；彻底解决"。排查：页面 result=cd62b6f0 是 06:03Z v1 旧结果（该 scan 最新结果当时为 14:48Z f1f3174a），无需重新出图，切结果选择器即可。S/X 差异：S 的径向清除靠 fragment 阶段闭环（`fragment_radials.associate_fragments`：锚=已拒绝的 RFI 门，同射线关联目标门仍需本地极化证据 + 距离律强度匹配，"identity never confers pollution"；本地极化用 PHIDP 圆方差≥0.085），另有 broad/narrow source 等模型级覆盖；X v2 只复用了 scikit-image 形态候选提取 + 逐门确认合取，无补全环节——这就是残余点状辐条的来源。
+- r5 实现（本地 main `8f8c79d`，新 `xqc_v2/fragments.py`）：锚=确认合取门；目标门需 X 极化合取或 S 式 PHIDP 圆方差、共享 rho/snr/dbzh 上限、距锚 ≤15km、20log10(r) 距离律差 ≤8dB、每射线锚门数 ≥4；rho>0.9 永不可关联（雨结构排除），缺测门不伪造。默认 `fragment_maximum_distance_m=0` 关闭，仅 profiles 显式启用；S qc_engine 零改动。测试 109 全绿（新增 test_fragments.py 7 例 + profiles 边界扩 fragment 断言）。
+- 用户帧 93d2d253 离线复算：径向路径覆盖 9701→19885 门（9 cut），总隔离 25379→32609，10184 补全门 rho>0.9 污染 0（注意掩码已还原原始行序、rho 在排序序，核对必须先做 order 映射，否则假阳性）；无 ACTION_BUDGET 弃权。105 r5 部署：镜像 `x-qc-v2-e549510-r5-mb`(025ccce6)/`-r5-qc`(5e0d62ee)（src-r5 构建上下文 build-r5；compose 引用的 r2-mb/r2-qc 标签现指向 r5，r2 回退保留为 -r2-keep/-r2-qc-keep）；网络 profiles-r5 all-quarantine（SHA c51f9005…，22 站），r4 切换前备份 active-r4-backup-20260928T153720Z.json；三 ops workers 重建健康（S workers 未动）。重算 run 1449f93e（zf701 00:00–00:15Z）SUCCEEDED，线上数字与离线逐一相同（32609/9701/10184）；map_qc cut0：0°/40-45°/105-115° 辐条基本消失、杂波环大部分清除、南部降水楔完整保留；225°/290-295° 仍有稀疏点状残余 = rho>0.9 或无极化佐证门（cut0 共 537 个），按降雨保护契约保留，S 同样不剔此类门。
+- 对用户口径：质控图随 result 工件走，页面选最新 result 即为 r5 效果；"彻底清除"受证据边界约束——无目标门本地极化证据的辐条段不能剔（会伤雨），这是与 S 一致的设计底线。
+
+
 ## Current S/X mainline: Priority 1 (2026-09-27)
 
 - 2026-09-28 ~06:01Z follow-up: S and X failed decode recovery verified,
