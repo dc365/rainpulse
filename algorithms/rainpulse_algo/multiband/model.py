@@ -169,7 +169,8 @@ class Grid:
             raise ValueError("experimental grid spacing must be 100..5000 m")
         if any(type(n) is not int for n in (self.width, self.height, self.tile_rows, self.cadence_seconds)):
             raise ValueError("grid dimensions and cadence must be integer")
-        if not (1 <= self.width <= 2048 and 1 <= self.height <= 2048 and self.width*self.height <= 1_000_000 and 1 <= self.tile_rows <= 128):
+        maximum_cells = 2_000_000 if self.method == "experimental_horizontal_max" else 1_000_000
+        if not (1 <= self.width <= 2048 and 1 <= self.height <= 2048 and self.width*self.height <= maximum_cells and 1 <= self.tile_rows <= 128):
             raise ValueError("grid exceeds bounded first-version resource budget")
         if min(self.tile_rows, self.height)*self.width*len(self.levels_m_msl) > 2_000_000:
             raise ValueError("height tile exceeds transient memory budget")

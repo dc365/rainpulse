@@ -187,3 +187,30 @@ func TestStandaloneXQCNeedsNoFusionGeometryOrGrid(t *testing.T) {
 		t.Fatal("S/X fusion accepted a station without spatial admission")
 	}
 }
+
+func TestFullHorizontalGridBudget(t *testing.T) {
+	for _, tc := range []struct {
+		method        string
+		width, height int
+		valid         bool
+	}{
+		{"experimental_horizontal_max", 1238, 1077, true},
+		{"quality_height", 1238, 1077, false},
+		{"experimental_horizontal_max", 2048, 2048, false},
+	} {
+		n := fixture(t)
+		g := n.Products["local"]
+		g.Method = tc.method
+		g.Width = tc.width
+		g.Height = tc.height
+		n.Products["local"] = g
+		raw, err := json.Marshal(n)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = Parse(raw)
+		if (err == nil) != tc.valid {
+			t.Fatalf("%+v: %v", tc, err)
+		}
+	}
+}

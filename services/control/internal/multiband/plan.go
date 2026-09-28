@@ -111,7 +111,11 @@ func Parse(raw []byte) (Network, error) {
 		if g.Method != "" && g.Method != "quality_height" && g.Method != "experimental_horizontal_max" {
 			return n, fmt.Errorf("unsupported composite method")
 		}
-		if !namePattern.MatchString(id) || !namePattern.MatchString(g.ID) || g.CRS == "" || g.Spacing < 100 || g.Spacing > 5000 || g.Width < 1 || g.Width > 2048 || g.Height < 1 || g.Height > 2048 || g.Width*g.Height > 1000000 || len(g.Levels) < 1 || len(g.Levels) > 32 {
+		maximumCells := 1000000
+		if g.Method == "experimental_horizontal_max" {
+			maximumCells = 2000000
+		}
+		if !namePattern.MatchString(id) || !namePattern.MatchString(g.ID) || g.CRS == "" || g.Spacing < 100 || g.Spacing > 5000 || g.Width < 1 || g.Width > 2048 || g.Height < 1 || g.Height > 2048 || g.Width*g.Height > maximumCells || len(g.Levels) < 1 || len(g.Levels) > 32 {
 			return n, fmt.Errorf("product grid exceeds limits")
 		}
 		if g.Cadence == 0 {

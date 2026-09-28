@@ -59,3 +59,16 @@
 
 - 前端全选/持久化、图层解析和多图层点查统一为最多32站，覆盖4S+24X；不改变数值组合资格或每接口4路并发。
 - 回归先复现28站全选被截断到16、32图层点查被拒；修复后28站完整保留，32请求接受、33请求拒绝，旧用例保持通过。
+
+## Full native composite coverage (2026-09-28)
+
+The previous 625 × 656 km product grid clipped native S coverage (459.875 km
+radius). Version `fujian-full-horizontal-1km-v3` uses EPSG:32651 bounds
+[-553000,2417000,685000,3494000], 1238 × 1077 cells at unchanged 1 km spacing.
+Bounds enclose native geodesic range circles for all 26 usable stations with a
+1 km margin, using decoded range coordinates. ZF703/ZF801 remain excluded.
+Horizontal experimental grids permit up to 2 million cells; quality/height
+fusion retains its 1 million cell budget, tile and dimension bounds unchanged.
+The comparison map fits actual product bounds. Existing clipped products need
+regeneration; camera changes alone cannot recover discarded cells. Verify new
+numerical coverage and live S/S+X products before declaring deployment complete.

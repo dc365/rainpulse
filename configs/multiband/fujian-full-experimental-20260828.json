@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "release_id": "sx-full-fields-20260828-v2",
+  "release_id": "sx-full-extent-20260828-v3",
   "cache_max_bytes": 0,
   "cache_ttl_seconds": 600,
   "maximum_input_bytes": 536870912,
@@ -467,13 +467,13 @@
       "method": "experimental_horizontal_max"
     },
     "sx-fujian-full-test": {
-      "grid_id": "fujian-full-horizontal-1km-v2",
+      "grid_id": "fujian-full-horizontal-1km-v3",
       "crs": "EPSG:32651",
-      "west_m": -291000,
-      "south_m": 2544000,
+      "west_m": -553000,
+      "south_m": 2417000,
       "spacing_m": 1000,
-      "width": 625,
-      "height": 656,
+      "width": 1238,
+      "height": 1077,
       "levels_m_msl": [
         0
       ],
