@@ -6,6 +6,30 @@ import json
 from pathlib import Path
 from .config import XQCConfig
 
+# Measured on the live 2026-08-28 ZF701 interference frame (scan 93d2d253):
+# of 1230 radial-geometry candidate gates on the lowest cut the legacy gates
+# confirmed only 84. RHOHV<=0.8 kept 40% (real spokes measured 0.63-0.88),
+# phase jitter>=20 deg kept 33%, SNR>=12 kept 67%, and the both-flank 8 dB
+# contrast within 6 deg killed 70% of the polar survivors (weak spokes
+# contrast only 6-13 dB). The S receiver-domain radial core cannot take over
+# either: X reference-block SNR measures mu ~ -5 dB / p90 spread 4-12 dB
+# against the S core's hard mu>=20 dB, spread<=2 dB contract, so it abstains
+# on X SNR semantics. The tuned conjunction below lifts per-ray coverage to
+# 30-180 contiguous gates on the real spokes while rain stays protected:
+# RHOHV>0.90 gates can never be flagged (rain is ~0.95+), the CF weather
+# proxy and weather-protected masks stay excluded, and geometry + measured
+# flanks + polar evidence all remain required, so intensity alone still
+# cannot trigger removal. X-only: these fields exist solely in
+# station.x_qc.enhancement and never touch the S qc_engine configs.
+RADIAL_TUNING = {
+    "radial_maximum_rhohv": .90,
+    "radial_phase_jitter_deg": 10.,
+    "radial_maximum_dbzh": 45.,
+    "radial_flank_contrast_db": 6.,
+    "radial_minimum_snr_db": 8.,
+    "radial_flank_deg": 10.,
+}
+
 
 def generate(parent, radar_ids, backend):
     if backend not in {"wradlib", "numpy_reference"}:
@@ -32,7 +56,7 @@ def generate(parent, radar_ids, backend):
             if x.get("enhancement") is not None:
                 raise ValueError("parent already has an enhancement; do not silently replace it")
             cfg = XQCConfig.model_validate({"mode": mode, "clutter_enabled": clutter,
-                "isolation_enabled": clutter,
+                "isolation_enabled": clutter, **RADIAL_TUNING,
                 "clutter": {"mode": "quarantine", "minimum_range_m": 750.,
                     "minimum_phase_spacing_m": 50., "neighbourhood_m": 1000.,
                     "depolarization_backend": backend, "isolated_objects": {"mode": "audit"}},
