@@ -21,6 +21,13 @@ from .config import XQCConfig
 # flanks + polar evidence all remain required, so intensity alone still
 # cannot trigger removal. X-only: these fields exist solely in
 # station.x_qc.enhancement and never touch the S qc_engine configs.
+#
+# r5 fragment completion (S association contract, see xqc_v2/fragments.py):
+# confirmed per-gate evidence leaves dotted spokes because X interference is
+# bursty per gate. On the same frame, completing along confirmed rays with
+# target-local polarimetric badness + a 20log10(r) source-law match recovers
+# ~1200 more gates per cut with zero rho>0.90 contamination; the 537 cut0
+# candidates with rain-like rho>0.9 stay untouched by design.
 RADIAL_TUNING = {
     "radial_maximum_rhohv": .90,
     "radial_phase_jitter_deg": 10.,
@@ -28,6 +35,9 @@ RADIAL_TUNING = {
     "radial_flank_contrast_db": 6.,
     "radial_minimum_snr_db": 8.,
     "radial_flank_deg": 10.,
+    "fragment_maximum_distance_m": 15000.,
+    "fragment_minimum_anchor_gates": 4,
+    "fragment_association_difference_db": 8.,
 }
 
 

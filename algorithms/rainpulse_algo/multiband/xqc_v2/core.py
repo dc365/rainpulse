@@ -13,6 +13,7 @@ from rainpulse_algo.radar.qc_engine.volume_review.receiver_domain.core import ev
 from rainpulse_algo.radar.qc_engine.volume_review.clutter_fusion.features import extract as extract_features
 from rainpulse_algo.radar.qc_engine.volume_review.clutter_fusion.engine import evaluate_volume
 from rainpulse_algo.radar.qc_engine.volume_review.clutter_fusion.background import empty as empty_background
+from .fragments import associate
 from .geometry import adapt, mask
 
 
@@ -30,6 +31,7 @@ class Reason(IntFlag):
     CALIBRATION_UNKNOWN = 1024
     ATTENUATION_UNKNOWN = 2048
     BACKGROUND = 4096
+    RADIAL_FRAGMENT = 8192
 
 
 @dataclass(frozen=True)
@@ -40,7 +42,7 @@ class Evidence:
 
 def empty(cut, status, reason=""):
     shape = cut.fields["DBZH"].shape
-    masks = ("RECEIVER", "PARTIAL", "RADIAL_OBJECT", "RADIAL_POLAR", "CLUTTER", "ISOLATED",
+    masks = ("RECEIVER", "PARTIAL", "RADIAL_OBJECT", "RADIAL_POLAR", "RADIAL_FRAGMENT", "CLUTTER", "ISOLATED",
              "HARD_WEATHER", "LOCAL_WEATHER", "PROPOSED", "QUARANTINE", "AVAILABLE")
     a = {"XQC_" + k + "_MASK": np.zeros(shape, "uint8") for k in masks}
     a.update(XQC_REASON=np.zeros(shape, "uint32"), XQC_CLASS=np.zeros(shape, "uint8"),
@@ -124,7 +126,7 @@ def _evaluate(cut, metadata, cfg):
                "index_space": "sorted_rays; sorted_to_original_ray below",
                "sorted_to_original_ray": view.order.tolist(),
                "scores_are_probabilities": False, "module_records": {}}
-    receiver = partial = radial = noisy = np.zeros(s.shape, bool)
+    receiver = partial = radial = noisy = fragments = np.zeros(s.shape, bool)
     quarantine = np.zeros(s.shape, bool)
     why = np.zeros(s.shape, "uint32")
     why[~s.good, :] |= int(Reason.GEOMETRY_UNAVAILABLE)
@@ -163,8 +165,17 @@ def _evaluate(cut, metadata, cfg):
                  ~hard & ~local & measured_flanks(s, cfg))
         why[noisy] |= int(Reason.RADIAL_POLAR)
         quarantine |= noisy
+        fragment_record = {"status": "DISABLED"}
+        if cfg.fragment_maximum_distance_m > 0:
+            # Identity never confers pollution: associated gates still need
+            # their own local polarimetric badness and the shared caps.
+            fragments, fragment_record = associate(
+                s, noisy, cfg, hard=hard, local=local, jitter=jitter)
+            why[fragments] |= int(Reason.RADIAL_FRAGMENT)
+            quarantine |= fragments
         records["module_records"]["radial_objects"] = {"capability": cap, "objects": rec,
-            "qualified_gates": int(noisy.sum()), "shape_alone_actions": 0}
+            "qualified_gates": int(noisy.sum()), "shape_alone_actions": 0,
+            "fragments": fragment_record}
     else:
         records["module_records"]["radial_objects"] = {"status": "DISABLED"}
     clutter = isolated = np.zeros(s.shape, bool)
@@ -195,11 +206,11 @@ def _evaluate(cut, metadata, cfg):
         records["module_records"]["clutter"] = ev.summary
     else:
         records["module_records"]["clutter"] = {"status": "DISABLED"}
-    proposed = (receiver | partial | noisy | clutter | isolated) & observed & ~hard
+    proposed = (receiver | partial | noisy | fragments | clutter | isolated) & observed & ~hard
     quarantine &= proposed
     why[hard] |= int(Reason.WEATHER_PROTECTED)
     for key, value in (("RECEIVER", receiver), ("PARTIAL", partial), ("RADIAL_OBJECT", radial),
-        ("RADIAL_POLAR", noisy), ("CLUTTER", clutter), ("ISOLATED", isolated),
+        ("RADIAL_POLAR", noisy), ("RADIAL_FRAGMENT", fragments), ("CLUTTER", clutter), ("ISOLATED", isolated),
         ("HARD_WEATHER", hard), ("LOCAL_WEATHER", local), ("PROPOSED", proposed),
         ("QUARANTINE", quarantine), ("AVAILABLE", observed)):
         a["XQC_" + key + "_MASK"] = view.restore(value.astype("uint8"))

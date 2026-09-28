@@ -75,6 +75,16 @@ class XQCConfig(BaseModel):
     radial_maximum_rhohv: float = Field(default=.8, gt=0., le=.9)
     radial_phase_jitter_deg: float = Field(default=20., ge=10., le=60.)
     radial_maximum_dbzh: float = Field(default=35., ge=25., le=45.)
+    # Same-ray fragment completion around confirmed anchors (S association
+    # contract): 0 disables; targets still need local polarimetric badness and
+    # the shared rho/snr/dbzh caps, so rain stays structurally excluded.
+    fragment_maximum_distance_m: float = Field(default=0., ge=0., le=30000.)
+    fragment_minimum_anchor_gates: int = Field(default=4, ge=2, le=64)
+    fragment_association_difference_db: float = Field(default=8., ge=4., le=12.)
+    fragment_minimum_echo_dbz: float = Field(default=-5., ge=-20., le=10.)
+    fragment_phase_window_gates: int = Field(default=5, ge=3, le=21)
+    fragment_phase_minimum_fraction: float = Field(default=.8, gt=.5, le=1.)
+    fragment_phase_variance_minimum: float = Field(default=.085, gt=0., lt=1.)
     # No velocity/waveform contract is inferred from a field name.
     doppler_verified: StrictBool = False
     doppler_verification_id: str | None = None
