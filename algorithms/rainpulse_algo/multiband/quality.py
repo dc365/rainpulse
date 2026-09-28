@@ -137,6 +137,9 @@ def x_qc(volume: Volume, station: Station, release_sha256: str) -> Volume:
     volume.validate(station, require_geometry=False, native_polar_qc=True)
     if station.band != "X":
         raise ValueError("X QC cannot be applied to an S observation")
+    if station.x_qc.enhancement is not None:
+        from .xqc_v2.pipeline import run
+        return run(volume, station, release_sha256, baseline=x_qc)
     cfg = station.x_qc
     upstream = volume.metadata.get("attenuation_status", "unknown")
     if upstream not in {"raw", "corrected", "unknown"}:

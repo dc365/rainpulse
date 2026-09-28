@@ -104,6 +104,9 @@
           "x_qc": {
             "type": "object",
             "properties": {
+              "enhancement": {
+                "$ref": "x-qc-v2.schema.json"
+              },
               "attenuation": {
                 "enum": [
                   "none",

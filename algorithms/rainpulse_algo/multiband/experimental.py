@@ -24,6 +24,11 @@ def experimental_fields(fields, band, *, allow_missing_snr=False):
         if allow_missing_snr and 'SNRH' not in fields:
             reject &= ~int(Flag.LOW_SNR)
         admitted = observed & ((fields['MB_QC_FLAGS'].astype(np.uint32) & reject) == 0)
+        if 'XQC_WITHHELD_MASK' in fields:
+            withheld = np.asarray(fields['XQC_WITHHELD_MASK'])
+            if withheld.shape != admitted.shape or not np.isin(withheld, (0, 1)).all():
+                raise ValueError('invalid X-v2 reflectivity admission mask')
+            admitted &= withheld == 0
         values = fields['DBZH_QC_DISPLAY']
         quality = np.full(values.shape, np.nan)
     else:

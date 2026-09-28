@@ -57,6 +57,11 @@ X_QC_FIELDS = {
     "PIA_DB", "CONFIRMED_NONMET_MASK", "WEATHER_PROTECTED_MASK", "BLOCKAGE_FRACTION",
 }
 
+# The cut budget includes these actual optional matrices; no missing values are filled.
+X_QC_FIELDS |= {"ZDR", "VR", "SW", "MIXED_WEATHER_MASK"}
+X_QC_FIELDS |= {name + suffix for name in ("DBZH", "SNR", "SNRH", "RHOHV", "ZDR", "PHIDP", "VR", "SW")
+                for suffix in ("_AVAILABLE_MASK", "_VALID_MASK")}
+
 
 def ray_seconds(values: np.ndarray, units: str | None) -> np.ndarray:
     if values.dtype.kind == "M":
@@ -226,6 +231,10 @@ def from_group(
         else "catalog_volume_unverified_completeness",
         "calibration_id": attrs.get("calibration_id", "unverified"),
         "attenuation_status": attrs.get("attenuation_status", "unknown"),
+        "radar_config_version": attrs.get("radar_config_version"),
+        "doppler_verification_id": attrs.get("doppler_verification_id"),
+        "doppler_waveform": attrs.get("doppler_waveform"),
+        "nyquist_velocity_mps": attrs.get("nyquist_velocity_mps"),
         "phase_anchor_verified": attrs.get("phase_anchor_verified") is True,
         "pia_at_first_gate_db": attrs.get("pia_at_first_gate_db"),
         "qc_pipeline_version": attrs.get("qc_pipeline_version"),
@@ -360,6 +369,10 @@ def read_x_qc_sweep(objects: dict[str, bytes], station: Station, source: dict, s
                 "asset_sha256": asset_sha256, "scan_type": attrs.get("scan_type", "volume"),
                 "calibration_id": attrs.get("calibration_id", "unverified"),
                 "attenuation_status": attrs.get("attenuation_status", "unknown"),
+        "radar_config_version": attrs.get("radar_config_version"),
+        "doppler_verification_id": attrs.get("doppler_verification_id"),
+        "doppler_waveform": attrs.get("doppler_waveform"),
+        "nyquist_velocity_mps": attrs.get("nyquist_velocity_mps"),
                 "phase_anchor_verified": attrs.get("phase_anchor_verified") is True,
                 "pia_at_first_gate_db": attrs.get("pia_at_first_gate_db"),
                 "no_echo_semantics": "explicit_mask_or_unknown_no_return"}

@@ -51,6 +51,7 @@ def finite(value: float, name: str) -> float:
 @dataclass(frozen=True)
 class XProfile:
     # All thresholds are candidate settings, not validated operational constants.
+    enhancement: dict[str, Any] | None = None
     attenuation: str = "none"
     alpha_db_per_degree: float | None = None
     max_pia_db: float = 12.0
@@ -64,6 +65,10 @@ class XProfile:
     max_blockage_fraction: float = 0.7
 
     def __post_init__(self) -> None:
+        if self.enhancement is not None:
+            from .xqc_v2.config import XQCConfig
+            configured = XQCConfig.model_validate(self.enhancement)
+            object.__setattr__(self, "enhancement", json.loads(configured.model_dump_json()))
         if self.attenuation not in {"none", "phidp_linear", "upstream_verified"}:
             raise ValueError("unsupported X attenuation method")
         for name in ("max_pia_db", "phase_window_m", "max_negative_phase_step_deg", "phase_anchor_max_range_m", "snr_min_db", "rho_candidate_max", "texture_candidate_db", "max_blockage_fraction"):

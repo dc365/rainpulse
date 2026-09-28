@@ -1,0 +1,113 @@
+"""Separate X policy: never relax the existing S policy's validation bounds."""
+from __future__ import annotations
+import hashlib
+import json
+from typing import Literal
+from pydantic import BaseModel, ConfigDict, Field, model_validator, StrictBool
+from rainpulse_algo.radar.qc_engine.volume_review.receiver_domain.config import (
+    ReceiverDomainConfig, SegmentReferenceConfig, SourceFamilyConfig,
+)
+from rainpulse_algo.radar.qc_engine.volume_review.config import VolumeReviewConfig
+from rainpulse_algo.radar.qc_engine.volume_review.clutter_fusion.config import ClutterFusionConfig
+from rainpulse_algo.radar.qc_engine.volume_review.clutter_fusion.isolation_config import IsolationConfig
+from . import VERSION
+
+
+class XSegmentConfig(SegmentReferenceConfig):
+    reference_minimum_range_m: float = Field(default=1500., ge=500.)
+    minimum_reference_span_m: float = Field(default=12000., ge=6000.)
+    minimum_reference_support_m: float = Field(default=6000., ge=3000.)
+    maximum_reference_distance_m: float = Field(default=20000., gt=0., le=50000.)
+    crosscheck_minimum_span_m: float = Field(default=5000., ge=2000.)
+
+
+class XReceiverConfig(ReceiverDomainConfig):
+    """The same fitted receiver core, with independently versioned X distances.
+
+    S defaults and residual/polar tests are inherited unchanged. At least three
+    separated raw reference blocks remain after target and guard exclusion.
+    """
+    local_policy: Literal["retain_conflict", "source_joint_review"] = "source_joint_review"
+    minimum_range_m: float = Field(default=1500., ge=500., le=20000.)
+    block_m: float = Field(default=5000., ge=1000., le=20000.)
+    minimum_reference_span_m: float = Field(default=20000., ge=6000., le=80000.)
+    minimum_reference_blocks: int = Field(default=3, ge=3)
+    minimum_pair_span_m: float = Field(default=8000., ge=3000., le=40000.)
+    segment_reference: XSegmentConfig | None = None
+    source_family: SourceFamilyConfig | None = None
+    maximum_folds: int = Field(default=12000, ge=1, le=40000)
+
+
+def default_clutter():
+    # Backend is explicit in profiles. No silent fallback from wradlib.
+    return ClutterFusionConfig(
+        mode="quarantine", minimum_range_m=750., maximum_range_m=75000.,
+        minimum_phase_spacing_m=50., maximum_phase_spacing_m=500.,
+        neighbourhood_m=1000., maximum_sweep_gates=2_000_000,
+        maximum_volume_gates=2_000_000,
+        isolated_objects=IsolationConfig(mode="audit"),
+    )
+
+
+class XQCConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
+    version: Literal["x-shared-qc-20260928-v2"] = VERSION
+    mode: Literal["audit", "cr_only", "quarantine"] = "audit"
+    operational_eligible: Literal[False] = False
+    receiver_enabled: StrictBool = True
+    radial_objects_enabled: StrictBool = True
+    clutter_enabled: StrictBool = True
+    isolation_enabled: StrictBool = True
+    receiver: XReceiverConfig = Field(default_factory=XReceiverConfig)
+    clutter: ClutterFusionConfig = Field(default_factory=default_clutter)
+    objects: VolumeReviewConfig = Field(default_factory=lambda: VolumeReviewConfig(
+        levels_dbz=(5., 15., 25., 35.), scales_m=(2000, 5000, 10000, 20000),
+    ))
+    maximum_sweep_gates: int = Field(default=2_000_000, ge=1, le=5_000_000)
+    maximum_evidence_bytes: int = Field(default=4 * 1024**2, ge=4096, le=16 * 1024**2)
+    maximum_new_exclusion_fraction: float = Field(default=.35, gt=0., le=1.)
+    maximum_gap_deg: float = Field(default=3., gt=.01, le=10.)
+    maximum_neighbor_time_s: float = Field(default=120., gt=0., le=300.)
+    maximum_neighbor_elevation_deg: float = Field(default=.3, gt=0., le=1.)
+    radial_flank_deg: float = Field(default=6., gt=0., le=15.)
+    radial_flank_contrast_db: float = Field(default=8., ge=6., le=20.)
+    radial_minimum_snr_db: float = Field(default=12., ge=8., le=30.)
+    radial_maximum_rhohv: float = Field(default=.8, gt=0., le=.9)
+    radial_phase_jitter_deg: float = Field(default=20., ge=10., le=60.)
+    radial_maximum_dbzh: float = Field(default=35., ge=25., le=45.)
+    # No velocity/waveform contract is inferred from a field name.
+    doppler_verified: StrictBool = False
+    doppler_verification_id: str | None = None
+    doppler_waveform: str | None = None
+    nyquist_velocity_mps: float | None = Field(default=None, gt=0., le=200.)
+    # This only tightens a provided PHASE_VALID+LIQUID path, never fabricates one.
+    phase_minimum_snr_db: float = Field(default=10., ge=3., le=30.)
+    phase_minimum_rhohv: float = Field(default=.95, ge=.9, le=1.)
+    phase_maximum_abs_zdr_db: float = Field(default=5., gt=0., le=7.5)
+    export_native: StrictBool = True
+
+    @model_validator(mode="after")
+    def contracts(self):
+        for name in ("receiver_enabled", "radial_objects_enabled", "clutter_enabled", "isolation_enabled",
+                     "doppler_verified", "export_native"):
+            if type(getattr(self, name)) is not bool:
+                raise ValueError("explicit boolean required: " + name)
+        if self.doppler_verified and (not self.doppler_verification_id or not self.doppler_waveform or self.nyquist_velocity_mps is None):
+            raise ValueError("Doppler use requires a verification identity and Nyquist velocity")
+        if self.clutter.gatefilter_check == "pyart":
+            raise ValueError("X-v2 uses its native admission validator; S NativeSweep GateFilter is not adapted")
+        if self.clutter.near_revision is not None:
+            raise ValueError("X-v2 does not silently import the S near/history/DEM runtime")
+        if self.objects.receiver_domain or self.objects.clutter_fusion or self.objects.near_measurement:
+            raise ValueError("object proposer cannot run nested S dispositions")
+        if self.clutter.no_rain_below_dbz != self.receiver.no_rain_below_dbz:
+            raise ValueError("shared branches disagree on reflectivity semantics")
+        if self.isolation_enabled and not self.clutter_enabled:
+            raise ValueError("isolated-object review requires current clutter features")
+        # CF computes evidence; the X finalizer is the sole action owner.
+        return self
+
+    @property
+    def digest(self):
+        return hashlib.sha256(json.dumps(self.model_dump(mode="json"), sort_keys=True,
+            separators=(",", ":"), allow_nan=False).encode()).hexdigest()

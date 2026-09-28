@@ -77,6 +77,8 @@ def x_qc_objects(volumes) -> dict[str, bytes]:
             ranges = sweep.range_m
             raw = fields["DBZH_RAW"]
             action = fields["QC_ACTION"]
+            from .xqc_v2.export import export_sweep
+            xqc_detail = export_sweep(sweep, volume.metadata, objects)
             from .preview_sampling import prepare_polar_sampling, render_polar_sampling
             plan = prepare_polar_sampling(azimuth, ranges)
             objects[raw_key] = render_polar_sampling(plan, raw, LEVELS, COLORS, png)
@@ -94,7 +96,7 @@ def x_qc_objects(volumes) -> dict[str, bytes]:
             ])
             map_layer = geographic_sweep_preview(sweep, volume.metadata, raw, qc, action, objects)
             comparisons.append({"sweep_number": number, "sequence": sequence, "raw": raw_key, "qc": qc_key, "flags": flags_key,
-                                "elevation_deg": float(np.nanmedian(sweep.elevation_deg)), **({"map": map_layer} if map_layer else {})})
+                                "elevation_deg": float(np.nanmedian(sweep.elevation_deg)), **({"xqc_v2": xqc_detail} if xqc_detail else {}), **({"map": map_layer} if map_layer else {})})
         del volume
     if metadata is None or not comparisons:
         raise ValueError("X QC preview requires at least one reflectivity sweep")
@@ -163,7 +165,7 @@ def geographic_sweep_preview(sweep, metadata, raw, qc, action, objects, size=720
     from rainpulse_algo.diagnostics.radar_probe import attach_probe
     probe_fields = {name: np.where(plan.support, values[plan.rays, plan.gates], np.nan)[::-1]
                     for name, values in (("DBZH_RAW", raw), ("DBZH_QC", qc), ("QC_ACTION", action))}
-    for name in ("QUALITY_INDEX", "QC_FLAGS", "NO_ECHO_MASK"):
+    for name in ("QUALITY_INDEX", "QC_FLAGS", "NO_ECHO_MASK", "QUALITY_SCORE", "MB_QC_FLAGS", "XQC_REASON", "XQC_WITHHELD_MASK", "XQC_REJECTED_MASK", "XQC_QUANTITATIVE_READY_MASK"):
         if name in sweep.fields and np.shape(sweep.fields[name]) == np.shape(raw):
             probe_fields[name] = np.where(plan.support, sweep.fields[name][plan.rays, plan.gates], np.nan)[::-1]
     probe_fields["DISPLAY_VALID"] = (plan.support & np.isfinite(qc[plan.rays, plan.gates]))[::-1].astype(float)

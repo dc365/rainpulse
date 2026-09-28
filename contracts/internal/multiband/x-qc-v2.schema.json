@@ -1,0 +1,2579 @@
+{
+  "$defs": {
+    "AssetBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "title": "AssetBinding",
+      "type": "object"
+    },
+    "ClutterFusionConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "near_revision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NearRevisionConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "isolated_objects": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IsolationConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "version": {
+          "const": "clutter-fusion-20260921-v1",
+          "default": "clutter-fusion-20260921-v1",
+          "title": "Version",
+          "type": "string"
+        },
+        "mode": {
+          "default": "audit",
+          "enum": [
+            "audit",
+            "cr_withhold",
+            "quarantine"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "operational_eligible": {
+          "const": false,
+          "default": false,
+          "title": "Operational Eligible",
+          "type": "boolean"
+        },
+        "background": {
+          "$ref": "#/$defs/EpisodeConfig"
+        },
+        "depolarization_backend": {
+          "default": "wradlib",
+          "enum": [
+            "wradlib",
+            "numpy_reference"
+          ],
+          "title": "Depolarization Backend",
+          "type": "string"
+        },
+        "gatefilter_check": {
+          "default": "disabled",
+          "enum": [
+            "disabled",
+            "pyart"
+          ],
+          "title": "Gatefilter Check",
+          "type": "string"
+        },
+        "wradlib_version": {
+          "const": "2.9.5",
+          "default": "2.9.5",
+          "title": "Wradlib Version",
+          "type": "string"
+        },
+        "pyart_version": {
+          "const": "2.2.5",
+          "default": "2.2.5",
+          "title": "Pyart Version",
+          "type": "string"
+        },
+        "minimum_range_m": {
+          "default": 2000.0,
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Minimum Range M",
+          "type": "number"
+        },
+        "maximum_range_m": {
+          "default": 75000.0,
+          "exclusiveMinimum": 0,
+          "maximum": 150000,
+          "title": "Maximum Range M",
+          "type": "number"
+        },
+        "no_rain_below_dbz": {
+          "default": -10.0,
+          "maximum": 0,
+          "minimum": -32,
+          "title": "No Rain Below Dbz",
+          "type": "number"
+        },
+        "protected_dbz": {
+          "default": 30.0,
+          "maximum": 35,
+          "minimum": 25,
+          "title": "Protected Dbz",
+          "type": "number"
+        },
+        "minimum_snr_db": {
+          "default": 8.0,
+          "maximum": 20,
+          "minimum": 8,
+          "title": "Minimum Snr Db",
+          "type": "number"
+        },
+        "biological_minimum_snr_db": {
+          "default": 12.0,
+          "maximum": 25,
+          "minimum": 8,
+          "title": "Biological Minimum Snr Db",
+          "type": "number"
+        },
+        "biological_maximum_dbz": {
+          "default": 25.0,
+          "exclusiveMinimum": 0,
+          "maximum": 30,
+          "title": "Biological Maximum Dbz",
+          "type": "number"
+        },
+        "maximum_abs_zdr_db": {
+          "default": 7.5,
+          "exclusiveMinimum": 0,
+          "maximum": 10,
+          "title": "Maximum Abs Zdr Db",
+          "type": "number"
+        },
+        "neighbourhood_m": {
+          "default": 2000.0,
+          "maximum": 10000,
+          "minimum": 500,
+          "title": "Neighbourhood M",
+          "type": "number"
+        },
+        "minimum_support_fraction": {
+          "default": 0.6,
+          "maximum": 1,
+          "minimum": 0.5,
+          "title": "Minimum Support Fraction",
+          "type": "number"
+        },
+        "minimum_samples": {
+          "default": 6,
+          "maximum": 500,
+          "minimum": 6,
+          "title": "Minimum Samples",
+          "type": "integer"
+        },
+        "neighbour_nonmet_fraction": {
+          "default": 0.6,
+          "maximum": 1,
+          "minimum": 0.6,
+          "title": "Neighbour Nonmet Fraction",
+          "type": "number"
+        },
+        "maximum_ray_spacing_deg": {
+          "default": 3.0,
+          "exclusiveMinimum": 0,
+          "maximum": 5,
+          "title": "Maximum Ray Spacing Deg",
+          "type": "number"
+        },
+        "minimum_phase_spacing_m": {
+          "default": 100.0,
+          "maximum": 500,
+          "minimum": 50,
+          "title": "Minimum Phase Spacing M",
+          "type": "number"
+        },
+        "maximum_phase_spacing_m": {
+          "default": 500.0,
+          "maximum": 1000,
+          "minimum": 100,
+          "title": "Maximum Phase Spacing M",
+          "type": "number"
+        },
+        "polar_structure_threshold": {
+          "default": 0.65,
+          "maximum": 1,
+          "minimum": 0.6,
+          "title": "Polar Structure Threshold",
+          "type": "number"
+        },
+        "biological_threshold": {
+          "default": 0.7,
+          "maximum": 1,
+          "minimum": 0.65,
+          "title": "Biological Threshold",
+          "type": "number"
+        },
+        "ground_threshold": {
+          "default": 0.7,
+          "maximum": 1,
+          "minimum": 0.65,
+          "title": "Ground Threshold",
+          "type": "number"
+        },
+        "minimum_quarantine_families": {
+          "default": 2,
+          "maximum": 4,
+          "minimum": 2,
+          "title": "Minimum Quarantine Families",
+          "type": "integer"
+        },
+        "local_conflict_policy": {
+          "default": "retain",
+          "enum": [
+            "retain",
+            "cr_withhold"
+          ],
+          "title": "Local Conflict Policy",
+          "type": "string"
+        },
+        "vertical_policy": {
+          "default": "diagnostic_only",
+          "enum": [
+            "diagnostic_only",
+            "verified_beam"
+          ],
+          "title": "Vertical Policy",
+          "type": "string"
+        },
+        "paired_doppler_policy": {
+          "default": "diagnostic_only",
+          "enum": [
+            "diagnostic_only",
+            "verified_pair"
+          ],
+          "title": "Paired Doppler Policy",
+          "type": "string"
+        },
+        "maximum_context_seconds": {
+          "default": 180.0,
+          "exclusiveMinimum": 0,
+          "maximum": 300,
+          "title": "Maximum Context Seconds",
+          "type": "number"
+        },
+        "maximum_doppler_seconds": {
+          "default": 90.0,
+          "exclusiveMinimum": 0,
+          "maximum": 180,
+          "title": "Maximum Doppler Seconds",
+          "type": "number"
+        },
+        "minimum_vertical_delta_m": {
+          "default": 400.0,
+          "maximum": 1000,
+          "minimum": 200,
+          "title": "Minimum Vertical Delta M",
+          "type": "number"
+        },
+        "maximum_vertical_delta_m": {
+          "default": 1800.0,
+          "maximum": 3000,
+          "minimum": 500,
+          "title": "Maximum Vertical Delta M",
+          "type": "number"
+        },
+        "maximum_doppler_delta_m": {
+          "default": 250.0,
+          "exclusiveMinimum": 0,
+          "maximum": 500,
+          "title": "Maximum Doppler Delta M",
+          "type": "number"
+        },
+        "maximum_doppler_elevation_deg": {
+          "default": 0.25,
+          "exclusiveMinimum": 0,
+          "maximum": 0.4,
+          "title": "Maximum Doppler Elevation Deg",
+          "type": "number"
+        },
+        "maximum_horizontal_error_m": {
+          "default": 1000.0,
+          "exclusiveMinimum": 0,
+          "maximum": 2000,
+          "title": "Maximum Horizontal Error M",
+          "type": "number"
+        },
+        "quarantine_quality": {
+          "default": 0.2,
+          "exclusiveMaximum": 0.5,
+          "minimum": 0,
+          "title": "Quarantine Quality",
+          "type": "number"
+        },
+        "maximum_new_cr_loss_fraction": {
+          "default": 0.2,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Maximum New Cr Loss Fraction",
+          "type": "number"
+        },
+        "maximum_new_qpe_loss_fraction": {
+          "default": 0.05,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Maximum New Qpe Loss Fraction",
+          "type": "number"
+        },
+        "maximum_volume_gates": {
+          "default": 20000000,
+          "maximum": 50000000,
+          "minimum": 1,
+          "title": "Maximum Volume Gates",
+          "type": "integer"
+        },
+        "maximum_sweep_gates": {
+          "default": 5000000,
+          "maximum": 10000000,
+          "minimum": 1,
+          "title": "Maximum Sweep Gates",
+          "type": "integer"
+        },
+        "maximum_context_pairs": {
+          "default": 100000000,
+          "maximum": 500000000,
+          "minimum": 1,
+          "title": "Maximum Context Pairs",
+          "type": "integer"
+        }
+      },
+      "title": "ClutterFusionConfig",
+      "type": "object"
+    },
+    "EpisodeConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "const": "short-episode-background-20260920-v1",
+          "default": "short-episode-background-20260920-v1",
+          "title": "Version",
+          "type": "string"
+        },
+        "mode": {
+          "default": "audit",
+          "enum": [
+            "audit",
+            "experiment_cr"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "assets": {
+          "additionalProperties": {
+            "$ref": "#/$defs/AssetBinding"
+          },
+          "title": "Assets",
+          "type": "object"
+        },
+        "temporal_policy": {
+          "default": "causal",
+          "enum": [
+            "causal",
+            "retrospective"
+          ],
+          "title": "Temporal Policy",
+          "type": "string"
+        },
+        "retrospective_target_dates": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Retrospective Target Dates",
+          "type": "array"
+        },
+        "maximum_age_hours": {
+          "default": 12.0,
+          "exclusiveMinimum": 0,
+          "maximum": 168,
+          "title": "Maximum Age Hours",
+          "type": "number"
+        },
+        "review_local_weather_conflicts": {
+          "default": false,
+          "title": "Review Local Weather Conflicts",
+          "type": "boolean"
+        },
+        "withhold_mixed": {
+          "default": false,
+          "title": "Withhold Mixed",
+          "type": "boolean"
+        },
+        "minimum_range_m": {
+          "default": 2000.0,
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Minimum Range M",
+          "type": "number"
+        },
+        "maximum_range_m": {
+          "default": 75000.0,
+          "exclusiveMinimum": 0,
+          "maximum": 150000,
+          "title": "Maximum Range M",
+          "type": "number"
+        },
+        "no_rain_below_dbz": {
+          "default": -10.0,
+          "maximum": 0,
+          "minimum": -32,
+          "title": "No Rain Below Dbz",
+          "type": "number"
+        },
+        "protected_dbz": {
+          "default": 30.0,
+          "maximum": 35,
+          "minimum": 25,
+          "title": "Protected Dbz",
+          "type": "number"
+        },
+        "minimum_snr_db": {
+          "default": 8.0,
+          "maximum": 20,
+          "minimum": 8,
+          "title": "Minimum Snr Db",
+          "type": "number"
+        },
+        "nonmet_rho": {
+          "default": 0.85,
+          "exclusiveMinimum": 0,
+          "maximum": 0.9,
+          "title": "Nonmet Rho",
+          "type": "number"
+        },
+        "minimum_feature_samples": {
+          "default": 8,
+          "maximum": 64,
+          "minimum": 6,
+          "title": "Minimum Feature Samples",
+          "type": "integer"
+        },
+        "maximum_normalized_distance": {
+          "default": 3.0,
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Maximum Normalized Distance",
+          "type": "number"
+        },
+        "maximum_dbzh_enhancement_db": {
+          "default": 3.0,
+          "exclusiveMinimum": 0,
+          "maximum": 6,
+          "title": "Maximum Dbzh Enhancement Db",
+          "type": "number"
+        },
+        "tail_match_fraction": {
+          "default": 0.7,
+          "maximum": 1,
+          "minimum": 0.6,
+          "title": "Tail Match Fraction",
+          "type": "number"
+        },
+        "maximum_new_cr_loss_fraction": {
+          "default": 0.2,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Maximum New Cr Loss Fraction",
+          "type": "number"
+        },
+        "maximum_volume_gates": {
+          "default": 20000000,
+          "maximum": 50000000,
+          "minimum": 1,
+          "title": "Maximum Volume Gates",
+          "type": "integer"
+        },
+        "maximum_asset_bytes": {
+          "default": 536870912,
+          "maximum": 2147483648,
+          "minimum": 1024,
+          "title": "Maximum Asset Bytes",
+          "type": "integer"
+        },
+        "operational_eligible": {
+          "const": false,
+          "default": false,
+          "title": "Operational Eligible",
+          "type": "boolean"
+        }
+      },
+      "title": "EpisodeConfig",
+      "type": "object"
+    },
+    "IsolationConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "const": "isolated-objects-20260923-v1",
+          "default": "isolated-objects-20260923-v1",
+          "title": "Version",
+          "type": "string"
+        },
+        "mode": {
+          "default": "audit",
+          "enum": [
+            "audit",
+            "cr_withhold",
+            "quarantine"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "operational_eligible": {
+          "const": false,
+          "default": false,
+          "title": "Operational Eligible",
+          "type": "boolean"
+        },
+        "echo_threshold_dbz": {
+          "default": -10.0,
+          "maximum": 10.0,
+          "minimum": -32.0,
+          "title": "Echo Threshold Dbz",
+          "type": "number"
+        },
+        "maximum_area_km2": {
+          "default": 4.0,
+          "exclusiveMinimum": 0.0,
+          "maximum": 20.0,
+          "title": "Maximum Area Km2",
+          "type": "number"
+        },
+        "maximum_diameter_m": {
+          "default": 4000.0,
+          "maximum": 10000.0,
+          "minimum": 500.0,
+          "title": "Maximum Diameter M",
+          "type": "number"
+        },
+        "maximum_elevation_deg": {
+          "default": 25.0,
+          "maximum": 45.0,
+          "minimum": 0.0,
+          "title": "Maximum Elevation Deg",
+          "type": "number"
+        },
+        "maximum_ray_spacing_deg": {
+          "default": 2.0,
+          "exclusiveMinimum": 0.0,
+          "maximum": 3.0,
+          "title": "Maximum Ray Spacing Deg",
+          "type": "number"
+        },
+        "maximum_gate_footprint_m": {
+          "default": 1500.0,
+          "maximum": 3000.0,
+          "minimum": 250.0,
+          "title": "Maximum Gate Footprint M",
+          "type": "number"
+        },
+        "ring_gap_m": {
+          "default": 250.0,
+          "maximum": 2000.0,
+          "minimum": 0.0,
+          "title": "Ring Gap M",
+          "type": "number"
+        },
+        "ring_widths_m": {
+          "default": [
+            1000.0,
+            2000.0
+          ],
+          "items": {
+            "type": "number"
+          },
+          "title": "Ring Widths M",
+          "type": "array"
+        },
+        "quadrature_step_m": {
+          "default": 250.0,
+          "maximum": 500.0,
+          "minimum": 100.0,
+          "title": "Quadrature Step M",
+          "type": "number"
+        },
+        "minimum_known_fraction": {
+          "default": 0.8,
+          "maximum": 1.0,
+          "minimum": 0.75,
+          "title": "Minimum Known Fraction",
+          "type": "number"
+        },
+        "minimum_quadrant_known_fraction": {
+          "default": 0.65,
+          "maximum": 1.0,
+          "minimum": 0.5,
+          "title": "Minimum Quadrant Known Fraction",
+          "type": "number"
+        },
+        "maximum_possible_echo_fraction": {
+          "default": 0.2,
+          "maximum": 0.25,
+          "minimum": 0.0,
+          "title": "Maximum Possible Echo Fraction",
+          "type": "number"
+        },
+        "minimum_unique_ring_gates": {
+          "default": 12,
+          "maximum": 1000,
+          "minimum": 8,
+          "title": "Minimum Unique Ring Gates",
+          "type": "integer"
+        },
+        "minimum_object_evidence_fraction": {
+          "default": 0.6,
+          "maximum": 1.0,
+          "minimum": 0.5,
+          "title": "Minimum Object Evidence Fraction",
+          "type": "number"
+        },
+        "minimum_nonmet_snr_db": {
+          "default": 12.0,
+          "maximum": 25.0,
+          "minimum": 8.0,
+          "title": "Minimum Nonmet Snr Db",
+          "type": "number"
+        },
+        "minimum_polar_score": {
+          "default": 0.65,
+          "maximum": 1.0,
+          "minimum": 0.6,
+          "title": "Minimum Polar Score",
+          "type": "number"
+        },
+        "minimum_nonmet_rho_score": {
+          "default": 0.6,
+          "maximum": 1.0,
+          "minimum": 0.5,
+          "title": "Minimum Nonmet Rho Score",
+          "type": "number"
+        },
+        "weak_diagnostic_enabled": {
+          "default": true,
+          "title": "Weak Diagnostic Enabled",
+          "type": "boolean"
+        },
+        "weak_offset_m": {
+          "default": 1000.0,
+          "maximum": 3000.0,
+          "minimum": 250.0,
+          "title": "Weak Offset M",
+          "type": "number"
+        },
+        "weak_score_threshold": {
+          "default": 40.0,
+          "maximum": 200.0,
+          "minimum": 0.0,
+          "title": "Weak Score Threshold",
+          "type": "number"
+        },
+        "maximum_sweep_gates": {
+          "default": 5000000,
+          "maximum": 10000000,
+          "minimum": 1,
+          "title": "Maximum Sweep Gates",
+          "type": "integer"
+        },
+        "maximum_objects": {
+          "default": 20000,
+          "maximum": 50000,
+          "minimum": 1,
+          "title": "Maximum Objects",
+          "type": "integer"
+        },
+        "maximum_sample_points": {
+          "default": 8000000,
+          "maximum": 30000000,
+          "minimum": 1,
+          "title": "Maximum Sample Points",
+          "type": "integer"
+        },
+        "maximum_action_gates_per_object": {
+          "default": 2000,
+          "maximum": 10000,
+          "minimum": 1,
+          "title": "Maximum Action Gates Per Object",
+          "type": "integer"
+        }
+      },
+      "title": "IsolationConfig",
+      "type": "object"
+    },
+    "NearMeasurementConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "const": "near-measurement-20260919-v1",
+          "default": "near-measurement-20260919-v1",
+          "title": "Version",
+          "type": "string"
+        },
+        "mode": {
+          "default": "audit",
+          "enum": [
+            "audit",
+            "experiment"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "nonmet_policy": {
+          "default": "cr_withhold",
+          "enum": [
+            "diagnostic_only",
+            "cr_withhold",
+            "quarantine"
+          ],
+          "title": "Nonmet Policy",
+          "type": "string"
+        },
+        "uncertainty_policy": {
+          "default": "cr_withhold",
+          "enum": [
+            "diagnostic_only",
+            "cr_withhold"
+          ],
+          "title": "Uncertainty Policy",
+          "type": "string"
+        },
+        "depolarization_backend": {
+          "default": "wradlib",
+          "enum": [
+            "wradlib",
+            "numpy_reference"
+          ],
+          "title": "Depolarization Backend",
+          "type": "string"
+        },
+        "gatefilter_check": {
+          "default": "disabled",
+          "enum": [
+            "disabled",
+            "pyart"
+          ],
+          "title": "Gatefilter Check",
+          "type": "string"
+        },
+        "wradlib_version": {
+          "const": "2.9.5",
+          "default": "2.9.5",
+          "title": "Wradlib Version",
+          "type": "string"
+        },
+        "pyart_version": {
+          "const": "2.2.5",
+          "default": "2.2.5",
+          "title": "Pyart Version",
+          "type": "string"
+        },
+        "near_min_m": {
+          "default": 2000.0,
+          "exclusiveMaximum": 75000,
+          "minimum": 0,
+          "title": "Near Min M",
+          "type": "number"
+        },
+        "near_max_m": {
+          "default": 75000.0,
+          "exclusiveMinimum": 0,
+          "maximum": 150000,
+          "title": "Near Max M",
+          "type": "number"
+        },
+        "no_rain_below_dbz": {
+          "default": -10.0,
+          "maximum": 0,
+          "minimum": -32,
+          "title": "No Rain Below Dbz",
+          "type": "number"
+        },
+        "protected_dbz": {
+          "default": 30.0,
+          "maximum": 35,
+          "minimum": 25,
+          "title": "Protected Dbz",
+          "type": "number"
+        },
+        "uncertainty_max_dbz": {
+          "default": 20.0,
+          "maximum": 25,
+          "minimum": 0,
+          "title": "Uncertainty Max Dbz",
+          "type": "number"
+        },
+        "uncertainty_snr_db": {
+          "default": 8.0,
+          "enum": [
+            3.0,
+            6.0,
+            8.0,
+            10.0
+          ],
+          "title": "Uncertainty Snr Db",
+          "type": "number"
+        },
+        "reliable_pol_snr_db": {
+          "default": 8.0,
+          "maximum": 20,
+          "minimum": 8,
+          "title": "Reliable Pol Snr Db",
+          "type": "number"
+        },
+        "dr_nonmet_db": {
+          "default": -12.0,
+          "maximum": -6,
+          "minimum": -15,
+          "title": "Dr Nonmet Db",
+          "type": "number"
+        },
+        "maximum_abs_zdr_db": {
+          "default": 7.5,
+          "exclusiveMinimum": 0,
+          "maximum": 10,
+          "title": "Maximum Abs Zdr Db",
+          "type": "number"
+        },
+        "maximum_ray_spacing_deg": {
+          "default": 3.0,
+          "exclusiveMinimum": 0,
+          "maximum": 5,
+          "title": "Maximum Ray Spacing Deg",
+          "type": "number"
+        },
+        "neighbourhood_m": {
+          "default": 2000.0,
+          "maximum": 10000,
+          "minimum": 500,
+          "title": "Neighbourhood M",
+          "type": "number"
+        },
+        "minimum_pol_samples": {
+          "default": 6,
+          "maximum": 500,
+          "minimum": 6,
+          "title": "Minimum Pol Samples",
+          "type": "integer"
+        },
+        "nonmet_fraction": {
+          "default": 0.6,
+          "maximum": 1,
+          "minimum": 0.6,
+          "title": "Nonmet Fraction",
+          "type": "number"
+        },
+        "weather_seed_snr_db": {
+          "default": 15.0,
+          "maximum": 30,
+          "minimum": 12,
+          "title": "Weather Seed Snr Db",
+          "type": "number"
+        },
+        "weather_seed_rho": {
+          "default": 0.97,
+          "maximum": 1,
+          "minimum": 0.95,
+          "title": "Weather Seed Rho",
+          "type": "number"
+        },
+        "weather_seed_dr_db": {
+          "default": -20.0,
+          "maximum": -16,
+          "minimum": -30,
+          "title": "Weather Seed Dr Db",
+          "type": "number"
+        },
+        "weather_phase_std_deg": {
+          "default": 10.0,
+          "exclusiveMinimum": 0,
+          "maximum": 20,
+          "title": "Weather Phase Std Deg",
+          "type": "number"
+        },
+        "weather_phase_coverage": {
+          "default": 0.6,
+          "maximum": 1,
+          "minimum": 0.5,
+          "title": "Weather Phase Coverage",
+          "type": "number"
+        },
+        "maximum_weather_fraction": {
+          "default": 0.2,
+          "exclusiveMinimum": 0,
+          "maximum": 0.3,
+          "title": "Maximum Weather Fraction",
+          "type": "number"
+        },
+        "quarantine_quality": {
+          "default": 0.2,
+          "exclusiveMaximum": 0.5,
+          "minimum": 0,
+          "title": "Quarantine Quality",
+          "type": "number"
+        },
+        "maximum_new_qpe_loss_fraction": {
+          "default": 0.05,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Maximum New Qpe Loss Fraction",
+          "type": "number"
+        },
+        "maximum_new_cr_loss_fraction": {
+          "default": 0.2,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Maximum New Cr Loss Fraction",
+          "type": "number"
+        },
+        "maximum_volume_gates": {
+          "default": 20000000,
+          "maximum": 50000000,
+          "minimum": 1,
+          "title": "Maximum Volume Gates",
+          "type": "integer"
+        },
+        "maximum_sweep_gates": {
+          "default": 5000000,
+          "maximum": 10000000,
+          "minimum": 1,
+          "title": "Maximum Sweep Gates",
+          "type": "integer"
+        },
+        "operational_eligible": {
+          "const": false,
+          "default": false,
+          "title": "Operational Eligible",
+          "type": "boolean"
+        }
+      },
+      "title": "NearMeasurementConfig",
+      "type": "object"
+    },
+    "NearRevisionConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "const": "near-joint-20260921-v1",
+          "default": "near-joint-20260921-v1",
+          "title": "Version",
+          "type": "string"
+        },
+        "mode": {
+          "default": "audit",
+          "enum": [
+            "audit",
+            "cr_withhold"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "partial_enabled": {
+          "default": true,
+          "title": "Partial Enabled",
+          "type": "boolean"
+        },
+        "minimum_snr_db": {
+          "default": 12.0,
+          "maximum": 25,
+          "minimum": 12,
+          "title": "Minimum Snr Db",
+          "type": "number"
+        },
+        "maximum_rhohv": {
+          "default": 0.9,
+          "maximum": 0.9,
+          "minimum": 0.5,
+          "title": "Maximum Rhohv",
+          "type": "number"
+        },
+        "minimum_jitter_deg": {
+          "default": 20.0,
+          "maximum": 90,
+          "minimum": 20,
+          "title": "Minimum Jitter Deg",
+          "type": "number"
+        },
+        "maximum_dbz": {
+          "default": 25.0,
+          "exclusiveMinimum": 0,
+          "maximum": 30,
+          "title": "Maximum Dbz",
+          "type": "number"
+        },
+        "minimum_samples": {
+          "default": 6,
+          "maximum": 500,
+          "minimum": 6,
+          "title": "Minimum Samples",
+          "type": "integer"
+        },
+        "minimum_neighbour_fraction": {
+          "default": 0.6,
+          "maximum": 1,
+          "minimum": 0.6,
+          "title": "Minimum Neighbour Fraction",
+          "type": "number"
+        },
+        "temporal_enabled": {
+          "default": true,
+          "title": "Temporal Enabled",
+          "type": "boolean"
+        },
+        "temporal_minimum_jitter_deg": {
+          "default": 15.0,
+          "maximum": 90,
+          "minimum": 15,
+          "title": "Temporal Minimum Jitter Deg",
+          "type": "number"
+        },
+        "maximum_age_seconds": {
+          "default": 900.0,
+          "maximum": 1200,
+          "minimum": 60,
+          "title": "Maximum Age Seconds",
+          "type": "number"
+        },
+        "maximum_temporal_sweeps": {
+          "default": 40,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Maximum Temporal Sweeps",
+          "type": "integer"
+        },
+        "maximum_previous_gates": {
+          "default": 20000000,
+          "maximum": 50000000,
+          "minimum": 1,
+          "title": "Maximum Previous Gates",
+          "type": "integer"
+        },
+        "maximum_horizontal_error_m": {
+          "default": 750.0,
+          "exclusiveMinimum": 0,
+          "maximum": 1000,
+          "title": "Maximum Horizontal Error M",
+          "type": "number"
+        },
+        "maximum_vertical_error_m": {
+          "default": 250.0,
+          "exclusiveMinimum": 0,
+          "maximum": 500,
+          "title": "Maximum Vertical Error M",
+          "type": "number"
+        },
+        "maximum_elevation_error_deg": {
+          "default": 0.2,
+          "exclusiveMinimum": 0,
+          "maximum": 0.3,
+          "title": "Maximum Elevation Error Deg",
+          "type": "number"
+        },
+        "maximum_dbzh_change_db": {
+          "default": 3.0,
+          "exclusiveMinimum": 0,
+          "maximum": 5,
+          "title": "Maximum Dbzh Change Db",
+          "type": "number"
+        },
+        "maximum_snr_change_db": {
+          "default": 3.0,
+          "exclusiveMinimum": 0,
+          "maximum": 5,
+          "title": "Maximum Snr Change Db",
+          "type": "number"
+        },
+        "dem_policy": {
+          "default": "audit",
+          "enum": [
+            "disabled",
+            "audit",
+            "cr_withhold"
+          ],
+          "title": "Dem Policy",
+          "type": "string"
+        },
+        "maximum_usable_cbb": {
+          "default": 0.7,
+          "maximum": 0.9,
+          "minimum": 0.5,
+          "title": "Maximum Usable Cbb",
+          "type": "number"
+        },
+        "local_interception_pbb": {
+          "default": 0.1,
+          "exclusiveMinimum": 0,
+          "maximum": 0.5,
+          "title": "Local Interception Pbb",
+          "type": "number"
+        },
+        "maximum_dem_range_m": {
+          "default": 75000.0,
+          "exclusiveMinimum": 0,
+          "maximum": 150000,
+          "title": "Maximum Dem Range M",
+          "type": "number"
+        },
+        "maximum_dem_gates": {
+          "default": 5000000,
+          "maximum": 10000000,
+          "minimum": 1,
+          "title": "Maximum Dem Gates",
+          "type": "integer"
+        }
+      },
+      "title": "NearRevisionConfig",
+      "type": "object"
+    },
+    "ReceiverDomainConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "const": "receiver-domain-20260921-v1",
+          "default": "receiver-domain-20260921-v1",
+          "title": "Version",
+          "type": "string"
+        },
+        "mode": {
+          "default": "audit",
+          "enum": [
+            "audit",
+            "cr_only",
+            "quarantine"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "partial_policy": {
+          "default": "diagnostic_only",
+          "enum": [
+            "diagnostic_only",
+            "cr_withhold"
+          ],
+          "title": "Partial Policy",
+          "type": "string"
+        },
+        "local_policy": {
+          "default": "retain_conflict",
+          "enum": [
+            "retain_conflict",
+            "source_joint_review"
+          ],
+          "title": "Local Policy",
+          "type": "string"
+        },
+        "minimum_range_m": {
+          "default": 50000.0,
+          "minimum": 10000,
+          "title": "Minimum Range M",
+          "type": "number"
+        },
+        "block_m": {
+          "default": 20000.0,
+          "maximum": 40000,
+          "minimum": 10000,
+          "title": "Block M",
+          "type": "number"
+        },
+        "guard_blocks": {
+          "default": 1,
+          "maximum": 3,
+          "minimum": 1,
+          "title": "Guard Blocks",
+          "type": "integer"
+        },
+        "minimum_reference_span_m": {
+          "default": 80000.0,
+          "minimum": 60000,
+          "title": "Minimum Reference Span M",
+          "type": "number"
+        },
+        "minimum_reference_blocks": {
+          "default": 5,
+          "minimum": 4,
+          "title": "Minimum Reference Blocks",
+          "type": "integer"
+        },
+        "minimum_snr_db": {
+          "default": 20.0,
+          "minimum": 20,
+          "title": "Minimum Snr Db",
+          "type": "number"
+        },
+        "maximum_snr_p90_db": {
+          "default": 2.0,
+          "exclusiveMinimum": 0,
+          "maximum": 2,
+          "title": "Maximum Snr P90 Db",
+          "type": "number"
+        },
+        "angular_contrast_db": {
+          "default": 6.0,
+          "minimum": 6,
+          "title": "Angular Contrast Db",
+          "type": "number"
+        },
+        "maximum_flank_angle_deg": {
+          "default": 12.0,
+          "exclusiveMinimum": 0,
+          "maximum": 15,
+          "title": "Maximum Flank Angle Deg",
+          "type": "number"
+        },
+        "minimum_pair_samples": {
+          "default": 40,
+          "minimum": 40,
+          "title": "Minimum Pair Samples",
+          "type": "integer"
+        },
+        "minimum_pair_blocks": {
+          "default": 2,
+          "minimum": 2,
+          "title": "Minimum Pair Blocks",
+          "type": "integer"
+        },
+        "minimum_samples_per_reference_block": {
+          "default": 10,
+          "minimum": 10,
+          "title": "Minimum Samples Per Reference Block",
+          "type": "integer"
+        },
+        "minimum_pair_span_m": {
+          "default": 40000.0,
+          "minimum": 40000,
+          "title": "Minimum Pair Span M",
+          "type": "number"
+        },
+        "maximum_relation_error_db": {
+          "default": 0.6,
+          "exclusiveMinimum": 0,
+          "maximum": 0.6,
+          "title": "Maximum Relation Error Db",
+          "type": "number"
+        },
+        "maximum_target_residual_db": {
+          "default": 3.0,
+          "exclusiveMinimum": 0,
+          "maximum": 3,
+          "title": "Maximum Target Residual Db",
+          "type": "number"
+        },
+        "maximum_phase_p90_deg": {
+          "default": 5.0,
+          "exclusiveMinimum": 0,
+          "maximum": 5,
+          "title": "Maximum Phase P90 Deg",
+          "type": "number"
+        },
+        "maximum_zdr_p90_db": {
+          "default": 0.5,
+          "exclusiveMinimum": 0,
+          "maximum": 0.5,
+          "title": "Maximum Zdr P90 Db",
+          "type": "number"
+        },
+        "target_phase_tolerance_deg": {
+          "default": 5.0,
+          "exclusiveMinimum": 0,
+          "maximum": 5,
+          "title": "Target Phase Tolerance Deg",
+          "type": "number"
+        },
+        "target_zdr_tolerance_db": {
+          "default": 0.5,
+          "exclusiveMinimum": 0,
+          "maximum": 0.5,
+          "title": "Target Zdr Tolerance Db",
+          "type": "number"
+        },
+        "minimum_polar_samples": {
+          "default": 30,
+          "minimum": 30,
+          "title": "Minimum Polar Samples",
+          "type": "integer"
+        },
+        "maximum_abs_reference_zdr_db": {
+          "default": 7.5,
+          "exclusiveMinimum": 0,
+          "maximum": 10,
+          "title": "Maximum Abs Reference Zdr Db",
+          "type": "number"
+        },
+        "no_rain_below_dbz": {
+          "default": -10.0,
+          "maximum": 0,
+          "minimum": -32,
+          "title": "No Rain Below Dbz",
+          "type": "number"
+        },
+        "quarantine_quality": {
+          "default": 0.2,
+          "exclusiveMaximum": 0.5,
+          "minimum": 0,
+          "title": "Quarantine Quality",
+          "type": "number"
+        },
+        "maximum_new_cr_loss_fraction": {
+          "default": 0.1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Maximum New Cr Loss Fraction",
+          "type": "number"
+        },
+        "maximum_new_qpe_loss_fraction": {
+          "default": 0.05,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Maximum New Qpe Loss Fraction",
+          "type": "number"
+        },
+        "maximum_sweep_gates": {
+          "default": 5000000,
+          "maximum": 10000000,
+          "minimum": 1,
+          "title": "Maximum Sweep Gates",
+          "type": "integer"
+        },
+        "maximum_volume_gates": {
+          "default": 20000000,
+          "maximum": 50000000,
+          "minimum": 1,
+          "title": "Maximum Volume Gates",
+          "type": "integer"
+        },
+        "maximum_folds": {
+          "default": 40000,
+          "maximum": 100000,
+          "minimum": 1,
+          "title": "Maximum Folds",
+          "type": "integer"
+        },
+        "operational_eligible": {
+          "const": false,
+          "default": false,
+          "title": "Operational Eligible",
+          "type": "boolean"
+        },
+        "segment_reference": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SegmentReferenceConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source_family": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceFamilyConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "ReceiverDomainConfig",
+      "type": "object"
+    },
+    "SegmentReferenceConfig": {
+      "additionalProperties": false,
+      "description": "Finite, intermittent receiver states; research fallback, not a short-blob filter.",
+      "properties": {
+        "version": {
+          "const": "receiver-segment-reference-v1",
+          "default": "receiver-segment-reference-v1",
+          "title": "Version",
+          "type": "string"
+        },
+        "mode": {
+          "default": "audit",
+          "enum": [
+            "audit",
+            "experiment"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "partial_policy": {
+          "default": "diagnostic_only",
+          "enum": [
+            "diagnostic_only",
+            "cr_withhold"
+          ],
+          "title": "Partial Policy",
+          "type": "string"
+        },
+        "reference_minimum_range_m": {
+          "default": 10000.0,
+          "minimum": 10000.0,
+          "title": "Reference Minimum Range M",
+          "type": "number"
+        },
+        "minimum_reference_blocks": {
+          "default": 3,
+          "minimum": 3,
+          "title": "Minimum Reference Blocks",
+          "type": "integer"
+        },
+        "minimum_reference_span_m": {
+          "default": 40000.0,
+          "minimum": 40000.0,
+          "title": "Minimum Reference Span M",
+          "type": "number"
+        },
+        "minimum_reference_support_m": {
+          "default": 12000.0,
+          "minimum": 10000.0,
+          "title": "Minimum Reference Support M",
+          "type": "number"
+        },
+        "state_separation_db": {
+          "default": 6.0,
+          "minimum": 6.0,
+          "title": "State Separation Db",
+          "type": "number"
+        },
+        "maximum_states": {
+          "default": 3,
+          "maximum": 3,
+          "minimum": 1,
+          "title": "Maximum States",
+          "type": "integer"
+        },
+        "maximum_reference_distance_m": {
+          "default": 50000.0,
+          "exclusiveMinimum": 0.0,
+          "maximum": 50000.0,
+          "title": "Maximum Reference Distance M",
+          "type": "number"
+        },
+        "crosscheck_minimum_span_m": {
+          "default": 10000.0,
+          "minimum": 5000.0,
+          "title": "Crosscheck Minimum Span M",
+          "type": "number"
+        },
+        "maximum_state_trials": {
+          "default": 50000,
+          "maximum": 100000,
+          "minimum": 1,
+          "title": "Maximum State Trials",
+          "type": "integer"
+        }
+      },
+      "title": "SegmentReferenceConfig",
+      "type": "object"
+    },
+    "SourceFamilyConfig": {
+      "additionalProperties": false,
+      "description": "One-hop shared coherent reference. No station/angle/target-value rules.",
+      "properties": {
+        "version": {
+          "const": "receiver-source-family-20260921-v1",
+          "default": "receiver-source-family-20260921-v1",
+          "title": "Version",
+          "type": "string"
+        },
+        "mode": {
+          "default": "audit",
+          "enum": [
+            "audit",
+            "experiment"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "partial_policy": {
+          "default": "diagnostic_only",
+          "enum": [
+            "diagnostic_only",
+            "cr_withhold"
+          ],
+          "title": "Partial Policy",
+          "type": "string"
+        },
+        "full_policy": {
+          "default": "cr_only",
+          "enum": [
+            "cr_only",
+            "quarantine"
+          ],
+          "title": "Full Policy",
+          "type": "string"
+        },
+        "maximum_neighbor_angle_deg": {
+          "default": 3.0,
+          "exclusiveMinimum": 0.0,
+          "maximum": 5.0,
+          "title": "Maximum Neighbor Angle Deg",
+          "type": "number"
+        },
+        "minimum_donors": {
+          "default": 2,
+          "maximum": 4,
+          "minimum": 2,
+          "title": "Minimum Donors",
+          "type": "integer"
+        },
+        "maximum_donors": {
+          "default": 6,
+          "maximum": 12,
+          "minimum": 2,
+          "title": "Maximum Donors",
+          "type": "integer"
+        },
+        "maximum_donor_phase_difference_deg": {
+          "default": 2.0,
+          "exclusiveMinimum": 0.0,
+          "maximum": 5.0,
+          "title": "Maximum Donor Phase Difference Deg",
+          "type": "number"
+        },
+        "maximum_donor_zdr_difference_db": {
+          "default": 0.25,
+          "exclusiveMinimum": 0.0,
+          "maximum": 0.5,
+          "title": "Maximum Donor Zdr Difference Db",
+          "type": "number"
+        },
+        "maximum_donor_offset_difference_db": {
+          "default": 0.5,
+          "exclusiveMinimum": 0.0,
+          "maximum": 1.0,
+          "title": "Maximum Donor Offset Difference Db",
+          "type": "number"
+        },
+        "maximum_donor_relation_difference_db": {
+          "default": 1.0,
+          "exclusiveMinimum": 0.0,
+          "maximum": 1.0,
+          "title": "Maximum Donor Relation Difference Db",
+          "type": "number"
+        },
+        "maximum_ray_bias_db": {
+          "default": 1.0,
+          "exclusiveMinimum": 0.0,
+          "maximum": 1.0,
+          "title": "Maximum Ray Bias Db",
+          "type": "number"
+        },
+        "local_block_m": {
+          "default": 2000.0,
+          "maximum": 5000.0,
+          "minimum": 1000.0,
+          "title": "Local Block M",
+          "type": "number"
+        },
+        "minimum_local_support_m": {
+          "default": 1000.0,
+          "minimum": 500.0,
+          "title": "Minimum Local Support M",
+          "type": "number"
+        },
+        "minimum_own_support_m": {
+          "default": 4000.0,
+          "minimum": 4000.0,
+          "title": "Minimum Own Support M",
+          "type": "number"
+        },
+        "minimum_own_blocks": {
+          "default": 2,
+          "minimum": 2,
+          "title": "Minimum Own Blocks",
+          "type": "integer"
+        },
+        "maximum_states": {
+          "default": 3,
+          "maximum": 3,
+          "minimum": 1,
+          "title": "Maximum States",
+          "type": "integer"
+        },
+        "maximum_state_center_spread_db": {
+          "default": 2.0,
+          "exclusiveMinimum": 0.0,
+          "maximum": 2.0,
+          "title": "Maximum State Center Spread Db",
+          "type": "number"
+        },
+        "maximum_elevation_difference_deg": {
+          "default": 0.2,
+          "exclusiveMinimum": 0.0,
+          "maximum": 0.3,
+          "title": "Maximum Elevation Difference Deg",
+          "type": "number"
+        },
+        "maximum_time_difference_s": {
+          "default": 120.0,
+          "exclusiveMinimum": 0.0,
+          "maximum": 180.0,
+          "title": "Maximum Time Difference S",
+          "type": "number"
+        },
+        "require_ray_times": {
+          "default": true,
+          "title": "Require Ray Times",
+          "type": "boolean"
+        },
+        "maximum_family_folds": {
+          "default": 40000,
+          "maximum": 100000,
+          "minimum": 1,
+          "title": "Maximum Family Folds",
+          "type": "integer"
+        },
+        "maximum_donor_trials": {
+          "default": 200000,
+          "maximum": 500000,
+          "minimum": 1,
+          "title": "Maximum Donor Trials",
+          "type": "integer"
+        },
+        "maximum_family_models": {
+          "default": 10000,
+          "maximum": 40000,
+          "minimum": 1,
+          "title": "Maximum Family Models",
+          "type": "integer"
+        },
+        "maximum_ordered_blocks": {
+          "default": 1000000,
+          "maximum": 3000000,
+          "minimum": 1,
+          "title": "Maximum Ordered Blocks",
+          "type": "integer"
+        }
+      },
+      "title": "SourceFamilyConfig",
+      "type": "object"
+    },
+    "VolumeReviewConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "const": "volume-object-review-20260919-v1",
+          "default": "volume-object-review-20260919-v1",
+          "title": "Version",
+          "type": "string"
+        },
+        "mode": {
+          "default": "audit",
+          "enum": [
+            "audit",
+            "experiment_quarantine"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "phase": {
+          "default": 3,
+          "enum": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "title": "Phase",
+          "type": "integer"
+        },
+        "operational_eligible": {
+          "const": false,
+          "default": false,
+          "title": "Operational Eligible",
+          "type": "boolean"
+        },
+        "levels_dbz": {
+          "default": [
+            0.0,
+            15.0,
+            30.0,
+            45.0
+          ],
+          "items": {
+            "type": "number"
+          },
+          "title": "Levels Dbz",
+          "type": "array"
+        },
+        "scales_m": {
+          "default": [
+            5000,
+            10000,
+            20000,
+            40000
+          ],
+          "items": {
+            "type": "integer"
+          },
+          "title": "Scales M",
+          "type": "array"
+        },
+        "minimum_window_support": {
+          "default": 0.4,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Minimum Window Support",
+          "type": "number"
+        },
+        "minimum_object_gates": {
+          "default": 4,
+          "minimum": 2,
+          "title": "Minimum Object Gates",
+          "type": "integer"
+        },
+        "minimum_object_span_m": {
+          "default": 2000.0,
+          "minimum": 1000,
+          "title": "Minimum Object Span M",
+          "type": "number"
+        },
+        "maximum_source_width_deg": {
+          "default": 45.0,
+          "exclusiveMinimum": 0,
+          "maximum": 90,
+          "title": "Maximum Source Width Deg",
+          "type": "number"
+        },
+        "minimum_source_aspect": {
+          "default": 3.0,
+          "minimum": 2,
+          "title": "Minimum Source Aspect",
+          "type": "number"
+        },
+        "source_block_m": {
+          "default": 10000.0,
+          "maximum": 25000,
+          "minimum": 5000,
+          "title": "Source Block M",
+          "type": "number"
+        },
+        "minimum_reference_blocks": {
+          "default": 3,
+          "minimum": 3,
+          "title": "Minimum Reference Blocks",
+          "type": "integer"
+        },
+        "guard_blocks": {
+          "default": 1,
+          "maximum": 3,
+          "minimum": 1,
+          "title": "Guard Blocks",
+          "type": "integer"
+        },
+        "minimum_reference_span_m": {
+          "default": 20000.0,
+          "minimum": 20000,
+          "title": "Minimum Reference Span M",
+          "type": "number"
+        },
+        "minimum_reference_samples": {
+          "default": 60,
+          "minimum": 30,
+          "title": "Minimum Reference Samples",
+          "type": "integer"
+        },
+        "minimum_samples_per_block": {
+          "default": 8,
+          "minimum": 5,
+          "title": "Minimum Samples Per Block",
+          "type": "integer"
+        },
+        "maximum_source_residual_db": {
+          "default": 2.5,
+          "exclusiveMinimum": 0,
+          "maximum": 2.5,
+          "title": "Maximum Source Residual Db",
+          "type": "number"
+        },
+        "maximum_snr_dispersion_db": {
+          "default": 2.0,
+          "exclusiveMinimum": 0,
+          "maximum": 2,
+          "title": "Maximum Snr Dispersion Db",
+          "type": "number"
+        },
+        "minimum_snr_db": {
+          "default": 12.0,
+          "minimum": 8,
+          "title": "Minimum Snr Db",
+          "type": "number"
+        },
+        "coherent_snr_db": {
+          "default": 20.0,
+          "minimum": 20,
+          "title": "Coherent Snr Db",
+          "type": "number"
+        },
+        "maximum_phase_p90_deg": {
+          "default": 10.0,
+          "exclusiveMinimum": 0,
+          "maximum": 10,
+          "title": "Maximum Phase P90 Deg",
+          "type": "number"
+        },
+        "maximum_zdr_p90_db": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Maximum Zdr P90 Db",
+          "type": "number"
+        },
+        "noisy_rho": {
+          "default": 0.8,
+          "exclusiveMaximum": 0.95,
+          "exclusiveMinimum": 0,
+          "title": "Noisy Rho",
+          "type": "number"
+        },
+        "maximum_states": {
+          "default": 3,
+          "maximum": 3,
+          "minimum": 1,
+          "title": "Maximum States",
+          "type": "integer"
+        },
+        "state_separation_db": {
+          "default": 8.0,
+          "minimum": 6,
+          "title": "State Separation Db",
+          "type": "number"
+        },
+        "minimum_link_elevation_deg": {
+          "default": 0.2,
+          "exclusiveMinimum": 0,
+          "maximum": 2,
+          "title": "Minimum Link Elevation Deg",
+          "type": "number"
+        },
+        "maximum_link_angle_deg": {
+          "default": 2.0,
+          "exclusiveMinimum": 0,
+          "maximum": 5,
+          "title": "Maximum Link Angle Deg",
+          "type": "number"
+        },
+        "maximum_link_range_m": {
+          "default": 1500.0,
+          "exclusiveMinimum": 0,
+          "maximum": 5000,
+          "title": "Maximum Link Range M",
+          "type": "number"
+        },
+        "maximum_link_seconds": {
+          "default": 300.0,
+          "exclusiveMinimum": 0,
+          "maximum": 600,
+          "title": "Maximum Link Seconds",
+          "type": "number"
+        },
+        "maximum_weather_horizontal_m": {
+          "default": 1500.0,
+          "exclusiveMinimum": 0,
+          "maximum": 3000,
+          "title": "Maximum Weather Horizontal M",
+          "type": "number"
+        },
+        "maximum_weather_vertical_m": {
+          "default": 750.0,
+          "exclusiveMinimum": 0,
+          "maximum": 1500,
+          "title": "Maximum Weather Vertical M",
+          "type": "number"
+        },
+        "weather_rho": {
+          "default": 0.97,
+          "exclusiveMinimum": 0.95,
+          "maximum": 1,
+          "title": "Weather Rho",
+          "type": "number"
+        },
+        "minimum_weather_run_m": {
+          "default": 2000.0,
+          "minimum": 1000,
+          "title": "Minimum Weather Run M",
+          "type": "number"
+        },
+        "source_corroboration_required": {
+          "const": true,
+          "default": true,
+          "title": "Source Corroboration Required",
+          "type": "boolean"
+        },
+        "weak_policy": {
+          "const": "diagnostic_only",
+          "default": "diagnostic_only",
+          "title": "Weak Policy",
+          "type": "string"
+        },
+        "unknown_cr_policy": {
+          "default": "withhold",
+          "enum": [
+            "withhold",
+            "retain_with_risk"
+          ],
+          "title": "Unknown Cr Policy",
+          "type": "string"
+        },
+        "quarantine_quality": {
+          "default": 0.2,
+          "exclusiveMaximum": 0.5,
+          "minimum": 0,
+          "title": "Quarantine Quality",
+          "type": "number"
+        },
+        "maximum_new_eligible_loss_fraction": {
+          "default": 0.1,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Maximum New Eligible Loss Fraction",
+          "type": "number"
+        },
+        "maximum_gates": {
+          "default": 20000000,
+          "maximum": 50000000,
+          "minimum": 1,
+          "title": "Maximum Gates",
+          "type": "integer"
+        },
+        "maximum_objects": {
+          "default": 20000,
+          "maximum": 100000,
+          "minimum": 1,
+          "title": "Maximum Objects",
+          "type": "integer"
+        },
+        "maximum_folds": {
+          "default": 20000,
+          "maximum": 100000,
+          "minimum": 1,
+          "title": "Maximum Folds",
+          "type": "integer"
+        },
+        "maximum_links": {
+          "default": 40000,
+          "maximum": 200000,
+          "minimum": 1,
+          "title": "Maximum Links",
+          "type": "integer"
+        },
+        "export_evidence": {
+          "default": true,
+          "title": "Export Evidence",
+          "type": "boolean"
+        },
+        "near_measurement": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NearMeasurementConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "clutter_fusion": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClutterFusionConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "receiver_domain": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReceiverDomainConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "VolumeReviewConfig",
+      "type": "object"
+    },
+    "XReceiverConfig": {
+      "additionalProperties": false,
+      "description": "The same fitted receiver core, with independently versioned X distances.\n\nS defaults and residual/polar tests are inherited unchanged. At least three\nseparated raw reference blocks remain after target and guard exclusion.",
+      "properties": {
+        "version": {
+          "const": "receiver-domain-20260921-v1",
+          "default": "receiver-domain-20260921-v1",
+          "title": "Version",
+          "type": "string"
+        },
+        "mode": {
+          "default": "audit",
+          "enum": [
+            "audit",
+            "cr_only",
+            "quarantine"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "partial_policy": {
+          "default": "diagnostic_only",
+          "enum": [
+            "diagnostic_only",
+            "cr_withhold"
+          ],
+          "title": "Partial Policy",
+          "type": "string"
+        },
+        "local_policy": {
+          "default": "source_joint_review",
+          "enum": [
+            "retain_conflict",
+            "source_joint_review"
+          ],
+          "title": "Local Policy",
+          "type": "string"
+        },
+        "minimum_range_m": {
+          "default": 1500.0,
+          "maximum": 20000.0,
+          "minimum": 500.0,
+          "title": "Minimum Range M",
+          "type": "number"
+        },
+        "block_m": {
+          "default": 5000.0,
+          "maximum": 20000.0,
+          "minimum": 1000.0,
+          "title": "Block M",
+          "type": "number"
+        },
+        "guard_blocks": {
+          "default": 1,
+          "maximum": 3,
+          "minimum": 1,
+          "title": "Guard Blocks",
+          "type": "integer"
+        },
+        "minimum_reference_span_m": {
+          "default": 20000.0,
+          "maximum": 80000.0,
+          "minimum": 6000.0,
+          "title": "Minimum Reference Span M",
+          "type": "number"
+        },
+        "minimum_reference_blocks": {
+          "default": 3,
+          "minimum": 3,
+          "title": "Minimum Reference Blocks",
+          "type": "integer"
+        },
+        "minimum_snr_db": {
+          "default": 20.0,
+          "minimum": 20,
+          "title": "Minimum Snr Db",
+          "type": "number"
+        },
+        "maximum_snr_p90_db": {
+          "default": 2.0,
+          "exclusiveMinimum": 0,
+          "maximum": 2,
+          "title": "Maximum Snr P90 Db",
+          "type": "number"
+        },
+        "angular_contrast_db": {
+          "default": 6.0,
+          "minimum": 6,
+          "title": "Angular Contrast Db",
+          "type": "number"
+        },
+        "maximum_flank_angle_deg": {
+          "default": 12.0,
+          "exclusiveMinimum": 0,
+          "maximum": 15,
+          "title": "Maximum Flank Angle Deg",
+          "type": "number"
+        },
+        "minimum_pair_samples": {
+          "default": 40,
+          "minimum": 40,
+          "title": "Minimum Pair Samples",
+          "type": "integer"
+        },
+        "minimum_pair_blocks": {
+          "default": 2,
+          "minimum": 2,
+          "title": "Minimum Pair Blocks",
+          "type": "integer"
+        },
+        "minimum_samples_per_reference_block": {
+          "default": 10,
+          "minimum": 10,
+          "title": "Minimum Samples Per Reference Block",
+          "type": "integer"
+        },
+        "minimum_pair_span_m": {
+          "default": 8000.0,
+          "maximum": 40000.0,
+          "minimum": 3000.0,
+          "title": "Minimum Pair Span M",
+          "type": "number"
+        },
+        "maximum_relation_error_db": {
+          "default": 0.6,
+          "exclusiveMinimum": 0,
+          "maximum": 0.6,
+          "title": "Maximum Relation Error Db",
+          "type": "number"
+        },
+        "maximum_target_residual_db": {
+          "default": 3.0,
+          "exclusiveMinimum": 0,
+          "maximum": 3,
+          "title": "Maximum Target Residual Db",
+          "type": "number"
+        },
+        "maximum_phase_p90_deg": {
+          "default": 5.0,
+          "exclusiveMinimum": 0,
+          "maximum": 5,
+          "title": "Maximum Phase P90 Deg",
+          "type": "number"
+        },
+        "maximum_zdr_p90_db": {
+          "default": 0.5,
+          "exclusiveMinimum": 0,
+          "maximum": 0.5,
+          "title": "Maximum Zdr P90 Db",
+          "type": "number"
+        },
+        "target_phase_tolerance_deg": {
+          "default": 5.0,
+          "exclusiveMinimum": 0,
+          "maximum": 5,
+          "title": "Target Phase Tolerance Deg",
+          "type": "number"
+        },
+        "target_zdr_tolerance_db": {
+          "default": 0.5,
+          "exclusiveMinimum": 0,
+          "maximum": 0.5,
+          "title": "Target Zdr Tolerance Db",
+          "type": "number"
+        },
+        "minimum_polar_samples": {
+          "default": 30,
+          "minimum": 30,
+          "title": "Minimum Polar Samples",
+          "type": "integer"
+        },
+        "maximum_abs_reference_zdr_db": {
+          "default": 7.5,
+          "exclusiveMinimum": 0,
+          "maximum": 10,
+          "title": "Maximum Abs Reference Zdr Db",
+          "type": "number"
+        },
+        "no_rain_below_dbz": {
+          "default": -10.0,
+          "maximum": 0,
+          "minimum": -32,
+          "title": "No Rain Below Dbz",
+          "type": "number"
+        },
+        "quarantine_quality": {
+          "default": 0.2,
+          "exclusiveMaximum": 0.5,
+          "minimum": 0,
+          "title": "Quarantine Quality",
+          "type": "number"
+        },
+        "maximum_new_cr_loss_fraction": {
+          "default": 0.1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Maximum New Cr Loss Fraction",
+          "type": "number"
+        },
+        "maximum_new_qpe_loss_fraction": {
+          "default": 0.05,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Maximum New Qpe Loss Fraction",
+          "type": "number"
+        },
+        "maximum_sweep_gates": {
+          "default": 5000000,
+          "maximum": 10000000,
+          "minimum": 1,
+          "title": "Maximum Sweep Gates",
+          "type": "integer"
+        },
+        "maximum_volume_gates": {
+          "default": 20000000,
+          "maximum": 50000000,
+          "minimum": 1,
+          "title": "Maximum Volume Gates",
+          "type": "integer"
+        },
+        "maximum_folds": {
+          "default": 12000,
+          "maximum": 40000,
+          "minimum": 1,
+          "title": "Maximum Folds",
+          "type": "integer"
+        },
+        "operational_eligible": {
+          "const": false,
+          "default": false,
+          "title": "Operational Eligible",
+          "type": "boolean"
+        },
+        "segment_reference": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/XSegmentConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source_family": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceFamilyConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "XReceiverConfig",
+      "type": "object"
+    },
+    "XSegmentConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "const": "receiver-segment-reference-v1",
+          "default": "receiver-segment-reference-v1",
+          "title": "Version",
+          "type": "string"
+        },
+        "mode": {
+          "default": "audit",
+          "enum": [
+            "audit",
+            "experiment"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "partial_policy": {
+          "default": "diagnostic_only",
+          "enum": [
+            "diagnostic_only",
+            "cr_withhold"
+          ],
+          "title": "Partial Policy",
+          "type": "string"
+        },
+        "reference_minimum_range_m": {
+          "default": 1500.0,
+          "minimum": 500.0,
+          "title": "Reference Minimum Range M",
+          "type": "number"
+        },
+        "minimum_reference_blocks": {
+          "default": 3,
+          "minimum": 3,
+          "title": "Minimum Reference Blocks",
+          "type": "integer"
+        },
+        "minimum_reference_span_m": {
+          "default": 12000.0,
+          "minimum": 6000.0,
+          "title": "Minimum Reference Span M",
+          "type": "number"
+        },
+        "minimum_reference_support_m": {
+          "default": 6000.0,
+          "minimum": 3000.0,
+          "title": "Minimum Reference Support M",
+          "type": "number"
+        },
+        "state_separation_db": {
+          "default": 6.0,
+          "minimum": 6.0,
+          "title": "State Separation Db",
+          "type": "number"
+        },
+        "maximum_states": {
+          "default": 3,
+          "maximum": 3,
+          "minimum": 1,
+          "title": "Maximum States",
+          "type": "integer"
+        },
+        "maximum_reference_distance_m": {
+          "default": 20000.0,
+          "exclusiveMinimum": 0.0,
+          "maximum": 50000.0,
+          "title": "Maximum Reference Distance M",
+          "type": "number"
+        },
+        "crosscheck_minimum_span_m": {
+          "default": 5000.0,
+          "minimum": 2000.0,
+          "title": "Crosscheck Minimum Span M",
+          "type": "number"
+        },
+        "maximum_state_trials": {
+          "default": 50000,
+          "maximum": 100000,
+          "minimum": 1,
+          "title": "Maximum State Trials",
+          "type": "integer"
+        }
+      },
+      "title": "XSegmentConfig",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": "x-shared-qc-20260928-v2",
+      "default": "x-shared-qc-20260928-v2",
+      "title": "Version",
+      "type": "string"
+    },
+    "mode": {
+      "default": "audit",
+      "enum": [
+        "audit",
+        "cr_only",
+        "quarantine"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "operational_eligible": {
+      "const": false,
+      "default": false,
+      "title": "Operational Eligible",
+      "type": "boolean"
+    },
+    "receiver_enabled": {
+      "default": true,
+      "title": "Receiver Enabled",
+      "type": "boolean"
+    },
+    "radial_objects_enabled": {
+      "default": true,
+      "title": "Radial Objects Enabled",
+      "type": "boolean"
+    },
+    "clutter_enabled": {
+      "default": true,
+      "title": "Clutter Enabled",
+      "type": "boolean"
+    },
+    "isolation_enabled": {
+      "default": true,
+      "title": "Isolation Enabled",
+      "type": "boolean"
+    },
+    "receiver": {
+      "$ref": "#/$defs/XReceiverConfig"
+    },
+    "clutter": {
+      "$ref": "#/$defs/ClutterFusionConfig"
+    },
+    "objects": {
+      "$ref": "#/$defs/VolumeReviewConfig"
+    },
+    "maximum_sweep_gates": {
+      "default": 2000000,
+      "maximum": 5000000,
+      "minimum": 1,
+      "title": "Maximum Sweep Gates",
+      "type": "integer"
+    },
+    "maximum_evidence_bytes": {
+      "default": 4194304,
+      "maximum": 16777216,
+      "minimum": 4096,
+      "title": "Maximum Evidence Bytes",
+      "type": "integer"
+    },
+    "maximum_new_exclusion_fraction": {
+      "default": 0.35,
+      "exclusiveMinimum": 0.0,
+      "maximum": 1.0,
+      "title": "Maximum New Exclusion Fraction",
+      "type": "number"
+    },
+    "maximum_gap_deg": {
+      "default": 3.0,
+      "exclusiveMinimum": 0.01,
+      "maximum": 10.0,
+      "title": "Maximum Gap Deg",
+      "type": "number"
+    },
+    "maximum_neighbor_time_s": {
+      "default": 120.0,
+      "exclusiveMinimum": 0.0,
+      "maximum": 300.0,
+      "title": "Maximum Neighbor Time S",
+      "type": "number"
+    },
+    "maximum_neighbor_elevation_deg": {
+      "default": 0.3,
+      "exclusiveMinimum": 0.0,
+      "maximum": 1.0,
+      "title": "Maximum Neighbor Elevation Deg",
+      "type": "number"
+    },
+    "radial_flank_deg": {
+      "default": 6.0,
+      "exclusiveMinimum": 0.0,
+      "maximum": 15.0,
+      "title": "Radial Flank Deg",
+      "type": "number"
+    },
+    "radial_flank_contrast_db": {
+      "default": 8.0,
+      "maximum": 20.0,
+      "minimum": 6.0,
+      "title": "Radial Flank Contrast Db",
+      "type": "number"
+    },
+    "radial_minimum_snr_db": {
+      "default": 12.0,
+      "maximum": 30.0,
+      "minimum": 8.0,
+      "title": "Radial Minimum Snr Db",
+      "type": "number"
+    },
+    "radial_maximum_rhohv": {
+      "default": 0.8,
+      "exclusiveMinimum": 0.0,
+      "maximum": 0.9,
+      "title": "Radial Maximum Rhohv",
+      "type": "number"
+    },
+    "radial_phase_jitter_deg": {
+      "default": 20.0,
+      "maximum": 60.0,
+      "minimum": 10.0,
+      "title": "Radial Phase Jitter Deg",
+      "type": "number"
+    },
+    "radial_maximum_dbzh": {
+      "default": 35.0,
+      "maximum": 45.0,
+      "minimum": 25.0,
+      "title": "Radial Maximum Dbzh",
+      "type": "number"
+    },
+    "doppler_verified": {
+      "default": false,
+      "title": "Doppler Verified",
+      "type": "boolean"
+    },
+    "doppler_verification_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Doppler Verification Id"
+    },
+    "doppler_waveform": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Doppler Waveform"
+    },
+    "nyquist_velocity_mps": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0.0,
+          "maximum": 200.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Nyquist Velocity Mps"
+    },
+    "phase_minimum_snr_db": {
+      "default": 10.0,
+      "maximum": 30.0,
+      "minimum": 3.0,
+      "title": "Phase Minimum Snr Db",
+      "type": "number"
+    },
+    "phase_minimum_rhohv": {
+      "default": 0.95,
+      "maximum": 1.0,
+      "minimum": 0.9,
+      "title": "Phase Minimum Rhohv",
+      "type": "number"
+    },
+    "phase_maximum_abs_zdr_db": {
+      "default": 5.0,
+      "exclusiveMinimum": 0.0,
+      "maximum": 7.5,
+      "title": "Phase Maximum Abs Zdr Db",
+      "type": "number"
+    },
+    "export_native": {
+      "default": true,
+      "title": "Export Native",
+      "type": "boolean"
+    }
+  },
+  "title": "XQCConfig",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "x-qc-v2.schema.json"
+}
