@@ -80,7 +80,8 @@ class XQCConfig(BaseModel):
     radial_phase_jitter_deg: float = Field(default=20., ge=10., le=60.)
     radial_maximum_dbzh: float = Field(default=35., ge=25., le=45.)
     radial_source_enabled: StrictBool = False
-    radial_source_maximum_width_deg: float = Field(default=3., gt=0., le=5.)
+    radial_source_block_model_enabled: StrictBool = False
+    radial_source_maximum_width_deg: float = Field(default=3., gt=0., le=7.)
     radial_source_minimum_span_m: float = Field(default=20000., ge=10000., le=50000.)
     radial_source_minimum_fraction: float = Field(default=.7, ge=.7, le=1.)
     radial_source_maximum_gap_m: float = Field(default=1500., ge=0., le=2000.)
@@ -116,6 +117,8 @@ class XQCConfig(BaseModel):
 
     @model_validator(mode="after")
     def contracts(self):
+        if self.radial_source_block_model_enabled and not self.radial_source_enabled:
+            raise ValueError("block source model requires radial source evidence")
         if self.radial_source_enabled and self.noise_censor_snr_db is None:
             raise ValueError("radial source evidence requires an explicit receiver noise floor")
         for name in ("receiver_enabled", "radial_objects_enabled", "clutter_enabled", "isolation_enabled",

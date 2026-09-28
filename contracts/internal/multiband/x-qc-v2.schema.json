@@ -2579,7 +2579,7 @@
     "radial_source_maximum_width_deg": {
       "default": 3.0,
       "exclusiveMinimum": 0.0,
-      "maximum": 5.0,
+      "maximum": 7.0,
       "title": "Radial Source Maximum Width Deg",
       "type": "number"
     },
@@ -2610,6 +2610,11 @@
       "maximum": 3.0,
       "title": "Radial Source Maximum Spread Db",
       "type": "number"
+    },
+    "radial_source_block_model_enabled": {
+      "default": false,
+      "title": "Radial Source Block Model Enabled",
+      "type": "boolean"
     }
   },
   "title": "XQCConfig",

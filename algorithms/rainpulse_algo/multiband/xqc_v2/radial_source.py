@@ -74,6 +74,11 @@ def detect(s, cfg, *, protected):
                                    "reference_blocks": np.unique(blocks[train]).tolist(),
                                    "reference_gates": int(len(train)), "target_gates": int(len(accepted)),
                                    "snr_center_db": center, "range_response_offset_db": offset})
-    return result, {"status": "EVALUATED", "source_gates": int(result.sum()),
+    block_record = {"status": "DISABLED"}
+    if cfg.radial_source_block_model_enabled:
+        from .source_blocks import detect as detect_blocks
+        block_mask, block_record = detect_blocks(s, cfg, protected=protected)
+        result |= block_mask
+    return result, {"status": "EVALUATED", "block_model": block_record, "source_gates": int(result.sum()),
                     "models": models, "method": "bilateral-receiver-corridor-heldout-v1",
                     "rho_is_weather_truth": False}

@@ -68,3 +68,18 @@ Actual >=15dBZ gates beyond25km remaining after all QC:
 |110.33|304|304|
 
 This is a partial fix. It does not resolve broad/interrupted radial strips or establish a rainfall false-removal rate. Source gate count3924 overlaps existing causes; total newly rejected is2697 (11851−9154), not3924. Keep the unresolved classes in the acceptance ledger.
+
+## 2026-09-29 repeated-defect correction: intermittent source blocks
+
+The new screenshot explicitly labels the north, east and southern interrupted strips. The earlier correction targeted contiguous narrow sources and was not complete. Failure conditions re-read and measured on the frozen input:
+
+- Per-gate range occupancy rejects a source with valid REF in only40–60% of gates, even when measured SNR and the range response repeat for50km. Missing REF must not be used as a no-source vote.
+- A single median envelope over the entire ray mixes near/far power regimes and gate-amplitude modes. It leaves dotted fragments and can veto all distant matches.
+- A weak edge ray cannot supply the same absolute shoulder contrast as its angular source peak. The actual southern corridor needs6.22degrees; the old5degree bound excludes it. The reviewed ZF701 configuration uses7degrees, with broad11ray weather preserved by regression.
+- The existing35% heuristic budget correctly abstains when the newly recognized source fraction exceeds that configured cap. The detector must not bypass it. The explicit ZF701 candidate configuration uses60%; other stations and S stay unchanged.
+
+The optional block model retains bilateral measured-quiet shoulders, geometry gaps, explicit weather protections and the finalizer budget. It estimates robust block centers, fits the range-response slope, and requires20km reference span,1.75x range leverage and >=70% block support. Constant-reflectivity rain has a -20dB/decade residual slope and is rejected as a source. Each target and adjacent blocks are excluded from training. Robust per-block5/95percentile envelopes handle recurrent amplitude modes without turning one reference outlier into a wide gate envelope. Models record their reference blocks and gate envelopes. No station/bearing/time/screenshot rectangle is encoded in detection.
+
+Regression command: `uv run --project algorithms python -m pytest algorithms/tests/xqc_v2_20260928 algorithms/tests/multiband -q`.135 pass. Red run before implementation: intermittent and changed-power source tests returned0 detections; the repeated-amplitude test also failed before the gate-envelope correction. Controls include broad rain, constant REF, short echo, missing shoulder/sector, explicit protection, held-out rain core, raw preservation and action-budget abstention.
+
+Offline evidence: firstcut8733source /16605quarantine (previous11851); main rays13.36/349.20/195.23/162.21/110.33/321.41 retain2/10/6/1/2/0 >=15dBZ gates beyond25km. All9cuts evaluate normally. Nextscan93d2d253 firstcut5497source/14313quarantine (previous9490), actual195.35ray303→7. ZF605 seven nonemptycuts have0newsource; ZF101 f34ee820 firstcut also0newsource. These are limited controls, not a quantified rainfall false-removal rate. Candidate applies only toZF701; no network-wide promotion, QPE or trusted fusion.
