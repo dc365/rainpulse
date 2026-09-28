@@ -1,11 +1,26 @@
 # RainPulse Project Memory
 
-Updated: 2026-09-26 (Asia/Taipei)
+Updated: 2026-09-28 (Asia/Taipei)
 
 This file is the concise handoff for a new Codex session. Stable engineering
 rules remain in `AGENTS.md`; implementation details remain in the referenced RP
 documents. Do not add passwords, tokens, private data-source details, or raw
 operational data here.
+
+## Single working directory (2026-09-28)
+
+- User requires all future RainPulse maintenance and branch work in `rainpulse-nowcast`; no new worktrees, clones or branch directories (including temporary checkouts). This overrides historical worktree workflows mentioned below.
+- 2026-09-28 cleanup completed: removed all ten historical sibling worktrees with `git worktree remove` and pruned stale registrations; branch history retained. All committed HEADs were already contained in main at `3757cbb`, so no merge was needed. Uncommitted deploy-build and sx-qc-ui changes, plus local build/runtime/validation evidence, are preserved as patches and archives under `.build/worktree-retirement-20260928/` (inventory and removal receipt included). Reinstallable dependencies and caches were excluded. Archived uncommitted changes were not applied to main; inspect them if needed. Only `rainpulse-nowcast` remains as the working directory.
+- Further uncommitted pre-existing work (diagnostics/clutter-fusion/qc_zarr/Go operations_adapter modifications plus height-datum-pkg deletion, 2026-09-28) is preserved at `.build/x-qc-v2-apply-20260928/uncommitted-tracked-vs-3757cbb.patch` and was not applied to main.
+
+## X QC v2 shared-core candidate (2026-09-28, e549510)
+
+- Delivery package `rainpulse-x-qc-v2-20260928/` (x-shared-qc-20260928-v2, gpt-pro) applied on baseline `3757cbb` and committed as local main `e549510`: opt-in `station.x_qc.enhancement` reusing S radial cores with X-scale receiver/clutter/isolated-object policy and independent attenuation/quantitative readiness. Default behavior unchanged without enhancement config; no Go change; delivery dir stays untracked user input.
+- Integration deviation: the package's network.schema.json recipe targeted a package-side baseline differing from the committed blob; only that edit was applied manually (enhancement `$ref` inserted at the real `properties/stations/additionalProperties/properties/x_qc` location). All other files applied through the installer's blob-hash guards; rollback receipt `.rainpulse-xqc-v2-backup-271304ccb40e43218ad16f12ff373a7f/`.
+- Verified locally: xqc_v2 34 tests; clutter_fusion+receiver_domain 247 (author-side shared-regressions failure was their incomplete checkout); `scripts/test_multiband.sh` (Go/Python/Web); contracts 50; performance AB/CD via official scripts. New-code lint errors are style-class only and left unfixed to preserve payload SHA auditability.
+- Deployed to 105 during an idle queue window: `ops-multiband-worker` x2 on `rainpulse-cpu-worker:x-qc-v2-e549510-mb` (from sx-full-extent-c1e30be), `ops-qc-worker` on `x-qc-v2-e549510-qc` (from performance-cd-full-20260927-r1); layered images copy committed multiband source; release dir `.build/x-qc-v2-e549510/` with release.json receipt; all healthy, web 200, rainpulse.service and s-backfill unaffected. Enhancement profiles not generated/deployed; activation needs `make_x_qc_v2_profiles.py` output plus explicit review. No real ZF701 case acceptance yet (manifest `actual_zf701_tested=false`).
+- 105 notes: the recorded compose chain referenced deleted `/home/yons/rainpulse-optimized-b3-20260922-stage/optimized-images.yaml`; restored as empty `services: {}` placeholder. The transient `rainpulse-sx-priority1-x-qc` submitter unit is gone while qc-backfill state.json still says RUNNING with 2 queued (updated 06:54Z); inspect before any rerun. `rainpulse-sx-storage-recovery` remains historical failed.
+
 
 ## Current S/X mainline: Priority 1 (2026-09-27)
 
@@ -102,7 +117,7 @@ operational data here.
   and probes support32 stations with unchanged4-way backend concurrency.
   Regression tests first failed on16 limit, then Go operations and7Web tests
   passed; Web build passed; actual105 browser selected28/32 with no alerts.
-  New worktree rainpulse-sx-priority1-followup beside main (old/tmp removed).
+  Historical worktree rainpulse-sx-priority1-followup beside main (old/tmp removed); superseded by the single-directory rule above.
 - X QC runner now includes next-midnight00:00–00:06 tail, waits on source23h
   checkpoint; four runners check actual MinIO disk bytes AND100k free inodes.
   Resumed state clears stale error text. Keep failed-storage receipt before

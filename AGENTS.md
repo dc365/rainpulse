@@ -3,6 +3,7 @@
 ## Project scope
 
 - This repository is the only active workspace for RainPulse short-term precipitation nowcasting work.
+- User decision (2026-09-28): perform all RainPulse changes, reviews, builds and maintenance in this `rainpulse-nowcast` directory. Use Git branches here; do not create new worktrees, clones or per-branch source directories, even under temporary directories, unless the user explicitly changes this decision. Preserve existing uncommitted work before switching branches; coordinate or serialize concurrent tasks rather than creating another checkout.
 - At the start of a new session, read `PROJECT_MEMORY.md` for the current branch,
   deployment, feature and handoff state. Keep it concise and update it only when
   those facts materially change. Never put credentials or private source data in it.
