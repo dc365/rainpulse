@@ -9,6 +9,18 @@ operational data here.
 
 ## Current S/X mainline: Priority 1 (2026-09-27)
 
+- STORAGE CORRECTION 2026-09-28: staging FAILED because root filesystem inode
+  count reached100%, despite547GiB free bytes. Original MinIO source/mount
+  untouched. Cleanup of ONLY unactivated new storage/upper copy is running;
+  inode/free-space recovery verified, control7307d05 remains ready. Do NOT
+  restart stage unit or trust old COPYING JSON. Original upper measured438GiB;
+  direct migration cannot retain120GiB reserve plus room for all-day outputs.
+  User approval requested for relocating unrelated Qwen3.5-9B-MTP-GGUF279GiB
+  to root disk preserving old access path, or another storage choice. Await
+  answer before touching models. All batch submissions remain stopped.
+  Heartbeat updated to enforce this correction. Capacity guards must check
+  both free bytes and inodes on actual MinIO filesystem before resuming.
+
 - 2026-09-28 storage blocker: MinIO overlay upper is on a different filesystem
   from deployment root. Its disk is99% full (18GiB free); root has573GiB free.
   X import stopped at04/ZF501 due XMinioStorageFull;4S QC jobs also failed
