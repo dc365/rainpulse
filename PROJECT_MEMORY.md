@@ -9,6 +9,33 @@ operational data here.
 
 ## Current S/X mainline: Priority 1 (2026-09-27)
 
+- LATEST 2026-09-28: user explicitly authorized Qwen3.5-9B-MTP-GGUF
+  relocation preserving old path. Original MinIO upper/mount unchanged; failed
+  staging copy fully removed, root inodes recovered~620k. Do not resume old
+  MinIO staging. New `rainpulse-model-relocation.service` copied279GiB/83files
+  to /home/yons/hwapp/models/Qwen3.5-9B-MTP-GGUF and is SHA256-verifying both
+  copies. It switches original path with bind mount/fstab and deletes only
+  verified old duplicate. State/hash receipts under rainpulse-minio-storage/
+  model-relocation.json and model-sha256.json. COMPLETE required before claims.
+- `rainpulse-sx-storage-recovery.service` waits for model COMPLETE, tests real
+  S3 put/get/delete own probe, restarts idle S QC workers only if queue empty,
+  rebuilds4 verified storage-failed S scans through normal API, then resumes
+  batch units in dependency order. Script .build/sx-priority1/storage-recover.py,
+  checkpoint storage-recovery/state.json. Currently WAITING_STORAGE.
+- Source/main/105 control and Web now cb73a87: frontend selection, resolution
+  and probes support32 stations with unchanged4-way backend concurrency.
+  Regression tests first failed on16 limit, then Go operations and7Web tests
+  passed; Web build passed; actual105 browser selected28/32 with no alerts.
+  New worktree rainpulse-sx-priority1-followup beside main (old/tmp removed).
+- X QC runner now includes next-midnight00:00–00:06 tail, waits on source23h
+  checkpoint; four runners check actual MinIO disk bytes AND100k free inodes.
+  Resumed state clears stale error text. Keep failed-storage receipt before
+  retrying X import04/ZF501. Storage recovery handles this preservation.
+- Capacity follow-up:187 recent X QC results average63.26MiB/max84.13MiB;
+  model relocation restores~279GiB but does not prove capacity for entireday.
+  Continue bounded processing; estimate whole-day remaining footprint and
+  address capacity before hitting reserve, without unauthorized data deletion.
+
 - STORAGE CORRECTION 2026-09-28: staging FAILED because root filesystem inode
   count reached100%, despite547GiB free bytes. Original MinIO source/mount
   untouched. Cleanup of ONLY unactivated new storage/upper copy is running;
