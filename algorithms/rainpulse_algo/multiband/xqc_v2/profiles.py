@@ -22,6 +22,11 @@ def generate(parent, radar_ids, backend):
                                 ("all-cr", "cr_only", True), ("all-quarantine", "quarantine", True)):
         out = copy.deepcopy(parent)
         out["release_id"] = parent["release_id"][:60] + "-xqc2-" + name
+        # The v2 read set decodes dual-pol moments and masks; real 40-cut X
+        # volumes exceed the legacy 512 MiB network budget, so releases must
+        # lift it to the streaming X QC constant's headroom.
+        out["maximum_input_bytes"] = max(int(out.get("maximum_input_bytes", 0)),
+                                         1024 * 1024**2)
         for sid in radar_ids:
             x = out["stations"][sid].setdefault("x_qc", {})
             if x.get("enhancement") is not None:

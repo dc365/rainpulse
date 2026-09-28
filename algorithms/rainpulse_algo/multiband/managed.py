@@ -21,7 +21,10 @@ from .model import MAX_SWEEPS, Network, Volume, epoch
 from .product import sx_comparison_objects, x_qc_objects
 from .quality import x_qc, accept_s_qc
 
-MAX_X_QC_INPUT_BYTES = 512 * 1024**2
+# X_QC_FIELDS decodes the dual-pol moments plus per-moment masks; a real
+# 40-cut dual-pol X volume (zf101 2026-08-28) reaches 625.7 MiB decoded, so
+# the streaming X QC budget must exceed the legacy 512 MiB single-pol bound.
+MAX_X_QC_INPUT_BYTES = 1024 * 1024**2
 
 
 class VolumeCache:

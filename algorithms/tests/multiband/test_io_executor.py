@@ -411,6 +411,49 @@ def test_x_qc_runs_geometry_free_without_spatial_products(tmp_path):
     assert len(loads)==41  # root index once, then one object selection per sweep
 
 
+def test_x_qc_input_budget_covers_dual_pol_volume_accounting(tmp_path):
+    import zarr
+    from zarr.storage import MemoryStore
+    from rainpulse_algo.multiband.managed import MAX_X_QC_INPUT_BYTES
+    document={'schema_version':'1.0','release_id':'x-budget-fixture',
+      'stations':{'x1':{'band':'X','source':'normalized_zarr','x_qc_enabled':True,
+                        'geometry_verified':False,'calibration_verified':False,'calibration_id':'unverified'}},
+      'products':{},'maximum_input_bytes':MAX_X_QC_INPUT_BYTES}
+    config=tmp_path/'x-budget-network.json'; config.write_text(json.dumps(document))
+    station=Network.load(config).stations['x1']
+    store=MemoryStore(); root=zarr.group(store=store)
+    end=datetime.fromisoformat(TARGET.replace('Z','+00:00')).timestamp()
+    root.attrs.update(contract_name='rainpulse.normalized-radar-volume',radar_id='x1',radar_band='X',scan_id='x1-b',
+                      volume_start_time_utc=datetime.fromtimestamp(end-60,UTC).isoformat(),
+                      volume_end_time_utc=datetime.fromtimestamp(end,UTC).isoformat(),scan_type='volume')
+    root.create_dataset('sweep_number',data=np.arange(1,dtype=np.int16))
+    group=root.create_group('sweep_000')
+    rays,gates=360,999
+    shape=(rays,gates)
+    group.create_dataset('azimuth',data=np.arange(rays,dtype=np.float32))
+    group.create_dataset('range',data=np.arange(gates,dtype=np.float32)*75.)
+    group.create_dataset('elevation',data=np.full(rays,.5,np.float32))
+    group.create_dataset('ray_time',data=np.full(rays,end,np.float64))
+    group.create_dataset('DBZH',data=np.zeros(shape,np.float32))
+    group.create_dataset('OBSERVED_MASK',data=np.ones(shape,np.uint8))
+    group.create_dataset('NO_ECHO_MASK',data=np.zeros(shape,np.uint8))
+    for name in ('SNR','RHOHV','ZDR','VR','SW','PHIDP'):
+        group.create_dataset(name,data=np.zeros(shape,np.float32))
+    objects={key:store[key] for key in store.keys()}
+    source={'radar_id':'x1','scan_id':'x1-b','input_uri':'s3://fixture/x1',
+            'volume_start':datetime.fromtimestamp(end-60,UTC).isoformat(),
+            'volume_end':datetime.fromtimestamp(end,UTC).isoformat(),
+            'available_at':datetime.fromtimestamp(end,UTC).isoformat()}
+    _,nbytes=read_x_qc_sweep(objects,station,source,0,
+                              asset_sha256=logical_digest(objects),maximum_bytes=MAX_X_QC_INPUT_BYTES)
+    # zf101 2026-08-28 measures 625.7 MiB for 40 cuts of (360,1998) with this
+    # field set; the adapter's own accounting must keep such volumes inside
+    # the streaming budget (the 512 MiB legacy bound rejected them).
+    projected=nbytes/(rays*gates)*40*360*1998
+    assert projected>512*1024**2
+    assert projected<=MAX_X_QC_INPUT_BYTES
+
+
 def test_network_and_task_schemas_allow_only_geometry_free_x_qc():
     from pathlib import Path
     root=Path(__file__).resolve().parents[3]
