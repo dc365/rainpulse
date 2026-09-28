@@ -9,6 +9,29 @@ operational data here.
 
 ## Current S/X mainline: Priority 1 (2026-09-27)
 
+- 2026-09-28 storage blocker: MinIO overlay upper is on a different filesystem
+  from deployment root. Its disk is99% full (18GiB free); root has573GiB free.
+  X import stopped at04/ZF501 due XMinioStorageFull;4S QC jobs also failed
+  publication. S46 station-hours/X98 station-hours complete; X QC71 batches,
+  full-day composite0. All batch submitters are stopped; control7307d05 ready.
+- All four operational runner guards now check actual upper filesystem rather
+  than deployment directory, retaining120GiB reserve. Storage evidence is
+  `.build/sx-priority1/storage-blocker.json` on105. No data deleted.
+- Authorized non-destructive migration staging is ACTIVE in systemd unit
+  `rainpulse-minio-storage-stage`: copies old upper with rsync -aHAX to
+  `/home/yons/hwapp/rainpulse-minio-storage/upper` on root disk, stops below
+  120GiB reserve, preserves old source. State/log are migration-state.json and
+  rsync-stage.log in that new directory. Script /tmp/sx-storage-stage.py.
+  COPYING or STAGED_REQUIRES_FINAL_SYNC is NOT migration completion.
+- Next: inspect stage outcome; controlled final sync with writers quiesced,
+  preserve overlay whiteouts/xattrs, update mount/fstab with rollback, verify
+  S3 read/write and old assets, repoint capacity guards, then rebuild4failed S
+  jobs normally and resume retained batch checkpoints. Do not remove unrelated
+  model directories or original source data. Migration not yet switched.
+- Old /tmp/rainpulse-sx-completion worktree was removed externally; use this
+  original main for reading and a new isolated worktree for code modifications.
+  Current-task heartbeat updated with storage recovery and this durable path.
+
 - User requires Priority 1 (source completeness / full-day availability / per-frame
   evidence) to finish before Priority 2 (QC and fusion effect quantification).
   Do not mix algorithm tuning, QPE/forecast enablement or unrelated redesign.
