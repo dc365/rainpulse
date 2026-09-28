@@ -188,3 +188,30 @@ Red evidence (ignored local artifacts): fan-residual-red.txt,
 strong-spoke-red.txt, fan-sparse-red.txt, fan-dropout-red.txt. Published results
 must be new immutable tasks, with source/config hashes and raw-data checks.
 The old pinned URLs intentionally remain old results.
+
+
+### Published verification — fc757e8
+
+- Source committed to main and pushed before105 deployment. Images
+  `rainpulse-cpu-worker:x-fan-fc757e8-mb/-qc`; onlyZF701 opt-in profile changed.
+- **150 tests passed.70/70 registered scans reprocessed;630/630 native cuts
+  evaluated and audited.** Unique scan IDs exactly match the frozen catalog,
+  UTC00:03:32.136–06:56:19.288. This is registered coverage, not a24hour claim.
+- Every published raw-array hash matches its normalized source. All recognized
+  source gates have exclusion action2 and missing QC values; QPE remains off.
+  No action-budget abstention;173cuts contain source detections.
+- Live map verification covers original3.36degree cut, next0.47degree cut,
+  next2.36degree cut formerly blocked by budget, plus08:15 and11:03 times.
+  Dominant fan/spoke patterns are removed in the inspected problem views.
+  Sparse local residuals remain; task success is not zero-error meteorological
+  truth. Other-station operational promotion and independent rain-loss scoring
+  are outside this candidate verification; no trustedfusion/QPE/forecast.
+- First run dc0c65e1-45f7-46d6-b3ea-04044a72bf67; original result
+  cdf17f1f-dd23-4448-8319-f621ac206a0b.68fc6e8a-77ce-498d-af70-f52babbe3f69;
+  adjacent result176858fc-dc52-446e-a852-84e8f735d870.d91d9053-24a6-4832-95a8-738874bc4b60.
+- Audit SHA256953e38687ac9e34a36ea0de0c2a014d366d64ba635df3583315ebcae6f96f09e.
+  Local ignored fan-release-summary.json and fan-audit.jsonl were copied to
+  existing105 `.build/x-radial-1d81cd1/`; release-fan-fc757e8.json records
+  REGISTERED_SCANS_REPROCESSED_VERIFIED and names rollback files.
+- S services/configuration are unchanged. Scheduled follow-up stays PAUSED.
+  Old pinned result URLs remain immutable; use the new result identity.
