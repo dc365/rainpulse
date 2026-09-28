@@ -21,6 +21,13 @@ operational data here.
 - Deployed to 105 during an idle queue window: `ops-multiband-worker` x2 on `rainpulse-cpu-worker:x-qc-v2-e549510-mb` (from sx-full-extent-c1e30be), `ops-qc-worker` on `x-qc-v2-e549510-qc` (from performance-cd-full-20260927-r1); layered images copy committed multiband source; release dir `.build/x-qc-v2-e549510/` with release.json receipt; all healthy, web 200, rainpulse.service and s-backfill unaffected. Enhancement profiles not generated/deployed; activation needs `make_x_qc_v2_profiles.py` output plus explicit review. No real ZF701 case acceptance yet (manifest `actual_zf701_tested=false`).
 - 105 notes: the recorded compose chain referenced deleted `/home/yons/rainpulse-optimized-b3-20260922-stage/optimized-images.yaml`; restored as empty `services: {}` placeholder. The transient `rainpulse-sx-priority1-x-qc` submitter unit is gone while qc-backfill state.json still says RUNNING with 2 queued (updated 06:54Z); inspect before any rerun. `rainpulse-sx-storage-recovery` remains historical failed.
 
+## 2026-09-28 X QC v2 启用 + 预算回归修复（db153c2）
+
+- 用户要求启用 v2 并修 bug。页面实证残留：ZF701 径向辐条、ZF101 海上强回波环（v1 X 质控不清理）。全库排查后定位实质代码 bug：e549510 无条件扩展 `X_QC_FIELDS`（ZDR/VR/SW+各矩掩码）但 `MAX_X_QC_INPUT_BYTES` 仍 512 MiB，双矩 X 站（zf101 实测 40×(360,1998) 全矩解码 625.7 MiB）任何重算都在 `read_x_qc_sweep` 抛 "selected decoded X sweep exceeds memory budget"，与是否启用 enhancement 无关。修复 `db153c2`：常量 512 MiB→1 GiB；`xqc_v2/profiles.py` 生成网络 `maximum_input_bytes`≥1 GiB（schema 上限 2 GiB）；回归测试用适配器自身记账把 zf101 体量钉在预算内（multiband+xqc_v2 共 100 测试全绿）。
+- 105 r2 发布：`.build/x-qc-v2-e549510/src` 同步修复后重建 `rainpulse-cpu-worker:x-qc-v2-e549510-r2-mb/-r2-qc`，release.json 已记 r2 块（含验证 run id）。compose 链 = 容器标签里 37 个文件原样（勿再用三文件子集起独立 project，会造出 sx-priority1-* 重复容器；且 `cat >` 原地换挂载网络文件会让运行中旧 worker 立即失配变 unhealthy，必须伴随镜像/网络同步重建）。
+- 网络启用（仅 zf701+zf101 加 enhancement，其余站不变）：`.build/x-qc-v2-network-20260928/` 存 parent-v3 备份与 r2 四档（audit/radial/all-cr/all-quarantine，wradlib 后端）。当前挂载活跃网络 = `sx-full-extent-20260828-v3-xqc2-all-quarantine`。真实运行验证：zf701 audit run 6ee7f498（x.v2.pipeline 9 cut 0 错）、radial 5ff4744b（仅隔离 16 门，极化/侧翼证据门保守）；zf101 修复前 b44d30fc FAILED、r2 后 700b0008 SUCCEEDED；all-quarantine 4a6becd4（zf701 拒绝/隔离 2658/2662 与 8315/8382 门）、8d96208d（zf101 155/155、91/91）。native.npz 数值核对：zf701 sweep0 REJECT 972 门分布 98 射线全 ≤30 dBZ（均值 13.5），DBZH_QC 在拒绝门全 NaN。强回波辐条/环按设计保留（强度不单独触发剔除；交付 profiles 的孤立对象固定 audit 模式），更激进清除需按包验收流程离线调参（radial_maximum_dbzh 等）并做冻结输入四档对照，不得为截图直接放宽。
+- 质控排查页 http://192.168.28.105:4173/?preset=qc&band=X 复核：全天 QC 数据完整（zf101 79/79、zf701 70/70、zf402 46/46 NORMALIZED）；qc-backfill state.json 的 RUNNING 为死提交器陈旧状态（receipt 到 01-45，后续结果由其他路径完成），保留原状未改。
+
 
 ## Current S/X mainline: Priority 1 (2026-09-27)
 
