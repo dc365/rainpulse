@@ -33,6 +33,7 @@ class Reason(IntFlag):
     BACKGROUND = 4096
     RADIAL_FRAGMENT = 8192
     NOISE_FLOOR = 16384
+    RADIAL_SOURCE = 32768
 
 
 @dataclass(frozen=True)
@@ -43,7 +44,7 @@ class Evidence:
 
 def empty(cut, status, reason=""):
     shape = cut.fields["DBZH"].shape
-    masks = ("RECEIVER", "PARTIAL", "RADIAL_OBJECT", "RADIAL_POLAR", "RADIAL_FRAGMENT", "CLUTTER", "ISOLATED",
+    masks = ("RECEIVER", "PARTIAL", "RADIAL_OBJECT", "RADIAL_POLAR", "RADIAL_FRAGMENT", "RADIAL_SOURCE", "CLUTTER", "ISOLATED",
              "HARD_WEATHER", "LOCAL_WEATHER", "NOISE_FLOOR", "PROPOSED", "QUARANTINE", "AVAILABLE")
     a = {"XQC_" + k + "_MASK": np.zeros(shape, "uint8") for k in masks}
     a.update(XQC_REASON=np.zeros(shape, "uint32"), XQC_CLASS=np.zeros(shape, "uint8"),
@@ -240,7 +241,12 @@ def _evaluate(cut, metadata, cfg):
                 "censored_gates": int(censor.sum()), "by_range_km": bands}
     else:
         records["module_records"]["noise_censor"] = {"status": "DISABLED"}
-    proposed = (receiver | partial | noisy | fragments | clutter | isolated) & observed & ~hard
+    from .radial_source import detect as detect_radial_source
+    radial_source, source_record = detect_radial_source(s, cfg, protected=hard | local)
+    records["module_records"]["radial_source"] = source_record
+    why[radial_source] |= int(Reason.RADIAL_SOURCE)
+    quarantine |= radial_source
+    proposed = (receiver | partial | noisy | fragments | radial_source | clutter | isolated) & observed & ~hard
     quarantine &= proposed
     why[hard] |= int(Reason.WEATHER_PROTECTED)
     denominator = int(observed.sum())
@@ -255,7 +261,7 @@ def _evaluate(cut, metadata, cfg):
     proposed |= censor
     quarantine |= censor
     for key, value in (("RECEIVER", receiver), ("PARTIAL", partial), ("RADIAL_OBJECT", radial),
-        ("RADIAL_POLAR", noisy), ("RADIAL_FRAGMENT", fragments), ("CLUTTER", clutter), ("ISOLATED", isolated),
+        ("RADIAL_POLAR", noisy), ("RADIAL_FRAGMENT", fragments), ("RADIAL_SOURCE", radial_source), ("CLUTTER", clutter), ("ISOLATED", isolated),
         ("HARD_WEATHER", hard), ("LOCAL_WEATHER", local), ("NOISE_FLOOR", censor),
         ("PROPOSED", proposed), ("QUARANTINE", quarantine), ("AVAILABLE", observed)):
         a["XQC_" + key + "_MASK"] = view.restore(value.astype("uint8"))

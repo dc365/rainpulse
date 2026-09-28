@@ -2570,6 +2570,46 @@
       "default": true,
       "title": "Export Native",
       "type": "boolean"
+    },
+    "radial_source_enabled": {
+      "default": false,
+      "title": "Radial Source Enabled",
+      "type": "boolean"
+    },
+    "radial_source_maximum_width_deg": {
+      "default": 3.0,
+      "exclusiveMinimum": 0.0,
+      "maximum": 5.0,
+      "title": "Radial Source Maximum Width Deg",
+      "type": "number"
+    },
+    "radial_source_minimum_span_m": {
+      "default": 20000.0,
+      "maximum": 50000.0,
+      "minimum": 10000.0,
+      "title": "Radial Source Minimum Span M",
+      "type": "number"
+    },
+    "radial_source_minimum_fraction": {
+      "default": 0.7,
+      "maximum": 1.0,
+      "minimum": 0.7,
+      "title": "Radial Source Minimum Fraction",
+      "type": "number"
+    },
+    "radial_source_maximum_gap_m": {
+      "default": 1500.0,
+      "maximum": 2000.0,
+      "minimum": 0.0,
+      "title": "Radial Source Maximum Gap M",
+      "type": "number"
+    },
+    "radial_source_maximum_spread_db": {
+      "default": 3.0,
+      "exclusiveMinimum": 0.0,
+      "maximum": 3.0,
+      "title": "Radial Source Maximum Spread Db",
+      "type": "number"
     }
   },
   "title": "XQCConfig",

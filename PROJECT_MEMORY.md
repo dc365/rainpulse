@@ -1,3 +1,10 @@
+## 2026-09-29 user-confirmed radial target and source candidate (not deployed)
+
+- User: obvious radial forms should be QC, including southern strips; do not use the old165–210degree proxy as rain truth.
+- Local opt-in `radial_source.py` detects bilateral measured-quiet SNR shoulders plus long narrow stationary receiver corridors, held-out blocks, weather protections and budget. Defaults disabled; no S edits.
+- 127 XQC/multiband tests pass. Offline 5degree variant: firstcut source3924/totalquarantine11851; actual strong rays321.41/31.41/214.30 source-removal578/578,492/512,546/568. All9cuts evaluated. Nextscan firstcut adds0; broader/sparse forms remain unresolved. ZF605 abd4e26b firstcut adds0.
+- Changes still local, no new105 result; r6 remains live. Do not claim issue resolved. Investigation/evidence in docs/X_RADIAL_ZF701_INVESTIGATION_20260929.md and .build/*integrated*/zf701-allcuts-evidence.jsonl. Hourly automation remains paused.
+
 # RainPulse Project Memory
 
 Updated: 2026-09-28 (Asia/Taipei)
@@ -12,6 +19,14 @@ operational data here.
 - User requires all future RainPulse maintenance and branch work in `rainpulse-nowcast`; no new worktrees, clones or branch directories (including temporary checkouts). This overrides historical worktree workflows mentioned below.
 - 2026-09-28 cleanup completed: removed all ten historical sibling worktrees with `git worktree remove` and pruned stale registrations; branch history retained. All committed HEADs were already contained in main at `3757cbb`, so no merge was needed. Uncommitted deploy-build and sx-qc-ui changes, plus local build/runtime/validation evidence, are preserved as patches and archives under `.build/worktree-retirement-20260928/` (inventory and removal receipt included). Reinstallable dependencies and caches were excluded. Archived uncommitted changes were not applied to main; inspect them if needed. Only `rainpulse-nowcast` remains as the working directory.
 - Further uncommitted pre-existing work (diagnostics/clutter-fusion/qc_zarr/Go operations_adapter modifications plus height-datum-pkg deletion, 2026-09-28) is preserved at `.build/x-qc-v2-apply-20260928/uncommitted-tracked-vs-3757cbb.patch` and was not applied to main.
+
+## X radial re-investigation (2026-09-29, unresolved)
+
+- Latest user explicitly reauthorized X radial debugging for ZF701 scan `07bdd490`; hourly automation stays paused. See `docs/X_RADIAL_ZF701_INVESTIGATION_20260929.md`.
+- Fresh live inspection of latest result `6472afda...6d707899` still shows substantial spokes. Earlier r6 "near clean"/"zero rain removal" claims below are NOT accepted; reject totals and round-angle probes were insufficient. Actual ray321.41 has578 surviving >=15dBZ gates beyond25km, ray31.41 has512, ray214.30 has454.
+- Confirmed current limitations: REF-required flank gate ignores available low-SNR neighbors; rho<=.9 conjunction excludes high-rho interference; spatial phase jitter missing on isolated spokes; coherent S receiver model produces0 models even in diagnostic lower-SNR replay.
+- Candidate flank fix passed synthetic tests but added60 exclusions in the historical southern-sector control (not independently labeled truth). Bilateral restriction still added53; long continuous restriction made no change. All experimental source/test changes reverted, no new deployment. Need independent weather evidence and a different source-family acceptance path, not further blind threshold tuning. Forensic scripts/patch under `.build/`.
+- Live geographic preview y-axis source differs from committed local product.py. Inspect/reconcile before redeploying whole module; do not overwrite this drift accidentally.
 
 ## X QC v2 shared-core candidate (2026-09-28, e549510)
 
