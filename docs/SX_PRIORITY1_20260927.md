@@ -97,3 +97,10 @@ returned to `NORMALIZED` with replacement job
 `31f85290-1443-5b13-b228-adc931e9e2a2` SUCCEEDED; original decode job
 remains FAILED. The four full-day batch units have restarted from checkpoints.
 These statuses are not full-day acceptance.
+
+The first X QC batch after storage recovery had two stale upload attempts from
+the full-disk window. Marker recovery found no complete assets; old workers
+were gone and leases expired. The supported abandon action preserved their
+failed attempts. Since the old plan froze network v2, a fresh v3 plan rebuilt
+that quarter-hour batch. Both replacement tasks succeeded; four full-day
+runners are again active from checkpoints.

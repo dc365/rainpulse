@@ -9,6 +9,23 @@ operational data here.
 
 ## Current S/X mainline: Priority 1 (2026-09-27)
 
+- 2026-09-28 ~06:01Z follow-up: S and X failed decode recovery verified,
+  control + separate cmd/orchestrator binaries both built from42f8cb1.
+  Four batches resumed, but legacy X QC run e56dbcd1 had2 COMMITTING
+  attempts from storage-full window on old dead worker IDs. API recover
+  found no committed marker. After checking expired leases/old workers absent,
+  used supported abandon action to mark failed, then normal retry was blocked
+  by v2→v3 network drift. Preserved old receipt as
+  qc-backfill/00-45-zf604.failed-worker-lost-v2.json; created new v3 plan
+  ca68c75e and run884e84a9, both tasks SUCCEEDED, runner resumed from
+  00-45-zf604 checkpoint. At~06:01Z X QC72 batches and advancing; X import
+  111station-hours, S46station-hours waiting capacity, composite0 waitingQC;
+  all four units ACTIVE. MinIO free~290GiB/108M inodes; RAM~13GiB available.
+  Continue monitoring resource budget and validate outputs. Old failed run
+  is retained; no SQL state changes or fake success. Historical
+  storage-recovery unit STOPPED_ERROR remains from missing transient x-qc unit,
+  which was recreated then started; rely on fresh batch states.
+
 - 2026-09-28 05:55Z: source/main/105 control 42f8cb1. A narrowly gated
   draft-S failed decode rebuild now accepts only frozen raw URI/SHA, same
   config version, FAILED scan and FAILED original decode job. Go unit tests,
