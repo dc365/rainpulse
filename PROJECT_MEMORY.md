@@ -9,6 +9,24 @@ operational data here.
 
 ## Current S/X mainline: Priority 1 (2026-09-27)
 
+- LATEST 2026-09-28 full-extent fix: user requests complete uncropped composite.
+  Source/main/105 control+Web c1e30be; multiband image sx-full-extent-c1e30be
+  derives from 41ea4b2 with only Grid budget patch (performance code preserved).
+  Network grid v3 EPSG:32651 [-553000,2417000,685000,3494000],1238x1077/1km
+  contains native range+1km for all26 usable stations (3600 bearings each).
+  Python2/Go multiband/Web7 tests and build passed. Map fits product bounds.
+  Initial real-data run7cb0d9d3-494a-4327-ae1c-01ea9b4e2649 RUNNING; do not
+  claim complete yet. Unit rainpulse-sx-full-extent-regrid waits for it then
+  regenerates all10 existing UTC00:06..01:00 frames, sequentially. Check
+  .build/sx-priority1/full-extent-regrid/state.json and receipts; script
+  /tmp/sx-full-extent-regrid.py. Verify arrays outside old625x656 grid, map
+  full range and S/S+X UI before acceptance. Existing clipped assets retained.
+- Model relocation COMPLETE:83 files/298906239661 bytes SHA256 verified,
+  original path bind-mounted persistently; old verified duplicate removed.
+  Data free recovered296GiB. Original MinIO overlay unchanged. Storage recovery
+  parser fixed to read structured rebuild receipt amid BDP startup logs;
+  restarted, now rebuilding second of4failed S scans. Check actual state.
+
 - LATEST 2026-09-28: user explicitly authorized Qwen3.5-9B-MTP-GGUF
   relocation preserving old path. Original MinIO upper/mount unchanged; failed
   staging copy fully removed, root inodes recovered~620k. Do not resume old
