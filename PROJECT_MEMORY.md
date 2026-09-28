@@ -1,3 +1,11 @@
+## 2026-09-29 targeted radial-source candidate deployed; residual work remains
+
+- Local main source commit `1d81cd1` pushed to origin. 105 images `rainpulse-cpu-worker:x-radial-1d81cd1-mb/-qc`, layered ONLY config/core/radial_source onto r6; COPY files0644. Three ops workers healthy; S radar-qc workers not restarted. Network SHA7fc94daf...; onlyZF701 has radial_source_enabled=true, maximumwidth5degrees. Hourly/all-day remain paused.
+- Release/rollback receipt105 `.build/x-radial-1d81cd1/`: network-before.json, compose-before.json, compose-chain.json, release.json. Active override remains `.build/x-qc-v2-e549510/compose.json`, current images are new1d81cd1 tags. Do not apply obsolete r6 retag instructions without inspecting this receipt.
+- Run `d28c261b-63cd-440b-96d0-c18533cc9d83` both tasks SUCCEEDED. User scan07bdd490 result `9c1ed4b8-af5c-4b71-9f9b-2af26c9bdb54.874de744-ae0d-4be7-bc5f-2f329e5efd60`: firstcut reject11851 (old9154), source3924 (overlapping causes), raw preserved, source action2+QCNaN verified, QPE eligibilityzero. Actual rays321.41/31.41/214.30 >=15dBZ beyond25km remaining0/20/10 out of578/512/568. New pinned live UI inspected; main narrow spokes reduced.
+- NOT COMPLETE: actual rays13.36/195.23/110.33 retain245/360/304 such gates; wider/discontinuous southern/eastern strips remain. Adjacent93d2d253 firstcut adds0, quarantine9490 unchanged. User labels obvious radial morphology a QC target; old southern-sector rain proxy is invalid as ground truth. Next investigate interrupted/broader source support rather than claim evidence-floor inevitability or indiscriminately widen/lower thresholds. Keep candidate, no trustedfusion/QPE.
+- 127 tests pass; ZF605 control seven nonemptycuts282/172/219/549/113/744/158obs havezero newsource. This is no quantitative rainfall-loss proof. Fresh artifacts `.build/zf701-live-rays.jsonl`, `zf701-live-verification.txt`, `zf701-radial-run.json`, `zf605-allcuts-evidence.jsonl`. Current local geographic preview matches live south-to-north sampling; earlier drift suspicion not reproduced.
+
 ## 2026-09-29 user-confirmed radial target and source candidate (not deployed)
 
 - User: obvious radial forms should be QC, including southern strips; do not use the old165–210degree proxy as rain truth.

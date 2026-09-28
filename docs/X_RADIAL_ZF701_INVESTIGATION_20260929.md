@@ -1,6 +1,6 @@
 # ZF701 radial QC investigation, 2026-09-29
 
-Status: reproduced; not resolved. No algorithm change from this investigation is deployed.
+Status: narrow-source candidate deployed and verified; broader/discontinuous residuals unresolved.
 
 ## Frozen case and live evidence
 
@@ -51,3 +51,20 @@ Current-session evidence (offline, not a deployed result):
 - No new candidate has been deployed at this point. Whole-module deployment must also reconcile the geographic rendering drift noted above.
 
 Recheck before release: current local `geographic_sweep_preview` samples south-to-north, matching the running worker; the earlier drift note is not reproduced on the current source. Deployment will layer only the three changed XQC files on the existing r6 image. ZF605 nonempty controls (cuts3/4/6/7/11/12/38; respectively282/172/219/549/113/744/158 observations) also have zero new source gates.
+
+## Targeted deployment and live acceptance
+
+Source commit1d81cd1 pushed; 105 layered images x-radial-1d81cd1-mb/-qc. OnlyZF701 enabled. Existing S workers and paused full-day jobs untouched. Two-task run d28c261b-63cd-440b-96d0-c18533cc9d83 SUCCEEDED. New first-scan result9c1ed4b8-af5c-4b71-9f9b-2af26c9bdb54.874de744-ae0d-4be7-bc5f-2f329e5efd60 is displayed and inspected in the live browser. Published native arrays match offline counts; source gates all action2 and NaN in QC, QPE eligibilityzero.
+
+Actual >=15dBZ gates beyond25km remaining after all QC:
+
+| Actual bearing | Raw | Remaining |
+|---|---:|---:|
+|321.41|578|0|
+|31.41|512|20|
+|214.30|568|10|
+|13.36|459|245|
+|195.23|363|360|
+|110.33|304|304|
+
+This is a partial fix. It does not resolve broad/interrupted radial strips or establish a rainfall false-removal rate. Source gate count3924 overlaps existing causes; total newly rejected is2697 (11851−9154), not3924. Keep the unresolved classes in the acceptance ledger.
