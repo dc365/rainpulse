@@ -37,6 +37,9 @@ def test_radial_tuning_stays_inside_conservative_bounds():
     assert RADIAL_TUNING["radial_maximum_dbzh"] <= 45.
     assert RADIAL_TUNING["radial_flank_contrast_db"] >= 6.
     assert RADIAL_TUNING["radial_minimum_snr_db"] >= 8.
+    assert RADIAL_TUNING["radial_flank_mode"] in ("both", "either")
+    # Detection-floor censor stays at/below the receiver's own floor.
+    assert RADIAL_TUNING["noise_censor_snr_db"] <= 5.
     # Fragment completion stays a bounded, locally corroborated extension.
     assert 0 < RADIAL_TUNING["fragment_maximum_distance_m"] <= 20000.
     assert RADIAL_TUNING["fragment_minimum_anchor_gates"] >= 3

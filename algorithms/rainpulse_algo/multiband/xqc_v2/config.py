@@ -71,6 +71,10 @@ class XQCConfig(BaseModel):
     maximum_neighbor_elevation_deg: float = Field(default=.3, gt=0., le=1.)
     radial_flank_deg: float = Field(default=6., gt=0., le=15.)
     radial_flank_contrast_db: float = Field(default=8., ge=6., le=20.)
+    # "both" keeps the S parity contract: a quiet comparison must exist on each
+    # side. "either" admits X interference that bleeds into the directly
+    # adjacent ray, hiding one side; the polar conjunction still applies.
+    radial_flank_mode: Literal["both", "either"] = "both"
     radial_minimum_snr_db: float = Field(default=12., ge=8., le=30.)
     radial_maximum_rhohv: float = Field(default=.8, gt=0., le=.9)
     radial_phase_jitter_deg: float = Field(default=20., ge=10., le=60.)
@@ -85,6 +89,14 @@ class XQCConfig(BaseModel):
     fragment_phase_window_gates: int = Field(default=5, ge=3, le=21)
     fragment_phase_minimum_fraction: float = Field(default=.8, gt=.5, le=1.)
     fragment_phase_variance_minimum: float = Field(default=.085, gt=0., lt=1.)
+    # Detection-floor censor: below this SNR the DBZH processor emits
+    # noise-floor + 20log10(r) values that render as false distant echo.
+    # None disables the censor (the default keeps S-parity behaviour).
+    # The integrity cap and coverage floor guard a broken SNR field: a censor
+    # that would swallow the sweep abstains entirely instead.
+    noise_censor_snr_db: float | None = Field(default=None, ge=0., le=10.)
+    noise_censor_maximum_fraction: float = Field(default=.8, gt=0., le=1.)
+    noise_censor_minimum_coverage: float = Field(default=.5, gt=0., le=1.)
     # No velocity/waveform contract is inferred from a field name.
     doppler_verified: StrictBool = False
     doppler_verification_id: str | None = None

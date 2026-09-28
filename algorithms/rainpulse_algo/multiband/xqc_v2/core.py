@@ -32,6 +32,7 @@ class Reason(IntFlag):
     ATTENUATION_UNKNOWN = 2048
     BACKGROUND = 4096
     RADIAL_FRAGMENT = 8192
+    NOISE_FLOOR = 16384
 
 
 @dataclass(frozen=True)
@@ -43,7 +44,7 @@ class Evidence:
 def empty(cut, status, reason=""):
     shape = cut.fields["DBZH"].shape
     masks = ("RECEIVER", "PARTIAL", "RADIAL_OBJECT", "RADIAL_POLAR", "RADIAL_FRAGMENT", "CLUTTER", "ISOLATED",
-             "HARD_WEATHER", "LOCAL_WEATHER", "PROPOSED", "QUARANTINE", "AVAILABLE")
+             "HARD_WEATHER", "LOCAL_WEATHER", "NOISE_FLOOR", "PROPOSED", "QUARANTINE", "AVAILABLE")
     a = {"XQC_" + k + "_MASK": np.zeros(shape, "uint8") for k in masks}
     a.update(XQC_REASON=np.zeros(shape, "uint32"), XQC_CLASS=np.zeros(shape, "uint8"),
              XQC_RECEIVER_MODEL_ID=np.zeros(shape, "uint32"),
@@ -94,7 +95,12 @@ def measured_flanks(s, cfg):
                 supported |= measured & (z[row] - z[other] >= cfg.radial_flank_contrast_db) & (sn[row] - sn[other] >= 6.)
                 current = other
             sides.append(supported)
-        result[row] = sides[0] & sides[1]
+        if cfg.radial_flank_mode == "either":
+            # X interference bleeds into directly adjacent rays, so a quiet
+            # comparison can sit one ray further out on either side.
+            result[row] = sides[0] | sides[1]
+        else:
+            result[row] = sides[0] & sides[1]
     return result
 
 
@@ -206,20 +212,53 @@ def _evaluate(cut, metadata, cfg):
         records["module_records"]["clutter"] = ev.summary
     else:
         records["module_records"]["clutter"] = {"status": "DISABLED"}
+    # Detection-floor censor: at SNR below the receiver's own detection floor
+    # the DBZH processor still emits noise-floor + 20log10(r) values, which
+    # render as false distant echo. SNRH is the radar's own measurement, so
+    # censoring is a calibration policy, bounded by a field-integrity cap.
+    censor = np.zeros(s.shape, bool)
+    if cfg.noise_censor_snr_db is not None:
+        sn_c, sa_c = s.moment("SNR")
+        coverage = float((observed & sa_c).sum()) / max(float(observed.sum()), 1.)
+        candidate = observed & sa_c & np.isfinite(sn_c) & (sn_c < cfg.noise_censor_snr_db) & ~hard
+        fraction = float(candidate.sum()) / max(float(observed.sum()), 1.)
+        if coverage < cfg.noise_censor_minimum_coverage or fraction > cfg.noise_censor_maximum_fraction:
+            records["module_records"]["noise_censor"] = {
+                "status": "ABSTAINED_SNR_FIELD_INVALID", "threshold_db": cfg.noise_censor_snr_db,
+                "snr_coverage": coverage, "censored_fraction": fraction, "censored_gates": 0}
+        else:
+            censor = candidate
+            why[censor] |= int(Reason.NOISE_FLOOR)
+            bands = {}
+            for lo, hi in ((0, 25), (25, 50), (50, 75), (75, 150)):
+                within = censor & (s.ranges[None, :] >= lo * 1000) & (s.ranges[None, :] < hi * 1000)
+                if within.any():
+                    bands[f"{lo}-{hi}km"] = int(within.sum())
+            records["module_records"]["noise_censor"] = {
+                "status": "APPLIED", "threshold_db": cfg.noise_censor_snr_db,
+                "snr_coverage": coverage, "censored_fraction": fraction,
+                "censored_gates": int(censor.sum()), "by_range_km": bands}
+    else:
+        records["module_records"]["noise_censor"] = {"status": "DISABLED"}
     proposed = (receiver | partial | noisy | fragments | clutter | isolated) & observed & ~hard
     quarantine &= proposed
     why[hard] |= int(Reason.WEATHER_PROTECTED)
-    for key, value in (("RECEIVER", receiver), ("PARTIAL", partial), ("RADIAL_OBJECT", radial),
-        ("RADIAL_POLAR", noisy), ("RADIAL_FRAGMENT", fragments), ("CLUTTER", clutter), ("ISOLATED", isolated),
-        ("HARD_WEATHER", hard), ("LOCAL_WEATHER", local), ("PROPOSED", proposed),
-        ("QUARANTINE", quarantine), ("AVAILABLE", observed)):
-        a["XQC_" + key + "_MASK"] = view.restore(value.astype("uint8"))
     denominator = int(observed.sum())
     if int(proposed.sum()) > cfg.maximum_new_exclusion_fraction * max(denominator, 1):
-        # All proposed changes from this enhancement abstain together.
+        # All heuristic changes from this enhancement abstain together.
         why[proposed] |= int(Reason.ACTION_BUDGET)
-        a["XQC_PROPOSED_MASK"][:] = 0; a["XQC_QUARANTINE_MASK"][:] = 0
+        proposed = np.zeros(s.shape, bool)
+        quarantine = np.zeros(s.shape, bool)
         records["status"] = "ACTION_BUDGET_ABSTAINED"
+    # The censor carries its own integrity cap and never triggers, nor is
+    # subject to, the heuristic action budget.
+    proposed |= censor
+    quarantine |= censor
+    for key, value in (("RECEIVER", receiver), ("PARTIAL", partial), ("RADIAL_OBJECT", radial),
+        ("RADIAL_POLAR", noisy), ("RADIAL_FRAGMENT", fragments), ("CLUTTER", clutter), ("ISOLATED", isolated),
+        ("HARD_WEATHER", hard), ("LOCAL_WEATHER", local), ("NOISE_FLOOR", censor),
+        ("PROPOSED", proposed), ("QUARANTINE", quarantine), ("AVAILABLE", observed)):
+        a["XQC_" + key + "_MASK"] = view.restore(value.astype("uint8"))
     a["XQC_REASON"] = view.restore(why)
     records.update(candidate_gates=int(a["XQC_PROPOSED_MASK"].sum()),
                    quarantine_supported_gates=int(a["XQC_QUARANTINE_MASK"].sum()), raw_digest=original)

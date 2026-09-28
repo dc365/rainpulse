@@ -28,6 +28,20 @@ from .config import XQCConfig
 # target-local polarimetric badness + a 20log10(r) source-law match recovers
 # ~1200 more gates per cut with zero rho>0.90 contamination; the 537 cut0
 # candidates with rain-like rho>0.9 stay untouched by design.
+#
+# r6 (measured on scan 07bdd490, the 00:03:32Z volume): two residual failure
+# classes survived r5. (1) The both-sided flank gate passes on only 2.3% of
+# radial&polar gates because X interference bleeds into the directly adjacent
+# ray; "either"-mode flanks raise per-cut removal 34->581 gates while the
+# measured rain-sector (165-210 deg) exposure stays at 4 gates (vs 64 for
+# removing flanks entirely). (2) The "ghost mirror" fan/dotted patterns the
+# page shows beyond ~25 km are not echo at all: gates with SNRH<2 follow the
+# processor's noise floor + 20log10(r) mapping exactly (median 4.5/10.5/15.5/
+# 17.5 dBZ at 10-20/20-40/40-60/60-75 km), so DBZH renders noise as 10-27 dBZ
+# "echo" (31% of observed gates on cut0). A 3 dB detection-floor censor
+# removes them as non-meteorological; real rain sectors (z>=10, SNRH>=8)
+# measured 1089+1635 gates in 160-220 deg and stay intact, and the censor
+# abstains entirely when the SNR field is broken (coverage/cap guards).
 RADIAL_TUNING = {
     "radial_maximum_rhohv": .90,
     "radial_phase_jitter_deg": 10.,
@@ -35,6 +49,8 @@ RADIAL_TUNING = {
     "radial_flank_contrast_db": 6.,
     "radial_minimum_snr_db": 8.,
     "radial_flank_deg": 10.,
+    "radial_flank_mode": "either",
+    "noise_censor_snr_db": 3.,
     "fragment_maximum_distance_m": 15000.,
     "fragment_minimum_anchor_gates": 4,
     "fragment_association_difference_db": 8.,
