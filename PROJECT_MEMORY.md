@@ -45,6 +45,17 @@ operational data here.
 - 用户帧 93d2d253 离线复算：径向路径覆盖 9701→19885 门（9 cut），总隔离 25379→32609，10184 补全门 rho>0.9 污染 0（注意掩码已还原原始行序、rho 在排序序，核对必须先做 order 映射，否则假阳性）；无 ACTION_BUDGET 弃权。105 r5 部署：镜像 `x-qc-v2-e549510-r5-mb`(025ccce6)/`-r5-qc`(5e0d62ee)（src-r5 构建上下文 build-r5；compose 引用的 r2-mb/r2-qc 标签现指向 r5，r2 回退保留为 -r2-keep/-r2-qc-keep）；网络 profiles-r5 all-quarantine（SHA c51f9005…，22 站），r4 切换前备份 active-r4-backup-20260928T153720Z.json；三 ops workers 重建健康（S workers 未动）。重算 run 1449f93e（zf701 00:00–00:15Z）SUCCEEDED，线上数字与离线逐一相同（32609/9701/10184）；map_qc cut0：0°/40-45°/105-115° 辐条基本消失、杂波环大部分清除、南部降水楔完整保留；225°/290-295° 仍有稀疏点状残余 = rho>0.9 或无极化佐证门（cut0 共 537 个），按降雨保护契约保留，S 同样不剔此类门。
 - 对用户口径：质控图随 result 工件走，页面选最新 result 即为 r5 效果；"彻底清除"受证据边界约束——无目标门本地极化证据的辐条段不能剔（会伤雨），这是与 S 一致的设计底线。
 
+## 2026-09-28 X 噪声底 censor + 单侧翼 r6（98f919c）：07bdd490"镜像"伪影根因与清除
+
+- 用户对 r5 提出异议：07bdd490（00:03:32Z，r5 结果 2cb2cd37）质控图"还是各种镜像"。取回该 scan r5 产物逐门分解，找到两个 r5 未覆盖的失败类，并否定两条放宽路线（证据地板）：
+  - **主因：噪声底被当回波显示**。SNRH<2 门的 DBZH 中位数随距离精确爬升（10-20/20-40/40-60/60-75km → 4.5/10.5/15.5/17.5 dBZ）= 处理器噪声底+20log10(r) 映射；占 cut0 观测门 31%，方位成扇区结构（0-20°/130-140°/180-220°/290-300°），就是页面上的"镜像扇形/点线"。真信号（snr≥8）只集中在真实雨区。
+  - **双侧翼被干扰渗透卡死**：radial&polar 门上 flank 通过率仅 2.3%（X 干扰渗入相邻射线）；"either" 单侧翼实测雨区暴露 4 门（彻底去掉 flank 为 64 门）。
+  - **否定的路线**（写档防止再走）：SNRH 是距离代理（雨区 z≥15 门中位 30-50km 6.0、50-75km 3.0），放松 snr 等于无界；长距雨 rho 真实 0.70-0.74 与干扰重叠、37% 雨门 rho≤0.6，rho 上限不可再收；snr≥8 雨射线同样紧贴 20log10 律（p90 中位 3.0dB）且极化异常比例 0.34-0.41 与点状辐条（0.34-0.79）重叠——**断续强信号辐条（10°/30°/105°/320° 约 1267 门）在此雷达矩量上与雨统计不可分**，为已定档证据地板。
+- r6 实现（本地 main `98f919c`）：`noise_censor_snr_db`（默认 None=S 原行为；观测&SNR 可用&低于门限&非硬保护 → 非气象拒绝）+ 完整性护栏（coverage<0.5 或占比>0.8 整体退避，SNR 场损坏不误删）+ 独立于启发式 ACTION_BUDGET（校准底线非启发式）；`radial_flank_mode: both|either`（默认 both）。NOISE_FLOOR=16384 原因位、XQC_NOISE_FLOOR_MASK；RADIAL_TUNING += either + censor 3dB。S qc_engine 零改动。xqc_v2 套件 53 全绿（新增 test_noise_censor.py 7 例 + test_radial_flanks.py 3 例；本地全量除 measurement_v8——sklearn 缺失为既有环境问题）。
+- 验证：07bdd490 cut0 拒绝 753→9154（censor 7183/radial 579/frag 857），形态学辐条 ≥12dBZ/25km 1→0，censor∩snr≥8=0，雨区（165-210°,snr≥8,z≥15）移除 0/351；93d2d253 cut0 3162→9490、雨区 0/9176 移除、map 视觉"接近干净"。zf605 净空站安全：空 cut 正确退避（ABSTAINED_SNR_FIELD_INVALID），有观测 cut 移除 30-60% 亚门限斑点（即净空杂点），无崩溃。
+- 105 部署：镜像 `x-qc-v2-e549510-r6-mb`(a01b7162)/`-r6-qc`(a5a60d59)（build-r6/src，本地 98f919c 树），compose 引用名 r2-mb/r2-qc 重打为 r6；r5 保留 -r5-mb/-r5-qc（及 r5-pre-r6-*），r2 原始 -r2-keep/-r2-qc-keep。网络 profiles-r6 all-quarantine（SHA 79eb09af…，22 站），r5 备份 active-r5-backup-*.json；三 ops workers 重建健康（S workers 未动）。live run 12b9be68（zf701 两卷）SUCCEEDED，数字与离线逐一相同（9154/7183/579/857 与 9490/6125/431/815）；zf605 安全 run e43cc388 SUCCEEDED。视觉评级：07bdd490 残余 ~2/10（0° 一条断续中等辐条=证据地板类+弱短点线），93d2d253 ~1/10。回滚：r5 标签回打 r2 名 + 网络恢复 active-r5-backup + workers 重建（--scale ops-multiband-worker=2）。release.json r6 块已记。
+- 对用户口径：用户看到的"镜像"主体是噪声底渲染 + 双侧翼卡死的强辐条，r6 均已消除且雨区零误删；残留断续弱辐条属于该雷达矩量与雨不可分的证据地板（S 在同类无证据门上同样保留）。
+
 
 ## Current S/X mainline: Priority 1 (2026-09-27)
 
