@@ -9,6 +9,16 @@ operational data here.
 
 ## Current S/X mainline: Priority 1 (2026-09-27)
 
+- 2026-09-28 03:46Z follow-up:8/10 existing catalog frames now verified as
+  full-grid v3 (UTC00:06..00:48);00:54 and01:00 still regridding. Storage~295GiB
+  free/108M inodes. Independently recovered storage-failed X scan8f7da415 via
+  normal draft-X decode rebuild: job32ca4ec4-ca71-5d41-99f3-e921286e151d SUCCEEDED,
+  catalog NORMALIZED with URI, receipt storage-recovery/decode-8f7da415-...json.
+  Old failed job retained; reviewed-failures ledger links successful replacement.
+  Unit rainpulse-sx-recover-x-decode finished. Recovery state now
+  WAITING_S_DECODE_RECOVERY; remaining S decode restriction still needs a
+  tested recovery path. Do not blindly restart storage-recovery before fixing it.
+
 - LATEST 2026-09-28 full-extent fix: user requests complete uncropped composite.
   Source/main/105 control+Web c1e30be; multiband image sx-full-extent-c1e30be
   derives from 41ea4b2 with only Grid budget patch (performance code preserved).
