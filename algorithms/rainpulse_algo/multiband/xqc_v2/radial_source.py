@@ -79,6 +79,11 @@ def detect(s, cfg, *, protected):
         from .source_blocks import detect as detect_blocks
         block_mask, block_record = detect_blocks(s, cfg, protected=protected)
         result |= block_mask
-    return result, {"status": "EVALUATED", "block_model": block_record, "source_gates": int(result.sum()),
+    fan_record = {"status": "DISABLED"}
+    if cfg.radial_source_fan_model_enabled:
+        from .source_fans import detect as detect_fans
+        fan_mask, fan_record = detect_fans(s, cfg, protected=protected)
+        result |= fan_mask
+    return result, {"status": "EVALUATED", "fan_model": fan_record, "block_model": block_record, "source_gates": int(result.sum()),
                     "models": models, "method": "bilateral-receiver-corridor-heldout-v1",
                     "rho_is_weather_truth": False}

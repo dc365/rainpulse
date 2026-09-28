@@ -2615,6 +2615,11 @@
       "default": false,
       "title": "Radial Source Block Model Enabled",
       "type": "boolean"
+    },
+    "radial_source_fan_model_enabled": {
+      "default": false,
+      "title": "Radial Source Fan Model Enabled",
+      "type": "boolean"
     }
   },
   "title": "XQCConfig",

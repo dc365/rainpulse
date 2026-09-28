@@ -89,3 +89,102 @@ Offline evidence: firstcut8733source /16605quarantine (previous11851); main rays
 Deployment105 reused the existing build context; source file hash matches local. Run01af4bba-a6c6-4ad0-bea2-017fa247f3df succeeded2/2. First resultdd9c37cf-5714-4c2c-ae5a-fa7df0d6c3ae.a7a1bde0-92db-4f73-aab4-7ec61da0c707 and nextresulte6019c1e-c90f-41b3-86b3-20fd7f9c76c1.41774257-9a82-4feb-b842-7c803c7026cd were opened in the actual map UI. Source/reject counts match offline8733/16605 and5497/14313. Published source gates are action2/NaN; QPE eligibility iszero. Both exported DBZH_RAW hashes exactly match the frozen normalized cuts.
 
 In approximate bearing sectors corresponding to the three marked areas (north345–20, east100–120, south150–210degrees), >=15dBZ gates beyond25km remaining dropped1022→44,651→13,1693→132. The marked frame no longer shows the previous prominent long strips; sparse points remain. The next frame's strong broad southern wedge remains visible and has not been established as rainfall or interference. Do not call that wedge preserved rainfall truth or claim all XQC is complete. OnlyZF701 enables the block model; S and paused automations are unchanged.
+
+
+## Strong fan recurrence: multi-elevation acceptance (2026-09-29)
+
+User supplied original scan sweep 3 (3.36 degrees) and adjacent scan sweep 0
+(0.47 degrees). These are explicit interference targets, not verified rain.
+The original source detector admits only DBZH below 45 and a family narrower
+than seven degrees. Ablating only the intensity cap changes neither sample;
+angular family exclusion dominates, with the cap also blocking strong cores.
+At original sweep 3 ray 195.46, median SNR remains approximately 58 dB from
+10 to 60 km, while median REF rises from 59 to 71 dBZ; range-normalized REF
+remains approximately 35–36 dB. Independent native values reproduce the issue.
+
+An opt-in `radial_source_fan_model_enabled` candidate now evaluates receiver
+families: measured bilateral quiet shoulders, held-out distance blocks,
+stationary receiver power, range-response fit and two neighbouring supported
+models. It uses the valid instrument REF range, not the weak-spoke cap.
+No station, bearing, time or elevation is encoded. Default remains disabled.
+Missing fields/gaps, protected gates and action budget remain gates.
+
+Regression red run: three strong fan variants all had zero removal before the
+implementation. Merely widening the family misclassified a synthetic
+range-varying weather profile; that variant was rejected. Candidate adds an
+explicit receiver stationarity condition. Tests cover four weather length
+scales, high elevation, strong REF, angular seam, missing angular sector,
+missing receiver observations, explicit protection and embedded rain core.
+Full XQC/multiband suite: 145 passed. Synthetic weather is a regression control,
+not independent precipitation truth or network-wide acceptance.
+
+Current offline evidence, NOT a deployment or completion claim:
+
+| Original cut | Strong gates beyond 25 km (>=35 dBZ) | Rejected |
+|---|---:|---:|
+|0|2|2|
+|1|3|2|
+|2|1112|777|
+|3|1929|1724|
+|4|1243|1167|
+|5|429|400|
+|6|137|132|
+|7|245|185|
+|8|0|0|
+
+Adjacent cut 0: 3643/3801; ZF101 control adds zero source gates.
+These are broad diagnostic counts, not an annotated interference recall score.
+Residuals in cuts 2/3/7 require further gate-level examination; all-time,
+all-station efficacy and independent rain-loss acceptance are NOT established.
+Do not enable or deploy this candidate as a completed fix yet. Current 105
+still runs d075740. Hourly jobs stay paused and S workers are untouched.
+Local evidence: `.build/fan-ablation.txt`, `fan-evaluation.txt`, `fan-allcuts.txt`,
+`source-fans-red.txt`; raw private exports remain ignored under `.build/`.
+
+
+### Follow-up correction and release validation
+
+The residual probe found four additional structural conditions, covered by
+red/green regressions in `test_source_fans.py`:
+
+1. Changing proportions of two REF response modes moved the old midhinge.
+   Fan references use the upper response mode with independently stationary
+   measured receiver power; no target/guard block trains its own model.
+2. A nonzero accepted range-response slope was not used to predict target
+   envelopes. Fan envelopes now use detrended reference residuals and restore
+   the fitted trend at each target range. Evidence records this transformation.
+3. A strong isolated spoke fell between weak-spoke intensity limits and the
+   two-neighbour fan gate. It now uses the same source evidence with local
+   bilateral shoulders. Sparse REF rays in a measured fan seek support within
+   that family's measured receiver boundary; missing telemetry/angular gaps
+   stop traversal rather than counting as quiet shoulders.
+4. REF-only dropouts with unchanged modelled receiver power remained as dotted
+   spokes. Once the target has a held-out source model, a weaker REF value does
+   not make a contaminated receiver measurement clean. Unexpected stronger
+   REF or changed receiver power still falls outside the model.
+
+A suspected local weather proxy cause was disproved in the principal residual:
+its hard/local masks were both zero. No weather-protection policy was changed.
+Independent and local weather protections retain their prior behavior.
+
+Additional frozen evaluation scan: 60b0ff34-de91-5475-a715-7e3cab45a370,
+UTC03:26:01.434; all nine cuts added zero source gates. The two user scans are
+also evaluated over all nine cuts. Raw arrays remain unchanged. These controls
+are not independent rain-gauge truth and do not establish zero rainfall loss.
+
+Adjacent scan cut2 proposed13768/21994 (62.6%) under the previous candidate,
+which exceeded the site's60% cap and erased the whole enhancement. Reviewed
+ZF701 test deployment raises its explicit cap to65%; the common default,
+action-budget enforcement, S configuration and other station profiles remain
+unchanged. Native scan/cut identity and per-frame abstention must be checked.
+Candidate outputs do not enable trusted fusion/QPE/forecast.
+
+Verification commands:
+```
+uv run --project algorithms python -m pytest algorithms/tests/xqc_v2_20260928 algorithms/tests/multiband -q
+git diff --check
+```
+Red evidence (ignored local artifacts): fan-residual-red.txt,
+strong-spoke-red.txt, fan-sparse-red.txt, fan-dropout-red.txt. Published results
+must be new immutable tasks, with source/config hashes and raw-data checks.
+The old pinned URLs intentionally remain old results.
