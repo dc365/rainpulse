@@ -91,3 +91,9 @@ an isolated rebuild prefix, retains the old failed job, and remains idempotent.
 Draft X behavior is unchanged. A unit regression and an isolated PostgreSQL
 integration test verify S admission, failed-source checks, idempotency, and
 rejection of ready stations. Real 105 success must be checked separately.
+
+Real 105 recovery validated: S scan `93a30121-d5bd-50f4-940d-44766f8c1bd7`
+returned to `NORMALIZED` with replacement job
+`31f85290-1443-5b13-b228-adc931e9e2a2` SUCCEEDED; original decode job
+remains FAILED. The four full-day batch units have restarted from checkpoints.
+These statuses are not full-day acceptance.

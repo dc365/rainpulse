@@ -9,6 +9,24 @@ operational data here.
 
 ## Current S/X mainline: Priority 1 (2026-09-27)
 
+- 2026-09-28 05:55Z: source/main/105 control 42f8cb1. A narrowly gated
+  draft-S failed decode rebuild now accepts only frozen raw URI/SHA, same
+  config version, FAILED scan and FAILED original decode job. Go unit tests,
+  controlplane/operations/orchestration/postgres tests, vet, and isolated
+  PostgreSQL integration test passed. Both server and separate orchestrator
+  binaries built from this commit; do not copy the root server binary over
+  cmd/orchestrator again. 105 S scan93a30121 rebuilt to NORMALIZED via job
+  31f85290-1443-5b13-b228-adc931e9e2a2 SUCCEEDED, original job62c43a4d
+  retained FAILED. Receipt storage-recovery/decode-93a30121...json.
+- Storage recovery launched X import and S backfill, then failed because
+  transient rainpulse-sx-priority1-x-qc unit had been garbage-collected.
+  Recreated it with systemd-run, MemoryMax4G/CPUQuota150%, then restarted
+  composite unit. At05:55Z all four units ACTIVE: X import103station-hours,
+  X QC71 batches, S46station-hours waiting QC, composite waiting QC0.
+  Those are starts/checkpoints, not full-day acceptance. Recovery unit state
+  remains historical STOPPED_ERROR for the missing transient unit; inspect
+  active batch unit/checkpoints before rerun. MinIO free~294GiB, inodes108M.
+
 - 2026-09-28 03:46Z follow-up:10/10 existing catalog frames now verified as
   full-grid v3 (UTC00:06..01:00). Regrid state COMPLETE at03:59:31Z;
   each catalog manifest has the same full geographic bounds and each receipt
