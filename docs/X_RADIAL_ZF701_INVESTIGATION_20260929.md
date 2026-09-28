@@ -1,6 +1,6 @@
 # ZF701 radial QC investigation, 2026-09-29
 
-Status: narrow-source candidate deployed and verified; broader/discontinuous residuals unresolved.
+Status: marked-frame intermittent radial correction deployed and visually verified; sparse points and the adjacent strong broad sector remain separate limitations.
 
 ## Frozen case and live evidence
 
@@ -83,3 +83,9 @@ The optional block model retains bilateral measured-quiet shoulders, geometry ga
 Regression command: `uv run --project algorithms python -m pytest algorithms/tests/xqc_v2_20260928 algorithms/tests/multiband -q`.135 pass. Red run before implementation: intermittent and changed-power source tests returned0 detections; the repeated-amplitude test also failed before the gate-envelope correction. Controls include broad rain, constant REF, short echo, missing shoulder/sector, explicit protection, held-out rain core, raw preservation and action-budget abstention.
 
 Offline evidence: firstcut8733source /16605quarantine (previous11851); main rays13.36/349.20/195.23/162.21/110.33/321.41 retain2/10/6/1/2/0 >=15dBZ gates beyond25km. All9cuts evaluate normally. Nextscan93d2d253 firstcut5497source/14313quarantine (previous9490), actual195.35ray303→7. ZF605 seven nonemptycuts have0newsource; ZF101 f34ee820 firstcut also0newsource. These are limited controls, not a quantified rainfall false-removal rate. Candidate applies only toZF701; no network-wide promotion, QPE or trusted fusion.
+
+### Live verification for d075740
+
+Deployment105 reused the existing build context; source file hash matches local. Run01af4bba-a6c6-4ad0-bea2-017fa247f3df succeeded2/2. First resultdd9c37cf-5714-4c2c-ae5a-fa7df0d6c3ae.a7a1bde0-92db-4f73-aab4-7ec61da0c707 and nextresulte6019c1e-c90f-41b3-86b3-20fd7f9c76c1.41774257-9a82-4feb-b842-7c803c7026cd were opened in the actual map UI. Source/reject counts match offline8733/16605 and5497/14313. Published source gates are action2/NaN; QPE eligibility iszero. Both exported DBZH_RAW hashes exactly match the frozen normalized cuts.
+
+In approximate bearing sectors corresponding to the three marked areas (north345–20, east100–120, south150–210degrees), >=15dBZ gates beyond25km remaining dropped1022→44,651→13,1693→132. The marked frame no longer shows the previous prominent long strips; sparse points remain. The next frame's strong broad southern wedge remains visible and has not been established as rainfall or interference. Do not call that wedge preserved rainfall truth or claim all XQC is complete. OnlyZF701 enables the block model; S and paused automations are unchanged.
