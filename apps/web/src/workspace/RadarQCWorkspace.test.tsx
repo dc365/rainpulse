@@ -34,14 +34,14 @@ const stations = { items: [
 const scans = { items: [{ scan_id: 'scan-x', radar_id: 'zf101', volume_start: morning, volume_end: '2026-08-28T00:07:00Z', state: 'NORMALIZED', qc_status: 'READY', results: [{ result_id: 'result-x', version: 'candidate-v1', finished_at: morning }] }], next_cursor: '' }
 const result = { result_id: 'result-x', radar_id: 'zf101', scan_id: 'scan-x', sweeps: [{ sweep_number: 3, sequence: 1, elevation_deg: 0.9, map: { crs: 'EPSG:4326', bounds: [118.8,25.7,119.8,26.7], longitude_deg: 119.3306, latitude_deg: 26.1758, maximum_range_km: 75, coordinate_source: 'normalized_volume_site', projection_version: 'wgs84-geodesic-4over3-v1', raw: '/map-raw-x.png', qc: '/map-qc-x.png', flags: '/map-flags-x.png' }, raw: '/raw-x.png', qc: '/qc-x.png', flags: '/flags-x.png' }] }
 
-function setup() {
+function setup(stationCatalog = stations) {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
   vi.stubGlobal('Image', class { src = ''; decode() { return Promise.resolve() } })
   URL.createObjectURL = vi.fn(() => 'blob:comparison')
   URL.revokeObjectURL = vi.fn()
   vi.stubGlobal('fetch', vi.fn(async (input: string, options?: {body?:string}) => {
     const url = String(input)
-    const data = url.includes('radar-composites/') ? {result_id:'late-composite',manifest:{analysis_time:'2026-08-28T15:54:00Z',comparison:{products:[]}}} : url.includes('radar-composites') ? {items:[{result_id:'late-composite',analysis_time:'2026-08-28T15:54:00Z'}]} : url.includes('radar-layer-resolutions') ? {items:JSON.parse(options?.body??'{}').time===evening?[{id:'zf101',sweeps:[],error:'该窗口无体扫'}]:[{id:'zf101',scan:scans.items[0],sweeps:result.sweeps}],times:[morning]} : url.includes('radar-stations') ? stations : url.includes('radar-scans') ? scans
+    const data = url.includes('radar-composites/') ? {result_id:'late-composite',manifest:{analysis_time:'2026-08-28T15:54:00Z',comparison:{products:[]}}} : url.includes('radar-composites') ? {items:[{result_id:'late-composite',analysis_time:'2026-08-28T15:54:00Z'}]} : url.includes('radar-layer-resolutions') ? {items:JSON.parse(options?.body??'{}').time===evening?[{id:'zf101',sweeps:[],error:'该窗口无体扫'}]:[{id:'zf101',scan:scans.items[0],sweeps:result.sweeps}],times:[morning]} : url.includes('radar-stations') ? stationCatalog : url.includes('radar-scans') ? scans
       : url.includes('radar-products') ? result : url.includes('cycles/cycle-') ? cycleDetail(Number(url.at(-1)))
         : { schema_version: '1.0', items: cycles, generated_at: morning, next_cursor: null }
     return { ok: true, json: async () => data, blob: async () => new Blob(['png'], { type: 'image/png' }) }
@@ -116,4 +116,16 @@ it('shows composite times beyond the S catalog without selected station layers',
  const late=await screen.findByRole('button',{name:/08\/28 23:54 北京时间/})
  fireEvent.click(late)
  await waitFor(()=>expect(new URLSearchParams(window.location.search).get('time')).toBe('2026-08-28T15:54:00.000Z'))
+})
+
+it('selects the whole 4 S + 24 X network without silently truncating stations',async()=>{
+ const full={...stations,items:[...Array.from({length:24},(_,i)=>({...stations.items[0],band:'X',radar_id:`zf${100+i}`})),...['z9591','z9593','z9598','z9599'].map(radar_id=>({...stations.items[0],band:'S',radar_id}))]}
+ setup(full)
+ window.history.replaceState({},'', '/?preset=qc&band=S&mode=overlay&date=2026-08-28&time=2026-08-28T00:06:00Z')
+ render(<RadarQCWorkspace />)
+ await screen.findByRole('checkbox',{name:/ZF123/})
+ fireEvent.click(screen.getByRole('button',{name:'S+X 全部'}))
+ await waitFor(()=>expect(JSON.parse(sessionStorage.getItem('rainpulse.multi-station.layers')??'[]')).toHaveLength(28))
+ const calls=vi.mocked(fetch).mock.calls.filter(([url])=>String(url).includes('radar-layer-resolutions'))
+ expect(JSON.parse(String(calls.at(-1)?.[1]?.body)).radar_ids).toHaveLength(24)
 })

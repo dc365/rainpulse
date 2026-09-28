@@ -35,8 +35,8 @@ func (h *Handler) radarResolutions(w http.ResponseWriter, r *http.Request) {
 		Radars []string  `json:"radar_ids"`
 		Cycle  string    `json:"cycle_id"`
 	}
-	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 16384)).Decode(&q) != nil || q.Time.IsZero() || len(q.Radars) > 16 || len(q.Radars) == 0 {
-		writeProblem(w, Invalid("最多解析16站，请指定时次"))
+	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 16384)).Decode(&q) != nil || q.Time.IsZero() || len(q.Radars) > 32 || len(q.Radars) == 0 {
+		writeProblem(w, Invalid("最多解析32站，请指定时次"))
 		return
 	}
 	start, e := time.Parse("2006-01-02T15:04:05Z07:00", q.Day+"T00:00:00+08:00")

@@ -21,7 +21,7 @@ paths:
     post:
       operationId: resolveWorkspaceRadarLayers
       tags: [radars]
-      summary: Resolve up to 16 registered stations against one six-minute display window with per-station failure isolation.
+      summary: Resolve up to 32 registered stations against one six-minute display window with per-station failure isolation.
       requestBody:
         required: true
         content:
@@ -36,7 +36,7 @@ paths:
                 radar_ids:
                   type: array
                   minItems: 1
-                  maxItems: 16
+                  maxItems: 32
                   items: {type: string}
       responses:
         "200":
@@ -60,7 +60,7 @@ paths:
                 layers:
                   type: array
                   minItems: 1
-                  maxItems: 16
+                  maxItems: 32
                   items:
                     type: object
                     required: [id, x, y]

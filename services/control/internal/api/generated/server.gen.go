@@ -2391,7 +2391,7 @@ type ServerInterface interface {
 	// ProbeWorkspaceRadarLayers Read native scalar values bound to each displayed image pixel, never colours.
 	// (POST /workspace/radar-layer-probes)
 	ProbeWorkspaceRadarLayers(w http.ResponseWriter, r *http.Request)
-	// ResolveWorkspaceRadarLayers Resolve up to 16 registered stations against one six-minute display window with per-station failure isolation.
+	// ResolveWorkspaceRadarLayers Resolve up to 32 registered stations against one six-minute display window with per-station failure isolation.
 	// (POST /workspace/radar-layer-resolutions)
 	ResolveWorkspaceRadarLayers(w http.ResponseWriter, r *http.Request)
 	// GetWorkspaceRadarProduct Validated native polar comparison, pinned to task and attempt; no operational promotion.
@@ -2692,7 +2692,7 @@ func (_ Unimplemented) ProbeWorkspaceRadarLayers(w http.ResponseWriter, r *http.
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// ResolveWorkspaceRadarLayers Resolve up to 16 registered stations against one six-minute display window with per-station failure isolation.
+// ResolveWorkspaceRadarLayers Resolve up to 32 registered stations against one six-minute display window with per-station failure isolation.
 // (POST /workspace/radar-layer-resolutions)
 func (_ Unimplemented) ResolveWorkspaceRadarLayers(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)

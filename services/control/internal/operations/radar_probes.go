@@ -31,8 +31,8 @@ func (h *Handler) radarProbes(w http.ResponseWriter, r *http.Request) {
 	var q struct {
 		Layers []radarProbeSelection `json:"layers"`
 	}
-	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 32768)).Decode(&q) != nil || len(q.Layers) < 1 || len(q.Layers) > 16 {
-		writeProblem(w, Invalid("点查最多16个图层"))
+	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 32768)).Decode(&q) != nil || len(q.Layers) < 1 || len(q.Layers) > 32 {
+		writeProblem(w, Invalid("点查最多32个图层"))
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)

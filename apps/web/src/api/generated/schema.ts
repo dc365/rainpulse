@@ -13,7 +13,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Resolve up to 16 registered stations against one six-minute display window with per-station failure isolation. */
+        /** Resolve up to 32 registered stations against one six-minute display window with per-station failure isolation. */
         post: operations["resolveWorkspaceRadarLayers"];
         delete?: never;
         options?: never;
