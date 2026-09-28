@@ -9,8 +9,10 @@ operational data here.
 
 ## Current S/X mainline: Priority 1 (2026-09-27)
 
-- 2026-09-28 03:46Z follow-up:8/10 existing catalog frames now verified as
-  full-grid v3 (UTC00:06..00:48);00:54 and01:00 still regridding. Storage~295GiB
+- 2026-09-28 03:46Z follow-up:10/10 existing catalog frames now verified as
+  full-grid v3 (UTC00:06..01:00). Regrid state COMPLETE at03:59:31Z;
+  each catalog manifest has the same full geographic bounds and each receipt
+  SUCCEEDED. Storage~295GiB
   free/108M inodes. Independently recovered storage-failed X scan8f7da415 via
   normal draft-X decode rebuild: job32ca4ec4-ca71-5d41-99f3-e921286e151d SUCCEEDED,
   catalog NORMALIZED with URI, receipt storage-recovery/decode-8f7da415-...json.
@@ -28,9 +30,8 @@ operational data here.
   Initial real-data run7cb0d9d3-494a-4327-ae1c-01ea9b4e2649 SUCCEEDED
   in608.7s; old-grid-outside valid cells S6317/X861/S+X7169, exact fmax.
   Live1920x1080 S/S+X comparison verified; map bounds111.9894,21.5459,
-  124.9493,31.5810. Receipt full-extent-validation.json on105. Other9frames
-  still regridding: do not claim all history complete. Unit rainpulse-sx-full-extent-regrid waits for it then
-  regenerates all10 existing UTC00:06..01:00 frames, sequentially. Check
+  124.9493,31.5810. Receipt full-extent-validation.json on105. All10 existing frames
+  regenerated successfully UTC00:06..01:00; full-day backfill still pending. Check
   .build/sx-priority1/full-extent-regrid/state.json and receipts; script
   /tmp/sx-full-extent-regrid.py. Verify arrays outside old625x656 grid, map
   full range and S/S+X UI before acceptance. Existing clipped assets retained.

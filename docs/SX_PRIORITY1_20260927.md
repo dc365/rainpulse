@@ -77,6 +77,6 @@ Validated real UTC00:12 run `7cb0d9d3-494a-4327-ae1c-01ea9b4e2649`
 SUCCEEDED (608.7 s): shape1077×1238; outside former bounds, S6317/X861/S+X7169
 valid cells; S+X equals fmax(S,X), preserving NaNs. Live1920×1080 S/S+X
 comparison shows complete product extent. Server receipt
-`.build/sx-priority1/full-extent-validation.json`. Remaining nine already
-published frames regrid sequentially under `rainpulse-sx-full-extent-regrid`;
-this representative acceptance does not establish full-day completion.
+`.build/sx-priority1/full-extent-validation.json`. All ten previously published frames UTC00:06–01:00 have `SUCCEEDED` receipts;
+the live catalog returns full grid v3 and identical complete geographic bounds
+for each. This does not establish full-day completion.
