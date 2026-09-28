@@ -15,8 +15,11 @@ operational data here.
   Network grid v3 EPSG:32651 [-553000,2417000,685000,3494000],1238x1077/1km
   contains native range+1km for all26 usable stations (3600 bearings each).
   Python2/Go multiband/Web7 tests and build passed. Map fits product bounds.
-  Initial real-data run7cb0d9d3-494a-4327-ae1c-01ea9b4e2649 RUNNING; do not
-  claim complete yet. Unit rainpulse-sx-full-extent-regrid waits for it then
+  Initial real-data run7cb0d9d3-494a-4327-ae1c-01ea9b4e2649 SUCCEEDED
+  in608.7s; old-grid-outside valid cells S6317/X861/S+X7169, exact fmax.
+  Live1920x1080 S/S+X comparison verified; map bounds111.9894,21.5459,
+  124.9493,31.5810. Receipt full-extent-validation.json on105. Other9frames
+  still regridding: do not claim all history complete. Unit rainpulse-sx-full-extent-regrid waits for it then
   regenerates all10 existing UTC00:06..01:00 frames, sequentially. Check
   .build/sx-priority1/full-extent-regrid/state.json and receipts; script
   /tmp/sx-full-extent-regrid.py. Verify arrays outside old625x656 grid, map
@@ -25,7 +28,16 @@ operational data here.
   original path bind-mounted persistently; old verified duplicate removed.
   Data free recovered296GiB. Original MinIO overlay unchanged. Storage recovery
   parser fixed to read structured rebuild receipt amid BDP startup logs;
-  restarted, now rebuilding second of4failed S scans. Check actual state.
+  4failed S QC replacements SUCCEEDED. Recovery then found2decode failures
+  (verified XMinioStorageFull artifact_publish in worker logs): S scan
+  93a30121-d5bd-50f4-940d-44766f8c1bd7/job62c43a4d-f864-5d05-9d48-299ac941dbac
+  and X scan8f7da415-e838-5460-a698-b0cb07e6275b/jobddadc54f-b537-5407-ae0c-8b857a65c576.
+  Recovery script extended for normal decode rebuild but STOPPED_ERROR:
+  current API restricts rebuild to draft X, so S submission was rejected.
+  No original failed state changed. Next must add/test narrowly scoped failed-S
+  decode recovery or use an existing sanctioned regeneration path; do not bypass
+  lifecycle/SQL states. X rebuild pending behind this S check. Batch units remain
+  stopped; full-extent regrid is independently running successfully.
 
 - LATEST 2026-09-28: user explicitly authorized Qwen3.5-9B-MTP-GGUF
   relocation preserving old path. Original MinIO upper/mount unchanged; failed
