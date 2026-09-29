@@ -79,3 +79,43 @@ The same cut proposed87940/128665 gates (68.348%) before noise censor, including
 passed replay for cuts2/4/5/6 with joint evidence: all EVALUATED; the global default and budget mechanism are unchanged. This budget accommodates the reviewed candidate scene, not a claim of false-positive safety.
 
 Final local regression: 165 XQC/multiband tests passed. Default-protect, independent hard protection and joint-policy range-varying weather controls passed. Joint-policy real controls preserve all828 ZF101 strong gates and produce zero radial-source detections across all9 ZF701 UTC03:26 cuts. First deployed acceptance covered7 volumes/63 cuts, revealing3 evidence abstentions and1 budget abstention; the follow-up release must recheck these before completion.
+
+## 105 release acceptance (2026-09-29)
+
+Code `4ed11c3` committed/pushed before deployment. Worker images
+`rainpulse-cpu-worker:x-residual-4ed11c3-mb` / `-qc`, network release
+`sx-xqc-residual-4ed11c3`, network SHA256
+`6ab65a7217caa682568a1a505bec2be97bd743ff61551a8052e2ea64eab61208`.
+Two multiband workers healthy; S worker images unchanged. Initial candidate
+network validation correctly rejected an overlength release name before service
+mutation; shortened version validated and deployed successfully.
+
+Runs `d8f09b09-06c4-4dbc-8cce-7aff36106591`,
+`050365ee-0b53-4783-ab0a-f328a7700588`,
+`e965eed3-c196-429e-826e-d04d32f1902c`: all7 tasks SUCCEEDED.
+All63 native cuts EVALUATED, all raw DBZH SHA256 checks equal original,
+all source masks applied as rejected/NaN and QPE eligibility remains false.
+Earlier3 evidence and1 action-budget abstentions are resolved. Local-proxy
+conflicts and continuous/block/fan kind counts remain available per cut.
+
+Real browser verified both ZF70108:07 cuts0/1, ZF70108:49 cut0,
+ZF70208:08 cut0, and ZF70208:02 cut6 (4.29 degrees). Reported strong southern
+residuals, NW spokes, broad southern fan and high-cut NE long ray were removed;
+near-site and separate compact echoes remain. This is bounded sample acceptance,
+not proof that every historical scene is error-free.
+
+Latest-result links (omit an old pinned result ID):
+- [ZF70108:07](http://192.168.28.105:4173/?preset=qc&band=X&mode=single&date=2026-08-28&station=zf701&scan=93d2d253-7dc8-55fd-b428-c1d8b76ad8ef&sweep=1)
+- [ZF70208:08](http://192.168.28.105:4173/?preset=qc&band=X&mode=single&date=2026-08-28&station=zf702&scan=d42663f7-67de-5f8a-901a-7c9163a1d1d2&sweep=0)
+
+Scoped165 tests passed; touched algorithm/test modules passed targeted lint.
+Repository-wide CI36541524613 is not green: existing broad lint/contract and
+legacy S parameter-hash checks fail; do not represent the whole repository as
+passing. No unrelated UI dirt was committed.
+
+MinIO actual volume available133699678208 bytes (~124.5GiB),101811522 inodes
+at acceptance. With120GiB guard, no whole-day backfill or composite regeneration
+was launched. Historical un-recomputed scans/composites retain old immutable
+versions. Next mainline step is capacity-safe wider replay and downstream
+candidate composite regeneration, retaining precipitation controls. Hourly
+follow-up remains paused and trusted fusion/QPE/forecast are not enabled.
