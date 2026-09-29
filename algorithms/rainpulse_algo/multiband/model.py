@@ -238,7 +238,10 @@ class Network:
             if type(v) is not int:
                 raise ValueError(f"{n} must be integer")
         result = cls(data["release_id"], stations, products, hashlib.sha256(raw).hexdigest(), **kwargs)
-        if not (0 <= result.cache_max_bytes <= 512*1024**2 and 1 <= result.cache_ttl_seconds <= 3600 and 1024 <= result.maximum_input_bytes <= 2*1024**3):
+        # 2026-09-30: cap raised for fusion reads of real 40-cut YLX2-D QC
+        # volumes (41 output arrays x 14.4M gates ~ 2.4 GiB per X volume); the
+        # old 2 GiB bound rejected even one such station beside its S partner.
+        if not (0 <= result.cache_max_bytes <= 512*1024**2 and 1 <= result.cache_ttl_seconds <= 3600 and 1024 <= result.maximum_input_bytes <= 8*1024**3):
             raise ValueError("invalid resource budgets")
         return result
 
