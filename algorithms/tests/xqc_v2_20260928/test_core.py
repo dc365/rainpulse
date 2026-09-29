@@ -74,12 +74,13 @@ def test_pipeline_action_contract(mode):
     for k,a in original.items():np.testing.assert_equal(a,v.sweeps[0].fields[k])
 
 
-def test_budget_abstains_without_partial_action():
+def test_budget_abstains_from_rejection_but_preserves_admission_hold():
     v,_=fixture("clutter",gates=180)
     c=config(mode="quarantine",receiver_enabled=False,radial_objects_enabled=False,isolation_enabled=False,maximum_new_exclusion_fraction=.001)
     out=x_qc(v,station(c),"b"*64).sweeps[0]
     assert out.xqc_diagnostics["status"]=="ACTION_BUDGET_ABSTAINED"
-    assert not out.fields["XQC_WITHHELD_MASK"].any()
+    assert out.fields["XQC_WITHHELD_MASK"].any()
+    assert not out.fields["XQC_REJECTED_MASK"].any()
 
 
 @pytest.mark.parametrize("bad",[{"unexpected":1},{"doppler_verified":True},{"mode":"prod"},{"maximum_sweep_gates":0}])

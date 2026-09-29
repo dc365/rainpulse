@@ -76,7 +76,10 @@ def run(volume, station, release_sha256, *, baseline):
         context = context_for_cut(volume, cut, cfg)
         ev = evaluate_cut(cut, volume.metadata, cfg, context=context)
         active = cfg.mode != "audit"
-        withheld = (ev.arrays["XQC_PROPOSED_MASK"] == 1) & active
+        # Exceeding the deletion budget is not evidence that a candidate is clean.
+        # Preserve measurements for review while excluding them from composites.
+        budget_withheld = (ev.arrays["XQC_REASON"] & int(Reason.ACTION_BUDGET)) != 0
+        withheld = ((ev.arrays["XQC_PROPOSED_MASK"] == 1) | budget_withheld) & active
         rejected = (ev.arrays["XQC_QUARANTINE_MASK"] == 1) & (cfg.mode == "quarantine")
         work = cut
         phase_valid = np.zeros(cut.fields["DBZH"].shape, bool)
@@ -131,6 +134,7 @@ def run(volume, station, release_sha256, *, baseline):
                      DBZH_QC_DISPLAY=np.where(action == 2, np.nan, f["DBZH_QC_DISPLAY"]).astype("float32"))
         f.update(ev.arrays)
         f.update(XQC_WITHHELD_MASK=withheld.astype("uint8"),
+                 XQC_BUDGET_WITHHELD_MASK=(budget_withheld & active).astype("uint8"),
                  XQC_REJECTED_MASK=rejected.astype("uint8"),
                  XQC_PHASE_VALID_MASK=phase_valid.astype("uint8"),
                  XQC_PHASE_BLOCKED_MASK=blocked_path.astype("uint8"),

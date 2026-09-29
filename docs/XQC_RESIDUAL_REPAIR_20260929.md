@@ -131,3 +131,9 @@ Full-network UTC00:12 composite run7806b948-b29c-4b2f-8a5d-37d930ec0cc5 has25 fr
 ### New unresolved full-network finding
 
 Browser X/S+X maps reveal southwest spokes dominated by ZF505, traced through WINNER_SOURCE/WINNER_SWEEP_NUMBER. Diagnostic normal x_qc run a10b2832-9d0d-4d28-9bc6-0ef975e41eb0, scan0b5c41f5-978a-5594-8a3b-88f3f70e746d (UTC00:06:31):8 cuts EVALUATED, cut4 ACTION_BUDGET_ABSTAINED with26270 source gates not applied. Raw hashes unchanged. Thus numerical composite consistency passes but artifact-removal acceptance is NOT complete. Next fix must review this cut's proposed exclusion fraction and precipitation controls, and prevent unexecuted QC from being mistaken for accepted clean composite input; do not blindly raise all budgets. Evidence .build/residual-zf505-audit.jsonl and .build/trace-composite-residual.jsonl.
+
+## Budget-abstention admission repair
+
+Root cause: core clears PROPOSED/QUARANTINE when heuristic deletion budget is exceeded; pipeline derived WITHHELD only from PROPOSED, resurrecting the suspicious gates for experimental composition. Preserve the budget guard and raw values; active pipeline now derives review withholding from ACTION_BUDGET reasons as well. Explicit XQC_BUDGET_WITHHELD_MASK is exported. These gates receive candidate/review action3 (unless baseline already rejected), CR eligibility false, phase-path exclusion; audit stays observational. No station budget raised. Single-station review values remain visible as uncertain, not falsely labelled confirmed deletion.
+
+New regression observed2 failures/2 passes on old pipeline; after fix169 XQC/multiband tests pass. Paired weather control remains admitted and raw checks pass. Deployment and real ZF505/composite acceptance follow separately.
