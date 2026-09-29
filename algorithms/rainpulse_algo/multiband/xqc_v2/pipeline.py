@@ -131,7 +131,16 @@ def run(volume, station, release_sha256, *, baseline):
                      QUALITY_SCORE=np.where(eligible, f["QUALITY_SCORE"], 0).astype("float32"),
                      CR_UNCERTAIN_MASK=(obs & ~eligible & (action != 2)).astype("uint8"),
                      DBZH_QC=np.where(action == 2, np.nan, f["DBZH_QC"]).astype("float32"),
-                     DBZH_QC_DISPLAY=np.where(action == 2, np.nan, f["DBZH_QC_DISPLAY"]).astype("float32"))
+                     # Candidate and budget-held gates are hidden from the QC
+                     # display while raw values, action=3 and evidence remain
+                     # available for review. This aligns the map with CR
+                     # admission without turning a candidate into a confirmed
+                     # rejection.
+                     DBZH_QC_DISPLAY=np.where(
+                         (action == 2) | (withheld & ~rejected),
+                         np.nan,
+                         f["DBZH_QC_DISPLAY"],
+                     ).astype("float32"))
         f.update(ev.arrays)
         f.update(XQC_WITHHELD_MASK=withheld.astype("uint8"),
                  XQC_BUDGET_WITHHELD_MASK=(budget_withheld & active).astype("uint8"),

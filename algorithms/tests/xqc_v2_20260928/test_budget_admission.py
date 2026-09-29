@@ -26,6 +26,7 @@ def test_budget_abstention_preserves_raw_but_withholds_active_candidates(mode):
     else:
         assert fields['XQC_WITHHELD_MASK'][budget].all()
         assert not fields['REFLECTIVITY_ELIGIBLE_FOR_CR'][budget].any()
+        assert np.isnan(fields['DBZH_QC_DISPLAY'][budget]).all()
         _, admitted, _ = experimental_fields(fields, 'X')
         assert not admitted[budget].any()
         assert not fields['QPE_ELIGIBLE_MASK'].any()
