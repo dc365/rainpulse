@@ -130,7 +130,14 @@ def run(volume, station, release_sha256, *, baseline):
                      REFLECTIVITY_ELIGIBLE_FOR_CR=eligible.astype("uint8"),
                      QUALITY_SCORE=np.where(eligible, f["QUALITY_SCORE"], 0).astype("float32"),
                      CR_UNCERTAIN_MASK=(obs & ~eligible & (action != 2)).astype("uint8"),
-                     DBZH_QC=np.where(action == 2, np.nan, f["DBZH_QC"]).astype("float32"),
+                     # The single-station preview reads DBZH_QC while the
+                     # experimental composite reads DBZH_QC_DISPLAY. Keep
+                     # both views aligned for candidate and budget-held gates.
+                     DBZH_QC=np.where(
+                         (action == 2) | (withheld & ~rejected),
+                         np.nan,
+                         f["DBZH_QC"],
+                     ).astype("float32"),
                      # Candidate and budget-held gates are hidden from the QC
                      # display while raw values, action=3 and evidence remain
                      # available for review. This aligns the map with CR
