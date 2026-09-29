@@ -18,7 +18,10 @@ TILE = 64
 def attach_probe(objects, prefix, fields, *, image_path, identity):
     names = list(fields)
     shape = np.shape(fields[names[0]])
-    if len(shape) != 2 or max(shape) > 4096 or len(names) > 16:
+    # xqc-hardening-20260929 X probes carry 20 fields (base moments + QC flags
+    # + source/context diagnostics); tiles are self-describing by field name,
+    # so the cap is a sanity bound, not a wire-format limit.
+    if len(shape) != 2 or max(shape) > 4096 or len(names) > 24:
         raise ValueError("invalid probe index dimensions")
     if any(np.shape(value) != shape for value in fields.values()):
         raise ValueError("probe field shapes differ")
