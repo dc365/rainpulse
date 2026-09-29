@@ -10,7 +10,7 @@ import warnings
 import numpy as np
 
 
-def detect(s, cfg, *, protected, fan=False, family_width_deg=None, prepared=None):
+def detect(s, cfg, *, protected, fan=False, family_width_deg=None, prepared=None, response_quantile=90):
     out = np.zeros(s.shape, bool)
     z, za = s.moment('DBZH'); sn, sa = s.moment('SNR')
     # Strong source evidence is evaluated across the valid instrument range.
@@ -33,7 +33,7 @@ def detect(s, cfg, *, protected, fan=False, family_width_deg=None, prepared=None
         if (count >= minimum).sum() < 3:
             continue
         powers = np.array([np.mean(np.percentile(sn[row,g],[25,75])) if len(g) else np.nan for g in gates])
-        responses = np.array([(np.percentile(z[row,g]-law[g],90) if fan else np.mean(np.percentile(z[row,g]-law[g],[25,75]))) if len(g) else np.nan for g in gates])
+        responses = np.array([(np.percentile(z[row,g]-law[g],response_quantile) if fan else np.mean(np.percentile(z[row,g]-law[g],[25,75]))) if len(g) else np.nan for g in gates])
         # Source shoulders bound the whole angular lobe. A weaker edge ray
         # must not demand the same absolute contrast as its measured peak.
         peak = powers.copy()
@@ -118,7 +118,7 @@ def detect(s, cfg, *, protected, fan=False, family_width_deg=None, prepared=None
                 out[row,fresh] = True
                 stats.model()
                 models.append(dict(ray=int(row),target_block=int(ids[target]),reference_blocks=ids[members].tolist(),
-                    reference_gates=len(train),target_gates=len(fresh),response_slope_db_per_decade=slope,
+                    reference_gates=len(train),target_gates=len(fresh),response_quantile=response_quantile if fan else None,response_slope_db_per_decade=slope,
                     response_bounds_detrended=bool(fan),trend_reference_range_m=1000.,
                     response_lower_bound_applied=not fan,
                     reference_span_m=float(np.ptp(ranges)),snr_center_db=power,snr_bounds_db=[float(power_low),float(power_high)],response_bounds_db=[float(low),float(high)]))

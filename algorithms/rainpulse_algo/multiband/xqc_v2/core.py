@@ -295,5 +295,9 @@ def _evaluate(cut, metadata, cfg, *, context=None):
         raise RuntimeError("shared X core mutated original measurements")
     serialized = json.dumps(records, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     if len(serialized) > cfg.maximum_evidence_bytes:
-        raise ResourceLimit("X evidence record budget exceeded")
+        from .evidence_tables import compact
+        records = compact(records)
+        serialized = json.dumps(records, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        if len(serialized) > cfg.maximum_evidence_bytes:
+            raise ResourceLimit("X evidence record budget exceeded after lossless compaction")
     return Evidence(a, records)

@@ -109,3 +109,64 @@ def test_reflectivity_dropout_inside_confirmed_receiver_source_is_contaminated()
     f['DBZH'][row,gates]-=25
     m=detect(v);target=gates&np.isfinite(f['DBZH'][row])
     assert m[row,target].mean()>.9
+
+
+def test_intermittent_secondary_response_mode_does_not_break_primary_corridor():
+    v,row=fan(strength=35)
+    cut=v.sweeps[0];r=cut.range_m;f=cut.fields
+    # The secondary processor mode crosses the 90th percentile from block to
+    # block. The stationary primary receiver source must remain detectable.
+    rng=np.random.default_rng(710)
+    for j in range(row-10,row+11):
+        gates=np.arange(len(r));fraction=np.where((r//5000).astype(int)%2,.06,.18)
+        upper=rng.random(len(r))<fraction
+        f['DBZH'][j,upper]+=10
+    mask=detect(v);target=np.isfinite(f['DBZH'][row])&(r>25000)
+    assert mask[row,target].mean()>.95
+
+
+def test_measured_intermittent_fan_skirts_do_not_break_family_support():
+    v,row=fan(strength=35);cut=v.sweeps[0];f=cut.fields;r=cut.range_m
+    for j in range(row-10,row+11):
+        power=np.full(len(r),5.)
+        if j != row:
+            power[:]=2.5;power[np.arange(len(r))%5<2]=5.5
+        f['SNRH'][j]=power
+        f['DBZH'][j]=power+20*np.log10(r/1000)-22
+    f['OBSERVED_MASK'][:]=np.isfinite(f['DBZH'])
+    mask=detect(v);target=(r>25000)
+    assert mask[row,target].mean()>.95
+
+
+def test_single_observed_corridor_in_measured_fan_has_its_own_range_evidence():
+    v,row=fan();cut=v.sweeps[0];f=cut.fields
+    for j in range(row-10,row+11):
+        if j != row:f['DBZH'][j]=np.nan
+    f['OBSERVED_MASK'][:]=np.isfinite(f['DBZH'])
+    mask=detect(v);target=np.isfinite(f['DBZH'][row])&(cut.range_m>25000)
+    assert mask[row,target].mean()>.95
+
+
+def test_short_receiver_dropouts_inside_source_are_associated_but_rain_is_not():
+    v,row=fan(strength=35);cut=v.sweeps[0];f=cut.fields;r=cut.range_m
+    dropout=(np.arange(len(r))%37==5)&(r>25000)
+    for key in ('DBZH','SNRH'):f[key][row,dropout]-=7
+    target=dropout&np.isfinite(f['DBZH'][row])
+    assert detect(v)[row,target].mean()>.95
+    v,row=fan(strength=35);f=v.sweeps[0].fields
+    for key in ('DBZH','SNRH'):f[key][row,dropout]+=15
+    assert not detect(v)[row,dropout].any()
+
+
+@pytest.mark.parametrize('barrier',['snr_missing','protected','quiet'])
+def test_association_cannot_cross_unmeasured_receiver_or_protected_gate(barrier):
+    v,row=fan(strength=35);cut=v.sweeps[0];f=cut.fields;r=cut.range_m
+    # Restore REF at the local test interval so this only exercises SNR/protection.
+    g=int(np.searchsorted(r,45000));f['DBZH'][row,g-2:g+4]=35+20*np.log10(r[g-2:g+4]/1000)-22
+    f['OBSERVED_MASK'][:]=np.isfinite(f['DBZH'])
+    for key in ('DBZH','SNRH'):f[key][row,g:g+2]-=7
+    protected=np.zeros(f['DBZH'].shape,bool)
+    if barrier=='snr_missing':f['SNRH'][row,g]=np.nan
+    elif barrier=='quiet':f['SNRH'][row,g]=0.
+    else:protected[row,g]=True
+    assert not detect(v,protected)[row,g+1]
