@@ -1,3 +1,66 @@
+## 2026-09-29 组合反射率去除站点选择（第四批，已部署 105）
+
+- 用户定论组合模式无需逐站选择：侧栏不再渲染站点选择区，改为「组合反射率 ·
+  N S + M X 全部参与」标题+说明；「生成组合」radar 清单改为全部已登记站点；
+  组合模式不再发起逐站 X 图层解析 fetch（无渲染消费）。多站叠加模式不变。
+- 全量 153 用例+build 通过；105 部署实测：侧栏 0 复选框、生成组合链接含全部 28 站
+  （chunk `index-Cg8B0ZKs.js`）。仍未提交。
+
+## 2026-09-29 质控排查第三批微调：卷帘移除 + 日期移至时间轴最左（已部署 105）
+
+- 用户定论"卷帘没用"：删除 swipe 布局全链路（Layout 类型、按钮、CSS、
+  MultiStationMap layout 类型收窄 'pair'|'single'），对照布局只剩 双图/单图。
+- 日期从工具栏移到时间轴最左（SharedTimeline cycleControls 槽，紧贴播放控制左侧、
+  间距 7px 成组靠左，状态信息保持右侧），缩短选日期→拖时间轴的鼠标移动；
+  修复 QC 壳 context 行 space-between 造成的大空洞。
+- 全量 153 用例+build+lint 基线通过；105 部署实测生效（chunk `index-eU7rjKCY.js`）。
+  注意 105 的 index.html 有浏览器缓存，验收需带 cache-buster 刷新。仍未提交。
+
+## 2026-09-29 多站叠加/组合反射率 站点选择重设计（Web UI，已部署 105）
+
+- 用户指出「S/X/S+X 全部」点击无反应。根因：`select()` 只有追加语义，已全选时无任何
+  变化；且组合反射率复用整个侧栏，逐站仰角/透明度/顺序控件在该模式不渲染图层（死控件）。
+- 重设计（先方案后落地，见 `docs/多站叠加_站点选择重设计_20260929.md`）：搜索+波段分段
+  筛选（全部/S 站/X 站）+「全选（切换语义，aria-pressed）/清空」作用域=当前筛选；
+  目录与"显示图层"两列表合并为单一站点列表（勾选行内展开仰角/透明度/聚焦/上移）；
+  列表顺序=叠放顺序（首行在图上层）；组合模式隐藏逐站控件并注明"勾选用于生成组合
+  与点查"。sessionStorage 旧 `visible:false` 归一；失效站点选择自动清理。
+- 涉及 MultiStationMap.tsx、radar-qc-workspace.css、RadarQCWorkspace.test.tsx；全量
+  153 用例 + build + lint 基线通过。105 index SHA 前 16 位 `254ee2b82cdafbee`，
+  实测全选 28/32↔取消 0/32、S 站过滤全选=4/32、组合模式裁剪生效。仍未提交。
+
+## 2026-09-29 质控排查布局简化 + overlay/fusion 直达崩溃修复（Web UI，已部署 105）
+
+- 用户反馈 `/?preset=qc` 凌乱、要求简单直接清晰。审查发现 overlay/fusion 模式 URL 直达稳定整页崩溃：
+  数据未返回时 `activeTime` 为空字符串传入 SharedTimeline，`new Date('')` →
+  `RangeError: Invalid time value`（堆栈 `MainWorkspace.tsx timelineDate`）。修复
+  `selectedTime={activeTimelineTime||null}`，新增 overlay 无 time 参数回归测试
+  （既有测试都带 time 参数，曾掩盖该路径）。
+- 布局 8 条横条简化为 5 条：预设页签并入顶栏；验证方式/波段/站点/仰角/日期/质控标记/
+  布局/刷新合并为单一工具栏（日期从时间轴上移）；删除死控件“字段”下拉与摘要条；
+  资料详情并入图例条右侧。地图区 664→768px。
+- 仅改 apps/web 三文件（RadarQCWorkspace.tsx、radar-qc-workspace.css、其测试）；npm test
+  152 用例、lint（无新增问题）、build 通过；变更未提交（保留现场既有未提交工作）。
+  `CompositeMap.test.tsx` `_input` lint error 为 HEAD 既有，与本变更无关。
+- 105 就地更新 dist：回退目录 `apps/web/dist.pre-qc-simplify-20260929`，原 index SHA 前
+  16 位 `36d897c0b1fd2f59`，新 `c5bcf68fb2ea750d`。浏览器验收：单站新布局正常、
+  `mode=overlay` 不再崩溃；fusion 同修复路径，未逐一浏览器复测。
+  详见 `docs/质控排查_布局简化与模式崩溃修复_20260929.md`。
+- 同日第二批（用户要求重设计时间轴，已部署 105）：SharedTimeline 观察模式
+  （observationOnly）改为自适应全宽轨道 `.observation-fit`（原 4px/分钟+24px 最小宽
+  必然横向滚动），帧宽 `min(48px,max(3px,比例))`，>120 帧密集模式；状态行内联
+  `第 N/M 帧`+图层可用性徽章+键盘提示，删观察模式独立可用性条；区间/预报模式渲染
+  路径与契约不变（105 实测无回归）。全量 153 用例+build 通过；105 新 index SHA 前
+  16 位 `25dc93f08ed21a8b`。改动含 MainWorkspace.tsx（SharedTimeline）与
+  workspace.css，仍未提交。
+
+## 2026-09-29 S+X 组合产品用最新 X 质控重算（run 30a5ad71）
+
+- 用户报告融合视图 X 部分仍有很多质控问题。定位：页面 mode=fusion 显示的是独立的 sx-composite 多站产品时间线（MultiStationMap composite），由 sx_composite 计划生成（任务内联跑 X 质控，用执行时刻的代码/网络）；用户 result 链接是单站 x_qc 任务（已最新）但组合模式不读它。旧组合产物=旧 X 质控。
+- 重算：preset sx_composite，product_id sx-fujian-full-test，2026-08-28T00:00–01:00Z（9 个时次），radar_ids=4S(z9591/9593/9598/9599)+10 问题 X（zf101-105/401/402/505/701/702），run 30a5ad71 9/9 SUCCEEDED（hardening a9e9116 代码 + c9e3a3d2 网络）。
+- 验证 00:12 时次（task 0d5b357f）：单站 d41c8ce4 全切 EVALUATED、source 3411-8960/切；新组合图 X 部分辐条/扇形较旧产物明显减少（残余=证据地板类），组合图进一步平滑。组合任务图层：comparison/{s_only,x_only,sx_composite}.png + map/{winner_*,x_added_coverage,...}.png。
+- 注意：Select 要求窗口 ≤1h、产品节拍对齐、radar_ids≤32；X 站需 experimental_enabled（当前全部 28 X 已开）。仅重算 00:00-01:00；其他时段按需批量。
+
 ## 2026-09-29 xqc-hardening-20260929-r1 合入+部署（gpt-pro 包 + 1 个部署阻断 bug 修复）
 
 - 用户指令：把 gpt-pro 的 `rainpulse-xqc-hardening-20260929`（相邻切面上下文/矩量有效性修复，基线 8959496）合入 main 并部署 105。安装器要求 HEAD==基线，而 main 上只有一个文档提交：`git reset --soft 8959496` 后应用（回执 `.rainpulse-xqc-hardening-backup-ec2a371390424b5ab3c3366b5a5b173a/`），17 文件（multiband 流式/适配 + xqc_v2 全套 + 共享 clutter_fusion engine/features + schema）；分开提交 d8dc19d（包）与 5dfb2ab（r7x 记录）。本地 xqc_v2 84 + 交付 18 测试绿。
