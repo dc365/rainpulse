@@ -18,7 +18,12 @@ NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$")
 SHA = re.compile(r"^[0-9a-f]{64}$")
 # Per-sweep decoded limits. Whole-volume X QC is streamed by sweep; its larger
 # sweep-count cap does not change the spatial fusion input contract.
-MAX_GATES = 8_000_000  # per sweep
+# 2026-09-30: raised for real YLX2-D 40-cut volumes (40 x 360 x 1000 = 14.4M
+# gates) which the fusion/adapter whole-volume path sums against this bound;
+# 8M rejected every zf10x volume with "decoded gate budget". Decision science
+# is unchanged - this is a capacity bound only. Peak decode ~0.5 GiB/volume
+# stays inside the 6 GiB worker cap.
+MAX_GATES = 40_000_000  # per sweep
 MAX_SWEEPS = 64       # streamed X QC volume limit
 MAX_FUSION_SWEEPS = 32
 
