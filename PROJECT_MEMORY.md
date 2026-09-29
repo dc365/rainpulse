@@ -1,3 +1,10 @@
+## 2026-09-29 xqc-hardening-20260929-r1 合入+部署（gpt-pro 包 + 1 个部署阻断 bug 修复）
+
+- 用户指令：把 gpt-pro 的 `rainpulse-xqc-hardening-20260929`（相邻切面上下文/矩量有效性修复，基线 8959496）合入 main 并部署 105。安装器要求 HEAD==基线，而 main 上只有一个文档提交：`git reset --soft 8959496` 后应用（回执 `.rainpulse-xqc-hardening-backup-ec2a371390424b5ab3c3366b5a5b173a/`），17 文件（multiband 流式/适配 + xqc_v2 全套 + 共享 clutter_fusion engine/features + schema）；分开提交 d8dc19d（包）与 5dfb2ab（r7x 记录）。本地 xqc_v2 84 + 交付 18 测试绿。
+- **部署阻断 bug（包作者本地验证未跑真实 X 全字段路径）**：X 地图预览探针新增 XQC_SOURCE/CONTEXT 字段后共 18-20 个，超 `diagnostics/radar_probe.py` ≤16 契约上限 → 每个X单站任务在 map_preview 阶段 `ValueError: invalid probe index dimensions`（x.qc/evidence 本体 0 错误）。修复 a9e9116：上限 16→24（瓦片 JSON 按字段名自描述，非线格式变更）。
+- 105 部署：镜像 `x-hardening-d8dc19d`（阻断）→ `x-hardening-a9e9116-mb`(60081561)/`-qc`(1ae06675)（build-h1 上下文：multiband + clutter_fusion engine/features + diagnostics/radar_probe.py 三层 COPY；注意 docker cp 不改名陷阱）；重打 compose 引用名 x-fan-fc757e8-mb/-qc（原 fc757e8 镜像保留 -keep 标签），12 副本重建健康，旧网络 c9e3a3d2 校验通过（新 context 字段默认 disabled，既有开关/阈值保留）。
+- 烟雾验证 run 74bdca73（zf701 07bdd490）SUCCEEDED：探针 18 字段含 XQC_SOURCE_KIND/CONTEXT_*，cut0 REJ 16729/censor 7183，9 切 map_qc 全生成。上下文功能默认关闭未启用；启用需 `scripts/upgrade_xqc_hardening.py` 生成新网络发布身份并重启 worker（未执行）。
+
 ## 2026-09-29 全问题 X 站按 fc757e8 重算（r7x，本会话；不改算法，仅配置+重算）
 
 - 用户指令：另一 LLM 的最新算法（fc757e8，radial_source/source_blocks/source_fans 三代模型）已解决大量径向/扇形问题；用最新算法重算"当前已有的、有径向等问题"的 X 站，全仰角，重新出图；算法本身不许改。
