@@ -2724,6 +2724,15 @@
     },
     "context": {
       "$ref": "#/$defs/ContextPolicy"
+    },
+    "radial_source_local_policy": {
+      "type": "string",
+      "enum": [
+        "protect",
+        "joint_evidence"
+      ],
+      "default": "protect",
+      "title": "Radial Source Local Policy"
     }
   },
   "title": "XQCConfig",

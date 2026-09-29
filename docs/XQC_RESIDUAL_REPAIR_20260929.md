@@ -57,3 +57,25 @@ protected gate, unavailable receiver measurement, or measured below-floor quiet
 gate anywhere between the two anchors now blocks completion. Missing REF with
 continuous measured SNR may be crossed, but the missing REF gate is never acted
 on. Missing-SNR/protected regressions were observed red before this correction.
+
+## Expanded acceptance fixes
+
+Neighbouring ZF702 UTC00:02:15 exposed three larger evidence records still above
+4 MiB after tables. A second lossless `xqc-record-table-zlib-v1` table encoding
+uses zlib/base64, exact decoded length and SHA256. The reader bounds each decoded
+table to64 MiB and rejects trailing/truncated streams. Module status/counts stay
+plain JSON; no scientific records are truncated. The deployed byte cap is unchanged.
+
+An additional long source ray (61.84 degrees, cut6) was fully vetoed by the local
+CF weather proxy (657 remaining gates), despite stationary measured receiver
+power along15–150km. New opt-in `radial_source_local_policy=joint_evidence` permits
+independently fitted source evidence to resolve that endogenous proxy; default
+`protect` remains unchanged. Independent WEATHER_PROTECTED/MIXED masks still
+veto and cross-cut weather conflicts retain their existing policy. Conflict gate
+counts are recorded. This is not a declaration of verified precipitation truth.
+
+The same cut proposed87940/128665 gates (68.348%) before noise censor, including
+86786 receiver-source gates. A station-specific candidate budget0.70 for ZF702
+passed replay for cuts2/4/5/6 with joint evidence: all EVALUATED; the global default and budget mechanism are unchanged. This budget accommodates the reviewed candidate scene, not a claim of false-positive safety.
+
+Final local regression: 165 XQC/multiband tests passed. Default-protect, independent hard protection and joint-policy range-varying weather controls passed. Joint-policy real controls preserve all828 ZF101 strong gates and produce zero radial-source detections across all9 ZF701 UTC03:26 cuts. First deployed acceptance covered7 volumes/63 cuts, revealing3 evidence abstentions and1 budget abstention; the follow-up release must recheck these before completion.

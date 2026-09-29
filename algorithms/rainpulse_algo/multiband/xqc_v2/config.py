@@ -80,6 +80,7 @@ class XQCConfig(BaseModel):
     radial_maximum_rhohv: float = Field(default=.8, gt=0., le=.9)
     radial_phase_jitter_deg: float = Field(default=20., ge=10., le=60.)
     radial_maximum_dbzh: float = Field(default=35., ge=25., le=45.)
+    radial_source_local_policy: Literal["protect", "joint_evidence"] = "protect"
     radial_source_enabled: StrictBool = False
     radial_source_block_model_enabled: StrictBool = False
     radial_source_fan_model_enabled: StrictBool = False
