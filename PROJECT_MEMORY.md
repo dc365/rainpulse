@@ -1,3 +1,51 @@
+## 2026-09-29 ZF505显示准入接缝修复a4032ee（最终复核完成）
+
+- `main` 已 push：`a4032ee`。在 `xqc_v2/pipeline.py` 同时将 `DBZH_QC`（单站地图读取）和 `DBZH_QC_DISPLAY`（候选组合读取）对 `XQC_WITHHELD_MASK` 隐藏；原始 `DBZH_RAW`、动作3、原因和证据仍保留，CR准入继续拒绝待复核门，不改S/QPE/预报。
+- 105 已部署镜像 `x-residual-a4032ee-mb/-qc`，两台 multiband 与 qc Worker 健康。专项 169 测试通过。
+- 最终 ZF505 单站 run `45566924-8a25-4cbc-b0eb-654fd96d1d3d` SUCCEEDED；9 层全部审计，cut4 `ACTION_BUDGET_ABSTAINED`，预算待复核26630门、源26270门，CR漏出0；所有待复核门 `DBZH_QC` 已隐藏，raw/action/flags/eligibility 与前版一致。
+- 全网组合 run `e8cf9d1c-8dd4-496f-a18b-fa754a775b07` SUCCEEDED；完整网格 `1077x1238`，有效格点 S/X/S+X=`53632/13682/57854`，S 与修复前逐格一致，`CR_DBZH=max(S_ONLY,X_ONLY)` 通过，旧版相比移除3265格且无新增值/越界支撑；来源25站，ZF402/ZF703/ZF801因无可用因果输入跳过。小时定时仍暂停。
+- 真实界面已复核：ZF505 单站原始/质控双图与 S/S+X 组合对照均正常，截图见 `output/playwright/zf505-final.png`、`output/playwright/fusion-sx-compare-final.png`。
+
+## 2026-09-29 ZF505预算准入修复44e7e4b（组合验收进行中）
+
+- 已main commit/push后部署105镜像x-residual-44e7e4b-mb/-qc。网络/阈值不变。pipeline依据ACTION_BUDGET保留待复核WITHHELD，拒绝其组合准入，保留raw及删除预算保护。
+- 红测2失败2通过，修复后169专项通过。ZF505单站run e11be507-d381-40bc-b324-2a3b10a47e43 SUCCEEDED：cut4预算hold26630门/源26270门，CR漏出0，raw相同；8个其他层DBZH_QC/action/flags/eligibility逐值不变。
+- 全站网08:12新run 53d18a67-6b19-4880-a4ab-49e229b19f57运行中，输入与旧run7806b948完全相同。完成后执行.build/audit-budget-composite-template.py的数组关系与旧S不变检查，再UI查看。正常全网约28min，不重启/重复提交。最新状态.build/budget-composite-live.json；轮询.build/poll-budget.py。
+- 169测试日志.build/budget-admission-green.log；预算原值保持可见待复核，不应声称单站强制删净/全网已全部质控。小时定时暂停。
+
+## 2026-09-29 当前未完成项：ZF505预算弃用进入组合
+
+- 完整站网08:12组合数值/地图链路通过，但西南条带经WINNER_SOURCE追到ZF505。不能称全站网质控完成。
+- 正常诊断run a10b2832-9d0d-4d28-9bc6-0ef975e41eb0，scan0b5c41f5-978a-5594-8a3b-88f3f70e746d（UTC00:06:31），cut4 ACTION_BUDGET_ABSTAINED，26270源污染门未应用；其余8层EVALUATED。下一步核验实际预算比例/降水保护，解决弃用层进入组合，不能盲升全局预算。
+- .build/residual-zf505-audit.jsonl、.build/trace-composite-residual.jsonl存有证据；未修改算法/网络配置。当前所有本轮提交任务都已结束，无需恢复小时定时。
+
+## 2026-09-29 X 扩大回放与组合跟进
+
+- 用户授权清理15GiB pip下载缓存，实际释放15342678016字节；保留缓存目录、未动雷达/模型。数据盘清理后可用148859305984字节。
+- 新增6体扫54层（UTC01/02/03附近）均SUCCEEDED/EVALUATED、raw哈希一致、动作实际应用；累计13体扫117层。详情docs/XQC_RESIDUAL_REPAIR_20260929.md。
+- 完整网络UTC00:12组合run7806b948-b29c-4b2f-8a5d-37d930ec0cc5已SUCCEEDED并完成数值与S/X/S+X真实地图核验（约28分钟/帧），25站可用，ZF402缺测，ZF703/ZF801排除。完整1077x1238网格，S53632/X16965/SX61119有效格点；逐格max关系、来源、非负年龄通过。其他旧时次未全量更新。现场凭据.build/residual-next-composite-*，54层验收.build/residual-wide-audit.jsonl。小时定时仍暂停。
+
+## 2026-09-29 X 径向/扇形残留修复验收（4ed11c3）
+
+- 已 main commit/push 后部署105：ops multiband/qc `x-residual-4ed11c3-mb/-qc`，网络 `sx-xqc-residual-4ed11c3`。两台multiband健康，S镜像不变。
+- 修复多响应模式、间歇源走廊、有限内段关联、无损证据压缩；ZF701/ZF702候选启用joint_evidence，独立天气保护不变；ZF702候选预算0.70通过本批回放。
+- 165测试通过；7体扫63层全部EVALUATED、原始SHA不变、源标记实际应用、QPE仍关闭。用户4张问题图及ZF70208:02 cut6真实UI已核验。详见docs/XQC_RESIDUAL_REPAIR_20260929.md。
+- MinIO可用约124.5GiB，接近120GiB保护线；未启动全天/组合重算。其他历史图件仍可能旧版，旧result链接固定旧版。下一步容量安全后扩大回放及候选组合更新。小时定时保持暂停。
+- 全仓CI仍有既有lint/contract/S参数哈希失败，不能声称全仓绿。保留其他任务Web及memory脏文件。
+
+## 2026-09-29 X 切站“该时刻无体扫”误报修复（第五批，已部署 105）
+
+- 用户反馈：X 波段切换站点提示"该时刻无体扫"，切时间再切回又有了。根因：切站触发
+  `radar-scans` 按新站重拉，期间 `scans=[]` 且 `target` 保留，门控把加载态当成确定性
+  "无体扫"结论（X 按站取数、S 目录全局一次，故仅 X 切站可见）。
+- 修复三处（RadarQCWorkspace.tsx）：① 新增 `xScansLoading`，加载中门控显示
+  "正在读取体扫… 请稍候"，不再误报；② 槽位匹配优先选**带结果**的体扫（原 find 可能
+  选中无结果体扫直接进门控）；③ 无同槽体扫时回退**最近带结果体扫**（跨站 target 时段
+  不重叠也能出图，时间轴 target 不变）。有 scan 无结果时门控显示
+  "qc_status · 该体扫暂无质控结果"。
+- 新增挂起 fetch 的回归测试（加载态文本 + 释放后出图）；全量 154 用例 + build +
+  lint 基线通过。105 部署实测 zf101→zf102 切换全程双图、新站 40 层仰角、无门控误报。
+
 ## 2026-09-29 组合反射率去除站点选择（第四批，已部署 105）
 
 - 用户定论组合模式无需逐站选择：侧栏不再渲染站点选择区，改为「组合反射率 ·
@@ -60,6 +108,13 @@
 - 重算：preset sx_composite，product_id sx-fujian-full-test，2026-08-28T00:00–01:00Z（9 个时次），radar_ids=4S(z9591/9593/9598/9599)+10 问题 X（zf101-105/401/402/505/701/702），run 30a5ad71 9/9 SUCCEEDED（hardening a9e9116 代码 + c9e3a3d2 网络）。
 - 验证 00:12 时次（task 0d5b357f）：单站 d41c8ce4 全切 EVALUATED、source 3411-8960/切；新组合图 X 部分辐条/扇形较旧产物明显减少（残余=证据地板类），组合图进一步平滑。组合任务图层：comparison/{s_only,x_only,sx_composite}.png + map/{winner_*,x_added_coverage,...}.png。
 - 注意：Select 要求窗口 ≤1h、产品节拍对齐、radar_ids≤32；X 站需 experimental_enabled（当前全部 28 X 已开）。仅重算 00:00-01:00；其他时段按需批量。
+
+## 2026-09-29 sx-fusion-v2-a4032ee 合入+部署（Z-Φ 独立订正 + quality_height_v2 质量分层融合）
+
+- gpt-pro 包 `rainpulse-sx-fusion-v2-a4032ee`（基线 a4032ee=对方当日提交链顶端，24 文件：8 改 16 新）。工作区有他人未提交前端 WIP（7 文件，与包零交集）→ 保留未提交，只提交包路径（01bc636）。验证：scripts/test_sx_path_quality.sh 全绿（PYTHON=algorithms/.venv/bin/python；63 通过+1 numba 跳过）+ xqc_v2 103 + Go race/vet。
+- 105 部署：Python 镜像 `x-sxfusion-01bc636-mb`(3f860dfb)/`-qc`(762bda9d)（build-sx2 上下文 = multiband + clutter_fusion + diagnostics 三层）；Go control 交叉编译（GOOS=linux GOARCH=amd64，services/control）替换 `.build/linux-amd64/rainpulse`（root 属主需 sudo cp；备份 rainpulse.a4032ee.bak）并 systemctl restart rainpulse。
+- **部署坑**：compose 覆盖文件 `.build/x-qc-v2-e549510/compose.json` 已被对方于 18:51 改为引用 `x-residual-a4032ee-mb/-qc`——重打旧标签名（x-fan-fc757e8-*）无效且无提示。已把覆盖文件改为 `x-sxfusion-01bc636-*`（备份 compose.json.x-residual.bak），12 副本重建健康，新模块 attenuation/fusion_quality 导入 OK。
+- 烟雾：run ad0cd866（zf701 07bdd490）SUCCEEDED。新融合产品为 opt-in 候选（默认不生效）：启用需 `prepare_sx_quality_release.py` 生成新网络/产品身份并核验证据字段（Z-Φ 系数/液态/相位/标定/湿罩），未执行。
 
 ## 2026-09-29 xqc-hardening-20260929-r1 合入+部署（gpt-pro 包 + 1 个部署阻断 bug 修复）
 
