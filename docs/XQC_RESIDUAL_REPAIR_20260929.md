@@ -119,3 +119,11 @@ was launched. Historical un-recomputed scans/composites retain old immutable
 versions. Next mainline step is capacity-safe wider replay and downstream
 candidate composite regeneration, retaining precipitation controls. Hourly
 follow-up remains paused and trusted fusion/QPE/forecast are not enabled.
+
+## Wider replay follow-up (2026-09-29)
+
+User authorized clearing only `/home/yons/hwapp/dis/rainpulse-pip-cache-relocated` pip download cache. Its known http/http-v2/selfcheck/wheels children were removed; directory retained. Freed15342678016 bytes, post-cleanup available148859305984 bytes. No radar assets or model files touched.
+
+Wider runs32762e58-e162-4ac3-8b9d-9c2863622e91,25086666-384b-466e-b3ca-34fc37a222c7,8e401680-93fc-45de-80a4-cc091afdde4a completed6 volumes54 cuts near UTC01/02/03. All EVALUATED, raw hashes unchanged, source masks applied, QPE false. Total checked13 volumes117 cuts. ZF70108:57 and ZF70209:59 weak-echo browser controls retain near-site echoes.
+
+Full-network UTC00:12 composite run7806b948-b29c-4b2f-8a5d-37d930ec0cc5 has25 frozen available sources; ZF402 absent/expired, ZF703/ZF801 excluded. Completed in1676865ms (~28min), output6088072 bytes. Numerical audit passed full1077x1238 shape, SHA256, S+X==fmax(S,X) including NaNs, valid source indices and nonnegative ages (maximum587.572s). Valid echo cells S53632/X16965/S+X61119. Browser verified S-only, X-only and S/S+X comparison at08:12. This is pipeline and sampled QC acceptance, not a claim that all other stations are artifact-free. Hourly automation remains paused.
