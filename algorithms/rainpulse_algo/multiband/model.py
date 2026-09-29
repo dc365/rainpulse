@@ -53,6 +53,7 @@ class XProfile:
     # All thresholds are candidate settings, not validated operational constants.
     enhancement: dict[str, Any] | None = None
     attenuation: str = "none"
+    zphi: dict[str, Any] | None = None
     alpha_db_per_degree: float | None = None
     max_pia_db: float = 12.0
     phase_window_m: float = 1000.0
@@ -69,7 +70,7 @@ class XProfile:
             from .xqc_v2.config import XQCConfig
             configured = XQCConfig.model_validate(self.enhancement)
             object.__setattr__(self, "enhancement", json.loads(configured.model_dump_json()))
-        if self.attenuation not in {"none", "phidp_linear", "upstream_verified"}:
+        if self.attenuation not in {"none", "phidp_linear", "upstream_verified", "zphi"}:
             raise ValueError("unsupported X attenuation method")
         for name in ("max_pia_db", "phase_window_m", "max_negative_phase_step_deg", "phase_anchor_max_range_m", "snr_min_db", "rho_candidate_max", "texture_candidate_db", "max_blockage_fraction"):
             finite(getattr(self, name), name)
@@ -81,8 +82,15 @@ class XProfile:
             raise ValueError("require_snr must be boolean")
         if self.alpha_db_per_degree is not None and not 0 < finite(self.alpha_db_per_degree, "alpha") <= 1:
             raise ValueError("alpha must be explicitly positive and bounded")
-        if self.attenuation == "phidp_linear" and self.alpha_db_per_degree is None:
+        if self.attenuation in {"phidp_linear", "zphi"} and self.alpha_db_per_degree is None:
             raise ValueError("phase correction requires a site-validated alpha; no S-band default")
+
+        if self.zphi is not None:
+            from .attenuation import ZPhiOptions
+            from dataclasses import asdict
+            object.__setattr__(self, "zphi", asdict(ZPhiOptions(**self.zphi)))
+        if self.attenuation == "zphi" and self.zphi is None:
+            raise ValueError("Z-Phi requires explicit site/frequency coefficient provenance")
 
 
 @dataclass(frozen=True)
@@ -161,7 +169,7 @@ class Grid:
     method: str = "quality_height"
 
     def __post_init__(self) -> None:
-        if self.method not in {"quality_height", "experimental_horizontal_max"}:
+        if self.method not in {"quality_height", "quality_height_v2", "experimental_horizontal_max"}:
             raise ValueError("unsupported composite method")
         if not NAME.fullmatch(self.grid_id):
             raise ValueError("invalid grid identity")

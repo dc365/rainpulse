@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Explicit X-only Z-Phi options",
+  "type": "object",
+  "properties": {
+    "beta": {
+      "type": "number",
+      "minimum": 0.3,
+      "maximum": 1.5
+    },
+    "coefficient_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]{1,96}$"
+    },
+    "coefficient_source_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "frequency_min_hz": {
+      "type": "number",
+      "minimum": 8000000000.0,
+      "maximum": 12000000000.0
+    },
+    "frequency_max_hz": {
+      "type": "number",
+      "minimum": 8000000000.0,
+      "maximum": 12000000000.0
+    },
+    "minimum_delta_phase_deg": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 90
+    },
+    "minimum_segment_m": {
+      "type": "number",
+      "minimum": 100,
+      "maximum": 20000
+    },
+    "minimum_rhohv": {
+      "type": "number",
+      "minimum": 0.5,
+      "maximum": 1
+    },
+    "phase_period_deg": {
+      "enum": [
+        180,
+        360
+      ]
+    },
+    "maximum_phase_step_deg": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "exclusiveMaximum": 180
+    },
+    "maximum_endpoint_noise_deg": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 20
+    }
+  },
+  "required": [
+    "beta",
+    "coefficient_id",
+    "coefficient_source_sha256",
+    "frequency_min_hz",
+    "frequency_max_hz"
+  ],
+  "additionalProperties": false,
+  "description": "Runtime also checks ordered frequency bounds, frequency applicability and maximum phase step < phase period/2. Provenance SHA is a declaration by a trusted producer, not an independent proof of calibration."
+}

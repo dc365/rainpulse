@@ -18,6 +18,7 @@ from pyproj import Transformer
 
 from rainpulse_algo.performance import timed as _perf_timed
 
+from . import fusion_quality
 from .execution import ExecutionOptions
 from .fusion import (
     allocate_layers,
@@ -31,6 +32,10 @@ from .fusion import (
     update_tile,
 )
 from .model import MAX_FUSION_SWEEPS, Network, epoch, json_bytes
+
+def s_size(volume):
+    return sum(s.fields["DBZH"].size for s in volume.sweeps)
+
 
 FIELDS = ("score", "values", "winner", "wray", "wgate", "h", "age", "resolution")
 DTYPE = np.dtype(
@@ -201,6 +206,11 @@ def build_composite_streaming(
                 raise ValueError("disabled or unverified station")
             if v.metadata.get("network_sha256") != network.sha256:
                 raise ValueError("volume was not translated through this network release")
+            if grid.method == fusion_quality.METHOD:
+                extra = 8 * s_size(v)
+                if v.nbytes + extra > options.maximum_qc_cut_bytes:
+                    raise ValueError("QC cut plus fusion admission fields exceeds execution budget")
+                v = fusion_quality.prepare_source(v, station)
             s = v.sweeps[0]
             order = (sid, v.metadata["scan_id"], s.number)
             if last_order is not None and order <= last_order:
@@ -256,6 +266,7 @@ def build_composite_streaming(
                 raise ValueError("invalid fusion quality score")
             index = len(sources)
             source_record = {
+                    "quality_receipt": getattr(s, "fusion_quality", None),
                     "index": index,
                     "radar_id": sid,
                     "band": station.band,

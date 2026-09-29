@@ -32,15 +32,34 @@ def encode_arrays(arrays, *, maximum_decoded_bytes=256 * 1024**2, maximum_encode
 
 def export_sweep(sweep, metadata, objects):
     record = getattr(sweep, "xqc_diagnostics", None)
+    path_record = getattr(sweep, "path_quality", None)
     if record is None:
-        return None  # Disabled path emits exactly the previous product.
+        if path_record is None or metadata.get("attenuation_method") != "zphi":
+            return None  # No new per-cut files for the inactive legacy path.
+        # Z-Phi can run without the optional nonmet classifier. This record is
+        # explicitly path quality, not an assertion that XQC-v2 was evaluated.
+        from ..model import digest
+        record = {
+            "version": path_record["implementation"], "mode": "path_quality_only",
+            "parameter_sha256": digest(metadata.get("attenuation_parameters", {})),
+            "status": "EVALUATED", "rejected_gates": 0,
+            "withheld_gates": int(np.count_nonzero(
+                (sweep.fields["OBSERVED_MASK"] == 1) & (sweep.fields["PATH_VALID_MASK"] == 0))),
+            "export_native": True,
+        }
     number = int(sweep.number)
     detail = dict(record)
+    if path_record is not None:
+        detail["path_quality"] = path_record
+        detail["path_parameters"] = metadata.get("attenuation_parameters", {})
     key = f"qc-v2/{number}/evidence.json"
     numerical = None
     if record.get("export_native", True):
         needed = {"DBZH_RAW", "DBZH_QC", "QC_ACTION", "MB_QC_FLAGS",
-                  "REFLECTIVITY_ELIGIBLE_FOR_CR", "QPE_ELIGIBLE_MASK"}
+                  "REFLECTIVITY_ELIGIBLE_FOR_CR", "QPE_ELIGIBLE_MASK",
+                  "DBZH_ATTENUATION_CORRECTED", "PIA_DB", "AH_DB_PER_KM", "KDP_EST",
+                  "PATH_VALID_MASK", "PATH_STATE", "PATH_REASON", "RADOME_QUALIFIED_MASK",
+                  "CALIBRATION_QUALIFIED_MASK"}
         arrays = {k: v for k, v in sweep.fields.items() if k in needed or k.startswith("XQC_")}
         arrays.update(azimuth=sweep.azimuth_deg, range_m=sweep.range_m,
                       elevation=sweep.elevation_deg, ray_time_epoch=sweep.ray_time_epoch)

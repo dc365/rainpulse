@@ -111,7 +111,8 @@
                 "enum": [
                   "none",
                   "phidp_linear",
-                  "upstream_verified"
+                  "upstream_verified",
+                  "zphi"
                 ]
               },
               "alpha_db_per_degree": {
@@ -168,10 +169,71 @@
                 "type": "number",
                 "minimum": 0,
                 "maximum": 1
+              },
+              "zphi": {
+                "anyOf": [
+                  {
+                    "$ref": "zphi-options.schema.json"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": [],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "attenuation": {
+                      "enum": [
+                        "phidp_linear",
+                        "zphi"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "attenuation"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "alpha_db_per_degree"
+                  ],
+                  "properties": {
+                    "alpha_db_per_degree": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "maximum": 1
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "attenuation": {
+                      "const": "zphi"
+                    }
+                  },
+                  "required": [
+                    "attenuation"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "zphi"
+                  ],
+                  "properties": {
+                    "zphi": {
+                      "$ref": "zphi-options.schema.json"
+                    }
+                  }
+                }
+              }
+            ]
           },
           "experimental_enabled": {
             "type": "boolean",
@@ -360,7 +422,8 @@
           "method": {
             "enum": [
               "quality_height",
-              "experimental_horizontal_max"
+              "experimental_horizontal_max",
+              "quality_height_v2"
             ],
             "default": "quality_height"
           }

@@ -16,6 +16,7 @@ import numpy as np
 from scipy.ndimage import median_filter
 
 from .model import Station, Sweep, Volume, XProfile
+from .attenuation import VERSION as PATH_VERSION, correct_sweep
 
 
 class Flag(IntFlag):
@@ -144,7 +145,7 @@ def x_qc(volume: Volume, station: Station, release_sha256: str) -> Volume:
     upstream = volume.metadata.get("attenuation_status", "unknown")
     if upstream not in {"raw", "corrected", "unknown"}:
         raise ValueError("unknown upstream correction provenance")
-    if cfg.attenuation == "phidp_linear" and upstream != "raw":
+    if cfg.attenuation in {"phidp_linear", "zphi"} and upstream != "raw":
         raise ValueError("refusing double or unknown upstream attenuation correction")
     if cfg.attenuation == "upstream_verified" and upstream != "corrected":
         raise ValueError("upstream-corrected mode requires explicit observed correction provenance")
@@ -180,33 +181,17 @@ def x_qc(volume: Volume, station: Station, release_sha256: str) -> Volume:
                 raise ValueError("invalid blockage fraction")
             blocked = ~np.isfinite(blockage) | (blockage >= cfg.max_blockage_fraction)
             flags[observed & blocked] |= int(Flag.BLOCKED)
-        pia = np.full(shape, np.nan, np.float32)
-        limited = np.zeros(shape, bool)
-        if cfg.attenuation == "phidp_linear":
-            pia, kdp, limited = phase_linear(
-                sweep,
-                cfg,
-                anchor_verified=volume.metadata.get("phase_anchor_verified") is True,
-                initial_pia_db=volume.metadata.get("pia_at_first_gate_db"),
-            )
-            f["KDP_EST"] = kdp
-            flags[echo & np.isfinite(pia)] |= int(Flag.PHASE_CORRECTED)
-            corrected = f["DBZH"].astype(np.float32) + pia
-            propagation_good = np.isfinite(pia)
-        elif cfg.attenuation == "upstream_verified":
-            propagation_good = _mask(f, "ATTENUATION_VALID_MASK", shape).copy()
-            corrected = np.asarray(f["DBZH"], dtype=np.float32)
+        # A single path interface owns all attenuation states. It takes this
+        # X sweep only; network observations cannot alter the standalone result.
+        path = correct_sweep(sweep, cfg, volume.metadata, linear_solver=phase_linear)
+        pia, limited = path.pia_db, path.limited
+        corrected, propagation_good = path.corrected_dbzh, path.valid.copy()
+        f.update(path.fields())
+        if cfg.attenuation in {"phidp_linear", "zphi"}:
+            f["KDP_EST"] = path.kdp_deg_km
+            flags[echo & propagation_good] |= int(Flag.PHASE_CORRECTED)
+        if cfg.attenuation == "upstream_verified":
             flags[observed & propagation_good] |= int(Flag.UPSTREAM_CORRECTED)
-            # Unknown correction magnitude stays NaN, not a fabricated 0 dB.
-            if "PIA_DB" in f:
-                pia = _shared(f["PIA_DB"], np.float32)
-                if np.any(np.isfinite(pia) & (pia < 0)):
-                    raise ValueError("upstream PIA cannot be negative")
-                limited = np.isfinite(pia) & (pia > cfg.max_pia_db)
-        else:
-            corrected = np.asarray(f["DBZH"], dtype=np.float32)
-            propagation_good = np.zeros(shape, bool)
-        propagation_good &= ~_mask(f, "ATTENUATION_UNRELIABLE_MASK", shape) & ~limited
         flags[observed & ~propagation_good] |= int(Flag.ATTENUATION_UNKNOWN)
         flags[observed & limited] |= int(Flag.ATTENUATION_LIMIT)
         # Independent low-rho + high-texture evidence nominates uncertain
@@ -257,6 +242,7 @@ def x_qc(volume: Volume, station: Station, release_sha256: str) -> Volume:
             DBZH_QC_DISPLAY=display_value,
             QUALITY_SCORE=score,
             QPE_ELIGIBLE_MASK=np.zeros(shape, np.uint8),
+            CALIBRATION_QUALIFIED_MASK=np.full(shape, calibrated, np.uint8),
         )
         result.sweeps.append(
             Sweep(
@@ -268,7 +254,15 @@ def x_qc(volume: Volume, station: Station, release_sha256: str) -> Volume:
                 f,
             )
         )
+        result.sweeps[-1].path_quality = path.summary()
     result.metadata.update(
+        path_quality_version=PATH_VERSION,
+        attenuation_parameters={
+            "method": cfg.attenuation, "alpha_db_per_degree": cfg.alpha_db_per_degree,
+            "max_pia_db": cfg.max_pia_db, "phase_window_m": cfg.phase_window_m,
+            "zphi": cfg.zphi,
+        },
+        attenuation_dependency="standalone_x_no_s_reference",
         processing="x-moment-qc-v1",
         network_sha256=release_sha256,
         quality_semantics="candidate-heuristic-not-probability-v1",
@@ -307,6 +301,9 @@ def accept_s_qc(volume: Volume, station: Station, network_sha256: str) -> Volume
             if name in f:
                 eligible &= f[name] == 0
         f["REFLECTIVITY_ELIGIBLE_FOR_CR"] = eligible.astype(np.uint8)
+        f["CALIBRATION_QUALIFIED_MASK"] = np.full(
+            eligible.shape, station.calibration_verified and
+            volume.metadata.get("calibration_id") == station.calibration_id, np.uint8)
         # This is an explicit network heuristic, not an assertion that legacy
         # S QI is probabilistically comparable to an X classifier's probability.
         f["QUALITY_SCORE"] = np.where(

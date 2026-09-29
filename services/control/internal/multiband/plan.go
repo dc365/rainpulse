@@ -108,7 +108,7 @@ func Parse(raw []byte) (Network, error) {
 		n.Stations[id] = s
 	}
 	for id, g := range n.Products {
-		if g.Method != "" && g.Method != "quality_height" && g.Method != "experimental_horizontal_max" {
+		if g.Method != "" && g.Method != "quality_height" && g.Method != "quality_height_v2" && g.Method != "experimental_horizontal_max" {
 			return n, fmt.Errorf("unsupported composite method")
 		}
 		maximumCells := 1000000

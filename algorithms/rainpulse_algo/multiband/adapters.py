@@ -7,6 +7,7 @@ from rainpulse_algo.performance import (timed as _perf_timed)
 
 import numpy as np
 
+from .attenuation import copy_path_provenance, PATH_INPUT_FIELDS
 from .codec import decode_volume
 from .quality import _shared
 from .model import MAX_GATES, MAX_SWEEPS, Station, Sweep, Volume, epoch
@@ -59,6 +60,7 @@ X_QC_FIELDS = {
 
 # The cut budget includes these actual optional matrices; no missing values are filled.
 X_QC_FIELDS |= {"ZDR", "VR", "SW", "MIXED_WEATHER_MASK"}
+X_QC_FIELDS |= PATH_INPUT_FIELDS
 X_QC_FIELDS |= {name + suffix for name in ("DBZH", "SNR", "SNRH", "RHOHV", "ZDR", "PHIDP", "VR", "SW")
                 for suffix in ("_AVAILABLE_MASK", "_VALID_MASK")}
 
@@ -241,6 +243,7 @@ def from_group(
         "qc_pipeline_version": attrs.get("qc_pipeline_version"),
         "no_echo_semantics": "explicit_mask_or_unknown_no_return",
     }
+    copy_path_provenance(attrs, metadata)
     # If a precise ingest availability exists it may strengthen, never weaken,
     # the catalog's availability cutoff.
     if attrs.get("ingest_available_at_utc") and epoch(attrs["ingest_available_at_utc"]) > epoch(
@@ -378,6 +381,7 @@ def read_x_qc_sweep(objects: dict[str, bytes], station: Station, source: dict, s
                 "phase_anchor_verified": attrs.get("phase_anchor_verified") is True,
                 "pia_at_first_gate_db": attrs.get("pia_at_first_gate_db"),
                 "no_echo_semantics": "explicit_mask_or_unknown_no_return"}
+    copy_path_provenance(attrs, metadata)
     sweep = Sweep(sweep_number, np.asarray(group["azimuth"][:], dtype=float), np.asarray(group["range"][:], dtype=float),
                   np.asarray(group["elevation"][:], dtype=float),
                   ray_seconds(np.asarray(group["ray_time"][:]), dict(group["ray_time"].attrs).get("units")), fields)

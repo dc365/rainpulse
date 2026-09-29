@@ -15,6 +15,7 @@ import numpy as np
 from pyproj import Geod, Transformer
 
 from .model import Network, Station, Sweep, Volume, epoch
+from . import fusion_quality
 
 EARTH_EFFECTIVE_M = 6371000.0 * 4.0 / 3.0
 GEOD = Geod(ellps="WGS84")
@@ -189,6 +190,8 @@ def build_composite(
         if target - epoch(v.metadata["volume_end"]) > station.maximum_age_seconds:
             skipped.append({"radar_id": sid, "reason": "expired"})
             continue
+        if grid.method == fusion_quality.METHOD:
+            v = fusion_quality.prepare_source(v, station)
         for s in sorted(v.sweeps, key=lambda s: s.number):
             for key in ("DBZH_QC", "REFLECTIVITY_ELIGIBLE_FOR_CR", "QUALITY_SCORE"):
                 if key not in s.fields:
@@ -199,6 +202,7 @@ def build_composite(
             index = len(sources)
             sources.append(
                 {
+                    "quality_receipt": getattr(s, "fusion_quality", None),
                     "index": index,
                     "radar_id": sid,
                     "band": station.band,
@@ -281,6 +285,10 @@ def allocate_output(grid):
     out["VALID_LAYER_COUNT"] = np.zeros(shape, np.uint16)
     out["OBSERVED_MASK"] = np.zeros(shape, np.uint8)
     out["NO_ECHO_MASK"] = np.zeros(shape, np.uint8)
+    if grid.method == fusion_quality.METHOD:
+        for name in ("AVAILABLE_BAND_BITS", "QUALIFIED_BAND_BITS", "UNRESOLVED_MASK"):
+            out[name] = np.zeros(shape, np.uint8)
+        out["INPUT_QUALITY_REASON"] = np.zeros(shape, np.uint16)
     return out
 
 
@@ -308,7 +316,8 @@ def update_tile(layers, out, sl, fp, sweep, station, index, grid, *, backend="nu
     noecho = f["NO_ECHO_MASK"][r, g] == 1
     sample = f["DBZH_QC"][r, g]
     echo = valid & ~noecho & np.isfinite(sample)
-    eligible = valid & (f["REFLECTIVITY_ELIGIBLE_FOR_CR"][r, g] == 1) & (noecho | echo)
+    eligibility_field = "FUSION_ELIGIBLE_MASK" if grid.method == fusion_quality.METHOD else "REFLECTIVITY_ELIGIBLE_FOR_CR"
+    eligible = valid & (f[eligibility_field][r, g] == 1) & (noecho | echo)
     quality = (
         f["QUALITY_SCORE"][r, g]
         * np.exp(-fp.age / station.maximum_age_seconds)
@@ -317,6 +326,8 @@ def update_tile(layers, out, sl, fp, sweep, station, index, grid, *, backend="nu
     half = np.maximum((fp.upper - fp.lower) / 2, 1)
     for li, level in enumerate(grid.levels_m_msl):
         represented = (level >= fp.lower) & (level <= fp.upper)
+        if grid.method == fusion_quality.METHOD:
+            fusion_quality.record_sample(out, sl, fp, f, station, represented, eligible & (quality > 0))
         uncertainty = f.get("CR_UNCERTAIN_MASK")
         uncertain = represented & echo & ~eligible
         if uncertainty is not None:
@@ -386,6 +397,8 @@ def finish_composite(out, grid, network, product, analysis_time, cutoff, sources
     # A qualified clear layer cannot turn an uncertain echo at another height
     # into valid no-echo for the column. Keep uncertainty explicitly queryable.
     out["UNCERTAIN_MASK"] = np.isfinite(out["CR_UNCERTAIN_DBZH"]).astype(np.uint8)
+    if grid.method == fusion_quality.METHOD:
+        out["UNCERTAIN_MASK"] |= out["UNRESOLVED_MASK"]
     out["NO_ECHO_MASK"] = (
         (out["OBSERVED_MASK"] == 1) & ~np.isfinite(out["CR_DBZH"]) & (out["UNCERTAIN_MASK"] == 0)
     ).astype(np.uint8)
@@ -423,4 +436,6 @@ def finish_composite(out, grid, network, product, analysis_time, cutoff, sources
             np.count_nonzero((out["OBSERVED_MASK"] == 0) & (out["UNCERTAIN_MASK"] == 0))
         ),
     }
+    if grid.method == fusion_quality.METHOD:
+        fusion_quality.finish_quality(out, meta, sources)
     return Composite(out, meta)
