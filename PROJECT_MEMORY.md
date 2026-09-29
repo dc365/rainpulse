@@ -1,3 +1,16 @@
+## 2026-09-29 全问题 X 站按 fc757e8 重算（r7x，本会话；不改算法，仅配置+重算）
+
+- 用户指令：另一 LLM 的最新算法（fc757e8，radial_source/source_blocks/source_fans 三代模型）已解决大量径向/扇形问题；用最新算法重算"当前已有的、有径向等问题"的 X 站，全仰角，重新出图；算法本身不许改。
+- 部署核对：105 运行 `x-fan-fc757e8-mb/-qc`（healthy），网络 SHA f54dbe66（仅 zf701 有新模型键）；zf701 70 卷已由对方 LLM 重算并审计（勿重提）。
+- **问题站定案（原始数据逐站体检：形态学辐条 + 逐射线极化异常门 + 远距 ghost/扇区集中度）**：A 组=窄径向辐条站 **zf401**（7 条射线≥100 异常门）、**zf505、zf702**（各 1 条，zf702 与 r4 观察 6187 径向门一致）、**zf402**（cut4 38 条 ≥15dBZ/20km 辐条射线）；B 组=宽扇形/海杂波/噪声站 **zf101-105**（ghost 15k-82k 门/卷、无窄辐条极化特征）；zf900（无 SNR 字段、远距回波 24 门）、zf605/zf602-604/zf201-203/zf501-504 干净或无径向特征，排除。
+- 配置动作（零算法改动）：A 组四站 enhancement 增加 zf701 同款 5 键（radial_source_enabled=true、maximum_width_deg=7.0、block_model=true、fan_model=true、maximum_new_exclusion_fraction=0.65），逐字复制；网络备份 `.build/x-qc-v2-network-20260928/network-before-agroup-<ts>.json`，新 SHA c9e3a3d2…；三 workers 重建健康（--scale 2）。B 组保持 r6 档（censor 3dB/either flank 已在其 enhancement）。
+- 试点 zf401 尾部 2 卷（run 4ec02402）：radial_source 在新站点火（source_gates 4008/10102 cut0、1361/3908 cut2），全 20 切 EVALUATED 无弃权，REJ 门 QC 全 NaN，20/20 map_qc 重生成；视觉：窄辐条基本清除、宽扇形清 85-95%、高仰角干净、无降水误删迹象。
+- 批量：9 站 570 卷（A 组 200 + B 组 370）分 80 个计划（≤8 卷、≤55min 窗、分钟对齐；注意 plans API 幂等键需 16-128 字符、时间须对齐分钟），后台提交器+轮询器+完成守护于 105 `/tmp/r7{submit,poll,wait}.*`，状态 `/tmp/r7state.json`。zf101 首批 320 切（40 切/卷）全 EVALUATED，censor 清 135.9 万门（B 组效果主要来自 r6 噪声底 censor），map 全生成；视觉扇形清除 80-90%。
+- （终审数字与逐站清单见下一条补充。）
+- **r7x 终审（79/79 计划 SUCCEEDED + 3 补卷计划）**：9 站全部预期扫描重算完毕，共 ~20,700 切；逐站——zf101 3160 切/censor 5161 万门；zf102 3120 切/7704 万；zf103 2920 切/7741 万；zf104 2800 切/8553 万；zf105 2800 切/4551 万（B 组五站 source=0、效果来自 r6 censor）；zf401 170+20 切/source 62,864 门（79 切有点火）；zf402 414 切/source 71,537；zf505 594 切/source 749,270（160 切点火，7 切预算弃权）；zf702 603+9 切/source 1,913,208（118 切点火，30 切预算弃权）。**全部切 EVALUATED 或预算弃权（共 37 切，均为源候选 >65% 观测的极重污染切——按护栏整体不动作，保留为已知残余；是否放宽 maximum_new_exclusion_fraction 需单独评审**，对方 LLM 曾为 zf701 从 .35 提到 .65）。map_qc 零缺失；zf702 缺卷 0ba02b76 已补跑（run 886aa7f8）；zf401 缺卷 2ab1fab7 输入 zarr 从未存在（无 _SUCCESS 标记），不可重算。
+- **吞吐**：用户要求提速后，停闲置追溯容器 retro-boundary-qc-0806（09-22 完成后占 21.8GB，docker stop 保留可重启），ops-multiband-worker 由 2 扩到 12（24 核主机，load ~10，内存 0.8-2.2GB/个），批量尾段从预估 1.5h 缩到 ~15min。S 波段 worker 与四 S QC worker 未动。
+- 用户样例 zf505 40700aec（00:44:51Z）新 result `9af85a8b-6543-4c52-9490-1b3a81305340.83c46127-1559-4c5d-91e5-dc4cf5a92091`：cut0 source 14,218 门（辐条群基本清除，视觉对比确认）+ censor 3,280；cut4/5 再清 7,156/5,430。
+
 ## 2026-09-29 strong fan deployed fc757e8 — 70 scans / 630 cuts verified
 
 - User requires generic obvious radial/fan QC across elevations and times. Local main/origin source `fc757e8a99a046596b5cfafd49ee895bd0dc68d8` pushed before105 deployment.150 XQC/multiband tests pass; strong-fan, mixed-mode, trend, isolated-strong-spoke, sparse-family and REF-dropout regressions observed red then green. Source only changes X modules; defaults off, no site/bearing/time/elevation hardcoding.
