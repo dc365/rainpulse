@@ -25,7 +25,11 @@ SHA = re.compile(r"^[0-9a-f]{64}$")
 # stays inside the 6 GiB worker cap.
 MAX_GATES = 40_000_000  # per sweep
 MAX_SWEEPS = 64       # streamed X QC volume limit
-MAX_FUSION_SWEEPS = 32
+# 2026-09-30: raised from 32 - the geometry-verified fusion path rejected every
+# real YLX2-D 40-cut zf10x volume ("unsupported or incomplete native scan
+# description"). 64 matches MAX_SWEEPS; decoded size stays bounded by MAX_GATES
+# and resident memory by network.maximum_input_bytes.
+MAX_FUSION_SWEEPS = 64
 
 
 def utc(value: str) -> datetime:
