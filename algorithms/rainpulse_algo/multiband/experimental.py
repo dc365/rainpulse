@@ -21,7 +21,7 @@ def experimental_fields(fields, band, *, allow_missing_snr=False):
     if band == 'X':
         reject = int(Flag.MISSING | Flag.LOW_SNR | Flag.NONMET_CONFIRMED |
                      Flag.NONMET_CANDIDATE | Flag.BLOCKED | Flag.INVALID_MOMENT | Flag.ATTENUATION_LIMIT)
-        if allow_missing_snr and 'SNRH' not in fields:
+        if allow_missing_snr and 'SNRH' not in fields and 'SNR' not in fields:
             reject &= ~int(Flag.LOW_SNR)
         admitted = observed & ((fields['MB_QC_FLAGS'].astype(np.uint32) & reject) == 0)
         if 'XQC_WITHHELD_MASK' in fields:
@@ -29,6 +29,12 @@ def experimental_fields(fields, band, *, allow_missing_snr=False):
             if withheld.shape != admitted.shape or not np.isin(withheld, (0, 1)).all():
                 raise ValueError('invalid X-v2 reflectivity admission mask')
             admitted &= withheld == 0
+        from .moment_support import moment_support
+        no_echo = fields['NO_ECHO_MASK'] == 1
+        admitted &= moment_support(fields, 'DBZH', admitted.shape).valid | no_echo
+        snr = moment_support(fields, 'SNR', admitted.shape)
+        if snr.source is not None:
+            admitted &= snr.valid | no_echo
         values = fields['DBZH_QC_DISPLAY']
         quality = np.full(values.shape, np.nan)
     else:
@@ -56,12 +62,8 @@ def update_samples(out, values, admitted, ray, gate, age, quality, index, sweep_
 
 def unique_rays(sweep):
     """Resolve exact duplicate bearings by latest acquisition, first index on ties."""
-    order = np.lexsort((np.arange(len(sweep.azimuth_deg)), -sweep.ray_time_epoch, sweep.azimuth_deg))
-    _, positions = np.unique(sweep.azimuth_deg[order], return_index=True)
-    chosen = np.sort(order[positions])
-    return Sweep(sweep.number, sweep.azimuth_deg[chosen], sweep.range_m,
-                 sweep.elevation_deg[chosen], sweep.ray_time_epoch[chosen],
-                 {key:value[chosen] for key,value in sweep.fields.items()}), chosen
+    from .native_geometry import projectable_sweep
+    return projectable_sweep(sweep)
 
 
 def missing_sources(payload):
@@ -109,13 +111,8 @@ def execute(executor, request, reader, *, started):
                                 'geometry_verified':station.geometry_verified,'calibration_verified':station.calibration_verified})
                 for number in cuts.numbers:
                     volume=cuts.read(number)
-                    resolved, native_ray = unique_rays(volume.sweeps[0])
-                    volume.sweeps = [resolved]
-                    volume.validate(station,require_geometry=False)
-                    if station.band=='X':
-                        volume=x_qc(volume,station,net.sha256)
-                    elif volume.metadata.get('qc_pipeline_version') not in station.allowed_s_qc_versions:
-                        raise ValueError('unapproved S QC version')
+                    from .native_geometry import qc_then_select
+                    volume, native_ray = qc_then_select(volume, station, net.sha256, qc=x_qc)
                     lon,lat=volume.metadata.get('longitude_deg'),volume.metadata.get('latitude_deg')
                     if lon is None or lat is None or not np.isfinite([lon,lat]).all() or not -180<=lon<=180 or not -85<lat<85:
                         raise ValueError('missing/invalid native horizontal coordinates')

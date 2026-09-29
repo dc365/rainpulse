@@ -2363,6 +2363,86 @@
       },
       "title": "XSegmentConfig",
       "type": "object"
+    },
+    "ContextPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "default": "disabled",
+          "enum": [
+            "disabled",
+            "audit",
+            "mixed_review"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "maximum_donors": {
+          "default": 2,
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Maximum Donors",
+          "type": "integer"
+        },
+        "maximum_bytes": {
+          "default": 67108864,
+          "maximum": 268435456,
+          "minimum": 4096,
+          "title": "Maximum Bytes",
+          "type": "integer"
+        },
+        "maximum_pairs": {
+          "default": 2000000,
+          "maximum": 8000000,
+          "minimum": 1,
+          "title": "Maximum Pairs",
+          "type": "integer"
+        },
+        "maximum_seconds": {
+          "default": 180.0,
+          "exclusiveMinimum": 0.0,
+          "maximum": 360.0,
+          "title": "Maximum Seconds",
+          "type": "number"
+        },
+        "maximum_horizontal_m": {
+          "default": 500.0,
+          "exclusiveMinimum": 0.0,
+          "maximum": 1500.0,
+          "title": "Maximum Horizontal M",
+          "type": "number"
+        },
+        "minimum_vertical_m": {
+          "default": 250.0,
+          "maximum": 1000.0,
+          "minimum": 100.0,
+          "title": "Minimum Vertical M",
+          "type": "number"
+        },
+        "maximum_vertical_m": {
+          "default": 3000.0,
+          "maximum": 6000.0,
+          "minimum": 1000.0,
+          "title": "Maximum Vertical M",
+          "type": "number"
+        },
+        "minimum_snr_db": {
+          "default": 15.0,
+          "maximum": 30.0,
+          "minimum": 10.0,
+          "title": "Minimum Snr Db",
+          "type": "number"
+        },
+        "minimum_rhohv": {
+          "default": 0.97,
+          "maximum": 1.0,
+          "minimum": 0.95,
+          "title": "Minimum Rhohv",
+          "type": "number"
+        }
+      },
+      "title": "ContextPolicy",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -2620,6 +2700,30 @@
       "default": false,
       "title": "Radial Source Fan Model Enabled",
       "type": "boolean"
+    },
+    "source_maximum_trials": {
+      "default": 500000,
+      "maximum": 2000000,
+      "minimum": 1,
+      "title": "Source Maximum Trials",
+      "type": "integer"
+    },
+    "source_maximum_models": {
+      "default": 50000,
+      "maximum": 100000,
+      "minimum": 1,
+      "title": "Source Maximum Models",
+      "type": "integer"
+    },
+    "source_maximum_summary_bytes": {
+      "default": 33554432,
+      "maximum": 134217728,
+      "minimum": 4096,
+      "title": "Source Maximum Summary Bytes",
+      "type": "integer"
+    },
+    "context": {
+      "$ref": "#/$defs/ContextPolicy"
     }
   },
   "title": "XQCConfig",

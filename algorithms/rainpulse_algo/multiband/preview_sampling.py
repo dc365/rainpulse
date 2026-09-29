@@ -26,7 +26,7 @@ class PolarSampling:
 
 @timed("preview.sampling")
 def prepare_polar_sampling(
-    azimuth_deg, range_m, *, size=720, map_sampling=None, elevation_deg=None
+    azimuth_deg, range_m, *, size=720, map_sampling=None, elevation_deg=None, ray_time_epoch=None
 ):
     az = np.asarray(azimuth_deg, dtype=float) % 360
     ranges = np.asarray(range_m, dtype=float)
@@ -40,12 +40,17 @@ def prepare_polar_sampling(
         bearing = np.rad2deg(np.arctan2(xx, yy)) % 360
     else:
         distance, bearing = map_sampling
-    # Repeated native bearings retain their original row identity. Both raw
-    # and QC maps select the last row for the same bearing deterministically.
-    order = np.argsort(az, kind="stable")
-    ordered = az[order]
-    keep = np.r_[ordered[1:] != ordered[:-1], True]
-    order, ordered = order[keep], ordered[keep]
+    if ray_time_epoch is None:
+        # Backward-compatible generic API without acquisition timestamps.
+        order = np.argsort(az, kind="stable")
+        ordered = az[order]
+        keep = np.r_[ordered[1:] != ordered[:-1], True]
+        order, ordered = order[keep], ordered[keep]
+    else:
+        from .native_geometry import representative_rows
+        chosen = representative_rows(azimuth_deg, ray_time_epoch)
+        order = chosen[np.argsort(az[chosen], kind="stable")]
+        ordered = az[order]
     extended = np.concatenate(([ordered[-1] - 360], ordered, [ordered[0] + 360]))
     ray_order = np.concatenate(([order[-1]], order, [order[0]]))
     right = np.searchsorted(extended, bearing, side="left")

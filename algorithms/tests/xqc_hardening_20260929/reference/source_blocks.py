@@ -10,7 +10,7 @@ import warnings
 import numpy as np
 
 
-def detect(s, cfg, *, protected, fan=False, family_width_deg=None, prepared=None):
+def detect(s, cfg, *, protected, fan=False, family_width_deg=None):
     out = np.zeros(s.shape, bool)
     z, za = s.moment('DBZH'); sn, sa = s.moment('SNR')
     # Strong source evidence is evaluated across the valid instrument range.
@@ -20,15 +20,21 @@ def detect(s, cfg, *, protected, fan=False, family_width_deg=None, prepared=None
     if not fan:
         signal &= z < cfg.radial_maximum_dbzh
     signal &= (s.ranges[None, :] >= cfg.receiver.minimum_range_m) & ~protected
-    from .source_summary import SourceStatistics
-    stats = (prepared or SourceStatistics.build(s, cfg)).use(s, cfg)
-    blocks, ids, law = stats.blocks, stats.ids, stats.law
-    n = len(ids)
-    receiver, center_range = stats.receiver, stats.center_range
+    blocks = (s.ranges // cfg.receiver.block_m).astype(int)
+    ids = np.unique(blocks); n = len(ids)
+    law = 20*np.log10(np.maximum(s.ranges, s.dr/2)/1000)
+    receiver = np.full((s.shape[0], n), np.nan)
+    center_range = np.array([np.median(s.ranges[blocks == b]) for b in ids])
+    for i,b in enumerate(ids):
+        gate = blocks == b
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', RuntimeWarning)
+            receiver[:,i] = np.nanmedian(np.where(sa[:,gate], sn[:,gate], np.nan), axis=1)
+        receiver[np.mean(sa[:,gate],axis=1)<cfg.noise_censor_minimum_coverage,i] = np.nan
     models = []
     minimum = 3  # per-block median; total reference samples still obey the source contract
     for row in np.flatnonzero(s.good):
-        gates = [g[signal[row, g]] for g in stats.indices]
+        gates = [np.flatnonzero(signal[row] & (blocks == b)) for b in ids]
         count = np.array([len(g) for g in gates])
         if (count >= minimum).sum() < 3:
             continue
@@ -40,7 +46,6 @@ def detect(s, cfg, *, protected, fan=False, family_width_deg=None, prepared=None
         for direction in (-1, 1):
             current = row
             for step in range(1, s.shape[0]):
-                stats.trial()
                 other = (row + direction*step) % s.shape[0]
                 edge = current if direction == 1 else other
                 angle = abs(float((s.azimuth[other]-s.azimuth[row]+180)%360-180))
@@ -52,7 +57,6 @@ def detect(s, cfg, *, protected, fan=False, family_width_deg=None, prepared=None
         for direction in (-1,1):
             nearest = np.full(n,np.inf); current = row
             for step in range(1,s.shape[0]):
-                stats.trial()
                 other = (row+direction*step)%s.shape[0]
                 edge = current if direction == 1 else other
                 angle = abs(float((s.azimuth[other]-s.azimuth[row]+180)%360-180))
@@ -68,7 +72,6 @@ def detect(s, cfg, *, protected, fan=False, family_width_deg=None, prepared=None
             eligible = (count>=minimum)&geometry&outside
             seen = set()
             for seed in np.flatnonzero(eligible):
-                stats.trial()
                 spread = cfg.radial_source_maximum_spread_db
                 members = np.flatnonzero(eligible & (abs(powers-powers[seed])<=(1. if fan else spread)) & (abs(responses-responses[seed])<=spread))
                 identity = tuple(members)
@@ -116,7 +119,6 @@ def detect(s, cfg, *, protected, fan=False, family_width_deg=None, prepared=None
                 if not len(fresh):
                     continue
                 out[row,fresh] = True
-                stats.model()
                 models.append(dict(ray=int(row),target_block=int(ids[target]),reference_blocks=ids[members].tolist(),
                     reference_gates=len(train),target_gates=len(fresh),response_slope_db_per_decade=slope,
                     response_bounds_detrended=bool(fan),trend_reference_range_m=1000.,

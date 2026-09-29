@@ -11,6 +11,7 @@ from rainpulse_algo.radar.qc_engine.volume_review.config import VolumeReviewConf
 from rainpulse_algo.radar.qc_engine.volume_review.clutter_fusion.config import ClutterFusionConfig
 from rainpulse_algo.radar.qc_engine.volume_review.clutter_fusion.isolation_config import IsolationConfig
 from . import VERSION
+from .limited_context import ContextPolicy
 
 
 class XSegmentConfig(SegmentReferenceConfig):
@@ -87,6 +88,9 @@ class XQCConfig(BaseModel):
     radial_source_minimum_fraction: float = Field(default=.7, ge=.7, le=1.)
     radial_source_maximum_gap_m: float = Field(default=1500., ge=0., le=2000.)
     radial_source_maximum_spread_db: float = Field(default=3., gt=0., le=3.)
+    source_maximum_trials: int = Field(strict=True, default=500000, ge=1, le=2000000)
+    source_maximum_models: int = Field(strict=True, default=50000, ge=1, le=100000)
+    source_maximum_summary_bytes: int = Field(strict=True, default=32 * 1024**2, ge=4096, le=128 * 1024**2)
     # Same-ray fragment completion around confirmed anchors (S association
     # contract): 0 disables; targets still need local polarimetric badness and
     # the shared rho/snr/dbzh caps, so rain stays structurally excluded.
@@ -115,6 +119,7 @@ class XQCConfig(BaseModel):
     phase_minimum_rhohv: float = Field(default=.95, ge=.9, le=1.)
     phase_maximum_abs_zdr_db: float = Field(default=5., gt=0., le=7.5)
     export_native: StrictBool = True
+    context: ContextPolicy = Field(default_factory=ContextPolicy)
 
     @model_validator(mode="after")
     def contracts(self):

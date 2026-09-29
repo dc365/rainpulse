@@ -80,7 +80,7 @@ def x_qc_objects(volumes) -> dict[str, bytes]:
             from .xqc_v2.export import export_sweep
             xqc_detail = export_sweep(sweep, volume.metadata, objects)
             from .preview_sampling import prepare_polar_sampling, render_polar_sampling
-            plan = prepare_polar_sampling(azimuth, ranges)
+            plan = prepare_polar_sampling(azimuth, ranges, ray_time_epoch=sweep.ray_time_epoch)
             objects[raw_key] = render_polar_sampling(plan, raw, LEVELS, COLORS, png)
             # Confirmed rejects are removed from the display; uncertain gates retain
             # their reflectivity and are highlighted in amber in a separate layer.
@@ -157,7 +157,8 @@ def geographic_sweep_preview(sweep, metadata, raw, qc, action, objects, size=720
     paths = {name: f"sweeps/{sweep.number}/map_{name}.png" for name in ("raw", "qc", "flags")}
     from .preview_sampling import prepare_polar_sampling, render_polar_sampling
     plan = prepare_polar_sampling(sweep.azimuth_deg, ranges, size=size,
-                                 map_sampling=sampling, elevation_deg=elevations)
+                                 map_sampling=sampling, elevation_deg=elevations,
+                                 ray_time_epoch=sweep.ray_time_epoch)
     for name, values, actions in (("raw", raw, None), ("qc", qc, None), ("flags", raw, action)):
         objects[paths[name]] = render_polar_sampling(plan, values, LEVELS, COLORS, png, actions=actions)
     if sum(map(len, objects.values())) > MAX_X_QC_PREVIEW_BYTES:
@@ -165,7 +166,8 @@ def geographic_sweep_preview(sweep, metadata, raw, qc, action, objects, size=720
     from rainpulse_algo.diagnostics.radar_probe import attach_probe
     probe_fields = {name: np.where(plan.support, values[plan.rays, plan.gates], np.nan)[::-1]
                     for name, values in (("DBZH_RAW", raw), ("DBZH_QC", qc), ("QC_ACTION", action))}
-    for name in ("QUALITY_INDEX", "QC_FLAGS", "NO_ECHO_MASK", "QUALITY_SCORE", "MB_QC_FLAGS", "XQC_REASON", "XQC_WITHHELD_MASK", "XQC_REJECTED_MASK", "XQC_QUANTITATIVE_READY_MASK"):
+    for name in ("QUALITY_INDEX", "QC_FLAGS", "NO_ECHO_MASK", "QUALITY_SCORE", "MB_QC_FLAGS", "XQC_REASON", "XQC_WITHHELD_MASK", "XQC_REJECTED_MASK", "XQC_QUANTITATIVE_READY_MASK", "XQC_SOURCE_KIND", "XQC_SOURCE_MIXED_MASK",
+                 "XQC_CONTEXT_DONOR", "XQC_CONTEXT_RAY", "XQC_CONTEXT_GATE"):
         if name in sweep.fields and np.shape(sweep.fields[name]) == np.shape(raw):
             probe_fields[name] = np.where(plan.support, sweep.fields[name][plan.rays, plan.gates], np.nan)[::-1]
     probe_fields["DISPLAY_VALID"] = (plan.support & np.isfinite(qc[plan.rays, plan.gates]))[::-1].astype(float)

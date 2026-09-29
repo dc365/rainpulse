@@ -291,6 +291,10 @@ class Executor:
         p = request["payload"]
         source = p["sources"][0]
         station = self.network.stations[source["radar_id"]]
+        from .xqc_v2.limited_context import use_context_streaming
+        if use_context_streaming(station):
+            from .stream_managed import _execute_x_qc as execute_context_streaming
+            return execute_context_streaming(self, request, reader, started=started)
         if station.band != "X" or not (station.enabled or station.x_qc_enabled):
             raise ValueError("X station is not enabled for standalone QC")
         if epoch(source["available_at"]) > epoch(p["input_cutoff"]):

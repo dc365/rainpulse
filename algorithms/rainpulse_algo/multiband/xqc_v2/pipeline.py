@@ -19,26 +19,21 @@ def prepare_phase(cut, blocked, cfg, base_profile):
     f = cut.fields
     shape = f["DBZH"].shape
     observed = mask(f, "OBSERVED_MASK", shape)
-    phase = f.get("PHIDP")
-    snr = f.get("SNRH", f.get("SNR"))
-    rho = f.get("RHOHV")
+    from ..moment_support import moment_support
+    phase = moment_support(f, "PHIDP", shape)
+    snr = moment_support(f, "SNR", shape)
+    rho = moment_support(f, "RHOHV", shape)
+    ref = moment_support(f, "DBZH", shape)
     valid = mask(f, "PHASE_VALID_MASK", shape) & mask(f, "LIQUID_MASK", shape) & observed
+    valid &= ref.valid & (ref.values >= -50) & (ref.values <= 100) & ~mask(f, "NO_ECHO_MASK", shape)
     valid &= ~blocked & ~mask(f, "CONFIRMED_NONMET_MASK", shape)
     valid &= ~mask(f, "ATTENUATION_UNRELIABLE_MASK", shape)
-    if phase is None or snr is None or rho is None:
-        valid[:] = False
-    else:
-        valid &= (np.isfinite(phase) & np.isfinite(snr) & np.isfinite(rho) &
-                  (snr >= max(cfg.phase_minimum_snr_db, base_profile.snr_min_db)) &
-                  (rho >= cfg.phase_minimum_rhohv) & (rho <= 1))
-        for key in ("PHIDP_AVAILABLE_MASK", "RHOHV_AVAILABLE_MASK", "SNR_AVAILABLE_MASK", "SNRH_AVAILABLE_MASK"):
-            if key in f:
-                valid &= mask(f, key, shape)
+    valid &= (phase.valid & snr.valid & rho.valid &
+              (snr.values >= max(cfg.phase_minimum_snr_db, base_profile.snr_min_db)) &
+              (rho.values >= cfg.phase_minimum_rhohv))
     if "ZDR" in f:
-        zdr = f["ZDR"]
-        valid &= np.isfinite(zdr) & (abs(zdr) < cfg.phase_maximum_abs_zdr_db)
-        if "ZDR_AVAILABLE_MASK" in f:
-            valid &= mask(f, "ZDR_AVAILABLE_MASK", shape)
+        zdr = moment_support(f, "ZDR", shape)
+        valid &= zdr.valid & (abs(zdr.values) < cfg.phase_maximum_abs_zdr_db)
     # Interference may contaminate a vendor phase integral too. Do not invent
     # attenuation-free restarts behind a newly unreliable measurement.
     contaminated_path = np.maximum.accumulate(blocked | mask(f, "CONFIRMED_NONMET_MASK", shape), axis=1)
@@ -77,7 +72,9 @@ def run(volume, station, release_sha256, *, baseline):
     result = None
     for cut in volume.sweeps:
         # The existing data/identity validator runs before this function.
-        ev = evaluate_cut(cut, volume.metadata, cfg)
+        from .limited_context import context_for_cut
+        context = context_for_cut(volume, cut, cfg)
+        ev = evaluate_cut(cut, volume.metadata, cfg, context=context)
         active = cfg.mode != "audit"
         withheld = (ev.arrays["XQC_PROPOSED_MASK"] == 1) & active
         rejected = (ev.arrays["XQC_QUARANTINE_MASK"] == 1) & (cfg.mode == "quarantine")
@@ -88,6 +85,10 @@ def run(volume, station, release_sha256, *, baseline):
             # Evidence uses immutable RAW, not a previous stage's deletion holes.
             prior_candidate = baseline_candidates(cut, base_profile)
             work, phase_valid, blocked_path = prepare_phase(cut, withheld | prior_candidate, cfg, base_profile)
+        if active and "SNRH" not in work.fields and "SNR" in work.fields:
+            # Some native bundles carry only the normalized SNR alias. Supply
+            # the existing baseline's name without rewriting the source field.
+            work = replace(work, fields={**work.fields, "SNRH": work.fields["SNR"]})
         baseline_result = baseline(Volume(copy.deepcopy(volume.metadata), [work]), base_station, release_sha256)
         if len(baseline_result.sweeps) != 1:
             raise ValueError("baseline X QC returned a different cut list")
@@ -110,12 +111,23 @@ def run(volume, station, release_sha256, *, baseline):
             action = before_action.copy()
             action[withheld & (action != 2)] = 3
             action[rejected] = 2
-            eligible = before_cr.astype(bool) & ~withheld
+            from ..moment_support import moment_support
+            echo_valid = moment_support(cut.fields, "DBZH", obs.shape).valid
+            no_echo = mask(cut.fields, "NO_ECHO_MASK", obs.shape)
+            measurement_valid = (echo_valid | no_echo) & obs
+            snr = moment_support(cut.fields, "SNR", obs.shape)
+            snr_valid = snr.valid | no_echo
+            if snr.source is None and not base_profile.require_snr:
+                snr_valid = obs.copy()
+            unsupported = obs & ~(measurement_valid & snr_valid)
+            flags[unsupported] |= int(Flag.INCOMPLETE_POLARIMETRY)
+            action[unsupported & (action != 2)] = 3
+            eligible = before_cr.astype(bool) & ~withheld & measurement_valid & snr_valid
             f.update(MB_QC_FLAGS=flags, QC_ACTION=action,
                      REFLECTIVITY_ELIGIBLE_FOR_CR=eligible.astype("uint8"),
                      QUALITY_SCORE=np.where(eligible, f["QUALITY_SCORE"], 0).astype("float32"),
                      CR_UNCERTAIN_MASK=(obs & ~eligible & (action != 2)).astype("uint8"),
-                     DBZH_QC=np.where(rejected, np.nan, f["DBZH_QC"]).astype("float32"),
+                     DBZH_QC=np.where(action == 2, np.nan, f["DBZH_QC"]).astype("float32"),
                      DBZH_QC_DISPLAY=np.where(action == 2, np.nan, f["DBZH_QC_DISPLAY"]).astype("float32"))
         f.update(ev.arrays)
         f.update(XQC_WITHHELD_MASK=withheld.astype("uint8"),
@@ -147,7 +159,8 @@ def run(volume, station, release_sha256, *, baseline):
             "phase_liquid_path_supplied": all(k in cut.fields for k in ("PHASE_VALID_MASK", "LIQUID_MASK")),
             "quantitative_ready_gates": int(ready.sum()), "qpe_enabled": False,
             "export_native": cfg.export_native,
-            "classification_is_ground_truth": False}
+            "classification_is_ground_truth": False,
+            "implementation_revision": "xqc-hardening-20260929-r1"}
         if result is None:
             result = Volume(copy.deepcopy(baseline_result.metadata), [])
         result.sweeps.append(target)
@@ -155,27 +168,71 @@ def run(volume, station, release_sha256, *, baseline):
     if result is None:
         raise ValueError("nonempty X volume required")
     result.metadata.update(processing=VERSION, xqc_parameter_sha256=cfg.digest,
-                           xqc_mode=cfg.mode, operational_eligible=False, qpe_enabled=False)
+                           xqc_mode=cfg.mode, operational_eligible=False, qpe_enabled=False,
+                           xqc_implementation_revision="xqc-hardening-20260929-r1")
     return result
 
 
 def validate_output(raw, qc, cfg):
-    """Gate contract consumed by both numerical and visual X products."""
+    """Independent numerical/visual/admission contract, not only a PNG check."""
+    from ..quality import Flag
+    from ..moment_support import binary_mask
     f = qc.fields
+    shape = raw.fields["DBZH"].shape
+    if qc.number != raw.number:
+        raise ValueError("X cut identity changed")
+    for key in ("azimuth_deg", "range_m", "elevation_deg", "ray_time_epoch"):
+        if not np.array_equal(getattr(raw, key), getattr(qc, key), equal_nan=True):
+            raise ValueError("X native coordinate/order changed: " + key)
+    for key, before in raw.fields.items():
+        # These are input moments/masks, not any preexisting QC output contract.
+        if key in ("DBZH", "SNR", "SNRH", "RHOHV", "ZDR", "PHIDP", "VR", "SW",
+                   "OBSERVED_MASK", "NO_ECHO_MASK", "PHASE_VALID_MASK", "LIQUID_MASK",
+                   "ATTENUATION_UNRELIABLE_MASK") or key.endswith(("_AVAILABLE_MASK", "_VALID_MASK")):
+            if key not in f or np.asarray(f[key]).dtype != np.asarray(before).dtype or not np.array_equal(f[key], before, equal_nan=True):
+                raise ValueError("X raw moment/availability changed: " + key)
     if not np.array_equal(f["DBZH_RAW"], raw.fields["DBZH"], equal_nan=True):
-        raise ValueError("X enhancement changed the raw reflectivity")
-    for name, old in raw.fields.items():
-        if name.endswith("_AVAILABLE_MASK") and not np.array_equal(f[name], old):
-            raise ValueError("X enhancement changed raw availability")
-    rejected = f["XQC_REJECTED_MASK"] == 1
-    withheld = f["XQC_WITHHELD_MASK"] == 1
-    if np.any(rejected & ~withheld) or np.any(withheld & (f["OBSERVED_MASK"] != 1)):
+        raise ValueError("X enhancement changed raw reflectivity")
+    for name, value in f.items():
+        if name.startswith("XQC_") and np.shape(value) != shape:
+            raise ValueError("X diagnostic native shape differs: " + name)
+        if name.endswith("_MASK"):
+            binary_mask(f, name, shape)
+    observed = binary_mask(f, "OBSERVED_MASK", shape)
+    rejected = binary_mask(f, "XQC_REJECTED_MASK", shape)
+    withheld = binary_mask(f, "XQC_WITHHELD_MASK", shape)
+    eligible = binary_mask(f, "REFLECTIVITY_ELIGIBLE_FOR_CR", shape)
+    action = np.asarray(f["QC_ACTION"])
+    flags = np.asarray(f["MB_QC_FLAGS"])
+    if action.shape != shape or action.dtype.kind not in 'ui' or not np.isin(action, (0, 1, 2, 3)).all():
+        raise ValueError("invalid X action codes")
+    if flags.shape != shape or flags.dtype.kind not in 'ui':
+        raise ValueError("invalid X cause flags")
+    if np.any(rejected & ~withheld) or np.any(withheld & ~observed):
         raise ValueError("invalid X disposition domain")
-    if np.any((f["REFLECTIVITY_ELIGIBLE_FOR_CR"] == 1) & withheld):
+    if np.any(eligible & (withheld | (action == 2) | ~observed)):
         raise ValueError("excluded X gate regained CR admission")
-    if np.any(rejected & ((f["QC_ACTION"] != 2) | np.isfinite(f["DBZH_QC_DISPLAY"]))):
-        raise ValueError("rejected X gate remains in clean display")
+    for name in ("DBZH_QC", "DBZH_QC_DISPLAY", "QUALITY_SCORE"):
+        if np.shape(f[name]) != shape:
+            raise ValueError("X numerical output shape differs: " + name)
+    # Baseline audit retains legacy fields exactly, including historical v1
+    # rejects. Every NEW rejection must satisfy the stronger contract.
+    numerical_reject = (action == 2) if cfg.mode != "audit" else rejected
+    if np.any(numerical_reject & (np.isfinite(f["DBZH_QC"]) | np.isfinite(f["DBZH_QC_DISPLAY"]))):
+        raise ValueError("rejected X gate remains in numerical/display QC")
+    if np.any(rejected & ((action != 2) | ((flags & int(Flag.NONMET_CONFIRMED)) == 0))):
+        raise ValueError("X rejection/action/cause mismatch")
+    if np.any(withheld & ~rejected & (action != 2) & ((action != 3) | ((flags & int(Flag.NONMET_CANDIDATE)) == 0))):
+        raise ValueError("X withholding/action/cause mismatch")
+    if np.any(withheld & (np.asarray(f["XQC_REASON"]) == 0)):
+        raise ValueError("X exclusion lacks a reason")
+    quality = np.asarray(f["QUALITY_SCORE"])
+    if not np.isfinite(quality).all() or np.any((quality < 0) | (quality > 1)) or np.any(~eligible & (quality != 0)):
+        raise ValueError("X quality and eligibility disagree")
+    before = binary_mask(f, "XQC_BASELINE_CR_ELIGIBLE_MASK", shape)
+    if np.any(eligible & ~before):
+        raise ValueError("X enhancement resurrected baseline exclusion")
     if np.any(f["QPE_ELIGIBLE_MASK"]):
         raise ValueError("candidate X release cannot enable QPE")
-    if cfg.mode == "audit" and (rejected.any() or withheld.any()):
+    if cfg.mode == "audit" and (rejected.any() or withheld.any() or not np.array_equal(action, f["XQC_BASELINE_ACTION"]) or not np.array_equal(eligible, before)):
         raise ValueError("audit caused an action")

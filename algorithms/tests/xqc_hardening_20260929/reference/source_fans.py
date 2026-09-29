@@ -9,20 +9,25 @@ import warnings
 from .source_blocks import detect as detect_blocks
 
 
-def detect(s, cfg, *, protected, prepared=None):
-    from .source_summary import SourceStatistics
-    stats = (prepared or SourceStatistics.build(s, cfg)).use(s, cfg)
-    candidates, record = detect_blocks(s, cfg, protected=protected, fan=True, prepared=stats)
-    # Only 0, 1, >=2 is needed. Saturate in block space; NEVER uint8 wrap.
-    support = np.zeros((s.shape[0], len(stats.ids)), np.uint8)
-    quiet = (stats.receiver < cfg.noise_censor_snr_db) | (stats.coverage < cfg.noise_censor_minimum_coverage)
-    model = np.stack([candidates[:, g].sum(axis=1) >= 3 for g in stats.indices], axis=1)
+def detect(s, cfg, *, protected):
+    candidates, record = detect_blocks(s, cfg, protected=protected, fan=True)
+    support = np.zeros(s.shape, np.uint8)
+    blocks = (s.ranges // cfg.receiver.block_m).astype(int)
+    block_gates = [blocks == b for b in np.unique(blocks)]
+    sn, available = s.moment("SNR")
+    quiet = np.zeros((s.shape[0],len(block_gates)),bool)
+    model = np.zeros_like(quiet)
+    for b,gates in enumerate(block_gates):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore",RuntimeWarning)
+            median = np.nanmedian(np.where(available[:,gates],sn[:,gates],np.nan),axis=1)
+        quiet[:,b] = (median < cfg.noise_censor_snr_db) | (available[:,gates].mean(axis=1) < cfg.noise_censor_minimum_coverage)
+        model[:,b] = candidates[:,gates].sum(axis=1) >= 3
     for row in np.flatnonzero(s.good):
         for direction in (-1, 1):
             current = row
-            active = np.ones(len(stats.ids),bool)
+            active = np.ones(len(block_gates),bool)
             for step in range(1, s.shape[0]):
-                stats.trial()
                 other = (row + direction*step) % s.shape[0]
                 edge = current if direction == 1 else other
                 angle = abs(float((s.azimuth[other]-s.azimuth[row]+180)%360-180))
@@ -30,16 +35,16 @@ def detect(s, cfg, *, protected, prepared=None):
                     break
                 # Range-block support survives alternating missing REF gates.
                 active &= ~quiet[other]
-                supported_blocks = active & model[other]
-                support[row, supported_blocks] = np.minimum(support[row, supported_blocks] + 1, 2)
+                for b in np.flatnonzero(active & model[other]):
+                    support[row,block_gates[b]] += 1
                 if not active.any():
                     break
                 current = other
     # A single strong spoke has bilateral local shoulders instead of a
     # multi-ray family. It needs the same held-out physical evidence.
     narrow, narrow_record = detect_blocks(s, cfg, protected=protected, fan=True,
-                                         family_width_deg=cfg.radial_source_maximum_width_deg, prepared=stats)
-    out = (candidates & (support[:, stats.block_index] >= 2)) | narrow
+                                         family_width_deg=cfg.radial_source_maximum_width_deg)
+    out = (candidates & (support >= 2)) | narrow
     return out, dict(record, method='receiver-fan-family-heldout-v1',
                      proposed_gates=int(candidates.sum()), source_gates=int(out.sum()),
                      narrow_model=narrow_record,

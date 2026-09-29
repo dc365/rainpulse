@@ -149,7 +149,7 @@ class GroupCuts:
     def read(self, number):
         if number not in self.gates:
             raise KeyError(number)
-        return from_group(
+        value = from_group(
             CutRoot(self.root, number),
             self.station,
             self.source,
@@ -158,6 +158,8 @@ class GroupCuts:
             s_reject_mask=self.reject_mask,
             expected_flag_version=self.flag_version,
         )
+        from .xqc_v2.limited_context import bind_group_context
+        return bind_group_context(value, self)
 
 
 class NPZCuts:

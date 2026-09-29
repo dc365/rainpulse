@@ -16,13 +16,20 @@ from rainpulse_algo.performance import observe, timed
 @timed("x.candidate")
 def nonmet_candidate(fields, echo, snr_good, cfg, range_m):
     shape = echo.shape
-    rho = fields["RHOHV"]
+    from .moment_support import moment_support, binary_mask
+    rho_support = moment_support(fields, "RHOHV", shape)
+    rho = rho_support.values
+    echo = echo & moment_support(fields, "DBZH", shape).valid
+    snr = moment_support(fields, "SNR", shape)
+    if snr.source is not None:
+        snr_good = snr_good & snr.valid
     weather = (
-        np.asarray(fields["WEATHER_PROTECTED_MASK"], dtype=bool)
+        binary_mask(fields, "WEATHER_PROTECTED_MASK", shape)
         if "WEATHER_PROTECTED_MASK" in fields
         else np.zeros(shape, bool)
     )
-    potential = echo & snr_good & np.isfinite(rho) & (rho < cfg.rho_candidate_max) & ~weather
+    weather |= binary_mask(fields, "MIXED_WEATHER_MASK", shape)
+    potential = echo & snr_good & rho_support.valid & (rho < cfg.rho_candidate_max) & ~weather
     rows = np.flatnonzero(potential.any(axis=1))
     observe("x.candidate_total_rays", int(shape[0]))
     observe("x.candidate_potential_rays", int(len(rows)))

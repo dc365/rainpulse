@@ -34,18 +34,21 @@ def zero_evidence(s,cfg,reason):
     return FusionEvidence(a,{"status":"RESOURCE_LIMIT_ABSTAINED","reason":reason,"candidate_gates":0})
 
 
-def evaluate_volume(sweeps,cfg,*,backgrounds=None,protections=None,metadata=None,near_context=None):
+def evaluate_volume(sweeps,cfg,*,backgrounds=None,protections=None,metadata=None,near_context=None,prepared_features=None):
     if not sweeps or len({s.name for s in sweeps})!=len(sweeps):raise ValueError("unique nonempty sweep list required")
     backgrounds=backgrounds or [(empty_background(s.shape,cfg),{"status":"NO_ASSET_BOUND"}) for s in sweeps]
     protections=protections or [(np.zeros(s.shape,bool),)*3 for s in sweeps]
     if len(backgrounds)!=len(sweeps) or len(protections)!=len(sweeps):raise ValueError("fusion input list lengths differ")
+    if prepared_features is not None and len(prepared_features) != len(sweeps):
+        raise ValueError("prepared feature/sweep list differs")
     before=[s.digest for s in sweeps]
     try:
         if sum(int(np.prod(s.shape)) for s in sweeps)>cfg.maximum_volume_gates:
             raise ResourceLimit("clutter fusion whole-volume budget")
         results=[]
         for i,s in enumerate(sweeps):
-            f=extract(s,cfg);a=f.arrays
+            f=extract(s,cfg) if prepared_features is None else prepared_features[i].for_sweep(s,cfg)
+            a=f.arrays
             a.update(derive(i,sweeps,cfg,metadata))
             bg,rec=backgrounds[i];a.update({k:np.array(v,copy=True) for k,v in bg.items()})
             for name,value in zip(("HARD_WEATHER","LOCAL_WEATHER","LEGACY_PROTECTED"),protections[i]):

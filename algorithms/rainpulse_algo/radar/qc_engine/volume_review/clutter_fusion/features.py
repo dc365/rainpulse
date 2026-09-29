@@ -122,3 +122,31 @@ def extract(s, cfg):
         [float(s.ranges[0]*np.deg2rad(3*spacing)), float(s.ranges[-1]*np.deg2rad(3*spacing))],
         "phase_increment_native_spacing_m": s.dr, "phase_spacing_applicable": bool(pairs.any()),
         "library": receipt, "scores_are_probabilities": False})
+
+
+@dataclass(frozen=True)
+class PreparedFeatures:
+    """Same immutable Sweep only; no cross-target/background cache."""
+    sweep: object
+    parameters: dict
+    result: Features
+
+    @classmethod
+    def bind(cls, sweep, cfg, result):
+        from types import MappingProxyType
+        parameters = cfg.model_dump(mode="json")
+        # Object disposition is downstream and does not change feature extraction.
+        parameters.pop("isolated_objects", None)
+        arrays = {}
+        for key, value in result.arrays.items():
+            a = np.asarray(value).view()
+            a.setflags(write=False)
+            arrays[key] = a
+        return cls(sweep, parameters, Features(MappingProxyType(arrays), dict(result.summary)))
+
+    def for_sweep(self, sweep, cfg):
+        parameters = cfg.model_dump(mode="json")
+        parameters.pop("isolated_objects", None)
+        if sweep is not self.sweep or parameters != self.parameters:
+            raise ValueError("prepared clutter features belong to another raw view/config")
+        return Features(dict(self.result.arrays), dict(self.result.summary))

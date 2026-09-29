@@ -34,6 +34,7 @@ class Reason(IntFlag):
     RADIAL_FRAGMENT = 8192
     NOISE_FLOOR = 16384
     RADIAL_SOURCE = 32768
+    CONTEXT_CONFLICT = 65536
 
 
 @dataclass(frozen=True)
@@ -106,15 +107,15 @@ def measured_flanks(s, cfg):
 
 
 @timed("x.v2.evidence")
-def evaluate_cut(cut, metadata, cfg):
+def evaluate_cut(cut, metadata, cfg, *, context=None):
     """Known resource limits abstain for this cut; unexpected errors remain errors."""
     try:
-        return _evaluate(cut, metadata, cfg)
+        return _evaluate(cut, metadata, cfg, context=context)
     except ResourceLimit as error:
         return empty(cut, "RESOURCE_OR_GEOMETRY_ABSTAINED", str(error))
 
 
-def _evaluate(cut, metadata, cfg):
+def _evaluate(cut, metadata, cfg, *, context=None):
     doppler_ok = bool(cfg.doppler_verified and
         metadata.get("doppler_verification_id") == cfg.doppler_verification_id and
         metadata.get("doppler_waveform") == cfg.doppler_waveform and
@@ -125,7 +126,9 @@ def _evaluate(cut, metadata, cfg):
     observed = s.observed
     hard = mask(cut.fields, "WEATHER_PROTECTED_MASK", cut.fields["DBZH"].shape)[view.order]
     hard |= mask(cut.fields, "MIXED_WEATHER_MASK", cut.fields["DBZH"].shape)[view.order]
+    from rainpulse_algo.radar.qc_engine.volume_review.clutter_fusion.features import PreparedFeatures
     features = extract_features(s, cfg.clutter)
+    prepared_features = PreparedFeatures.bind(s, cfg.clutter, features)
     local = features.arrays["CF_WEATHER_PROXY_MASK"] == 1
     result = empty(cut, "EVALUATED")
     a = result.arrays
@@ -189,7 +192,7 @@ def _evaluate(cut, metadata, cfg):
     if cfg.clutter_enabled:
         cf_cfg = cfg.clutter.model_copy(update={"isolated_objects": cfg.clutter.isolated_objects if cfg.isolation_enabled else None})
         bg = background(s, metadata, cfg)
-        ev = evaluate_volume([s], cf_cfg, backgrounds=[bg], protections=[(hard, local, np.zeros(s.shape, bool))])[0]
+        ev = evaluate_volume([s], cf_cfg, backgrounds=[bg], protections=[(hard, local, np.zeros(s.shape, bool))], prepared_features=[prepared_features])[0]
         cf = ev.arrays
         if cfg.isolation_enabled and "CF_ISO_CANDIDATE_MASK" in cf:
             from rainpulse_algo.radar.qc_engine.volume_review.clutter_fusion.isolated_objects import validate
@@ -242,10 +245,30 @@ def _evaluate(cut, metadata, cfg):
     else:
         records["module_records"]["noise_censor"] = {"status": "DISABLED"}
     from .radial_source import detect as detect_radial_source
-    radial_source, source_record = detect_radial_source(s, cfg, protected=hard | local)
+    source_details = {}
+    try:
+        radial_source, source_record = detect_radial_source(s, cfg, protected=hard | local, details=source_details)
+    except ResourceLimit as exc:
+        radial_source = np.zeros(s.shape, bool)
+        source_details.clear()
+        source_record = {"status": "RESOURCE_LIMIT_ABSTAINED", "reason": str(exc), "source_gates": 0}
     records["module_records"]["radial_source"] = source_record
+    a["XQC_SOURCE_KIND"] = view.restore(source_details.get("source_kind", np.zeros(s.shape, np.uint8)))
     why[radial_source] |= int(Reason.RADIAL_SOURCE)
     quarantine |= radial_source
+    from .limited_context import evaluate_context
+    context_weather, context_record, context_measured, context_donor, context_ray, context_gate = evaluate_context(s, metadata, cfg, context)
+    records["module_records"]["context"] = context_record
+    mixed = context_weather & quarantine
+    why[mixed] |= int(Reason.CONTEXT_CONFLICT)
+    if cfg.context.mode == "mixed_review":
+        quarantine &= ~mixed  # still proposed/withheld; never restore CR!
+    a["XQC_CONTEXT_MEASURED_MASK"] = view.restore(context_measured.astype("uint8"))
+    a["XQC_CONTEXT_WEATHER_MASK"] = view.restore(context_weather.astype("uint8"))
+    a["XQC_CONTEXT_DONOR"] = view.restore(context_donor)
+    a["XQC_CONTEXT_RAY"] = view.restore(context_ray)
+    a["XQC_CONTEXT_GATE"] = view.restore(context_gate)
+    a["XQC_SOURCE_MIXED_MASK"] = view.restore(mixed.astype("uint8"))
     proposed = (receiver | partial | noisy | fragments | radial_source | clutter | isolated) & observed & ~hard
     quarantine &= proposed
     why[hard] |= int(Reason.WEATHER_PROTECTED)

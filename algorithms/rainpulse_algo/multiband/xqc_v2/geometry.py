@@ -63,16 +63,12 @@ def adapt(cut, cfg):
         raise ValueError("unobserved gate cannot be valid no echo")
     fields, available = {}, {}
     for k in MOMENTS:
-        source = "SNRH" if k == "SNR" and "SNRH" in cut.fields else k
-        if source not in cut.fields:
+        from ..moment_support import moment_support
+        support = moment_support(cut.fields, k, shape)
+        if support.source is None:
             continue
-        a = np.asarray(cut.fields[source], np.float32)
-        if a.shape != shape:
-            raise ValueError("moment geometry differs: " + source)
-        ok = np.isfinite(a)
-        for key in (source + "_AVAILABLE_MASK", source + "_VALID_MASK", k + "_AVAILABLE_MASK"):
-            if key in cut.fields:
-                ok &= mask(cut.fields, key, shape)
+        a = np.asarray(support.values, np.float32)
+        ok = support.valid
         if k == "DBZH":
             ok &= obs & ~no & (a >= -32) & (a <= 80)
         elif k == "RHOHV":
