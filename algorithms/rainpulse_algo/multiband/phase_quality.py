@@ -31,6 +31,9 @@ VERSION = "phase-quality-wradlib-v1"
 # Provenance identity for the rain-segment anchors emitted below: the SHA-256
 # of the anchor method statement (computed, not invented).
 ANCHOR_EVIDENCE_SHA256 = "368d0913d3a8de44f13d5b49e7eaef9ccdf3313b98d3be60257d1e0fd19b7d38"
+
+# Provenance identity for the solver-facing reconstructed phase integral.
+RECON_EVIDENCE_SHA256 = "ccc7b292df9d66b90f9d236170f3f9a3426b1791dd15079e99090125d5357c3a"
 _ANCHOR_METHOD = (
     "Anchor PIA=0 dB at the first phase-supported gate of a ray only when "
     "every preceding gate carries no finite DBZH echo: the standard Z-PHI "
@@ -114,6 +117,12 @@ def attach_phase_quality(fields: dict, range_m=None, metadata=None) -> None:
         liquid = np.isfinite(rho_corr) & np.isfinite(snr) & np.isfinite(dbz)
         liquid &= (rho_corr >= RHO_LIQUID_MIN) & (snr >= SNR_MIN_DB) & (dbz >= 0.0)
         fields["LIQUID_MASK"] = liquid.astype("uint8")
+    if "PHIDP_RECON" not in fields and usable.any():
+        # Solver-facing phase integral: the reconstruction whose support the
+        # masks declare. Raw PHIDP remains the measurement of record.
+        fields["PHIDP_RECON"] = rec_phi.astype("float32")
+        if metadata is not None:
+            metadata.setdefault("phase_reconstruction_evidence_sha256", RECON_EVIDENCE_SHA256)
     if "PATH_ANCHOR_VALID_MASK" not in fields and "PATH_ANCHOR_PIA_DB" not in fields:
         anchor, pia = _anchor_fields(usable.astype(bool), np.isfinite(dbz), dr)
         fields["PATH_ANCHOR_VALID_MASK"] = anchor

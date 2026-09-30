@@ -215,6 +215,11 @@ def _zphi(sweep, profile, metadata, result):
     f, ranges = sweep.fields, np.asarray(sweep.range_m, dtype=float)
     support, raw_phase = _phase_support(sweep, profile, options)
     shape = support.shape
+    recon = f.get("PHIDP_RECON")
+    if recon is not None and np.shape(recon) == shape and _proof(metadata, "phase_reconstruction_evidence_sha256"):
+        # Walk the classifier's evidenced reconstruction (the integral its
+        # masks declare support for); raw PHIDP stays the measurement of record.
+        raw_phase = np.asarray(recon, dtype=float)
     nonliquid = ~binary_mask(f, "LIQUID_MASK", shape) | binary_mask(f, "CONFIRMED_NONMET_MASK", shape)
     clear = (binary_mask(f, "CLEAR_PATH_MASK", shape)
              & binary_mask(f, "NO_ECHO_MASK", shape)

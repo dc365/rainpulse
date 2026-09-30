@@ -91,3 +91,28 @@ def test_anchor_rules_by_prefix_geometry():
     assert int(a[1:].sum()) > 0                 # clean rain-start rows anchored
     pia = f["PATH_ANCHOR_PIA_DB"]
     assert np.nanmax(np.where(a == 1, pia, np.nan)) == 0.0
+
+
+def test_solver_walks_evidenced_reconstruction_not_raw_phase():
+    from rainpulse_algo.multiband.phase_quality import attach_phase_quality
+    from rainpulse_algo.multiband.attenuation import correct_sweep
+    from rainpulse_algo.multiband.quality import phase_linear
+    st = station()
+    v = volume(st)
+    f = v.sweeps[0].fields
+    for k in ("PHASE_VALID_MASK", "LIQUID_MASK", "PATH_ANCHOR_VALID_MASK", "PATH_ANCHOR_PIA_DB", "PHIDP_RECON"):
+        f.pop(k, None)
+    synthetic = phase_fields(f["DBZH"].shape)
+    f.update({k: synthetic[k] for k in ("PHIDP", "RHOHV", "SNR")})
+    # raw phase jitter far beyond any admissible step: only the classifier's
+    # evidenced reconstruction can carry the walk
+    f["PHIDP"] = (f["PHIDP"] + np.random.default_rng(3).normal(0, 25.0, f["PHIDP"].shape)).astype("float32")
+    attach_phase_quality(f, v.sweeps[0].range_m, v.metadata)
+    assert "PHIDP_RECON" in f
+    evidenced = dict(v.metadata)
+    assert evidenced.get("phase_reconstruction_evidence_sha256")
+    stripped = {k: w for k, w in v.metadata.items() if k != "phase_reconstruction_evidence_sha256"}
+    good = correct_sweep(v.sweeps[0], st.x_qc, evidenced, linear_solver=phase_linear)
+    assert np.isfinite(good.pia_db).any()
+    bad = correct_sweep(v.sweeps[0], st.x_qc, stripped, linear_solver=phase_linear)
+    assert not np.isfinite(bad.pia_db).any()
