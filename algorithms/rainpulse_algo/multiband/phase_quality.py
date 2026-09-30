@@ -21,9 +21,9 @@ from __future__ import annotations
 
 import numpy as np
 
-RHO_PHASE_MIN = 0.92        # noise-corrected RhoHV floor for phase usability
+RHO_PHASE_MIN = 0.90        # noise-corrected RhoHV gross-error floor (reconstruction handles local noise)
 RHO_LIQUID_MIN = 0.97       # liquid-path proxy floor
-SNR_MIN_DB = 6.0            # phase reliability SNR floor
+SNR_MIN_DB = 4.0            # gross-error SNR floor (reconstruction handles local noise)
 PHIDP_TEXTURE_MAX_DEG = 10.0  # 3x3 texture of PHIDP
 DESPECKLE_MIN_GATES = 5     # minimum consecutive valid gates along range
 VERSION = "phase-quality-wradlib-v1"
@@ -83,15 +83,24 @@ def attach_phase_quality(fields: dict, range_m=None, metadata=None) -> None:
     if phi is None or rho is None or snr is None:
         return  # required moments absent: leave masks absent, solver abstains
 
-    from wradlib.dp import rhohv_noise_correction
-    from wradlib.util import despeckle, texture
+    from wradlib.dp import phidp_kdp_vulpiani, rhohv_noise_correction
+    from wradlib.util import despeckle
 
     rho_corr = rhohv_noise_correction(rho, snr)
-    usable = np.isfinite(phi) & np.isfinite(rho_corr) & np.isfinite(snr) & np.isfinite(dbz)
+    dr = None
+    if range_m is not None and len(range_m) > 1:
+        dr = float(np.median(np.diff(np.asarray(range_m, "f8"))))
+    # Vulpiani reconstruction (despeckle -> unfolding -> iterative
+    # KDP/PHIDP) bridges the texture/noise holes that fragment raw phase
+    # support inside rain; gross-error floors stay per gate.
+    dr_km = (dr / 1000.0) if dr else 0.25
+    try:
+        rec_phi, _ = phidp_kdp_vulpiani(np.where(np.isfinite(phi), phi, np.nan), dr_km)
+    except Exception:
+        rec_phi = np.full(shape, np.nan)
+    usable = np.isfinite(rec_phi) & np.isfinite(rho_corr) & np.isfinite(snr) & np.isfinite(dbz)
     usable &= rho_corr >= RHO_PHASE_MIN
     usable &= snr >= SNR_MIN_DB
-    tex = texture(np.where(np.isfinite(phi), phi, np.nan))
-    usable &= np.isfinite(tex) & (tex <= PHIDP_TEXTURE_MAX_DEG)
     for name in ("CONFIRMED_NONMET_MASK", "ATTENUATION_UNRELIABLE_MASK"):
         if name in fields:
             usable &= np.asarray(fields[name]) == 0
@@ -106,9 +115,6 @@ def attach_phase_quality(fields: dict, range_m=None, metadata=None) -> None:
         liquid &= (rho_corr >= RHO_LIQUID_MIN) & (snr >= SNR_MIN_DB) & (dbz >= 0.0)
         fields["LIQUID_MASK"] = liquid.astype("uint8")
     if "PATH_ANCHOR_VALID_MASK" not in fields and "PATH_ANCHOR_PIA_DB" not in fields:
-        dr = None
-        if range_m is not None and len(range_m) > 1:
-            dr = float(np.median(np.diff(np.asarray(range_m, "f8"))))
         anchor, pia = _anchor_fields(usable.astype(bool), np.isfinite(dbz), dr)
         fields["PATH_ANCHOR_VALID_MASK"] = anchor
         fields["PATH_ANCHOR_PIA_DB"] = pia
