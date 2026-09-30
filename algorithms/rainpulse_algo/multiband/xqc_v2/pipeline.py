@@ -82,6 +82,15 @@ def run(volume, station, release_sha256, *, baseline):
         withheld = ((ev.arrays["XQC_PROPOSED_MASK"] == 1) | budget_withheld) & active
         rejected = (ev.arrays["XQC_QUARANTINE_MASK"] == 1) & (cfg.mode == "quarantine")
         work = cut
+        if base_profile.attenuation in ("zphi", "phidp_linear") and not all(
+                k in cut.fields for k in ("PHASE_VALID_MASK", "LIQUID_MASK")):
+            # The baseline classifier only derives masks the source did not
+            # declare. Declaring them here lets prepare_phase tighten real
+            # support instead of intersecting an all-zero placeholder.
+            from ..phase_quality import attach_phase_quality
+
+            work = replace(cut, fields=dict(cut.fields))
+            attach_phase_quality(work.fields, cut.range_m, volume.metadata)
         phase_valid = np.zeros(cut.fields["DBZH"].shape, bool)
         blocked_path = phase_valid.copy()
         if active:
