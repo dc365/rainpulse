@@ -96,7 +96,7 @@ def run(volume, station, release_sha256, *, baseline):
         if active:
             # Evidence uses immutable RAW, not a previous stage's deletion holes.
             prior_candidate = baseline_candidates(cut, base_profile)
-            work, phase_valid, blocked_path = prepare_phase(cut, withheld | prior_candidate, cfg, base_profile)
+            work, phase_valid, blocked_path = prepare_phase(work, withheld | prior_candidate, cfg, base_profile)
         if active and "SNRH" not in work.fields and "SNR" in work.fields:
             # Some native bundles carry only the normalized SNR alias. Supply
             # the existing baseline's name without rewriting the source field.
