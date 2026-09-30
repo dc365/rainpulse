@@ -83,3 +83,11 @@
 复现回归先实跑两例失败：两个更近下层挤走有效上层；仅有下层时错误绑定供体。修复共享上层供体筛选函数，按实际仰角选层，不按层号猜高度，保留供体数/字节/配对/时间/垂直距离及波束证据门。修复后相关 XQC 和上下文测试 **131 passed**，包含有上层时确实产出正支持的正例、缺少上层时不推断无雨的负例。未改源判据、天气阈值或排除预算。
 
 这修复的是上下文机制的实际路径缺陷，**不是证明18门已经误删或已恢复**：当前候选配置上下文模式为 `disabled`，该体扫原生 `clutter_context_contract` 为空。只读审计临时用 `audit`，不向原始对象填造波束证据，不自动开启生产混合保护。修复后的真实选择和发布回执另记。
+
+修复提交 `53beaba` 已先 push 后部署。105 镜像 `rainpulse-cpu-worker:xqc-upper-53beaba-mb` 继承当时已部署94f82b9镜像，只替换 `limited_context.py`；80个multiband Python模块逐项SHA比较，唯一变化为本修复，运行容器文件SHA与该提交相等。未覆盖并行相位任务后续尚未部署的提交。
+
+新镜像真实 RAW 审计退出0：仰角5供体6/7、实测匹配668门；仰角6供体7/8、实测匹配71门。此前两层因选到下层均为0。18个重点门中5个仰角5门不满足目标SNR≥15条件；仰角6的13门仅1门同时满足目标SNR/RHO初筛。18门均没有已验证上层天气支持，不能将未知供体/波束证据解释为无雨。
+
+4个默认multiband Worker在闲置核验后部署，4/4 ready且healthy；通道以expected revision比较后切换到 `ca853767299e4a9f9d87dd0b024f807d9cb7e8fc52ff60c4aae5715a41a966c6`，网络SHA仍 `74bfcf66084ff542062bcb24c8dc6b2940c919f01657e079a921de347bdb87d9`。上下文disabled、阈值、排除预算和S Worker保持原配置。无UI或持久化雷达产品变化；本次无需地图重建来验证读取选择。没有恢复全天批次或定时。
+
+新增证据：`upper-tests.txt`（131 passed）、`scontrol-upper-context.jsonl`（修复前真实错误选层）、`upper-image-real.jsonl`（修复后18门和供体）、`upper-hashes.txt`、`upper-promotion.txt`；105 `.build/xqc-upper-context-20260930/promotion.json`。独立降水真值仍未完成；下一步取得可核验的波束证据，并在冻结样本上验证mixed_review只降级确认、不恢复组合/QPE准入。

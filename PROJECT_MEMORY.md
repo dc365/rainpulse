@@ -1479,3 +1479,11 @@ operational data here.
 - 现有头部候选天线高度ZF701429m/Z95981740m差1311m，基准仍未核验。使用候选高度、真实垂直波束和4/3地球地面弧长重新筛全部18层，得到47个候选重合门（29噪声/18源），不是原63的确定子集或误删真值。重点18源门是ZF701cut5 ray39五门/cut6 ray81十三门。
 - ray81十三门对照下一体扫UTC00:07:21完成，原生同8.96°、方位偏差0.12°；原DBZH29–33/SNR13.5–16/ZDR−5.25至−2.75，下一时次10门有REF26–28/SNR9–12.5。持续接收功率和异常极化不能排除降水叠加，3门缺测不等于无雨。
 - docs/XQC_S_CONTROL_SCREEN_20260930.md含续验；.build/xqc-zf702-investigation/scontrol-{gates,63-signature,source-models,candidate-height,next-raw}.jsonl全部最终执行退出0。无算法/部署/预算/定时修改。下一关口：18个源与降水共存候选的独立几何及可信降水证据，不能宣布全网漏检误删验收通过。
+
+## 2026-09-30 X 上层天气上下文选层缺陷已修复部署
+
+- 实测内存context_for_cut按绝对仰角差选下层占满2供体，evaluate_context只能接受正上层高度差，且与流式GroupContextProvider行为不同。共享upper_delta，只选实际仰角差>0.2°上层，不改天气阈值/动作预算。两回归实跑红后绿，相关XQC+context 131passed。
+- 代码53beaba先push再105部署，镜像xqc-upper-53beaba-mb继承当前94f82b9，仅limited_context一模块改变；80模块SHA比较通过，容器文件SHA对提交一致。并行相位后续未部署提交未被覆盖。
+- 冻结ZF701 RAW新镜像审计退出0：cut5供体6/7匹配668门、cut6供体7/8匹配71门，旧路径均0。18门目标天气初筛只有1门满足；全18无已验证上层天气支持，缺波束契约不能当无雨。
+- 默认4MB Worker闲置核验后切换，4/4ready/healthy，fingerprint ca853767299e4a9f9d87dd0b024f807d9cb7e8fc52ff60c4aae5715a41a966c6，网络74bfcf66未变，context仍disabled。S Worker/阈值/预算/定时未改；无雷达产品/UI变化。
+- docs/XQC_S_CONTROL_SCREEN_20260930.md续验；105.build/xqc-upper-context-20260930/promotion.json，本地upper-image-real.jsonl/upper-hashes.txt/upper-tests.txt。下一关口为可核验波束证据+冻结样本mixed_review验证，仍不能宣布18门无降水或全天全网完成。
