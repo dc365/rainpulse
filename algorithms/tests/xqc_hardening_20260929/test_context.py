@@ -117,6 +117,31 @@ def test_group_provider_selects_actual_height_not_cut_number():
     assert calls==[5] and out.donors[0].cut.number==5
 
 
+def test_in_memory_lower_cuts_cannot_crowd_out_upper_weather():
+    v, s, c, d = inputs()
+    lower1 = copy.deepcopy(d.cut)
+    lower1.number = 1
+    lower1.elevation_deg[:] = .4
+    lower2 = copy.deepcopy(d.cut)
+    lower2.number = 2
+    lower2.elevation_deg[:] = .2
+    v.sweeps.extend([lower1, lower2, d.cut])
+    bundle = context_for_cut(v, v.sweeps[0], c)
+    assert [x.cut.number for x in bundle.donors] == [5]
+    positive = evaluate_context(s, v.metadata, c, bundle)[0]
+    assert positive.any()
+
+
+def test_in_memory_without_upper_cuts_does_not_infer_absent_weather():
+    v, _, c, d = inputs()
+    lower = copy.deepcopy(d.cut)
+    lower.elevation_deg[:] = .2
+    v.sweeps.append(lower)
+    bundle = context_for_cut(v, v.sweeps[0], c)
+    assert not bundle.donors
+    assert bundle.record['status'] == 'NOT_BOUND_SINGLE_CUT'
+
+
 def test_mixed_review_downgrades_rejection_but_never_restores_cr(monkeypatch):
     from rainpulse_algo.multiband.xqc_v2 import radial_source
     v,_,audit,d=inputs();v.sweeps.append(d.cut)

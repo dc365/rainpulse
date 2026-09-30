@@ -42,6 +42,15 @@ def cut_bytes(cut):
         cut.elevation_deg, cut.ray_time_epoch, *cut.fields.values()))
 
 
+def upper_delta(center, elevation):
+    """Shared donor eligibility for eager and streaming readers."""
+    e = np.asarray(elevation)
+    if e.ndim != 1 or not 1 <= e.size <= 4096 or not np.isfinite(e).all():
+        return None
+    delta = float(np.median(e)) - center
+    return delta if delta > .2 else None
+
+
 class GroupContextProvider:
     """Reads descriptors before choosing at most N actual-height neighbours.
 
@@ -62,10 +71,8 @@ class GroupContextProvider:
             if len(descriptor.shape) != 1 or np.prod(descriptor.shape) > 4096:
                 continue
             e = np.asarray(descriptor[:])
-            if not len(e) or not np.isfinite(e).all():
-                continue
-            delta = float(np.median(e)) - center
-            if delta <= .2:
+            delta = upper_delta(center, e)
+            if delta is None:
                 continue
             size = sum(int(np.prod(g[k].shape)) * np.dtype(g[k].dtype).itemsize
                        for k in g.array_keys())
@@ -97,7 +104,11 @@ def context_for_cut(volume, cut, cfg):
     candidates = [Donor(s, dict(volume.metadata)) for s in volume.sweeps if s.number != cut.number]
     # A caller may bind frozen past/same-volume donors, never a search callback.
     candidates.extend(getattr(volume, 'xqc_frozen_context', ()))
-    candidates.sort(key=lambda d: (abs(float(np.median(d.cut.elevation_deg)) - float(np.median(cut.elevation_deg))),
+    center = float(np.median(cut.elevation_deg))
+    # Only upper cuts can satisfy evaluate_context's positive vertical delta.
+    # Lower neighbours must not consume the bounded donor slots.
+    candidates = [d for d in candidates if upper_delta(center, d.cut.elevation_deg) is not None]
+    candidates.sort(key=lambda d: (upper_delta(center, d.cut.elevation_deg),
                                    str(d.metadata.get('scan_id')), d.cut.number))
     donors, used = [], 0
     for d in candidates:
