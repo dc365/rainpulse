@@ -189,3 +189,15 @@ def test_preview_support_preserves_missing_and_weather_values(version):
 def test_v2_preview_refuses_missing_eligibility():
     from rainpulse_algo.operations.preview_mask import business_support
     with pytest.raises(ValueError):business_support([1.],[0],{},flag_version="qc-flags-v2")
+
+
+def test_drift_after_compute_is_blocked_before_upload_transition():
+    class ChangedAfterCompute(Adapter):
+        def execute(self,claim):
+            result=super().execute(claim)
+            self.identity_error=ConfigurationChanged('config changed during compute')
+            return result
+    c,a=Control(),ChangedAfterCompute()
+    assert run(c,a)
+    assert a.uploads==0 and c.outcomes==['BLOCKED']
+    assert 'UPLOAD' not in {p['stage'] for r,p in c.calls if r=='heartbeat'}

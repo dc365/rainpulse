@@ -142,6 +142,11 @@ class Engine:
                 continue
 
     def checkpoint(self, stage: str) -> None:
+        if stage == "UPLOAD":
+            # Configuration drift before the first PUT is a known block, not
+            # an ambiguous publication. Verify before entering COMMITTING;
+            # keep the existing post-pulse check and lost-PUT recovery gate.
+            self.adapter.check_identity(self.claim["identity"])
         self.stage = stage
         retry_io(self.pulse, sleep=self.sleep)
         if self.cancel.is_set():
