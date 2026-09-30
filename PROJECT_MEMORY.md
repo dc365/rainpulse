@@ -1465,3 +1465,10 @@ operational data here.
 - 两份代表任务均完成：ZF701 scan07bdd490、task832c7cbc/attempt2e3cbe4a；ZF702 scan5418017f、task0a71654e/attemptef55b788。18层全部EVALUATED且源模型完整，无动作预算弃权；DBZH_RAW逐层与归一化对象相等、原生方位距离一致、SHA与提交标记核验。
 - 实图复核ZF701 08:03:32/3.36°、ZF702 08:33:05/0.54°强扇形条带消失，近场蓝色及独立西南绿色回波保留。不能据此声明独立真值误删率0或全网验收完成。
 - 证据及后续入口：docs/XQC_SOURCE_BUDGET_FIX_20260930.md，`.build/xqc-zf702-investigation/*-verified.jsonl`，105 `.build/xqc-budget-c2918a1/representative/`。下一步增加高污染与真实降水对照样本，复核70%保护所涉及的大面积候选；不盲调上限，不恢复小时定时/全天大批次。
+
+## 2026-09-30 X 径向质控同期 S 冲突筛查
+
+- 已完成 ZF701 UTC00:03:32 / ZF702 UTC00:33:05 两体扫18仰角只读筛查，6份同期S输入经正常组合预检冻结，未提交组合重算、未切换worker、未恢复定时或全天任务。
+- S可用反射率≥20dBZ、RHO≥.95、可信掩码；X原始≥15dBZ且≥15km。水平≤1km、逐径向时间差≤180秒共1859个已排除X门有S候选匹配。再要求“各自雷达以上高度差≤1km”剩63个，均ZF701；它不是共同MSL匹配、不是误删率，不能宣布误删验收通过。
+- 优先复核ZF701仰角0/4/5/6/8的1/8/6/45/3门；既有RADIAL_SOURCE也有NOISE_FLOOR原因。代表仰角0 14.46°/68.889km X21.5dBZ、S24.5dBZ，可能降水与干扰共存。下一关口是共同MSL/几何、接收功率与极化逐门证据，不能盲提70%预算或按固定方位清除。
+- 证据文档 docs/XQC_S_CONTROL_SCREEN_20260930.md；本地.build/xqc-zf702-investigation/scontrol-screen-final.jsonl共24记录，执行退出0。MinIO空闲122346885120字节/100641076inode，仍低于全天120GiB保护线。
