@@ -186,7 +186,7 @@ def x_qc(volume: Volume, station: Station, release_sha256: str) -> Volume:
         if cfg.attenuation in ("zphi", "phidp_linear") and station.band == "X":
             from .phase_quality import attach_phase_quality
 
-            attach_phase_quality(sweep.fields)
+            attach_phase_quality(sweep.fields, sweep.range_m, volume.metadata)
         # A single path interface owns all attenuation states. It takes this
         # X sweep only; network observations cannot alter the standalone result.
         path = correct_sweep(sweep, cfg, volume.metadata, linear_solver=phase_linear)

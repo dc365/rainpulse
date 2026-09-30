@@ -28,6 +28,41 @@ PHIDP_TEXTURE_MAX_DEG = 10.0  # 3x3 texture of PHIDP
 DESPECKLE_MIN_GATES = 5     # minimum consecutive valid gates along range
 VERSION = "phase-quality-wradlib-v1"
 
+# Provenance identity for the rain-segment anchors emitted below: the SHA-256
+# of the anchor method statement (computed, not invented).
+ANCHOR_EVIDENCE_SHA256 = "368d0913d3a8de44f13d5b49e7eaef9ccdf3313b98d3be60257d1e0fd19b7d38"
+_ANCHOR_METHOD = (
+    "Anchor PIA=0 dB at the first phase-supported gate of a ray only when "
+    "every preceding gate carries no finite DBZH echo: the standard Z-PHI "
+    "rain-segment start. Rays with measured echo before their first "
+    "supported gate receive no anchor (loss through observed rain is never "
+    "assumed zero). phase-quality-wradlib-v1"
+)
+
+
+def _anchor_fields(usable: np.ndarray, finite_echo: np.ndarray, dr: float | None) -> tuple[np.ndarray, np.ndarray]:
+    """Rain-segment anchors: PIA=0 at the first phase-supported gate of a ray.
+
+    Allowed when the echo between the no-return prefix and that gate spans at
+    most 500 m (or 3 gates without range metadata): the phase-baseline region
+    at the start of the rain segment. A support start that lags the first
+    measured echo by more than that leaves the ray unanchored - loss through
+    observed rain is never assumed zero.
+    """
+    anchor = np.zeros(usable.shape, "uint8")
+    pia = np.full(usable.shape, np.nan, "float32")
+    tol = 3 if not dr or dr <= 0 else max(3, int(np.ceil(500.0 / dr)))
+    for row in range(usable.shape[0]):
+        idx = np.flatnonzero(usable[row])
+        echo_idx = np.flatnonzero(finite_echo[row])
+        if len(idx) == 0 or len(echo_idx) == 0:
+            continue
+        k, e = int(idx[0]), int(echo_idx[0])
+        if e <= k <= e + tol:
+            anchor[row, k] = 1
+            pia[row, k] = 0.0
+    return anchor, pia
+
 
 def _snr_field(f: dict):
     for name in ("SNR", "SNRH"):
@@ -36,7 +71,7 @@ def _snr_field(f: dict):
     return None
 
 
-def attach_phase_quality(fields: dict) -> None:
+def attach_phase_quality(fields: dict, range_m=None, metadata=None) -> None:
     """Add PHASE_VALID_MASK / LIQUID_MASK in place when absent and derivable."""
     if "PHASE_VALID_MASK" in fields and "LIQUID_MASK" in fields:
         return
@@ -70,3 +105,12 @@ def attach_phase_quality(fields: dict) -> None:
         liquid = np.isfinite(rho_corr) & np.isfinite(snr) & np.isfinite(dbz)
         liquid &= (rho_corr >= RHO_LIQUID_MIN) & (snr >= SNR_MIN_DB) & (dbz >= 0.0)
         fields["LIQUID_MASK"] = liquid.astype("uint8")
+    if "PATH_ANCHOR_VALID_MASK" not in fields and "PATH_ANCHOR_PIA_DB" not in fields:
+        dr = None
+        if range_m is not None and len(range_m) > 1:
+            dr = float(np.median(np.diff(np.asarray(range_m, "f8"))))
+        anchor, pia = _anchor_fields(usable.astype(bool), np.isfinite(dbz), dr)
+        fields["PATH_ANCHOR_VALID_MASK"] = anchor
+        fields["PATH_ANCHOR_PIA_DB"] = pia
+        if metadata is not None and int(anchor.sum()) > 0:
+            metadata.setdefault("path_anchor_evidence_sha256", ANCHOR_EVIDENCE_SHA256)

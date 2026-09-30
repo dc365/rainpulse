@@ -71,3 +71,23 @@ def test_zphi_admits_eligible_echo_without_upstream_masks():
     g = out.sweeps[0].fields
     assert int((g["REFLECTIVITY_ELIGIBLE_FOR_CR"] == 1).sum()) > 0
     assert np.isfinite(g["PIA_DB"]).any()
+
+
+def test_anchor_rules_by_prefix_geometry():
+    from rainpulse_algo.multiband.phase_quality import attach_phase_quality
+    f = phase_fields((30, 120))
+    rng = np.arange(120) * 250.0
+    # rows 1+: no-return NaN prefix, echo + support start together (anchor)
+    for k in ("DBZH", "PHIDP", "RHOHV", "SNR"):
+        f[k] = f[k].astype("float32").copy()
+        f[k][1:, :40] = np.nan
+    # row 0: echo from gate 0 but phase support withheld until gate 40
+    # (low RhoHV sector) -> support lags echo by 40 gates, no anchor allowed
+    f["RHOHV"][0, :40] = 0.70
+    attach_phase_quality(f, rng)
+    a = f["PATH_ANCHOR_VALID_MASK"]
+    assert a.dtype == np.uint8 and int(a.sum()) > 0
+    assert a[0].sum() == 0                      # lagging support: no anchor
+    assert int(a[1:].sum()) > 0                 # clean rain-start rows anchored
+    pia = f["PATH_ANCHOR_PIA_DB"]
+    assert np.nanmax(np.where(a == 1, pia, np.nan)) == 0.0
