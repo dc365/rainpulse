@@ -80,6 +80,20 @@ def _station_registered_calibration(attrs, station) -> str:
     return declared
 
 
+def _normalized_attenuation_status(attrs, station) -> str:
+    """Upstream attenuation provenance for adapter-loaded volumes.
+
+    The normalized-radar-volume contract publishes decoded, uncorrected
+    moments: no attenuation correction exists anywhere in the decode path, so
+    volumes of this source that declare no explicit status are raw by
+    contract. Explicit declarations are never overridden.
+    """
+    declared = attrs.get("attenuation_status")
+    if declared is not None:
+        return declared
+    return "raw" if station.source == "normalized_zarr" else "unknown"
+
+
 def ray_seconds(values: np.ndarray, units: str | None) -> np.ndarray:
     if values.dtype.kind == "M":
         if np.isnat(values).any():
@@ -247,7 +261,7 @@ def from_group(
         if "scan_type" in attrs
         else "catalog_volume_unverified_completeness",
         "calibration_id": _station_registered_calibration(attrs, station),
-        "attenuation_status": attrs.get("attenuation_status", "unknown"),
+        "attenuation_status": _normalized_attenuation_status(attrs, station),
         "radar_config_version": attrs.get("radar_config_version"),
         "clutter_context_contract": attrs.get("clutter_context_contract", {}),
         "doppler_verification_id": attrs.get("doppler_verification_id"),
@@ -387,7 +401,7 @@ def read_x_qc_sweep(objects: dict[str, bytes], station: Station, source: dict, s
                 "volume_start": start, "volume_end": end, "available_at": source["available_at"],
                 "asset_sha256": asset_sha256, "scan_type": attrs.get("scan_type", "volume"),
                 "calibration_id": _station_registered_calibration(attrs, station),
-                "attenuation_status": attrs.get("attenuation_status", "unknown"),
+                "attenuation_status": _normalized_attenuation_status(attrs, station),
         "radar_config_version": attrs.get("radar_config_version"),
         "clutter_context_contract": attrs.get("clutter_context_contract", {}),
         "doppler_verification_id": attrs.get("doppler_verification_id"),
