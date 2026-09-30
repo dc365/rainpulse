@@ -46,6 +46,39 @@ def test_adapter_preserves_native_order_and_readonly_source():
     assert source == before
 
 
+def test_adapter_accepts_float32_elevation_spread_at_configured_limit():
+    import zarr
+    from zarr.storage import MemoryStore
+
+    dbzh, _ = field_case()
+    store = MemoryStore()
+    store.update(synthetic_normalized_fixture(dbzh))
+    root = zarr.open_group(store=store, mode="a")
+    elevation = np.full(dbzh.shape[0], np.float32(4.34), dtype="float32")
+    elevation[0] = np.float32(4.04)
+    root["sweep_000/elevation"][:] = elevation
+
+    native = adapt_sweep(open_qc_input(dict(store)).root, "sweep_000", OpenSourceQCProfile())
+
+    assert np.ptp(native.elevation) > 0.3
+
+
+def test_adapter_rejects_elevation_spread_materially_above_configured_limit():
+    import zarr
+    from zarr.storage import MemoryStore
+
+    dbzh, _ = field_case()
+    store = MemoryStore()
+    store.update(synthetic_normalized_fixture(dbzh))
+    root = zarr.open_group(store=store, mode="a")
+    elevation = np.full(dbzh.shape[0], np.float32(4.341), dtype="float32")
+    elevation[0] = np.float32(4.039)
+    root["sweep_000/elevation"][:] = elevation
+
+    with pytest.raises(ValueError, match="incompatible elevations"):
+        adapt_sweep(open_qc_input(dict(store)).root, "sweep_000", OpenSourceQCProfile())
+
+
 def test_sector_cannot_wrap_support_across_north_or_outer_boundary():
     az = np.r_[np.arange(350, 360), np.arange(0, 20)]
     objects = synthetic_normalized_fixture(np.full((30, 40), 20, dtype="float32"), azimuth_deg=az)

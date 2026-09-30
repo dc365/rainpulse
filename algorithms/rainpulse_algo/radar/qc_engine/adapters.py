@@ -125,7 +125,8 @@ class NativeSweep:
 def adapt_sweep(root, name: str, profile: OpenSourceQCProfile) -> NativeSweep:
     group = root[name]
     az = np.asarray(group["azimuth"][:], dtype="float64")
-    el = np.asarray(group["elevation"][:], dtype="float64")
+    source_el = np.asarray(group["elevation"][:])
+    el = np.asarray(source_el, dtype="float64")
     ranges = np.asarray(group["range"][:], dtype="float64")
     times = group["ray_time"][:]
     if az.ndim != 1 or el.shape != az.shape or times.shape != az.shape or ranges.ndim != 1:
@@ -143,7 +144,15 @@ def adapt_sweep(root, name: str, profile: OpenSourceQCProfile) -> NativeSweep:
         and ranges[0] >= 0
     ):
         raise ValueError("invalid azimuth, elevation or increasing range")
-    if np.ptp(el) > profile.geometry.maximum_elevation_spread_deg:
+    elevation_spread = float(np.ptp(el))
+    elevation_tolerance = 0.0
+    if np.issubdtype(source_el.dtype, np.floating):
+        elevation_tolerance = (
+            2.0
+            * float(np.finfo(source_el.dtype).eps)
+            * max(1.0, float(np.max(np.abs(el))))
+        )
+    if elevation_spread > profile.geometry.maximum_elevation_spread_deg + elevation_tolerance:
         raise ValueError("incompatible elevations inside one source cut")
     if not np.allclose(np.diff(ranges), np.median(np.diff(ranges)), rtol=0.001, atol=0.001):
         raise ValueError("nonuniform native range is not supported by the library stencil")
