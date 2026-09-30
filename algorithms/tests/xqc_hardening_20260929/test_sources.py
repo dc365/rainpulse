@@ -163,3 +163,17 @@ def test_geometry_steps_do_not_consume_model_trials():
     with pytest.raises(ResourceLimit,match='model-trial'):stats.trial()
     with pytest.raises(ResourceLimit,match='geometry'):
         stats.geometry(32*s.shape[0]**2)
+
+
+def test_stationary_upper_receiver_mode_survives_changing_lower_mode():
+    s=dense(9);c=policy();f={k:v.copy() for k,v in s.fields.items()}
+    row=5;low=np.arange(s.shape[1])%3==0
+    f['SNR'][row,low]=np.linspace(14.,38.,s.shape[1])[low]
+    f['DBZH'][row]=f['SNR'][row]+20*np.log10(s.ranges/1000)-22
+    s=replace(s,fields=f);out,_=source_blocks.detect(s,c,protected=np.zeros(s.shape,bool),fan=True)
+    upper=(~low)&(s.ranges>=c.receiver.minimum_range_m)
+    assert np.mean(out[row,upper])>.95
+    # The same receiver modes cannot establish a source from a flat rain REF.
+    f={k:v.copy() for k,v in s.fields.items()};f['DBZH'][row]=28.
+    flat=replace(s,fields=f);weather,_=source_blocks.detect(flat,c,protected=np.zeros(flat.shape,bool),fan=True)
+    assert not weather[row].any()

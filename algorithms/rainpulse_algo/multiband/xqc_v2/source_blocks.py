@@ -41,8 +41,15 @@ def detect(
         count = np.array([len(g) for g in gates])
         if (count >= minimum).sum() < 3:
             continue
+        # REF upper/primary modes must use the corresponding receiver mode.
+        # Averaging SNR quartiles can mix a changing lower mode with a stable
+        # upper source, falsely rejecting its held-out stationary power.
         powers = np.array(
-            [np.mean(np.percentile(sn[row, g], [25, 75])) if len(g) else np.nan for g in gates]
+            [
+                (np.percentile(sn[row, g], response_quantile) if fan
+                 else np.mean(np.percentile(sn[row, g], [25, 75])))
+                if len(g) else np.nan for g in gates
+            ]
         )
         responses = np.array(
             [
@@ -196,7 +203,8 @@ def detect(
                     )
                 )
     return out, dict(
-        method="bilateral-receiver-block-heldout-v2",
+        method="bilateral-receiver-block-heldout-v3",
+        receiver_power_quantile=response_quantile if fan else None,
         source_gates=int(out.sum()),
         models=models,
         missing_ref_is_continuity_failure=False,
