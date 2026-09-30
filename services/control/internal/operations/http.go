@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -20,6 +21,12 @@ type HTTPOptions struct {
 	WorkerToken   string
 	Admit         func(context.Context) (func(), error)
 	LokiURL       string
+	// TiandituToken enables Tianditu-backed basemap sources ({token}
+	// placeholder); empty keeps those sources unavailable. BasemapConfigPath
+	// overrides where the basemap source list is stored (tests / non-standard
+	// deployments).
+	TiandituToken     string
+	BasemapConfigPath string
 }
 
 const AdminAuthModeValidation = "validation"
@@ -28,9 +35,16 @@ type Handler struct {
 	service *Service
 	options HTTPOptions
 	next    http.Handler
+
+	basemapOnce sync.Once
+	basemapMu   sync.RWMutex
+	basemapCfg  BasemapConfig
 }
 
 func NewHandler(service *Service, next http.Handler, options HTTPOptions) http.Handler {
+	if strings.TrimSpace(options.BasemapConfigPath) == "" {
+		options.BasemapConfigPath = "runtime/basemap-config.json"
+	}
 	return &Handler{service: service, next: next, options: options}
 }
 func authorized(value, token string) bool {
@@ -47,6 +61,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.URL.Path == radarWorkspacePrefix+"radar-composites" || strings.HasPrefix(r.URL.Path, radarWorkspacePrefix+"radar-composites/") || r.URL.Path == radarWorkspacePrefix+"radar-stations" || r.URL.Path == radarWorkspacePrefix+"radar-scans" || strings.HasPrefix(r.URL.Path, radarWorkspacePrefix+"radar-products/") {
 		h.radarWorkspace(w, r)
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, basemapTilesPrefix) {
+		h.basemapTile(w, r)
+		return
+	}
+	if r.URL.Path == radarWorkspacePrefix+"basemap-config" {
+		h.basemapConfigPublic(w, r)
 		return
 	}
 	const admin = "/api/v1/admin/ops"
@@ -193,6 +215,19 @@ func (h *Handler) admin(w http.ResponseWriter, r *http.Request, path string) (an
 	q := r.URL.Query()
 	if path == "/releases" || strings.HasPrefix(path, "/releases/") || path == "/storage" || strings.HasPrefix(path, "/storage/") {
 		return h.storage(r, path)
+	}
+	if path == "/basemap-config" {
+		return h.basemapConfigAdmin(w, r)
+	}
+	if path == "/basemap-config/reset" {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			return nil, problem(405, "invalid_request", "仅支持 POST")
+		}
+		if err := h.saveBasemapConfig(DefaultBasemapConfig()); err != nil {
+			return nil, err
+		}
+		return h.loadBasemapConfig(), nil
 	}
 	if strings.HasPrefix(path, "/data/") || path == "/performance" || path == "/pools" || strings.HasPrefix(path, "/pools/") {
 		return h.extensions(r, path)
