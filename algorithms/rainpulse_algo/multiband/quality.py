@@ -181,6 +181,12 @@ def x_qc(volume: Volume, station: Station, release_sha256: str) -> Volume:
                 raise ValueError("invalid blockage fraction")
             blocked = ~np.isfinite(blockage) | (blockage >= cfg.max_blockage_fraction)
             flags[observed & blocked] |= int(Flag.BLOCKED)
+        # Phase-correction modes require the upstream phase quality masks; the
+        # classifier derives them from moments when the input carries none.
+        if cfg.attenuation in ("zphi", "phidp_linear") and station.band == "X":
+            from .phase_quality import attach_phase_quality
+
+            attach_phase_quality(sweep.fields)
         # A single path interface owns all attenuation states. It takes this
         # X sweep only; network observations cannot alter the standalone result.
         path = correct_sweep(sweep, cfg, volume.metadata, linear_solver=phase_linear)
