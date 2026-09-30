@@ -172,8 +172,10 @@ export type JournalPage = {
     direction?: string;
     has_more: boolean;
 };
+export type SystemTab = 'workers' | 'performance' | 'logs' | 'storage';
 export type View = {
-    page: 'tasks' | 'new' | 'workers' | 'logs' | 'data' | 'performance' | 'storage';
+    page: 'overview' | 'tasks' | 'new' | 'data' | 'system';
+    tab?: SystemTab;
     scan?: string;
     radar?: string;
     start?: string;
@@ -187,6 +189,13 @@ export type View = {
 const names: Record<string, string> = { QUEUED: '排队中', WAITING: '等待上游', RUNNING: '执行中', COMMITTING: '提交产物', SUCCEEDED: '已完成', FAILED: '失败', BLOCKED: '受阻', PARTIAL_SUCCESS: '部分成功', PAUSED: '已暂停接单', CANCELLING: '取消中', CANCELLED: '已取消', SUPERSEDED: '执行权已撤销', PENDING: '待派发', SKIPPED: '已跳过', ATTENTION: '需要处理', VERIFY_INPUT: '核验输入', COMPUTE: '原生阶段执行', UPLOAD: '上传产物', COMMIT: '登记结果', RECOVER: '恢复登记', PASS: '通过', WARN: '提醒', BLOCK: '阻止提交' };
 export function stateLabel(state: string) { return names[state] ?? state; }
 export function tone(state: string) { return ['FAILED', 'BLOCK', 'BLOCKED'].includes(state) ? 'danger' : ['PARTIAL_SUCCESS', 'WARN', 'ATTENTION', 'CANCELLING', 'SUPERSEDED'].includes(state) ? 'warn' : ['SUCCEEDED', 'PASS'].includes(state) ? 'success' : ['RUNNING', 'COMMITTING', 'COMPUTE', 'UPLOAD'].includes(state) ? 'active' : 'muted'; }
+export type Phase = 'executing' | 'queued' | 'done' | 'attention';
+const executingStates = ['RUNNING', 'COMMITTING', 'VERIFY_INPUT', 'COMPUTE', 'UPLOAD', 'COMMIT', 'RECOVER', 'CANCELLING'];
+const queuedStates = ['QUEUED', 'WAITING', 'PENDING'];
+const doneStates = ['SUCCEEDED', 'PASS', 'SKIPPED', 'CANCELLED'];
+export function phaseOf(state: string): Phase { return executingStates.includes(state) ? 'executing' : queuedStates.includes(state) ? 'queued' : doneStates.includes(state) ? 'done' : 'attention'; }
+export function phaseLabel(phase: Phase) { return phase === 'executing' ? '执行中' : phase === 'queued' ? '排队中' : phase === 'done' ? '已完成' : '需注意'; }
+export function phaseTone(state: string) { const phase = phaseOf(state); return phase === 'executing' ? 'active' : phase === 'queued' ? 'muted' : phase === 'done' ? 'success' : ['FAILED', 'BLOCK', 'BLOCKED'].includes(state) ? 'danger' : 'warn'; }
 export function timestamp(value?: string | null) { if (!value || !Number.isFinite(Date.parse(value)))
     return '未记录'; return new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date(value)); }
 export function duration(value?: number | null) { if (value == null || !Number.isFinite(value) || value < 0)
@@ -211,8 +220,9 @@ export function parseSelection(preset: string, start: string, end: string, radar
 }
 else if (!s.source_job_ids?.length || s.source_job_ids.length > 32 || new Set(s.source_job_ids).size !== s.source_job_ids.length || s.source_job_ids.some(x => !/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(x)))
     throw new Error('请输入1–32个有效诊断任务ID'); return s; }
-export function viewFromSearch(search: string): View { const q = new URLSearchParams(search); const page = q.get('view'); return { page: page === 'new' || page === 'workers' || page === 'logs' || page === 'data' || page === 'performance' || page === 'storage' ? page : 'tasks', run: validViewID(q.get('run')), legacy: validViewID(q.get('legacy')), task: validViewID(q.get('task')), job: validViewID(q.get('job')), scan: validViewID(q.get('scan')), radar: /^[a-zA-Z0-9_.-]{1,96}$/.test(q.get('radar') ?? '') ? q.get('radar')! : undefined, start: validViewTime(q.get('start')), end: validViewTime(q.get('end')), preset: ['qc_preview','render_only','x_qc','sx_composite'].includes(q.get('preset') ?? '') ? q.get('preset')! : undefined }; }
-export function viewURL(v: View) { const q = new URLSearchParams({ view: v.page }); for (const key of ['run', 'legacy', 'task', 'job', 'scan', 'radar', 'start', 'end', 'preset'] as const)
+export function viewFromSearch(search: string): View { const q = new URLSearchParams(search); const raw = q.get('view'); const legacyTabs: Record<string, SystemTab> = { workers: 'workers', logs: 'logs', performance: 'performance', storage: 'storage' }; const page = raw === 'new' || raw === 'data' || raw === 'system' ? raw : raw === 'tasks' ? 'tasks' : raw && legacyTabs[raw] ? 'system' : 'overview'; const tabRaw = q.get('tab'); const tab = tabRaw && ['workers', 'performance', 'logs', 'storage'].includes(tabRaw) ? tabRaw as SystemTab : raw && legacyTabs[raw] ? legacyTabs[raw] : undefined; return { page, tab, run: validViewID(q.get('run')), legacy: validViewID(q.get('legacy')), task: validViewID(q.get('task')), job: validViewID(q.get('job')), scan: validViewID(q.get('scan')), radar: /^[a-zA-Z0-9_.-]{1,96}$/.test(q.get('radar') ?? '') ? q.get('radar')! : undefined, start: validViewTime(q.get('start')), end: validViewTime(q.get('end')), preset: ['qc_preview','render_only','x_qc','sx_composite'].includes(q.get('preset') ?? '') ? q.get('preset')! : undefined }; }
+export function viewURL(v: View) { const q = new URLSearchParams({ view: v.page }); if (v.page === 'system' && v.tab)
+        q.set('tab', v.tab); for (const key of ['run', 'legacy', 'task', 'job', 'scan', 'radar', 'start', 'end', 'preset'] as const)
     if (v[key])
         q.set(key, v[key]!); return `/admin?${q}`; }
 export function mergeEvents(old: JournalEvent[], next: JournalEvent[], limit = 2000) { const merged = new Map(old.map(e => [e.id, e])); for (const event of next)

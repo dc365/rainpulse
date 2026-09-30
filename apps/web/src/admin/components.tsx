@@ -13,6 +13,10 @@ export function Notice({ children, error = false }: {
 export function Empty({ children }: {
     children: ReactNode;
 }) { return <div className="ops-empty">{children}</div>; }
+export function Hint({ title = '规则说明', children }: {
+    title?: string;
+    children: ReactNode;
+}) { return <details className="ops-hint"><summary>{title}</summary><div className="ops-hint-body">{children}</div></details>; }
 export function JSONView({ value, label = '详细信息' }: {
     value: unknown;
     label?: string;
