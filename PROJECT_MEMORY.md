@@ -1447,3 +1447,12 @@ operational data here.
 - 当前状态安全：zphi 已配置但因无相位支撑而零订正（诚实弃权），产品行为与 none 等价
   （winner 层仍 S 驱动，X 值未被错误订正）。待相位分类器就绪后无需再动配置即可点亮。
 - 交叉定标重跑补齐：控制服务恢复后 zf101/zf102 补验尚未做（与 zf103-105 预期一致）。
+
+
+## 2026-09-30 ZF702 径向预算与接收机模式修复已发布
+
+- 本地主线提交a5ed2bb/3027252/d60fbb8/c2918a1已合并main并push：源枚举去重、独立几何预算、异构诊断无损压缩、上传前身份校验、REF/SNR接收机模式分位一致。239项相关当前用例通过，混合模式与上传漂移回归均实跑红绿；旧8项参考不适配保留记录。
+- 正常r4 task `7f00e623-f996-4a0c-868a-6d0ef74c38fb` / attempt `3a519e3b-1106-4b12-9a29-fa043e0a5830` SUCCEEDED08:20Z，artifact SHA `c29dc68fc441284dea55ec2de312e8c6f36f3e9239d6abff01c7dd75d869b709`。ZF702 scan3b3bf9da全部9层源模型完整、raw不变；主要cut0/2/4/5远距≥15dBZ残留门77079→1397、182551→1655、110031→1149、81840→1409。r3漏检的cut2约198.345°强径向2481→0，浏览器复核0/2/4/5原始/质控地图通过主要径向清除检查。
+- cut2/9仍ACTION_BUDGET_ABSTAINED，界面保留未完成警告，不宣称全层或全天验收通过。未提高动作预算，不启用可信融合/QPE/预报。
+- 105默认4个MB Worker已更新 `rainpulse-cpu-worker:xqc-mode-c2918a1-merged`，4/4ready，发布指纹 `b9480e0d5085612bb9bb841e41a221e0bff6e7b6e6d6becbb2ec15a15f03e392`。保留同期d13f8dd定标/衰减适配，17份算法SHA核对提交c2918a1。配置仍74bfcf66，S QC镜像/控制Web未重启。证据 `.build/xqc-zf702-investigation/published-r4.jsonl`、verified-ray-r4.json；105 `.build/xqc-budget-c2918a1/acceptance.json`、promotion.json。
+- 下一步沿主线抽查其他站/时次/仰角与动作保护，不从单体扫推断全网干净。X全天/小时定时仍暂停；实际MinIO数据盘约116.9GiB可用（不是/data的NFS空闲），低于120GiB批次保护线，不能盲启动大批量。
