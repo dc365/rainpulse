@@ -35,6 +35,27 @@ button, select { min-height: 40px; }
 }
 .workspace-topbar { grid-template-columns: auto 1fr auto auto; }
 .workspace-topbar .workspace-freshness { justify-self: end; }
+/* Right cluster keeps the topbar at three grid children so nothing wraps
+   to a second row when the data-warning button appears. */
+.workspace-topbar-side { display: flex; align-items: center; gap: 10px; justify-self: end; min-width: 0; }
+/* Preset tabs live inside the topbar on every workspace page. */
+.radar-qc-presets { justify-self: center; display: inline-flex; align-items: center; gap: 2px; }
+.radar-qc-presets a,
+.radar-qc-presets button {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  text-decoration: none;
+  color: var(--rp-muted);
+  font-weight: 600;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+}
+.radar-qc-presets a.active,
+.radar-qc-presets button.active { color: var(--rp-teal); background: var(--rp-teal-soft); }
 .workspace-warning-compact {
   min-height: 32px;
   padding: 0 9px;
@@ -255,14 +276,12 @@ button, select { min-height: 40px; }
   border: 1px solid var(--rp-line);
   background: var(--rp-paper);
 }
-.preset-tabs,
 .map-tools,
 .mobile-panel-tabs {
   display: flex;
   align-items: center;
   gap: 4px;
 }
-.preset-tabs button,
 .map-tools button,
 .mobile-panel-tabs button {
   border: 1px solid transparent;
@@ -272,7 +291,6 @@ button, select { min-height: 40px; }
   color: var(--rp-muted);
   cursor: pointer;
 }
-.preset-tabs button.active,
 .map-tools button.active,
 .mobile-panel-tabs button.active {
   border-color: #b9d3cd;
@@ -919,6 +937,22 @@ button, select { min-height: 40px; }
   letter-spacing: .08em;
 }
 
+/* Observation timeline: the whole observed span stays visible without scrolling. */
+.workspace-timeline-rail.observation-fit { overflow-x: hidden; }
+.workspace-timeline-rail.observation-fit .workspace-timeline-frame { min-width: 3px; }
+.workspace-timeline-rail.observation-fit .workspace-timeline-frame[data-dense="true"] .workspace-timeline-lanes { display: none; }
+.workspace-timeline-rail.observation-fit .workspace-timeline-frame[data-dense="true"] .workspace-timeline-node { width: 5px; height: 5px; top: -3px; left: calc(50% - 2.5px); }
+.workspace-timeline-frame-pos { color: var(--rp-muted); font-size: 11px; white-space: nowrap; }
+.workspace-timeline-inline-availability { display: flex; align-items: center; gap: 12px; margin-left: 4px; padding-left: 12px; border-left: 1px solid var(--rp-line); white-space: nowrap; overflow: hidden; }
+.workspace-timeline-inline-availability > span { display: inline-flex; align-items: center; gap: 5px; color: var(--rp-muted); font-size: 11px; }
+.workspace-timeline-inline-availability i { width: 6px; height: 6px; border-radius: 50%; background: var(--rp-line); flex: none; }
+.workspace-timeline-inline-availability i[data-ready="true"] { background: var(--rp-teal); }
+.workspace-timeline-inline-availability small { color: var(--rp-muted); font-size: 11px; }
+@media (max-width: 760px) {
+  .workspace-timeline-inline-availability small, .workspace-timeline-frame-pos { display: none; }
+  .workspace-timeline-inline-availability { border-left: 0; padding-left: 0; gap: 8px; }
+}
+
 .timeline-period-labels { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
 .timeline-period-labels span { position: absolute; top: 19px; box-sizing: border-box; overflow: hidden; color: #496573; font-size: 10px; font-weight: 650; white-space: nowrap; }
 .timeline-period-labels span:first-child { padding-right: 42px; text-align: right; }
@@ -1454,7 +1488,7 @@ button, select { min-height: 40px; }
     gap: 8px;
     padding: 2px 6px;
   }
-  .preset-tabs button,
+  .radar-qc-presets button,
   .map-tools button { min-height: 32px; padding-inline: 9px; }
   .map-tools label { gap: 4px; padding-left: 4px; font-size: 11px; }
   .map-tools input { width: 76px; }
@@ -1552,8 +1586,8 @@ button, select { min-height: 40px; }
   .workspace-cycle-summary { grid-column: 1 / 2; grid-row: 3; border-left: 0; padding-left: 0; }
   .workspace-freshness { grid-column: 2 / 3; grid-row: 3; justify-self: end; }
   .workspace-controls { margin-top: 0; border-left: 0; border-right: 0; }
-  .preset-tabs { width: 100%; overflow-x: auto; }
-  .preset-tabs button { flex: 1 0 auto; }
+  .radar-qc-presets { grid-column: 1 / -1; grid-row: 2; justify-self: start; width: 100%; overflow-x: auto; }
+  .radar-qc-presets button { flex: 0 0 auto; }
   .radar-selector { width: 100%; }
   .qc-evidence-switch { width: 100%; overflow-x: auto; }
   .qc-evidence-switch .map-style-switch button { flex: 0 0 auto; }

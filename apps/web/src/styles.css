@@ -2558,6 +2558,22 @@ h1 {
   letter-spacing: .08em;
 }
 
+.gis-basemap-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  letter-spacing: .08em;
+}
+.gis-basemap-picker select {
+  min-height: 24px;
+  padding: 0 6px;
+  font-size: 11px;
+  border: 1px solid var(--gis-border);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+}
+
 .gis-layer-empty {
   z-index: 4;
   position: absolute;

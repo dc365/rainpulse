@@ -47,12 +47,7 @@ import {
   type WorkspacePanel,
   type WorkspacePreset,
 } from './model'
-
-const presetLabels: Record<WorkspacePreset, string> = {
-  forecast: '预报对比',
-  qc: '质控排查',
-  verification: '检验回放',
-}
+import { WorkspacePresets } from './WorkspacePresets'
 
 // The slot answers "is the fused field damaged?" with the mosaic by default;
 // one button flips it to the flags that explain why a gate was removed.
@@ -332,35 +327,26 @@ export function MainWorkspace() {
           <strong>RainPulse</strong>
           <small>短临降水工作台</small>
         </a>
-        <div className="workspace-freshness" aria-label="数据时效">
-          <i className={isRealtimeView ? 'fresh' : ''} />
-          <span>{followLatest ? connection === 'connected' ? '自动跟随 · 已连接' : '自动跟随 · 轮询恢复' : '历史回放 · 固定起报'}</span>
-          <strong>{followLatest && detail ? ageLabel(cycleAgeSeconds(detail, now)) : selectedCycle ? capabilityText(selectedCycle) : '读取中'}</strong>
+        <WorkspacePresets active={preset} onSelect={(key) => {
+          if (key === 'qc') { window.location.href = '/?preset=qc'; return }
+          if (key === 'verification') pin()
+          setPreset(key)
+          if (selectedTime) applyTimeSelection(selectedTime, true, key)
+        }} />
+        <div className="workspace-topbar-side">
+          <div className="workspace-freshness" aria-label="数据时效">
+            <i className={isRealtimeView ? 'fresh' : ''} />
+            <span>{followLatest ? connection === 'connected' ? '自动跟随 · 已连接' : '自动跟随 · 轮询恢复' : '历史回放 · 固定起报'}</span>
+            <strong>{followLatest && detail ? ageLabel(cycleAgeSeconds(detail, now)) : selectedCycle ? capabilityText(selectedCycle) : '读取中'}</strong>
+          </div>
+          {error ? <button type="button" className="workspace-warning-compact" title={error} aria-label={`部分数据源不可用，重试。${error}`} onClick={refresh}>数据异常 · 重试</button> : null}
+          <a className="admin-link" href="/admin">后台</a>
         </div>
-        {error ? <button type="button" className="workspace-warning-compact" title={error} aria-label={`部分数据源不可用，重试。${error}`} onClick={refresh}>数据异常 · 重试</button> : null}
-        <a className="admin-link" href="/admin">后台</a>
       </header>
 
       {loading && detail ? <div className="workspace-pending" role="status">正在读取所选周期；当前仍显示 {formatLocalCycleTime(detail.issue_time)} 起报结果。</div> : null}
 
       <section className={`workspace-controls${preset === 'qc' ? ' qc-controls' : ''}`} aria-label="工作台控制">
-        <div className="preset-tabs" role="tablist" aria-label="工作台预设">
-          {(Object.keys(presetLabels) as WorkspacePreset[]).map((key) => (
-            <button
-              type="button"
-              role="tab"
-              aria-selected={preset === key}
-              className={preset === key ? 'active' : ''}
-              key={key}
-              onClick={() => {
-                if (key === 'qc') { window.location.href = '/?preset=qc'; return }
-                if (key === 'verification') pin()
-                setPreset(key)
-                if (selectedTime) applyTimeSelection(selectedTime, true, key)
-              }}
-            >{presetLabels[key]}</button>
-          ))}
-        </div>
         {preset === 'qc' && detail ? (
           <label className="radar-selector">
             <span>雷达</span>
@@ -951,10 +937,17 @@ export function SharedTimeline({
           {!observationOnly && !cycleControls && <span className="workspace-timeline-issue"><small>起报</small>{formatCycleTime(issueTime)}</span>}
           <strong>{highlighted ? `${intervalLabel(issueTime, highlighted)}${intervalBusy && !draftInterval ? ' · 计算中…' : ''}` : productMode === 'rain_rate' ? `${timelineDateTime(new Date(activeValue))} 北京时间`
             : `${accumulationLabel(issueTime, activeValue, productMode)} · ${timelineDateTime(new Date(activeValue))} 北京时间`}</strong>
+          {observationOnly && values.length > 0 && <span className="workspace-timeline-frame-pos">第 {activeIndex + 1}/{values.length} 帧</span>}
+          {observationOnly && <span className="workspace-timeline-inline-availability" aria-label="图层可用性">
+            {panels.map((panel) => (
+              <span key={panel.panel_id}><i data-ready={isDisplayAvailable(panel, activeValue)} />{panelDisplayName(panel)}</span>
+            ))}
+            <small>← → 键逐帧查看</small>
+          </span>}
         </div>
       </div>
 
-      <div className={`workspace-timeline-rail${onInterval ? ' selectable-timeline' : ''}${productMode !== 'rain_rate' ? ' accumulation-rail' : ''}`} ref={railRef}
+      <div className={`workspace-timeline-rail${observationOnly ? ' observation-fit' : ''}${onInterval ? ' selectable-timeline' : ''}${productMode !== 'rain_rate' ? ' accumulation-rail' : ''}`} ref={railRef}
         onPointerDown={event => {
           if (!onInterval || event.button !== 0 || event.isPrimary === false) return
           const node = (event.target as HTMLElement).closest<HTMLElement>('[data-lead]')
@@ -984,7 +977,7 @@ export function SharedTimeline({
         onPointerCancel={cancelGesture}
         onLostPointerCapture={cancelGesture}>
         <div className="workspace-timeline-track" style={{
-          width: `max(100%, ${railWidth}px)`,
+          width: observationOnly ? '100%' : `max(100%, ${railWidth}px)`,
           background: `linear-gradient(90deg, #edf2f5 0% ${issuePosition}%, var(--rp-teal-soft) ${issuePosition}% 100%)`,
         }}>
         {onInterval && <div className="timeline-period-labels" aria-hidden="true">
@@ -1019,8 +1012,9 @@ export function SharedTimeline({
               className={`workspace-timeline-frame${active ? ' active' : ''}`}
               key={value}
               onClick={event => { if (!onInterval || event.detail === 0) onSelect(value) }}
-              style={{ left: `${position}%`, width: `max(24px, ${cellWidth}%)`, transform: alignment }}
+              style={{ left: `${position}%`, width: observationOnly ? `min(48px, max(3px, ${cellWidth}%))` : `max(24px, ${cellWidth}%)`, transform: alignment }}
               data-lead={leadMinutes}
+              data-dense={observationOnly && values.length > 120 ? 'true' : undefined}
               data-period={observationOnly ? 'past' : leadMinutes < 0 ? 'past' : leadMinutes === 0 ? 'issue' : 'future'}
               data-available={panels.some(panel => isDisplayAvailable(panel, value))}
               data-selected={Boolean(highlighted && leadMinutes >= highlighted.start && leadMinutes <= highlighted.end)}
@@ -1041,14 +1035,14 @@ export function SharedTimeline({
         </div>
       </div>
 
-      <div className="workspace-timeline-availability" aria-label="图层可用性">
+      {!observationOnly && <div className="workspace-timeline-availability" aria-label="图层可用性">
         <span className="workspace-timeline-current"><i />{highlighted ? '累计区间' : '当前时效'}</span>
         {panels.map((panel) => (
           <span key={panel.panel_id}><i data-ready={isDisplayAvailable(panel, selectedTime ?? issueTime)} />{panelDisplayName(panel)}</span>
         ))}
         {selectedInterval && onRetryInterval && <button type="button" onClick={onRetryInterval} disabled={intervalBusy}>重新计算</button>}
         <small>{onInterval ? '点击看单时效 · 按住拖动看累计' : '← → 键逐帧查看'}</small>
-      </div>
+      </div>}
     </section>
   )
 }

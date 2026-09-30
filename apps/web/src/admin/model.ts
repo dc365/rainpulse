@@ -172,7 +172,7 @@ export type JournalPage = {
     direction?: string;
     has_more: boolean;
 };
-export type SystemTab = 'workers' | 'performance' | 'logs' | 'storage';
+export type SystemTab = 'workers' | 'performance' | 'logs' | 'storage' | 'basemap';
 export type View = {
     page: 'overview' | 'tasks' | 'new' | 'data' | 'system';
     tab?: SystemTab;
@@ -220,7 +220,7 @@ export function parseSelection(preset: string, start: string, end: string, radar
 }
 else if (!s.source_job_ids?.length || s.source_job_ids.length > 32 || new Set(s.source_job_ids).size !== s.source_job_ids.length || s.source_job_ids.some(x => !/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(x)))
     throw new Error('请输入1–32个有效诊断任务ID'); return s; }
-export function viewFromSearch(search: string): View { const q = new URLSearchParams(search); const raw = q.get('view'); const legacyTabs: Record<string, SystemTab> = { workers: 'workers', logs: 'logs', performance: 'performance', storage: 'storage' }; const page = raw === 'new' || raw === 'data' || raw === 'system' ? raw : raw === 'tasks' ? 'tasks' : raw && legacyTabs[raw] ? 'system' : 'overview'; const tabRaw = q.get('tab'); const tab = tabRaw && ['workers', 'performance', 'logs', 'storage'].includes(tabRaw) ? tabRaw as SystemTab : raw && legacyTabs[raw] ? legacyTabs[raw] : undefined; return { page, tab, run: validViewID(q.get('run')), legacy: validViewID(q.get('legacy')), task: validViewID(q.get('task')), job: validViewID(q.get('job')), scan: validViewID(q.get('scan')), radar: /^[a-zA-Z0-9_.-]{1,96}$/.test(q.get('radar') ?? '') ? q.get('radar')! : undefined, start: validViewTime(q.get('start')), end: validViewTime(q.get('end')), preset: ['qc_preview','render_only','x_qc','sx_composite'].includes(q.get('preset') ?? '') ? q.get('preset')! : undefined }; }
+export function viewFromSearch(search: string): View { const q = new URLSearchParams(search); const raw = q.get('view'); const legacyTabs: Record<string, SystemTab> = { workers: 'workers', logs: 'logs', performance: 'performance', storage: 'storage' }; const page = raw === 'new' || raw === 'data' || raw === 'system' ? raw : raw === 'tasks' ? 'tasks' : raw && legacyTabs[raw] ? 'system' : 'overview'; const tabRaw = q.get('tab'); const tab = tabRaw && ['workers', 'performance', 'logs', 'storage', 'basemap'].includes(tabRaw) ? tabRaw as SystemTab : raw && legacyTabs[raw] ? legacyTabs[raw] : undefined; return { page, tab, run: validViewID(q.get('run')), legacy: validViewID(q.get('legacy')), task: validViewID(q.get('task')), job: validViewID(q.get('job')), scan: validViewID(q.get('scan')), radar: /^[a-zA-Z0-9_.-]{1,96}$/.test(q.get('radar') ?? '') ? q.get('radar')! : undefined, start: validViewTime(q.get('start')), end: validViewTime(q.get('end')), preset: ['qc_preview','render_only','x_qc','sx_composite'].includes(q.get('preset') ?? '') ? q.get('preset')! : undefined }; }
 export function viewURL(v: View) { const q = new URLSearchParams({ view: v.page }); if (v.page === 'system' && v.tab)
         q.set('tab', v.tab); for (const key of ['run', 'legacy', 'task', 'job', 'scan', 'radar', 'start', 'end', 'preset'] as const)
     if (v[key])

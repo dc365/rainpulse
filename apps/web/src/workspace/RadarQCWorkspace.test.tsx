@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { RadarQCWorkspace } from './RadarQCWorkspace'
 
@@ -80,10 +80,12 @@ it('selects S and X together without requiring trusted fusion geometry', async (
   render(<RadarQCWorkspace />)
   await waitFor(() => expect(document.querySelectorAll('[data-image="/dbzh_qc-z9591.png"]')).toHaveLength(1))
   fireEvent.click(screen.getByRole('button', { name: '多站叠加' }))
-  fireEvent.click(screen.getByRole('button', { name: 'S 全部' }))
+  fireEvent.click(screen.getByRole('button', { name: 'S 站' }))
+  fireEvent.click(screen.getByRole('button', { name: '全选' }))
+  fireEvent.click(screen.getByRole('button', { name: '全部' }))
   fireEvent.click(screen.getByRole('checkbox', { name: /ZF101/ }))
   await waitFor(() => expect(document.querySelector('[data-layers="/dbzh_qc-z9591.png,/map-qc-x.png"]')).toBeTruthy())
-  fireEvent.change(screen.getByRole('combobox', {name:'筛选波段'}), {target:{value:'S'}})
+  fireEvent.click(screen.getByRole('button', { name: 'S 站' }))
   expect(document.querySelector('[data-layers="/dbzh_qc-z9591.png,/map-qc-x.png"]')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: /08\/28 18:36 北京时间/ }))
   await waitFor(() => expect(document.querySelector('[data-layers*="map-qc-x"]')).toBeNull())
@@ -99,12 +101,10 @@ it('overlays X raw and QC rasters on exactly two maps using the result geometry'
   expect(maps.map(map => map.dataset.image)).toEqual(['/map-raw-x.png', '/map-qc-x.png'])
   for (const map of maps) expect(map.dataset).toMatchObject({ longitude: '119.3306', latitude: '26.1758',
     geometryStatus: 'unverified', radii: '10,20,30,40,50', extent: '118.8,25.7,119.8,26.7' })
-  expect(fetch).toHaveBeenCalledWith('/map-raw-x.png', expect.anything())
-  expect(fetch).toHaveBeenCalledWith('/map-qc-x.png', expect.anything())
   expect(screen.queryByRole('region', { name: 'X 波段站点参考地图' })).toBeNull()
   expect(screen.queryByLabelText('原生图缩放')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: '质控标记' }))
-  await waitFor(() => expect(fetch).toHaveBeenCalledWith('/map-flags-x.png', expect.anything()))
+  await waitFor(() => expect(maps[1].dataset.image).toBe('/map-flags-x.png'))
   fireEvent.click(screen.getByRole('button', { name: '单图' }))
   expect(document.querySelector('.radar-qc-pair.layout-single')).toBeTruthy()
 })
@@ -113,9 +113,148 @@ it('shows composite times beyond the S catalog without selected station layers',
  setup()
  window.history.replaceState({}, '', '/?preset=qc&band=S&mode=fusion&date=2026-08-28&time=2026-08-28T00:06:00Z')
  render(<RadarQCWorkspace />)
+ expect(screen.queryByRole('checkbox', { name: /Z9591/ })).toBeNull()
+ expect(screen.queryByRole('button', { name: '全选' })).toBeNull()
+ const generate = await screen.findByRole('link', { name: '生成组合' })
+ await waitFor(() => expect(generate.getAttribute('href')).toContain('radar=z9591'))
+ expect(generate.getAttribute('href')).toContain('zf505')
  const late=await screen.findByRole('button',{name:/08\/28 23:54 北京时间/})
  fireEvent.click(late)
  await waitFor(()=>expect(new URLSearchParams(window.location.search).get('time')).toBe('2026-08-28T15:54:00.000Z'))
+})
+
+it('renders overlay mode directly from a URL without a time parameter', async () => {
+  setup()
+  window.history.replaceState({}, '', '/?preset=qc&band=S&mode=overlay&date=2026-08-28')
+  render(<RadarQCWorkspace />)
+  await screen.findByRole('checkbox', { name: /ZF101/ })
+  await screen.findByRole('checkbox', { name: /Z9591/ })
+  fireEvent.click(screen.getByRole('button', { name: '全选' }))
+  await waitFor(() => expect(JSON.parse(sessionStorage.getItem('rainpulse.multi-station.layers') ?? '[]')).toHaveLength(4))
+  expect(screen.getByRole('button', { name: '取消全选' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '取消全选' }))
+  await waitFor(() => expect(JSON.parse(sessionStorage.getItem('rainpulse.multi-station.layers') ?? '[]')).toHaveLength(0))
+  expect((screen.getByLabelText('资料日期') as HTMLInputElement).value).toBe('2026-08-28')
+  expect(screen.queryByRole('combobox', { name: '字段' })).toBeNull()
+})
+
+it('renders the observation timeline as a fit-all rail with inline availability', async () => {
+  setup()
+  window.history.replaceState({}, '', '/?preset=qc&band=S&date=2026-08-28&time=2026-08-28T00:06:00Z&station=z9591')
+  const { container } = render(<RadarQCWorkspace />)
+  await waitFor(() => expect(document.querySelectorAll('[data-image="/dbzh_raw-z9591.png"]')).toHaveLength(1))
+  const rail = container.querySelector('.workspace-timeline-rail')
+  expect(rail?.classList.contains('observation-fit')).toBe(true)
+  expect(rail?.querySelectorAll('.workspace-timeline-frame')).toHaveLength(2)
+  expect(container.querySelector('.workspace-timeline-availability')).toBeNull()
+  expect(container.querySelector('.workspace-timeline-inline-availability')).toBeTruthy()
+  expect(screen.getByText('S 分析周期')).toBeTruthy()
+  expect(screen.getByText('第 1/2 帧')).toBeTruthy()
+})
+
+it('distinguishes reading from no-scan while the X scan list is loading', async () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
+  vi.stubGlobal('Image', class { src = ''; decode() { return Promise.resolve() } })
+  URL.createObjectURL = vi.fn(() => 'blob:comparison')
+  URL.revokeObjectURL = vi.fn()
+  let releaseScans: (value: unknown) => void = () => {}
+  vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+    const url = String(input)
+    if (url.includes('radar-scans')) return new Promise(resolve => { releaseScans = resolve })
+    const data = url.includes('radar-stations') ? stations : url.includes('radar-products') ? result
+      : { schema_version: '1.0', items: cycles, generated_at: morning, next_cursor: null }
+    return { ok: true, json: async () => data, blob: async () => new Blob(['png'], { type: 'image/png' }) }
+  }))
+  window.history.replaceState({}, '', '/?preset=qc&band=X&date=2026-08-28&time=2026-08-28T00:06:00Z&station=zf101')
+  render(<RadarQCWorkspace />)
+  expect(await screen.findByText('正在读取体扫…')).toBeTruthy()
+  expect(screen.queryByText('该时刻无体扫')).toBeNull()
+  await act(async () => { releaseScans({ ok: true, json: async () => scans }) })
+  await waitFor(() => expect(document.querySelectorAll('[data-testid="geo-image"]')).toHaveLength(2))
+})
+
+it('uses the S analysis grid for the X timeline and matches the nearest scan', async () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
+  vi.stubGlobal('Image', class { src = ''; decode() { return Promise.resolve() } })
+  URL.createObjectURL = vi.fn(() => 'blob:comparison')
+  URL.revokeObjectURL = vi.fn()
+  const offsetScans = { items: [{ ...scans.items[0], volume_start: '2026-08-28T00:07:30Z', volume_end: '2026-08-28T00:08:30Z' }], next_cursor: '' }
+  vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+    const url = String(input)
+    const data = url.includes('radar-stations') ? stations : url.includes('radar-scans') ? offsetScans : url.includes('radar-products') ? result
+      : { schema_version: '1.0', items: cycles, generated_at: morning, next_cursor: null }
+    return { ok: true, json: async () => data, blob: async () => new Blob(['png'], { type: 'image/png' }) }
+  }))
+  window.history.replaceState({}, '', '/?preset=qc&band=X&date=2026-08-28&time=2026-08-28T00:06:00Z&station=zf101')
+  const { unmount } = render(<RadarQCWorkspace />)
+  await waitFor(() => expect(document.querySelectorAll('[data-testid="geo-image"]')).toHaveLength(2))
+  expect(document.querySelectorAll('.workspace-timeline-frame')).toHaveLength(2)
+  expect(document.querySelector('.radar-qc-map header span')?.textContent).toBe('08:07:30')
+  expect(document.querySelector('.workspace-timeline-state strong')?.textContent).toContain('08/28 08:06 北京时间')
+  unmount()
+  // 目标时刻无邻近体扫时回退最近带结果体扫，不落"无体扫"门控
+  window.history.replaceState({}, '', '/?preset=qc&band=X&date=2026-08-28&time=2026-08-28T10:36:00Z&station=zf101')
+  render(<RadarQCWorkspace />)
+  await waitFor(() => expect(document.querySelectorAll('[data-testid="geo-image"]')).toHaveLength(2))
+  expect(document.querySelector('.radar-qc-gate')).toBeNull()
+  expect(document.querySelector('.radar-qc-map header span')?.textContent).toBe('08:07:30')
+})
+
+it('drops the retained composite once a time is confirmed to have no composite', async () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
+  vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+    const url = String(input)
+    let data: unknown
+    if (url.includes('radar-composites/')) data = { result_id: 'rc-1', manifest: { analysis_time: '2026-08-28T00:06:00Z', comparison: { products: [
+      { product_id: 's_only', label: 'S 组合反射率', status: 'ready', map: { bounds: [118, 25, 120, 27], object_path: '/full.png' } },
+    ] } } }
+    else if (url.includes('radar-composites?')) {
+      const start = new URLSearchParams(url.split('?')[1]).get('start') ?? ''
+      data = start.startsWith('2026-08-28T00') ? { items: [{ result_id: 'rc-1', analysis_time: '2026-08-28T00:06:00Z' }] } : { items: [] }
+    }
+    else if (url.includes('radar-stations')) data = stations
+    else if (url.includes('radar-scans')) data = scans
+    else if (url.includes('radar-products')) data = result
+    else if (url.includes('cycles/cycle-')) data = cycleDetail(Number(url.at(-1)))
+    else data = { schema_version: '1.0', items: cycles, generated_at: morning, next_cursor: null }
+    return { ok: true, json: async () => data, blob: async () => new Blob(['png'], { type: 'image/png' }) }
+  }))
+  window.history.replaceState({}, '', '/?preset=qc&mode=fusion&date=2026-08-28&time=2026-08-28T00:06:00Z')
+  render(<RadarQCWorkspace />)
+  await waitFor(() => expect(document.querySelector('[data-layers="/full.png"]')).toBeTruthy())
+  fireEvent.click(screen.getByRole('button', { name: /08\/28 18:36 北京时间/ }))
+  await waitFor(() => expect(document.querySelector('[data-layers="/full.png"]')).toBeNull())
+  expect(screen.getByText(/现有 S 数值组合产品|X 未参与/)).toBeTruthy()
+})
+
+it('keeps the previous fallback layer while the next cycle detail is loading', async () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
+  const mosaicDetail = (index: number) => ({ ...cycleDetail(index), panels: [...cycleDetail(index).panels,
+    { panel_id: 'analysis:dbzh_qc', algorithm_id: 'radar-analysis', display_name: 'analysis', role: 'qc', lifecycle: 'analysis',
+      data_kind: 'reflectivity', cadence_minutes: 6, status: 'ready',
+      frames: [{ asset_id: `m${index}`, valid_time: cycles[index].issue_time, lead_time_minutes: 0, image_url: `/mosaic-${index}.png`, media_type: 'image/png' }] }] })
+  const pendingCycle1: ((value: unknown) => void)[] = []
+  vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+    const url = String(input)
+    let data: unknown
+    if (url.includes('radar-composites')) data = { items: [] }
+    else if (url.includes('radar-stations')) data = stations
+    else if (url.includes('radar-scans')) data = scans
+    else if (url.includes('radar-products')) data = result
+    else if (url.includes('cycles/cycle-0')) data = mosaicDetail(0)
+    else if (url.includes('cycles/cycle-1')) return new Promise(resolve => { pendingCycle1.push(resolve) })
+    else data = { schema_version: '1.0', items: cycles, generated_at: morning, next_cursor: null }
+    return { ok: true, json: async () => data, blob: async () => new Blob(['png'], { type: 'image/png' }) }
+  }))
+  window.history.replaceState({}, '', '/?preset=qc&mode=fusion&date=2026-08-28&time=2026-08-28T00:06:00Z')
+  render(<RadarQCWorkspace />)
+  await waitFor(() => expect(document.querySelector('[data-layers="/mosaic-0.png"]')).toBeTruthy())
+  fireEvent.click(screen.getByRole('button', { name: /08\/28 18:36 北京时间/ }))
+  await act(async () => { await new Promise(r => setTimeout(r, 120)) })
+  expect(document.querySelector('[data-layers="/mosaic-0.png"]')).toBeTruthy()
+  await act(async () => { pendingCycle1.forEach(resolve => resolve({ ok: true, json: async () => mosaicDetail(1) })) })
+  await waitFor(() => expect(document.querySelector('[data-layers="/mosaic-1.png"]')).toBeTruthy())
+  expect(document.querySelector('[data-layers="/mosaic-0.png"]')).toBeNull()
 })
 
 it('selects the whole 4 S + 24 X network without silently truncating stations',async()=>{
@@ -124,7 +263,7 @@ it('selects the whole 4 S + 24 X network without silently truncating stations',a
  window.history.replaceState({},'', '/?preset=qc&band=S&mode=overlay&date=2026-08-28&time=2026-08-28T00:06:00Z')
  render(<RadarQCWorkspace />)
  await screen.findByRole('checkbox',{name:/ZF123/})
- fireEvent.click(screen.getByRole('button',{name:'S+X 全部'}))
+ fireEvent.click(screen.getByRole('button',{name:'全选'}))
  await waitFor(()=>expect(JSON.parse(sessionStorage.getItem('rainpulse.multi-station.layers')??'[]')).toHaveLength(28))
  const calls=vi.mocked(fetch).mock.calls.filter(([url])=>String(url).includes('radar-layer-resolutions'))
  expect(JSON.parse(String(calls.at(-1)?.[1]?.body)).radar_ids).toHaveLength(24)

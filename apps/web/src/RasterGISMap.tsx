@@ -1,4 +1,5 @@
 import { radarImagePool } from './radarImagePool'
+import { basemapTileURL, selectBasemap, useBasemap, type BasemapState } from './basemapSources'
 import { ReflectivityLegend } from './ReflectivityLegend'
 import { REFLECTIVITY_LEGEND } from './reflectivityPalette'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
@@ -69,6 +70,24 @@ const basemapUrl = import.meta.env.VITE_BASEMAP_URL?.trim()
 const basemapAttribution = import.meta.env.VITE_BASEMAP_ATTRIBUTION?.trim()
   || '© OpenStreetMap 贡献者'
 const basemapLabel = import.meta.env.VITE_BASEMAP_LABEL?.trim() || 'OPENSTREETMAP'
+// Optional label/annotation tiles rendered on top of the basemap (e.g. the
+// Tianditu cva annotation layer stacked over its unlabeled base map).
+const basemapOverlayUrl = import.meta.env.VITE_BASEMAP_OVERLAY_URL?.trim()
+
+// Runtime sources come from the control plane; the build-time env URLs are
+// only the fallback while that config is loading or unreachable.
+function basemapLayerURLs(state: BasemapState): { base: string; overlay: string } {
+  if (state.status !== 'ready') {
+    return { base: basemapUrl, overlay: basemapOverlayUrl ?? '' }
+  }
+  const option = state.options.find(item => item.key === state.selected)
+    ?? state.options.find(item => item.key === state.defaultKey)
+  if (!option) return { base: basemapUrl, overlay: basemapOverlayUrl ?? '' }
+  return {
+    base: basemapTileURL(option.key),
+    overlay: option.hasOverlay ? basemapTileURL(option.key, true) : '',
+  }
+}
 
 function createReferenceLayer(places: NonNullable<GISReferenceContext['places']>) {
   const features = places.map((place) => new Feature({
@@ -386,8 +405,8 @@ interface RasterGISMapProps {
   bbox?: readonly number[]
   loading: boolean
   loadingLabel?: string
-  layerError: boolean
-  onLayerError: (failed: boolean) => void
+  layerError?: boolean
+  onLayerError?: (failed: boolean) => void
   onSelectPoint?: (point: MapCoordinate) => void
   onProbe?: (point: MapCoordinate | null) => void
   referenceContext?: GISReferenceContext
@@ -432,7 +451,7 @@ export function RasterGISMap({
   bbox,
   loading,
   loadingLabel = '正在读取降水图层',
-  layerError,
+  layerError = false,
   onLayerError,
   onSelectPoint,
   onProbe,
@@ -457,6 +476,7 @@ export function RasterGISMap({
   const targetRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<OLMap | null>(null)
   const basemapLayerRef = useRef<TileLayer<XYZ> | null>(null)
+  const basemapOverlayLayerRef = useRef<TileLayer<XYZ> | null>(null)
   const coastlineLayerRef = useRef<ImageLayer<ImageStatic> | null>(null)
   const rasterLayerRef = useRef<ImageLayer<ImageStatic> | null>(null)
   const rasterValueLayerRef = useRef<VectorLayer<VectorSource> | null>(null)
@@ -502,6 +522,53 @@ export function RasterGISMap({
   const showRasterValues = controlledShowRasterValues ?? localShowRasterValues
   const rasterOpacity = controlledRasterOpacity ?? localRasterOpacity
   const rasterOpacityRef = useRef(rasterOpacity)
+
+  const basemap = useBasemap()
+  const basemapStateRef = useRef<BasemapState>(basemap)
+  useEffect(() => {
+    basemapStateRef.current = basemap
+    if (basemap.status !== 'ready') return
+    const urls = basemapLayerURLs(basemap)
+    const currentBase = basemapLayerRef.current?.getSource()?.getUrls()?.[0]
+    if (currentBase !== urls.base) {
+      const source = new XYZ({
+        attributions: basemapAttribution,
+        crossOrigin: 'anonymous',
+        url: urls.base,
+      })
+      basemapLayerRef.current?.setSource(source)
+      // A tile renderer that mounted against a zero-size map can stay dormant
+      // and never request tiles; refreshing the source kicks it awake.
+      source.refresh()
+    }
+    const currentOverlay = basemapOverlayLayerRef.current?.getSource()?.getUrls()?.[0]
+    if (basemapOverlayLayerRef.current) {
+      if (urls.overlay) {
+        if (currentOverlay !== urls.overlay) {
+          const source = new XYZ({ crossOrigin: 'anonymous', url: urls.overlay })
+          basemapOverlayLayerRef.current.setSource(source)
+          source.refresh()
+        }
+      } else {
+        // Sources without an annotation layer drop the overlay entirely.
+        mapRef.current?.removeLayer(basemapOverlayLayerRef.current)
+        basemapOverlayLayerRef.current = null
+      }
+    } else if (urls.overlay) {
+      const source = new XYZ({ crossOrigin: 'anonymous', url: urls.overlay })
+      const layer = new TileLayer({
+        className: 'rainpulse-basemap-overlay-layer',
+        opacity: 0.92,
+        preload: 0,
+        source,
+      })
+      basemapOverlayLayerRef.current = layer
+      layer.setVisible(basemapLayerRef.current?.getVisible() ?? true)
+      const map = mapRef.current
+      if (map) map.getLayers().insertAt(1, layer)
+      source.refresh()
+    }
+  }, [basemap])
 
   const pendingFrame = imageUrl && !loading && !layerError
     && loadedFrame !== `${imageUrl}|${rasterStyle}` ? `${imageUrl}|${rasterStyle}` : null
@@ -570,6 +637,7 @@ export function RasterGISMap({
     const domainExtent = fitExtentRef.current
     const mapReference = referenceContextRef.current
     const radarReference = radarContextRef.current
+    const basemapURLs = basemapLayerURLs(basemapStateRef.current)
 
     const basemapLayer = new TileLayer({
       className: 'rainpulse-basemap-layer',
@@ -578,9 +646,18 @@ export function RasterGISMap({
       source: new XYZ({
         attributions: basemapAttribution,
         crossOrigin: 'anonymous',
-        url: basemapUrl,
+        url: basemapURLs.base,
       }),
     })
+    const basemapOverlayLayer = basemapURLs.overlay ? new TileLayer({
+      className: 'rainpulse-basemap-overlay-layer',
+      opacity: 0.92,
+      preload: 0,
+      source: new XYZ({
+        crossOrigin: 'anonymous',
+        url: basemapURLs.overlay,
+      }),
+    }) : null
     const coastlineLayer = mapReference?.coastline
       ? new ImageLayer<ImageStatic>({
           opacity: 0.78,
@@ -633,6 +710,7 @@ export function RasterGISMap({
       target: targetRef.current,
       layers: [
         basemapLayer,
+        ...(basemapOverlayLayer ? [basemapOverlayLayer] : []),
         ...(coastlineLayer ? [coastlineLayer] : []),
         rasterLayer,
         motionLayer,
@@ -663,6 +741,15 @@ export function RasterGISMap({
     }
     fitDomain()
     refitRef.current = fitDomain
+    // The initial source can mount dormant when the container starts at zero
+    // size (see the refresh note in the basemap switch effect); one deferred
+    // refresh covers mounts that never switch sources at runtime.
+    const basemapKickTimer = window.setTimeout(() => {
+      basemapLayer.getSource()?.refresh()
+      basemapOverlayLayer?.getSource()?.refresh()
+      // Tests stub the OL map without renderSync; only nudge the real API.
+      if (typeof map.renderSync === 'function') map.renderSync()
+    }, 600)
     const markUserMoved = () => { userMovedRef.current = true }
     const viewportEl = map.getViewport()
     viewportEl.addEventListener('wheel', markUserMoved, { passive: true })
@@ -752,6 +839,7 @@ export function RasterGISMap({
 
     mapRef.current = map
     basemapLayerRef.current = basemapLayer
+    basemapOverlayLayerRef.current = basemapOverlayLayer
     coastlineLayerRef.current = coastlineLayer
     rasterLayerRef.current = rasterLayer
     rasterValueLayerRef.current = rasterValueLayer
@@ -759,6 +847,7 @@ export function RasterGISMap({
     selectionLayerRef.current = selectionLayer
 
     return () => {
+      window.clearTimeout(basemapKickTimer)
       unByKey([clickKey, pointerKey, moveKey])
       viewport.removeEventListener('pointerleave', clearHover)
       viewportEl.removeEventListener('wheel', markUserMoved)
@@ -770,6 +859,7 @@ export function RasterGISMap({
       map.setTarget(undefined)
       mapRef.current = null
       basemapLayerRef.current = null
+      basemapOverlayLayerRef.current = null
       coastlineLayerRef.current = null
       for(const entry of attachedMultiLayers.values()){entry.release();entry.layer.dispose()}
       attachedMultiLayers.clear()
@@ -810,20 +900,28 @@ export function RasterGISMap({
       const key=`${entry.url}/${entry.extent.join(',')}`
       let existing=entries.get(entry.id)
       if(existing?.key!==key){
-        if(existing){map.removeLayer(existing.layer);existing.release();existing.layer.dispose()}
+        const previous=existing
         let active=true
         const resource=radarImagePool.acquire(entry.url)
         const source=new ImageStatic({url:entry.url,imageExtent:[...entry.extent],projection:'EPSG:4326',interpolate:false,
-          imageLoadFunction:(image)=>{void resource.promise.then(value=>{if(active)(image.getImage() as HTMLImageElement).src=value.url}).catch(()=>{if(active)onLayerErrorRef.current(true)})}})
+          imageLoadFunction:(image)=>{void resource.promise.then(value=>{if(active)(image.getImage() as HTMLImageElement).src=value.url}).catch(()=>{if(active)onLayerErrorRef.current?.(true)})}})
         // Observe errors even if an offscreen source never invokes its loader.
-        void resource.promise.catch(()=>{if(active)onLayerErrorRef.current(true)})
+        void resource.promise.catch(()=>{if(active)onLayerErrorRef.current?.(true)})
         const layer=new ImageLayer({source})
         existing={layer,key,release:()=>{active=false;resource.release();layer.setSource(null)}}
-        entries.set(entry.id,existing);map.addLayer(layer)
+        entries.set(entry.id,existing)
+        map.addLayer(layer)
+        // Swap without flashing: keep the previous frame until the replacement decodes.
+        if (previous) void resource.promise.then(() => {
+          if (entries.get(entry.id) !== existing || !mapRef.current) return
+          map.removeLayer(previous.layer)
+          previous.release()
+          previous.layer.dispose()
+        }).catch(() => { previous.release() })
       }
       existing.layer.setOpacity(entry.opacity);existing.layer.setZIndex(10+index)
     })
-    onLayerErrorRef.current(false)
+    onLayerErrorRef.current?.(false)
   }, [imageLayers, fitExtentKey, radarContextKey, referenceContext, sharedView])
   useEffect(()=>()=>{for(const entry of multiLayersRef.current.values()){entry.release();entry.layer.dispose()}multiLayersRef.current.clear();radarImagePool.clearIdle()},[])
 
@@ -867,7 +965,7 @@ export function RasterGISMap({
       layer?.setSource(null)
       return
     }
-    onLayerErrorRef.current(false)
+    onLayerErrorRef.current?.(false)
     onProbeRef.current?.(null)
     const key = `${imageUrl}|${rasterStyle}|${imageExtentKey}`
     const cache = frameCacheRef.current
@@ -901,7 +999,7 @@ export function RasterGISMap({
         loadedImageRef.current = null
         layer.setSource(null)
         onProbeRef.current?.(null)
-        onLayerErrorRef.current(true)
+        onLayerErrorRef.current?.(true)
       }),
     ]
     // Keep the last decoded frame visible until its replacement is ready.
@@ -929,6 +1027,7 @@ export function RasterGISMap({
 
   useEffect(() => {
     basemapLayerRef.current?.setVisible(basemapVisible)
+    basemapOverlayLayerRef.current?.setVisible(basemapVisible)
   }, [basemapVisible, fitExtentKey, referenceContext])
 
   useEffect(() => {
@@ -1127,13 +1226,17 @@ export function RasterGISMap({
             ))}
           </div>
         )}
-        <footer><span>{basemapLabel}</span><small>{footerNote}</small></footer>
+        <footer>{basemap.status === 'ready' ? <label className="gis-basemap-picker">底图
+          <select aria-label="底图源" value={basemap.selected} onChange={event => { event.preventDefault(); selectBasemap(event.target.value) }}>
+            {basemap.options.map(option => <option key={option.key} value={option.key}>{option.label}</option>)}
+          </select>
+        </label> : <span>{basemapLabel}</span>}<small>{footerNote}</small></footer>
       </div> : null}
 
       {(!referenceOnly && ((!imageUrl && !imageLayers?.length) || layerError)) ? (
         <div className="gis-layer-empty" role="status">
-          <strong>{loading ? loadingLabel : '降水图层暂不可用'}</strong>
-          <small>{layerError ? '图层校验或网络请求失败' : (emptyStateHint ?? '等待已发布的透明 PNG 产品')}</small>
+          <strong>{layerError ? '降水图层暂不可用' : loading ? loadingLabel : emptyStateHint ?? '降水图层暂不可用'}</strong>
+          <small>{layerError ? '图层校验或网络请求失败' : '等待已发布的透明 PNG 产品'}</small>
         </div>
       ) : null}
     </div>

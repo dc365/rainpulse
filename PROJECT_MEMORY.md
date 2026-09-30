@@ -1,3 +1,188 @@
+## 2026-09-30 底图源可配置：内网瓦片为默认（第十五批，已部署 105）
+
+- 用户要求后台支持内网瓦片配置（192.168.18.101:20001 行政/地形/卫星，Mercator XYZ）且默认内网，
+  天地图保留可选。
+- Go：`operations/basemap_config.go` 配置域（`runtime/basemap-config.json`，env
+  `RAINPULSE_BASEMAP_CONFIG_FILE` 可覆盖；缺省 seed=内网 XZ/DX/WX + TDT[vec_w+cva_w，{token} 由
+  服务端替换、{0-7} 子域展开]）。代理 `/api/v1/workspace/basemap-tiles/{key}[/…-annot]/{z}/{x}/{y}.png`
+  按 key 取源（旧 vec/cva/img/cia 键保留兼容）；公开 `GET /api/v1/workspace/basemap-config` 只回
+  key/label/hasOverlay（不泄内网地址）；管理 `GET/PUT /api/v1/admin/ops/basemap-config` 与
+  `POST …/reset`（恢复默认 seed）。校验：key 唯一 1-16 位、URL 需 http(s) 且含 {z}{x}{y}、default
+  必须在列。单测 5 个（配置 seed/回写校验/代理 key/旧键/鉴权），Go 全量 29 包 ok。
+- Web：`src/basemapSources.ts` 运行时源 store（useSyncExternalStore + localStorage
+  `rainpulse.basemap.key`，取不到配置回退构建期 env URL）；RasterGISMap 顶栏页脚换为底图源
+  下拉（行政/地形/卫星/天地图），切源 setSource 不重建地图；`-annot` 注记层动态增删。
+  后台：系统运维新增"底图配置"页签（admin/Basemaps.tsx，行级编辑+保存+恢复默认）。
+- **重要坑（OL 瓦片层休眠）**：零尺寸挂载时 OL TileLayer 可能从不发瓦片请求（连初始源都不发，
+  与 URL/代码无关；source.refresh()+map.renderSync() 可唤醒）。修复：创建后 600ms kick
+  （refresh+renderSync，测试桩无 renderSync 需 typeof 防御）+ 每次切源后 refresh。此为 105 产线
+  "部署后瓦片 0 请求"的真因，此前误判为用户网络问题。
+- 验证：本地 dev 与 105 实测默认 XZ 12 片 0 失败、DX/TDT(含 11+11 注记) 切换正常、像素确认内网
+  行政瓦片渲染；web 161 用例全绿（并行会话 XQCStatus WIP 曾缺 cleanup 后已绿）；dist hash
+  `1ab73656…`。服务仍为手动实例（见上条），ingest 待用户 sudo 交回 systemd。仍未提交。
+
+## 2026-09-30 底图天地图改服务端代理（第十四批修订，已部署 105）
+
+- 直连方案（下条）在用户浏览器失败："底图服务暂不可用"。原因：浏览器端无外网直出/被天地图 WAF
+  拦截；且该 Key 为浏览器端类型。改为**服务端代理**：Go 控制面新增
+  `GET /api/v1/workspace/basemap-tiles/{vec|cva|img|cia}/{z}/{x}/{y}.png`（operations/basemap_proxy.go，
+  校验层级/坐标范围、UA+Referer 伪装浏览器、8MB 上限、Cache-Control 1d），token 服务端化：
+  env `RAINPULSE_TIANDITU_TOKEN` 或文件 `deploy/tianditu-token`（yons 可写；新增文件回退，
+  因 systemd EnvironmentFile root-only）。web 侧 `.env.local` 改同源代理 URL（dist 已无外链/token）。
+  单测 2 个；Go 全量 29 包 ok；二进制 stripped 交叉编译（`-buildvcs=false -ldflags "-s -w"`；
+  本地 HEAD 6446133 为 105 已部署提交的超集，已核对 42f8cb1→HEAD 历史，不回退他人部署）。
+- **105 无免密 sudo 的部署路径与事故**：目标二进制 yons 属主，运行中直接 cp 报 ETXTBSY，须同目录
+  cp + 原子 mv；`systemctl restart/start` 需认证；pkill 优雅退出（码 0）不触发 Restart=on-failure。
+  本批 pkill 后服务未能拉起且 root env（/etc/rainpulse/control.env，含 DB 密码与 ingest
+  manifest）不可读 → 服务中断约 2 分钟。恢复：`deploy/start-control-manual.sh`（source
+  deploy/.env，映射 POSTGRES_PASSWORD→DATABASE_PASSWORD、NATS/MinIO 指 127.0.0.1）手动拉起；
+  页面/API/瓦片全部 200，但 ingest 后台模块缺 RAINPULSE_RADAR_INGEST_MANIFEST（root env）未运行。
+- **已交还 systemd（2026-09-30 13:30，用户授权 sudo 后完成）**：手动实例 pkill 后
+  `systemctl start rainpulse`，unit 用新二进制+完整 env；active、页面/瓦片 200、ingest 模块恢复
+  （manifest 错误消失）、tianditu-token 文件回退在 systemd 环境继续生效。手动实例日志
+  runtime/control-manual.log；旧二进制备份 rainpulse.pre-basemap-proxy.bak。sudo 口令仅使用一次，
+  未存任何文件。
+- 验证：105 curl 瓦片 200（vec/cva 各 20KB PNG）；浏览器 24/24 瓦片成功、无失败提示、像素分析
+  确认浅色矢量底图渲染。前端 hash `ea146a29…`。仍未提交。
+
+## 2026-09-30 ZF702 当前 v2 严重残留诊断（尚未修复）
+
+- 用户链接 task b2fc710d / attempt a2d51715、scan 3b3bf9da 指向当前 sx-quality-v2-z10，SUCCEEDED并非旧审计档。浏览器与逐门证据确认严重长径向/南侧扇形残留。
+- 0/2/4/5切面radial_source均RESOURCE_LIMIT_ABSTAINED（model-trial budget exceeded，配置默认500000）；异常使整个源模型结果置零，外层仍EVALUATED/任务SUCCEEDED。切面0 >30km且>=15dBZ残留77079门，其中67103门形态候选却未提出排除；hard保护0、local仅4，非主要降水保护问题。
+- 6/7/8/10源模型完成；9另有ACTION_BUDGET_ABSTAINED。需优化重复试验、处理部分完成/降级可见性，再全层与跨站时次验收。此次只完成定位，未更换算法或结果。证据 `.build/xqc-zf702-investigation/REPORT.md` 及 cuts/evidence/task 文件。
+
+## 2026-09-30 底图切换天地图（第十四批 Web，已部署 105）
+
+- 用户提供天地图浏览器端 Key，要求底图改用天地图。实现走既有 env 通道：`.env.local`（gitignore，
+  token 不入仓库/记忆）设 `VITE_BASEMAP_URL=…T=vec_w…` + `VITE_BASEMAP_OVERLAY_URL=…T=cva_w…`
+  （_w 为 Web 墨卡托，与现有 OSM 相同的自动重投影路径；{0-7} 子域展开 OL 原生支持）。
+- 代码仅新增可选注记图层：RasterGISMap 读 `VITE_BASEMAP_OVERLAY_URL`，在底图之上叠一层 XYZ
+  TileLayer（className rainpulse-basemap-overlay-layer），跟随底图显隐切换与重建清理；未配置时零变化。
+  `.env.example` 补充说明（示例用 YOUR_TOKEN 占位）。归属显示"天地图 GS(2023)2767号"。
+- 验证：158 用例/tsc/build 绿；部署 hash `6233234b…`。105 侧 curl 复核（浏览器 UA+Referer）：
+  vec_w 200（256×256 PNG）、cva_w 200 且 `Access-Control-Allow-Origin: *`；服务端裸 curl 403
+  code=301012（"Key权限类型为:浏览器端"）与 WAF 对 HEAD 的 418 均为预期。本会话内嵌浏览器无外网，
+  瓦片渲染以用户浏览器为准。若某环境瓦片不可达，既有"底图服务暂不可用"提示与海岸线兜底仍生效。
+  仍未提交。
+
+## 2026-09-30 顶栏页签统一（第十三批 Web，已部署 105）
+
+- 用户反馈界面设计不统一（图1=预报对比页页签在第二行左侧带边框药丸 preset-tabs；图2=质控排查
+  页页签在顶栏内居中偏右、无边框青底），要求统一为图2样式。
+- 新增共享组件 `workspace/WorkspacePresets.tsx`（button+role=tab，默认整页跳转 `/?preset=`，
+  onSelect 可选站内切换）；MainWorkspace 页签从 workspace-controls 移入 workspace-topbar
+  （保留 qc 跳转/verification pin/applyTimeSelection 原逻辑，删除 presetLabels 与旧 preset-tabs 块）；
+  RadarQCWorkspace 顶栏改用同组件。`radar-qc-presets` 样式从 radar-qc-workspace.css 移入
+  workspace.css（含 button 变体与 ≤760px 整行规则；qc css 中重复规则删除；preset-tabs 样式清理）。
+- 158 用例（含新增 WorkspacePresets 单测）+tsc 干净+lint 基线（仅既有 CompositeMap.test 1 错）+build
+  通过；部署 hash `2dd880d3…`。105 实测：预报对比/检验回放/质控排查三页顶栏一致，页签站内切换与
+  qc 整页跳转正常。仍未提交。
+- **返工（用户报后台按钮掉到第二行最左）**：首版把 freshness/警告/后台当 5 个平级 grid 子元素，
+  超出 `workspace-topbar` 4 列模板，auto-flow 把第 5 个换到第二行第 1 列（grid 隐式列假设错误）。
+  修复：MainWorkspace 右侧三者收进 `workspace-topbar-side`（flex+justify-self:end），顶栏恒 3 个
+  grid 子元素；重部署 hash `ee347026…`，1280 实测（含警告按钮）与 420 手机、QC 页均单行/整齐折行，
+  后台恒最右。
+
+## 2026-09-30 S 全天回填仰角边界修复并恢复
+
+- S 全天批次在 `17-z9591` 被两份体扫阻断。根因是 `sweep_006` 的 float32 仰角 4.04/4.34 转为 float64 后跨度为 0.3000001907°，裸比较误判超过 0.3°；随后时次因引用该体扫作为时间上下文也失败。
+- `09eecdd` 已提交并 push：仰角跨度比较加入按源 dtype 精度计算的极小容差，明显超限仍拒绝；专项 44 项通过。扩展集合 87 通过、3 个既有失败位于 `volume_review`/diagnostics 契约，与本次改动无关。
+- 105 S Worker 已部署 `rainpulse-cpu-worker:s-elevation-09eecdd` ×2，容器源码 SHA256 均为 `ecd40c550a5466de6012d1d559c989e183be3140fb092f2067bab6a92a3a37d4`。两份失败扫描经 `radar-qc-rebuild` 正常重算成功，原 FAILED 任务保留。
+- 全天批次从原检查点恢复于 `.build/s-qc-elevation-09eecdd/s-backfill-resume/state.json`；`17-z9591` 已完成并推进到 `17-z9593`。后台 PID 记录在同目录。容量保护仍为 120 GiB/100k inode。X Worker、X 重算及小时定时保持暂停。
+
+- 后续复核：17-z9593也已完成，当前17-z9598；本轮27成功/2运行，无新增失败。四站最新样本44切面中36个含反射率切面DBZH_RAW与normalized逐值相同，8个速度切面原无DBZH。证据105 `.build/s-qc-elevation-09eecdd/latest-s-audit.jsonl`。
+- 发现Worker任务结束仍保留约80GiB内存，队列完全空闲后重启两台释放，可用内存4→89GiB；同部署目录idle-recycler.py仅在runner WAITING_CAPACITY、MemAvailable<16GiB且QC队列0时回收，批次结束自动退出。
+- 用户已清理部分数据；03:31Z实测系统盘526.6GiB、MinIO数据盘121.5GiB（不能混淆）。此前下载缓存为空，模型迁移尚未获授权；继续120GiB保护线，待用户清理数据盘或授权两份模型迁移。
+
+## 2026-09-30 zf505/zf702 全天 X 质控按最新算法重算（v2-z10，取代 r7x 审计档展示）
+
+- 用户报 zf702 X 单站"没质控"。根因：09-29 r7x 审计重算把 zf505/zf702 的 results[0] 换成
+  all-quarantine 审计档（`…v3-xqc2-all-quarantine-radial-source-1d81cd1-blocks-d075740-fans-fc757e8`，
+  qc==raw 字节相同、不剔除任何回波）；zf101/zf401 未受影响。前端无 bug。用户拍板"用最新的
+  X 波段质控算法重算"。
+- 当晚并行会话已再次部署：workers `x-sxfusion-2e7ba35-mb`(×4)/`-qc`(×1)（比记忆中 e04383c/
+  a4032ee 新，迭代频繁、以现场容器为准）；mb 网络档 `.build/sx-priority1/fujian-full-experimental-20260828.json`
+  （release `sx-quality-v2-z10-20260930`，挂载 /opt/rainpulse/multiband/network.json）。
+- 重算走 admin ops preset `x_qc`（单计划 ≤8 体扫 → 20 分钟窗 ×2 站）：冒烟 zf702 00:00–00:20
+  run 683fe767 验证全仰角 raw≠qc 后，21 批（00:00–07:00Z 两站全天数据）全部 SUCCEEDED；覆盖
+  zf505 66/66、zf702 67/67，新结果版本 `sx-quality-v2-z10-20260930`，抽检（首/中/末+原问题体扫）
+  低仰角 0/2/4 全 DIFF，candidate_only=true（不影响 QPE/预报/默认展示）。旧版本结果仍在目录多版本
+  并存，v2 排 results[0]，前端默认即选它。
+- 浏览器验收：ZF702 00:26:55Z（原问题体扫 3b3bf9da）双图正常渲染、质控图明显清除近站杂波、
+  无报错。提交/监控脚本留存 105 `/tmp/rp-submit-fullday.py`、`/tmp/rp-fullday-runs.json`、
+  `/tmp/rp-monitor-fullday.py`。并行会话当时 v2 验证 run 两次 FAILED（v2-probe-cycle0006 等），
+  其后续若再换镜像，以 ops runs 与结果版本为准。Web 侧 12 批未提交改动不变。
+
+## 2026-09-30 多站叠加"降水图层暂不可用"提示去除（第十二批 Web，已部署 105）
+
+- 用户反馈多站叠加每切一次提示"降水图层暂不可用"。根因：切时次时 S 详情与 X 图层
+  解析同时在途 → 图层列表瞬时清空 → 命中无图层空态（strong 误用产品页通用文案）。
+- 修复：图层列表在途保留上一帧；空态 strong 优先用调用方 emptyStateHint（layerError
+  分支保留原文案）；多站叠加解除全局 layerError 接线，RasterGISMap layerError/
+  onLayerError 改可选。105 实测全选 28 站四档切换提示 0 次、图层计数保持。
+  全量 157 用例+build+lint 基线通过。仍未提交。
+
+## 2026-09-30 组合反射率残余闪最终修复（第十一批 Web，已部署 105）
+
+- 用户复测回退区仍闪。逐帧双画布哈希探针定位：① 组合清单在途窗口回放最后一份旧
+  组合（第十批守卫未拦"在途"）→ compositeMemory 记录 have/absent 确认态、仅上次
+  确认"有"才在途保留，并删除跨区兜底；② 全范围产品逐帧 bounds 随参差站微变（实测
+  10:30/10:36 两帧不同）→ 取景实时计算导致每次切帧视图重定位 → 冻结首次取景
+  （渲染期 setState），「定位产品」手动重定位仍可用。
+- 105 实测四档距离切换仅两态转换、底图哈希恒定（视图零移动）。全量 157 用例+build+
+  lint 基线通过；部署 hash `bccfbd80c32e86ac`。仍未提交。
+
+## 2026-09-30 组合反射率回退区切换闪屏修复（第十批 Web，已部署 105）
+
+- 用户反馈 09:06 后组合模式每次切换再闪一下（第九批恢复切换后暴露的回退路径闪源）：
+  回退层（已发布 S 拼图）来自逐周期详情，在途时图层清空 → fitExtent 翻转 → 整图重建。
+- 修复：回退层在途保留上一帧；组合区→回退区首次过渡用保留的最后组合 S 产品兜底；
+  详情到达即换新、确认无帧清空（不冻结）。新增受控延迟回归测试。
+- 全量 157 用例+build+lint 基线通过；105 实测回退区连续切换视口/画布零替换、图层
+  不清空。仍未提交。
+
+## 2026-09-29 组合反射率 09:06 后切换无变化修复（第九批 Web，已部署 105）
+
+- 用户反馈组合模式 09:06（北京时，最后一份组合产品的时次）之后切换完全无变化。
+  根因：第八批 stale 逻辑未区分"请求在途"与"已确认无组合"——09:06 后 API 无组合
+  结果，保留逻辑把最后一份组合永久冻结在屏幕上。修复：仅 `compositeState===undefined`
+  （在途）时用保留清单，确认无组合立即回退"已发布 S 产品"。
+- 新增回归测试（有组合显示产品层/无组合时次回退并消失）；全量 156 用例+build+lint
+  基线通过。105 实测 08:54→10:00/12:00/15:00 状态与画面正确切换（截图确认回波
+  内容随时间变化）。仍未提交。
+
+## 2026-09-29 X 单站与组合反射率残余闪烁修复（第八批 Web，已部署 105）
+
+- 用户复测 S 单站/多站已不闪，X 单站与组合仍闪。视口标记探针定位：X 是 useXPair
+  fetch→blob→decode 校验多一跳，换图延迟>800ms 触发"正在切换时效"浮层闪现——改为
+  同步派生图件路径（错误交地图层 imageloaderror），切时次保留用户仰角；组合反射率是
+  产品图层清空导致 fitExtent 在 DOMAIN↔产品范围翻转、整个 OL 地图销毁重建——按
+  result_id 保留上一份组合清单（渲染期比较用稳定标识，防引用比较死循环）。
+- 105 实测：X min 方差 98.6%、组合 98%，视口/画布均不再被替换。全量 155 用例+build+
+  lint 基线通过。涉及 RadarQCWorkspace/MultiStationMap/CompositeMap（导出类型），
+  仍未提交。
+
+## 2026-09-29 切时效地图闪白消除（第七批 Web，已部署 105）
+
+- 用户反馈每切一次时效地图闪一下。三处根因修复：SMap 在周期详情加载期保留上一帧
+  （stale-while-revalidate，确定无帧才空态）；X 的 xResult/useXPair 按站点保留上一份
+  结果与图件（切站重置防串图）；RasterGISMap 多图层换层改为新层就绪后再移除旧层。
+- 105 用画布像素方差高频采样实测：S 最低方差为加载态 97%、X 96%、多站叠加无下降，
+  切换无闪白。全量 155 用例+build+lint 基线通过；顺带清理了重复"资料详情"节点。
+  涉及 RadarQCWorkspace.tsx 与 RasterGISMap.tsx，仍未提交。
+
+## 2026-09-29 时间轴统一 S 分析周期网格（第六批 Web，已部署 105）
+
+- 用户要求 S/X 时间轴统一以 S 波段为准（原 X 用各站体扫实际起始时刻，带秒且各站错开）。
+  改动（RadarQCWorkspace.tsx）：单站 S/X 与 overlay 合并时间轴全部用 S 分析周期网格
+  （overlay 去掉 X 秒级体扫时刻混入）；观察标签统一"分析周期"；X 面板可用性帧投影到
+  S 网格。
+- X 体扫选择：目标 S 时刻 ±3 分钟内最近带结果体扫；无邻近时回退全天最近带结果体扫
+  （防 S 切 X 携带时刻超出 X 覆盖落"无体扫"门控，实测 S 到 18:36/zf101 只到 15:54 场景）；
+  地图头显示真实体扫时间，时间轴高亮吸附最近 S 刻度。
+- 新增偏移体扫/无邻近回退回归测试；全量 155 用例+build+lint 基线通过。105 实测：
+  S/X 均 106 帧同刻度，S(18:36)切 X 显示 15:54:59 最近体扫且高亮同步，无门控。仍未提交。
+
 ## 2026-09-29 ZF505显示准入接缝修复a4032ee（最终复核完成）
 
 - `main` 已 push：`a4032ee`。在 `xqc_v2/pipeline.py` 同时将 `DBZH_QC`（单站地图读取）和 `DBZH_QC_DISPLAY`（候选组合读取）对 `XQC_WITHHELD_MASK` 隐藏；原始 `DBZH_RAW`、动作3、原因和证据仍保留，CR准入继续拒绝待复核门，不改S/QPE/预报。
@@ -1168,3 +1353,65 @@ operational data here.
 - 原始目录实际为 24 X / 5,466 文件；本次逐文件头部核验一致。更正此前缺 SNR 判断：23 站原始样本有 SNR，旧候选解码配置遗漏了映射；ZF900 样本未见 SNR。新增完整字段候选配置。
 - 21 站样本全字段解码通过；ZF900 显式 reserved-tail 配置后通过；ZF703/ZF801 射线亚秒值反复回绕，尚未安全解释，不能伪造精度或绕过校验。ZF502 首文件 bz2 截断，其下一份样本通过。
 - S 三周期 02:36/02:54/03:00 UTC 混用两代 CF/volume-review 配置；普通幂等 QC 命令命中旧任务，不构成修复。新增带独立 UUID 的 QC-only rebuild 命令，需部署执行后再补建诊断。
+
+## 2026-09-30 S/X v2 融合验证（z9591+ZF10 系列）——链路全通、校准门现状与 A/B 结论
+
+- 容量链收口 `73a14f9`：v2 几何核验路径拒 40 刀 zf10x 体扫（`MAX_FUSION_SWEEPS=32`，
+  model.py "unsupported or incomplete native scan description"）→ 提至 64（与 MAX_SWEEPS 一致；
+  `options.maximum_sweeps` 默认 64 不会二次卡）。至此容量修复链：MAX_GATES 8M→40M(e04383c)
+  → 网络输入预算 6GiB+代码上限 8GiB(2e7ba35) → 融合层数 64(73a14f9)。
+- 镜像坑：本地 `multiband/xqc_v2/*` 部分文件 mode 600，COPY 进镜像后 worker 以非 root 运行
+  `PermissionError` 崩溃循环。修法：构建源 `chmod -R go+rX`（本地仓库同步 chmod）。当前镜像
+  `rainpulse-cpu-worker:x-sxfusion-73a14f9-mb/-qc`（`.build/x-qc-v2-e549510/build-sx2`），
+  镜像内已验证 `MAX_FUSION_SWEEPS=64` 且 xqc_v2 可导入；4×mb+1×qc healthy，融合峰值内存
+  3.6–4.2GiB/6GiB。
+- 网络访问：`10.15.12.105` 当晚失联（VPN 不再推 10.x 路由，跳板 192.168.18.105 亦不通）。
+  同机双网卡地址 `192.168.28.105`（enp130s0，22/4173 均通）全程可用——后续排障先试它。
+- 验证结果（admin ops `sx_composite`·`sx-quality-v2-z10`，2026-08-28 数据）：z9591+zf101(run
+  5946a500, 00:12–00:30)、z9591+zf102/103/104/105(runs d3c8a04c/39cf2671/605eac9e/6d7fa978,
+  00:12–00:24) 共 **10 个双站周期产品全部 SUCCEEDED**。zf101 00:24 合规弃权：z9591 该 S 卷
+  (end 00:19:28) sweep0 366 径向仅 365 唯一方位角（69.51°×2）→ 融合几何门拒绝（X 质控路径
+  容忍重复方位角，融合路径不容忍；不得放宽）。
+- **系统级现状：`QUALIFIED_BAND_BITS` 处处为 0 = 校准门**。站配置 `calibration_verified=false`
+  （六站全是），且输入卷 attrs 无 `calibration_id`（X 归一化卷无此键；S 质控卷 "unverified"），
+  fusion_quality.py 逐门 admitted 需两者匹配。文档 §86 明言不自动补 ID、补真实定标资料是启用前
+  操作员任务——**不可伪造核验标记**。故当前 v2 产品 = 仅不确定层（`CR_UNCERTAIN_DBZH`，产品自标
+  `operational_eligible=false`、`qpe_eligible=false`，winner 层空、CR_DBZH 空、合成图层渲染为黑图，
+  均为设计行为）。S 侧 sweep0 回执：170,853 观测门中 131,944 被 S 质控 CR_WITHHELD；X 可用度
+  分站差异大（zf104 3.0–3.3k 格、zf101 ~0.75k、zf102 0.25–0.5k、zf103 ~25、zf105 0——该卷
+  低层 OBSERVED_MASK 全零，无有效观测门）。
+- A/B（同站 z9591+zf101 同周期，旧方法 `sx-fujian-full-test` run 2182580a vs v2）：
+  旧 CR 覆盖 18.8k/18.9k 格，v2 不确定层 49.1k/52.6k 格（2.6–2.8×，为旧的超集，多出部分是
+  被质控保留但显式标注不确定的格）；重叠 17.4k/18.0k 格数值一致性：中位差 0.0/−0.5 dB、
+  均值 −0.95/−1.21 dB、|Δ|>5dB 占 16.5%/17.9%。
+- 待办（真 winner 层启用前提）：拿到真实定标资料后在站配置登记 `calibration_verified=true`+
+  `calibration_id` 并让解码/质控链路把同 ID 写进卷 attrs，重跑即可点亮分层胜出；Z–Φ 衰减订正
+  仍未启用（无已核验系数，待真实证据）。
+
+## 2026-09-30 交叉定标落地：v2 winner 层点亮（xcal-z9591-20260828-v1）
+
+- 用户拍板"资料要不到，只有基数据；按气象常用做法做交叉定标"。实现三件套：
+  1) **研究**（`.build/sx-quality-v2-20260930/crosscal-study-20260828.json`，提交 6446133）：S 质控卷 ×
+     X qc-v2 native.npz 极坐标几何匹配（4/3 地球半径，|Δxy|≤1200m、|Δz|≤350m、|Δt|≤300s；
+     X 侧判据= DBZH_RAW≥5 且未被 XQC 隔离/拒绝/噪声底标记——测值级天气回波，非产品准入）。
+     结果：zf101 +4.5dB(N=56.0万)、zf102 +3.0(12.0万)、zf103 +8.5(1.9万)、zf104 +0.5(268.5万)，
+     分强度 Bin 呈经典形态（低段 +14~+20 噪声底、高段 −9~−17 X 衰减）；**zf105 N=411 不足
+     登记门槛，保持 calibration_verified=false（诚实）**。z9591 为参考锚（绝对定标基数据无法
+     自证，锚语义已写入研究文件）。
+  2) **代码**（8e1f58c，测试全过）：`adapters._station_registered_calibration`——站点经登记
+     核验（calibration_verified=true）时，未声明自身 calibration_id 的卷继承站点身份；卷内显式
+     身份永不覆盖（中途定标变化仍可检测）。
+  3) **登记**：105 网络五站写入 calibration 字段（备份 `…json.before-xcal-20260930-115729.bak`，
+     新 sha a3dff504…）；镜像 `x-sxfusion-8e1f58c-mb/-qc` 部署，worker healthy。
+- **效果**（00:12–00:24 重跑，zf103/104/105 run a77706d4/6c496407/a8457726）：QUALIFIED 层从 0 →
+  15,822/16,332 格/周期，CR 中位 28.5–29.0 dBZ，cr.png/winner_band.png 正常渲染（回波结构完整、
+  全 S 胜出）。**X 仍 0 胜出**——非校准原因：XQC 的 CR 准入链（REFLECTIVITY_ELIGIBLE_FOR_CR/
+  QUANTITATIVE_READY 全 0，PATH/RADOME 门）在当前周期不放行 X，其根因与 Z–Φ 系数未启用同源。
+- 运维踩坑记录：①compose 链里并行会话删掉的 `rainpulse-optimized-b3-20260922-stage/
+  optimized-images.yaml` 导致重建失败，已从 /tmp/compose-files.txt 剔除（备份同目录 .bak-*）；
+  ②服务中断窗口内被认领的任务成孤儿（JetStream AckWait30s×10 耗尽，任务卡 RUNNING 无管理
+  动作可重排——系统的真实缺口），zf101/zf102 两个 run 已 cancel，等完整控制服务恢复后重提；
+  ③现 4173 实例是并行会话的 z9598 单雷达回放专用进程（无 RAINPULSE_MULTIBAND_CONFIG），
+  sx_composite 计划暂不可提；AdminToken 在该进程环境（临时取用，不入库）。
+- 待办交接：完整控制服务恢复后补 zf101/zf102 重跑（预期与三站一致）；X 胜出参与需 XQC CR
+  准入链放行（依赖 Z–Φ/路径质量基础设施）；定标偏差值本轮只登记不订正（订正属算法改动）。

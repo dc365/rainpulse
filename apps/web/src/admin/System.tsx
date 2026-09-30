@@ -3,8 +3,9 @@ import { Workers } from './Workers';
 import { Performance } from './Performance';
 import { SystemLogs } from './LogViews';
 import { Maintenance } from './Maintenance';
+import { Basemaps } from './Basemaps';
 
-const tabs: readonly [SystemTab, string][] = [['workers', '执行资源'], ['performance', '性能分析'], ['logs', '系统日志'], ['storage', '算法与存储']];
+const tabs: readonly [SystemTab, string][] = [['workers', '执行资源'], ['performance', '性能分析'], ['logs', '系统日志'], ['storage', '算法与存储'], ['basemap', '底图配置']];
 
 export function System({ token, navigate, tab, initialJob }: {
     token: string;
@@ -21,5 +22,6 @@ export function System({ token, navigate, tab, initialJob }: {
     {current === 'performance' && <Performance token={token} navigate={navigate}/>}
     {current === 'logs' && <SystemLogs token={token} initialJob={initialJob}/>}
     {current === 'storage' && <Maintenance token={token} navigate={navigate}/>}
+    {current === 'basemap' && <Basemaps token={token}/>}
     </>;
 }

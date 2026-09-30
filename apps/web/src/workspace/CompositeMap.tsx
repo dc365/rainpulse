@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import type { CompositeCoverageManifest } from './CompositeCoverage'
 import type { GISMapExtent } from '../RasterGISMap'
-type Product = { unit?: string; legend?: {minimum?:number;label:string;color:string}[]; product_id: string; label: string; status: string; reason?: string; contributing_bands?: string[]; map?: { bounds: GISMapExtent; object_path: string } }
-type Result = { result_id: string; manifest: CompositeCoverageManifest & { display_warning?: string; analysis_time: string; grid_id: string; method: string; comparison: { comparison_group: string; products: Product[] } } }
+export type CompositeProduct = { unit?: string; legend?: {minimum?:number;label:string;color:string}[]; product_id: string; label: string; status: string; reason?: string; contributing_bands?: string[]; map?: { bounds: GISMapExtent; object_path: string } }
+export type CompositeResult = { result_id: string; manifest: CompositeCoverageManifest & { display_warning?: string; analysis_time: string; grid_id: string; method: string; comparison: { comparison_group: string; products: CompositeProduct[] } } }
+type Result = CompositeResult
 export function useComposite(time: string, revision: number) {
   const [state,setState]=useState<{key:string; data?:Result; error?:string}>()
   const key=`${time}/${revision}`
