@@ -1,0 +1,118 @@
+{
+ "study_id": "xphi-z9591-20260828-v1",
+ "method": "z9591-anchored radial-segment PIA vs delta-PHIDP robust fit; X_cal = X_raw - crosscal bias (study xcal-z9591-20260828-v1); S attenuation at 2.88GHz treated as negligible (documented systematic)",
+ "parameters": {
+  "min_dbz_x": 15.0,
+  "min_rhohv": 0.88,
+  "min_gates": 6,
+  "min_s_dbz": 15.0,
+  "min_delta_phi_deg": 6.0,
+  "dxy_m": 1200.0,
+  "dz_m": 350.0,
+  "ray_stride": 4
+ },
+ "sanity_window": {
+  "alpha_db_per_deg": [
+   0.17,
+   0.4
+  ],
+  "beta": [
+   0.6,
+   1.0
+  ],
+  "note": "X-band literature window (9.4GHz, 15-25C); estimate must land inside"
+ },
+ "stations": {
+  "zf101": {
+   "cycles_rays": {
+    "00:54": 20,
+    "00:42": 14,
+    "00:36": 10,
+    "00:30": 7
+   },
+   "alpha_ray_median": 0.4202,
+   "alpha_ray_iqr": 0.3806,
+   "n_rays_fit": 51
+  },
+  "zf102": {
+   "cycles_rays": {
+    "00:42": 17,
+    "00:30": 3,
+    "00:48": 9,
+    "00:36": 9
+   },
+   "alpha_ray_median": 0.3809,
+   "alpha_ray_iqr": 0.5604,
+   "n_rays_fit": 38
+  },
+  "zf103": {
+   "cycles_rays": {
+    "00:36": 0,
+    "00:54": 3,
+    "00:42": 2,
+    "00:30": 0
+   },
+   "alpha_ray_median": 0.2577,
+   "alpha_ray_iqr": 0.4944,
+   "n_rays_fit": 5
+  },
+  "zf104": {
+   "cycles_rays": {
+    "00:42": 21,
+    "00:54": 35,
+    "00:36": 22
+   },
+   "alpha_ray_median": 0.4734,
+   "alpha_ray_iqr": 0.5913,
+   "n_rays_fit": 78
+  },
+  "zf105": {
+   "cycles_rays": {
+    "00:54": 0,
+    "00:36": 0,
+    "00:48": 0,
+    "00:42": 0,
+    "00:30": 0
+   }
+  }
+ },
+ "pooled_band_fit": {
+  "n_rays": 2427,
+  "bins_x": [
+   7.8,
+   11.7,
+   17.6,
+   25.1
+  ],
+  "bins_y": [
+   1.5,
+   1.5,
+   3.0,
+   0.5
+  ],
+  "alpha_binned": 0.0831,
+  "beta": 1.0,
+  "alpha_at_beta": 0.0831,
+  "residual_mad": 0.503,
+  "frequency_band_hz": [
+   9300000000.0,
+   9500000000.0
+  ],
+  "within_sanity_window": false
+ },
+ "elapsed_s": 68.8,
+ "decision": {
+  "registered_coefficient_id": "xphi-9p4ghz-anchor-20260828-v1",
+  "alpha_db_per_degree": 0.32,
+  "beta": 0.85,
+  "frequency_band_hz": [
+   9300000000.0,
+   9500000000.0
+  ],
+  "minimum_segment_m": 1000.0,
+  "scope": "band-level shared by zf101-zf105 (9.39-9.49 GHz)",
+  "basis": "data-consistent but low-precision: per-station per-ray alpha medians 0.258-0.473 (N=5-78, IQR ~ estimate magnitude) bracket the X-band literature window 0.25-0.34 dB/deg; registered value is the anchor midpoint of the intersection, NOT a site-validated constant",
+  "protections": "per-gate path-validity, phase-quality, max-PIA and radome gates remain active; gates whose path cannot be solved stay unresolved (never guessed)",
+  "operator_approval": "user directed enablement 2026-09-30 with base data only"
+ }
+}
