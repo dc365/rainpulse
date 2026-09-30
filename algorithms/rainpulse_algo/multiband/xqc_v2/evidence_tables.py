@@ -61,19 +61,26 @@ def expand(value):
 def pack_details(value):
     """Compress model tables only; status/count/module metadata stay readable."""
     if isinstance(value, list):
+        # Model entries can have distinct schemas (fallback/primary modes).
+        # Preserve the whole list losslessly rather than missing table packing.
+        if len(value) >= 2 and all(isinstance(item, dict) for item in value):
+            packed = _pack(value)
+            if packed is not value:
+                return packed
         return [pack_details(item) for item in value]
     if not isinstance(value, dict):
         return value
     if value.get("encoding") == FORMAT:
-        raw = json.dumps(value, separators=(",", ":"), allow_nan=False).encode()
-        if 1024 <= len(raw) <= MAX_DECODED_BYTES:
-            packed = dict(
-                encoding=PACKED,
-                decoded_bytes=len(raw),
-                sha256=hashlib.sha256(raw).hexdigest(),
-                data=base64.b64encode(zlib.compress(raw)).decode("ascii"),
-            )
-            if len(json.dumps(packed)) < len(raw):
-                return packed
-        return value
+        return _pack(value)
     return {key: pack_details(item) for key, item in value.items()}
+
+
+def _pack(value):
+    raw = json.dumps(value, separators=(",", ":"), allow_nan=False).encode()
+    if 1024 <= len(raw) <= MAX_DECODED_BYTES:
+        packed = dict(encoding=PACKED, decoded_bytes=len(raw),
+                      sha256=hashlib.sha256(raw).hexdigest(),
+                      data=base64.b64encode(zlib.compress(raw)).decode("ascii"))
+        if len(json.dumps(packed)) < len(raw):
+            return packed
+    return value

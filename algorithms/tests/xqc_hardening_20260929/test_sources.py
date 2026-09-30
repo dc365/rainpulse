@@ -150,3 +150,16 @@ def test_later_source_budget_preserves_completed_continuous_stage(monkeypatch):
     assert record['complete'] is False
     assert record['source_gates']==int(actual.sum())
     np.testing.assert_array_equal(details['source_kind']>0,actual)
+
+
+def test_geometry_steps_do_not_consume_model_trials():
+    from rainpulse_algo.multiband.xqc_v2.source_summary import SourceStatistics
+    s=dense(9);c=policy().model_copy(update={'source_maximum_trials':1})
+    stats=SourceStatistics.build(s,c)
+    for _ in range(100):stats.geometry()
+    assert stats.receipt()['model_trials']==0
+    assert stats.receipt()['geometry_comparisons']==100
+    stats.trial()
+    with pytest.raises(ResourceLimit,match='model-trial'):stats.trial()
+    with pytest.raises(ResourceLimit,match='geometry'):
+        stats.geometry(32*s.shape[0]**2)

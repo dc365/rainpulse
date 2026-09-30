@@ -49,7 +49,7 @@ def detect(s, cfg, *, protected, prepared=None):
             current = row
             active = np.ones(len(stats.ids), bool)
             for step in range(1, s.shape[0]):
-                stats.trial()
+                stats.geometry()
                 other = (row + direction * step) % s.shape[0]
                 edge = current if direction == 1 else other
                 angle = abs(float((s.azimuth[other] - s.azimuth[row] + 180) % 360 - 180))

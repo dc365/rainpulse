@@ -77,7 +77,7 @@ def _continuous(s, cfg, *, protected, prepared):
             nearest = np.full(s.shape[1], np.inf)
             current = row
             for step in range(1, s.shape[0]):
-                stats.trial()
+                stats.geometry()
                 other = (row + direction * step) % s.shape[0]
                 edge = current if direction == 1 else other
                 angle = abs(float((s.azimuth[other] - s.azimuth[row] + 180) % 360 - 180))

@@ -70,11 +70,14 @@ def test_record_budget_keeps_actions_when_lossless_table_fits(monkeypatch):
 
     monkeypatch.setattr(radial_source, "detect", source)
     real = evidence_tables.compact
+    real_pack = evidence_tables.pack_details
+    monkeypatch.setattr(evidence_tables, "pack_details", lambda x: x)
     monkeypatch.setattr(evidence_tables, "compact", lambda x: x)
     old = evaluate_cut(volume.sweeps[0], volume.metadata, cfg)
     assert old.record["status"] == "RESOURCE_OR_GEOMETRY_ABSTAINED"
     assert not old.arrays["XQC_QUARANTINE_MASK"].any()
     monkeypatch.setattr(evidence_tables, "compact", real)
+    monkeypatch.setattr(evidence_tables, "pack_details", real_pack)
     fixed = evaluate_cut(volume.sweeps[0], volume.metadata, cfg)
     assert fixed.record["status"] == "EVALUATED"
     assert fixed.arrays["XQC_QUARANTINE_MASK"][row, 100] == 1
@@ -129,3 +132,13 @@ def test_compressed_evidence_rejects_truncated_extra_and_oversize_streams():
             expand(dict(value, data=base64.b64encode(bad).decode()))
     with pytest.raises(ValueError, match="integrity"):
         expand(dict(value, decoded_bytes=value["decoded_bytes"] - 1))
+
+
+def test_heterogeneous_diagnostic_models_compress_losslessly():
+    from rainpulse_algo.multiband.xqc_v2.evidence_tables import pack_details,PACKED
+    models=[{'ray':i,'refs':list(range(50)),**({'fallback':False} if i%2 else {})} for i in range(1000)]
+    records={'status':'EVALUATED','models':models}
+    packed=pack_details(compact(records))
+    assert packed['status']=='EVALUATED'
+    assert packed['models']['encoding']==PACKED
+    assert expand(packed)==records

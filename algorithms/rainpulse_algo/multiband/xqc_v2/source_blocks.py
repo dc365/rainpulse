@@ -62,7 +62,7 @@ def detect(
         for direction in (-1, 1):
             current = row
             for step in range(1, s.shape[0]):
-                stats.trial()
+                stats.geometry()
                 other = (row + direction * step) % s.shape[0]
                 edge = current if direction == 1 else other
                 angle = abs(float((s.azimuth[other] - s.azimuth[row] + 180) % 360 - 180))
@@ -75,7 +75,7 @@ def detect(
             nearest = np.full(n, np.inf)
             current = row
             for step in range(1, s.shape[0]):
-                stats.trial()
+                stats.geometry()
                 other = (row + direction * step) % s.shape[0]
                 edge = current if direction == 1 else other
                 angle = abs(float((s.azimuth[other] - s.azimuth[row] + 180) % 360 - 180))

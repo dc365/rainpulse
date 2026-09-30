@@ -23,6 +23,7 @@ class SourceStatistics:
     trials: int = 0
     models: int = 0
     seed_comparisons: int = 0
+    geometry_comparisons: int = 0
 
     @classmethod
     def build(cls, s, cfg):
@@ -62,6 +63,14 @@ class SourceStatistics:
         if self.trials > self.maximum_trials:
             raise ResourceLimit('X source model-trial budget exceeded')
 
+    def geometry(self, count=1):
+        # Six detector passes plus family support have at most 24 ray-pair
+        # traversals. Keep a separate shape-bounded allowance for cheap
+        # geometry checks; only held-out model candidates consume trials.
+        self.geometry_comparisons += count
+        if self.geometry_comparisons > 32 * self.sweep.shape[0] ** 2:
+            raise ResourceLimit("X source geometry-comparison budget exceeded")
+
     def model(self):
         self.models += 1
         if self.models > self.maximum_models:
@@ -71,4 +80,5 @@ class SourceStatistics:
         return {'scope': 'current_raw_cut_only', 'receiver_summary_builds': 1,
                 'distance_blocks': len(self.ids), 'model_trials': self.trials,
                 'model_records': self.models, 'seed_comparisons': self.seed_comparisons,
+                'geometry_comparisons': self.geometry_comparisons,
                 'fitted_model_cache': False}
