@@ -33,3 +33,11 @@ ZF702 scan 3b3bf9da-aac2-5800-88a5-6d29ed907d9c 的 0/2/4/5 切面，在当前 v
 - 真实浏览器复核cut0/2/4/5地图：主要长径向及扇形消失，地图、原始回波、同心圆与共有色谱正常。cut2/9仍保留ACTION_BUDGET_ABSTAINED与明确警告，不作为全层验收通过；没有提高动作预算。
 - 默认4个multiband Worker更新为 `rainpulse-cpu-worker:xqc-mode-c2918a1-merged`，全部ready，发布指纹 `b9480e0d5085612bb9bb841e41a221e0bff6e7b6e6d6becbb2ec15a15f03e392`。镜像以最新d13f8dd多波段镜像为基础，保留同期定标/衰减适配改动；17份算法源码SHA256与提交c2918a1核对一致。S QC镜像未切换。
 - 本次验收范围是该真实ZF702体扫，不能外推为全天全网络无污染。既有链接固定旧result，查看修复应使用新的task.attempt。下一步是不同站点/时次/仰角代表样本及动作保护复核；全天大批次与小时定时继续暂停，实际MinIO盘仍需满足120GiB保护线。
+
+## 后续动作保护与跨站时次复核
+
+- r4已发布cut2：446929有效门，328436拟排除门（73.4873%）；cut9：32814有效门，24190拟排除门（73.7185%），均超过70%保护线。RADIAL_SOURCE分别覆盖321183/23766门，无hard-weather或context冲突；预算候选在QC图中没有有效可见门。这是大面积操作保护，区别于计算未执行。保留保护与警告，未放宽阈值。
+- 使用当前已登记94f82b9 Worker（指纹92060946…，逐文件核验保留c2918a1径向修复）完成两份正常任务：ZF701 scan07bdd490，task832c7cbc/attempt2e3cbe4a，SHA5561c9ea…；ZF702 scan5418017f，task0a71654e/attemptef55b788，SHA2d5699dd…。
+- 18个反射率cut全EVALUATED、源模型完整、无ACTION_BUDGET；逐层DBZH_RAW与原归一化对象相等（NaN一致），原生方位/距离一致，产物提交标记与SHA核验。ZF701 cut0远距≥15dBZ 7848→122；cut3 8374→206；ZF702后续cut0 17678→692，cut2 24793→650，cut5 19547→79。
+- 浏览器复核ZF701 08:03:32/3.36°南侧强扇形、ZF702 08:33:05/0.54°东南强条带已清除，近场蓝色回波和西南独立绿色回波保留。上述保留并不替代独立降水真值验收，不宣称误删率为零。
+- 证据 `.build/xqc-zf702-investigation/audit-budget-r4.jsonl`、`zf701-early-verified.jsonl`、`zf702-next-verified.jsonl`；105批次凭据 `.build/xqc-budget-c2918a1/representative/`。本次两体扫完成，不是仅启动。实际MinIO空闲122447499264字节，全天保护/小时定时未解除。
