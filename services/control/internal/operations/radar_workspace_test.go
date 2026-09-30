@@ -72,3 +72,13 @@ func TestRadarMapGeometryAndAssetPaths(t *testing.T) {
 		t.Fatal("unknown projection accepted")
 	}
 }
+
+func TestRadarManifestRetainsIncompleteQCStatus(t *testing.T) {
+	m := radarManifest{Radar: "zf702", Scan: "scan", Start: time.Now(), Candidate: true}
+	m.End = m.Start
+	m.Comparison.Sweeps = []radarSweep{{Number: 0, Sequence: 1, Raw: "raw.png", QC: "qc.png", Flags: "flags.png", XQC: &radarQCStatus{Status: "DEGRADED_SOURCE_RESOURCE_LIMIT", Mode: "quarantine"}}}
+	parsed, err := parseRadarManifest(JSON(m), "zf702", "scan")
+	if err != nil || parsed.Comparison.Sweeps[0].XQC == nil || parsed.Comparison.Sweeps[0].XQC.Status != "DEGRADED_SOURCE_RESOURCE_LIMIT" {
+		t.Fatalf("degraded QC status lost: %+v %v", parsed, err)
+	}
+}

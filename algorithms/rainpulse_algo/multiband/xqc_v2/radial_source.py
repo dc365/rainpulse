@@ -16,6 +16,52 @@ def detect(s, cfg, *, protected, details=None):
         return result, {"status": "DISABLED"}
     from .source_summary import SourceStatistics
     stats = SourceStatistics.build(s, cfg)
+    from rainpulse_algo.radar.qc_engine.volume_review.data import ResourceLimit
+    kinds = np.zeros(s.shape, np.uint8)
+    records = {"continuous": {"status": "DISABLED"},
+               "blocks": {"status": "DISABLED"}, "fan": {"status": "DISABLED"}}
+    stages = [("continuous", 1, _continuous)]
+    if cfg.radial_source_block_model_enabled:
+        from .source_blocks import detect as detect_blocks
+        stages.append(("blocks", 2, detect_blocks))
+    if cfg.radial_source_fan_model_enabled:
+        from .source_fans import detect as detect_fans
+        stages.append(("fan", 4, detect_fans))
+    status, failed_module, failure = "EVALUATED", None, None
+    completed = []
+    for name, bit, detector in stages:
+        try:
+            mask, record = detector(s, cfg, protected=protected, prepared=stats)
+        except ResourceLimit as exc:
+            # A stage publishes only after its complete held-out evaluation.
+            # Retain earlier completed stages, never incomplete stage masks.
+            status, failed_module, failure = "PARTIAL_RESOURCE_LIMIT", name, str(exc)
+            records[name] = {"status": "RESOURCE_LIMIT_ABSTAINED", "reason": failure}
+            break
+        result |= mask
+        kinds[mask] |= bit
+        records[name] = record
+        completed.append(name)
+    if details is not None:
+        details["source_kind"] = kinds
+    return result, {"status": status, "complete": failed_module is None,
+                    "failed_module": failed_module, "reason": failure,
+                    "completed_modules": completed,
+                    "kind_counts": {
+                    "continuous": int(((kinds & 1) != 0).sum()),
+                    "blocks": int(((kinds & 2) != 0).sum()),
+                    "fan": int(((kinds & 4) != 0).sum()),
+                    "union": int(result.sum())},
+                    "kind_bits_are_independent_votes": False,
+                    "fan_model": records["fan"], "block_model": records["blocks"],
+                    "source_gates": int(result.sum()),
+                    "models": records["continuous"].get("models", []),
+                    "method": "bilateral-receiver-corridor-heldout-v1",
+                    "rho_is_weather_truth": False, "work": stats.receipt()}
+
+
+def _continuous(s, cfg, *, protected, prepared):
+    stats = prepared.use(s, cfg)
     z, za = s.moment("DBZH")
     sn, sa = s.moment("SNR")
     floor = cfg.noise_censor_snr_db
@@ -23,6 +69,7 @@ def detect(s, cfg, *, protected, details=None):
     signal &= (s.ranges[None, :] >= cfg.receiver.minimum_range_m) & ~protected
     quiet = sa & (sn < floor)
     blocks, law = stats.blocks, stats.law
+    result = np.zeros(s.shape, bool)
     models = []
     for row in np.flatnonzero(s.good):
         distances = []
@@ -78,26 +125,4 @@ def detect(s, cfg, *, protected, details=None):
                                    "reference_blocks": np.unique(blocks[train]).tolist(),
                                    "reference_gates": int(len(train)), "target_gates": int(len(accepted)),
                                    "snr_center_db": center, "range_response_offset_db": offset})
-    kinds = result.astype(np.uint8)  # 1=continuous, 2=blocks, 4=fan (not votes)
-    block_record = {"status": "DISABLED"}
-    if cfg.radial_source_block_model_enabled:
-        from .source_blocks import detect as detect_blocks
-        block_mask, block_record = detect_blocks(s, cfg, protected=protected, prepared=stats)
-        result |= block_mask
-        kinds[block_mask] |= 2
-    fan_record = {"status": "DISABLED"}
-    if cfg.radial_source_fan_model_enabled:
-        from .source_fans import detect as detect_fans
-        fan_mask, fan_record = detect_fans(s, cfg, protected=protected, prepared=stats)
-        result |= fan_mask
-        kinds[fan_mask] |= 4
-    if details is not None:
-        details["source_kind"] = kinds
-    return result, {"status": "EVALUATED", "kind_counts": {
-                    "continuous": int(((kinds & 1) != 0).sum()),
-                    "blocks": int(((kinds & 2) != 0).sum()),
-                    "fan": int(((kinds & 4) != 0).sum()),
-                    "union": int(result.sum())},
-                    "kind_bits_are_independent_votes": False, "fan_model": fan_record, "block_model": block_record, "source_gates": int(result.sum()),
-                    "models": models, "method": "bilateral-receiver-corridor-heldout-v1",
-                    "rho_is_weather_truth": False, "work": stats.receipt()}
+    return result, {"status": "EVALUATED", "source_gates": int(result.sum()), "models": models}

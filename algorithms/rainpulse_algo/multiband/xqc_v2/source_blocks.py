@@ -88,22 +88,29 @@ def detect(
                 current = other
             distances.append(nearest)
         geometry = distances[0] + distances[1] <= maximum_width
+        # Seed membership is a raw-ray statistic, independent of the held-out
+        # target. Compute it once; target/guard blocks are still removed below.
+        # Previously every duplicate seed consumed a model trial before dedup,
+        # exhausting low-elevation, long-range cuts without fitting a model.
+        spread = cfg.radial_source_maximum_spread_db
+        reference = (count >= minimum) & geometry
+        membership = (
+            reference[None, :]
+            & (abs(powers[:, None] - powers[None, :]) <= (1.0 if fan else spread))
+            & (abs(responses[:, None] - responses[None, :]) <= spread)
+        )
         for target in np.flatnonzero((count > 0) & geometry):
             outside = abs(ids - ids[target]) > cfg.receiver.guard_blocks
             eligible = (count >= minimum) & geometry & outside
             seen = set()
             for seed in np.flatnonzero(eligible):
-                stats.trial()
-                spread = cfg.radial_source_maximum_spread_db
-                members = np.flatnonzero(
-                    eligible
-                    & (abs(powers - powers[seed]) <= (1.0 if fan else spread))
-                    & (abs(responses - responses[seed]) <= spread)
-                )
+                stats.seed_comparisons += 1
+                members = np.flatnonzero(membership[seed] & outside)
                 identity = tuple(members)
                 if identity in seen or len(members) < 3:
                     continue
                 seen.add(identity)
+                stats.trial()
                 ranges = center_range[members]
                 if (
                     np.ptp(ranges) < cfg.radial_source_minimum_span_m

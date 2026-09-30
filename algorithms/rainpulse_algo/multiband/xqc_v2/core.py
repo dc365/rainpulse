@@ -383,6 +383,9 @@ def _evaluate(cut, metadata, cfg, *, context=None):
     source_record["local_proxy_policy"] = cfg.radial_source_local_policy
     source_record["local_proxy_conflict_gates"] = int((radial_source & local).sum())
     records["module_records"]["radial_source"] = source_record
+    if source_record["status"] in {"RESOURCE_LIMIT_ABSTAINED", "PARTIAL_RESOURCE_LIMIT"}:
+        records["status"] = "DEGRADED_SOURCE_RESOURCE_LIMIT"
+        records["degraded_modules"] = ["radial_source"]
     a["XQC_SOURCE_KIND"] = view.restore(
         source_details.get("source_kind", np.zeros(s.shape, np.uint8))
     )

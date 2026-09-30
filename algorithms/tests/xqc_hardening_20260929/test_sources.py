@@ -104,6 +104,7 @@ def test_source_budget_does_not_discard_independent_parent_candidates(monkeypatc
     monkeypatch.setattr(radial_source,'detect',limited)
     ev=core.evaluate_cut(v.sweeps[0],v.metadata,c)
     assert ev.record['module_records']['radial_source']['status']=='RESOURCE_LIMIT_ABSTAINED'
+    assert ev.record['status']=='DEGRADED_SOURCE_RESOURCE_LIMIT'
     assert not ev.arrays['XQC_RADIAL_SOURCE_MASK'].any()
     assert ev.arrays['XQC_NOISE_FLOOR_MASK'].any() and ev.arrays['XQC_PROPOSED_MASK'].any()
     assert not ev.arrays['XQC_SOURCE_KIND'].any()
@@ -121,3 +122,31 @@ def test_target_and_guard_changes_do_not_train_their_own_block_model():
     a=[x for x in before['models'] if x['ray']==4 and x['target_block']==target]
     b=[x for x in after['models'] if x['ray']==4 and x['target_block']==target]
     assert a and a==b
+
+
+def test_duplicate_seed_enumeration_does_not_exhaust_model_budget():
+    s=dense(9);c=policy().model_copy(update={'source_maximum_trials':5000})
+    expected,_=radial_source.detect(s,policy(),protected=np.zeros(s.shape,bool))
+    actual,record=radial_source.detect(s,c,protected=np.zeros(s.shape,bool))
+    np.testing.assert_array_equal(actual,expected)
+    assert record['status']=='EVALUATED'
+    assert record['work']['model_trials']<=5000
+
+
+def test_later_source_budget_preserves_completed_continuous_stage(monkeypatch):
+    s=dense(9);c=policy();details={}
+    fields={k:v.copy() for k,v in s.fields.items()}
+    fields['DBZH']-=30.;fields['SNR'][1:-1]-=30.
+    s=replace(s,fields=fields)
+    continuous_cfg=c.model_copy(update={'radial_source_fan_model_enabled':False})
+    expected,_=radial_source.detect(s,continuous_cfg,protected=np.zeros(s.shape,bool))
+    assert expected.any()
+    def limited(*args,**kwargs):raise ResourceLimit('fixture later fan budget')
+    monkeypatch.setattr(source_fans,'detect',limited)
+    actual,record=radial_source.detect(s,c,protected=np.zeros(s.shape,bool),details=details)
+    np.testing.assert_array_equal(actual,expected)
+    assert record['status']=='PARTIAL_RESOURCE_LIMIT'
+    assert record['failed_module']=='fan'
+    assert record['complete'] is False
+    assert record['source_gates']==int(actual.sum())
+    np.testing.assert_array_equal(details['source_kind']>0,actual)

@@ -235,13 +235,20 @@ func (s *radarSweep) paths() []*string {
 }
 
 type radarSweep struct {
-	Map       *radarMap `json:"map,omitempty"`
-	Number    int       `json:"sweep_number"`
-	Sequence  int       `json:"sequence"`
-	Elevation float64   `json:"elevation_deg"`
-	Raw       string    `json:"raw"`
-	QC        string    `json:"qc"`
-	Flags     string    `json:"flags"`
+	XQC       *radarQCStatus `json:"xqc_v2,omitempty"`
+	Map       *radarMap      `json:"map,omitempty"`
+	Number    int            `json:"sweep_number"`
+	Sequence  int            `json:"sequence"`
+	Elevation float64        `json:"elevation_deg"`
+	Raw       string         `json:"raw"`
+	QC        string         `json:"qc"`
+	Flags     string         `json:"flags"`
+}
+
+// Expose completion independently of a successfully published candidate image.
+type radarQCStatus struct {
+	Status string `json:"status"`
+	Mode   string `json:"mode"`
 }
 type radarManifest struct {
 	Radar       string          `json:"radar_id"`

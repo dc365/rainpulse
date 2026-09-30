@@ -180,7 +180,7 @@ def run(volume, station, release_sha256, *, baseline):
             "quantitative_ready_gates": int(ready.sum()), "qpe_enabled": False,
             "export_native": cfg.export_native,
             "classification_is_ground_truth": False,
-            "implementation_revision": "xqc-hardening-20260929-r1"}
+            "implementation_revision": "xqc-source-budget-20260930-r2"}
         if result is None:
             result = Volume(copy.deepcopy(baseline_result.metadata), [])
         result.sweeps.append(target)
@@ -189,7 +189,7 @@ def run(volume, station, release_sha256, *, baseline):
         raise ValueError("nonempty X volume required")
     result.metadata.update(processing=VERSION, xqc_parameter_sha256=cfg.digest,
                            xqc_mode=cfg.mode, operational_eligible=False, qpe_enabled=False,
-                           xqc_implementation_revision="xqc-hardening-20260929-r1")
+                           xqc_implementation_revision="xqc-source-budget-20260930-r2")
     return result
 
 

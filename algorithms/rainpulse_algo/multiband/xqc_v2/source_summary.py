@@ -22,6 +22,7 @@ class SourceStatistics:
     maximum_models: int
     trials: int = 0
     models: int = 0
+    seed_comparisons: int = 0
 
     @classmethod
     def build(cls, s, cfg):
@@ -31,6 +32,7 @@ class SourceStatistics:
         expected = s.shape[0] * len(ids) * 16 + len(s.ranges) * 40
         largest = max(int(np.count_nonzero(blocks == b)) for b in ids)
         expected += s.shape[0] * largest * 32  # conservative median-workspace estimate
+        expected += len(ids) ** 2 * 32  # bounded per-ray membership temporaries
         if expected > cfg.source_maximum_summary_bytes:
             raise ResourceLimit('X source summary byte budget exceeded')
         indices = tuple(np.flatnonzero(blocks == b) for b in ids)
@@ -68,4 +70,5 @@ class SourceStatistics:
     def receipt(self):
         return {'scope': 'current_raw_cut_only', 'receiver_summary_builds': 1,
                 'distance_blocks': len(self.ids), 'model_trials': self.trials,
-                'model_records': self.models, 'fitted_model_cache': False}
+                'model_records': self.models, 'seed_comparisons': self.seed_comparisons,
+                'fitted_model_cache': False}
