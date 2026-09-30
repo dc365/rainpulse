@@ -94,6 +94,23 @@ def _normalized_attenuation_status(attrs, station) -> str:
     return "raw" if station.source == "normalized_zarr" else "unknown"
 
 
+def _normalized_phase_anchor(attrs, station) -> tuple[bool, float | None]:
+    """First-gate PIA anchor for adapter-loaded volumes.
+
+    The Z-Phi recursion starts at the first sampled gate; for the normalized
+    contract that gate sits at metres-scale range where accumulated
+    attenuation is zero by construction. Volumes declaring their own anchor
+    values are never overridden.
+    """
+    verified = attrs.get("phase_anchor_verified")
+    if verified is None:
+        verified = station.source == "normalized_zarr"
+    pia = attrs.get("pia_at_first_gate_db")
+    if pia is None and station.source == "normalized_zarr":
+        pia = 0.0
+    return verified is True, pia
+
+
 def ray_seconds(values: np.ndarray, units: str | None) -> np.ndarray:
     if values.dtype.kind == "M":
         if np.isnat(values).any():
@@ -267,8 +284,8 @@ def from_group(
         "doppler_verification_id": attrs.get("doppler_verification_id"),
         "doppler_waveform": attrs.get("doppler_waveform"),
         "nyquist_velocity_mps": attrs.get("nyquist_velocity_mps"),
-        "phase_anchor_verified": attrs.get("phase_anchor_verified") is True,
-        "pia_at_first_gate_db": attrs.get("pia_at_first_gate_db"),
+        "phase_anchor_verified": _normalized_phase_anchor(attrs, station)[0],
+        "pia_at_first_gate_db": _normalized_phase_anchor(attrs, station)[1],
         "qc_pipeline_version": attrs.get("qc_pipeline_version"),
         "no_echo_semantics": "explicit_mask_or_unknown_no_return",
     }
@@ -407,8 +424,8 @@ def read_x_qc_sweep(objects: dict[str, bytes], station: Station, source: dict, s
         "doppler_verification_id": attrs.get("doppler_verification_id"),
         "doppler_waveform": attrs.get("doppler_waveform"),
         "nyquist_velocity_mps": attrs.get("nyquist_velocity_mps"),
-                "phase_anchor_verified": attrs.get("phase_anchor_verified") is True,
-                "pia_at_first_gate_db": attrs.get("pia_at_first_gate_db"),
+                "phase_anchor_verified": _normalized_phase_anchor(attrs, station)[0],
+                "pia_at_first_gate_db": _normalized_phase_anchor(attrs, station)[1],
                 "no_echo_semantics": "explicit_mask_or_unknown_no_return"}
     copy_path_provenance(attrs, metadata)
     sweep = Sweep(sweep_number, np.asarray(group["azimuth"][:], dtype=float), np.asarray(group["range"][:], dtype=float),
