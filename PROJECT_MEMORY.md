@@ -2,8 +2,9 @@
 
 - 本地 main 已 push a5ed2bb、3027252；105 专用 `rainpulse-ops-xqc-budget-r3-worker` 使用镜像 `xqc-budget-3027252`。保留其他 Worker/历史凭据，未重启全天 X 定时。
 - 正常发布 r2 任务60b6be3f：cut0远距>30km、QC≥15dBZ残留77079→1456，raw逐门不变；cut5为81840→1409。cut2仍fan超限、cut4证据超限，不能全层验收。
-- r3分离邻接几何计数与500000模型预算，异构诊断列表无损压缩。197项当前相关测试通过，旧参考不适配失败另留日志。离线cut2源完整422067试验；cut4完整EVALUATED、361670试验、压缩证据约3.04MiB，未提升证据预算。
-- 105 r3正常任务 `0d0406da-fa92-4627-8ac1-5e78b032ef7a` / attempt `a4736904-e9e1-4bcb-9651-0e577d292275`，run `d855c986-a656-469e-b20d-32676003fe6f` 正在重算全9层。状态 `.build/xqc-budget-3027252/focused-task.json`，安全轮询 `/tmp/rp-zf702-poll-r3.py`。提交后已恢复原默认release；验证专用Worker正常。
+- r3分离邻接几何计数与500000模型预算，异构诊断列表无损压缩。197项当前相关测试通过，旧参考不适配失败另留日志。离线cut2源完整422067试验；cut4完整EVALUATED、361670试验、证据3042809字节，未提升证据预算。
+- r3旧任务0d0406da/a4736904在计算后遭同期网络更新a3dff504→74bfcf66，发布身份门拒绝。旧Worker停止且租约/注册过期后正常abandon，旧凭据保留；retry因网络已改变而正确409拒绝。最新网络冻结只读后新预检查/提交任务 `519cbd32-9c4c-4521-9635-36008b06e9e0` / attempt `0b84533d-44fd-4abf-9cc0-fb475f2e6e38`，run `afc0f416-b3ca-48ef-b987-90863dfa71d2`，Worker `rainpulse-ops-xqc-budget-current-worker`（镜像3027252）正在算全9层；轮询 `/tmp/rp-zf702-poll-current.py`，状态 `.build/xqc-budget-3027252-current/focused-task.json`。原默认release已恢复，未SQL改状态。
+- 后续发布镜像 `xqc-budget-d60fbb8` 已构建：上传前先校验身份，计算期间明确的配置漂移在进入COMMITTING前BLOCKED；真正PUT响应丢失仍可恢复。生产Engine红绿及整套测试通过，未替换运行中的验收Worker。
 - cut9独立ACTION_BUDGET保护未绕过；Go/Web已部署分层状态告警并在实际界面验证。旧URL固定历史result不会覆盖，需新result链接。下一步等待r3正常发布，逐层raw身份/残留/状态及真实地图复核后决定默认Worker升级。
 
 ## 2026-09-30 底图源可配置：内网瓦片为默认（第十五批，已部署 105）
@@ -1423,3 +1424,26 @@ operational data here.
   sx_composite 计划暂不可提；AdminToken 在该进程环境（临时取用，不入库）。
 - 待办交接：完整控制服务恢复后补 zf101/zf102 重跑（预期与三站一致）；X 胜出参与需 XQC CR
   准入链放行（依赖 Z–Φ/路径质量基础设施）；定标偏差值本轮只登记不订正（订正属算法改动）。
+
+## 2026-09-30 Z–Φ 启用攻坚：配置链全通，止步于相位质量基础设施缺口
+
+- 用户拍板启用 Z–Φ。完成链路：①系数研究 `.build/sx-quality-v2-20260930/xphi-study-20260828.json`
+  （提交 12a444c）：z9591 锚径向段 PIA(φdp) 拟合，发现并修复 PIA 符号 bug（X_cal−Z_S=−PIA），
+  逐径向 α 中位 0.258–0.473（N=5-78，IQR≈估计量级，数据包络括住文献 0.25–0.34 但精度不足）；
+  ②登记决策：频段级锚定系数 **α=0.32/β=0.85**（同时落数据包络与文献窗，coefficient_id
+  `xphi-9p4ghz-anchor-20260828-v1`，出处 sha=a4885b73…，决策记录含不确定度披露）；③网络五站
+  x_qc.attenuation=zphi（备份 `…json.before-xphi-20260930-143911.bak`，新网络 sha 74bfcf66…）。
+- 配套代码（均提交、测试全过、镜像已部）：`3537a21` 归一化卷 attenuation_status 缺省=raw（契约）；
+  `d13f8dd` 首门 PIA 锚缺省=(verified,0.0dB)（契约）。镜像 `x-sxfusion-d13f8dd-mb/-qc`。
+  **发布通道坑**：网络/代码变更改变 worker 指纹 → `ops_release_channels.multiband` 钉住的旧指纹
+  拒绝一切计划（"没有新鲜且配置匹配的管理Worker"）——需 POST
+  `/api/v1/admin/ops/releases/multiband/select` 重钉（fingerprint+expected_revision+reason）。
+- 验证结果：任务 SUCCEEDED、锚已生效（evidence `attenuation_anchor_verified:true`），但
+  **PIA/eligible 仍全 0**。逐门归因：`_phase_support` 要求输入侧 `PHASE_VALID_MASK`+`LIQUID_MASK`
+  逐门掩码——**代码库无任何生产者**、归一化数据不携带（canonical 仅矩量）。这是上游"相位质量
+  分类"基础设施（从 PHIDP/RHOHV/SNR 纹理逐门判定相位可用性/液态路径）的真正缺口，需算法开发，
+  不能用配置缺省替代（伪造全 1 = 对垃圾相位做 unwrap，危险且违规）。
+- 次级缺口（已知未解）：融合准入还需 radome evidence（天线罩状态，运行输入，基数据不可推导）。
+- 当前状态安全：zphi 已配置但因无相位支撑而零订正（诚实弃权），产品行为与 none 等价
+  （winner 层仍 S 驱动，X 值未被错误订正）。待相位分类器就绪后无需再动配置即可点亮。
+- 交叉定标重跑补齐：控制服务恢复后 zf101/zf102 补验尚未做（与 zf103-105 预期一致）。
