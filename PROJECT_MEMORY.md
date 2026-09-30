@@ -1472,3 +1472,10 @@ operational data here.
 - S可用反射率≥20dBZ、RHO≥.95、可信掩码；X原始≥15dBZ且≥15km。水平≤1km、逐径向时间差≤180秒共1859个已排除X门有S候选匹配。再要求“各自雷达以上高度差≤1km”剩63个，均ZF701；它不是共同MSL匹配、不是误删率，不能宣布误删验收通过。
 - 优先复核ZF701仰角0/4/5/6/8的1/8/6/45/3门；既有RADIAL_SOURCE也有NOISE_FLOOR原因。代表仰角0 14.46°/68.889km X21.5dBZ、S24.5dBZ，可能降水与干扰共存。下一关口是共同MSL/几何、接收功率与极化逐门证据，不能盲提70%预算或按固定方位清除。
 - 证据文档 docs/XQC_S_CONTROL_SCREEN_20260930.md；本地.build/xqc-zf702-investigation/scontrol-screen-final.jsonl共24记录，执行退出0。MinIO空闲122346885120字节/100641076inode，仍低于全天120GiB保护线。
+
+## 2026-09-30 X/S 冲突逐门复核续验
+
+- 原63门全部完成原生SNR/RHO/ZDR/PHI和邻域掩码复核：39门NOISE_FLOOR且SNR<3dB，24门RADIAL_SOURCE；独立保护掩码全0。源模型排序还原与压缩完整性核对，没有新运行故障证据，不盲恢复回波或改阈值。
+- 现有头部候选天线高度ZF701429m/Z95981740m差1311m，基准仍未核验。使用候选高度、真实垂直波束和4/3地球地面弧长重新筛全部18层，得到47个候选重合门（29噪声/18源），不是原63的确定子集或误删真值。重点18源门是ZF701cut5 ray39五门/cut6 ray81十三门。
+- ray81十三门对照下一体扫UTC00:07:21完成，原生同8.96°、方位偏差0.12°；原DBZH29–33/SNR13.5–16/ZDR−5.25至−2.75，下一时次10门有REF26–28/SNR9–12.5。持续接收功率和异常极化不能排除降水叠加，3门缺测不等于无雨。
+- docs/XQC_S_CONTROL_SCREEN_20260930.md含续验；.build/xqc-zf702-investigation/scontrol-{gates,63-signature,source-models,candidate-height,next-raw}.jsonl全部最终执行退出0。无算法/部署/预算/定时修改。下一关口：18个源与降水共存候选的独立几何及可信降水证据，不能宣布全网漏检误删验收通过。
