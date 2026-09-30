@@ -1456,3 +1456,12 @@ operational data here.
 - cut2/9仍ACTION_BUDGET_ABSTAINED，界面保留未完成警告，不宣称全层或全天验收通过。未提高动作预算，不启用可信融合/QPE/预报。
 - 105默认4个MB Worker已更新 `rainpulse-cpu-worker:xqc-mode-c2918a1-merged`，4/4ready，发布指纹 `b9480e0d5085612bb9bb841e41a221e0bff6e7b6e6d6becbb2ec15a15f03e392`。保留同期d13f8dd定标/衰减适配，17份算法SHA核对提交c2918a1。配置仍74bfcf66，S QC镜像/控制Web未重启。证据 `.build/xqc-zf702-investigation/published-r4.jsonl`、verified-ray-r4.json；105 `.build/xqc-budget-c2918a1/acceptance.json`、promotion.json。
 - 下一步沿主线抽查其他站/时次/仰角与动作保护，不从单体扫推断全网干净。X全天/小时定时仍暂停；实际MinIO数据盘约116.9GiB可用（不是/data的NFS空闲），低于120GiB批次保护线，不能盲启动大批量。
+
+
+## 2026-09-30 X 径向跨站时次与动作保护复核完成
+
+- 已核验ZF702 r4 cut2/9的ACTION_BUDGET原因：拟排除328436/446929（73.49%）、24190/32814（73.72%）超过70%，源模型完整；预算门QC图有效可见数0，hard-weather重叠0，不能用提高上限消除警告。
+- 当前MB默认发布通道已由同期相位分类任务更新为94f82b9镜像/指纹92060946…；核验source_blocks/core/radial_source/source_summary/evidence_tables与main一致，保留c2918a1径向修复，未回滚并行改动。
+- 两份代表任务均完成：ZF701 scan07bdd490、task832c7cbc/attempt2e3cbe4a；ZF702 scan5418017f、task0a71654e/attemptef55b788。18层全部EVALUATED且源模型完整，无动作预算弃权；DBZH_RAW逐层与归一化对象相等、原生方位距离一致、SHA与提交标记核验。
+- 实图复核ZF701 08:03:32/3.36°、ZF702 08:33:05/0.54°强扇形条带消失，近场蓝色及独立西南绿色回波保留。不能据此声明独立真值误删率0或全网验收完成。
+- 证据及后续入口：docs/XQC_SOURCE_BUDGET_FIX_20260930.md，`.build/xqc-zf702-investigation/*-verified.jsonl`，105 `.build/xqc-budget-c2918a1/representative/`。下一步增加高污染与真实降水对照样本，复核70%保护所涉及的大面积候选；不盲调上限，不恢复小时定时/全天大批次。
