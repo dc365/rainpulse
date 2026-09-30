@@ -1,0 +1,302 @@
+{
+ "study_id": "xcal-z9591-20260828-v1",
+ "method": "polar geometric matching of QC-eligible gates (4/3 earth), S QC zarr vs v2 X-QC native sweeps; nearest S volume per X scan (dt<=300s)",
+ "parameters": {
+  "dxy_m": 1200.0,
+  "dz_m": 350.0,
+  "dt_s": 300.0,
+  "min_dbz": 5.0,
+  "bins": [
+   [
+    5.0,
+    15.0
+   ],
+   [
+    15.0,
+    25.0
+   ],
+   [
+    25.0,
+    35.0
+   ],
+   [
+    35.0,
+    45.0
+   ],
+   [
+    45.0,
+    60.0
+   ]
+  ],
+  "register_bin": [
+   15.0,
+   35.0
+  ],
+  "min_register_n": 300
+ },
+ "reference": {
+  "radar_id": "z9591",
+  "role": "network_reference_anchor",
+  "note": "absolute calibration not independently verifiable from base data; all X biases are relative to this anchor"
+ },
+ "stations": {
+  "zf101": {
+   "scans": {
+    "2026-08-28T00:31:00Z": {
+     "n": 142151,
+     "eligible_x_gates": 1573095,
+     "median_x_minus_s": 13.0
+    },
+    "2026-08-28T00:49:00Z": {
+     "n": 254161,
+     "eligible_x_gates": 2982708,
+     "median_x_minus_s": 10.0
+    },
+    "2026-08-28T00:55:00Z": {
+     "skipped": "no pool"
+    },
+    "2026-08-28T00:37:00Z": {
+     "n": 163544,
+     "eligible_x_gates": 1915600,
+     "median_x_minus_s": 12.0
+    },
+    "2026-08-28T00:43:00Z": {
+     "skipped": "no pool"
+    }
+   },
+   "n_pairs": 559856,
+   "median_bias_db": 11.5,
+   "iqr_db": 13.0,
+   "bins": {
+    "5-15": {
+     "n": 298274,
+     "median": 17.0,
+     "iqr": 8.0
+    },
+    "15-25": {
+     "n": 177288,
+     "median": 7.0,
+     "iqr": 7.5
+    },
+    "25-35": {
+     "n": 80749,
+     "median": -1.0,
+     "iqr": 7.0
+    },
+    "35-45": {
+     "n": 3545,
+     "median": -9.5,
+     "iqr": 7.0
+    }
+   },
+   "registered": true,
+   "registered_bias_db": 4.5
+  },
+  "zf102": {
+   "scans": {
+    "2026-08-28T00:37:59Z": {
+     "n": 70899,
+     "eligible_x_gates": 513914,
+     "median_x_minus_s": 6.0
+    },
+    "2026-08-28T00:55:59Z": {
+     "skipped": "no pool"
+    },
+    "2026-08-28T00:31:59Z": {
+     "n": 48771,
+     "eligible_x_gates": 379327,
+     "median_x_minus_s": 8.5
+    },
+    "2026-08-28T00:42:59Z": {
+     "skipped": "no pool"
+    }
+   },
+   "n_pairs": 119670,
+   "median_bias_db": 7.0,
+   "iqr_db": 12.0,
+   "bins": {
+    "5-15": {
+     "n": 43160,
+     "median": 14.0,
+     "iqr": 7.5
+    },
+    "15-25": {
+     "n": 50919,
+     "median": 6.0,
+     "iqr": 7.0
+    },
+    "25-35": {
+     "n": 24148,
+     "median": -3.0,
+     "iqr": 7.0
+    },
+    "35-45": {
+     "n": 1419,
+     "median": -13.0,
+     "iqr": 5.0
+    },
+    "45-60": {
+     "n": 24,
+     "median": -17.0,
+     "iqr": 0.5
+    }
+   },
+   "registered": true,
+   "registered_bias_db": 3.0
+  },
+  "zf103": {
+   "scans": {
+    "2026-08-28T00:43:59Z": {
+     "n": 4328,
+     "eligible_x_gates": 102564,
+     "median_x_minus_s": 8.5
+    },
+    "2026-08-28T00:31:59Z": {
+     "n": 3867,
+     "eligible_x_gates": 55634,
+     "median_x_minus_s": 14.5
+    },
+    "2026-08-28T00:48:59Z": {
+     "n": 6572,
+     "eligible_x_gates": 143119,
+     "median_x_minus_s": 10.5
+    },
+    "2026-08-28T00:55:59Z": {
+     "skipped": "no pool"
+    },
+    "2026-08-28T00:37:59Z": {
+     "n": 4302,
+     "eligible_x_gates": 65370,
+     "median_x_minus_s": 13.0
+    }
+   },
+   "n_pairs": 19069,
+   "median_bias_db": 11.5,
+   "iqr_db": 10.0,
+   "bins": {
+    "5-15": {
+     "n": 6431,
+     "median": 20.0,
+     "iqr": 7.0
+    },
+    "15-25": {
+     "n": 8994,
+     "median": 10.0,
+     "iqr": 5.5
+    },
+    "25-35": {
+     "n": 3638,
+     "median": 2.5,
+     "iqr": 5.5
+    }
+   },
+   "registered": true,
+   "registered_bias_db": 8.5
+  },
+  "zf104": {
+   "scans": {
+    "2026-08-28T00:55:00Z": {
+     "skipped": "no pool"
+    },
+    "2026-08-28T00:43:00Z": {
+     "skipped": "no pool"
+    },
+    "2026-08-28T00:31:00Z": {
+     "n": 635264,
+     "eligible_x_gates": 6133398,
+     "median_x_minus_s": 11.0
+    },
+    "2026-08-28T00:37:59Z": {
+     "n": 893329,
+     "eligible_x_gates": 7732231,
+     "median_x_minus_s": 9.0
+    },
+    "2026-08-28T00:49:00Z": {
+     "n": 1156720,
+     "eligible_x_gates": 8507312,
+     "median_x_minus_s": 9.0
+    }
+   },
+   "n_pairs": 2685313,
+   "median_bias_db": 9.5,
+   "iqr_db": 14.0,
+   "bins": {
+    "5-15": {
+     "n": 1716110,
+     "median": 14.0,
+     "iqr": 9.5
+    },
+    "15-25": {
+     "n": 685670,
+     "median": 2.5,
+     "iqr": 9.0
+    },
+    "25-35": {
+     "n": 251104,
+     "median": -4.5,
+     "iqr": 8.0
+    },
+    "35-45": {
+     "n": 31048,
+     "median": -13.0,
+     "iqr": 6.5
+    },
+    "45-60": {
+     "n": 1381,
+     "median": -16.5,
+     "iqr": 3.5
+    }
+   },
+   "registered": true,
+   "registered_bias_db": 0.5
+  },
+  "zf105": {
+   "scans": {
+    "2026-08-28T00:43:01Z": {
+     "skipped": "no pool"
+    },
+    "2026-08-28T00:37:01Z": {
+     "n": 104,
+     "eligible_x_gates": 277,
+     "median_x_minus_s": -3.5
+    },
+    "2026-08-28T00:54:59Z": {
+     "skipped": "no pool"
+    },
+    "2026-08-28T00:31:00Z": {
+     "n": 89,
+     "eligible_x_gates": 429,
+     "median_x_minus_s": 1.5
+    },
+    "2026-08-28T00:48:59Z": {
+     "n": 218,
+     "eligible_x_gates": 655,
+     "median_x_minus_s": -11.5
+    }
+   },
+   "n_pairs": 411,
+   "median_bias_db": -4.5,
+   "iqr_db": 16.0,
+   "bins": {
+    "5-15": {
+     "n": 187,
+     "median": 0.5,
+     "iqr": 7.25
+    },
+    "15-25": {
+     "n": 140,
+     "median": -9.0,
+     "iqr": 11.0
+    },
+    "25-35": {
+     "n": 83,
+     "median": -21.0,
+     "iqr": 5.25
+    }
+   },
+   "registered": false
+  }
+ },
+ "generated_at_unix": 1790740568.4194477,
+ "elapsed_s": 137.6
+}
