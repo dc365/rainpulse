@@ -49,6 +49,48 @@ function setup(stationCatalog = stations) {
 }
 afterEach(() => { cleanup(); sessionStorage.clear(); vi.unstubAllGlobals(); window.history.replaceState({}, '', '/') })
 
+it('identifies a pinned historical X result and refreshes to the latest version', async () => {
+  setup()
+  const fallback = vi.mocked(fetch).getMockImplementation()!
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    const url = String(input)
+    if (url.includes('radar-scans')) return { ok: true, json: async () => ({ ...scans, items: [{ ...scans.items[0], results: [...scans.items[0].results, { result_id: 'result-old', version: 'old', finished_at: morning }] }] }) } as Response
+    if (url.includes('radar-products/result-old')) return { ok: true, json: async () => ({ ...result, result_id: 'result-old' }) } as Response
+    return fallback(input, init)
+  })
+  window.history.replaceState({}, '', '/?preset=qc&band=X&date=2026-08-28&time=2026-08-28T00:06:00Z&station=zf101&scan=scan-x&result=result-old')
+  render(<RadarQCWorkspace />)
+  expect(await screen.findByText(/正在查看历史质控结果/)).toBeTruthy()
+  expect(new URLSearchParams(window.location.search).get('result')).toBe('result-old')
+  fireEvent.click(screen.getByRole('button', { name: '查看最新结果' }))
+  await waitFor(() => expect(new URLSearchParams(window.location.search).get('result')).toBe('result-x'))
+  expect(screen.queryByText(/正在查看历史质控结果/)).toBeNull()
+})
+
+it('does not retain a previous X volume or its completion status while the next volume loads', async () => {
+  setup()
+  const fallback = vi.mocked(fetch).getMockImplementation()!
+  let finish: (value: Response) => void = () => {}
+  const pending = new Promise<Response>(resolve => { finish = resolve })
+  let requested = false
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    const url = String(input)
+    if (url.includes('radar-scans')) return { ok: true, json: async () => ({ ...scans, items: [scans.items[0], { ...scans.items[0], scan_id: 'scan-next', volume_start: evening, volume_end: evening, results: [{ result_id: 'result-next', version: 'v2', finished_at: evening }] }] }) } as Response
+    if (url.includes('radar-products/result-next')) { requested = true; return pending }
+    if (url.includes('radar-products/result-x')) return { ok: true, json: async () => ({ ...result, sweeps: result.sweeps.map(s => ({ ...s, xqc_v2: { status: 'ACTION_BUDGET_ABSTAINED', mode: 'quarantine' } })) }) } as Response
+    return fallback(input, init)
+  })
+  window.history.replaceState({}, '', '/?preset=qc&band=X&date=2026-08-28&time=2026-08-28T00:06:00Z&station=zf101')
+  render(<RadarQCWorkspace />)
+  await screen.findByText(/ACTION_BUDGET_ABSTAINED/)
+  fireEvent.click(await screen.findByRole('button', { name: /08\/28 18:36 北京时间/ }))
+  await waitFor(() => expect(requested).toBe(true))
+  expect(screen.queryByText(/ACTION_BUDGET_ABSTAINED/)).toBeNull()
+  expect(document.querySelectorAll('[data-image="/map-qc-x.png"]')).toHaveLength(0)
+  await act(async () => finish({ ok: true, json: async () => ({ ...result, result_id: 'result-next', scan_id: 'scan-next' }) } as Response))
+  await waitFor(() => expect(document.querySelectorAll('[data-image="/map-qc-x.png"]')).toHaveLength(1))
+})
+
 it('keeps the six-minute target and native sweep identity across S→X→S', async () => {
   setup()
   window.history.replaceState({}, '', '/?preset=qc&band=S&date=2026-08-28&time=2026-08-28T00:06:00Z&station=z9591')
