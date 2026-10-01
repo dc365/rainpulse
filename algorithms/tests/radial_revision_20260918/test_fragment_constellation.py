@@ -68,3 +68,29 @@ def test_budget_and_forged_proof_rejected():
     arrays, _ = detect(n); arrays[P+'STRONG_MASK'][0,0] = 1
     with pytest.raises(ValueError,match='proof mismatch'):
         module.validate(arrays,n,np.zeros(n.shape,bool))
+
+
+def test_optional_segments_qualify_independently_without_weather_member_authority():
+    n = fixture(); barrier = np.zeros(n.shape,bool); barrier[5,101] = True
+    baseline, _ = detect(n,barrier)
+    arrays, report = detect(n,barrier,segment_evidence=True)
+    assert not baseline[P+'STRONG_MASK'].any()
+    assert not arrays[P+'STRONG_MASK'][:,100:108].any()
+    assert arrays[P+'STRONG_MASK'].sum() == 4*3*8
+    assert all(len(obj['member_history']) == 5 for obj in report['objects'])
+    # Two failed original members leave only three; their evidence is not borrowed.
+    barrier[5,251] = True
+    arrays, _ = detect(n,barrier,segment_evidence=True)
+    assert not arrays[P+'STRONG_MASK'].any()
+
+
+def test_full_original_fixed_km_width_history_cannot_be_evaded_by_segmentation():
+    n = fixture(); n.fields['DBZH'][:] = np.nan; n.field_available['DBZH'][:] = False
+    # Resolved transverse shards narrow in angle with distance like a weather ribbon.
+    for start,width in zip((0,200,400,600,800,1000),(4,3,3,2,2,1),strict=True):
+        n.fields['DBZH'][5-width:6+width,start:start+8] = 25
+        n.field_available['DBZH'][5-width:6+width,start:start+8] = True
+    arrays, report = detect(n,beam_width=2,segment_evidence=True)
+    assert report['objects']
+    assert any(obj['full_parent_narrowing_weather_hold'] for obj in report['objects'])
+    assert not arrays[P+'STRONG_MASK'].any()

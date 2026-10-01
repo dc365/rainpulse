@@ -32,9 +32,13 @@ def main():
                         help='Full-history frozen radial core and fringe; optional experimental engine replay')
     parser.add_argument('--fragment-constellation', action='store_true',
                         help='Read-only RAW transverse fragments in frozen radial neighborhoods')
+    parser.add_argument('--fragment-segments', action='store_true',
+                        help='Read-only independent measured segments retaining full RAW parent history')
     parser.add_argument('--engine-quarantine', action='store_true',
                         help='Validate opt-in experiment proposals through the actual engine; no product writes')
     args = parser.parse_args()
+    if args.fragment_segments and not args.fragment_constellation:
+        raise ValueError('fragment segments require constellation research mode')
     if args.fragment_constellation and (args.radial_backbone or args.variable_width or args.branch_shoulders or args.engine_quarantine):
         raise ValueError('fragment constellation is a separate read-only research mode')
     if args.radial_backbone and (args.variable_width or args.branch_shoulders):
@@ -70,6 +74,7 @@ def main():
         start = time.monotonic()
         options={'beam_width':meta['config']['fragment_line'].get('antenna_beam_width_deg')}
         if args.variable_width:options['branch_shoulders']=args.branch_shoulders
+        if args.fragment_constellation:options['segment_evidence']=args.fragment_segments
         arrays, detail = DETECTOR.detect(native, blocked, **options)
         DETECTOR.validate(arrays, native, blocked, **options)
         integration = {}
@@ -169,6 +174,7 @@ def main():
               'variable_width_prototype': args.variable_width,
               'radial_backbone_prototype': args.radial_backbone,
               'fragment_constellation_prototype': args.fragment_constellation,
+              'fragment_segments_prototype': args.fragment_segments,
               'detector_sha256': hashlib.sha256(Path(DETECTOR.__file__).read_bytes()).hexdigest(),
               'cases': records}
     (args.output/'report.json').write_text(json.dumps(report, indent=2)+'\n')

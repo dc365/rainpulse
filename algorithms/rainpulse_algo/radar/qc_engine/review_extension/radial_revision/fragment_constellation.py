@@ -11,7 +11,7 @@ from .geometry import ResourceLimit
 PREFIX = 'RV2_CONSTELLATION_'
 
 
-def detect(native, blocked, *, beam_width=None, maximum_objects=10000):
+def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_evidence=False):
     r, az, dr, good, gaps = native_geometry(native)
     if native.shape[0] < 3:
         raise ValueError('at least three native rays required')
@@ -86,7 +86,7 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000):
                     continue
                 if len(records) >= maximum_objects:
                     raise ResourceLimit('constellation object budget exceeded; no partial output')
-                holds = []; accept = []; fractions = []; side_observations = []
+                holds = []; accept = []; fractions = []; side_observations = []; member_history = []
                 if weather[segment[rr], cc].any(): holds.append('measured_weather_member')
                 if barred[segment[rr], cc].any(): holds.append('protected_original_member')
                 for fragment in group:
@@ -104,20 +104,69 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000):
                             unknown_fraction=float((~observed[row, fc] & ~quiet).mean())))
                         accepted &= ~barred[row, fc] & (quiet | contrast)
                     fractions.append(float(accepted.mean())); accept.append(accepted); side_observations.append(sides)
+                    member_history.append(dict(component_id=fragment['ident'],
+                        range_min_m=float(r[fc].min()), range_max_m=float(r[fc].max()+dr),
+                        bearing_deg=fragment['bearing'] % 360,
+                        angular_width_deg=float(np.ptp(angle[fr])+spacing),
+                        observed_weather_gates=int(weather[segment[fr], fc].sum()),
+                        protected_gates=int(barred[segment[fr], fc].sum()),
+                        bilateral_fraction=float(accepted.mean())))
                 # Keep every original member in qualification history; no restarting
                 # the object after discarding a failed/unknown/weather fragment.
                 if min(fractions) < .8: holds.append('incomplete_measured_bilateral_boundaries')
                 object_id = len(records)+1
                 out[PREFIX+'MASK'][segment[rr], cc] = 1
                 out[PREFIX+'ID'][segment[rr], cc] = object_id
+                # Full-parent width history is retained before optional segmentation.
+                # A fixed-km ribbon narrows in angle as range increases; splitting
+                # away its near/weather part must not evade this counterexample.
+                distance = np.array([(m['range_min_m']+m['range_max_m'])/2 for m in member_history])
+                widths = np.array([m['angular_width_deg'] for m in member_history])
+                narrowing = False; slope = correlation = None
+                if distance.min() > 0 and distance.max()/distance.min() >= 1.7 and np.ptp(widths) > beam:
+                    slope = float(np.polyfit(np.log(distance), np.log(widths), 1)[0])
+                    correlation = float(np.corrcoef(np.log(distance), np.log(widths))[0, 1])
+                    narrowing = slope <= -.4 and correlation <= -.7
+                if narrowing:
+                    holds.append('full_original_parent_narrowing_weather_counterexample')
                 if not holds:
                     for f, accepted in zip(group, accept, strict=True):
                         out[PREFIX+'STRONG_MASK'][segment[f['rows'][accepted]], f['cols'][accepted]] = 1
+                segments = []
+                ordered = np.argsort([m['range_min_m'] for m in member_history])
+                qualifying = np.array([m['bilateral_fraction'] >= .8 and
+                    not m['observed_weather_gates'] and not m['protected_gates'] for m in member_history])
+                # Any original failed member blocks its observed radial interval,
+                # including another member that overlaps the same interval.
+                for i in np.flatnonzero(~qualifying):
+                    lo, hi = member_history[i]['range_min_m'], member_history[i]['range_max_m']
+                    for j, m in enumerate(member_history):
+                        if m['range_min_m'] < hi and m['range_max_m'] > lo:
+                            qualifying[j] = False
+                edges = np.diff(np.r_[False, qualifying[ordered], False].astype('int8'))
+                for start, end in zip(np.flatnonzero(edges == 1), np.flatnonzero(edges == -1), strict=True):
+                    indices = ordered[start:end]
+                    if len(indices) < 4:
+                        continue
+                    sc = np.unique(np.concatenate([group[i]['cols'] for i in indices]))
+                    ss = float(r[sc[-1]]-r[sc[0]]+dr)
+                    sw = [len(np.unique(r[sc]//scale)) for scale in (5000,10000,20000)]
+                    eligible = not narrowing and ss >= 60000 and len(sc)*dr >= 5000 and min(sw) >= 4
+                    segments.append(dict(original_components=[group[i]['ident'] for i in indices],
+                        radial_span_m=ss, actual_range_support_m=float(len(sc)*dr),
+                        range_window_counts=sw, independently_qualified=bool(eligible)))
+                    if segment_evidence and eligible:
+                        for i in indices:
+                            f = group[i]; selected = accept[i]
+                            out[PREFIX+'STRONG_MASK'][segment[f['rows'][selected]],f['cols'][selected]] = 1
                 records.append(dict(id=object_id, contour_dbz=level, original_components=list(key),
                     anchor_bearing_deg=anchor['bearing'] % 360, neighborhood_half_width_deg=beam,
                     radial_span_m=span, actual_range_support_m=float(len(cols)*dr),
                     range_window_counts=windows, bilateral_fractions=fractions,
                     side_observations=side_observations,
+                    member_history=member_history, measured_segments=segments,
+                    full_parent_width_slope=slope, full_parent_width_correlation=correlation,
+                    full_parent_narrowing_weather_hold=bool(narrowing),
                     strong=not holds, hold_reasons=holds))
     return out, dict(objects=records, source_claim=False, recursive_growth=False,
         action_gates=0, research_only=True, work=work)
