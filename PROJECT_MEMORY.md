@@ -1487,3 +1487,12 @@ operational data here.
 - 冻结ZF701 RAW新镜像审计退出0：cut5供体6/7匹配668门、cut6供体7/8匹配71门，旧路径均0。18门目标天气初筛只有1门满足；全18无已验证上层天气支持，缺波束契约不能当无雨。
 - 默认4MB Worker闲置核验后切换，4/4ready/healthy，fingerprint ca853767299e4a9f9d87dd0b024f807d9cb7e8fc52ff60c4aae5715a41a966c6，网络74bfcf66未变，context仍disabled。S Worker/阈值/预算/定时未改；无雷达产品/UI变化。
 - docs/XQC_S_CONTROL_SCREEN_20260930.md续验；105.build/xqc-upper-context-20260930/promotion.json，本地upper-image-real.jsonl/upper-hashes.txt/upper-tests.txt。下一关口为可核验波束证据+冻结样本mixed_review验证，仍不能宣布18门无降水或全天全网完成。
+
+## 2026-10-01 X 原生波束证据、混合回波复核已部署验收
+
+- 56796d4 修复普通 RSTM type-1 归一化丢失已核对的站点垂直波束宽度，契约绑定原始 SHA/config/version；缺失/无效或相控阵不补猜值。红测1失败后相关149测试通过，main先push后105部署，2解码Worker健康且模块SHA对提交一致。
+- 5份代表体扫（ZF701 08:03/08:07/08:49；ZF702 08:26原问题/08:33）正常重建及质控均SUCCEEDED，45个REF层源模型完整；924个原始矩阵/几何数组与旧归一化对象逐数组相同。ZF702原问题2/9层仍按70%动作保护扣留328436/24190门、质控可见0，不能把预算弃权当确认清除或恢复组合。
+- 5af913d 冻结通用 native-beam mixed_review 策略；4个闲置MB Worker正常重建后CAS选择，22实验增强站应用，网络bee28feb…，指纹79faf337…，镜像仍xqc-upper-53beaba-mb，保留当前已部署相位模块，不覆盖同期未部署研究。ZF703/ZF801/S/可信资格/预算/定时不变。
+- 线上正常任务1569935c/asset a2033863…已SUCCEEDED且九层逐门验收PASSED：1092混合门action=3、非确认拒绝、不恢复质控显示或组合；RAW及整层CR准入与前版相等，流式/离线结果一致。先前18个S重合重点源门仍无验证上层支持，不等于无降水。
+- 实浏览器ZF70108:49及ZF702原问题0.54°新图径向/扇形消失；未固定result入口已自动选新结果。历史result链接保留历史产品。证据docs/XQC_NATIVE_BEAM_CONTEXT_20261001.md，105.build/xqc-upper-context-20260930/beam及本地.build/xqc-zf702-investigation/beam-receipts。实际MinIO空闲122080387072字节，低于120GiB全天保护线，未恢复全天/小时任务。
+- 下一主线：高污染层与独立降水对照、其他站/时次回归及完整全天验收；缺原生等价波束的相控阵保持未知。不宣称全天全网全部完成，不启用候选可信融合/QPE/预报。
