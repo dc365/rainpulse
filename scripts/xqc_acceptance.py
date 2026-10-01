@@ -82,7 +82,7 @@ def freeze(path):
 SELECT jsonb_build_object('scan_id',s.scan_id,'radar_id',lower(s.radar_id),
  'start',s.volume_start_time,'end',s.volume_end_time,'raw_asset_id',s.raw_asset_id,
  'normalized_uri',r.normalized_uri,'decode_state',r.status,
- 'config_version',r.radar_config_version,'task',t.task)
+ 'config_version',r.radar_config_version,'available_at',r.updated_at,'task',t.task)
 FROM radar_scans s LEFT JOIN LATERAL (
  SELECT * FROM radar_scan_runs WHERE scan_id=s.scan_id
  ORDER BY created_at DESC,run_id DESC LIMIT 1) r ON true
@@ -189,7 +189,7 @@ def audit(manifest, station_filter=None):
                               "error_type": type(error).__name__, "detail": str(error)[:240]}), flush=True)
 
 
-def pilot(manifest, station_filter=None):
+def pilot(manifest, station_filter=None, scan_filter=None):
     """Compare source activation on stratified native cuts without publication.
 
     Only three explicit source switches change. Existing thresholds, floor,
@@ -231,6 +231,8 @@ def pilot(manifest, station_filter=None):
         child_cfg = XQCConfig.model_validate({**cfg.model_dump(mode="json"), **patch})
         child_station = replace(station, x_qc=replace(station.x_qc, enhancement=child_cfg.model_dump(mode="json")))
         for scan in selected.values():
+            if scan_filter and scan["scan_id"] not in scan_filter:
+                continue
             prefix = {"manifest_sha256": expected, "scan_id": scan["scan_id"], "radar_id": sid,
                       "source_activation_changed": cfg.digest != child_cfg.digest,
                       "parent_policy_sha256": cfg.digest, "child_policy_sha256": child_cfg.digest}
@@ -242,7 +244,8 @@ def pilot(manifest, station_filter=None):
                 else:
                     source = {"scan_id": scan["scan_id"], "radar_id": sid,
                               "input_uri": scan["normalized_uri"],
-                              "volume_start": scan["start"], "volume_end": scan["end"]}
+                              "volume_start": scan["start"], "volume_end": scan["end"],
+                              "available_at": scan["available_at"]}
                     sha = None
                 snapshot = reader.open(source["input_uri"], expected_sha256=sha)
                 sha = snapshot.index.sha256
@@ -299,14 +302,16 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("freeze").add_argument("output")
     sub.add_parser("audit").add_argument("--station", action="append")
-    sub.add_parser("pilot").add_argument("--station", action="append")
+    pilot_parser = sub.add_parser("pilot")
+    pilot_parser.add_argument("--station", action="append")
+    pilot_parser.add_argument("--scan-id", action="append")
     args = parser.parse_args()
     if args.command == "freeze":
         freeze(args.output)
     elif args.command == "audit":
         audit(json.load(sys.stdin), args.station)
     else:
-        pilot(json.load(sys.stdin), args.station)
+        pilot(json.load(sys.stdin), args.station, args.scan_id)
 
 
 if __name__ == "__main__":

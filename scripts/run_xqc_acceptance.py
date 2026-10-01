@@ -18,6 +18,7 @@ def main():
     parser.add_argument("audit_script")
     parser.add_argument("output")
     parser.add_argument("--mode", choices=("audit", "pilot"), default="audit")
+    parser.add_argument("--failed-pilot", type=Path)
     args = parser.parse_args()
     manifest = Path(args.manifest).resolve()
     script = Path(args.audit_script).resolve()
@@ -31,6 +32,14 @@ def main():
     environment.update(item.split("=", 1) for item in c["Config"]["Env"] if "=" in item)
     stations = sorted({s["radar_id"] for s in frozen["scans"]})
     groups = [stations[i::4] for i in range(4)]
+    failed_scans = set()
+    if args.failed_pilot:
+        for evidence in args.failed_pilot.glob("audit-*.jsonl"):
+            failed_scans.update(row["scan_id"] for row in
+                                (json.loads(line) for line in evidence.read_text().splitlines())
+                                if row.get("failures") == ["PILOT_ERROR"])
+        if args.mode != "pilot" or not failed_scans:
+            raise ValueError("failed-pilot requires explicit pilot errors to repair")
     lock = threading.Lock()
     state = {"status": "RUNNING", "pid": os.getpid(), "manifest_sha256": frozen["manifest_sha256"],
              "audit_script_sha256": hashlib.sha256(script.read_bytes()).hexdigest(), "mode": args.mode,
@@ -60,6 +69,8 @@ def main():
         command += [frozen["image_id"], "/opt/xqc_acceptance.py", args.mode]
         for station in selected:
             command += ["--station", station]
+        for scan in sorted(failed_scans):
+            command += ["--scan-id", scan]
         output = folder / ("audit-" + str(index) + ".jsonl")
         if output.exists():
             raise ValueError("refusing to overwrite audit evidence")
