@@ -155,6 +155,13 @@ def _native_cut_sampling(attrs, group):
     for key in ("source_sweep_number", "process_mode_code", "waveform_code"):
         if type(record.get(key)) is not int:
             raise ValueError("native cut sampling integer code required")
+    for key in ("dealiasing_mode_code", "sample_count1", "sample_count2", "phase_mode_code"):
+        if key in record and type(record[key]) is not int:
+            raise ValueError("native cut sampling integer processing measurement required")
+    if "atmospheric_loss_db_per_km" in record:
+        value = record["atmospheric_loss_db_per_km"]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not np.isfinite(value):
+            raise ValueError("native cut sampling finite processing measurement required")
     for key in ("prf1_hz", "prf2_hz", "log_resolution_m", "doppler_resolution_m", "nyquist_velocity_m_s"):
         value = record.get(key)
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not np.isfinite(value):

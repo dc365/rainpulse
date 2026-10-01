@@ -505,3 +505,33 @@ def test_native_cut_sampling_parameters_survive_normalization(tmp_path: Path) ->
     assert sampling['nyquist_velocity_m_s']==changed.nyquist_velocity_m_s
     assert sampling['semantic_verification'] is False
     np.testing.assert_array_equal(root['sweep_000/DBZH'][:],volume.sweeps[0].fields['DBZH'])
+
+
+def test_standard_cut_processing_header_survives_normalization_without_guessing(tmp_path):
+    config = load_radar_config(make_config(tmp_path))
+    source = make_fmt_fixture(tmp_path)
+    payload = bytearray(bz2.decompress(source.read_bytes()))
+    offset = GENERIC_HEADER.size + SITE_CONFIG.size + TASK_CONFIG.size
+    # Independent byte offsets from QX/T 653—2022 table 6. Do not pack using
+    # the decoder's index mapping: the test must catch shifted indexes.
+    struct.pack_into('<i', payload, offset + 4, 8)  # vendor extension, unknown
+    struct.pack_into('<i', payload, offset + 16, 2)
+    struct.pack_into('<ii', payload, offset + 64, 42, -2147483648)
+    struct.pack_into('<i', payload, offset + 72, 0)  # outside standard enum
+    struct.pack_into('<f', payload, offset + 76, .025)
+    source.write_bytes(bz2.compress(payload))
+    volume = decode_fmt_volume(source, config)
+    cut = volume.cuts[0]
+    assert cut.dealiasing_mode_code == 2
+    assert cut.sample_count1 == 42 and cut.sample_count2 == -2147483648
+    assert cut.phase_mode_code == 0
+    assert cut.atmospheric_loss_db_per_km == pytest.approx(.025)
+    objects = build_zarr_store(volume, config, asset_id=UUID(int=1), source_uri='s3://radar/raw')
+    store = MemoryStore(); store.update(objects)
+    root = zarr.open_group(store=store, mode='r')
+    sampling = root['sweep_000'].attrs['native_cut_sampling']
+    for key in ('dealiasing_mode_code', 'sample_count1', 'sample_count2', 'phase_mode_code',
+                'atmospheric_loss_db_per_km'):
+        assert sampling[key] == getattr(cut, key)
+    assert sampling['waveform_code'] == 8 and sampling['semantic_verification'] is False
+    np.testing.assert_array_equal(root['sweep_000/DBZH'][:], volume.sweeps[0].fields['DBZH'])

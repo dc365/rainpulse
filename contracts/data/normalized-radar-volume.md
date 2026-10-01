@@ -112,3 +112,12 @@ keyed by the normalized sweep number, in eager and streaming paths alike.
 Present records with mismatched raw/config/cut identity are rejected. Legacy
 assets without the record stay readable and never inherit invented PRFs or a
 root-level waveform as a replacement for missing per-cut source parameters.
+
+For generic type 1, the same optional record also retains
+`dealiasing_mode_code`, `sample_count1`, `sample_count2`, `phase_mode_code`, and
+`atmospheric_loss_db_per_km` from the packed cut header (QX/T 653—2022, table 6).
+The first four are opaque integers; the last is a finite source measurement.
+Sentinels and out-of-standard enum values are preserved for diagnosis, without
+being promoted to known processing modes. Adapters reject malformed present
+values. Legacy sampling records may omit this extension. Type 16 does not
+inherit type 1 byte offsets or synthesize these fields without verified layout.

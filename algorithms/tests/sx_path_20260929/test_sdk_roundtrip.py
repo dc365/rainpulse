@@ -95,3 +95,30 @@ def test_native_sampling_rejects_invalid_measurements_and_promotion(invalid):
     root['sweep_000'].attrs.update(source_sweep_number=10,native_cut_sampling=sampling)
     with pytest.raises(ValueError,match='native cut sampling'):
         read_x_qc_sweep(dict(store),s,source,0,asset_sha256=SHA,maximum_bytes=10**7)
+
+
+@pytest.mark.parametrize('streaming', [False, True])
+@pytest.mark.parametrize('field,value', [('dealiasing_mode_code', True), ('sample_count1', 42.5),
+                                        ('sample_count2', 'missing'), ('phase_mode_code', None),
+                                        ('atmospheric_loss_db_per_km', float('inf'))])
+def test_native_processing_extension_rejects_malformed_present_values(streaming, field, value):
+    s,v,root,store,source=fixture()
+    root.attrs.update(input_sha256='a'*64,radar_config_version='native-test')
+    sampling={'version':'native-cut-sampling-v1','input_sha256':'a'*64,'radar_config_version':'native-test','source_sweep_number':10,'process_mode_code':1,'waveform_code':8,'prf1_hz':1200.,'prf2_hz':800.,'log_resolution_m':75.,'doppler_resolution_m':75.,'nyquist_velocity_m_s':19.3,'semantic_verification':False,field:value}
+    root['sweep_000'].attrs.update(source_sweep_number=10,native_cut_sampling=sampling)
+    with pytest.raises(ValueError, match='native cut sampling'):
+        if streaming: read_x_qc_sweep(dict(store),s,source,0,asset_sha256=SHA,maximum_bytes=10**7)
+        else: from_group(root,s,source,asset_sha256=SHA,maximum_bytes=10**7)
+
+
+@pytest.mark.parametrize('streaming', [False, True])
+def test_native_processing_extension_preserves_unknown_codes_and_sentinels(streaming):
+    s,v,root,store,source=fixture()
+    root.attrs.update(input_sha256='a'*64,radar_config_version='native-test')
+    sampling={'version':'native-cut-sampling-v1','input_sha256':'a'*64,'radar_config_version':'native-test','source_sweep_number':10,'process_mode_code':1,'waveform_code':8,'prf1_hz':1200.,'prf2_hz':800.,'log_resolution_m':75.,'doppler_resolution_m':75.,'nyquist_velocity_m_s':19.3,'semantic_verification':False,'dealiasing_mode_code':2,'sample_count1':42,'sample_count2':-2147483648,'phase_mode_code':0,'atmospheric_loss_db_per_km':.025}
+    root['sweep_000'].attrs.update(source_sweep_number=10,native_cut_sampling=sampling)
+    if streaming: got,_=read_x_qc_sweep(dict(store),s,source,0,asset_sha256=SHA,maximum_bytes=10**7)
+    else: got=from_group(root,s,source,asset_sha256=SHA,maximum_bytes=10**7)
+    assert got.metadata['native_cut_sampling']['0']==sampling
+    assert got.metadata.get('doppler_verification_id') is None
+    np.testing.assert_array_equal(got.sweeps[0].fields['DBZH'],v.sweeps[0].fields['DBZH'])

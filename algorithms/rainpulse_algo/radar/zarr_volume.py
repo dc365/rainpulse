@@ -157,6 +157,14 @@ def build_zarr_store(
                     "doppler_resolution_m": source_cut.doppler_resolution_m,
                     "nyquist_velocity_m_s": source_cut.nyquist_velocity_m_s,
                     "semantic_verification": False,
+                    **{
+                        key: getattr(source_cut, key)
+                        for key in (
+                            "dealiasing_mode_code", "sample_count1", "sample_count2",
+                            "phase_mode_code", "atmospheric_loss_db_per_km",
+                        )
+                        if getattr(source_cut, key) is not None
+                    },
                 },
                 "transmit_beam_index": source_cut.transmit_beam_index,
                 "receive_beam_width_horizontal_deg": source_cut.receive_beam_width_horizontal_deg,

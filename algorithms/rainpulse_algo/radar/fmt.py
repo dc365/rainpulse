@@ -15,7 +15,7 @@ import numpy as np
 from .config import FieldMapping, RadarDecoderConfig
 
 DECODER_ID = "rainpulse.cma-rstm"
-DECODER_VERSION = "cma-rstm-2.2.0"
+DECODER_VERSION = "cma-rstm-2.2.1"
 ABSENT_RAW_GATE_CODE = np.uint32(np.iinfo("uint32").max)
 MAGIC_NUMBER = 0x4D545352
 
@@ -102,6 +102,13 @@ class SourceCut:
     transmit_beam_index: int | None = None
     receive_beam_width_horizontal_deg: float | None = None
     receive_beam_width_vertical_deg: float | None = None
+    # Packed regular-FMT cut measurements; absent for unverified PA layouts.
+    # Preserve sentinels and vendor extensions without guessing semantics.
+    dealiasing_mode_code: int | None = None
+    sample_count1: int | None = None
+    sample_count2: int | None = None
+    phase_mode_code: int | None = None
+    atmospheric_loss_db_per_km: float | None = None
 
 
 @dataclass(frozen=True)
@@ -711,6 +718,11 @@ def _parse_cut(number: int, value: bytes) -> SourceCut:
         start_range_m=int(values[15]),
         nyquist_velocity_m_s=float(values[20]),
         moments_mask=int(values[21]),
+        dealiasing_mode_code=int(values[4]),
+        sample_count1=int(values[16]),
+        sample_count2=int(values[17]),
+        phase_mode_code=int(values[18]),
+        atmospheric_loss_db_per_km=float(values[19]),
     )
 
 
