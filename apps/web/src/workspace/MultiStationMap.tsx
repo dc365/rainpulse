@@ -9,7 +9,7 @@ import { RasterGISMap, type GISImageLayer, type GISMapExtent, type GISRadarConte
 import { radarDisplayExtent, radarSiteFor } from '../radarSites'
 import { FUZHOU_GIS_CONTEXT } from '../GISMapContexts'
 import { REFLECTIVITY_LEGEND } from '../reflectivityPalette'
-import { panelByID, qcSweepOptions, type WorkspaceCycleDetail } from './model'
+import { panelByID, stationDisplayName, qcSweepOptions, type WorkspaceCycleDetail } from './model'
 
 const DOMAIN: GISMapExtent = [117.995, 24.995, 123.005, 27.005]
 type Station = { radar_id: string; display_name: string }
@@ -23,7 +23,7 @@ export function MultiStationMap({ sIDs, xStations, detail, time, day, revision, 
   sIDs: string[]; xStations: Station[]; detail?: WorkspaceCycleDetail; time: string; day: string; revision: number;
   onTimes: (times: string[]) => void; sharedView: View; layout: 'single' | 'pair'; composite: boolean;
 }) {
-  const stations = useMemo(() => [...sIDs.map(id => ({ id, band: 'S', name: radarSiteFor(id)?.displayName ?? id })), ...xStations.map(s => ({ id: s.radar_id, band: 'X', name: s.display_name }))], [sIDs, xStations])
+  const stations = useMemo(() => [...sIDs.map(id => ({ id, band: 'S', name: radarSiteFor(id)?.displayName ?? id })), ...xStations.map(s => ({ id: s.radar_id, band: 'X', name: stationDisplayName(s.radar_id, s.display_name) }))], [sIDs, xStations])
   const [choices, setChoices] = useState<Choice[]>(() => {
     try { const saved: unknown = JSON.parse(sessionStorage.getItem('rainpulse.multi-station.layers') ?? '[]');
       return Array.isArray(saved) ? saved.filter((c): c is Choice => typeof c?.id === 'string' && Number.isFinite(c?.opacity) && c.opacity >= 0 && c.opacity <= 1 && (c.sweep === undefined || Number.isInteger(c.sweep))).map(c => ({ ...c, visible: true })).slice(0,32) : []

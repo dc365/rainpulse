@@ -114,6 +114,13 @@ export type WorkspaceCycleDetail = CycleSummary & {
 
 const forecastPanelIDs = ['qpe', 'lk', 'steps', 'nowcastnet'] as const
 
+// X station display names repeat the radar id ("ZF101 X 波段候选站");
+// strip the leading id so pickers read "ZF101 · X 波段候选站".
+export function stationDisplayName(radarID: string, displayName: string) {
+  const trimmed = displayName.replace(new RegExp(`^${radarID}\\s*`, 'i'), '').trim()
+  return trimmed || displayName
+}
+
 export function panelByID(detail: WorkspaceCycleDetail, panelID: string) {
   return detail.panels.find((panel) => panel.panel_id === panelID) ?? null
 }
