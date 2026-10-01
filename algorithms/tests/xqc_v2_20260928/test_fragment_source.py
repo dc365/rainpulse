@@ -85,3 +85,57 @@ def test_unknown_receiver_is_not_filled_and_global_model_limit_abstains():
     s=adapt(cut,cfg).sweep
     with pytest.raises(ResourceLimit,match='model-trial'):
         detect(s,cfg,protected=np.zeros(s.shape,bool))
+
+
+def test_fragment_family_reaches_complete_source_stage_and_core_actions():
+    from rainpulse_algo.multiband.xqc_v2.radial_source import detect as source
+    from rainpulse_algo.multiband.xqc_v2.core import evaluate_cut
+    cut,cfg,target=sample()
+    cfg=cfg.model_copy(update={'radial_source_block_model_enabled':True,
+                              'radial_source_local_policy':'joint_evidence'})
+    s=adapt(cut,cfg).sweep
+    details={}
+    mask,record=source(s,cfg,protected=np.zeros(s.shape,bool),details=details)
+    assert record['fragment_model']['integrated_by_radial_source']
+    assert ((details['source_kind'][70,target]&8)!=0).mean()>.95
+    original=cut.fields['DBZH'].copy()
+    ev=evaluate_cut(cut,{},cfg)
+    assert ev.arrays['XQC_RADIAL_SOURCE_MASK'][70,target].mean()>.95
+    assert ev.arrays['XQC_QUARANTINE_MASK'][70,target].mean()>.95
+    np.testing.assert_array_equal(cut.fields['DBZH'],original)
+
+
+def test_fragment_stage_preserves_protection_and_existing_global_budget():
+    from rainpulse_algo.multiband.xqc_v2.radial_source import detect as source
+    from rainpulse_algo.multiband.xqc_v2.core import evaluate_cut
+    cut,cfg,target=sample()
+    cfg=cfg.model_copy(update={'radial_source_block_model_enabled':True,
+                              'radial_source_local_policy':'joint_evidence',
+                              'maximum_new_exclusion_fraction':.1})
+    s=adapt(cut,cfg).sweep
+    protected=np.zeros(s.shape,bool);protected[70,target]=True
+    mask,record=source(s,cfg,protected=protected)
+    assert record['fragment_model']['integrated_by_radial_source']
+    assert not mask[protected].any()
+    ev=evaluate_cut(cut,{},cfg)
+    assert ev.record['status']=='ACTION_BUDGET_ABSTAINED'
+    assert not ev.arrays['XQC_QUARANTINE_MASK'].any()
+
+
+def test_fragment_resource_failure_cannot_publish_partial_stage(monkeypatch):
+    from rainpulse_algo.multiband.xqc_v2 import radial_source,fragment_source
+    from rainpulse_algo.radar.qc_engine.volume_review.data import ResourceLimit
+    cut,cfg,_=sample()
+    cfg=cfg.model_copy(update={'radial_source_block_model_enabled':True})
+    s=adapt(cut,cfg).sweep
+    details={}
+    def fail(s,cfg,*,protected,prepared):
+        assert prepared.sweep is s
+        raise ResourceLimit('fragment held-out trial exhausted')
+    monkeypatch.setattr(fragment_source,'detect',fail)
+    mask,record=radial_source.detect(s,cfg,protected=np.zeros(s.shape,bool),details=details)
+    assert record['status']=='PARTIAL_RESOURCE_LIMIT'
+    assert record['failed_module']=='fragment'
+    assert record['completed_modules']==['continuous','blocks']
+    assert not (details['source_kind']&8).any()
+    np.testing.assert_array_equal(mask,details['source_kind']!=0)

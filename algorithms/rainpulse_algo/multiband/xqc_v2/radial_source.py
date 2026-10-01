@@ -19,7 +19,8 @@ def detect(s, cfg, *, protected, details=None):
     from rainpulse_algo.radar.qc_engine.volume_review.data import ResourceLimit
     kinds = np.zeros(s.shape, np.uint8)
     records = {"continuous": {"status": "DISABLED"},
-               "blocks": {"status": "DISABLED"}, "fan": {"status": "DISABLED"}}
+               "blocks": {"status": "DISABLED"}, "fan": {"status": "DISABLED"},
+               "fragment": {"status": "DISABLED"}}
     stages = [("continuous", 1, _continuous)]
     if cfg.radial_source_block_model_enabled:
         from .source_blocks import detect as detect_blocks
@@ -27,6 +28,9 @@ def detect(s, cfg, *, protected, details=None):
     if cfg.radial_source_fan_model_enabled:
         from .source_fans import detect as detect_fans
         stages.append(("fan", 4, detect_fans))
+    if cfg.radial_source_block_model_enabled:
+        from .fragment_source import detect as detect_fragments
+        stages.append(("fragment", 8, detect_fragments))
     status, failed_module, failure = "EVALUATED", None, None
     completed = []
     for name, bit, detector in stages:
@@ -38,6 +42,8 @@ def detect(s, cfg, *, protected, details=None):
             status, failed_module, failure = "PARTIAL_RESOURCE_LIMIT", name, str(exc)
             records[name] = {"status": "RESOURCE_LIMIT_ABSTAINED", "reason": failure}
             break
+        if name == "fragment":
+            record = dict(record, diagnostic_only=False, integrated_by_radial_source=True)
         result |= mask
         kinds[mask] |= bit
         records[name] = record
@@ -51,9 +57,11 @@ def detect(s, cfg, *, protected, details=None):
                     "continuous": int(((kinds & 1) != 0).sum()),
                     "blocks": int(((kinds & 2) != 0).sum()),
                     "fan": int(((kinds & 4) != 0).sum()),
+                    "fragment": int(((kinds & 8) != 0).sum()),
                     "union": int(result.sum())},
                     "kind_bits_are_independent_votes": False,
                     "fan_model": records["fan"], "block_model": records["blocks"],
+                    "fragment_model": records["fragment"],
                     "source_gates": int(result.sum()),
                     "models": records["continuous"].get("models", []),
                     "method": "bilateral-receiver-corridor-heldout-v1",

@@ -1,6 +1,7 @@
 """Held-out source qualification within separate, frozen RAW fragment families.
 
-This module is not wired to QC actions. Geometry only selects reference domains;
+The radial-source stage integrates complete results under its existing gates.
+This entry point alone is diagnostic. Geometry only selects reference domains;
 paired receiver power and REF response must qualify every observed target gate.
 """
 import numpy as np
@@ -9,13 +10,13 @@ from .source_blocks import detect as detect_blocks
 from .source_summary import SourceStatistics
 
 
-def detect(sweep, cfg, *, protected):
+def detect(sweep, cfg, *, protected, prepared=None):
     if not isinstance(protected, np.ndarray) or protected.shape != sweep.shape or protected.dtype != bool:
         raise ValueError('fragment source protection must be a boolean native-sweep matrix')
     nomination, geometry = nominate(sweep, cfg)
     result = np.zeros(sweep.shape, bool)
     records = []
-    stats = SourceStatistics.build(sweep, cfg)
+    stats = SourceStatistics.build(sweep, cfg) if prepared is None else prepared.use(sweep, cfg)
     for identity, family in enumerate(geometry['families']):
         # One family per evaluation: distant groups cannot share their training
         # support across an unknown or over-limit receiver interval.

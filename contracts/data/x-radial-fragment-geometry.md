@@ -24,3 +24,13 @@
 - `domain=None` 保持既有生产行为；全 true domain 的 mask 和完整模型记录与旧路径逐字段相等。新增入口未改变配置摘要或线上图件。
 
 验证增加 `test_source_domain.py` 与 `test_fragment_source.py`：覆盖跨零方位、高仰角、间歇弱源、目标留出、短家族不能借远段参考、保护与异常增强、范围变化天气、接收信号缺测、资源弃权。
+
+## 原始片段家族完整引擎接入
+
+在既有 `radial_source_enabled` 且 `radial_source_block_model_enabled` 时，
+家族来源作为独立完整阶段运行，复用同一 SourceStatistics 资源账本。
+`XQC_SOURCE_KIND` 的位 8 标记该来源，位 1/2/4 含义不变；多个位不构成独立投票。
+阶段完整成功才合并 mask；资源失败舍弃该阶段的部分输出，保留先前完整阶段及降级回执。
+逐门源资格仍须通过原有硬保护、上下文冲突、全层动作预算、audit/quarantine 和产品准入。
+独立诊断入口仍标记 diagnostic_only；引擎接入回执显式标记 integrated_by_radial_source。
+RAW、缺测及家族范围外门不修改。不增加站点/方位/仰角例外或提高任何阈值。
