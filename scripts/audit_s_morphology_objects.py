@@ -26,13 +26,22 @@ def main():
     parser.add_argument('--plot', action='store_true')
     parser.add_argument('--variable-width', action='store_true',
                         help='Read-only complete variable-envelope prototype; no engine actions')
+    parser.add_argument('--branch-shoulders', action='store_true',
+                        help='Read-only bounded measured exterior of variable-width branches')
+    parser.add_argument('--radial-backbone', action='store_true',
+                        help='Full-history frozen radial core and fringe; optional experimental engine replay')
     parser.add_argument('--engine-quarantine', action='store_true',
                         help='Validate opt-in experiment proposals through the actual engine; no product writes')
     args = parser.parse_args()
+    if args.radial_backbone and (args.variable_width or args.branch_shoulders):
+        raise ValueError('radial backbone is a separate detector mode')
+    if args.branch_shoulders and not args.variable_width:
+        raise ValueError('branch shoulders require evidence-only variable-width mode')
     if args.variable_width and args.engine_quarantine:
         raise ValueError('variable-width prototype is evidence-only; not wired to engine actions')
     global DETECTOR
-    module_name = 'variable_morphology' if args.variable_width else 'morphology_objects'
+    module_name = ('radial_backbone' if args.radial_backbone else
+                   'variable_morphology' if args.variable_width else 'morphology_objects')
     DETECTOR = importlib.import_module('morph_object_runtime.engine.review_extension.radial_revision.'+module_name)
     args.output.mkdir(parents=True, exist_ok=False)
     from audit_s_source_footprint import select_roi
@@ -54,10 +63,10 @@ def main():
             gate_spacing_m=float(np.median(np.diff(a['RANGE']))))
         blocked = (a['WEATHER'] == 1) | (a['CONFLICTS'] == 1) | (a['RV2_BARRED_MASK'] == 1)
         start = time.monotonic()
-        arrays, detail = DETECTOR.detect(native, blocked,
-            beam_width=meta['config']['fragment_line'].get('antenna_beam_width_deg'))
-        DETECTOR.validate(arrays, native, blocked,
-            beam_width=meta['config']['fragment_line'].get('antenna_beam_width_deg'))
+        options={'beam_width':meta['config']['fragment_line'].get('antenna_beam_width_deg')}
+        if args.variable_width:options['branch_shoulders']=args.branch_shoulders
+        arrays, detail = DETECTOR.detect(native, blocked, **options)
+        DETECTOR.validate(arrays, native, blocked, **options)
         integration = {}
         extra_proposals = np.zeros(native.shape, bool)
         if args.engine_quarantine:
@@ -65,8 +74,9 @@ def main():
             config = importlib.import_module('morph_object_runtime.engine.review_extension.radial_revision.config')
             validator = importlib.import_module('morph_object_runtime.engine.review_extension.radial_revision.validation')
             cfg = config.RadialRevisionConfig.model_validate(meta['config'])
+            feature='radial_backbone_enabled' if args.radial_backbone else 'whole_object_morphology_enabled'
             cfg = cfg.model_copy(update={'mode':'experiment_quarantine', 'fragment_line':
-                cfg.fragment_line.model_copy(update={'whole_object_morphology_enabled':False})})
+                cfg.fragment_line.model_copy(update={feature:False})})
             barrier = (a['WEATHER'] == 1) | (a['CONFLICTS'] == 1)
             baseline, _ = engine.evaluate(native, cfg, a['SEED'], a['RESIDUAL_DB'],
                 weather=a['WEATHER'], conflicts=a['CONFLICTS'])
@@ -76,7 +86,7 @@ def main():
             if changed:
                 raise ValueError('frozen source-stage baseline differs: '+','.join(changed))
             cfg = cfg.model_copy(update={'fragment_line':cfg.fragment_line.model_copy(
-                update={'whole_object_morphology_enabled':True})})
+                update={feature:True})})
             integrated, engine_report = engine.evaluate(native, cfg, a['SEED'], a['RESIDUAL_DB'],
                 weather=a['WEATHER'], conflicts=a['CONFLICTS'])
             validator.validate_revision_fields({**integrated,'DBZH_RAW':a['RAW']},
@@ -106,6 +116,7 @@ def main():
         strong = arrays[DETECTOR.PREFIX+'STRONG_MASK'] == 1
         proof = {'scan_id': meta['scan_id'], 'sweep': meta['sweep'],
                  'input_snapshot_sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
+                 'detector_sha256': hashlib.sha256(Path(DETECTOR.__file__).read_bytes()).hexdigest(),
                  'web_frame_identity': meta['web_frame_identity'], 'elapsed_seconds': elapsed,
                  'remaining_selected': int((remaining & roi).sum()),
                  'candidate_remaining_selected': int((remaining & roi & candidate).sum()),
@@ -148,6 +159,7 @@ def main():
               'selection': {'azimuth': args.azimuth, 'range_min': args.range_min},
               'script_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
               'variable_width_prototype': args.variable_width,
+              'radial_backbone_prototype': args.radial_backbone,
               'detector_sha256': hashlib.sha256(Path(DETECTOR.__file__).read_bytes()).hexdigest(),
               'cases': records}
     (args.output/'report.json').write_text(json.dumps(report, indent=2)+'\n')

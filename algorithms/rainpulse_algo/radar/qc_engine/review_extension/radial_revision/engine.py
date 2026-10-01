@@ -197,6 +197,19 @@ def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, confl
             # This stage runs AFTER freezing original source identities.
             candidate|=whole_morphology
             line_report['whole_object_morphology']=whole_report
+        backbone=np.zeros(native.shape,bool)
+        if cfg.fragment_line is not None and cfg.fragment_line.radial_backbone_enabled:
+            from .radial_backbone import detect as detect_backbone, evidence as backbone_evidence
+            fields,backbone_report=detect_backbone(native,barred,
+                beam_width=cfg.fragment_line.antenna_beam_width_deg)
+            out.update(fields)
+            out.update(backbone_evidence(native,barred,
+                beam_width=cfg.fragment_line.antenna_beam_width_deg))
+            backbone=fields['RV2_BACKBONE_STRONG_MASK']==1
+            # Original source identities are already frozen. Weak RAW fringes
+            # never acquire source authority or propagate beyond their object.
+            candidate|=backbone
+            line_report['radial_backbone']=backbone_report
         fan_joint=np.zeros(native.shape,bool)
         if cfg.fragment_line is not None and cfg.fragment_line.fan_joint_enabled:
             from .fan_joint import qualify as qualify_fans
@@ -240,7 +253,7 @@ def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, confl
         out["RV2_SEGMENT_MATCH_MASK"] &= (~weak).astype("uint8")
         legacy_match = candidate & source & ~barred
         segment_match = (out["RV2_SEGMENT_MATCH_MASK"] == 1) & candidate & ~barred & ~weak
-        geometry = (line_morphology | line_isolated | group_polar | group_morph | residual | discontinuous | envelope | joint | source_window | fan_joint | source_footprint | whole_morphology) & observed & ~barred
+        geometry = (line_morphology | line_isolated | group_polar | group_morph | residual | discontinuous | envelope | joint | source_window | fan_joint | source_footprint | whole_morphology | backbone) & observed & ~barred
         qualified = legacy_match | segment_match | line_source | geometry
         receiver = (legacy_match | (segment_match & cfg.allow_segmented_quarantine) | line_source) & ~weak
         geometry_action = geometry & (cfg.mode == 'experiment_quarantine')
@@ -248,7 +261,7 @@ def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, confl
         if cfg.mode != "experiment_quarantine":
             proposal[:] = False
         reason = out["RV2_REASON"]
-        reason[group_polar | group_morph | discontinuous | envelope | joint | source_window | fan_joint | source_footprint | whole_morphology] |= int(Reason.GROUP_POLAR_MORPHOLOGY)
+        reason[group_polar | group_morph | discontinuous | envelope | joint | source_window | fan_joint | source_footprint | whole_morphology | backbone] |= int(Reason.GROUP_POLAR_MORPHOLOGY)
         if "RV2_LINE_MASK" in out:
             reason[out["RV2_LINE_MASK"] == 1] |= int(Reason.FRAGMENT_LINE)
             reason[line_source] |= int(Reason.COHERENT_LINE_SOURCE)

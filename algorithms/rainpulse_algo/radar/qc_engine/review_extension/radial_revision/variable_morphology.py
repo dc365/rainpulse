@@ -12,7 +12,43 @@ from .morphology_objects import _shoulders, SCALES_M, LEVELS_DBZ
 PREFIX = 'RV2_VARIABLE_OBJECT_'
 
 
-def detect(native, blocked, *, beam_width=None, maximum_objects=50000):
+def _branch_edges(rows, a, b, columns, angles, beam, z, observed, snr, sa, barred, charge):
+    """Find measured shoulders in a fixed two-beam RAW stencil, never grow body.
+
+    Every intervening coordinate must be measured and unbarred. Prefer the
+    nearest pair, then require the entire object's exterior edges to be stable.
+    Unknown inner flanks cannot be skipped in pursuit of a convenient quiet edge.
+    """
+    best=(a-1,b)
+    candidates=[]
+    for left in range(a-1,-1,-1):
+        if angles[a]-angles[left]>2*beam+1e-6:break
+        for right in range(b,len(rows)):
+            if angles[right]-angles[b-1]>2*beam+1e-6:break
+            charge((right-left+1)*len(columns))
+            stencil=np.ix_(rows[left:right+1],columns)
+            known=observed[stencil]|(sa[stencil]&(snr[stencil]<=3))
+            measured_paths=(known&~barred[stencil]).all(axis=0)
+            if measured_paths.mean()<.8:continue
+            # Compare against the original branch, not a diluted expanded body.
+            body=z[np.ix_(rows[a:b],columns)]
+            present=observed[np.ix_(rows[a:b],columns)]
+            centre=np.divide(np.where(present,body,0).sum(axis=0),present.sum(axis=0),
+                out=np.full(len(columns),np.nan),where=present.sum(axis=0)>0)
+            clear=measured_paths.copy()
+            for side in (left,right):
+                k=rows[side]
+                clear &= ((observed[k,columns]&(z[k,columns]<=centre-6))|
+                          (~observed[k,columns]&sa[k,columns]&(snr[k,columns]<=3)))
+            if clear.mean()>=.8:
+                candidates.append((angles[a]-angles[left]+angles[right]-angles[b-1],left,right))
+        # Work is bounded by the fixed native two-beam stencil.
+    if candidates:
+        _,left,right=min(candidates);best=(left,right)
+    return best
+
+
+def detect(native, blocked, *, beam_width=None, maximum_objects=50000, branch_shoulders=False):
     r, az, dr, good, gaps = native_geometry(native)
     if beam_width is not None and (not np.isfinite(beam_width) or beam_width <= 0):
         raise ValueError('positive finite antenna beam width required')
@@ -43,6 +79,13 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=50000):
         angles=np.rad2deg(np.unwrap(np.deg2rad(az[rows])))
         spacing=float(np.median(np.diff(angles)))
         if spacing<=0 or np.any(np.diff(angles)<=0):continue
+        steps=np.diff(angles)
+        # A declared gap is a segment boundary. An undeclared large jump must
+        # not enlarge angular tolerance and manufacture reliable coverage.
+        if np.any(steps>1.5*spacing):continue
+        left_edges=angles-np.r_[steps[0],steps]/2
+        right_edges=angles+np.r_[steps,steps[-1]]/2
+        footprints=right_edges-left_edges
         beam=max(spacing, beam_width or spacing)
         for scale in SCALES_M:
             blocks=(r//scale).astype(int)
@@ -66,7 +109,8 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=50000):
                             raise ResourceLimit('variable object budget exceeded; no partial result')
                         rr,cc=np.where(signal[a:b]);rr=rows[a+rr];cc=cols[cc]
                         node=dict(a=a,b=b,block=int(block),cols=cols,anchor=np.unique(cc),
-                                  rr=rr,cc=cc,left=angles[a]-spacing/2,right=angles[b-1]+spacing/2)
+                                  rr=rr,cc=cc,left=left_edges[a],right=right_edges[b-1],
+                                  footprint=float(footprints[a:b].max()))
                         i=len(nodes);nodes.append(node);parent.append(i);current.append(i)
                         charge(len(recent))
                         matches=[j for j in recent if max(a,nodes[j]['a'])<min(b,nodes[j]['b'])]
@@ -108,7 +152,7 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=50000):
                             incoming[i]+=1;outgoing[j]+=1
                     if max((*incoming.values(),*outgoing.values()))>1:holds.append('ambiguous_fork_or_merge')
                     if widths.max()>90:holds.append('broad_connected_domain')
-                    tolerance=max(beam,.25*float(np.median(widths)))
+                    tolerance=max(beam,max(e['footprint'] for e in entries),.25*float(np.median(widths)))
                     excursion=float(np.max(np.abs(centres-np.median(centres))))
                     if excursion>tolerance:holds.append('curved_or_drifting_centre')
                     # A narrowing constant-km rain ribbon is a required
@@ -124,22 +168,61 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=50000):
                     aspect=span/max(end*np.deg2rad(widths.max()),dr)
                     shape=(span>=80000 and support>=10000 and windows>=4 and aspect>=3) if kind=='line' else (span>=100000 and support>=20000 and windows>=6)
                     if not shape:holds.append('insufficient_object_geometry')
-                    clear=[];known=[];target_rows=[];target_cols=[];allowed=[]
+                    branch_candidate=branch_shoulders and not holds
+                    if branch_candidate:
+                        # Already qualified objects keep their exact original
+                        # evidence. Exterior search only addresses failed contrast.
+                        baseline=[]
+                        for e in entries:
+                            charge((e['b']-e['a']+2)*len(e['anchor']))
+                            baseline.append(_shoulders(rows,e['a'],e['b'],e['anchor'],z,observed,snr,sa,barred))
+                        baseline=np.asarray(baseline)
+                        if (baseline[:,0].mean()>=.8 and baseline[:,1].mean()>=.8
+                                and ((baseline[:,0]>=.8)&(baseline[:,1]>=.8)).mean()>=.8):
+                            branch_candidate=False
+                    clear=[];known=[];target_rows=[];target_cols=[];allowed=[];exterior=[]
                     for e in entries:
                         a,b,cols=e['a'],e['b'],e['cols']
                         charge((b-a+2)*len(cols))
-                        kn,cl=_shoulders(rows,a,b,e['anchor'],z,observed,snr,sa,barred)
+                        left,right=(a-1,b)
+                        if branch_candidate:
+                            left,right=_branch_edges(rows,a,b,e['anchor'],angles,beam,z,observed,snr,sa,barred,charge)
+                        # Original branch mean is the contrast reference even
+                        # when measured exterior shoulders are farther away.
+                        body=z[np.ix_(rows[a:b],e['anchor'])];present=observed[np.ix_(rows[a:b],e['anchor'])]
+                        mean=np.divide(np.where(present,body,0).sum(axis=0),present.sum(axis=0),
+                            out=np.full(len(e['anchor']),np.nan),where=present.sum(axis=0)>0)
+                        kk=np.ones(len(e['anchor']),bool);cll=kk.copy()
+                        for side in (left,right):
+                            if side<0 or side>=len(rows):kk[:]=False;cll[:]=False;break
+                            k=rows[side];c=e['anchor'];noise=sa[k,c]&(snr[k,c]<=3)
+                            kk &= ~barred[k,c]&(observed[k,c]|noise)
+                            cll &= ~barred[k,c]&((observed[k,c]&(z[k,c]<=mean-6))|(~observed[k,c]&noise))
+                        kn,cl=float(kk.mean()),float(cll.mean())
+                        if 0<=left<right<len(rows):exterior.append((angles[left],angles[right]))
                         known.append(kn);clear.append(cl)
                         domain=raw[np.ix_(rows[a:b],cols)]
                         rr,cc=np.where(domain);rr=rows[a+rr];cc=cols[cc]
                         inside=(r[cc]>=start)&(r[cc]<end);rr=rr[inside];cc=cc[inside]
                         if barred[np.ix_(rows[a:b],cols)].any():holds.append('original_object_barrier')
                         accept=~barred[rr,cc]&~weather[rr,cc]
-                        for side in (a-1,b):
+                        if branch_candidate and 0<=left<right<len(rows):
+                            unique_cc,inverse=np.unique(cc,return_inverse=True)
+                            stencil=np.ix_(rows[left:right+1],unique_cc)
+                            charge((right-left+1)*len(unique_cc))
+                            valid=((observed[stencil]|(sa[stencil]&(snr[stencil]<=3)))&~barred[stencil]).all(axis=0)
+                            accept &= valid[inverse]
+                        for side in (left,right):
                             if side<0 or side>=len(rows):accept[:]=False;break
                             k=rows[side];quiet=sa[k,cc]&(snr[k,cc]<=3)
                             accept &= ~barred[k,cc]&((observed[k,cc]&(z[k,cc]<=z[rr,cc]-6))|(~observed[k,cc]&quiet))
                         target_rows.append(rr);target_cols.append(cc);allowed.append(accept)
+                    if branch_candidate and len(exterior)==len(entries):
+                        edges_array=np.asarray(exterior)
+                        if np.max(edges_array[:,1]-edges_array[:,0])>90:
+                            holds.append('broad_branch_exterior')
+                        if np.ptp(edges_array[:,0])>2*beam or np.ptp(edges_array[:,1])>2*beam:
+                            holds.append('unstable_branch_exterior')
                     if np.mean(known)<.8:holds.append('unknown_shoulders')
                     confirmed=np.array(known)>=.8;confirmed &= np.array(clear)>=.8
                     if np.mean(clear)<.8 or confirmed.mean()<.8:holds.append('insufficient_repeated_edge_contrast')
@@ -156,9 +239,12 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=50000):
                         centre_median_deg=float(np.median(centres)),left_min_deg=float(min(e['left'] for e in entries)),
                         right_max_deg=float(max(e['right'] for e in entries)),
                         known_shoulders_fraction=float(np.mean(known)),clear_shoulders_fraction=float(np.mean(clear)),
+                        bounded_branch_exterior_searched=bool(branch_candidate),
+                        exterior_left_min_deg=float(min(x[0] for x in exterior)) if exterior else None,
+                        exterior_right_max_deg=float(max(x[1] for x in exterior)) if exterior else None,
                         narrowing_log_slope=slope,narrowing_correlation=correlation,strong=not holds,
                         holds=sorted(set(holds)),member_gates=len(rr),qualified_gates=int(accept.sum()) if not holds else 0))
-    return result,dict(version='variable-native-morphology-v1',objects=records,action_gates=0,
+    return result,dict(version='variable-native-morphology-v1',branch_shoulders=bool(branch_shoulders),objects=records,action_gates=0,
         product_writes=False,source_claim=False,filled_gates=0,recursive_growth=False,
         independent_weather_truth=False,strong_evidence_gates=int(result[PREFIX+'STRONG_MASK'].sum()))
 

@@ -91,3 +91,91 @@ def test_forged_evidence_is_rejected_by_original_measurement_replay():
     arrays[P+'STRONG_MASK'][0,0]=1
     with pytest.raises(ValueError,match='proof differs'):
         module.validate(arrays,n,barred)
+
+
+def test_actual_local_footprints_bound_narrow_centre_jitter():
+    r=np.arange(0.,420000.,500.);az=np.arange(41.,dtype=float)
+    az[21:]+=0.2
+    z=np.full((len(az),len(r)),np.nan,'float32')
+    for j,radius in enumerate(r):
+        if 80000<=radius<400000:
+            rows=[20] if int(radius//10000)%8 else [20,21,22]
+            z[rows,j]=25
+    n=Native(z,dr=500.,start=0.,fields={'SNR':np.where(np.isfinite(z),8.,-2.)})
+    n.azimuth=az
+    arrays,report=detect(n)
+    assert arrays[P+'STRONG_MASK'][n.field_available['DBZH']].any()
+    assert any(o['centre_tolerance_deg']>1 for o in report['objects'])
+    # A missing native sector must not become a huge footprint allowance.
+    n.azimuth[21:]+=8
+    arrays,_=detect(n)
+    assert not arrays[P+'STRONG_MASK'].any()
+
+
+def nested_branch():
+    r=np.arange(0.,420000.,500.)
+    z=np.full((43,len(r)),np.nan,'float32')
+    for j,radius in enumerate(r):
+        if 80000<=radius<400000:
+            extent=3 if int(radius//20000)%2 else 18
+            z[20-extent:24,j]=25
+            z[19:22,j]=34
+            z[20,j]=35
+    return Native(z,dr=500.,start=0.,fields={'SNR':np.where(np.isfinite(z),8.,-2.)})
+
+
+def test_bounded_exterior_recovers_core_without_growing_parent():
+    n=nested_branch();old,_=detect(n)
+    new,report=detect(n,branch_shoulders=True)
+    core=n.field_available['DBZH'][20]
+    assert not old[P+'STRONG_MASK'][20,core].any()
+    assert new[P+'STRONG_MASK'][20,core].all()
+    # The weak halo belongs to a drifting broad parent: it cannot inherit
+    # the qualified high-level branch's identity or deletion eligibility.
+    assert not new[P+'STRONG_MASK'][n.fields['DBZH']<35].any()
+    assert report['action_gates']==0 and not report['recursive_growth']
+    rotated=n.clone();rotated.azimuth=(rotated.azimuth+121)%360
+    other,_=detect(rotated,branch_shoulders=True)
+    assert np.array_equal(new[P+'STRONG_MASK'],other[P+'STRONG_MASK'])
+
+
+@pytest.mark.parametrize('kind',['unknown','barrier','outside_stencil'])
+def test_branch_cannot_search_past_unknown_barrier_or_frozen_stencil(kind):
+    n=nested_branch();blocked=np.zeros(n.shape,bool)
+    core=n.field_available['DBZH'][20]
+    if kind=='unknown':
+        n.fields['DBZH'][19,core]=np.nan;n.field_available['DBZH'][19,core]=False
+        n.fields['SNR'][19,core]=np.nan;n.field_available['SNR'][19,core]=False
+    elif kind=='barrier':blocked[19,core]=True
+    else:
+        n.fields['DBZH'][18:23,core]=34;n.fields['DBZH'][20,core]=35
+    arrays,_=detect(n,blocked,branch_shoulders=True)
+    assert not arrays[P+'STRONG_MASK'][20,core].any()
+
+
+@pytest.mark.parametrize('kind',['constant_km','curved'])
+def test_branch_mode_retains_whole_history_weather_counterexamples(kind):
+    arrays,_=detect(fixture(kind),branch_shoulders=True)
+    assert not arrays[P+'STRONG_MASK'].any()
+
+
+def test_branch_mode_preserves_qualified_original_objects_and_weather():
+    n=fixture();baseline,_=detect(n);candidate,_=detect(n,branch_shoulders=True)
+    assert np.all(candidate[P+'STRONG_MASK'][baseline[P+'STRONG_MASK']==1]==1)
+    n=nested_branch();n.fields['RHOHV']=np.full(n.shape,.99,'float32')
+    n.field_available['RHOHV']=n.field_available['DBZH'].copy()
+    n.fields['SNR'][n.field_available['DBZH']]=20
+    candidate,_=detect(n,branch_shoulders=True)
+    assert not candidate[P+'STRONG_MASK'].any()
+
+
+def test_branch_proof_binds_search_mode_and_actual_measurements():
+    n=nested_branch();blocked=np.zeros(n.shape,bool)
+    module=load('radial_revision.variable_morphology')
+    arrays,_=module.detect(n,blocked,branch_shoulders=True)
+    module.validate(arrays,n,blocked,branch_shoulders=True)
+    with pytest.raises(ValueError,match='proof differs'):
+        module.validate(arrays,n,blocked,branch_shoulders=False)
+    arrays[P+'STRONG_MASK'][0,0]=1
+    with pytest.raises(ValueError,match='proof differs'):
+        module.validate(arrays,n,blocked,branch_shoulders=True)

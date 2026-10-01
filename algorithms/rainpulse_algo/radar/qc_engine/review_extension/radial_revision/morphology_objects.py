@@ -216,7 +216,7 @@ def validate(arrays, native, blocked, *, beam_width=None, maximum_objects=10000)
             raise ValueError('whole-object evidence does not match original measurements: '+key)
 
 
-def evidence(native, blocked, *, beam_width=None):
+def evidence(native, blocked, *, beam_width=None, prefix=PREFIX):
     """Original measured inputs for serialization and native-order replay."""
     r, az, _, good, gaps = native_geometry(native)
     out = {}
@@ -230,15 +230,15 @@ def evidence(native, blocked, *, beam_width=None):
         ('VERSION_CODE', 1, 'uint8'),
         ('BARRED_MASK', blocked, 'uint8'),
     ):
-        out[PREFIX+key] = np.broadcast_to(value, native.shape).astype(dtype).copy()
+        out[prefix+key] = np.broadcast_to(value, native.shape).astype(dtype).copy()
     for name in ('DBZH', 'SNR', 'RHOHV'):
         value, available = moment(native, name)
-        out[PREFIX+'MEASURED_'+name] = np.where(available, value, np.nan).astype('float32')
-        out[PREFIX+name+'_AVAILABLE_MASK'] = available.astype('uint8')
+        out[prefix+'MEASURED_'+name] = np.where(available, value, np.nan).astype('float32')
+        out[prefix+name+'_AVAILABLE_MASK'] = available.astype('uint8')
     return out
 
 
-def validate_serialized(group, observed, blocked):
+def validate_serialized(group, observed, blocked, *, prefix=PREFIX, replay=None):
     """Bind proof to immutable RAW, then recompute geometry and gate eligibility."""
     from types import SimpleNamespace
     shape = observed.shape
@@ -247,8 +247,8 @@ def validate_serialized(group, observed, blocked):
              'VERSION_CODE':'uint8', 'BARRED_MASK':'uint8',
              **{'MEASURED_'+n:'float32' for n in ('DBZH','SNR','RHOHV')},
              **{n+'_AVAILABLE_MASK':'uint8' for n in ('DBZH','SNR','RHOHV')}}
-    get = lambda key: np.asarray(group[PREFIX+key][:])
-    if any(PREFIX+key not in group for key in typed):
+    get = lambda key: np.asarray(group[prefix+key][:])
+    if any(prefix+key not in group for key in typed):
         raise ValueError('missing whole-object original evidence')
     for key, dtype in typed.items():
         value = get(key)
@@ -292,4 +292,4 @@ def validate_serialized(group, observed, blocked):
     native = SimpleNamespace(shape=shape, fields=fields, field_available=available,
         ranges=ranges[0], azimuth=angles[rows,0], geometry_good=good[rows,0], gap_after=gaps[rows,0])
     keys = ('MASK','STRONG_MASK','ID','WEATHER_VETO_MASK')
-    validate({PREFIX+k:get(k)[rows] for k in keys}, native, barred[rows], beam_width=beam_width)
+    (validate if replay is None else replay)({prefix+k:get(k)[rows] for k in keys}, native, barred[rows], beam_width=beam_width)
