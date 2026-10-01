@@ -240,3 +240,5 @@ grouped-render-v1四张完整PNG/冻源task/audit/renderer SHA已核验且实际
 生产core已含无损证据压缩，历史四层弃权来自旧任务代码；需使用当前正常路径重算核实。额外installed cut core probe针对50505 cut4/5运行，不提供邻层context且不是正常发布；其结果另存grouped-core-v1，不能据源级detect回放替代正常状态验收。下一步优先确认这两个实际core状态、正常冻源重算/完整地图，然后继续解释残留完整轨迹，保持动作预算和天气门。
 
 候选配置已冻结于grouped-release/child-network.json，SHA2e54f00c0e7c238c66f12762801f0771b1b04e1b2a93ee335789ca9f87ddebd4，只改release_id和ZF505/701/702形态v5开关/身份；保留其他噪声/源证据/动作预算/天气政策，ZF402仍未启用。未替换现场网络或发布通道。当前installed真实core探针约747.5MiB/4GiB、100%单核运行，尚未完成，不以启动称通过。105run-grouped-core.py/本地exec66158续读，结果grouped-core-v1/zf505-05/core-receipt.json待生成。相关形态+审计测试本轮104项通过，既有NumPy警告1；正常大体扫需等实际结果。
+
+续证：installed真实core探针已exit0，auditSHA c186dc3ec34635b8258f8e26e03cbd4c9fa19bb969bad1884bd7a6807cabd4c9，本地receipt/SHA核验。50505 cut4 DEGRADED_MORPHOLOGY_ACTION_BUDGET，提名156506/形态102741，证据1650329字节；cut5 ACTION_BUDGET_ABSTAINED，提名16434/形态102912，证据1448026字节；均低于原4194304字节cap，RAW不变。证明当前core确实越过旧证据容量弃权，但动作预算仍阻止预览成为实际完整清除；未提供邻层context/未正常发布。exec66158已完成，不能再称运行中。下一步追踪原基线/新增形态候选比例及预算降级语义，保留原告警/cap，随后正常冻源重算和UI核验。
