@@ -38,6 +38,8 @@
 - 22站候选源开关网络已准备，精确父bee28feb…，候选SHA398ccfb1ead6d628129b2c55e791b07743db02fd0080a2fb3fd491d0382c093b。52个变化为17站三开关和release_id，其他字段/阈值相同。本地.build/xqc-zf702-investigation/source-activation-v2含逐项回执；仍未部署生产。v1生成器补齐隐含默认值，未使用，v2避免无关变动。
 - 剩余验收：完整日期/六分钟桶覆盖、高污染层与天气保护、正常生命周期新产品、真实界面全矩阵。候选可信融合/QPE/预报仍关闭。
 - 并发扩展：实测四路各约2GiB/一个CPU，主机可用约49GiB。main 2c4c3f8已push后部署按完整文件SHA取模的互斥分片，4项测试通过，包括5466份身份在8分片中完整且不重复。raw-full-v1是因明确资源调度优化主动停止，旧回执和superseded-for-parallelism.json保留，不是观察超时重启。raw-full-v2-eight使用8路各1CPU/4GiB，源、配置SHA和计算镜像相同；重新完整核验，以v2最终回执为准，不把v1部分计数相加冒充覆盖。
+- main 707a907增加清单关联汇总脚本summarize_xqc_raw_acceptance.py，逐文件/REF层/decoder配置身份/分片检查，按真实原生起报时间单列UTC与UTC+08桶及跨日。文件完整不等于时次对齐或气象通过。实际执行发现defaultdict缺省访问把未处理文件算入有回执数量；回归红测2≠1后修复为不插入缺省项，6测试绿，PENDING与FAIL分开。旧raw-summary-01错误覆盖数保留，raw-summary-02已正确为60份有回执、52份机械完成、5414份待完成，不以全部5466条清单冒充处理完成。
+- 第六个必测案例ZF702 08:08:25（d42663f7…）正常解码重建job191cf078-6aef-51d5-9bf3-49d45c84e4de已SUCCEEDED，NORMALIZED run bbfebfaf…；保留旧图件，不伪造生命周期状态。冻结当前bee28feb网络，分钟对齐预检查只返回该scan一个任务，正常提交task022987e3-3388-4126-a763-e1d5da0f3915/run613d92c2-0b05-4d54-8d29-3055551f449e。最新状态RUNNING、attempt ace18f13…，须待终态后逐数组/层/界面验收；receipt在105验收目录zf702-0808-*。
 
 ## 2026-10-01 批量筛查证据与在途执行
 
