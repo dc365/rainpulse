@@ -227,3 +227,16 @@ main e2995f2先push再同步活动源：模块SHA3ca9d0df80037277c86e19f3d6b1cc9
 main e9ada37先push再同步，模块12fc0cb51ec0913a5136e9855bf50a71baae1ff96b446ac2c3183902b3772601、审计d43d9199。source3537411/paired3537412均SOURCE_REPLAY_COMPLETED；492源层与同源72配对层全部EVALUATED/资源弃权0，v4合格mask保留且逐层v4计数等于前次实际回放。28输出/冻源task SHA核验。v5-only新增74350门=ZF50505 69983+ZF70105 2193+ZF70205 2174，其余0；不能重复累加源级和配对。目录polar-morphology-grouped-source-v1/paired-v1，正常发布/天气验收仍未完成。
 
 复查旧ZF50505 cut0/2/4/5均RESOURCE_OR_GEOMETRY_ABSTAINED，但历史XQC_AVAILABLE_MASK全零，旧审计却据此输出候选比例0/预算未超限。这不是正常新任务的预算通过证据。新candidate_budget核对冻结RAW当前原生可用mask与旧可用mask；有漂移或缺旧分支mask则历史/未来比例与预算结论全部null，记录两类可用数量和漂移门数。相同可用集也只称HISTORICAL_MASK_ESTIMATE，不替代正常任务。2回归测试实际RED后GREEN，21审计边界测试通过。新paired输出同时提供正常历史detail，追查真实资源弃权原因。旧冻结输出不覆盖，接下来新目录复核这项口径及真实正常状态。
+
+
+### v5配对预算复核、完整图与兼容安装（2026-10-02）
+
+6380c9f先push后同步审计a1bc1909759f1f54ec312efbb4fa3b0e8f347105d4b2f2153194c6a8ece3d933；新paired-v2同8冻源72层全部完成，JSON/receipt SHA本地核验。ZF50505 cut0/2/4/5历史detail均为“X evidence record budget exceeded”，原生可用252147/233726/224579/187220门但旧可用全零，新未来预算均null。ZF70205 cut7是ACTION_BUDGET_ABSTAINED且原生/旧可用集相同，仍只给历史估计，不和资源弃权混淆。初次验证脚本误把所有非EVALUATED（含动作预算）要求null而失败，修正为核对资源弃权，未改算法或数据。
+
+grouped-render-v1四张完整PNG/冻源task/audit/renderer SHA已核验且实际观察。ZF50505 cut5西南相邻条带明显改善，但两条细径向、cut4西侧与东南条带和天气团块内径向仍残留；不能称彻底解决。ZF70205 cut5剩余长细径向被候选覆盖，cut4没有新增候选。均是研究预览，无正常发布/UI/独立天气真值声明。
+
+兼容镜像rainpulse-cpu-worker:xqc-polar-morphology-e9ada37-v5-compat-mb，imageID sha256:ec887aacc8f373afb4dc54a31e5141694938972370cc6bc7e565abb7eb79ce72，只替换形态模块12fc0cb5，其余794文件（含生产core/decoder/pipeline）逐SHA不变。安装真实正常QC合成603观测门通过：内部缺测保持不可用/不被选中，RAW不变、action3/sourcekind0/QC不显示/CR0/QPE0。四生产X Worker fresh healthy且仍v1模块2b27，网络288690不变。镜像只构建未启用。
+
+生产core已含无损证据压缩，历史四层弃权来自旧任务代码；需使用当前正常路径重算核实。额外installed cut core probe针对50505 cut4/5运行，不提供邻层context且不是正常发布；其结果另存grouped-core-v1，不能据源级detect回放替代正常状态验收。下一步优先确认这两个实际core状态、正常冻源重算/完整地图，然后继续解释残留完整轨迹，保持动作预算和天气门。
+
+候选配置已冻结于grouped-release/child-network.json，SHA2e54f00c0e7c238c66f12762801f0771b1b04e1b2a93ee335789ca9f87ddebd4，只改release_id和ZF505/701/702形态v5开关/身份；保留其他噪声/源证据/动作预算/天气政策，ZF402仍未启用。未替换现场网络或发布通道。当前installed真实core探针约747.5MiB/4GiB、100%单核运行，尚未完成，不以启动称通过。105run-grouped-core.py/本地exec66158续读，结果grouped-core-v1/zf505-05/core-receipt.json待生成。相关形态+审计测试本轮104项通过，既有NumPy警告1；正常大体扫需等实际结果。
