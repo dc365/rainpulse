@@ -167,3 +167,30 @@ def test_writer_native_order_raw_and_segment_contract_bound():
         forged={k:v.copy() for k,v in arrays.items()}
         forged[key][index]=0 if key.endswith('MODE') else forged[key][index]+1
         with pytest.raises(ValueError):validator(forged,n.field_available['DBZH'])
+
+
+def test_short_research_geometry_is_translation_invariant_and_not_action_authority():
+    module=load('radial_revision.fragment_constellation')
+    history=[dict(angular_width_deg=2.,bearing_deg=35.,bilateral_fraction=1.,
+        observed_weather_gates=0,lower_parent_weather_gates=0,protected_gates=0,
+        lower_parent_protected_gates=0) for _ in range(4)]
+    ranges=300000.+np.concatenate([np.arange(i,i+6)*250 for i in (0,24,48,72)])
+    result=module.short_segment_assessment(history,ranges,250,1,False)
+    shifted=module.short_segment_assessment(history,ranges+1234,250,1,False)
+    assert result==shifted and result['qualified']
+    assert result['research_only'] and not result['action_authority']
+    history[1]['bilateral_fraction']=.99
+    assert not module.short_segment_assessment(history,ranges,250,1,False)['qualified']
+
+
+def test_short_research_rejects_weather_parent_and_unstable_boundaries():
+    module=load('radial_revision.fragment_constellation')
+    history=[dict(angular_width_deg=2.+i*.3,bearing_deg=35.+i*.2,bilateral_fraction=1.,
+        observed_weather_gates=0,lower_parent_weather_gates=0,protected_gates=0,
+        lower_parent_protected_gates=0) for i in range(4)]
+    history[0]['lower_parent_weather_gates']=1
+    ranges=300000.+np.concatenate([np.arange(i,i+6)*250 for i in (0,24,48,72)])
+    result=module.short_segment_assessment(history,ranges,250,1,True)
+    assert not result['qualified']
+    assert set(result['hold_reasons'])=={'weather_or_protected_original_member',
+        'full_parent_geometry_hold','unstable_short_center','unstable_short_width'}

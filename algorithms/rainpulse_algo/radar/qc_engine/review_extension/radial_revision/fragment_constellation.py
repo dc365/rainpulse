@@ -11,6 +11,31 @@ from .geometry import ResourceLimit
 PREFIX = 'RV2_CONSTELLATION_'
 
 
+def short_segment_assessment(history, ranges, dr, beam, parent_hold):
+    """Stricter short-object research evidence; never supplies action authority."""
+    distance=np.asarray(ranges,dtype=float)
+    widths=np.array([m['angular_width_deg'] for m in history])
+    bearings=np.rad2deg(np.unwrap(np.deg2rad([m['bearing_deg'] for m in history])))
+    span=float(distance[-1]-distance[0]+dr)
+    support=float(len(distance)*dr)
+    windows=[len(np.unique((distance-distance[0])//scale)) for scale in (1000,2000,5000)]
+    holds=[]
+    if span>=60000:holds.append('outside_short_object_scale')
+    if len(history)<4:holds.append('fewer_than_four_original_members')
+    if span<15000 or support<5000 or min(windows)<4:holds.append('insufficient_short_multiscale_support')
+    if any(m['bilateral_fraction']<1. for m in history):holds.append('short_requires_complete_bilateral_observations')
+    if any(m['observed_weather_gates'] or m['lower_parent_weather_gates'] or
+           m['protected_gates'] or m['lower_parent_protected_gates'] for m in history):
+        holds.append('weather_or_protected_original_member')
+    if parent_hold:holds.append('full_parent_geometry_hold')
+    center_drift=float(np.ptp(bearings));width_drift=float(np.ptp(widths))
+    if center_drift>.25*beam:holds.append('unstable_short_center')
+    if width_drift>.5*beam:holds.append('unstable_short_width')
+    return dict(research_only=True,action_authority=False,qualified=not holds,
+        radial_span_m=span,actual_range_support_m=support,range_window_counts=windows,
+        center_drift_deg=center_drift,width_drift_deg=width_drift,hold_reasons=holds)
+
+
 def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_evidence=False):
     r, az, dr, good, gaps = native_geometry(native)
     if native.shape[0] < 3:
@@ -173,15 +198,17 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                 edges = np.diff(np.r_[False, qualifying[ordered], False].astype('int8'))
                 for start, end in zip(np.flatnonzero(edges == 1), np.flatnonzero(edges == -1), strict=True):
                     indices = ordered[start:end]
-                    if len(indices) < 4:
+                    if len(indices) < 2:
                         continue
                     sc = np.unique(np.concatenate([group[i]['cols'] for i in indices]))
                     ss = float(r[sc[-1]]-r[sc[0]]+dr)
                     sw = [len(np.unique(r[sc]//scale)) for scale in (5000,10000,20000)]
-                    eligible = not narrowing and not lower_hold and ss >= 60000 and len(sc)*dr >= 5000 and min(sw) >= 4
+                    eligible = len(indices)>=4 and not narrowing and not lower_hold and ss >= 60000 and len(sc)*dr >= 5000 and min(sw) >= 4
                     segments.append(dict(original_components=[group[i]['ident'] for i in indices],
                         radial_span_m=ss, actual_range_support_m=float(len(sc)*dr),
-                        range_window_counts=sw, independently_qualified=bool(eligible)))
+                        range_window_counts=sw, independently_qualified=bool(eligible),
+                        short_assessment=short_segment_assessment([member_history[i] for i in indices],
+                            r[sc],dr,beam,narrowing or lower_hold)))
                     if segment_evidence and eligible:
                         for i in indices:
                             f = group[i]; selected = accept[i]

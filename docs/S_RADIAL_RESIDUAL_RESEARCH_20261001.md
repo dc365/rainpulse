@@ -949,3 +949,29 @@ or genuinely observed repeated geometry evidence, without globally lowering
 length/window thresholds, borrowing support across failed members, or treating
 missing observations as dry. Broad weather-connected fans remain a separate
 unfinished requirement. No claim that all eight cases are solved.
+
+### 2026-10-02: short-segment geometry assessment within complete RAW parents
+
+Added a research-only assessment for original consecutive member segments. It
+uses 1/2/5-km windows anchored at the object's start (not arbitrary absolute
+range-bin phase), at least four members, 15–60-km span, 5-km actual support,
+complete measured bilateral acceptance, center drift <=0.25 beam and width
+drift <=0.5 beam. All full-parent weather/geometry and failed-member interval
+barriers remain. The assessment cannot authorize engine actions; unanchored
+short objects outside the existing full-parent detector are not yet handled.
+
+Real full-RAW 10:42 replay (short-segment-assessment-1042-v1) still gives 36
+selected residuals / 18 nominations / 0 strong. Remote original runs have only
+three acceptable members: one 7.5-km/4.25-km support run contains incomplete
+bilateral observations; another 17.5-km/4-km support run has insufficient support
+and unstable measured width. A failed member splits the apparent remote group.
+The proposed stronger short geometry therefore does not justify deleting this
+case. Long 61-km segments are explicitly outside this short-object scale.
+
+Two new tests establish range-origin translation invariance, incomplete-side
+rejection, weather-parent/barrier protection and unstable-boundary rejection.
+The full scoped suite (285 tests before the final short-scale upper bound) passed.
+No production activation or added deletion authority. Next test observed exterior
+windows against local contamination and actual multi-cut corroboration, retaining
+missing observations and full original object boundaries; do not tune the short
+rule solely until this screenshot passes.
