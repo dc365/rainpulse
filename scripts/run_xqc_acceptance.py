@@ -17,8 +17,14 @@ def main():
     parser.add_argument("manifest")
     parser.add_argument("audit_script")
     parser.add_argument("output")
-    parser.add_argument("--mode", choices=("audit", "pilot"), default="audit")
+    parser.add_argument("--mode", choices=("audit", "pilot", "raw"), default="audit")
     parser.add_argument("--failed-pilot", type=Path)
+    parser.add_argument("--raw-inventory", type=Path)
+    parser.add_argument("--raw-root", type=Path)
+    parser.add_argument("--configs", type=Path)
+    parser.add_argument("--gate-script", type=Path)
+    parser.add_argument("--raw-image")
+    parser.add_argument("--limit-files", type=int)
     args = parser.parse_args()
     manifest = Path(args.manifest).resolve()
     script = Path(args.audit_script).resolve()
@@ -32,6 +38,24 @@ def main():
     environment.update(item.split("=", 1) for item in c["Config"]["Env"] if "=" in item)
     stations = sorted({s["radar_id"] for s in frozen["scans"]})
     groups = [stations[i::4] for i in range(4)]
+    image_id = frozen["image_id"]
+    raw_args = []
+    raw_mounts = []
+    if args.mode == "raw":
+        if not all((args.raw_inventory, args.raw_root, args.configs, args.gate_script, args.raw_image)):
+            raise ValueError("raw mode requires frozen inventory, read-only source/configs, gate script and decoder image")
+        raw_state = json.loads((args.raw_inventory / "state.json").read_text())
+        if raw_state["status"] != "FROZEN":
+            raise ValueError("raw identity inventory has not completed")
+        image_id = json.loads(subprocess.check_output(["docker", "image", "inspect", args.raw_image]))[0]["Id"]
+        raw_mounts = ["-v", str(args.raw_root.resolve()) + ":/inputs:ro",
+                      "-v", str(args.configs.resolve()) + ":/configs:ro",
+                      "-v", str((args.raw_inventory / "raw-files.jsonl").resolve()) + ":/opt/raw-files.jsonl:ro",
+                      "-v", str(args.gate_script.resolve()) + ":/opt/xqc_acceptance.py:ro"]
+        raw_args = ["--raw-root", "/inputs", "--raw-records", "/opt/raw-files.jsonl", "--configs", "/configs",
+                    "--raw-sha256", raw_state["manifest_sha256"]]
+        if args.limit_files is not None:
+            raw_args += ["--limit-files", str(args.limit_files)]
     failed_scans = set()
     if args.failed_pilot:
         for evidence in args.failed_pilot.glob("audit-*.jsonl"):
@@ -43,6 +67,7 @@ def main():
     lock = threading.Lock()
     state = {"status": "RUNNING", "pid": os.getpid(), "manifest_sha256": frozen["manifest_sha256"],
              "audit_script_sha256": hashlib.sha256(script.read_bytes()).hexdigest(), "mode": args.mode,
+             "compute_image_id": image_id,
              "started_at": datetime.now(timezone.utc).isoformat(), "workers": {},
              "counts": {}, "meteorological_acceptance": "NOT_COMPLETED"}
     counters = collections.Counter()
@@ -59,14 +84,19 @@ def main():
 
     def run(index, selected):
         name = "rainpulse-xqc-" + args.mode + "-" + frozen["manifest_sha256"][:8] + "-" + str(index)
-        command = ["docker", "run", "--rm", "--name", name, "--cpus", "1", "--memory", "3g",
+        command = ["docker", "run", "--rm", "--name", name, "--cpus", "1", "--memory", "6g" if args.mode == "raw" else "3g",
                    "--network", next(iter(c["NetworkSettings"]["Networks"])),
                    "--read-only", "--tmpfs", "/tmp:rw,size=64m", "-i",
-                   "-v", str(script) + ":/opt/xqc_acceptance.py:ro", "--entrypoint", "python"]
+                   "-v", str(script) + ":/opt/compute.py:ro", "--entrypoint", "python"]
+        # Audit/pilot import their own gate helpers; raw compute uses the same
+        # separate helper module for all acceptance predicates.
+        if args.mode != "raw":
+            command += ["-v", str(script) + ":/opt/xqc_acceptance.py:ro"]
+        command += raw_mounts
         for key in ("RAINPULSE_OBJECT_STORE_ENDPOINT", "RAINPULSE_OBJECT_STORE_ACCESS_KEY",
                     "RAINPULSE_OBJECT_STORE_SECRET_KEY"):
             command += ["-e", key]
-        command += [frozen["image_id"], "/opt/xqc_acceptance.py", args.mode]
+        command += [image_id, "/opt/compute.py", args.mode, *raw_args]
         for station in selected:
             command += ["--station", station]
         for scan in sorted(failed_scans):
