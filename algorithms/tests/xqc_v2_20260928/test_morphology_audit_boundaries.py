@@ -430,3 +430,22 @@ def test_cli_routes_grouped_envelopes_as_explicit_read_only_v5(monkeypatch, sour
     ]
     p = module.policy_for_audit(grouped_envelopes=True)
     assert p.version.endswith("v5") and p.grouped_envelopes_enabled
+
+
+@pytest.mark.parametrize("source", [False, True])
+def test_cli_routes_branching_envelopes_as_explicit_read_only_v6(monkeypatch, source):
+    module = audit()
+    calls = []
+    monkeypatch.setattr(
+        module.sys,
+        "argv",
+        ["audit", "--branching-envelopes"] + (["--source-only"] if source else []),
+    )
+    monkeypatch.setattr(module, "run", lambda stack, **kw: calls.append((False, kw)))
+    monkeypatch.setattr(module, "run_source_only", lambda stack, **kw: calls.append((True, kw)))
+    module.main()
+    assert calls[0][0] == source
+    assert calls[0][1]["branching_envelopes"] is True
+    p = module.policy_for_audit(branching_envelopes=True)
+    assert p.version.endswith("v6") and p.branching_envelopes_enabled
+    assert p.grouped_envelopes_enabled

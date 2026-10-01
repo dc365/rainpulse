@@ -25,11 +25,13 @@ class MorphologyPolicy(BaseModel):
         "x-polar-morphology-20261002-v3",
         "x-polar-morphology-20261002-v4",
         "x-polar-morphology-20261002-v5",
+        "x-polar-morphology-20261002-v6",
     ] = "x-polar-morphology-20261001-v1"
     expanding_fans_enabled: bool = False
     anchored_fans_enabled: bool = False
     pulsing_fans_enabled: bool = False
     grouped_envelopes_enabled: bool = False
+    branching_envelopes_enabled: bool = False
     local_weather_policy: Literal["protect", "joint_review"] = "protect"
     scales_m: tuple[Annotated[float, Field(ge=2000.0, le=20000.0)], ...] = Field(
         default=(5000.0, 10000.0),
@@ -69,6 +71,7 @@ class MorphologyPolicy(BaseModel):
             "x-polar-morphology-20261002-v3",
             "x-polar-morphology-20261002-v4",
             "x-polar-morphology-20261002-v5",
+            "x-polar-morphology-20261002-v6",
         ):
             raise ValueError("expanding fan geometry requires v2 or v3 identity")
         if self.anchored_fans_enabled and (
@@ -77,18 +80,31 @@ class MorphologyPolicy(BaseModel):
                 "x-polar-morphology-20261002-v3",
                 "x-polar-morphology-20261002-v4",
                 "x-polar-morphology-20261002-v5",
+                "x-polar-morphology-20261002-v6",
             )
             or not self.expanding_fans_enabled
         ):
             raise ValueError("anchored fan requires v3/v4 expanding geometry identity")
         if self.pulsing_fans_enabled and (
-            self.version not in ("x-polar-morphology-20261002-v4", "x-polar-morphology-20261002-v5")
+            self.version
+            not in (
+                "x-polar-morphology-20261002-v4",
+                "x-polar-morphology-20261002-v5",
+                "x-polar-morphology-20261002-v6",
+            )
             or not self.anchored_fans_enabled
             or not self.expanding_fans_enabled
         ):
             raise ValueError("pulsing fan requires explicit v4 and anchored expanding branches")
-        if self.grouped_envelopes_enabled and self.version != "x-polar-morphology-20261002-v5":
+        if self.grouped_envelopes_enabled and self.version not in (
+            "x-polar-morphology-20261002-v5",
+            "x-polar-morphology-20261002-v6",
+        ):
             raise ValueError("grouped envelopes require explicit v5 identity")
+        if self.branching_envelopes_enabled and (
+            self.version != "x-polar-morphology-20261002-v6" or not self.grouped_envelopes_enabled
+        ):
+            raise ValueError("branching envelopes require explicit v6 grouped identity")
         if (
             not self.scales_m
             or not self.levels_dbz
@@ -214,6 +230,55 @@ def detect(sweep, policy, *, protected=None):
             row = other
         return known, clear, offset
 
+    def measure_entry(rows, cols, signal, slit, bucket):
+        leftrow = (int(rows[0]) - 1) % shape[0]
+        rightrow = (int(rows[-1]) + 1) % shape[0]
+
+        left = float(sweep.azimuth[rows[0]] - da[leftrow] / 2.0)
+        width = float(
+            ((sweep.azimuth[rows[-1]] - sweep.azimuth[rows[0]]) % 360)
+            + da[leftrow] / 2.0
+            + da[rows[-1]] / 2.0
+        )
+        if width > p.maximum_width_deg:
+            return None
+        block = signal[rows]
+        active = block.any(axis=0)
+        if not active.any():
+            return None
+        native_cols = cols[active]
+        body = np.where(raw[np.ix_(rows, cols)], z[np.ix_(rows, cols)], np.nan)
+        # Maximum supports intensity-varying rays; shoulders still
+        # need independently measured samples at the same ranges.
+        strength = np.max(np.where(np.isfinite(body), body, -np.inf), axis=0)
+        flank = [
+            exterior_flank(leftrow, -1, left, cols, strength, active),
+            exterior_flank(rightrow, 1, left + width, cols, strength, active),
+        ]
+        shoulder_known = np.stack([f[0] for f in flank])
+        shoulder_clear = np.stack([f[1] for f in flank])
+        sample = np.broadcast_to(active, (2, len(cols)))
+        return dict(
+            rows=rows,
+            cols=native_cols,
+            window_cols=cols,
+            left=left,
+            right=left + width,
+            left_spacing=float(da[leftrow]),
+            right_spacing=float(da[rows[-1]]),
+            width=width,
+            center=left + width / 2.0,
+            bucket=int(bucket),
+            radial_support_m=float(active.sum() * sweep.dr),
+            known_sides=(shoulder_known & sample).sum(axis=1),
+            clear_sides=(shoulder_clear & sample).sum(axis=1),
+            known=int((shoulder_known & sample).sum()),
+            clear=int((shoulder_clear & sample).sum()),
+            flank_total=int(sample.sum()),
+            maximum_flank_offset_deg=max(f[2] for f in flank),
+            internal_unknown_gates=int((~known_native[np.ix_(rows[slit[rows]], cols)]).sum()),
+        )
+
     def finish(track, scale, level):
         entries = track["entries"]
         rows0 = entries[0]["rows"]
@@ -331,6 +396,7 @@ def detect(sweep, policy, *, protected=None):
                         maximum_narrowing_native_footprints=normalized_narrowing,
                         width_growth_native_footprints=growth,
                         grouped_envelope=bool(grouped),
+                        branching_envelope=bool(track.get("branching", False)),
                         internal_unknown_gates=sum(e["internal_unknown_gates"] for e in entries),
                         expanding_shape_qualified=bool(expanding),
                         pulsing_shape_qualified=bool(pulsing),
@@ -375,6 +441,7 @@ def detect(sweep, policy, *, protected=None):
             dict(
                 object_id=oid,
                 grouped_envelope=bool(grouped),
+                branching_envelope=bool(track.get("branching", False)),
                 internal_unknown_gates=sum(e["internal_unknown_gates"] for e in entries),
                 kind=kind,
                 scale_m=scale,
@@ -411,6 +478,15 @@ def detect(sweep, policy, *, protected=None):
             buckets = np.floor(sweep.ranges / scale).astype(int)
             for level in p.levels_dbz:
                 tracks = []
+                graph_nodes, graph_roots, graph_previous = [], [], []
+
+                def root_of(index):
+                    while graph_roots[index] != index:
+                        charge(1)
+                        graph_roots[index] = graph_roots[graph_roots[index]]
+                        index = graph_roots[index]
+                    return index
+
                 for bucket in np.unique(buckets):
                     cols = np.flatnonzero(buckets == bucket)
                     charge(len(cols) * shape[0])
@@ -448,57 +524,29 @@ def detect(sweep, policy, *, protected=None):
                         slit = np.zeros(shape[0], bool)
                         envelope = occupied
                     for rows in _angular_runs(envelope, sweep):
-                        leftrow = (int(rows[0]) - 1) % shape[0]
-                        rightrow = (int(rows[-1]) + 1) % shape[0]
-
-                        left = float(sweep.azimuth[rows[0]] - da[leftrow] / 2.0)
-                        width = float(
-                            ((sweep.azimuth[rows[-1]] - sweep.azimuth[rows[0]]) % 360)
-                            + da[leftrow] / 2.0
-                            + da[rows[-1]] / 2.0
-                        )
-                        if width > p.maximum_width_deg:
-                            continue
-                        block = signal[rows]
-                        active = block.any(axis=0)
-                        if not active.any():
-                            continue
-                        native_cols = cols[active]
-                        body = np.where(raw[np.ix_(rows, cols)], z[np.ix_(rows, cols)], np.nan)
-                        # Maximum supports intensity-varying rays; shoulders still
-                        # need independently measured samples at the same ranges.
-                        strength = np.max(np.where(np.isfinite(body), body, -np.inf), axis=0)
-                        flank = [
-                            exterior_flank(leftrow, -1, left, cols, strength, active),
-                            exterior_flank(rightrow, 1, left + width, cols, strength, active),
-                        ]
-                        shoulder_known = np.stack([f[0] for f in flank])
-                        shoulder_clear = np.stack([f[1] for f in flank])
-                        sample = np.broadcast_to(active, (2, len(cols)))
-                        entries.append(
-                            dict(
-                                rows=rows,
-                                cols=native_cols,
-                                window_cols=cols,
-                                left=left,
-                                right=left + width,
-                                left_spacing=float(da[leftrow]),
-                                right_spacing=float(da[rows[-1]]),
-                                width=width,
-                                center=left + width / 2.0,
-                                bucket=int(bucket),
-                                radial_support_m=float(active.sum() * sweep.dr),
-                                known_sides=(shoulder_known & sample).sum(axis=1),
-                                clear_sides=(shoulder_clear & sample).sum(axis=1),
-                                known=int((shoulder_known & sample).sum()),
-                                clear=int((shoulder_clear & sample).sum()),
-                                flank_total=int(sample.sum()),
-                                maximum_flank_offset_deg=max(f[2] for f in flank),
-                                internal_unknown_gates=int(
-                                    (~known_native[np.ix_(rows[slit[rows]], cols)]).sum()
-                                ),
-                            )
-                        )
+                        entry = measure_entry(rows, cols, signal, slit, bucket)
+                        if entry is not None:
+                            entries.append(entry)
+                    if grouped and p.branching_envelopes_enabled:
+                        # Nodes are original, independently measured envelopes.
+                        # Connections carry no decisions or source authority.
+                        current_nodes = []
+                        for entry in entries:
+                            if len(graph_nodes) >= p.maximum_objects:
+                                raise ResourceLimit("morphology branch-node budget exceeded")
+                            index = len(graph_nodes)
+                            graph_nodes.append(entry)
+                            graph_roots.append(index)
+                            current_nodes.append(index)
+                            for prior_index in graph_previous:
+                                charge(1)
+                                prior = graph_nodes[prior_index]
+                                if entry["bucket"] - prior["bucket"] != 1:
+                                    continue
+                                delta = abs(float(wrap(entry["center"] - prior["center"])))
+                                if delta < (entry["width"] + prior["width"]) / 2 + spacing * 0.1:
+                                    graph_roots[root_of(index)] = root_of(prior_index)
+                        graph_previous = current_nodes
                     # Associate by previous envelope, retain the initial template.
                     links = []
                     for entry in entries:
@@ -555,6 +603,52 @@ def detect(sweep, policy, *, protected=None):
                     tracks = updated
                 for track in tracks:
                     finish(track, scale, level)
+                if grouped and p.branching_envelopes_enabled:
+                    components = {}
+                    for index, entry in enumerate(graph_nodes):
+                        charge(1)
+                        components.setdefault(root_of(index), []).append(entry)
+                    for original_nodes in components.values():
+                        by_bucket = {}
+                        for entry in original_nodes:
+                            by_bucket.setdefault(entry["bucket"], []).append(entry)
+                        # Linear histories already use the established branch.
+                        if not any(len(nodes) > 1 for nodes in by_bucket.values()):
+                            continue
+                        complete, barred = [], False
+                        for bucket, nodes in sorted(by_bucket.items()):
+                            cols = np.flatnonzero(buckets == bucket)
+                            charge(len(cols) * shape[0])
+                            signal = raw[:, cols] & (z[:, cols] >= level)
+                            reference = nodes[0]["left"]
+                            first = min(nodes, key=lambda e: float(wrap(e["left"] - reference)))
+                            start = int(first["rows"][0])
+                            indices = np.concatenate([e["rows"] for e in nodes])
+                            rows = (
+                                start + np.arange(int(((indices - start) % shape[0]).max()) + 1)
+                            ) % shape[0]
+                            # Remeasure the complete body and exterior from RAW.
+                            # Do not inherit per-fragment shoulders or fill holes.
+                            if (
+                                not sweep.good[rows].all()
+                                or sweep.gap_after[rows[:-1]].any()
+                                or hard[np.ix_(rows, cols)].any()
+                            ):
+                                barred = True
+                                break
+                            observed = np.zeros(shape[0], bool)
+                            observed[indices] = True
+                            entry = measure_entry(rows, cols, signal, ~observed, bucket)
+                            if entry is None:
+                                barred = True
+                                break
+                            complete.append(entry)
+                        if not barred:
+                            finish(
+                                {"entries": complete, "ambiguous": False, "branching": True},
+                                scale,
+                                level,
+                            )
     return MorphologyEvidence(
         mask,
         ids,
@@ -569,6 +663,7 @@ def detect(sweep, policy, *, protected=None):
             maximum_flank_search_deg=MAXIMUM_FLANK_SEARCH_DEG,
             doppler_required=False,
             grouped_envelopes_enabled=p.grouped_envelopes_enabled,
+            branching_envelopes_enabled=p.branching_envelopes_enabled,
             objects=records,
             review_objects=reviews,
         ),

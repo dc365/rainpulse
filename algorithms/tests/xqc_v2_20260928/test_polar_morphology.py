@@ -892,3 +892,159 @@ def test_pulsing_identity_and_contract_are_explicit():
         invalid[key] = value
         with pytest.raises(jsonschema.ValidationError):
             validator.validate({"morphology": invalid})
+
+
+def branching_policy():
+    return MorphologyPolicy(
+        version="x-polar-morphology-20261002-v6",
+        expanding_fans_enabled=True,
+        anchored_fans_enabled=True,
+        pulsing_fans_enabled=True,
+        grouped_envelopes_enabled=True,
+        branching_envelopes_enabled=True,
+    )
+
+
+@pytest.mark.parametrize("bearing", [100.0, 359.0])
+def test_complete_branch_graph_retests_terminal_split_without_losing_parent(bearing):
+    s, body = scene("fan", bearing=bearing)
+    z = s.fields["DBZH"].copy()
+    sn = s.fields["SNR"].copy()
+    diff = (s.azimuth - bearing + 180) % 360 - 180
+    gap = (abs(diff[:, None]) <= 1.0) & (s.ranges[None, :] >= 50000)
+    z[gap] = 0
+    sn[gap] = -2
+    body[gap] = False
+    s = replace(s, fields={**s.fields, "DBZH": z, "SNR": sn})
+    old = detect(s, grouped_policy())
+    assert not old.mask[body].all()  # positive witness for the old parent veto
+    before = s.digest
+    new = detect(s, branching_policy())
+    assert new.mask[body].all()
+    assert not new.mask[~body].any()
+    assert s.digest == before
+    assert any(o.get("branching_envelope") for o in new.objects)
+
+
+@pytest.mark.parametrize("kind", ["fixed_km", "curved", "blob"])
+def test_complete_branch_graph_keeps_full_weather_counterexamples(kind):
+    s, _ = scene(kind)
+    assert not detect(s, branching_policy()).mask.any()
+
+
+def test_complete_branch_graph_keeps_atomic_resource_limit():
+    s, _ = scene("fan")
+    with pytest.raises(ResourceLimit):
+        detect(s, branching_policy().model_copy(update={"maximum_work": 1}))
+
+
+@pytest.mark.parametrize("dr,da", [(75.0, 0.5), (1000.0, 2.0)])
+def test_complete_branch_graph_handles_split_and_rejoin_across_native_resolutions(dr, da):
+    s, body = scene("fan", dr=dr, da=da, elevation=3.36)
+    z, sn = s.fields["DBZH"].copy(), s.fields["SNR"].copy()
+    gap = (
+        (abs(s.azimuth[:, None] - 100) <= 1.5 * da)
+        & (s.ranges[None, :] >= 20000)
+        & (s.ranges[None, :] < 30000)
+    )
+    z[gap], sn[gap], body[gap] = 0, -2, False
+    s = replace(s, fields={**s.fields, "DBZH": z, "SNR": sn})
+    ev = detect(s, branching_policy())
+    assert ev.mask[body].all()
+    assert not ev.mask[~body].any()
+
+
+@pytest.mark.parametrize("barrier", ["weather", "geometry"])
+def test_branch_union_cannot_authorize_across_a_declared_barrier(barrier):
+    s, _ = scene("fan")
+    z, sn = s.fields["DBZH"].copy(), s.fields["SNR"].copy()
+    gap = (abs(s.azimuth[:, None] - 100) <= 1) & (s.ranges[None, :] >= 50000)
+    z[gap], sn[gap] = 0, -2
+    s = replace(s, fields={**s.fields, "DBZH": z, "SNR": sn})
+    hard = np.zeros(s.shape, bool)
+    if barrier == "weather":
+        hard[100, s.ranges >= 50000] = True
+    else:
+        gaps = s.gap_after.copy()
+        gaps[100] = True
+        s = replace(s, gap_after=gaps)
+    old = detect(s, grouped_policy(), protected=hard)
+    new = detect(s, branching_policy(), protected=hard)
+    assert np.array_equal(old.mask, new.mask)
+
+
+def test_branch_union_requires_measured_exterior_and_keeps_narrowing_parent():
+    s, _ = scene("fan", missing_shoulders=True)
+    assert not detect(s, branching_policy()).mask.any()
+    s, body = scene("fixed_km")
+    z, sn = s.fields["DBZH"].copy(), s.fields["SNR"].copy()
+    gap = (
+        (abs(s.azimuth[:, None] - 100) <= 1)
+        & (s.ranges[None, :] >= 15000)
+        & (s.ranges[None, :] < 20000)
+    )
+    z[gap], sn[gap], body[gap] = 0, -2, False
+    s = replace(s, fields={**s.fields, "DBZH": z, "SNR": sn})
+    ev = detect(s, branching_policy())
+    assert not any(o["branching_envelope"] for o in ev.objects)
+
+
+def test_branching_schema_version_requires_explicit_parent_and_keeps_default_off():
+    import json
+    from pathlib import Path
+
+    import jsonschema
+
+    schema = json.loads(
+        (
+            Path(__file__).resolve().parents[3] / "contracts/internal/multiband/x-qc-v2.schema.json"
+        ).read_text()
+    )["$defs"]["MorphologyPolicy"]
+    assert not MorphologyPolicy().branching_envelopes_enabled
+    jsonschema.validate(branching_policy().model_dump(mode="json"), schema)
+    invalid = branching_policy().model_dump(mode="json")
+    invalid["grouped_envelopes_enabled"] = False
+    with pytest.raises(ValueError):
+        MorphologyPolicy.model_validate(invalid)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(invalid, schema)
+
+
+def test_branching_full_normal_qc_withholds_original_members_without_confirming_source():
+    from rainpulse_algo.multiband.model import Sweep as XCut
+    from rainpulse_algo.multiband.model import Volume
+    from rainpulse_algo.multiband.quality import x_qc
+
+    from .helpers import config, fixture, station
+
+    s, body = scene("fan")
+    z, sn = s.fields["DBZH"].copy(), s.fields["SNR"].copy()
+    gap = (abs(s.azimuth[:, None] - 100) <= 1) & (s.ranges[None, :] >= 50000)
+    z[gap], sn[gap], body[gap] = 0, -2, False
+    fields = {
+        "DBZH": z,
+        "SNR": sn,
+        "OBSERVED_MASK": np.ones(s.shape, "uint8"),
+        "NO_ECHO_MASK": np.zeros(s.shape, "uint8"),
+    }
+    cut = XCut(0, s.azimuth, s.ranges, s.elevation, 1787875200 + s.ray_time_s, fields)
+    parent, _ = fixture("empty")
+    cfg = config(
+        mode="quarantine",
+        receiver_enabled=False,
+        radial_objects_enabled=False,
+        clutter_enabled=False,
+        isolation_enabled=False,
+        morphology=branching_policy()
+        .model_copy(update={"local_weather_policy": "joint_review"})
+        .model_dump(),
+    )
+    product = x_qc(Volume(parent.metadata, [cut]), station(cfg), "b" * 64)
+    a = product.sweeps[0].fields
+    assert a["XQC_MORPHOLOGY_MASK"][body].all()
+    assert not a["XQC_MORPHOLOGY_MASK"][gap].any()
+    assert (a["QC_ACTION"][body] == 3).all()
+    assert not a["XQC_SOURCE_KIND"].any()
+    assert not np.isfinite(a["DBZH_QC"][body]).any()
+    assert not a["REFLECTIVITY_ELIGIBLE_FOR_CR"][body].any()
+    np.testing.assert_array_equal(a["DBZH_RAW"], z)

@@ -169,6 +169,11 @@ def main():
         action="store_true",
         help="Explicit v5 perforated complete envelopes; read-only",
     )
+    parser.add_argument(
+        "--branching-envelopes",
+        action="store_true",
+        help="Explicit v6 complete original split/join graph; read-only",
+    )
     args = parser.parse_args()
     with ExitStack() as stack:
         if args.source_only:
@@ -177,12 +182,17 @@ def main():
                 expanding_fans=args.expanding_fans
                 or args.anchored_fans
                 or args.pulsing_fans
-                or args.grouped_envelopes,
+                or args.grouped_envelopes
+                or args.branching_envelopes,
                 anchored_fans=args.anchored_fans
                 or args.pulsing_fans
-                or args.grouped_envelopes,
-                pulsing_fans=args.pulsing_fans or args.grouped_envelopes,
-                grouped_envelopes=args.grouped_envelopes,
+                or args.grouped_envelopes
+                or args.branching_envelopes,
+                pulsing_fans=args.pulsing_fans
+                or args.grouped_envelopes
+                or args.branching_envelopes,
+                grouped_envelopes=args.grouped_envelopes or args.branching_envelopes,
+                **({"branching_envelopes": True} if args.branching_envelopes else {}),
             )
         else:
             run(
@@ -190,12 +200,17 @@ def main():
                 expanding_fans=args.expanding_fans
                 or args.anchored_fans
                 or args.pulsing_fans
-                or args.grouped_envelopes,
+                or args.grouped_envelopes
+                or args.branching_envelopes,
                 anchored_fans=args.anchored_fans
                 or args.pulsing_fans
-                or args.grouped_envelopes,
-                pulsing_fans=args.pulsing_fans or args.grouped_envelopes,
-                grouped_envelopes=args.grouped_envelopes,
+                or args.grouped_envelopes
+                or args.branching_envelopes,
+                pulsing_fans=args.pulsing_fans
+                or args.grouped_envelopes
+                or args.branching_envelopes,
+                grouped_envelopes=args.grouped_envelopes or args.branching_envelopes,
+                **({"branching_envelopes": True} if args.branching_envelopes else {}),
             )
 
 
@@ -280,10 +295,13 @@ def policy_for_audit(
     anchored_fans=False,
     pulsing_fans=False,
     grouped_envelopes=False,
+    branching_envelopes=False,
 ):
     return MorphologyPolicy(
         version=(
-            "x-polar-morphology-20261002-v5"
+            "x-polar-morphology-20261002-v6"
+            if branching_envelopes
+            else "x-polar-morphology-20261002-v5"
             if grouped_envelopes
             else "x-polar-morphology-20261002-v4"
             if pulsing_fans
@@ -296,10 +314,15 @@ def policy_for_audit(
         expanding_fans_enabled=expanding_fans
         or anchored_fans
         or pulsing_fans
-        or grouped_envelopes,
-        anchored_fans_enabled=anchored_fans or pulsing_fans or grouped_envelopes,
-        pulsing_fans_enabled=pulsing_fans or grouped_envelopes,
-        grouped_envelopes_enabled=grouped_envelopes,
+        or grouped_envelopes
+        or branching_envelopes,
+        anchored_fans_enabled=anchored_fans
+        or pulsing_fans
+        or grouped_envelopes
+        or branching_envelopes,
+        pulsing_fans_enabled=pulsing_fans or grouped_envelopes or branching_envelopes,
+        grouped_envelopes_enabled=grouped_envelopes or branching_envelopes,
+        branching_envelopes_enabled=branching_envelopes,
         local_weather_policy="joint_review",
     )
 
@@ -311,6 +334,7 @@ def run_source_only(
     anchored_fans=False,
     pulsing_fans=False,
     grouped_envelopes=False,
+    branching_envelopes=False,
 ):
     """Bounded raw-only evidence; never invent old survivors or weather labels."""
     import os
@@ -352,6 +376,7 @@ def run_source_only(
         anchored_fans=anchored_fans,
         pulsing_fans=pulsing_fans,
         grouped_envelopes=grouped_envelopes,
+        branching_envelopes=branching_envelopes,
     )
     cuts = []
     for number in numbers:
@@ -458,6 +483,7 @@ def run(
     anchored_fans=False,
     pulsing_fans=False,
     grouped_envelopes=False,
+    branching_envelopes=False,
 ):
     from rainpulse_algo.multiband.model import Network
     import os
@@ -492,6 +518,7 @@ def run(
         anchored_fans=anchored_fans,
         pulsing_fans=pulsing_fans,
         grouped_envelopes=grouped_envelopes,
+        branching_envelopes=branching_envelopes,
     )
     cuts = []
     from rainpulse_algo.multiband.adapters import read_x_qc_sweep

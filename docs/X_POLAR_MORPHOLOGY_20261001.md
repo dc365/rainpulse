@@ -241,4 +241,26 @@ grouped-render-v1四张完整PNG/冻源task/audit/renderer SHA已核验且实际
 
 候选配置已冻结于grouped-release/child-network.json，SHA2e54f00c0e7c238c66f12762801f0771b1b04e1b2a93ee335789ca9f87ddebd4，只改release_id和ZF505/701/702形态v5开关/身份；保留其他噪声/源证据/动作预算/天气政策，ZF402仍未启用。未替换现场网络或发布通道。当前installed真实core探针约747.5MiB/4GiB、100%单核运行，尚未完成，不以启动称通过。105run-grouped-core.py/本地exec66158续读，结果grouped-core-v1/zf505-05/core-receipt.json待生成。相关形态+审计测试本轮104项通过，既有NumPy警告1；正常大体扫需等实际结果。
 
-续证：installed真实core探针已exit0，auditSHA c186dc3ec34635b8258f8e26e03cbd4c9fa19bb969bad1884bd7a6807cabd4c9，本地receipt/SHA核验。50505 cut4 DEGRADED_MORPHOLOGY_ACTION_BUDGET，提名156506/形态102741，证据1650329字节；cut5 ACTION_BUDGET_ABSTAINED，提名16434/形态102912，证据1448026字节；均低于原4194304字节cap，RAW不变。证明当前core确实越过旧证据容量弃权，但动作预算仍阻止预览成为实际完整清除；未提供邻层context/未正常发布。exec66158已完成，不能再称运行中。下一步追踪原基线/新增形态候选比例及预算降级语义，保留原告警/cap，随后正常冻源重算和UI核验。
+续证：installed真实core探针已exit0，auditSHA c186dc3ec34635b8258f8e26e03cbd4c9fa19bb969bad1884bd7a6807cabd4c9，本地receipt/SHA核验。50505 cut4 DEGRADED_MORPHOLOGY_ACTION_BUDGET，提名156506/形态102741，证据1650329字节；cut5 ACTION_BUDGET_ABSTAINED，提名16434/形态102912，证据1448026字节；均低于原4194304字节cap，RAW不变。证明当前core确实越过旧证据容量弃权，但此时仅检查core，尚未核验最终显示动作，不能据预算状态判定清除失败；未提供邻层context/未正常发布。exec66158已完成，不能再称运行中。下一步追踪原基线/新增形态候选比例及预算降级语义，保留原告警/cap，随后正常冻源重算和UI核验。
+
+
+## v5候选部署与正常跨时次重算（2026-10-02，复核中）
+
+进一步追踪真实pipeline finalizer纠正前次预算推断：ACTION_BUDGET会限制确认拒绝，但原始proposed及budget-withheld仍转为候选action3，DBZH_QC/DISPLAY不显示且CR准入0；告警保留，不提高预算。installed完整x_qc探针对ZF50505 cut4/5实际验证形态选中门QC可见0、CR准入0、RAW不变，证据字节1650971/1448666低于4194304。pipeline-receipt/audit SHA ad10b10afc2b984e7662922e78190a94f39c68134a1dd3b97db12bd9094f53c6。core提名数量不能替代最终显示验收。
+
+四X ops Worker已实际切换唯一兼容v5镜像ec887aacc8；其余794模块含decoder/pipeline保持原SHA，S Worker不涉及。活动网络SHA 2e54f00c0e7c238c66f12762801f0771b1b04e1b2a93ee335789ca9f87ddebd4，fingerprint c23048ccabec7ec20076b96afa38db406aebd1ad134ffb3f5e042afeb1b69830，仅ZF505/701/702显式启用v5，其他政策与动作预算不变。正常生命周期六冻源任务提交完成；promotion.json保留原镜像/配置及发布凭据。246项XQC-v2整套测试通过，已有NumPy ABI警告1，不宣称全CI通过。
+
+截至UTC22:37Z，六正常跨时次任务已有5份SUCCEEDED且原生9层逐份图件/RAW/坐标/时间/准入校验完成，共45层，其中ZF70205 cut7保留CUT_ACTION_BUDGET_ABSTAINED复核告警；ZF50505任务ad439bbd-812b-4384-9620-46055b230135仍RUNNING。后台finisher PID3812107持续核验，不把启动称完成。目录polar-morphology-grouped-normal/state.json及各verified.jsonl可复验。实际IAB网页ZF70105新task7fa1aa0e、attempt ea21449b、scan e42d2745原生sweep0，RAW12:57:45和质控时间一致、底图/数字同心圆一致；实际截图看到长径向/南部扇形已隐藏。新增实际UI仅此1张，不代表所有层天气与界面验收完成。
+
+完整轨迹探针发现ZF50505两条长外轮廓跨度130/160km、双肩清晰率约98%，仍被ambiguous标记拒绝。当前只认定关联分支为疑点；继续捕获实际分裂/合并节点与全部原始分支，再制定完整连通对象验证。不能直接取消歧义门、截断近端历史或按固定方位补删。独立天气真值尚不完整，shape-only仍候选action3，不启用可信融合/QPE/预报；小时跟进保持停止。
+
+
+### 六正常任务终态及完整分支对象 v6（默认关闭）
+
+UTC22:41:47Z finisher已NORMAL_PUBLICATION_AUDITED并结束；6/6任务SUCCEEDED、54原生层全部RAW/坐标/时间一致、候选可见0/CR0、每层4PNG校验、六receipt SHA本地核验。50层MECHANICAL_GATES_PASSED；另4层告警保留：ZF505 cut2 DEGRADED_SOURCE_RESOURCE_LIMIT/SOURCE_INCOMPLETE，cut4 DEGRADED_MORPHOLOGY_ACTION_BUDGET，cut5 ACTION_BUDGET_ABSTAINED，ZF702 cut7 ACTION_BUDGET_ABSTAINED。不是“54层全面天气验收通过”。正常新累计3站13唯一体扫117层；唯一源回放22站46体扫1219层不重复增加。701新网页真实截图已观察；702选择原生cut7后截图工具超时，不能增加UI计数。
+
+junctions-v1实际原生探针确认：ZF50505 cut5 5km尺度父轨迹336–354持续至bucket35，bucket36分成336–337和340–353，两子节点都关联同父索引4；10km尺度同样bucket17→18分裂。旧关联逻辑因此把130050/160050m完整父历史标ambiguous拒绝。probe/audit SHA aeb3fc054c9dea18fd53b22bde23d50f2b6d94e1c45fd65c5cf30d9bc6a9a853，未改RAW/已发布结果。
+
+v6新增branching_envelopes_enabled显式身份/JSON契约，默认关闭且要求grouped父分支。原始逐距离窗口节点按相邻窗口重叠建立连通关系；只对存在分裂/合并的完整组件重新测量每个窗口的全部外轮廓、原始body和独立外侧肩部，再用原跨度/角宽/初始边界/固定公里宽反例/双肩/资源政策验收。不继承旧父或碎片的合格权，不截断原始失败历史，不填缺测门，不跨hard-weather/显式角缺口。节点/关联/重复测量纳入既有20k对象/50M工作上限。旧线性与v5路径保留；shape-only仍候选action3。
+
+两末端分裂正例（普通方位/北缝）先在已支持v6政策但未实现graph的旧逻辑实际RED（原RAW body未全选），实现后GREEN。另split→rejoin的两原生分辨率、原始固定公里宽/弯曲/团块天气反例、缺肩、hard-weather/几何隔断、默认关闭/版本契约、资源弃权及完整正常x_qc动作验证通过。CLI --branching-envelopes源级和配对路由实际RED后GREEN。全XQC-v2 261测试PASS/NumPy ABI警告1、ruff和diffcheck通过。实样v6尚未回放/生产启用；先同20源/8配对冻结样本核查v5资格保留和新增完整形态，再决定候选部署。
