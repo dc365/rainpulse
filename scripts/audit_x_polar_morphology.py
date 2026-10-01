@@ -86,6 +86,44 @@ def baseline_union(arrays):
     return result, missing
 
 
+def candidate_budget(arrays, selected, cfg, *, native_available):
+    """Historical masks estimate a budget only with matching RAW availability.
+
+    A resource-abstained export contains zero AVAILABLE/proposal masks despite
+    observed RAW. Its zeros are not proof that a new normal task fits a budget.
+    """
+    shape = selected.shape
+    current = checked_diagnostic_mask(native_available, shape)
+    historical = checked_diagnostic_mask(arrays["XQC_AVAILABLE_MASK"], shape)
+    mismatch = int((current != historical).sum())
+    baseline, missing = baseline_union(arrays)
+    record = dict(
+        baseline_missing_masks=missing,
+        historical_available_count=int(historical.sum()),
+        native_available_count=int(current.sum()),
+        budget_availability_mismatch_gates=mismatch,
+        baseline_candidate_fraction=None,
+        prospective_candidate_fraction=None,
+        prospective_action_budget_abstained=None,
+        budget_scope="UNAVAILABLE",
+    )
+    if baseline is None or mismatch:
+        return record
+    hard = checked_diagnostic_mask(arrays["XQC_HARD_WEATHER_MASK"], shape)
+    baseline &= current & ~hard
+    union = baseline | (selected & current & ~hard)
+    denominator = max(int(current.sum()), 1)
+    record.update(
+        baseline_candidate_fraction=float(baseline.sum()) / denominator,
+        prospective_candidate_fraction=float(union.sum()) / denominator,
+        prospective_action_budget_abstained=bool(
+            int(union.sum()) > cfg.maximum_new_exclusion_fraction * denominator
+        ),
+        budget_scope="HISTORICAL_MASK_ESTIMATE",
+    )
+    return record
+
+
 def load_bounded(objects, keys, maximum_bytes):
     total = sum(objects.session.index.logical[key][2] for key in keys)
     if total > maximum_bytes:
@@ -539,30 +577,14 @@ def run(
             actual_cfg = XQCConfig.model_validate(
                 net.stations[source["radar_id"]].x_qc.enhancement
             )
-            baseline, missing = baseline_union(arrays)
-            rec["baseline_missing_masks"] = missing
-            if baseline is None:
-                rec["baseline_candidate_fraction"] = None
-                rec["prospective_candidate_fraction"] = None
-                rec["prospective_action_budget_abstained"] = None
-            else:
-                baseline &= arrays["XQC_AVAILABLE_MASK"] == 1
-                baseline &= arrays["XQC_HARD_WEATHER_MASK"] == 0
-                union = baseline | (
-                    selected
-                    & (arrays["XQC_AVAILABLE_MASK"] == 1)
-                    & (arrays["XQC_HARD_WEATHER_MASK"] == 0)
+            rec.update(
+                candidate_budget(
+                    arrays,
+                    selected,
+                    actual_cfg,
+                    native_available=view.restore(view.sweep.observed),
                 )
-                observed_count = int((arrays["XQC_AVAILABLE_MASK"] == 1).sum())
-                rec["baseline_candidate_fraction"] = float(baseline.sum()) / max(
-                    observed_count, 1
-                )
-                rec["prospective_candidate_fraction"] = float(union.sum()) / max(
-                    observed_count, 1
-                )
-                rec["prospective_action_budget_abstained"] = int(
-                    union.sum()
-                ) > actual_cfg.maximum_new_exclusion_fraction * max(observed_count, 1)
+            )
             rec["selected_context_weather_gates"] = optional_mask_count(
                 arrays, "XQC_CONTEXT_WEATHER_MASK", selected
             )
@@ -585,6 +607,7 @@ def run(
                 native_sha256=descriptor["sha256"],
                 elapsed_s=time.monotonic() - stamp,
                 normal_status=evidence["status"],
+                normal_detail=evidence.get("detail"),
                 morphology=rec,
             )
         )

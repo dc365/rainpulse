@@ -109,6 +109,72 @@ def test_incomplete_legacy_baseline_has_no_fabricated_fraction():
     assert baseline is None and missing == ["XQC_RADIAL_SOURCE_MASK"]
 
 
+def test_abstained_history_cannot_fabricate_zero_budget_for_current_observed_gates():
+    from types import SimpleNamespace
+
+    module = audit()
+    shape = (2, 3)
+    fields = {
+        "XQC_" + name + "_MASK": np.zeros(shape, "uint8")
+        for name in [
+            "RECEIVER",
+            "PARTIAL",
+            "RADIAL_POLAR",
+            "RADIAL_FRAGMENT",
+            "RADIAL_SOURCE",
+            "CLUTTER",
+            "ISOLATED",
+            "AVAILABLE",
+            "HARD_WEATHER",
+        ]
+    }
+    selected = np.ones(shape, bool)
+    r = module.candidate_budget(
+        fields,
+        selected,
+        SimpleNamespace(maximum_new_exclusion_fraction=0.5),
+        native_available=np.ones(shape, bool),
+    )
+    assert r["historical_available_count"] == 0 and r["native_available_count"] == 6
+    assert r["budget_availability_mismatch_gates"] == 6
+    assert r["baseline_candidate_fraction"] is None
+    assert r["prospective_candidate_fraction"] is None
+    assert r["prospective_action_budget_abstained"] is None
+
+
+def test_matching_native_history_allows_only_an_explicit_budget_estimate():
+    from types import SimpleNamespace
+
+    module = audit()
+    shape = (2, 3)
+    fields = {
+        "XQC_" + name + "_MASK": np.zeros(shape, "uint8")
+        for name in [
+            "RECEIVER",
+            "PARTIAL",
+            "RADIAL_POLAR",
+            "RADIAL_FRAGMENT",
+            "RADIAL_SOURCE",
+            "CLUTTER",
+            "ISOLATED",
+            "HARD_WEATHER",
+        ]
+    }
+    fields["XQC_AVAILABLE_MASK"] = np.ones(shape, "uint8")
+    fields["XQC_HARD_WEATHER_MASK"][0, 0] = 1
+    r = module.candidate_budget(
+        fields,
+        np.ones(shape, bool),
+        SimpleNamespace(maximum_new_exclusion_fraction=0.5),
+        native_available=np.ones(shape, bool),
+    )
+    assert r["budget_availability_mismatch_gates"] == 0
+    assert r["baseline_candidate_fraction"] == 0
+    assert r["prospective_candidate_fraction"] == 5 / 6
+    assert r["prospective_action_budget_abstained"] is True
+    assert r["budget_scope"] == "HISTORICAL_MASK_ESTIMATE"
+
+
 def test_source_only_binds_one_frozen_input_without_product_arrays():
     module = audit()
     source = {"radar_id": "generic-x", "scan_id": "scan", "input_uri": "s3://bucket/native"}

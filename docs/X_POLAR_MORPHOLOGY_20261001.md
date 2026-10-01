@@ -220,3 +220,10 @@ main e2995f2先push再同步活动源：模块SHA3ca9d0df80037277c86e19f3d6b1cc9
 合成三个径向在两条缺测射线处分裂，原判据全部漏检，v5完整提名实际三条射线且缺测仍未提名。北缝/0.5°与1°几何、几何和天气屏障、固定公里宽雨带/曲线/团块、缺测外肩、资源限额与v5契约反例通过。7项原始新测试与2项CLI实际RED后GREEN，扩展几何后243项XQC-v2整套通过；正常QC新集成单测随后通过（实际观测候选3，内部missing仍不可用且QC非finite，RAW不变、sourcekind0、CR0）。CLI --grouped-envelopes显式选择v5并保留默认v1；两类audit实际转发待实样验证，不能把路由mock当数据入口验收。
 
 下一步同协议e4d476a9的20源/8配对冻结回放：确认v4资格保留、资源、天气代理与完整图件，合格后准备唯一兼容候选镜像/网络与正常重算。不先按固定方位清理，也不将新内部未知量视为无风险。生产仍v1；v4兼容镜像未激活。
+
+
+### v5原始冻源回放终态与历史预算口径修复
+
+main e9ada37先push再同步，模块12fc0cb51ec0913a5136e9855bf50a71baae1ff96b446ac2c3183902b3772601、审计d43d9199。source3537411/paired3537412均SOURCE_REPLAY_COMPLETED；492源层与同源72配对层全部EVALUATED/资源弃权0，v4合格mask保留且逐层v4计数等于前次实际回放。28输出/冻源task SHA核验。v5-only新增74350门=ZF50505 69983+ZF70105 2193+ZF70205 2174，其余0；不能重复累加源级和配对。目录polar-morphology-grouped-source-v1/paired-v1，正常发布/天气验收仍未完成。
+
+复查旧ZF50505 cut0/2/4/5均RESOURCE_OR_GEOMETRY_ABSTAINED，但历史XQC_AVAILABLE_MASK全零，旧审计却据此输出候选比例0/预算未超限。这不是正常新任务的预算通过证据。新candidate_budget核对冻结RAW当前原生可用mask与旧可用mask；有漂移或缺旧分支mask则历史/未来比例与预算结论全部null，记录两类可用数量和漂移门数。相同可用集也只称HISTORICAL_MASK_ESTIMATE，不替代正常任务。2回归测试实际RED后GREEN，21审计边界测试通过。新paired输出同时提供正常历史detail，追查真实资源弃权原因。旧冻结输出不覆盖，接下来新目录复核这项口径及真实正常状态。
