@@ -155,3 +155,14 @@ ZF505独立来源反证v2成功，回执SHA `7836b1616aa7bc8fb4681ab320e49b66672
 9项新增测试先实际RED（v2契约/开关缺失），实现后54项形态相关测试通过。首版连续合成边缘包括不足500m支持的单门尖端，完整性断言失败；测试用足够原生支持的阶梯扩宽对象核验完整提名，不放宽既有500m角向入选物理条件。源码SHA `c2173ca56243617cfbc08bd2e0e40204705f409a612bdcee5c2644c3fe1c4eb2`。下一步先用同一冻结20体扫和8份正常原生结果只读回放，比较新增提名、天气代理冲突和旧v1资格保留；没有正常候选镜像/网络/图件切换。
 
 首次渲染v1四份因容器输出目录UID权限失败，失败记录保留；v2显式以目录所属yons UID运行，四份成功/8张PNG及task/audit/renderer/PNG SHA绑定。105polar-morphology-cross-objects-render-v2和本地同名目录；renderer SHA a0b758f965b2aaf6fd45f8f5a8b32b2fbd2c24d3a15f636540881a4e22f26452。查询UTC05:00–05:12四个S站目录均无已发布体扫，不能假称已使用同期S真值；此缺口不阻止原始对象排查。
+
+
+### v2冻结真实回放终态与可复验入口
+
+9a90a78先本地main提交push后同步源文件，安装准备源码c2173ca56243617cfbc08bd2e0e40204705f409a612bdcee5c2644c3fe1c4eb2。首次同步发现105活动algorithms路径缺multiband子目录且父目录root所有，普通scp/mkdir失败、未启动任何driver；随后通过已有Docker权限仅写活动源路径该文件，SHA一致，不创建替代checkout、不改变运行中镜像。正式source driver2918816/paired driver2918817均已终止SOURCE_REPLAY_COMPLETED，各20/8份exit0；使用原协议e4d476a9冻源，两个只读容器各自绑定v2模块，生产四X候选Worker仍v1模块与网络。
+
+源级492层/配对72层全部EVALUATED，资源弃权0；全部v1合格mask是v2子集，492层v1计数也与前次实际安装v1回放逐层一致。新增v2-only合计10240门：ZF50505为8452、ZF70105为857、ZF70205为931，其他冻源0。配对与源级是同一批对象，不重复累加。28份JSON/receipt/task SHA本地核验、summary留存，目录polar-morphology-expanding-source-v1和expanding-paired-v1。比较程序每层分别执行v1/v2两次有界detect，comparison_work明确记录总工作，不能把两次总成本说成一次50M预算。
+
+完整图显示残留尚未解决：ZF505 cut4一完整169.6km对象宽增长2.96足迹、回缩0，但中心漂移1.48，故v2仍不合格；另166.6km对象宽增长约8足迹、中心漂移2.00，同样未通过。cut5一个170km对象中心0.49但中途回缩3.07足迹、总增长0，不能直接按扩宽分支通过。下一步须用完整边界轨迹/持续核心解释不对称扩宽及回缩，不能单纯调高中心/边界容差、切掉失败前缀重启尾端或丢弃天气反例。
+
+可复验只读入口新增`python scripts/audit_x_polar_morphology.py --expanding-fans < frozen-task.json`；没有历史native产品时加`--source-only`。必须在安装对应v2模块且绑定只读冻源对象访问的环境执行。CLI显式选择v2，默认v1；两类审计的原有SHA/资源/身份/缺项语义保留，无发布动作。3项CLI实际RED（原选项/路由不存在）后GREEN；相关XQC-v2整套209测试通过，既有NumPy二进制兼容警告1，ruff/diff-check通过，不声称全CI绿色。目标active，生产尚未启用v2/新正常图件，不以研究预览代替地图验收。

@@ -60,14 +60,23 @@ def optional_mask_count(arrays, key, selected):
 
 def checked_diagnostic_mask(value, shape):
     from rainpulse_algo.radar.qc_engine.volume_review.data import checked_mask
+
     return checked_mask(value, shape, "published diagnostic mask")
 
 
 def baseline_union(arrays):
-    keys = ["XQC_" + name + "_MASK" for name in (
-        "RECEIVER", "PARTIAL", "RADIAL_POLAR", "RADIAL_FRAGMENT",
-        "RADIAL_SOURCE", "CLUTTER", "ISOLATED",
-    )]
+    keys = [
+        "XQC_" + name + "_MASK"
+        for name in (
+            "RECEIVER",
+            "PARTIAL",
+            "RADIAL_POLAR",
+            "RADIAL_FRAGMENT",
+            "RADIAL_SOURCE",
+            "CLUTTER",
+            "ISOLATED",
+        )
+    ]
     missing = [key for key in keys if key not in arrays]
     if missing:
         return None, missing
@@ -95,15 +104,24 @@ def check_staging_budget(session, maximum_disk_bytes):
 
 def main():
     import argparse
+
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source-only", action="store_true",
-                        help="Verify frozen RAW source only; no historical QC comparison")
+    parser.add_argument(
+        "--source-only",
+        action="store_true",
+        help="Verify frozen RAW source only; no historical QC comparison",
+    )
+    parser.add_argument(
+        "--expanding-fans",
+        action="store_true",
+        help="Explicit v2 centre-stable widening geometry; read-only audit",
+    )
     args = parser.parse_args()
     with ExitStack() as stack:
         if args.source_only:
-            run_source_only(stack)
+            run_source_only(stack, expanding_fans=args.expanding_fans)
         else:
-            run(stack)
+            run(stack, expanding_fans=args.expanding_fans)
 
 
 def source_identity(task):
@@ -114,11 +132,14 @@ def source_identity(task):
     if len(sources) != 1 or len(inputs) != 1:
         raise ValueError("source audit requires exactly one frozen input")
     source, identity = sources[0], inputs[0]
-    if (task.get("state") != "SUCCEEDED" or payload.get("mode") != "x_qc"
-            or payload.get("scan_id") != source["scan_id"]
-            or payload.get("radar_id") != source["radar_id"]
-            or identity["uri"] != source["input_uri"]
-            or not re.fullmatch(r"[a-f0-9]{64}", identity["sha256"])):
+    if (
+        task.get("state") != "SUCCEEDED"
+        or payload.get("mode") != "x_qc"
+        or payload.get("scan_id") != source["scan_id"]
+        or payload.get("radar_id") != source["radar_id"]
+        or identity["uri"] != source["input_uri"]
+        or not re.fullmatch(r"[a-f0-9]{64}", identity["sha256"])
+    ):
         raise ValueError("source differs from frozen successful X task identity")
     return source, identity["sha256"]
 
@@ -127,7 +148,11 @@ def source_cut_numbers(keys, declared_numbers=None):
     """Bound the full native inventory, including non-REF split sweeps."""
     all_numbers, reflectivity = set(), set()
     for key in keys:
-        if key.startswith("sweep_number/") or not key.startswith("sweep_") or "/" not in key:
+        if (
+            key.startswith("sweep_number/")
+            or not key.startswith("sweep_")
+            or "/" not in key
+        ):
             continue
         group = key.split("/", 1)[0]
         match = re.fullmatch(r"sweep_([0-9]{3})", group)
@@ -135,8 +160,11 @@ def source_cut_numbers(keys, declared_numbers=None):
             parts = key.split("/", 2)
             # Normalized volumes also have root sweep_start/end_ray_index
             # arrays. They are coordinates, never native cut groups.
-            if (len(parts) > 2 or parts[1] == ".zgroup"
-                    or re.fullmatch(r"sweep_[0-9]+", group)):
+            if (
+                len(parts) > 2
+                or parts[1] == ".zgroup"
+                or re.fullmatch(r"sweep_[0-9]+", group)
+            ):
                 raise ValueError("invalid native sweep number")
             continue
         number = int(match[1])
@@ -154,14 +182,36 @@ def source_cut_numbers(keys, declared_numbers=None):
 
 def source_cut_keys(keys, number):
     from rainpulse_algo.multiband.adapters import X_QC_FIELDS
+
     group = f"sweep_{number:03d}/"
     names = X_QC_FIELDS | {"azimuth", "elevation", "ray_time", "range"}
-    return [key for key in keys if key in {".zattrs", ".zgroup"}
-            or (key.startswith(group) and (key[len(group):] in {".zattrs", ".zgroup"}
-                or key[len(group):].split("/", 1)[0] in names))]
+    return [
+        key
+        for key in keys
+        if key in {".zattrs", ".zgroup"}
+        or (
+            key.startswith(group)
+            and (
+                key[len(group) :] in {".zattrs", ".zgroup"}
+                or key[len(group) :].split("/", 1)[0] in names
+            )
+        )
+    ]
 
 
-def run_source_only(stack):
+def policy_for_audit(expanding_fans=False):
+    return MorphologyPolicy(
+        version=(
+            "x-polar-morphology-20261002-v2"
+            if expanding_fans
+            else "x-polar-morphology-20261001-v1"
+        ),
+        expanding_fans_enabled=expanding_fans,
+        local_weather_policy="joint_review",
+    )
+
+
+def run_source_only(stack, *, expanding_fans=False):
     """Bounded raw-only evidence; never invent old survivors or weather labels."""
     import os
     from rainpulse_algo.multiband.model import Network
@@ -170,38 +220,65 @@ def run_source_only(stack):
     task = read_task(sys.stdin.buffer)
     source, sha = source_identity(task)
     net = Network.load(os.environ["RAINPULSE_MULTIBAND_CONFIG"])
-    reader = ArtifactObjectReader(minio_client_from_environment(), max_workers=2,
-        max_size_bytes=min(net.maximum_input_bytes, 512 * 1024**2))
+    reader = ArtifactObjectReader(
+        minio_client_from_environment(),
+        max_workers=2,
+        max_size_bytes=min(net.maximum_input_bytes, 512 * 1024**2),
+    )
     session = reader.open(source["input_uri"], expected_sha256=sha)
     check_staging_budget(session, 512 * 1024**2)
-    objects = stack.enter_context(session.staged(maximum_disk_bytes=512 * 1024**2,
-                                                maximum_object_bytes=64 * 1024**2))
+    objects = stack.enter_context(
+        session.staged(
+            maximum_disk_bytes=512 * 1024**2, maximum_object_bytes=64 * 1024**2
+        )
+    )
     from rainpulse_algo.multiband.managed import _zarr_sweep_numbers
-    index_keys = [key for key in objects if key in {".zattrs", ".zgroup"}
-                  or key.startswith("sweep_number/")]
+
+    index_keys = [
+        key
+        for key in objects
+        if key in {".zattrs", ".zgroup"} or key.startswith("sweep_number/")
+    ]
     declared = _zarr_sweep_numbers(load_bounded(objects, index_keys, 1024**2))
     numbers = source_cut_numbers(objects, declared)
-    cfg = XQCConfig(receiver_enabled=False, radial_objects_enabled=False,
-                    clutter_enabled=False, isolation_enabled=False)
-    policy = MorphologyPolicy(local_weather_policy="joint_review")
+    cfg = XQCConfig(
+        receiver_enabled=False,
+        radial_objects_enabled=False,
+        clutter_enabled=False,
+        isolation_enabled=False,
+    )
+    policy = policy_for_audit(expanding_fans)
     cuts = []
     for number in numbers:
         stamp = time.monotonic()
         chosen = load_bounded(objects, source_cut_keys(objects, number), 256 * 1024**2)
-        volume, _ = read_x_qc_sweep(chosen, net.stations[source["radar_id"]], source,
-            number, asset_sha256=sha, maximum_bytes=min(net.maximum_input_bytes, 256 * 1024**2))
+        volume, _ = read_x_qc_sweep(
+            chosen,
+            net.stations[source["radar_id"]],
+            source,
+            number,
+            asset_sha256=sha,
+            maximum_bytes=min(net.maximum_input_bytes, 256 * 1024**2),
+        )
         if volume is None:
             raise ValueError("inventoried reflectivity cut disappeared")
         cut = volume.sweeps[0]
-        hard_keys = [key for key in ("WEATHER_PROTECTED_MASK", "MIXED_WEATHER_MASK")
-                     if key in cut.fields]
+        hard_keys = [
+            key
+            for key in ("WEATHER_PROTECTED_MASK", "MIXED_WEATHER_MASK")
+            if key in cut.fields
+        ]
         hard = np.zeros(cut.fields["DBZH"].shape, bool)
         for key in hard_keys:
             hard |= mask(cut.fields, key, hard.shape)
         fingerprints = {}
-        for key, value in {"DBZH_RAW": cut.fields["DBZH"], "azimuth": cut.azimuth_deg,
-                           "range_m": cut.range_m, "elevation": cut.elevation_deg,
-                           "ray_time_epoch": cut.ray_time_epoch}.items():
+        for key, value in {
+            "DBZH_RAW": cut.fields["DBZH"],
+            "azimuth": cut.azimuth_deg,
+            "range_m": cut.range_m,
+            "elevation": cut.elevation_deg,
+            "ray_time_epoch": cut.ray_time_epoch,
+        }.items():
             a = np.ascontiguousarray(value)
             digest = hashlib.sha256()
             digest.update(json.dumps([str(a.dtype), list(a.shape)]).encode())
@@ -215,29 +292,61 @@ def run_source_only(stack):
             for obj in rec["objects"] + rec["review_objects"]:
                 for key in ("first_native_ray", "last_native_ray"):
                     obj[key] = int(view.order[obj[key]])
-            rec["selected_known_hard_weather_gates"] = int((selected & hard).sum()) if hard_keys else None
+            rec["selected_known_hard_weather_gates"] = (
+                int((selected & hard).sum()) if hard_keys else None
+            )
         except ResourceLimit as exc:
-            rec = {"status": "RESOURCE_LIMIT_ABSTAINED", "reason": str(exc), "qualified_gates": 0}
-        rec.update(new_visible_selected=None, visible_before=None,
-                   selected_context_weather_gates=None, prospective_action_budget_abstained=None,
-                   action_semantics="diagnostic_only_no_actions")
-        cuts.append({"sweep_number": number, "native_identity_sha256": fingerprints,
-                     "geometry": {"rays": len(cut.azimuth_deg), "gates": len(cut.range_m),
-                         "minimum_elevation_deg": float(np.min(cut.elevation_deg)),
-                         "maximum_elevation_deg": float(np.max(cut.elevation_deg))},
-                     "hard_weather_masks_present": hard_keys,
-                     "normal_status": None, "normal_native_comparison": "UNAVAILABLE",
-                     "elapsed_s": time.monotonic() - stamp, "morphology": rec})
+            rec = {
+                "status": "RESOURCE_LIMIT_ABSTAINED",
+                "reason": str(exc),
+                "qualified_gates": 0,
+            }
+        rec.update(
+            new_visible_selected=None,
+            visible_before=None,
+            selected_context_weather_gates=None,
+            prospective_action_budget_abstained=None,
+            action_semantics="diagnostic_only_no_actions",
+        )
+        cuts.append(
+            {
+                "sweep_number": number,
+                "native_identity_sha256": fingerprints,
+                "geometry": {
+                    "rays": len(cut.azimuth_deg),
+                    "gates": len(cut.range_m),
+                    "minimum_elevation_deg": float(np.min(cut.elevation_deg)),
+                    "maximum_elevation_deg": float(np.max(cut.elevation_deg)),
+                },
+                "hard_weather_masks_present": hard_keys,
+                "normal_status": None,
+                "normal_native_comparison": "UNAVAILABLE",
+                "elapsed_s": time.monotonic() - stamp,
+                "morphology": rec,
+            }
+        )
         print("completed source cut " + str(number), file=sys.stderr, flush=True)
-    print(json.dumps({"task_id": task["id"], "scan_id": source["scan_id"],
-                      "input_sha256": sha, "proof_scope": "verified_source_only",
-                      "morphology_policy": policy.model_dump(), "no_publication": True,
-                      "actions_executed": False, "survivor_is_weather_truth": False,
-                      "independent_weather_acceptance": "NOT_COMPLETED", "cuts": cuts},
-                     allow_nan=False), flush=True)
+    print(
+        json.dumps(
+            {
+                "task_id": task["id"],
+                "scan_id": source["scan_id"],
+                "input_sha256": sha,
+                "proof_scope": "verified_source_only",
+                "morphology_policy": policy.model_dump(),
+                "no_publication": True,
+                "actions_executed": False,
+                "survivor_is_weather_truth": False,
+                "independent_weather_acceptance": "NOT_COMPLETED",
+                "cuts": cuts,
+            },
+            allow_nan=False,
+        ),
+        flush=True,
+    )
 
 
-def run(stack):
+def run(stack, *, expanding_fans=False):
     from rainpulse_algo.multiband.model import Network
     import os
 
@@ -266,7 +375,7 @@ def run(stack):
         clutter_enabled=False,
         isolation_enabled=False,
     )
-    policy = MorphologyPolicy(local_weather_policy="joint_review")
+    policy = policy_for_audit(expanding_fans)
     cuts = []
     from rainpulse_algo.multiband.adapters import read_x_qc_sweep
 
@@ -296,7 +405,7 @@ def run(stack):
         arrays = decode_arrays(payload, maximum_bytes=256 * 1024**2)
         # Native export retains source RAW DBZH, but auxiliary moments live in
         # the frozen normalized input. Read only this source cut.
-        keys = source_cut_keys(source_objects, entry['sweep_number'])
+        keys = source_cut_keys(source_objects, entry["sweep_number"])
         objects = load_bounded(source_objects, keys, 256 * 1024**2)
         volume, _ = read_x_qc_sweep(
             objects,

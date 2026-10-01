@@ -68,22 +68,39 @@ def test_missing_optional_history_mask_is_unknown_not_zero():
     module = audit()
     selected = np.ones((2, 3), bool)
     assert module.optional_mask_count({}, "XQC_CONTEXT_WEATHER_MASK", selected) is None
-    assert module.optional_mask_count(
-        {"XQC_CONTEXT_WEATHER_MASK": np.zeros((2, 3), "uint8")},
-        "XQC_CONTEXT_WEATHER_MASK", selected,
-    ) == 0
-    assert module.optional_mask_count(
-        {"XQC_CONTEXT_WEATHER_MASK": np.ones((2, 3), "uint8")},
-        "XQC_CONTEXT_WEATHER_MASK", selected,
-    ) == 6
+    assert (
+        module.optional_mask_count(
+            {"XQC_CONTEXT_WEATHER_MASK": np.zeros((2, 3), "uint8")},
+            "XQC_CONTEXT_WEATHER_MASK",
+            selected,
+        )
+        == 0
+    )
+    assert (
+        module.optional_mask_count(
+            {"XQC_CONTEXT_WEATHER_MASK": np.ones((2, 3), "uint8")},
+            "XQC_CONTEXT_WEATHER_MASK",
+            selected,
+        )
+        == 6
+    )
 
 
 def test_incomplete_legacy_baseline_has_no_fabricated_fraction():
     module = audit()
     shape = (2, 3)
-    fields = {"XQC_" + name + "_MASK": np.zeros(shape, "uint8") for name in
-              ("RECEIVER", "PARTIAL", "RADIAL_POLAR", "RADIAL_FRAGMENT",
-               "RADIAL_SOURCE", "CLUTTER", "ISOLATED")}
+    fields = {
+        "XQC_" + name + "_MASK": np.zeros(shape, "uint8")
+        for name in (
+            "RECEIVER",
+            "PARTIAL",
+            "RADIAL_POLAR",
+            "RADIAL_FRAGMENT",
+            "RADIAL_SOURCE",
+            "CLUTTER",
+            "ISOLATED",
+        )
+    }
     fields["XQC_RECEIVER_MASK"][0, 0] = 1
     baseline, missing = module.baseline_union(fields)
     assert baseline.sum() == 1 and missing == []
@@ -94,49 +111,76 @@ def test_incomplete_legacy_baseline_has_no_fabricated_fraction():
 
 def test_source_only_binds_one_frozen_input_without_product_arrays():
     module = audit()
-    source = {'radar_id': 'generic-x', 'scan_id': 'scan', 'input_uri': 's3://bucket/native'}
-    task = {'state': 'SUCCEEDED', 'spec': {'inputs': [{'uri': source['input_uri'],
-             'sha256': 'a' * 64}], 'request': {'payload': {'mode': 'x_qc',
-             'radar_id': 'generic-x', 'scan_id': 'scan', 'sources': [source]}}}}
-    assert module.source_identity(task) == (source, 'a' * 64)
-    task['spec']['inputs'][0]['uri'] = 's3://bucket/other'
-    with pytest.raises(ValueError, match='frozen'):
+    source = {"radar_id": "generic-x", "scan_id": "scan", "input_uri": "s3://bucket/native"}
+    task = {
+        "state": "SUCCEEDED",
+        "spec": {
+            "inputs": [{"uri": source["input_uri"], "sha256": "a" * 64}],
+            "request": {
+                "payload": {
+                    "mode": "x_qc",
+                    "radar_id": "generic-x",
+                    "scan_id": "scan",
+                    "sources": [source],
+                }
+            },
+        },
+    }
+    assert module.source_identity(task) == (source, "a" * 64)
+    task["spec"]["inputs"][0]["uri"] = "s3://bucket/other"
+    with pytest.raises(ValueError, match="frozen"):
         module.source_identity(task)
-    task['spec']['inputs'][0]['uri'] = source['input_uri']
-    task['spec']['request']['payload']['sources'].append(source)
-    with pytest.raises(ValueError, match='one'):
+    task["spec"]["inputs"][0]["uri"] = source["input_uri"]
+    task["spec"]["request"]["payload"]["sources"].append(source)
+    with pytest.raises(ValueError, match="one"):
         module.source_identity(task)
 
 
 def test_source_inventory_preserves_native_numbers_and_bounds_all_cuts():
     module = audit()
-    assert module.source_cut_numbers(['sweep_008/DBZH/.zarray',
-        'sweep_010/DBZH/.zarray', 'sweep_009/VR/.zarray']) == [8, 10]
-    with pytest.raises(ValueError, match='declared'):
-        module.source_cut_numbers(['sweep_008/DBZH/.zarray'], [8, 10])
-    assert module.source_cut_numbers(['sweep_008/DBZH/.zarray'], [8]) == [8]
-    assert module.source_cut_numbers(['sweep_mode/.zarray',
-        'sweep_start_ray_index/0', 'sweep_end_ray_index/.zattrs',
-        'sweep_008/.zgroup', 'sweep_008/DBZH/.zarray'], [8]) == [8]
-    with pytest.raises(ValueError, match='64'):
-        module.source_cut_numbers([f'sweep_{i:03d}/VR/.zarray' for i in range(65)])
-    with pytest.raises(ValueError, match='reflectivity'):
-        module.source_cut_numbers(['sweep_001/VR/.zarray'])
-    with pytest.raises(ValueError, match='number'):
-        module.source_cut_numbers(['sweep_1000/DBZH/.zarray'])
+    assert module.source_cut_numbers(
+        ["sweep_008/DBZH/.zarray", "sweep_010/DBZH/.zarray", "sweep_009/VR/.zarray"]
+    ) == [8, 10]
+    with pytest.raises(ValueError, match="declared"):
+        module.source_cut_numbers(["sweep_008/DBZH/.zarray"], [8, 10])
+    assert module.source_cut_numbers(["sweep_008/DBZH/.zarray"], [8]) == [8]
+    assert module.source_cut_numbers(
+        [
+            "sweep_mode/.zarray",
+            "sweep_start_ray_index/0",
+            "sweep_end_ray_index/.zattrs",
+            "sweep_008/.zgroup",
+            "sweep_008/DBZH/.zarray",
+        ],
+        [8],
+    ) == [8]
+    with pytest.raises(ValueError, match="64"):
+        module.source_cut_numbers([f"sweep_{i:03d}/VR/.zarray" for i in range(65)])
+    with pytest.raises(ValueError, match="reflectivity"):
+        module.source_cut_numbers(["sweep_001/VR/.zarray"])
+    with pytest.raises(ValueError, match="number"):
+        module.source_cut_numbers(["sweep_1000/DBZH/.zarray"])
 
 
 def test_source_cut_keys_never_load_another_cut_or_unused_fields():
     module = audit()
-    keys = ['.zattrs', '.zgroup', 'sweep_008/.zattrs', 'sweep_008/.zgroup',
-            'sweep_008/DBZH/.zarray', 'sweep_008/DBZH/0.0',
-            'sweep_008/azimuth/0', 'sweep_008/unused/0.0',
-            'sweep_010/DBZH/0.0', 'sweep_number/0']
+    keys = [
+        ".zattrs",
+        ".zgroup",
+        "sweep_008/.zattrs",
+        "sweep_008/.zgroup",
+        "sweep_008/DBZH/.zarray",
+        "sweep_008/DBZH/0.0",
+        "sweep_008/azimuth/0",
+        "sweep_008/unused/0.0",
+        "sweep_010/DBZH/0.0",
+        "sweep_number/0",
+    ]
     selected = module.source_cut_keys(keys, 8)
-    assert 'sweep_008/DBZH/0.0' in selected and '.zattrs' in selected
-    assert 'sweep_010/DBZH/0.0' not in selected
-    assert 'sweep_008/unused/0.0' not in selected
-    assert 'sweep_number/0' not in selected
+    assert "sweep_008/DBZH/0.0" in selected and ".zattrs" in selected
+    assert "sweep_010/DBZH/0.0" not in selected
+    assert "sweep_008/unused/0.0" not in selected
+    assert "sweep_number/0" not in selected
 
 
 def test_source_only_runtime_never_reads_product_or_invents_comparison(monkeypatch, capsys):
@@ -149,55 +193,109 @@ def test_source_only_runtime_never_reads_product_or_invents_comparison(monkeypat
     import rainpulse_algo.multiband.model as model
 
     module = audit()
-    source = {'radar_id': 'generic-x', 'scan_id': 'scan', 'input_uri': 's3://bucket/native'}
-    task = {'id': 'old-task', 'state': 'SUCCEEDED', 'spec': {
-        'inputs': [{'uri': source['input_uri'], 'sha256': 'a' * 64}],
-        'request': {'payload': {'mode': 'x_qc', 'radar_id': 'generic-x',
-                    'scan_id': 'scan', 'sources': [source]}}}}
+    source = {"radar_id": "generic-x", "scan_id": "scan", "input_uri": "s3://bucket/native"}
+    task = {
+        "id": "old-task",
+        "state": "SUCCEEDED",
+        "spec": {
+            "inputs": [{"uri": source["input_uri"], "sha256": "a" * 64}],
+            "request": {
+                "payload": {
+                    "mode": "x_qc",
+                    "radar_id": "generic-x",
+                    "scan_id": "scan",
+                    "sources": [source],
+                }
+            },
+        },
+    }
+
     class Objects(dict):
         pass
-    objects = Objects({'.zattrs': b'{}', '.zgroup': b'{}',
-                       'sweep_number/.zarray': b'{}', 'sweep_number/0': b'8',
-                       'sweep_008/.zgroup': b'{}', 'sweep_008/DBZH/.zarray': b'{}'})
-    index = SimpleNamespace(schema='2.0', logical={k: ('pack', 0, len(v))
-                                                 for k, v in objects.items()})
+
+    objects = Objects(
+        {
+            ".zattrs": b"{}",
+            ".zgroup": b"{}",
+            "sweep_number/.zarray": b"{}",
+            "sweep_number/0": b"8",
+            "sweep_008/.zgroup": b"{}",
+            "sweep_008/DBZH/.zarray": b"{}",
+        }
+    )
+    index = SimpleNamespace(
+        schema="2.0", logical={k: ("pack", 0, len(v)) for k, v in objects.items()}
+    )
     objects.session = SimpleNamespace(index=index)
     session = SimpleNamespace(index=index, staged=lambda **kwargs: nullcontext(objects))
     opened = []
+
     class Reader:
         def __init__(self, *args, **kwargs):
             pass
+
         def open(self, uri, *, expected_sha256):
             opened.append((uri, expected_sha256))
-            assert uri == source['input_uri']
+            assert uri == source["input_uri"]
             return session
-    monkeypatch.setattr(module, 'ArtifactObjectReader', Reader)
-    monkeypatch.setattr(module, 'minio_client_from_environment', lambda: None)
-    net = SimpleNamespace(maximum_input_bytes=512 * 1024**2,
-                          stations={'generic-x': None})
-    monkeypatch.setattr(model.Network, 'load', lambda _: net)
-    monkeypatch.setenv('RAINPULSE_MULTIBAND_CONFIG', 'test-frozen-network')
-    monkeypatch.setattr(managed, '_zarr_sweep_numbers', lambda _: [8])
+
+    monkeypatch.setattr(module, "ArtifactObjectReader", Reader)
+    monkeypatch.setattr(module, "minio_client_from_environment", lambda: None)
+    net = SimpleNamespace(maximum_input_bytes=512 * 1024**2, stations={"generic-x": None})
+    monkeypatch.setattr(model.Network, "load", lambda _: net)
+    monkeypatch.setenv("RAINPULSE_MULTIBAND_CONFIG", "test-frozen-network")
+    monkeypatch.setattr(managed, "_zarr_sweep_numbers", lambda _: [8])
     shape = (9, 100)
-    cut = SimpleNamespace(number=8, azimuth_deg=np.arange(9.), range_m=np.arange(100.) * 1000,
-        elevation_deg=np.ones(9), ray_time_epoch=np.arange(9.),
-        fields={'DBZH': np.zeros(shape, 'float32'),
-                'OBSERVED_MASK': np.ones(shape, 'uint8'),
-                'NO_ECHO_MASK': np.ones(shape, 'uint8')})
-    monkeypatch.setattr(adapters, 'read_x_qc_sweep',
-                        lambda *args, **kwargs: (SimpleNamespace(sweeps=[cut]), 0))
+    cut = SimpleNamespace(
+        number=8,
+        azimuth_deg=np.arange(9.0),
+        range_m=np.arange(100.0) * 1000,
+        elevation_deg=np.ones(9),
+        ray_time_epoch=np.arange(9.0),
+        fields={
+            "DBZH": np.zeros(shape, "float32"),
+            "OBSERVED_MASK": np.ones(shape, "uint8"),
+            "NO_ECHO_MASK": np.ones(shape, "uint8"),
+        },
+    )
+    monkeypatch.setattr(
+        adapters, "read_x_qc_sweep", lambda *args, **kwargs: (SimpleNamespace(sweeps=[cut]), 0)
+    )
     stream = SimpleNamespace(buffer=io.BytesIO(json.dumps(task).encode()))
-    monkeypatch.setattr(module.sys, 'stdin', stream)
+    monkeypatch.setattr(module.sys, "stdin", stream)
     with ExitStack() as stack:
         module.run_source_only(stack)
     report = json.loads(capsys.readouterr().out)
-    assert opened == [(source['input_uri'], 'a' * 64)]
-    assert report['proof_scope'] == 'verified_source_only'
-    assert report['no_publication'] is True and report['actions_executed'] is False
-    assert report['cuts'][0]['sweep_number'] == 8
-    assert report['cuts'][0]['normal_status'] is None
-    record = report['cuts'][0]['morphology']
-    assert record['status'] == 'EVALUATED' and record['qualified_gates'] == 0
-    assert record['new_visible_selected'] is None
-    assert record['selected_known_hard_weather_gates'] is None
-    assert record['prospective_action_budget_abstained'] is None
+    assert opened == [(source["input_uri"], "a" * 64)]
+    assert report["proof_scope"] == "verified_source_only"
+    assert report["no_publication"] is True and report["actions_executed"] is False
+    assert report["cuts"][0]["sweep_number"] == 8
+    assert report["cuts"][0]["normal_status"] is None
+    record = report["cuts"][0]["morphology"]
+    assert record["status"] == "EVALUATED" and record["qualified_gates"] == 0
+    assert record["new_visible_selected"] is None
+    assert record["selected_known_hard_weather_gates"] is None
+    assert record["prospective_action_budget_abstained"] is None
+
+
+@pytest.mark.parametrize(
+    "args,source,expanding",
+    [
+        ([], False, False),
+        (["--source-only", "--expanding-fans"], True, True),
+        (["--expanding-fans"], False, True),
+    ],
+)
+def test_cli_expanding_policy_is_explicit_and_routes_to_bounded_audit(
+    monkeypatch, args, source, expanding
+):
+    module = audit()
+    calls = []
+    monkeypatch.setattr(module.sys, "argv", ["audit", *args])
+    monkeypatch.setattr(module, "run", lambda stack, **kw: calls.append((False, kw)))
+    monkeypatch.setattr(module, "run_source_only", lambda stack, **kw: calls.append((True, kw)))
+    module.main()
+    assert calls == [(source, {"expanding_fans": expanding})]
+    p = module.policy_for_audit(expanding)
+    assert p.expanding_fans_enabled == expanding and p.local_weather_policy == "joint_review"
+    assert p.version.endswith("v2" if expanding else "v1")
