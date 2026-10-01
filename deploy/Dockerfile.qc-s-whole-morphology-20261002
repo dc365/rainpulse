@@ -1,0 +1,4 @@
+FROM rainpulse-cpu-worker:s-bounded-radial-20261001-v4
+LABEL rainpulse.s.morphology.revision="10797657f737c67832e339389f2473493a24b404"
+COPY algorithms/rainpulse_algo/radar/qc_engine/review_extension/radial_revision/config.py algorithms/rainpulse_algo/radar/qc_engine/review_extension/radial_revision/engine.py algorithms/rainpulse_algo/radar/qc_engine/review_extension/radial_revision/morphology_objects.py algorithms/rainpulse_algo/radar/qc_engine/review_extension/radial_revision/validation.py /opt/rainpulse/rainpulse_algo/radar/qc_engine/review_extension/radial_revision/
+RUN python -m compileall -q /opt/rainpulse/rainpulse_algo/radar/qc_engine/review_extension/radial_revision

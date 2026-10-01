@@ -2,11 +2,17 @@
 """Sequential exact-Web S QC -> grid -> mosaic -> QPE -> image refresh on 105.
 Run from the deployed repository; state and log remain reusable for review.
 """
-import fcntl, hashlib, json, os, subprocess, time, uuid
+import argparse, fcntl, hashlib, json, os, subprocess, time, uuid
 from pathlib import Path
 from s_web_identity import resolve_frames
 ROOT=Path(__file__).resolve().parents[1]
-OUT=ROOT/'.build/s-bounded-radial-20261001-refresh'; OUT.mkdir(parents=True,exist_ok=True)
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--profile',type=Path,default=ROOT/'configs/qc/s-bounded-radial-20261001-v4.yaml')
+parser.add_argument('--output',type=Path,default=ROOT/'.build/s-bounded-radial-20261001-refresh')
+parser.add_argument('--plan',type=Path)
+parser.add_argument('--prioritize',help='Process this existing UTC issue time first')
+args=parser.parse_args()
+OUT=args.output.resolve(); OUT.mkdir(parents=True,exist_ok=True)
 lock=(OUT/'lock').open('w'); fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
 pid=subprocess.check_output(['systemctl','show','rainpulse','-p','MainPID','--value'],text=True).strip()
 env=dict(os.environ)
@@ -31,17 +37,30 @@ def wait(job):
         time.sleep(10)
     raise TimeoutError(job)
 config={k:env['RAINPULSE_PIPELINE_'+v+'_CONFIG'] for k,v in [('qc','QC'),('grid','GRID'),('mosaic','MOSAIC'),('qpe','QPE'),('diagnostics','DIAGNOSTIC')]}
-expected=hashlib.sha256((ROOT/'configs/qc/s-bounded-radial-20261001-v4.yaml').read_bytes()).hexdigest()
+expected=hashlib.sha256(args.profile.read_bytes()).hexdigest()
 if hashlib.sha256(Path(config['qc']).read_bytes()).hexdigest()!=expected: raise RuntimeError('active QC profile mismatch')
 state_path=OUT/'state.json'
 state=json.loads(state_path.read_text()) if state_path.exists() else {'completed':[],'jobs':[]}
 def save():
     p=state_path.with_suffix('.tmp'); p.write_text(json.dumps(state,indent=2)); p.replace(state_path)
-plan_path=OUT/'plan.json'
+plan_path=args.plan or OUT/'plan.json'
 if plan_path.exists(): plan=json.loads(plan_path.read_text())
 else:
     cases=[(s,t,0) for t in ('08:18','08:36','08:42','09:48','10:18','10:24','10:42','11:24') for s in ('z9591','z9593','z9598','z9599')]
     plan=resolve_frames('http://127.0.0.1:4173','2026-08-28',cases); plan_path.write_text(json.dumps(plan,indent=2))
+if len(plan)%4 or any(len({f['issue_time'] for f in plan[i:i+4]})!=1 or
+                      len({f['site'] for f in plan[i:i+4]})!=4 for i in range(0,len(plan),4)):
+    raise ValueError('plan must contain complete distinct four-station groups')
+plan_sha=hashlib.sha256(plan_path.read_bytes()).hexdigest()
+if state.get('plan_sha256',plan_sha)!=plan_sha:
+    raise ValueError('persisted plan identity changed')
+state['plan_sha256']=plan_sha
+if args.prioritize:
+    groups=[plan[i:i+4] for i in range(0,len(plan),4)]
+    if args.prioritize not in {g[0]['issue_time'] for g in groups}:
+        raise ValueError('priority time absent from frozen plan')
+    groups.sort(key=lambda g:g[0]['issue_time']!=args.prioritize)
+    plan=[frame for group in groups for frame in group]
 def step(stage,target,*args):
     # Reattach to a persisted live/succeeded job; never replace it on a timeout.
     prior=[j for j in state['jobs'] if j.get('profile_sha256')==expected and

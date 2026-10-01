@@ -1,0 +1,3 @@
+services:
+  radar-qc-worker:
+    image: rainpulse-cpu-worker:s-whole-morphology-20261002-v5
