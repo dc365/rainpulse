@@ -310,3 +310,22 @@ abstention and normal QC diagnostics. Scoped XQC-v2 suite: 277 passing, one
 existing NumPy ABI warning. Ruff and diff whitespace checks pass. Read-only
 source and paired audits accept explicit `--compact-counterexamples`; real
 replay and normal publication acceptance are pending. No CI success claimed.
+
+### v7 frozen replay result and remaining counterexample
+
+The 20 RAW replays (492 cuts) and the same eight paired replays (72 cuts)
+terminated successfully, with zero morphology resource abstentions. Output
+SHA256 checks pass. The per-gate invariant is exact: v7 equals v6 candidates
+minus original compact ambiguities. RAW source qualified counts change from
+629073 to 610407, withdrawing 18666 ambiguous gates; the paired 16983 withdrawn
+gates are a subset of that source set, not additional unique coverage.
+
+The current normal v5 ZF505 05 sample was separately bound and rendered at cuts
+4 and 5. Both full five-panel PNG hashes were checked and inspected. Cut 4 still
+selects part of the northeast compact-looking body (122275 candidates remain;
+481 counterexample gates elsewhere). Cut 5 has 114434 candidates and no compact
+counterexample. Thus the synthetic guard does not resolve all real contour
+ambiguity. This is an explicit remaining counterexample; v7 is not activated,
+weather acceptance and new normal publication remain incomplete. Next diagnosis
+must measure complete original contour connectivity and radial/body overlap,
+without station exceptions, contour filling or assumed weather labels.
