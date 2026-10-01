@@ -24,10 +24,12 @@ class MorphologyPolicy(BaseModel):
         "x-polar-morphology-20261002-v2",
         "x-polar-morphology-20261002-v3",
         "x-polar-morphology-20261002-v4",
+        "x-polar-morphology-20261002-v5",
     ] = "x-polar-morphology-20261001-v1"
     expanding_fans_enabled: bool = False
     anchored_fans_enabled: bool = False
     pulsing_fans_enabled: bool = False
+    grouped_envelopes_enabled: bool = False
     local_weather_policy: Literal["protect", "joint_review"] = "protect"
     scales_m: tuple[Annotated[float, Field(ge=2000.0, le=20000.0)], ...] = Field(
         default=(5000.0, 10000.0),
@@ -66,19 +68,27 @@ class MorphologyPolicy(BaseModel):
             "x-polar-morphology-20261002-v2",
             "x-polar-morphology-20261002-v3",
             "x-polar-morphology-20261002-v4",
+            "x-polar-morphology-20261002-v5",
         ):
             raise ValueError("expanding fan geometry requires v2 or v3 identity")
         if self.anchored_fans_enabled and (
-            self.version not in ("x-polar-morphology-20261002-v3", "x-polar-morphology-20261002-v4")
+            self.version
+            not in (
+                "x-polar-morphology-20261002-v3",
+                "x-polar-morphology-20261002-v4",
+                "x-polar-morphology-20261002-v5",
+            )
             or not self.expanding_fans_enabled
         ):
             raise ValueError("anchored fan requires v3/v4 expanding geometry identity")
         if self.pulsing_fans_enabled and (
-            self.version != "x-polar-morphology-20261002-v4"
+            self.version not in ("x-polar-morphology-20261002-v4", "x-polar-morphology-20261002-v5")
             or not self.anchored_fans_enabled
             or not self.expanding_fans_enabled
         ):
             raise ValueError("pulsing fan requires explicit v4 and anchored expanding branches")
+        if self.grouped_envelopes_enabled and self.version != "x-polar-morphology-20261002-v5":
+            raise ValueError("grouped envelopes require explicit v5 identity")
         if (
             not self.scales_m
             or not self.levels_dbz
@@ -320,6 +330,8 @@ def detect(sweep, policy, *, protected=None):
                         maximum_center_excursion_native_footprints=center_excursion,
                         maximum_narrowing_native_footprints=normalized_narrowing,
                         width_growth_native_footprints=growth,
+                        grouped_envelope=bool(grouped),
+                        internal_unknown_gates=sum(e["internal_unknown_gates"] for e in entries),
                         expanding_shape_qualified=bool(expanding),
                         pulsing_shape_qualified=bool(pulsing),
                         maximum_initial_contraction_native_footprints=initial_contraction,
@@ -362,6 +374,8 @@ def detect(sweep, policy, *, protected=None):
         records.append(
             dict(
                 object_id=oid,
+                grouped_envelope=bool(grouped),
+                internal_unknown_gates=sum(e["internal_unknown_gates"] for e in entries),
                 kind=kind,
                 scale_m=scale,
                 level_dbz=level,
@@ -392,122 +406,155 @@ def detect(sweep, policy, *, protected=None):
             )
         )
 
-    for scale in p.scales_m:
-        buckets = np.floor(sweep.ranges / scale).astype(int)
-        for level in p.levels_dbz:
-            tracks = []
-            for bucket in np.unique(buckets):
-                cols = np.flatnonzero(buckets == bucket)
-                charge(len(cols) * shape[0])
-                signal = raw[:, cols] & (z[:, cols] >= level)
-                blocked = hard[:, cols].any(axis=1)
-                # Unknown REF with a measured strong SNR is not measured
-                # quiet. Stop long blind intervals even inside a coarse
-                # physical window; smaller holes contribute no support and
-                # are never painted into the output.
-                blocked |= long_unknown[:, cols].any(axis=1)
-                occupied = (signal.sum(axis=1) * sweep.dr >= max(500.0, 2 * sweep.dr)) & ~blocked
-                entries = []
-                for rows in _angular_runs(occupied, sweep):
-                    leftrow = (int(rows[0]) - 1) % shape[0]
-                    rightrow = (int(rows[-1]) + 1) % shape[0]
-
-                    left = float(sweep.azimuth[rows[0]] - da[leftrow] / 2.0)
-                    width = float(
-                        ((sweep.azimuth[rows[-1]] - sweep.azimuth[rows[0]]) % 360)
-                        + da[leftrow] / 2.0
-                        + da[rows[-1]] / 2.0
-                    )
-                    if width > p.maximum_width_deg:
-                        continue
-                    block = signal[rows]
-                    active = block.any(axis=0)
-                    if not active.any():
-                        continue
-                    native_cols = cols[active]
-                    body = np.where(raw[np.ix_(rows, cols)], z[np.ix_(rows, cols)], np.nan)
-                    # Maximum supports intensity-varying rays; shoulders still
-                    # need independently measured samples at the same ranges.
-                    strength = np.max(np.where(np.isfinite(body), body, -np.inf), axis=0)
-                    flank = [
-                        exterior_flank(leftrow, -1, left, cols, strength, active),
-                        exterior_flank(rightrow, 1, left + width, cols, strength, active),
-                    ]
-                    shoulder_known = np.stack([f[0] for f in flank])
-                    shoulder_clear = np.stack([f[1] for f in flank])
-                    sample = np.broadcast_to(active, (2, len(cols)))
-                    entries.append(
-                        dict(
-                            rows=rows,
-                            cols=native_cols,
-                            window_cols=cols,
-                            left=left,
-                            right=left + width,
-                            left_spacing=float(da[leftrow]),
-                            right_spacing=float(da[rows[-1]]),
-                            width=width,
-                            center=left + width / 2.0,
-                            bucket=int(bucket),
-                            radial_support_m=float(active.sum() * sweep.dr),
-                            known_sides=(shoulder_known & sample).sum(axis=1),
-                            clear_sides=(shoulder_clear & sample).sum(axis=1),
-                            known=int((shoulder_known & sample).sum()),
-                            clear=int((shoulder_clear & sample).sum()),
-                            flank_total=int(sample.sum()),
-                            maximum_flank_offset_deg=max(f[2] for f in flank),
+    for grouped in (False, True) if p.grouped_envelopes_enabled else (False,):
+        for scale in p.scales_m:
+            buckets = np.floor(sweep.ranges / scale).astype(int)
+            for level in p.levels_dbz:
+                tracks = []
+                for bucket in np.unique(buckets):
+                    cols = np.flatnonzero(buckets == bucket)
+                    charge(len(cols) * shape[0])
+                    signal = raw[:, cols] & (z[:, cols] >= level)
+                    blocked = hard[:, cols].any(axis=1)
+                    # Unknown REF with a measured strong SNR is not measured
+                    # quiet. Stop long blind intervals even inside a coarse
+                    # physical window; smaller holes contribute no support and
+                    # are never painted into the output.
+                    blocked |= long_unknown[:, cols].any(axis=1)
+                    occupied = (
+                        signal.sum(axis=1) * sweep.dr >= max(500.0, 2 * sweep.dr)
+                    ) & ~blocked
+                    entries = []
+                    if grouped:
+                        charge(shape[0])
+                        # A single unoccupied native ray may be an INTERNAL
+                        # slit in a complete perforated fan. It is never used
+                        # as a quiet exterior, filled with values, or bridged
+                        # across protected/invalid geometry. Keep both actual
+                        # neighbouring measured seed rays and test the whole
+                        # original envelope, not two individually hostile flanks.
+                        slit = (
+                            ~occupied
+                            & np.roll(occupied, 1)
+                            & np.roll(occupied, -1)
+                            & sweep.good
+                            & ~sweep.gap_after
+                            & ~np.roll(sweep.gap_after, 1)
+                            & ~hard[:, cols].any(axis=1)
+                            & ((da + np.roll(da, 1)) <= MAXIMUM_FLANK_SEARCH_DEG)
                         )
-                    )
-                # Associate by previous envelope, retain the initial template.
-                links = []
-                for entry in entries:
-                    matches = []
-                    for i, track in enumerate(tracks):
-                        charge(1)
-                        previous = track["entries"][-1]
-                        delta = abs(float(wrap(entry["center"] - previous["center"])))
+                        envelope = occupied | slit
+                    else:
+                        slit = np.zeros(shape[0], bool)
+                        envelope = occupied
+                    for rows in _angular_runs(envelope, sweep):
+                        leftrow = (int(rows[0]) - 1) % shape[0]
+                        rightrow = (int(rows[-1]) + 1) % shape[0]
+
+                        left = float(sweep.azimuth[rows[0]] - da[leftrow] / 2.0)
+                        width = float(
+                            ((sweep.azimuth[rows[-1]] - sweep.azimuth[rows[0]]) % 360)
+                            + da[leftrow] / 2.0
+                            + da[rows[-1]] / 2.0
+                        )
+                        if width > p.maximum_width_deg:
+                            continue
+                        block = signal[rows]
+                        active = block.any(axis=0)
+                        if not active.any():
+                            continue
+                        native_cols = cols[active]
+                        body = np.where(raw[np.ix_(rows, cols)], z[np.ix_(rows, cols)], np.nan)
+                        # Maximum supports intensity-varying rays; shoulders still
+                        # need independently measured samples at the same ranges.
+                        strength = np.max(np.where(np.isfinite(body), body, -np.inf), axis=0)
+                        flank = [
+                            exterior_flank(leftrow, -1, left, cols, strength, active),
+                            exterior_flank(rightrow, 1, left + width, cols, strength, active),
+                        ]
+                        shoulder_known = np.stack([f[0] for f in flank])
+                        shoulder_clear = np.stack([f[1] for f in flank])
+                        sample = np.broadcast_to(active, (2, len(cols)))
+                        entries.append(
+                            dict(
+                                rows=rows,
+                                cols=native_cols,
+                                window_cols=cols,
+                                left=left,
+                                right=left + width,
+                                left_spacing=float(da[leftrow]),
+                                right_spacing=float(da[rows[-1]]),
+                                width=width,
+                                center=left + width / 2.0,
+                                bucket=int(bucket),
+                                radial_support_m=float(active.sum() * sweep.dr),
+                                known_sides=(shoulder_known & sample).sum(axis=1),
+                                clear_sides=(shoulder_clear & sample).sum(axis=1),
+                                known=int((shoulder_known & sample).sum()),
+                                clear=int((shoulder_clear & sample).sum()),
+                                flank_total=int(sample.sum()),
+                                maximum_flank_offset_deg=max(f[2] for f in flank),
+                                internal_unknown_gates=int(
+                                    (~known_native[np.ix_(rows[slit[rows]], cols)]).sum()
+                                ),
+                            )
+                        )
+                    # Associate by previous envelope, retain the initial template.
+                    links = []
+                    for entry in entries:
+                        matches = []
+                        for i, track in enumerate(tracks):
+                            charge(1)
+                            previous = track["entries"][-1]
+                            delta = abs(float(wrap(entry["center"] - previous["center"])))
+                            if (
+                                entry["bucket"] - previous["bucket"] <= 2
+                                and delta
+                                < (entry["width"] + previous["width"]) / 2.0 + spacing * 0.1
+                            ):
+                                matches.append(i)
+                        links.append(matches)
+                    used = set()
+                    updated = []
+                    for entry, matches in zip(entries, links):
+                        if len(matches) == 1 and sum(matches[0] in m for m in links) == 1:
+                            idx = matches[0]
+                            track = tracks[idx]
+                            track["entries"].append(entry)
+                            used.add(idx)
+                            updated.append(track)
+                        else:
+                            for idx in matches:
+                                tracks[idx]["ambiguous"] = True
+                            trials += 1
+                            if trials > p.maximum_objects:
+                                raise ResourceLimit("morphology track budget exceeded")
+                            # A join has no inherited object identity. Close the
+                            # conflicting parents and test this observed envelope
+                            # anew. Poisoning the new track permanently would veto
+                            # a subsequent long, independently measured fan.
+                            # No old members or qualification are inherited.
+                            updated.append({"entries": [entry], "ambiguous": False})
+                    for idx, track in enumerate(tracks):
+                        if idx in used:
+                            continue
+                        last = track["entries"][-1]
+                        # A missing range window is a barrier; only measured quiet
+                        # interruptions may be crossed as a discontinuous band.
+                        previous_rows = last["rows"]
+                        known = known_native[np.ix_(previous_rows, cols)]
+                        barrier = blocked[previous_rows].any() or not known.all()
                         if (
-                            entry["bucket"] - previous["bucket"] <= 2
-                            and delta < (entry["width"] + previous["width"]) / 2.0 + spacing * 0.1
+                            int(bucket) - last["bucket"] < 2
+                            and not barrier
+                            and not track["ambiguous"]
                         ):
-                            matches.append(i)
-                    links.append(matches)
-                used = set()
-                updated = []
-                for entry, matches in zip(entries, links):
-                    if len(matches) == 1 and sum(matches[0] in m for m in links) == 1:
-                        idx = matches[0]
-                        track = tracks[idx]
-                        track["entries"].append(entry)
-                        used.add(idx)
-                        updated.append(track)
-                    else:
-                        for idx in matches:
-                            tracks[idx]["ambiguous"] = True
-                        trials += 1
-                        if trials > p.maximum_objects:
-                            raise ResourceLimit("morphology track budget exceeded")
-                        # A join has no inherited object identity. Close the
-                        # conflicting parents and test this observed envelope
-                        # anew. Poisoning the new track permanently would veto
-                        # a subsequent long, independently measured fan.
-                        # No old members or qualification are inherited.
-                        updated.append({"entries": [entry], "ambiguous": False})
-                for idx, track in enumerate(tracks):
-                    if idx in used:
-                        continue
-                    last = track["entries"][-1]
-                    # A missing range window is a barrier; only measured quiet
-                    # interruptions may be crossed as a discontinuous band.
-                    previous_rows = last["rows"]
-                    known = known_native[np.ix_(previous_rows, cols)]
-                    barrier = blocked[previous_rows].any() or not known.all()
-                    if int(bucket) - last["bucket"] < 2 and not barrier and not track["ambiguous"]:
-                        updated.append(track)
-                    else:
-                        finish(track, scale, level)
-                tracks = updated
-            for track in tracks:
-                finish(track, scale, level)
+                            updated.append(track)
+                        else:
+                            finish(track, scale, level)
+                    tracks = updated
+                for track in tracks:
+                    finish(track, scale, level)
     return MorphologyEvidence(
         mask,
         ids,
@@ -521,6 +568,7 @@ def detect(sweep, policy, *, protected=None):
             source_verified=False,
             maximum_flank_search_deg=MAXIMUM_FLANK_SEARCH_DEG,
             doppler_required=False,
+            grouped_envelopes_enabled=p.grouped_envelopes_enabled,
             objects=records,
             review_objects=reviews,
         ),

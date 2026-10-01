@@ -2455,7 +2455,8 @@
             "x-polar-morphology-20261001-v1",
             "x-polar-morphology-20261002-v2",
             "x-polar-morphology-20261002-v3",
-            "x-polar-morphology-20261002-v4"
+            "x-polar-morphology-20261002-v4",
+            "x-polar-morphology-20261002-v5"
           ]
         },
         "local_weather_policy": {
@@ -2614,6 +2615,11 @@
           "type": "boolean",
           "default": false,
           "title": "Pulsing Fans Enabled"
+        },
+        "grouped_envelopes_enabled": {
+          "default": false,
+          "type": "boolean",
+          "title": "Grouped Envelopes Enabled"
         }
       },
       "title": "MorphologyPolicy",
@@ -2636,7 +2642,8 @@
                 "enum": [
                   "x-polar-morphology-20261002-v2",
                   "x-polar-morphology-20261002-v3",
-                  "x-polar-morphology-20261002-v4"
+                  "x-polar-morphology-20261002-v4",
+                  "x-polar-morphology-20261002-v5"
                 ]
               }
             },
@@ -2661,7 +2668,8 @@
               "version": {
                 "enum": [
                   "x-polar-morphology-20261002-v3",
-                  "x-polar-morphology-20261002-v4"
+                  "x-polar-morphology-20261002-v4",
+                  "x-polar-morphology-20261002-v5"
                 ]
               },
               "expanding_fans_enabled": {
@@ -2688,7 +2696,10 @@
           "then": {
             "properties": {
               "version": {
-                "const": "x-polar-morphology-20261002-v4"
+                "enum": [
+                  "x-polar-morphology-20261002-v4",
+                  "x-polar-morphology-20261002-v5"
+                ]
               },
               "anchored_fans_enabled": {
                 "const": true
@@ -2701,6 +2712,28 @@
               "version",
               "anchored_fans_enabled",
               "expanding_fans_enabled"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "grouped_envelopes_enabled": {
+                "const": true
+              }
+            },
+            "required": [
+              "grouped_envelopes_enabled"
+            ]
+          },
+          "then": {
+            "properties": {
+              "version": {
+                "const": "x-polar-morphology-20261002-v5"
+              }
+            },
+            "required": [
+              "version"
             ]
           }
         }

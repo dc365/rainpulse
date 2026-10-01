@@ -615,6 +615,132 @@ def test_anchor_policy_json_contract_requires_both_version_and_parent_branch():
             validator.validate({"morphology": invalid})
 
 
+def perforated_scene(*, bearing=100, da=1):
+    s, _ = scene("fan", bearing=bearing, da=da)
+    distance = s.ranges[None, :]
+    body = (
+        np.isin(s.azimuth[:, None], np.mod(bearing + np.array([-2, 0, 2]) * da, 360))
+        & (distance >= 5000)
+        & (distance <= 55000)
+    )
+    holes = (
+        np.isin(s.azimuth[:, None], np.mod(bearing + np.array([-1, 1]) * da, 360))
+        & (distance >= 5000)
+        & (distance <= 55000)
+    )
+    fields = {
+        "DBZH": np.where(body, 20, 0).astype("float32"),
+        "SNR": np.where(body | holes, 15, -2).astype("float32"),
+    }
+    available = {k: np.ones(s.shape, bool) for k in fields}
+    available["DBZH"][holes] = False
+    return replace(s, fields=fields, available=available), body, holes
+
+
+def grouped_policy():
+    return MorphologyPolicy(
+        version="x-polar-morphology-20261002-v5", grouped_envelopes_enabled=True
+    )
+
+
+@pytest.mark.parametrize("bearing,da", [(100, 1), (359, 1), (100, 0.5)])
+def test_grouped_complete_envelope_recognizes_separate_radials_without_painting_missing(
+    bearing, da
+):
+    s, body, holes = perforated_scene(bearing=bearing, da=da)
+    assert not detect(s, MorphologyPolicy()).mask.any()
+    before = s.digest
+    ev = detect(s, grouped_policy())
+    assert ev.mask[body].all() and not ev.mask[holes].any()
+    assert not ev.mask[~body].any() and s.digest == before
+    assert any(o["grouped_envelope"] and o["internal_unknown_gates"] > 0 for o in ev.objects)
+
+
+def test_grouped_envelope_cannot_cross_geometry_or_weather_barrier():
+    s, body, holes = perforated_scene()
+    # The central beam remains nonquiet on both sides. Do not inherit a merged
+    # parent through a protected or physically disconnected interior ray.
+    hard = holes.copy()
+    assert not detect(s, grouped_policy(), protected=hard).mask[100].any()
+    gaps = s.gap_after.copy()
+    gaps[99] = True
+    gaps[101] = True
+    assert not detect(replace(s, gap_after=gaps), grouped_policy()).mask[100].any()
+
+
+@pytest.mark.parametrize("kind", ["curved", "fixed_km", "blob"])
+def test_grouping_preserves_complete_weather_history(kind):
+    s, _ = scene(kind)
+    assert not detect(s, grouped_policy()).mask.any()
+
+
+def test_grouping_does_not_use_missing_exteriors_or_partial_resource_results():
+    s, _ = scene("fan", missing_shoulders=True)
+    assert not detect(s, grouped_policy()).mask.any()
+    with pytest.raises(ResourceLimit):
+        detect(s, grouped_policy().model_copy(update={"maximum_work": 1}))
+
+
+def test_grouped_envelope_version_and_schema_are_explicit():
+    import json
+    from pathlib import Path
+
+    import jsonschema
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        MorphologyPolicy(grouped_envelopes_enabled=True)
+    schema = json.loads(
+        (
+            Path(__file__).resolve().parents[3] / "contracts/internal/multiband/x-qc-v2.schema.json"
+        ).read_text()
+    )
+    validator = jsonschema.Draft202012Validator(schema)
+    policy = grouped_policy().model_dump(mode="json")
+    validator.validate({"morphology": policy})
+    policy["version"] = "x-polar-morphology-20261002-v4"
+    with pytest.raises(jsonschema.ValidationError):
+        validator.validate({"morphology": policy})
+
+
+def test_grouped_normal_qc_keeps_missing_and_only_withholds_observed_candidates():
+    from rainpulse_algo.multiband.model import Sweep as XCut
+    from rainpulse_algo.multiband.model import Volume
+    from rainpulse_algo.multiband.quality import x_qc
+
+    from .helpers import config, fixture, station
+
+    s, body, holes = perforated_scene()
+    fields = {
+        "DBZH": s.fields["DBZH"].copy(),
+        "SNR": s.fields["SNR"].copy(),
+        "OBSERVED_MASK": (~holes).astype("uint8"),
+        "NO_ECHO_MASK": np.zeros(s.shape, "uint8"),
+    }
+    cut = XCut(0, s.azimuth, s.ranges, s.elevation, 1787875200 + s.ray_time_s, fields)
+    parent, _ = fixture("empty")
+    cfg = config(
+        mode="quarantine",
+        receiver_enabled=False,
+        radial_objects_enabled=False,
+        clutter_enabled=False,
+        isolation_enabled=False,
+        morphology=grouped_policy()
+        .model_copy(update={"local_weather_policy": "joint_review"})
+        .model_dump(),
+    )
+    product = x_qc(Volume(parent.metadata, [cut]), station(cfg), "b" * 64)
+    a = product.sweeps[0].fields
+    assert a["XQC_MORPHOLOGY_MASK"][body].all()
+    assert not a["XQC_MORPHOLOGY_MASK"][holes].any()
+    assert not a["XQC_AVAILABLE_MASK"][holes].any()
+    assert not np.isfinite(a["DBZH_QC"][body | holes]).any()
+    assert (a["QC_ACTION"][body] == 3).all()
+    assert not a["XQC_SOURCE_KIND"].any()
+    assert not a["REFLECTIVITY_ELIGIBLE_FOR_CR"][body | holes].any()
+    np.testing.assert_array_equal(a["DBZH_RAW"], fields["DBZH"])
+
+
 def test_anchor_does_not_follow_both_moving_edges_even_if_width_increases():
     s, _ = expanding_scene(drift=True)
     p = MorphologyPolicy(
