@@ -2443,6 +2443,161 @@
       },
       "title": "ContextPolicy",
       "type": "object"
+    },
+    "MorphologyPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "const": "x-polar-morphology-20261001-v1",
+          "default": "x-polar-morphology-20261001-v1",
+          "title": "Version",
+          "type": "string"
+        },
+        "local_weather_policy": {
+          "default": "protect",
+          "enum": [
+            "protect",
+            "joint_review"
+          ],
+          "title": "Local Weather Policy",
+          "type": "string"
+        },
+        "scales_m": {
+          "default": [
+            5000.0,
+            10000.0
+          ],
+          "items": {
+            "maximum": 20000.0,
+            "minimum": 2000.0,
+            "type": "number"
+          },
+          "maxItems": 4,
+          "minItems": 1,
+          "title": "Scales M",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "levels_dbz": {
+          "default": [
+            5.0,
+            15.0,
+            25.0
+          ],
+          "items": {
+            "maximum": 55.0,
+            "minimum": 5.0,
+            "type": "number"
+          },
+          "maxItems": 6,
+          "minItems": 1,
+          "title": "Levels Dbz",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "minimum_echo_dbz": {
+          "const": 5.0,
+          "default": 5.0,
+          "title": "Minimum Echo Dbz",
+          "type": "number"
+        },
+        "minimum_range_m": {
+          "default": 1500.0,
+          "minimum": 500.0,
+          "title": "Minimum Range M",
+          "type": "number"
+        },
+        "minimum_span_m": {
+          "default": 20000.0,
+          "minimum": 15000.0,
+          "title": "Minimum Span M",
+          "type": "number"
+        },
+        "minimum_support_fraction": {
+          "default": 0.4,
+          "maximum": 1.0,
+          "minimum": 0.4,
+          "title": "Minimum Support Fraction",
+          "type": "number"
+        },
+        "minimum_windows": {
+          "default": 4,
+          "minimum": 4,
+          "title": "Minimum Windows",
+          "type": "integer"
+        },
+        "maximum_width_deg": {
+          "default": 45.0,
+          "exclusiveMinimum": 0.0,
+          "maximum": 60.0,
+          "title": "Maximum Width Deg",
+          "type": "number"
+        },
+        "boundary_tolerance_rays": {
+          "default": 1.05,
+          "exclusiveMinimum": 0.0,
+          "maximum": 1.5,
+          "title": "Boundary Tolerance Rays",
+          "type": "number"
+        },
+        "flank_contrast_db": {
+          "default": 6.0,
+          "maximum": 15.0,
+          "minimum": 6.0,
+          "title": "Flank Contrast Db",
+          "type": "number"
+        },
+        "minimum_flank_fraction": {
+          "default": 0.8,
+          "maximum": 1.0,
+          "minimum": 0.8,
+          "title": "Minimum Flank Fraction",
+          "type": "number"
+        },
+        "quiet_snr_db": {
+          "default": 3.0,
+          "maximum": 5.0,
+          "minimum": 0.0,
+          "title": "Quiet Snr Db",
+          "type": "number"
+        },
+        "minimum_fan_range_ratio": {
+          "default": 1.7,
+          "minimum": 1.5,
+          "title": "Minimum Fan Range Ratio",
+          "type": "number"
+        },
+        "maximum_unknown_gap_m": {
+          "default": 1000.0,
+          "maximum": 1500.0,
+          "minimum": 0.0,
+          "title": "Maximum Unknown Gap M",
+          "type": "number"
+        },
+        "maximum_objects": {
+          "default": 20000,
+          "maximum": 20000,
+          "minimum": 1,
+          "title": "Maximum Objects",
+          "type": "integer"
+        },
+        "maximum_sweep_gates": {
+          "default": 2000000,
+          "maximum": 2000000,
+          "minimum": 1,
+          "title": "Maximum Sweep Gates",
+          "type": "integer"
+        },
+        "maximum_work": {
+          "default": 50000000,
+          "maximum": 50000000,
+          "minimum": 1,
+          "title": "Maximum Work",
+          "type": "integer"
+        }
+      },
+      "title": "MorphologyPolicy",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -2733,6 +2888,17 @@
       ],
       "default": "protect",
       "title": "Radial Source Local Policy"
+    },
+    "morphology": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MorphologyPolicy"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     }
   },
   "title": "XQCConfig",

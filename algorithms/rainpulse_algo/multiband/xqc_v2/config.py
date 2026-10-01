@@ -12,6 +12,7 @@ from rainpulse_algo.radar.qc_engine.volume_review.clutter_fusion.config import C
 from rainpulse_algo.radar.qc_engine.volume_review.clutter_fusion.isolation_config import IsolationConfig
 from . import VERSION
 from .limited_context import ContextPolicy
+from .polar_morphology import MorphologyPolicy
 
 
 class XSegmentConfig(SegmentReferenceConfig):
@@ -59,6 +60,7 @@ class XQCConfig(BaseModel):
     radial_objects_enabled: StrictBool = True
     clutter_enabled: StrictBool = True
     isolation_enabled: StrictBool = True
+    morphology: MorphologyPolicy | None = None
     receiver: XReceiverConfig = Field(default_factory=XReceiverConfig)
     clutter: ClutterFusionConfig = Field(default_factory=default_clutter)
     objects: VolumeReviewConfig = Field(default_factory=lambda: VolumeReviewConfig(

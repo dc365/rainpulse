@@ -46,6 +46,7 @@ class Reason(IntFlag):
     NOISE_FLOOR = 16384
     RADIAL_SOURCE = 32768
     CONTEXT_CONFLICT = 65536
+    MORPHOLOGY = 131072
 
 
 @dataclass(frozen=True)
@@ -63,6 +64,7 @@ def empty(cut, status, reason=""):
         "RADIAL_POLAR",
         "RADIAL_FRAGMENT",
         "RADIAL_SOURCE",
+        "MORPHOLOGY",
         "CLUTTER",
         "ISOLATED",
         "HARD_WEATHER",
@@ -77,6 +79,7 @@ def empty(cut, status, reason=""):
         XQC_REASON=np.zeros(shape, "uint32"),
         XQC_CLASS=np.zeros(shape, "uint8"),
         XQC_RECEIVER_MODEL_ID=np.zeros(shape, "uint32"),
+        XQC_MORPHOLOGY_OBJECT_ID=np.zeros(shape, "uint32"),
         XQC_RECEIVER_RESIDUAL_DB=np.full(shape, np.nan, "float32"),
     )
     if status != "EVALUATED":
@@ -391,6 +394,35 @@ def _evaluate(cut, metadata, cfg, *, context=None):
     )
     why[radial_source] |= int(Reason.RADIAL_SOURCE)
     quarantine |= radial_source
+    morphology = np.zeros(s.shape, bool)
+    if cfg.morphology is not None:
+        from .polar_morphology import detect as detect_morphology
+
+        try:
+            protection = hard | (
+                local if cfg.morphology.local_weather_policy == "protect" else False
+            )
+            morph = detect_morphology(s, cfg.morphology, protected=protection)
+            morphology = morph.mask
+            a["XQC_MORPHOLOGY_OBJECT_ID"] = view.restore(morph.object_id)
+            morph.record["local_proxy_policy"] = cfg.morphology.local_weather_policy
+            morph.record["local_proxy_conflict_gates"] = int((morphology & local).sum())
+            morph.record["action_semantics"] = "candidate_withheld_not_confirmed"
+            records["module_records"]["morphology"] = morph.record
+        except ResourceLimit as exc:
+            records["module_records"]["morphology"] = {
+                "status": "RESOURCE_LIMIT_ABSTAINED",
+                "reason": str(exc),
+                "qualified_gates": 0,
+            }
+            records["status"] = "DEGRADED_MORPHOLOGY_RESOURCE_LIMIT"
+            records.setdefault("degraded_modules", []).append("morphology")
+        why[morphology] |= int(Reason.MORPHOLOGY)
+        # Shape evidence alone never asserts confirmed non-meteorological
+        # contamination. The sole finalizer withholds candidates from display
+        # and CR, preserving raw values, cause and review state (action 3).
+    else:
+        records["module_records"]["morphology"] = {"status": "DISABLED"}
     from .limited_context import evaluate_context
 
     context_weather, context_record, context_measured, context_donor, context_ray, context_gate = (
@@ -407,20 +439,39 @@ def _evaluate(cut, metadata, cfg, *, context=None):
     a["XQC_CONTEXT_RAY"] = view.restore(context_ray)
     a["XQC_CONTEXT_GATE"] = view.restore(context_gate)
     a["XQC_SOURCE_MIXED_MASK"] = view.restore(mixed.astype("uint8"))
-    proposed = (
+    baseline_proposed = (
         (receiver | partial | noisy | fragments | radial_source | clutter | isolated)
         & observed
         & ~hard
     )
+    proposed = baseline_proposed | (morphology & observed & ~hard)
     quarantine &= proposed
     why[hard] |= int(Reason.WEATHER_PROTECTED)
     denominator = int(observed.sum())
-    if int(proposed.sum()) > cfg.maximum_new_exclusion_fraction * max(denominator, 1):
-        # All heuristic changes from this enhancement abstain together.
+    budget = cfg.maximum_new_exclusion_fraction * max(denominator, 1)
+    if int(baseline_proposed.sum()) > budget:
+        # Preserve the pre-existing full-enhancement abstention contract.
         why[proposed] |= int(Reason.ACTION_BUDGET)
         proposed = np.zeros(s.shape, bool)
         quarantine = np.zeros(s.shape, bool)
         records["status"] = "ACTION_BUDGET_ABSTAINED"
+    elif int(proposed.sum()) > budget:
+        # An incremental morphology entry must not undo previously accepted
+        # baseline QC. Keep the same cap and abstain the new proposal as a
+        # whole; do not select arbitrary pixels to fill the remaining budget.
+        why[proposed & ~baseline_proposed] |= int(Reason.ACTION_BUDGET)
+        proposed = baseline_proposed
+        quarantine &= proposed
+        records["module_records"]["morphology"]["action_status"] = "ACTION_BUDGET_ABSTAINED"
+        records["status"] = (
+            "DEGRADED_MORPHOLOGY_ACTION_BUDGET"
+            if baseline_proposed.any() else "ACTION_BUDGET_ABSTAINED"
+        )
+    if cfg.morphology is not None:
+        records["module_records"]["morphology"]["withheld_candidate_gates"] = int(
+            (morphology & (proposed | ((why & int(Reason.ACTION_BUDGET)) != 0))
+             & ~quarantine).sum()
+        )
     # The censor carries its own integrity cap and never triggers, nor is
     # subject to, the heuristic action budget.
     proposed |= censor
@@ -432,6 +483,7 @@ def _evaluate(cut, metadata, cfg, *, context=None):
         ("RADIAL_POLAR", noisy),
         ("RADIAL_FRAGMENT", fragments),
         ("RADIAL_SOURCE", radial_source),
+        ("MORPHOLOGY", morphology),
         ("CLUTTER", clutter),
         ("ISOLATED", isolated),
         ("HARD_WEATHER", hard),

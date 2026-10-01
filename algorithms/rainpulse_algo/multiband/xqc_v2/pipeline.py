@@ -67,6 +67,10 @@ def run(volume, station, release_sha256, *, baseline):
     if station.band != "X":
         raise ValueError("X enhancement cannot run on an S observation")
     cfg = XQCConfig.model_validate(station.x_qc.enhancement)
+    implementation_revision = (
+        "xqc-polar-morphology-20261001-v1" if cfg.morphology is not None
+        else "xqc-mode-pair-20260930-r4"
+    )
     base_profile = replace(station.x_qc, enhancement=None)
     base_station = replace(station, x_qc=base_profile)
     result = None
@@ -180,6 +184,10 @@ def run(volume, station, release_sha256, *, baseline):
         if (not station.calibration_verified or volume.metadata.get("calibration_id") != station.calibration_id):
             f["XQC_REASON"][observed] |= int(Reason.CALIBRATION_UNKNOWN)
         f["XQC_REASON"][observed & ((f["MB_QC_FLAGS"] & int(Flag.ATTENUATION_UNKNOWN)) != 0)] |= int(Reason.ATTENUATION_UNKNOWN)
+        if cfg.morphology is not None:
+            ev.record["module_records"]["morphology"]["withheld_candidate_gates"] = int(
+                ((ev.arrays["XQC_MORPHOLOGY_MASK"] == 1) & withheld & ~rejected).sum()
+            )
         target.fields = f
         # Per-cut records do not go into Volume.metadata: source-major fusion
         # demands exactly the same volume metadata for all cuts of a source.
@@ -195,7 +203,7 @@ def run(volume, station, release_sha256, *, baseline):
             "quantitative_ready_gates": int(ready.sum()), "qpe_enabled": False,
             "export_native": cfg.export_native,
             "classification_is_ground_truth": False,
-            "implementation_revision": "xqc-mode-pair-20260930-r4"}
+            "implementation_revision": implementation_revision}
         if result is None:
             result = Volume(copy.deepcopy(baseline_result.metadata), [])
         result.sweeps.append(target)
@@ -204,7 +212,7 @@ def run(volume, station, release_sha256, *, baseline):
         raise ValueError("nonempty X volume required")
     result.metadata.update(processing=VERSION, xqc_parameter_sha256=cfg.digest,
                            xqc_mode=cfg.mode, operational_eligible=False, qpe_enabled=False,
-                           xqc_implementation_revision="xqc-mode-pair-20260930-r4")
+                           xqc_implementation_revision=implementation_revision)
     return result
 
 
