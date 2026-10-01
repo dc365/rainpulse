@@ -52,3 +52,19 @@ def test_invalid_domain_is_rejected_before_fitting(invalid):
     domain = np.ones(s.shape[1], bool) if invalid == 'wrong_shape' else np.ones(s.shape, np.uint8)
     with pytest.raises(ValueError, match='source domain'):
         detect(s, cfg, protected=np.zeros(s.shape, bool), fan=True, domain=domain)
+
+
+def test_sparse_family_does_not_build_empty_reference_lists_for_other_rays():
+    from rainpulse_algo.multiband.xqc_v2.source_summary import SourceStatistics
+    _,row,cfg,s=setup()
+    class Counted(tuple):
+        traversals=0
+        def __iter__(self):
+            self.traversals+=1
+            return super().__iter__()
+    stats=SourceStatistics.build(s,cfg)
+    stats.indices=Counted(stats.indices)
+    domain=np.zeros(s.shape,bool);domain[row]=True
+    mask,record=detect(s,cfg,protected=np.zeros(s.shape,bool),fan=True,domain=domain,prepared=stats)
+    assert mask.any() and record['models']
+    assert stats.indices.traversals==1

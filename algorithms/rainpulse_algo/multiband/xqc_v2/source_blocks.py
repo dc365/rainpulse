@@ -44,7 +44,10 @@ def detect(
     receiver, center_range = stats.receiver, stats.center_range
     models = []
     minimum = 3  # per-block median; total reference samples still obey the source contract
-    for row in np.flatnonzero(s.good):
+    rows = s.good if domain is None else s.good & np.any(signal, axis=1)
+    # Empty domain rows previously built a block list only to skip it.
+    # They consume no model/geometry counters and cannot alter decisions.
+    for row in np.flatnonzero(rows):
         gates = [g[signal[row, g]] for g in stats.indices]
         count = np.array([len(g) for g in gates])
         if (count >= minimum).sum() < 3:
