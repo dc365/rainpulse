@@ -36,9 +36,13 @@ def main():
                         help='Read-only independent measured segments retaining full RAW parent history')
     parser.add_argument('--shoulder-windows', action='store_true',
                         help='Research-only 1/2/5-km measured fragment exterior windows')
+    parser.add_argument('--shoulder-band',action='store_true',
+                        help='Research-only complete exterior band within two actual beam widths')
     parser.add_argument('--engine-quarantine', action='store_true',
                         help='Validate opt-in experiment proposals through the actual engine; no product writes')
     args = parser.parse_args()
+    if args.shoulder_band and not args.shoulder_windows:
+        raise ValueError('bounded shoulder band requires shoulder window research')
     if args.shoulder_windows and (not args.fragment_constellation or args.engine_quarantine):
         raise ValueError('shoulder windows require research-only constellation; no engine actions')
     if args.fragment_segments and not args.fragment_constellation:
@@ -83,6 +87,7 @@ def main():
         if args.fragment_constellation:
             options['segment_evidence']=args.fragment_segments
             options['shoulder_windows']=args.shoulder_windows
+            options['shoulder_band']=args.shoulder_band
         arrays, detail = DETECTOR.detect(native, blocked, **options)
         DETECTOR.validate(arrays, native, blocked, **options)
         integration = {}

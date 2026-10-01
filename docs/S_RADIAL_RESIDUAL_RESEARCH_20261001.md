@@ -1006,3 +1006,39 @@ Three additional tests cover local contamination vs unknowns, weather/barrier
 and range-edge rejection, unchanged RAW and original candidate footprint.
 288 scoped tests passed, including engine/writer proof and weather counterexamples.
 No production deployment/profile switch or new Web publication this experiment.
+
+### 2026-10-02: bounded angular exterior and corrected observation semantics
+
+Added research-only `--shoulder-band` with `--shoulder-windows`. All contiguous
+original exterior rays within two actual beam widths are included, never selected
+by best contrast; native gaps/incomplete bands reject. Fractional area statistics
+preserve counts instead of truncating them. Any observed weather/protected ray
+inside the band vetoes its windows. No engine/production activation is permitted
+by the CLI research mode.
+
+Corrected an observation-accounting error: DBZH unavailable but finite available
+SNR above the quiet threshold is **measured nonquiet**, not unknown. Direct-side
+reports now separate it explicitly; window known support includes all available
+SNR, while quiet support still requires measured low SNR or DBZH contrast. This
+changes diagnostic semantics, not the default production decision masks. Earlier
+unknown fractions should not be interpreted as pure sensor missingness. For
+10:42 component137 direct-side nonquiet fraction is20% with zero true unknown;
+component140 is40%. Nearby window samples are still assessed independently.
+
+Eight full RAW replays: all target strong increments zero. 10:42 remote members
+108/109 are fully accepted;137/138/140 accepted fractions are0.3/0.375/0.0.
+Thus this fixed-band variant also fails to improve the target and is not suitable
+for promotion. Retain the existing production and earlier candidate separately.
+First08:42 band replay exceeded the50-million work budget and produced no partial
+output. Cache only identical original fragment/exterior observations, scoped to
+native segment and contour, resolves duplicated calculations without increasing
+budget: final08:42 work29,130,993, target strong0. Earlier failure remains retained.
+Seven completed prior arrays equal their cached reruns exactly; eighth08:42 has a
+separate complete cached receipt. Artifacts shoulder-band-*-v1 and
+shoulder-band-*-cached-v2; no Web publication.
+
+Three new tests cover measured-nonquiet semantics, full fixed band membership,
+weather and native-gap protection.291 scoped tests passed after cache fix.
+Next investigate genuinely observed multi-cut structure and validate the existing
+successful constellation candidate on real weather/clear-air volumes; neither
+failed window variant justifies weakening missing/weather restrictions.

@@ -40,7 +40,7 @@ def measured_shoulder_windows(r,dr,columns,known,quiet,protected,charge):
     """Bounded physical windows; unknown samples never contribute quiet support."""
     decisions=np.ones(len(columns),bool);records=[]
     charge(3*len(r)+3*len(columns))
-    cumulative=[np.r_[0,np.cumsum(x,dtype='int64')] for x in (known,quiet,protected)]
+    cumulative=[np.r_[0,np.cumsum(x,dtype='float64')] for x in (known,quiet,protected)]
     for width in (1000.,2000.,5000.):
         lo=r[columns]-width/2;hi=r[columns]+width/2
         left=np.searchsorted(r,lo);right=np.searchsorted(r,hi,side='right')
@@ -59,7 +59,9 @@ def measured_shoulder_windows(r,dr,columns,known,quiet,protected,charge):
 
 
 def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_evidence=False,
-           shoulder_windows=False):
+           shoulder_windows=False,shoulder_band=False):
+    if shoulder_band and not shoulder_windows:
+        raise ValueError('bounded shoulder band requires measured window research')
     r, az, dr, good, gaps = native_geometry(native)
     if native.shape[0] < 3:
         raise ValueError('at least three native rays required')
@@ -127,6 +129,7 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
             if not fragments:
                 continue
             bearings = np.array([f['bearing'] for f in fragments]); seen = set()
+            window_cache={}
             # Every neighborhood is anchored in original RAW, never in a new association.
             for anchor in fragments:
                 charge(len(fragments))
@@ -173,15 +176,42 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                         contrast = observed[row, fc] & (z[row, fc] <= z[segment[fr], fc]-6)
                         sides.append(dict(observed_dbzh_fraction=float(observed[row, fc].mean()),
                             measured_quiet_snr_fraction=float(quiet.mean()),
-                            unknown_fraction=float((~observed[row, fc] & ~quiet).mean())))
+                            measured_nonquiet_snr_fraction=float((~observed[row,fc]&sa[row,fc]&~quiet).mean()),
+                            unknown_fraction=float((~observed[row, fc] & ~sa[row,fc]).mean())))
                         if shoulder_windows:
+                            cache_key=(fragment['ident'],side)
+                            if cache_key in window_cache:
+                                window_accept,window_detail=window_cache[cache_key]
+                                sides[-1].update(window_detail)
+                                accepted &= window_accept
+                                continue
                             reference=float(np.median(z[segment[fr],fc]))
-                            row_quiet=(~observed[row]&sa[row]&(snr[row]<=3))|(
-                                observed[row]&(z[row]<=reference-6))
-                            row_known=observed[row]|(~observed[row]&sa[row]&(snr[row]<=3))
+                            exterior=np.array([row])
+                            if shoulder_band:
+                                direction=-1 if side<fragment['left'] else 1
+                                count=int(np.floor(2*beam/spacing+.5))
+                                positions=side+direction*np.arange(count)
+                                if (positions<0).any() or (positions>=len(segment)).any():
+                                    sides[-1]['angular_band_incomplete']=True
+                                    accepted[:]=False;continue
+                                edge=angle[fragment['left']]-spacing/2 if direction<0 else angle[fragment['right']]+spacing/2
+                                if np.any(abs(angle[positions]-edge)>2*beam+1e-6):
+                                    sides[-1]['angular_band_incomplete']=True
+                                    accepted[:]=False;continue
+                                exterior=segment[positions]
+                                sides[-1]['angular_band_rows']=list(map(int,exterior))
+                                sides[-1]['angular_band_max_offset_deg']=float(abs(angle[positions]-edge).max())
+                                charge(len(exterior)*len(r))
+                            band_observed=observed[exterior];band_sa=sa[exterior]
+                            band_quiet=(~band_observed&band_sa&(snr[exterior]<=3))|(
+                                band_observed&(z[exterior]<=reference-6))
+                            row_quiet=band_quiet.mean(axis=0)
+                            row_known=(band_observed|band_sa).mean(axis=0)
                             window_accept,window_report=measured_shoulder_windows(r,dr,fc,
-                                row_known,row_quiet,barred[row]|weather[row],charge)
+                                row_known,row_quiet,(barred[exterior]|weather[exterior]).any(axis=0),charge)
                             sides[-1]['distance_windows']=window_report
+                            window_cache[cache_key]=(window_accept,{k:v for k,v in sides[-1].items()
+                                if k.startswith('angular_band_') or k=='distance_windows'})
                             accepted &= window_accept
                         else:
                             accepted &= ~barred[row, fc] & (quiet | contrast)
@@ -258,7 +288,8 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                     lower_parent_width_correlation=lower_correlation,lower_parent_geometry_hold=bool(lower_hold),
                     strong=not holds, hold_reasons=holds))
     return out, dict(objects=records, source_claim=False, recursive_growth=False,
-        action_gates=0, research_only=True, shoulder_windows=bool(shoulder_windows),work=work)
+        action_gates=0, research_only=True, shoulder_windows=bool(shoulder_windows),
+        shoulder_band=bool(shoulder_band),work=work)
 
 
 def validate(arrays, native, blocked, **options):

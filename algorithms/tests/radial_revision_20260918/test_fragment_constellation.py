@@ -229,3 +229,39 @@ def test_window_research_does_not_fill_raw_or_expand_original_object():
     assert not arrays[P+'STRONG_MASK'][~n.field_available['DBZH']].any()
     assert np.array_equal(arrays[P+'MASK'],baseline[P+'MASK'])
     assert np.array_equal(n.fields['DBZH'],original,equal_nan=True)
+
+
+def test_nonquiet_measured_snr_is_not_reported_as_unknown_or_quiet():
+    n=fixture();n.fields['SNR'][3,:]=8
+    arrays,report=detect(n,segment_evidence=True,shoulder_windows=True)
+    assert not arrays[P+'STRONG_MASK'].any()
+    side=report['objects'][0]['side_observations'][0][0]
+    assert side['unknown_fraction']==0 and side['measured_nonquiet_snr_fraction']==1
+    assert side['distance_windows'][0]['minimum_known_fraction']==1
+    assert side['distance_windows'][0]['minimum_quiet_fraction']==0
+
+
+def test_bounded_band_never_skips_a_weather_ray_or_crosses_native_gap():
+    n=fixture();n.fields['RHOHV']=np.full(n.shape,np.nan,'float32')
+    n.field_available['RHOHV']=np.zeros(n.shape,bool)
+    n.fields['DBZH'][2,100:108]=15;n.field_available['DBZH'][2,100:108]=True
+    n.fields['RHOHV'][2,100:108]=.99;n.field_available['RHOHV'][2,100:108]=True
+    n.fields['SNR'][2,100:108]=20
+    arrays,report=detect(n,shoulder_windows=True,shoulder_band=True)
+    assert not arrays[P+'STRONG_MASK'].any()
+    assert any(w['protected_windows'] for obj in report['objects']
+        for pair in obj['side_observations'] for side in pair for w in side.get('distance_windows',[]))
+    n=fixture();n.gap_after[2]=True
+    arrays,report=detect(n,shoulder_windows=True,shoulder_band=True)
+    assert not arrays[P+'STRONG_MASK'].any()
+    assert any(side.get('angular_band_incomplete') for obj in report['objects'] for pair in obj['side_observations'] for side in pair)
+
+
+def test_bounded_band_uses_all_fixed_exterior_rays_without_growing_candidates():
+    n=fixture()
+    baseline,_=detect(n)
+    arrays,report=detect(n,shoulder_windows=True,shoulder_band=True)
+    assert np.array_equal(arrays[P+'MASK'],baseline[P+'MASK'])
+    assert np.array_equal(arrays[P+'STRONG_MASK'],baseline[P+'STRONG_MASK'])
+    assert all(len(side['angular_band_rows'])==2 and side['angular_band_max_offset_deg']<=2
+        for obj in report['objects'] for pair in obj['side_observations'] for side in pair)
