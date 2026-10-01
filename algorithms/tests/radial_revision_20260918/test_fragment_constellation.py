@@ -265,3 +265,34 @@ def test_bounded_band_uses_all_fixed_exterior_rays_without_growing_candidates():
     assert np.array_equal(arrays[P+'STRONG_MASK'],baseline[P+'STRONG_MASK'])
     assert all(len(side['angular_band_rows'])==2 and side['angular_band_max_offset_deg']<=2
         for obj in report['objects'] for pair in obj['side_observations'] for side in pair)
+
+
+def test_original_distance_partitions_preserve_shared_lower_weather_bridge():
+    module=load('radial_revision.fragment_constellation')
+    ranges=np.arange(1000.,201000.,1000.)
+    group=[dict(ident=i+1,cols=np.array([c])) for i,c in enumerate((0,1,150,151))]
+    history=[dict(range_min_m=ranges[f['cols'][0]],range_max_m=ranges[f['cols'][0]]+1000,
+        lower_parent_ids=[1 if i<2 else 2],bearing_deg=30.,angular_width_deg=1.,
+        bilateral_fraction=1.,observed_weather_gates=0,lower_parent_weather_gates=0,
+        protected_gates=0,lower_parent_protected_gates=0) for i,f in enumerate(group)]
+    parents=[dict(component_id=i,range_min_m=lo,range_max_m=hi,mean_range_m=(lo+hi)/2,
+        angular_width_deg=1.) for i,lo,hi in ((1,1000.,3000.),(2,151000.,153000.))]
+    separate=module.original_distance_partitions(group,history,parents,ranges,1000,1)
+    assert [p['original_components'] for p in separate]==[[1,2],[3,4]]
+    assert all(not p['action_authority'] and p['gap_is_not_dry_evidence'] for p in separate)
+    # The same complete lower contour spans both sets: splitting is forbidden,
+    # even if the higher contour has a very long empty-looking interval.
+    parents[0].update(range_max_m=153000.,angular_width_deg=8.)
+    for member in history:member['lower_parent_ids']=[1]
+    joined=module.original_distance_partitions(group,history,parents[:1],ranges,1000,1)
+    assert len(joined)==1 and joined[0]['original_lower_parent_geometry_hold']
+    assert not joined[0]['assessment']['qualified']
+
+
+def test_distance_partition_evidence_cannot_change_masks_or_weather_authority():
+    n=fixture()
+    legacy,base=detect(n,segment_evidence=True)
+    evidence,report=detect(n,segment_evidence=True,partition_evidence=True)
+    for field in legacy:assert np.array_equal(legacy[field],evidence[field])
+    assert all('original_distance_partitions' in record for record in report['objects'])
+    assert all('original_distance_partitions' not in record for record in base['objects'])

@@ -11,6 +11,49 @@ from .geometry import ResourceLimit
 PREFIX = 'RV2_CONSTELLATION_'
 
 
+def original_distance_partitions(group, history, parents, ranges, dr, beam):
+    """Research-only RAW topology partitions; never cut a shared lower parent.
+
+    A 20km gap separates candidates, not evidence of dry air. Full lower-parent
+    intervals extend each member before partitioning, so a weak/weather bridge
+    cannot be discarded by splitting its higher-intensity fragments.
+    """
+    lookup = {p['component_id']:p for p in parents}
+    intervals = []
+    for i, member in enumerate(history):
+        original = [lookup[p] for p in member['lower_parent_ids']]
+        lo = min([member['range_min_m']] + [p['range_min_m'] for p in original])
+        hi = max([member['range_max_m']] + [p['range_max_m'] for p in original])
+        intervals.append((lo, hi, i))
+    buckets = []; end = None
+    for lo, hi, i in sorted(intervals):
+        if end is None or lo-end > 20000:
+            buckets.append([])
+            end = hi
+        else:
+            end = max(end, hi)
+        buckets[-1].append(i)
+    result = []
+    for indices in buckets:
+        members = [history[i] for i in indices]
+        ids = sorted({p for m in members for p in m['lower_parent_ids']})
+        local = [lookup[p] for p in ids]
+        hold = any(p['angular_width_deg'] > 4*beam for p in local)
+        distance = np.array([p['mean_range_m'] for p in local])
+        width = np.array([p['angular_width_deg'] for p in local])
+        if len(local) >= 4 and distance.min()>0 and distance.max()/distance.min()>=1.7 and np.ptp(width)>beam:
+            hold |= (np.polyfit(np.log(distance),np.log(width),1)[0] <= -.4 and
+                     np.corrcoef(np.log(distance),np.log(width))[0,1] <= -.7)
+        columns = np.unique(np.concatenate([group[i]['cols'] for i in indices]))
+        result.append(dict(original_components=[group[i]['ident'] for i in indices],
+            original_lower_parent_ids=ids, original_lower_parent_geometry_hold=bool(hold),
+            parent_start_m=min(p['range_min_m'] for p in local),
+            parent_end_m=max(p['range_max_m'] for p in local),
+            assessment=short_segment_assessment(members,ranges[columns],dr,beam,hold),
+            gap_is_not_dry_evidence=True, action_authority=False))
+    return result
+
+
 def short_segment_assessment(history, ranges, dr, beam, parent_hold):
     """Stricter short-object research evidence; never supplies action authority."""
     distance=np.asarray(ranges,dtype=float)
@@ -59,7 +102,7 @@ def measured_shoulder_windows(r,dr,columns,known,quiet,protected,charge):
 
 
 def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_evidence=False,
-           shoulder_windows=False,shoulder_band=False):
+           shoulder_windows=False,shoulder_band=False, partition_evidence=False):
     if shoulder_band and not shoulder_windows:
         raise ValueError('bounded shoulder band requires measured window research')
     r, az, dr, good, gaps = native_geometry(native)
@@ -287,6 +330,9 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                     full_lower_contour_history=lower_history,lower_parent_width_slope=lower_slope,
                     lower_parent_width_correlation=lower_correlation,lower_parent_geometry_hold=bool(lower_hold),
                     strong=not holds, hold_reasons=holds))
+                if partition_evidence:
+                    records[-1]['original_distance_partitions'] = original_distance_partitions(
+                        group,member_history,lower_history,r,dr,beam)
     return out, dict(objects=records, source_claim=False, recursive_growth=False,
         action_gates=0, research_only=True, shoulder_windows=bool(shoulder_windows),
         shoulder_band=bool(shoulder_band),work=work)

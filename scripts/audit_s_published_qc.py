@@ -96,6 +96,11 @@ assert np.array_equal(stored_raw,n.fields['DBZH'],equal_nan=True),'RAW changed i
 assert np.allclose(stored_raw[rows,cols],p['raw_dbzh'],rtol=0,atol=.0001),'target measurements changed'
 values=get('DBZH_QC')[rows,cols];eligible=get('QPE_ELIGIBLE_MASK')[rows,cols]==1
 visible=eligible&np.isfinite(values)&(values>=5)
+target_records=[dict(row=int(row),column=int(col),azimuth_deg=float(n.azimuth[row]),
+ range_m=float(n.ranges[col]),raw_dbzh=float(stored_raw[row,col]),
+ qc_dbzh=float(value) if np.isfinite(value) else None,
+ qpe_eligible=bool(ok),renderer_visible=bool(shown))
+ for row,col,value,ok,shown in zip(rows,cols,values,eligible,visible)]
 fields={}
 for key in ('QC_FLAGS','RFI_QUARANTINE_MASK','QC_ACTION','RV2_ACTION_PROPOSAL_MASK',
             'RV2_SOURCE_LEDGER_LINK_MASK','RV2_MORPH_OBJECT_STRONG_MASK','RV2_MORPH_OBJECT_WEATHER_VETO_MASK'):
@@ -109,7 +114,7 @@ report=dict(scope='exact_Web_consumed_stored_QC_not_replay',qc_uri=p['qc_uri'],
     active_profile_sha256=hashlib.sha256(profile_text.encode()).hexdigest(),
     active_parameters_sha256=profile.parameters_hash,
     stored_parameters_match_active=qroot.attrs.get('qc_parameters_sha256')==profile.parameters_hash,
-    target_gates=len(rows),renderer_eligible_visible_gates=int(visible.sum()),
+    target_gates=len(rows),renderer_eligible_visible_gates=int(visible.sum()),target_records=target_records,
     raw_unchanged=True,stored_attributes=attrs,stored_target_fields=fields,
     product_writes=False,algorithm_replay=False,independent_weather_truth=False)
 print('PUBLISHED_AUDIT '+json.dumps(report,allow_nan=False))

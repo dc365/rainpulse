@@ -1212,3 +1212,60 @@ Goformatonlycorrects spacing inbasemaprangeexpression. Broader local twofile
 suite:40passed/26failed because thislocalvenvlacksarm_pyart2.2.5; notclaimedgreen.
 PerformanceCD sourcesmetadata difference remains uninvestigated; no allCIgreen
 claim. Keep S morphology/actualpublication as the main task.
+
+### Actual v6 published 09:48 residual shape diagnosis, 2026-10-02
+
+The published audit now exports native target indices, azimuth/range, RAW/QC
+measurements and actual QPE/render eligibility. `audit_s_published_residual_shapes.py`
+binds that receipt to the immutable snapshot SHA and scan, then runs both detectors
+on the COMPLETE RAW field; residual selection is applied only to resulting object
+IDs. It cannot issue actions or write products. `fetch_s_published_images.py` binds
+actual PNG paths to the exact diagnostic generation, station, scan and cut.
+
+Actual v6 09:48 NW targets:97, isolated66, still renderable31. Receipt
+`.build/s-discontinuous-20261001/published-v6-0948-native-v2.json`; shape explanation
+`published-v6-0948-shapes-v1.json`. Whole-object candidate covers all31 but strong0:
+27 gates belong to a 33.5km-span,15km-support,1.99degree-width fan with three20km
+windows/four10km physical bins, stable edges and measured/clear shoulder fraction
+0.97297. Four belong to a13.25km-span,6.25km-support,2degree object, aspect0.825,
+shoulder fraction0.84. Both hold `insufficient_object_geometry`; absence of the
+weather proxy is not independent evidence of no weather.
+
+Constellation covers11/31 but strong0. The original angular neighborhood includes
+near-weather parents at~76–82km and remote fragments at~355–459km. Full-group
+lower-parent width/narrowing/weather holds veto the association. The remote short
+segment has29.5km span,10km support but fails complete bilateral observations,
+full-parent hold and center stability. This identifies two distinct next targets:
+original lower-parent/physical-distance separation before association, and strict
+short-object qualification. Do not globally lower length/geometry thresholds or
+remove a shared true-weather parent veto. A new segment must retain every original
+member/history within its independently defined RAW bounds and cannot reanchor or
+grow from a residual.
+
+15 published-lineage/PNG-contract tests pass. Actual RAW and QC PNGs have been
+inspected; remaining NW fragments are visible. No new algorithm activation in this
+diagnostic change. Same live background unit has completed09:48 and proceeds08:18.
+
+### RAW distance partitions, research only
+
+`fragment_constellation.detect(..., partition_evidence=True)` now reports distance
+partitions WITHOUT changing any candidate/action arrays. Every original fragment
+is extended to its complete10dBZ lower-parent interval before a20km physical gap
+can separate it. A shared weak/weather parent spanning a gap must remain together;
+a gap is never treated as measured dry evidence. No failed member is removed.
+Per-partition short assessment retains parent weather/protection and narrowing
+checks. No engine/profile/writer version or production behavior is changed.
+
+Actual09:48 `published-v6-0948-partitions-v2.json`: near-weather parent362 remains
+held; far~354–385km partition no longer inherits its geometry hold. That partition
+still fails complete bilateral observations and center stability (~0.257–0.329deg
+center excursion). Remote~456–459km single fragment fails independent support.
+Thus partitioning alone produces ZERO additional dispositions, explicitly not a
+solution. Next quantify center/boundary uncertainty from native ray sampling and
+measured distance-window evidence before considering a separate short-object
+qualification. Do not tune center tolerance to this case or promote failed evidence.
+
+Related radial+published tests pass (303 collected cases), with six additional
+negative receipt-binding tests passing separately. Default array identity is
+verified with and without partition evidence; a shared lower-weather bridge is
+not split. Source/bounds/known-vs-missing and short-weather counterexamples remain.
