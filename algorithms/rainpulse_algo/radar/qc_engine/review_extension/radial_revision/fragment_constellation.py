@@ -152,12 +152,39 @@ def measured_shoulder_windows(r,dr,columns,known,quiet,protected,charge):
     return decisions,records
 
 
+def measured_parent_footprint(fr,fc,segment,r,z,observed,snr,sa,barred,weather,dr,charge):
+    """One frozen lower-contour footprint; independently verify each weak target."""
+    selected=observed[segment[fr],fc]&~barred[segment[fr],fc]&~weather[segment[fr],fc]
+    charge(len(fc))
+    details=[]
+    for side in (int(fr.min())-1,int(fr.max())+1):
+        if side<0 or side>=len(segment):
+            return np.zeros(len(fc),bool),dict(incomplete_native_boundary=True)
+        row=segment[side]
+        quiet=~observed[row,fc]&sa[row,fc]&(snr[row,fc]<=3)
+        contrast=observed[row,fc]&(z[row,fc]<=z[segment[fr],fc]-6)
+        # The weak target's own contrast is mandatory; a strong core cannot
+        # donate its intensity contrast to this lower-contour observation.
+        selected &= (quiet|contrast)&~barred[row,fc]&~weather[row,fc]
+        reference=float(np.median(z[segment[fr],fc]))
+        known=observed[row]|sa[row]
+        clear=(~observed[row]&sa[row]&(snr[row]<=3))|(observed[row]&(z[row]<=reference-6))
+        confirmed,windows=measured_shoulder_windows(r,dr,fc,known,clear,barred[row]|weather[row],charge)
+        selected &= confirmed
+        details.append(dict(opposing_row=int(row),distance_windows=windows))
+    return selected,dict(independent_weak_target_contrast=True,sides=details,
+                         original_footprint_gates=len(fc),confirmed_gates=int(selected.sum()))
+
+
 def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_evidence=False,
-           shoulder_windows=False,shoulder_band=False, partition_evidence=False, short_subset_evidence=False):
+           shoulder_windows=False,shoulder_band=False, partition_evidence=False, short_subset_evidence=False,
+           short_parent_footprint=False):
     if shoulder_band and not shoulder_windows:
         raise ValueError('bounded shoulder band requires measured window research')
     if short_subset_evidence and not (partition_evidence and shoulder_windows):
         raise ValueError('short subset requires complete partition and measured window evidence')
+    if short_parent_footprint and not short_subset_evidence:
+        raise ValueError('parent footprint requires original short subset evidence')
     r, az, dr, good, gaps = native_geometry(native)
     if native.shape[0] < 3:
         raise ValueError('at least three native rays required')
@@ -176,6 +203,8 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
            PREFIX+'WEATHER_VETO_MASK': weather.astype('uint8')}
     if short_subset_evidence:
         out[PREFIX+'SHORT_RESEARCH_MASK']=np.zeros(native.shape,'uint8')
+    if short_parent_footprint:
+        out[PREFIX+'SHORT_PARENT_RESEARCH_MASK']=np.zeros(native.shape,'uint8')
     steps = (np.diff(az) + 180) % 360 - 180
     positive = steps[steps > 0]
     if not len(positive):
@@ -192,7 +221,7 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
             raise ResourceLimit('constellation work budget exceeded; no partial output')
     for segment in np.split(np.arange(len(az)), np.flatnonzero(breaks)+1):
         angle = np.rad2deg(np.unwrap(np.deg2rad(az[segment])))
-        lower_labels=None; lower_parents={}
+        lower_labels=None; lower_parents={}; lower_footprints={}; parent_window_cache={}
         for level in (10., 20., 35.):
             charge(len(segment)*len(r))
             use = observed[segment] & good[segment, None] & (z[segment] >= level)
@@ -208,6 +237,8 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                 rr += box[0].start; cc += box[1].start
                 charge(len(rr))
                 if level==10.:
+                    if short_parent_footprint:
+                        lower_footprints[ident]=(rr.copy(),cc.copy())
                     lower_parents[ident]=dict(component_id=ident,
                         range_min_m=float(r[cc].min()),range_max_m=float(r[cc].max()+dr),
                         mean_range_m=float(r[cc].mean()),angular_width_deg=float(np.ptp(angle[rr])+spacing),
@@ -403,6 +434,22 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                                 if fragment['ident'] in ids:
                                     out[PREFIX+'SHORT_RESEARCH_MASK'][segment[fragment['rows'][confirmed]],
                                         fragment['cols'][confirmed]]=1
+                            if short_parent_footprint:
+                                footprint_records=[]
+                                # Exactly one hop to parents frozen BEFORE high
+                                # contour grouping. New proposals never supply IDs.
+                                for parent_id in partition['original_lower_parent_ids']:
+                                    if parent_id not in parent_window_cache:
+                                        pr,pc=lower_footprints[parent_id]
+                                        accepted_parent,detail=measured_parent_footprint(pr,pc,segment,r,
+                                            z,observed,snr,sa,barred,weather,dr,charge)
+                                        parent_window_cache[parent_id]=(accepted_parent,detail)
+                                    accepted_parent,detail=parent_window_cache[parent_id]
+                                    pr,pc=lower_footprints[parent_id]
+                                    out[PREFIX+'SHORT_PARENT_RESEARCH_MASK'][segment[pr[accepted_parent]],
+                                        pc[accepted_parent]]=1
+                                    footprint_records.append(dict(original_lower_parent_id=parent_id,**detail))
+                                partition['frozen_parent_footprints']=footprint_records
     return out, dict(objects=records, source_claim=False, recursive_growth=False,
         action_gates=0, research_only=True, shoulder_windows=bool(shoulder_windows),
         shoulder_band=bool(shoulder_band),work=work)

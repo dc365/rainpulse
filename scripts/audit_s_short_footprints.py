@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+"""Compare complete RAW short/weak-parent research masks; never publish QC actions."""
+import argparse
+import hashlib
+import json
+from pathlib import Path
+from types import SimpleNamespace
+
+import numpy as np
+from rainpulse_algo.radar.qc_engine.review_extension.radial_revision.fragment_constellation import detect, PREFIX
+
+
+def replay(path):
+    with np.load(path,allow_pickle=False) as data:
+        a={k:data[k] for k in data.files}
+    meta=json.loads(str(a['METADATA']))
+    if not meta.get('web_frame_identity'):
+        raise ValueError('complete Web-bound native RAW snapshot required')
+    native=SimpleNamespace(shape=a['RAW'].shape,
+        fields={'DBZH':a['RAW'].copy(),**{k[7:]:v for k,v in a.items() if k.startswith('MOMENT_')}},
+        field_available={k[10:]:v for k,v in a.items() if k.startswith('AVAILABLE_')},
+        ranges=a['RANGE'],azimuth=a['AZIMUTH'],geometry_good=a['GEOMETRY_GOOD'],gap_after=a['GAP_AFTER'])
+    blocked=(a['WEATHER']==1)|(a['CONFLICTS']==1)|(a['RV2_BARRED_MASK']==1)
+    options=dict(partition_evidence=True,shoulder_windows=True,short_subset_evidence=True)
+    baseline,_=detect(native,blocked,**options)
+    extended,report=detect(native,blocked,short_parent_footprint=True,**options)
+    if not all(np.array_equal(baseline[k],extended[k]) for k in baseline):
+        raise ValueError('existing detector arrays changed')
+    short=extended[PREFIX+'SHORT_RESEARCH_MASK']==1
+    parent=extended[PREFIX+'SHORT_PARENT_RESEARCH_MASK']==1
+    proposal=short|parent
+    if (proposal&blocked).any() or (proposal&(extended[PREFIX+'WEATHER_VETO_MASK']==1)).any():
+        raise ValueError('protected or weather-proxy overlap')
+    if not np.array_equal(native.fields['DBZH'],a['RAW'],equal_nan=True):
+        raise ValueError('RAW changed')
+    return dict(scan_id=meta['scan_id'],sweep=meta['sweep'],snapshot_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+        short_research_gates=int(short.sum()),parent_research_gates=int(parent.sum()),
+        combined_research_gates=int(proposal.sum()),parent_only_gates=int((parent&~short).sum()),
+        protected_overlap=0,weather_proxy_overlap=0,existing_arrays_unchanged=True,raw_unchanged=True,
+        recursive_growth=report['recursive_growth'])
+
+
+def main():
+    p=argparse.ArgumentParser(description=__doc__)
+    p.add_argument('snapshots',nargs='+',type=Path);p.add_argument('--output',required=True,type=Path)
+    args=p.parse_args()
+    if args.output.exists():raise ValueError('new output required')
+    cuts=[];seen=set()
+    for path in args.snapshots:
+        row=replay(path);identity=(row['scan_id'],row['sweep'])
+        if identity in seen:raise ValueError('duplicate scan/cut')
+        seen.add(identity);cuts.append(row);print(json.dumps(row),flush=True)
+    result=dict(scope='complete_native_RAW_short_parent_research',cuts=cuts,
+        action_authority=False,product_writes=False,independent_weather_truth=False)
+    with args.output.open('x') as f:json.dump(result,f,indent=2);f.write('\n')
+
+
+if __name__=='__main__':main()

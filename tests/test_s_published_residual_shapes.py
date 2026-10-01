@@ -48,3 +48,8 @@ def test_bounded_exterior_band_requires_measured_windows(tmp_path):
 def test_short_subset_cannot_run_without_measured_window_evidence(tmp_path):
     with pytest.raises(ValueError,match='short subset requires measured windows'):
         m.audit(tmp_path/'unused.npz',tmp_path/'unused.json',short_subset=True)
+
+
+def test_parent_footprint_cannot_run_without_short_original_evidence(tmp_path):
+    with pytest.raises(ValueError,match='parent footprint requires short subset evidence'):
+        m.audit(tmp_path/'unused.npz',tmp_path/'unused.json',parent_footprint=True)

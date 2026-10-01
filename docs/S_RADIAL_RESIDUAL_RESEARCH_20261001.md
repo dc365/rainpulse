@@ -1332,3 +1332,31 @@ revalidate weak target observations, never recursively promote newly linked piec
 
 315relatedtestsPASS, plusnewCLIdependencytestPASS; direct34targetedtestsPASS.
 Remaining actualpublishedtarget29notcovered bythisprototype; no deployment.
+
+### One-hop original weak-parent footprint research
+
+`short_parent_footprint=True` requires independently measured short subset evidence.
+At the first10dBZ contour, complete native lower-parent member indices are frozen
+before high-core grouping. A qualified short partition can inspect ONLY those
+original parent IDs; caches cannot introduce new IDs, and proposed gates never
+become anchors. Each weak target revalidates its OWN6dB bilateral contrast (or
+actually measured quietSNR) plus1/2/5km measured shoulder windows, weather and
+protection. A strong core's larger contrast cannot authorize a weaker target.
+Distinct `RV2_CONSTELLATION_SHORT_PARENT_RESEARCH_MASK` remains research only;
+existing production/short/core arrays are unchanged. No engine/writer/profile
+activation. Tests cover unknown shoulders, weak-target contrast failure, original
+weather parents, exact parent-ID confinement, optin dependency and no recursive
+orphan growth.
+
+Actual09:48 fullRAW published-receipt-bound v8:parent research91gates overall,
+9of31actual residual targets nominated versus prior2 (7additional), protected0.
+This is candidate coverage, NOT9newpublishedisolations.22targetsremain. Eight
+complete snapshots in reusable `audit_s_short_footprints.py` replay:combined
+91/0/0/0/0/0/86/38; parent-onlyincrement8/0/0/0/0/0/0/0. Preserved all RAW and
+existing arrays; no weatherproxy/protectedoverlap. The finalbarred-v2 receipt also
+includes capturedRV2_BARRED_MASK (numericplateaus/nativebarriers), unchangedcounts.
+Priorpublished-residual shape helper now includes that engine barrier too.
+
+320relatedtestsPASS. Researchmasksevidence are not independent weather truth;
+remaining parent/segmentholds and actual postdeployment images still required.
+105sameunit3730153active, completed09:48/08:18/08:36/08:42,current10:18.

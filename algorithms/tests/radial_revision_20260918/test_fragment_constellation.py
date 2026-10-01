@@ -373,3 +373,59 @@ def test_short_subset_requires_window_proof_and_keeps_production_arrays_identica
     proposal,_=detect(n,partition_evidence=True,shoulder_windows=True,short_subset_evidence=True)
     for key in base:assert np.array_equal(base[key],proposal[key])
     assert P+'SHORT_RESEARCH_MASK' in proposal
+
+
+def test_weak_parent_target_requires_own_contrast_and_measured_windows():
+    module=load('radial_revision.fragment_constellation')
+    shape=(5,100);z=np.full(shape,np.nan);z[2,20:60]=25.;z[2,30]=10.
+    z[1,:]=5.;z[3,:]=5.
+    observed=np.isfinite(z);snr=np.zeros(shape);sa=np.ones(shape,bool)
+    barred=np.zeros(shape,bool);weather=barred.copy();fc=np.arange(20,60);fr=np.full(len(fc),2)
+    original=z.copy()
+    good,detail=module.measured_parent_footprint(fr,fc,np.arange(5),np.arange(100)*250.,
+        z,observed,snr,sa,barred,weather,250,lambda _:None)
+    assert good.sum()==39 and not good[10]
+    assert detail['independent_weak_target_contrast']
+    assert np.array_equal(z,original,equal_nan=True)
+    # DBZH and SNR both unavailable: never infer quiet/dry support.
+    observed[1,:]=False;sa[1,:]=False
+    good,_=module.measured_parent_footprint(fr,fc,np.arange(5),np.arange(100)*250.,
+        z,observed,snr,sa,barred,weather,250,lambda _:None)
+    assert not good.any()
+
+
+def test_parent_footprint_is_optin_and_cannot_change_existing_arrays():
+    n=fixture()
+    with pytest.raises(ValueError,match='requires original short subset'):
+        detect(n,short_parent_footprint=True)
+    baseline,_=detect(n,partition_evidence=True,shoulder_windows=True,short_subset_evidence=True)
+    extended,_=detect(n,partition_evidence=True,shoulder_windows=True,short_subset_evidence=True,
+        short_parent_footprint=True)
+    for key in baseline:assert np.array_equal(baseline[key],extended[key])
+    assert P+'SHORT_PARENT_RESEARCH_MASK' in extended
+
+
+def test_parent_extension_uses_only_frozen_original_parent_ids_without_recursive_growth():
+    from scipy.ndimage import label
+    n=fixture();n.fields['DBZH'][:]=np.nan;n.field_available['DBZH'][:]=False
+    n.fields['RHOHV']=np.full(n.shape,np.nan);n.field_available['RHOHV']=np.zeros(n.shape,bool)
+    for start in (0,160,800,824,848,872):
+        n.fields['DBZH'][4:7,start:start+10]=15
+        n.fields['DBZH'][4:7,start:start+6]=25
+        n.field_available['DBZH'][4:7,start:start+10]=True
+        if start<800:
+            n.fields['RHOHV'][4:7,start:start+10]=.99
+            n.field_available['RHOHV'][4:7,start:start+10]=True
+            n.fields['SNR'][4:7,start:start+10]=20
+    # Original orphan in another direction is not authorized by new proposals.
+    n.fields['DBZH'][9:12,850:860]=15;n.field_available['DBZH'][9:12,850:860]=True
+    arrays,report=detect(n,partition_evidence=True,shoulder_windows=True,
+        short_subset_evidence=True,short_parent_footprint=True)
+    mask=arrays[P+'SHORT_PARENT_RESEARCH_MASK']==1
+    assert mask.any() and not mask[9:12,850:860].any()
+    assert not mask[:,0:170].any()
+    labels,_=label(n.field_available['DBZH']&(n.fields['DBZH']>=10),np.ones((3,3)))
+    ids={p['original_lower_parent_id'] for o in report['objects']
+         for part in o['original_distance_partitions'] for p in part.get('frozen_parent_footprints',[])}
+    assert not (mask&~np.isin(labels,list(ids))).any()
+    assert not report['recursive_growth'] and report['action_gates']==0
