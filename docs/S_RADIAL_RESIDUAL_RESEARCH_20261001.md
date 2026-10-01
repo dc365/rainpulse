@@ -1042,3 +1042,43 @@ weather and native-gap protection.291 scoped tests passed after cache fix.
 Next investigate genuinely observed multi-cut structure and validate the existing
 successful constellation candidate on real weather/clear-air volumes; neither
 failed window variant justifies weakening missing/weather restrictions.
+
+### 2026-10-02: actual multi-cut check and independent-date complete RAW replay
+
+Read the exact10:42 volume's0.50/2.39-degree REF cuts with reusable capture tool,
+RAW/artifact/native identity retained. Same-radio-coordinate audit of36 remote
+residuals gives low-cut geometric coverage33 but actualDBZH measurements3;
+higher-cut coverage1/actualDBZH0 (range ends329.875km). Two typed independent
+radial-cut support0. This is not weather absence or equivalent-height support.
+Artifacts volume-source-1042-v1 and volume-source-1042-audit-v1.json. Do not
+borrow negative weather evidence from missing/high-cut range limits.
+
+Added reusable audit_s_normalized_morphology.py for frozen exact normalized
+volumes without storedQC. It rejects duplicate/wrong-site/wrong-URI/unbounded
+plans, validates original scan/site, records actual artifact/profile/detector
+hashes, evaluates every native REF cut, checks RAW conservation and no overlap
+with current measured weather proxy. Resource abstentions are explicit. No
+upstream weather/conflict masks or independent weather truth are supplied.
+Optional fullRAW/proposal PNGs use sequence/size/SHA-verified transport. No
+products/actions are written; source-only results are not normalQC acceptance.
+
+Predeclared two sites and UTC00/02/04 first available scans on2026-09-18, the
+user-described clear-air day, frozen before replay. Six volumes54REF cuts all
+EVALUATED, no resource abstention. Candidate strong counts0/0/49 forZ9591 and
+0/2935/0 forZ9598. Measured weather-proxy gates154231, candidate overlap0;
+this proxy count is not154231 independently verified weather gates. RAW unchanged
+on all54. Second actual replay with previews exactly matches first volume/cut
+results and detector hash. Five hash-verified fullRAW/proposal images inspected:
+Z9598 nominees follow visible fragmented radial structures at several angles;
+Z9591 sole nominee follows a remote SWfragment chain. This supports cross-date
+geometry use but does not prove pollution truth, no-weather deletion rates or
+remaining broadfan coverage. Large clear-air radial/fan structures remain outside
+this transverse-fragment detector's coverage.
+
+Frozen local plan/results/5PNGs:
+.build/s-discontinuous-20261001/clear-air-normalized-20260918-v1.
+Two manifest tests and8published-lineage tests pass. Independent weather label
+validation and normal candidateQC→grid→mosaic→PNG/Web publication remain pending.
+Next inspect complete fan and retained-weather-proxy structures on these new
+volumes, then promote only geometry with preserved provenance and actual pipeline
+validation; avoid treating same-date prototype targets as universal acceptance.
