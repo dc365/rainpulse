@@ -138,3 +138,56 @@ def test_independent_weather_support_vetoes_measured_unanchored_object():
     out, _ = evaluate(n, cfg(), weather=hit, independent_weather_available=hit)
     assert not out['RV2_ACTION_PROPOSAL_MASK'][hit].any()
     assert out['RV2_INDEPENDENT_WEATHER_AVAILABLE_MASK'][hit].all()
+
+
+def microfragment_scene():
+    r=np.arange(0.,400000.,250.)
+    z=np.full((11,len(r)),np.nan,'float32')
+    hit=np.zeros(z.shape,bool)
+    for start in np.arange(50000.,350000.,8000.):
+        hit[5,(r>=start)&(r<start+500.)]=True
+    z[hit]=30.
+    n=Native(z,dr=250.,start=0.,fields={'SNR':np.where(hit,12.,0.)})
+    return n,hit
+
+
+def test_microfragment_probe_separates_nomination_from_measured_evidence():
+    n,hit=microfragment_scene(); d=load('radial_revision.discontinuous')
+    blocked=np.zeros(n.shape,bool); raw=n.fields['DBZH'].copy()
+    before,_=d.detect(n,blocked)
+    out,report=d.probe(n,blocked,microfragments=True,measured_noise=True)
+    assert not before['RV2_DISCONTINUOUS_CANDIDATE_MASK'].any()
+    assert np.array_equal(out['RV2_SPARSE_PROBE_CANDIDATE_MASK']==1,hit)
+    assert out['RV2_SPARSE_PROBE_EVIDENCE_MASK'].any()
+    assert report['actions']==0
+    assert 'RV2_DISCONTINUOUS_MASK' not in out
+    np.testing.assert_equal(n.fields['DBZH'],raw)
+    without_noise,_=d.probe(n,blocked,microfragments=True)
+    assert not without_noise['RV2_SPARSE_PROBE_EVIDENCE_MASK'].any()
+
+
+def test_probe_missing_noise_and_weather_barrier_never_supply_evidence():
+    d=load('radial_revision.discontinuous')
+    n,_=microfragment_scene(); n.field_available['SNR'][4]=False
+    out,_=d.probe(n,np.zeros(n.shape,bool),microfragments=True,measured_noise=True)
+    assert not out['RV2_SPARSE_PROBE_EVIDENCE_MASK'].any()
+    n,_=microfragment_scene(); barrier=np.zeros(n.shape,bool);barrier[:,600:1000]=True
+    out,_=d.probe(n,barrier,microfragments=True,measured_noise=True)
+    assert not out['RV2_SPARSE_PROBE_EVIDENCE_MASK'][:,600:1000].any()
+
+
+def test_probe_band_width_is_in_native_beams_and_does_not_change_default_actions():
+    n,hit=microfragment_scene()
+    n.azimuth *= .5
+    n.fields['DBZH'][4:8,hit[5]]=30.
+    n.fields['SNR'][4:8,hit[5]]=12.
+    n.field_available['DBZH']=np.isfinite(n.fields['DBZH'])
+    blocked=np.zeros(n.shape,bool); d=load('radial_revision.discontinuous')
+    narrow,_=d.probe(n,blocked,microfragments=True,measured_noise=True)
+    wider,report=d.probe(n,blocked,microfragments=True,measured_noise=True,
+        maximum_half_beams=3,maximum_width_deg=3.)
+    assert not narrow['RV2_SPARSE_PROBE_CANDIDATE_MASK'].any()
+    assert wider['RV2_SPARSE_PROBE_CANDIDATE_MASK'].any()
+    assert report['actions']==0
+    defaults,_=d.detect(n,blocked)
+    assert not defaults['RV2_DISCONTINUOUS_MASK'].any()

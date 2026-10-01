@@ -1,5 +1,27 @@
 # S-band bounded radial deployment, 2026-10-01
 
+## Current verified state (supersedes initial v3 launch below)
+
+Both primary S workers are healthy on
+`rainpulse-cpu-worker:s-bounded-radial-20261001-v4`. Active profile SHA256:
+`ebaa36fa24c147ebc4b4975062a9e4c39cbdd1623685e2d581e92ba3a660db68`.
+The rebuilt orchestrator includes `dff524c`, binding downstream jobs to immutable
+QC/grid inputs. Background state is RUNNING, with 08:18 completed and 08:36 in
+progress. Current log is `run-lineage-v2.log`; earlier grid receipts are superseded.
+
+The normal 08:18 chain completed QC, grid, mosaic, QPE and diagnostics. Web cycle
+detail selected analysis `cb2e4c83-bb33-521b-8340-21afe904a7bb` and diagnostic
+job `79c0f459-4caf-5457-ba16-26c4fb8325b3` for the raw/QC/composite frames. The
+served `grid-dbzh-qc` PNG was downloaded and visually inspected. Discrete radial
+residuals remain; publication success does not establish complete QC removal.
+
+The microfragment/noise factorial probe is a reusable offline diagnostic with
+zero actions and no QC product writes. It is not enabled in production. Its
+default `detect` entry retains existing production conditions. New diagnostics
+and regression tests are committed separately from unrelated decoder/X work.
+
+## Initial launch history
+
 Algorithm commit: `5f639fcd39feb1a1e3cce7d3261246cd98ef54f6` (main and origin/main).
 105 image: `rainpulse-cpu-worker:s-bounded-radial-20261001-v3`.
 Both primary S QC workers healthy; X workers were not restarted.
