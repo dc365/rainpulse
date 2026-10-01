@@ -24,3 +24,18 @@ def test_manifest_identity_changes_with_scope_and_release():
     original = {"scans": ["a", "b"], "network_sha256": "old"}
     assert module.digest(original) != module.digest({**original, "scans": ["a"]})
     assert module.digest(original) != module.digest({**original, "network_sha256": "new"})
+
+
+def test_raw_batch_rejects_decoder_configuration_drift(tmp_path):
+    import hashlib
+    import pytest
+    raw_spec = importlib.util.spec_from_file_location("raw_acceptance", Path(__file__).parents[1] / "scripts/audit_xqc_raw.py")
+    raw_module = importlib.util.module_from_spec(raw_spec)
+    raw_spec.loader.exec_module(raw_module)
+    config = tmp_path / "zf101.yaml"
+    config.write_bytes(b"frozen decoder")
+    expected = hashlib.sha256(config.read_bytes()).hexdigest()
+    assert raw_module.verify_config(config, expected) == b"frozen decoder"
+    config.write_bytes(b"changed decoder")
+    with pytest.raises(ValueError, match="frozen batch identity"):
+        raw_module.verify_config(config, expected)

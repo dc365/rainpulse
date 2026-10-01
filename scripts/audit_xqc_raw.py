@@ -16,7 +16,14 @@ import uuid
 from datetime import datetime, timezone
 
 
-def process_file(record, network, root, configs, parent_sha):
+def verify_config(path, expected):
+    data = path.read_bytes()
+    if hashlib.sha256(data).hexdigest() != expected:
+        raise ValueError("decoder config differs from frozen batch identity")
+    return data
+
+
+def process_file(record, network, root, configs, parent_sha, config_identities):
     import numpy as np
     import zarr
     from zarr.storage import MemoryStore
@@ -41,7 +48,7 @@ def process_file(record, network, root, configs, parent_sha):
     if root.resolve() not in path.resolve().parents:
         raise ValueError("source escapes frozen read-only root")
     config_path = configs / (sid + ".yaml")
-    config_bytes = config_path.read_bytes()
+    config_bytes = verify_config(config_path, config_identities[sid])
     config = load_radar_config(config_path)
     if config_path.read_bytes() != config_bytes:
         raise ValueError("decoder config changed during load")
@@ -115,11 +122,13 @@ def main():
     parser.add_argument("--raw-sha256", required=True)
     parser.add_argument("--configs", type=Path, required=True)
     parser.add_argument("--limit-files", type=int)
+    parser.add_argument("--config-identities", type=Path, required=True)
     args = parser.parse_args()
     manifest = json.load(sys.stdin)
     sha = manifest.pop("manifest_sha256")
     if digest(manifest) != sha or hashlib.sha256(args.raw_records.read_bytes()).hexdigest() != args.raw_sha256:
         raise ValueError("frozen source/network manifest changed")
+    config_identities = json.loads(args.config_identities.read_text())
     network = Network.from_bytes(json.dumps(manifest["network"]).encode())
     count = 0
     for line in args.raw_records.read_text().splitlines():
@@ -130,8 +139,10 @@ def main():
             break
         count += 1
         try:
-            for result in process_file(record, network, args.raw_root, args.configs, manifest["network_sha256"]):
+            for result in process_file(record, network, args.raw_root, args.configs, manifest["network_sha256"], config_identities):
                 print(json.dumps({"manifest_sha256": sha, "raw_manifest_sha256": args.raw_sha256, **result}), flush=True)
+            print(json.dumps({"scan_id": record["sha256"], "radar_id": record["radar_id"],
+                              "raw_sha256": record["sha256"], "state": "RAW_FILE_COMPLETE"}), flush=True)
         except Exception as error:
             print(json.dumps({"scan_id": record["sha256"], "radar_id": record["radar_id"],
                               "raw_sha256": record["sha256"], "state": "FAIL", "failures": ["RAW_COMPUTE_ERROR"],

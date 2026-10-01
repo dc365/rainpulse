@@ -52,7 +52,13 @@ def main():
                       "-v", str(args.configs.resolve()) + ":/configs:ro",
                       "-v", str((args.raw_inventory / "raw-files.jsonl").resolve()) + ":/opt/raw-files.jsonl:ro",
                       "-v", str(args.gate_script.resolve()) + ":/opt/xqc_acceptance.py:ro"]
-        raw_args = ["--raw-root", "/inputs", "--raw-records", "/opt/raw-files.jsonl", "--configs", "/configs",
+        identities = {p.stem: hashlib.sha256(p.read_bytes()).hexdigest()
+                      for p in args.configs.glob("*.yaml")}
+        identities_path = folder.resolve() / "decoder-config-identities.json"
+        with identities_path.open("x") as target:
+            json.dump(identities, target, sort_keys=True)
+        raw_mounts += ["-v", str(identities_path) + ":/opt/decoder-config-identities.json:ro"]
+        raw_args = ["--config-identities", "/opt/decoder-config-identities.json", "--raw-root", "/inputs", "--raw-records", "/opt/raw-files.jsonl", "--configs", "/configs",
                     "--raw-sha256", raw_state["manifest_sha256"]]
         if args.limit_files is not None:
             raw_args += ["--limit-files", str(args.limit_files)]
