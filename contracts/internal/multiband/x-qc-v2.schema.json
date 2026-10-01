@@ -2454,7 +2454,8 @@
           "enum": [
             "x-polar-morphology-20261001-v1",
             "x-polar-morphology-20261002-v2",
-            "x-polar-morphology-20261002-v3"
+            "x-polar-morphology-20261002-v3",
+            "x-polar-morphology-20261002-v4"
           ]
         },
         "local_weather_policy": {
@@ -2608,6 +2609,11 @@
           "default": false,
           "title": "Anchored Fans Enabled",
           "type": "boolean"
+        },
+        "pulsing_fans_enabled": {
+          "type": "boolean",
+          "default": false,
+          "title": "Pulsing Fans Enabled"
         }
       },
       "title": "MorphologyPolicy",
@@ -2629,7 +2635,8 @@
               "version": {
                 "enum": [
                   "x-polar-morphology-20261002-v2",
-                  "x-polar-morphology-20261002-v3"
+                  "x-polar-morphology-20261002-v3",
+                  "x-polar-morphology-20261002-v4"
                 ]
               }
             },
@@ -2652,7 +2659,10 @@
           "then": {
             "properties": {
               "version": {
-                "const": "x-polar-morphology-20261002-v3"
+                "enum": [
+                  "x-polar-morphology-20261002-v3",
+                  "x-polar-morphology-20261002-v4"
+                ]
               },
               "expanding_fans_enabled": {
                 "const": true
@@ -2660,6 +2670,36 @@
             },
             "required": [
               "version",
+              "expanding_fans_enabled"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "pulsing_fans_enabled": {
+                "const": true
+              }
+            },
+            "required": [
+              "pulsing_fans_enabled"
+            ]
+          },
+          "then": {
+            "properties": {
+              "version": {
+                "const": "x-polar-morphology-20261002-v4"
+              },
+              "anchored_fans_enabled": {
+                "const": true
+              },
+              "expanding_fans_enabled": {
+                "const": true
+              }
+            },
+            "required": [
+              "version",
+              "anchored_fans_enabled",
               "expanding_fans_enabled"
             ]
           }

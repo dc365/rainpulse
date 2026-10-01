@@ -23,9 +23,11 @@ class MorphologyPolicy(BaseModel):
         "x-polar-morphology-20261001-v1",
         "x-polar-morphology-20261002-v2",
         "x-polar-morphology-20261002-v3",
+        "x-polar-morphology-20261002-v4",
     ] = "x-polar-morphology-20261001-v1"
     expanding_fans_enabled: bool = False
     anchored_fans_enabled: bool = False
+    pulsing_fans_enabled: bool = False
     local_weather_policy: Literal["protect", "joint_review"] = "protect"
     scales_m: tuple[Annotated[float, Field(ge=2000.0, le=20000.0)], ...] = Field(
         default=(5000.0, 10000.0),
@@ -63,12 +65,20 @@ class MorphologyPolicy(BaseModel):
         if self.expanding_fans_enabled and self.version not in (
             "x-polar-morphology-20261002-v2",
             "x-polar-morphology-20261002-v3",
+            "x-polar-morphology-20261002-v4",
         ):
             raise ValueError("expanding fan geometry requires v2 or v3 identity")
         if self.anchored_fans_enabled and (
-            self.version != "x-polar-morphology-20261002-v3" or not self.expanding_fans_enabled
+            self.version not in ("x-polar-morphology-20261002-v3", "x-polar-morphology-20261002-v4")
+            or not self.expanding_fans_enabled
         ):
-            raise ValueError("anchored fan requires v3 expanding geometry identity")
+            raise ValueError("anchored fan requires v3/v4 expanding geometry identity")
+        if self.pulsing_fans_enabled and (
+            self.version != "x-polar-morphology-20261002-v4"
+            or not self.anchored_fans_enabled
+            or not self.expanding_fans_enabled
+        ):
+            raise ValueError("pulsing fan requires explicit v4 and anchored expanding branches")
         if (
             not self.scales_m
             or not self.levels_dbz
@@ -238,6 +248,26 @@ def detect(sweep, policy, *, protected=None):
             and growth > 2 * p.boundary_tolerance_rays
             and float(widths.max()) <= p.maximum_width_deg
         )
+        # A stationary original edge can retain a radial object whose opposite
+        # edge expands then returns. Keep every original window: the envelope
+        # may never contract below its initial width beyond the same two-edge
+        # sampling uncertainty. This rejects one-sided constant-km rain ribbons
+        # rather than restarting at their narrow far tail. Only observed body
+        # members qualify; no inheritance into adjacent branches or holes.
+        initial_contraction = float(
+            np.max(np.maximum(widths[0] - widths, 0) / np.maximum(footprints, 1e-6))
+        )
+        peak_growth = float(
+            np.max((widths - widths[0]) / np.maximum((footprints + footprints[0]) / 2, 1e-6))
+        )
+        pulsing = (
+            p.pulsing_fans_enabled
+            and anchored
+            and initial_contraction <= 2 * p.boundary_tolerance_rays + 1e-6
+            and peak_growth > 2 * p.boundary_tolerance_rays
+            and normalized_narrowing > 2 * p.boundary_tolerance_rays
+            and float(widths.max()) <= p.maximum_width_deg
+        )
         cols0 = entries[0]["cols"]
         cols1 = entries[-1]["cols"]
         begin = float(sweep.ranges[cols0[0]])
@@ -256,11 +286,14 @@ def detect(sweep, policy, *, protected=None):
             and len(entries) >= p.minimum_windows
             and span >= p.minimum_span_m
             and support >= p.minimum_support_fraction * span
-            and (normalized_excursion <= p.boundary_tolerance_rays + 1e-6 or expanding)
+            and (normalized_excursion <= p.boundary_tolerance_rays + 1e-6 or expanding or pulsing)
             and width <= p.maximum_width_deg
             and np.all(per_side_known >= p.minimum_flank_fraction * side_total)
             and np.all(per_side_clear >= p.minimum_flank_fraction * side_total)
-            and (not (fan or expanding) or end / max(begin, sweep.dr) >= p.minimum_fan_range_ratio)
+            and (
+                not (fan or expanding or pulsing)
+                or end / max(begin, sweep.dr) >= p.minimum_fan_range_ratio
+            )
         )
         if not qualified:
             if span >= p.minimum_span_m / 2:
@@ -288,6 +321,9 @@ def detect(sweep, policy, *, protected=None):
                         maximum_narrowing_native_footprints=normalized_narrowing,
                         width_growth_native_footprints=growth,
                         expanding_shape_qualified=bool(expanding),
+                        pulsing_shape_qualified=bool(pulsing),
+                        maximum_initial_contraction_native_footprints=initial_contraction,
+                        maximum_peak_growth_native_footprints=peak_growth,
                         ambiguous=track["ambiguous"],
                         scale_m=scale,
                         level_dbz=level,
@@ -309,7 +345,9 @@ def detect(sweep, policy, *, protected=None):
             ids[np.ix_(rows, cols)] = ii
             members += int(block.sum())
         kind = (
-            (
+            "anchored_pulsing_fan"
+            if pulsing
+            else (
                 "anchored_expanding_fan"
                 if anchored and center_excursion > p.boundary_tolerance_rays + 1e-6
                 else "expanding_fan"
@@ -346,6 +384,8 @@ def detect(sweep, policy, *, protected=None):
                 maximum_center_excursion_native_footprints=center_excursion,
                 maximum_narrowing_native_footprints=normalized_narrowing,
                 width_growth_native_footprints=growth,
+                maximum_initial_contraction_native_footprints=initial_contraction,
+                maximum_peak_growth_native_footprints=peak_growth,
                 member_gates=members,
                 maximum_flank_offset_deg=max(e["maximum_flank_offset_deg"] for e in entries),
                 source_verified=False,

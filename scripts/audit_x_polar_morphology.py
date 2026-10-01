@@ -121,19 +121,30 @@ def main():
         action="store_true",
         help="Explicit v3 original stable-edge expanding geometry; read-only",
     )
+    parser.add_argument(
+        "--pulsing-fans",
+        action="store_true",
+        help="Explicit v4 original anchored pulsing geometry; read-only",
+    )
     args = parser.parse_args()
     with ExitStack() as stack:
         if args.source_only:
             run_source_only(
                 stack,
-                expanding_fans=args.expanding_fans or args.anchored_fans,
-                anchored_fans=args.anchored_fans,
+                expanding_fans=args.expanding_fans
+                or args.anchored_fans
+                or args.pulsing_fans,
+                anchored_fans=args.anchored_fans or args.pulsing_fans,
+                pulsing_fans=args.pulsing_fans,
             )
         else:
             run(
                 stack,
-                expanding_fans=args.expanding_fans or args.anchored_fans,
-                anchored_fans=args.anchored_fans,
+                expanding_fans=args.expanding_fans
+                or args.anchored_fans
+                or args.pulsing_fans,
+                anchored_fans=args.anchored_fans or args.pulsing_fans,
+                pulsing_fans=args.pulsing_fans,
             )
 
 
@@ -212,22 +223,27 @@ def source_cut_keys(keys, number):
     ]
 
 
-def policy_for_audit(expanding_fans=False, *, anchored_fans=False):
+def policy_for_audit(expanding_fans=False, *, anchored_fans=False, pulsing_fans=False):
     return MorphologyPolicy(
         version=(
-            "x-polar-morphology-20261002-v3"
+            "x-polar-morphology-20261002-v4"
+            if pulsing_fans
+            else "x-polar-morphology-20261002-v3"
             if anchored_fans
             else "x-polar-morphology-20261002-v2"
             if expanding_fans
             else "x-polar-morphology-20261001-v1"
         ),
-        expanding_fans_enabled=expanding_fans or anchored_fans,
-        anchored_fans_enabled=anchored_fans,
+        expanding_fans_enabled=expanding_fans or anchored_fans or pulsing_fans,
+        anchored_fans_enabled=anchored_fans or pulsing_fans,
+        pulsing_fans_enabled=pulsing_fans,
         local_weather_policy="joint_review",
     )
 
 
-def run_source_only(stack, *, expanding_fans=False, anchored_fans=False):
+def run_source_only(
+    stack, *, expanding_fans=False, anchored_fans=False, pulsing_fans=False
+):
     """Bounded raw-only evidence; never invent old survivors or weather labels."""
     import os
     from rainpulse_algo.multiband.model import Network
@@ -263,7 +279,9 @@ def run_source_only(stack, *, expanding_fans=False, anchored_fans=False):
         clutter_enabled=False,
         isolation_enabled=False,
     )
-    policy = policy_for_audit(expanding_fans, anchored_fans=anchored_fans)
+    policy = policy_for_audit(
+        expanding_fans, anchored_fans=anchored_fans, pulsing_fans=pulsing_fans
+    )
     cuts = []
     for number in numbers:
         stamp = time.monotonic()
@@ -362,7 +380,7 @@ def run_source_only(stack, *, expanding_fans=False, anchored_fans=False):
     )
 
 
-def run(stack, *, expanding_fans=False, anchored_fans=False):
+def run(stack, *, expanding_fans=False, anchored_fans=False, pulsing_fans=False):
     from rainpulse_algo.multiband.model import Network
     import os
 
@@ -391,7 +409,9 @@ def run(stack, *, expanding_fans=False, anchored_fans=False):
         clutter_enabled=False,
         isolation_enabled=False,
     )
-    policy = policy_for_audit(expanding_fans, anchored_fans=anchored_fans)
+    policy = policy_for_audit(
+        expanding_fans, anchored_fans=anchored_fans, pulsing_fans=pulsing_fans
+    )
     cuts = []
     from rainpulse_algo.multiband.adapters import read_x_qc_sweep
 

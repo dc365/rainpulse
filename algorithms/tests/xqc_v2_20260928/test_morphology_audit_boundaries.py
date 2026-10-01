@@ -297,8 +297,29 @@ def test_cli_expanding_policy_is_explicit_and_routes_to_bounded_audit(
     monkeypatch.setattr(module, "run", lambda stack, **kw: calls.append((False, kw)))
     monkeypatch.setattr(module, "run_source_only", lambda stack, **kw: calls.append((True, kw)))
     module.main()
-    assert calls == [(source, {"expanding_fans": expanding, "anchored_fans": anchored})]
+    assert calls == [
+        (source, {"expanding_fans": expanding, "anchored_fans": anchored, "pulsing_fans": False})
+    ]
     p = module.policy_for_audit(expanding, anchored_fans=anchored)
     assert p.expanding_fans_enabled == expanding and p.local_weather_policy == "joint_review"
     assert p.anchored_fans_enabled == anchored
     assert p.version.endswith("v3" if anchored else ("v2" if expanding else "v1"))
+
+
+@pytest.mark.parametrize("source", [False, True])
+def test_cli_routes_explicit_pulsing_geometry_as_read_only_v4(monkeypatch, source):
+    import sys
+
+    module = audit()
+    calls = []
+    monkeypatch.setattr(
+        sys, "argv", ["audit", "--pulsing-fans"] + (["--source-only"] if source else [])
+    )
+    monkeypatch.setattr(module, "run", lambda stack, **kw: calls.append((False, kw)))
+    monkeypatch.setattr(module, "run_source_only", lambda stack, **kw: calls.append((True, kw)))
+    module.main()
+    assert calls == [
+        (source, {"expanding_fans": True, "anchored_fans": True, "pulsing_fans": True})
+    ]
+    p = module.policy_for_audit(pulsing_fans=True)
+    assert p.version.endswith("v4") and p.pulsing_fans_enabled and p.anchored_fans_enabled

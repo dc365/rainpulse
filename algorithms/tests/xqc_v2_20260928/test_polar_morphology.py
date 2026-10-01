@@ -625,7 +625,8 @@ def test_anchor_does_not_follow_both_moving_edges_even_if_width_increases():
     assert not detect(s, p).mask.any()
 
 
-def test_v3_original_anchor_fan_enters_normal_qc_as_candidate_only():
+@pytest.mark.parametrize("version,pulsing", [("v3", False), ("v4", True)])
+def test_original_anchor_fan_enters_normal_qc_as_candidate_only(version, pulsing):
     from rainpulse_algo.multiband.model import Sweep as XCut
     from rainpulse_algo.multiband.model import Volume
     from rainpulse_algo.multiband.quality import x_qc
@@ -635,6 +636,8 @@ def test_v3_original_anchor_fan_enters_normal_qc_as_candidate_only():
     s, _ = expanding_scene()
     offset = (s.azimuth[:, None] - 100 + 180) % 360 - 180
     grow = np.clip(np.floor((s.ranges - 5000) / 10000) / 4, 0, 1)[None, :] * 8
+    if pulsing:
+        grow = np.where((s.ranges >= 15000) & (s.ranges < 35000), 6, 0)[None, :]
     body = (offset >= -1) & (offset <= 1 + grow)
     body &= (s.ranges[None, :] >= 5000) & (s.ranges[None, :] < 55000)
     fields = {
@@ -646,9 +649,10 @@ def test_v3_original_anchor_fan_enters_normal_qc_as_candidate_only():
     cut = XCut(0, s.azimuth, s.ranges, s.elevation, 1787875200.0 + s.ray_time_s, fields)
     parent, _ = fixture("empty")
     policy = MorphologyPolicy(
-        version="x-polar-morphology-20261002-v3",
+        version="x-polar-morphology-20261002-" + version,
         expanding_fans_enabled=True,
         anchored_fans_enabled=True,
+        pulsing_fans_enabled=pulsing,
         local_weather_policy="joint_review",
     )
     cfg = config(
@@ -669,3 +673,96 @@ def test_v3_original_anchor_fan_enters_normal_qc_as_candidate_only():
     assert not np.isfinite(arrays["DBZH_QC"][body]).any()
     np.testing.assert_array_equal(arrays["DBZH_RAW"], raw)
     np.testing.assert_array_equal(cut.fields["DBZH"], raw)
+
+
+def pulsing_scene(*, bearing=100.0, shrinking=False, moving=False):
+    s, _ = expanding_scene(bearing=bearing)
+    offset = (s.azimuth[:, None] - bearing + 180) % 360 - 180
+    distance = s.ranges[None, :]
+    width = np.where(distance < 15000, 2, np.where(distance < 35000, 8, 2))
+    if shrinking:
+        width = np.degrees(np.arctan2(2500, distance))
+    left = -1 + np.clip((distance - 5000) / 50000, 0, 1) * 8 if moving else -1
+    body = (offset >= left) & (offset <= left + width)
+    body &= (distance >= 5000) & (distance < 55000)
+    fields = {
+        "DBZH": np.where(body, 20, 0).astype("float32"),
+        "SNR": np.where(body, 15, -2).astype("float32"),
+    }
+    return replace(s, fields=fields), body
+
+
+def pulse_policy():
+    return MorphologyPolicy(
+        version="x-polar-morphology-20261002-v4",
+        expanding_fans_enabled=True,
+        anchored_fans_enabled=True,
+        pulsing_fans_enabled=True,
+    )
+
+
+@pytest.mark.parametrize("bearing", [100.0, 359.0])
+def test_pulsing_fan_retains_original_anchor_and_all_range_history(bearing):
+    s, body = pulsing_scene(bearing=bearing)
+    v3 = MorphologyPolicy(
+        version="x-polar-morphology-20261002-v3",
+        expanding_fans_enabled=True,
+        anchored_fans_enabled=True,
+    )
+    assert not detect(s, v3).mask.any()
+    before = s.digest
+    ev = detect(s, pulse_policy())
+    assert ev.mask[body].all() and not ev.mask[~body].any()
+    assert any(o["kind"] == "anchored_pulsing_fan" for o in ev.objects)
+    assert s.digest == before
+
+
+@pytest.mark.parametrize("kwargs", [{"shrinking": True}, {"moving": True}])
+def test_pulsing_branch_rejects_one_sided_constant_km_ribbon_or_moving_anchor(kwargs):
+    s, _ = pulsing_scene(**kwargs)
+    assert not detect(s, pulse_policy()).mask.any()
+
+
+@pytest.mark.parametrize("kind", ["fixed_km", "curved", "blob"])
+def test_pulsing_branch_preserves_weather_counterexamples(kind):
+    s, _ = scene(kind)
+    assert not detect(s, pulse_policy()).mask.any()
+
+
+def test_pulsing_branch_cannot_cross_missing_shoulders_protection_or_resource_limit():
+    s, body = pulsing_scene()
+    available = {k: v.copy() for k, v in s.available.items()}
+    for value in available.values():
+        value[~body] = False
+    assert not detect(replace(s, available=available), pulse_policy()).mask.any()
+    assert not detect(s, pulse_policy(), protected=np.ones(s.shape, bool)).mask.any()
+    with pytest.raises(ResourceLimit):
+        detect(s, pulse_policy().model_copy(update={"maximum_work": 1}))
+
+
+def test_pulsing_identity_and_contract_are_explicit():
+    import json
+    from pathlib import Path
+
+    import jsonschema
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        MorphologyPolicy(version="x-polar-morphology-20261002-v3", pulsing_fans_enabled=True)
+    p = pulse_policy()
+    schema = json.loads(
+        (
+            Path(__file__).resolve().parents[3] / "contracts/internal/multiband/x-qc-v2.schema.json"
+        ).read_text()
+    )
+    validator = jsonschema.Draft202012Validator(schema)
+    validator.validate({"morphology": p.model_dump(mode="json")})
+    for key, value in [
+        ("version", "x-polar-morphology-20261002-v3"),
+        ("anchored_fans_enabled", False),
+        ("expanding_fans_enabled", False),
+    ]:
+        invalid = p.model_dump(mode="json")
+        invalid[key] = value
+        with pytest.raises(jsonschema.ValidationError):
+            validator.validate({"morphology": invalid})
