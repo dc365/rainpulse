@@ -132,7 +132,13 @@ def source_cut_numbers(keys, declared_numbers=None):
         group = key.split("/", 1)[0]
         match = re.fullmatch(r"sweep_([0-9]{3})", group)
         if match is None:
-            raise ValueError("invalid native sweep number")
+            parts = key.split("/", 2)
+            # Normalized volumes also have root sweep_start/end_ray_index
+            # arrays. They are coordinates, never native cut groups.
+            if (len(parts) > 2 or parts[1] == ".zgroup"
+                    or re.fullmatch(r"sweep_[0-9]+", group)):
+                raise ValueError("invalid native sweep number")
+            continue
         number = int(match[1])
         all_numbers.add(number)
         if len(all_numbers) > 64:

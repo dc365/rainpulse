@@ -115,6 +115,9 @@ def test_source_inventory_preserves_native_numbers_and_bounds_all_cuts():
     with pytest.raises(ValueError, match='declared'):
         module.source_cut_numbers(['sweep_008/DBZH/.zarray'], [8, 10])
     assert module.source_cut_numbers(['sweep_008/DBZH/.zarray'], [8]) == [8]
+    assert module.source_cut_numbers(['sweep_mode/.zarray',
+        'sweep_start_ray_index/0', 'sweep_end_ray_index/.zattrs',
+        'sweep_008/.zgroup', 'sweep_008/DBZH/.zarray'], [8]) == [8]
     with pytest.raises(ValueError, match='64'):
         module.source_cut_numbers([f'sweep_{i:03d}/VR/.zarray' for i in range(65)])
     with pytest.raises(ValueError, match='reflectivity'):
