@@ -76,3 +76,5 @@
 - ZF70108:07:21未指定result的精确scan链接，在实际浏览器自动选中新result4e8bd8ce….d8150533…；第0层完整截图确认双地图加载、宽扇形主体在QC图不再显示。这不是独立天气误删证明；扣留/隔离语义以数值证据为准。后续仰角循环CUA超时未算通过，再次选择同一页也超时。
 - 原问题taskbc376635…实际attempt24a157aa…RUNNING/COMPUTE，07:23:18Z新鲜heartbeat、lease到07:25:18Z，MB-3约1CPU/1.3GiB，任务未重启。观察driver2217431按20分钟界限退出WAITING_TASKS（确认进程消失）；新observer2387501继续同一5任务的只读轮询/产品审计，未创建新任务或重启计算。原观察状态和恢复回执留在105fixed-five目录。
 - raw-summary-04逐一关联冻结5466SHA，545文件有回执、539机械完成、4927待完成，源身份错误0、已完成失败0；不能外推余下文件通过。UTC/CST覆盖9行仍是部分站/部分时段，未证明全天完整。
+
+- 07:29Z最终更新：原问题taskbc376635…已正常SUCCEEDED且9REF层审核完成，observer2387501正常结束NORMAL_PUBLICATION_AUDITED。六必测共54层，52机械通过，原ZF702第2/9层仅CUT_ACTION_BUDGET_ABSTAINED失败；两层source_complete、RAW/几何/时间、4PNG均核验，withheld-visible/admitted/hard-weather-rejected均0。正常任务成功不是预算决策通过；两层仍阻塞验收。最终回执SHA5e0397769a3fe4d01336bb6ffef6dfc593b72ea481351522f381f8b100dafa72。
