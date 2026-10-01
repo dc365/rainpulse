@@ -1165,3 +1165,26 @@ No new fields are required to read version1 proof. Audit still makes no actions,
 geometry qualification enters the existing disposition path after original source
 identities are frozen. Integration tests exercise both versions, action/audit,
 RAW and native-order validation. Production activation remains pending.
+
+### Eight target engine replays and v6 deployment profile, 2026-10-02
+
+Reusable audit_s_physical_windows.py compares complete native Web-bound RAW
+snapshots under legacy whole-object and v2 branches, independently validates
+writer proof, preserves source IDs and RAW, rejects lost legacy dispositions
+or protected-mask overlap, and never publishes products. Eight frozen cases
+0948/1018/1024/1042/1124/0818/0836/0842 all passed. Physical windows alone adds
+0/0/0/0/0/0/0/79 proposals. Together with the previously reviewed bounded fragment
+constellation, additions are134/55/50/0/1/0/39/134 (413 total), protected overlap0.
+The supplied protection masks contain2141 observations total, but are not an
+independent weather truth label set. No claim of complete contamination removal.
+The1042 and0818 residual problems remain uncovered by these additions.
+
+New s-physical-constellation-20261002-v6 profile enables both reviewed branches,
+retains pipeline contract7.3.9, and has distinct child profile/version/parameter
+hash; fileSHA91d7f00a5b26bba86f4f3af7cd068dafbe16757a9e2116cace9184d73d0b46c4.
+Compose selects installed candidate image s-physical-windows-0b417e3-candidate.
+Versioned geometry proof identifies physical-window v2 independently of the
+pipeline contract. Other profile settings remain inherited fromv5. Initial
+attempts to invent pipeline7.3.10 or omit review-child naming were rejected by
+profile validation and corrected before deployment. Installed combined engine
+replay is also required before activating this profile.

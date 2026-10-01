@@ -1,0 +1,3 @@
+services:
+  radar-qc-worker:
+    image: rainpulse-cpu-worker:s-physical-windows-0b417e3-candidate
