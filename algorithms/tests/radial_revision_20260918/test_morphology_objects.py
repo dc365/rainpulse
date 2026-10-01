@@ -21,9 +21,9 @@ def fixture(dr=500., spacing=1., *, short=False, fan=False, noise=True):
     return n
 
 
-def detect(n, blocked=None):
+def detect(n, blocked=None, **options):
     blocked = np.zeros(n.shape, bool) if blocked is None else blocked
-    return load('radial_revision.morphology_objects').detect(n, blocked)
+    return load('radial_revision.morphology_objects').detect(n, blocked, **options)
 
 
 @pytest.mark.parametrize('dr', [250., 500., 1000.])
@@ -138,7 +138,8 @@ def test_original_evidence_replay_rejects_forgery_and_exhaustion():
         module.detect(n, blocked, beam_width=float('nan'))
 
 
-def test_fixed_kilometre_weather_band_is_not_a_fixed_angle_fan():
+@pytest.mark.parametrize('physical_windows', [False, True])
+def test_fixed_kilometre_weather_band_is_not_a_fixed_angle_fan(physical_windows):
     r = np.arange(0., 300000., 500.)
     angles = (np.arange(121)-60)*.25
     # A resolved straight 8km-wide precipitation band: its angular shoulders
@@ -148,7 +149,7 @@ def test_fixed_kilometre_weather_band_is_not_a_fixed_angle_fan():
     z = np.where(body, 25., np.nan).astype('float32')
     n = Native(z, dr=500., start=0., fields={'SNR': np.where(body, 8., -2.)})
     n.azimuth = angles % 360.
-    arrays, _ = detect(n)
+    arrays, _ = detect(n, physical_windows=physical_windows)
     assert not arrays[P+'STRONG_MASK'].any()
 
 
@@ -168,10 +169,12 @@ def test_full_ppi_native_array_seam_has_real_shoulders_but_sector_does_not_wrap(
     assert not arrays[P+'STRONG_MASK'][n.field_available['DBZH']].any()
 
 
-def test_opt_in_engine_geometry_disposition_and_audit_preserve_source_identity():
+@pytest.mark.parametrize('physical_windows', [False, True])
+def test_opt_in_engine_geometry_disposition_and_audit_preserve_source_identity(physical_windows):
     n = fixture()
     cfg = load('radial_revision.config').RadialRevisionConfig(step=3,
-        mode='experiment_quarantine', fragment_line={'whole_object_morphology_enabled': True})
+        mode='experiment_quarantine', fragment_line={'whole_object_morphology_enabled': True,
+            'whole_object_physical_windows_enabled': physical_windows})
     fields, report = evaluate(n, cfg)
     hit = fields[P+'STRONG_MASK'] == 1
     assert hit.any() and fields['RV2_ACTION_PROPOSAL_MASK'][hit].all()
@@ -183,22 +186,30 @@ def test_opt_in_engine_geometry_disposition_and_audit_preserve_source_identity()
     assert np.array_equal(audit[P+'STRONG_MASK'], fields[P+'STRONG_MASK'])
     assert not audit['RV2_ACTION_PROPOSAL_MASK'].any()
     baseline, _ = evaluate(n, cfg.model_copy(update={'fragment_line':
-        cfg.fragment_line.model_copy(update={'whole_object_morphology_enabled': False})}))
+        cfg.fragment_line.model_copy(update={'whole_object_morphology_enabled': False,
+                                            'whole_object_physical_windows_enabled': False})}))
     assert not baseline['RV2_ACTION_PROPOSAL_MASK'].any()
     assert report['fragment_line']['whole_object_morphology']['source_claim'] is False
 
 
-def test_writer_replays_restored_native_measurements_and_binds_raw():
+@pytest.mark.parametrize('physical_windows', [False, True])
+def test_writer_replays_restored_native_measurements_and_binds_raw(physical_windows):
     n = fixture()
     cfg = load('config').SourceReviewConfig(narrow_enabled=False, radial_revision={
         'step': 3, 'mode': 'experiment_quarantine',
-        'fragment_line': {'whole_object_morphology_enabled': True}})
+        'fragment_line': {'whole_object_morphology_enabled': True,
+                          'whole_object_physical_windows_enabled': physical_windows}})
     source = np.zeros(n.shape, bool)
     _, arrays, _ = load('source').source_additions(n, cfg, source, np.zeros(n.shape, 'float32'))
     arrays['SRC_REVIEW_REFERENCE_FOLD_ID'] = np.zeros(n.shape, 'uint32')
     arrays['DBZH_RAW'] = n.fields['DBZH'].copy()
     validator = load('source_validation').validate_source_fields
     validator(arrays, n.field_available['DBZH'])
+    assert (arrays[P+'VERSION_CODE'] == (2 if physical_windows else 1)).all()
+    invalid_version = {key: value.copy() for key, value in arrays.items()}
+    invalid_version[P+'VERSION_CODE'][0, 0] = 3
+    with pytest.raises(ValueError, match='version'):
+        validator(invalid_version, n.field_available['DBZH'])
     order = np.random.default_rng(20).permutation(n.shape[0])
     restored = {key: value[order].copy() for key, value in arrays.items()}
     validator(restored, n.field_available['DBZH'][order])
@@ -210,3 +221,51 @@ def test_writer_replays_restored_native_measurements_and_binds_raw():
     forged[P+'MEASURED_DBZH'][20, 120] += 1.
     with pytest.raises(ValueError, match='RAW'):
         validator(forged, n.field_available['DBZH'])
+
+
+def test_physical_window_profile_requires_whole_object_detector():
+    module = load('radial_revision.config')
+    with pytest.raises(ValueError, match='require whole-object'):
+        module.FragmentLineConfig(whole_object_physical_windows_enabled=True)
+
+
+@pytest.mark.parametrize('dr', [250., 500., 1000.])
+def test_physical_fan_windows_count_actual_distance_not_detection_blocks(dr):
+    r = np.arange(0., 340000., dr)
+    body = np.zeros((65, len(r)), bool)
+    columns = ((r >= 180000.) & (r < 200000.)) | ((r >= 220000.) & (r < 240000.)) | ((r >= 260000.) & (r < 320000.))
+    body[2:63, columns] = True
+    n = Native(np.where(body, 25., np.nan).astype('float32'), dr=dr, start=0.,
+               fields={'SNR': np.where(body, 8., -2.)})
+    m = load('radial_revision.morphology_objects'); blocked = np.zeros(n.shape, bool)
+    legacy, old = m.detect(n, blocked)
+    candidate, report = m.detect(n, blocked, physical_windows=True)
+    select = lambda o: o['scale_m'] == 20000. and o['level_dbz'] == 20. and o['span_m'] == 140000.
+    before = next(o for o in old['objects'] if select(o))
+    after = next(o for o in report['objects'] if select(o))
+    assert before['windows'] == 5 and before['holds'] == ['insufficient_object_geometry']
+    assert after['strong'] and after['physical_windows'] == after['physical_confirmed_windows'] == 10
+    assert np.all(candidate[P+'STRONG_MASK'] >= legacy[P+'STRONG_MASK'])
+    assert not candidate[P+'MASK'][~body].any()
+    m.validate(candidate, n, blocked, physical_windows=True)
+    # The whole object's qualification cannot authorize measured weather or
+    # manufacture quiet evidence where both shoulders are unavailable.
+    n.fields['RHOHV'] = np.where(body, .99, np.nan).astype('float32')
+    n.field_available['RHOHV'] = body.copy()
+    n.fields['SNR'][body] = 20.
+    weather, _ = m.detect(n, blocked, physical_windows=True)
+    assert not weather[P+'STRONG_MASK'].any()
+    n.fields['SNR'][:] = np.nan; n.field_available['SNR'] = np.zeros(n.shape, bool)
+    unknown, _ = m.detect(n, blocked, physical_windows=True)
+    assert not unknown[P+'STRONG_MASK'].any()
+
+
+def test_physical_windows_do_not_turn_sparse_aligned_fragments_into_a_fan():
+    r = np.arange(0., 340000., 250.)
+    columns = (r >= 180000.) & (r < 320000.) & ((r % 20000.) < 1000.)
+    body = np.zeros((65, len(r)), bool); body[2:63, columns] = True
+    n = Native(np.where(body, 25., np.nan).astype('float32'), dr=250., start=0.,
+               fields={'SNR': np.where(body, 8., -2.)})
+    arrays, report = detect(n, physical_windows=True)
+    assert report['objects'] and not arrays[P+'STRONG_MASK'].any()
+    assert all(not o['strong'] for o in report['objects'])

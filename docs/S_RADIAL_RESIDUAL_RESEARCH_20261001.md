@@ -1082,3 +1082,86 @@ validation and normal candidateQC→grid→mosaic→PNG/Web publication remain p
 Next inspect complete fan and retained-weather-proxy structures on these new
 volumes, then promote only geometry with preserved provenance and actual pipeline
 validation; avoid treating same-date prototype targets as universal acceptance.
+
+### Complete fan comparison and physical-window diagnosis, 2026-10-02
+
+The normalized audit now routes explicitly to constellation, whole-object or
+variable-width detectors, without engine actions. The same six frozen volumes
+and 54 native REF cuts all evaluated with no resource abstention. Whole-object
+strong counts by volume: Z9591 100/3714/1965; Z9598 0/129436/0. Variable-width:
+Z9591 0/2702/2009; Z9598 0/28115/0. These are source-only nominations, not gains,
+verified clutter truth or published QC. Whole-object RAW/proposal previews for
+Z9598 UTC02 sweep000/005 were inspected: broad fans are recognized, with remaining
+radial windows and weak fragments. Full-parent variable-width tracking also holds
+forks, boundary instability and centre drift; reducing those safeguards globally
+is not warranted by the nomination counts.
+
+A dedicated replay of the frozen Z9598 UTC02 volume exports support_m, scale_m,
+windows, confirmed_windows and radial_aspect alongside generic hold reasons.
+All nine cuts and RAW artifact SHA match the earlier whole-object replay exactly.
+At sweep005 the 59.71-degree fan spans140km, has100km actual support, 5/5 confirmed
+windows, and measured/clear shoulders0.9675; its sole object hold is the fixed
+six-window geometry requirement at20km scale. Sweep004 similarly holds an8.95deg
+fan spanning139.75km with89.25km support and5/5 confirmed windows. Conversely
+sweep006's2.01deg fan spanning152.5km has only15.25km support, so the20km support
+requirement is the cause; it must not inherit the broad fan's successful evidence.
+
+This distinguishes scale-dependent window-count failures from sparse support
+and unknown/contaminated shoulder failures. Next replace sampling-scale-dependent
+count evidence with independently measured fixed physical-distance windows on
+the original complete object, preserving gap, weather and per-target guards.
+Do not simply change six to five or count absent observations as quiet. The broad
+sweep005 object includes389 measured weather-proxy gates; a qualifying object must
+still exclude these. Existing per-target checks remain authoritative.
+
+Artifacts: whole-object-v3.json, variable-width-v3.json, whole-previews-v3/,
+fan-diagnosis-plan.json and fan-diagnosis-v4.json under the frozen clear-air audit
+directory above. Three audit contract tests pass. No worker restart, production
+activation, QC recomputation or Web product changes were made by this diagnosis.
+
+### Physical-distance fan evidence branch, 2026-10-02
+
+Implemented explicit research opt-in `physical_windows=True`, with distinct
+native-morphology-objects-physical-windows-v2 report version. Frozen angular
+tracks and actual original anchor columns are evaluated in nonoverlapping10km
+physical bins; each needs at least500m actual support. A fan still needs100km
+span,20km observed support, six independently supported physical bins,80percent
+mean bilateral-known/clear evidence and80percent confirmed bins. Missing bins
+never count. Existing repeated-edge and per-target own-strength comparisons,
+weather vetoes, blocked bridges and frozen original extent remain in force.
+Legacy qualification is retained; no defaults, serialized version1 proof or
+production profile changed. The new branch is not yet engine/writer enabled.
+
+Synthetic tests cover three gate resolutions250/500/1000m, the original five20km
+blocks rejected by legacy but supported by ten measured10km bins, unchanged RAW
+and no fill, replay validation, explicit weather/unknown shoulders, a converging
+fixed-km weather band and a sparse aligned fan without sufficient observed support.
+The existing radial-revision suite passed before the final sparse test addition;
+the final morphology/audit suite also passed including that addition.
+
+Actual frozen six-volume54cut replay physical-windows-v2.json completed with no
+resource abstention, same RAW hashes and weather proxy counts. Whole-object
+strong counts unchanged on five volumes. Z9598 UTC02 increases129436→132982:
+sweep000+748, sweep002+301, sweep004+1694, sweep005+803. Every proposal excludes
+current measured weather proxy. FullRAW/proposal sweep005 PNG inspected: southern
+fan coverage improves, but missing radial rings and adjacent radials remain.
+Nomination counts are not pollution truth or normal-product acceptance. Eleven
+fullRAW proposal previews are hash verified by the reusable audit transport.
+
+No production restart or Web changes this turn. Actual weather holdouts and
+engine/writer versioned integration plus normal QC→grid→mosaic→PNG publication
+are required before activation. Shared main advanced to e9ada37 during work;
+this turn's own changes remain uncommitted, preserving concurrent X changes.
+
+### Version-bound normal engine integration, 2026-10-02
+
+Added default-off whole_object_physical_windows_enabled with a required enabled
+whole-object parent detector. Engine passes the same switch into detection and
+serialized original evidence. VERSION_CODE is2 for physical-window evidence and1
+for legacy; writer accepts only a uniform supported version, restores native
+order and independently replays the corresponding detector. Unknown or mixed
+version values, proposal forgery and immutable RAW changes fail validation.
+No new fields are required to read version1 proof. Audit still makes no actions,
+geometry qualification enters the existing disposition path after original source
+identities are frozen. Integration tests exercise both versions, action/audit,
+RAW and native-order validation. Production activation remains pending.

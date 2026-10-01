@@ -35,6 +35,7 @@ class FragmentLineConfig(BaseModel):
     fan_power_states_enabled: bool = False
     source_footprint_enabled: bool = False
     whole_object_morphology_enabled: bool = False
+    whole_object_physical_windows_enabled: bool = False
     radial_backbone_enabled: bool = False
     fragment_constellation_enabled: bool = False
     antenna_beam_width_deg: float | None = Field(default=None, gt=0., le=5.)
@@ -43,6 +44,8 @@ class FragmentLineConfig(BaseModel):
     @model_validator(mode="after")
     def check(self):
         import math
+        if self.whole_object_physical_windows_enabled and not self.whole_object_morphology_enabled:
+            raise ValueError('physical windows require whole-object morphology')
         if self.family_joint_enabled and not self.raw_fragment_families_enabled:
             raise ValueError("family joint qualification requires RAW families")
         if self.source_ledger_enabled and not self.raw_fragment_families_enabled:

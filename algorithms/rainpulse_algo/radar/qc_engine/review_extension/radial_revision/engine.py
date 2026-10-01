@@ -189,9 +189,11 @@ def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, confl
         if cfg.fragment_line is not None and cfg.fragment_line.whole_object_morphology_enabled:
             from .morphology_objects import detect as detect_whole_objects, evidence as whole_evidence
             fields,whole_report=detect_whole_objects(native,barred,
-                beam_width=cfg.fragment_line.antenna_beam_width_deg)
+                beam_width=cfg.fragment_line.antenna_beam_width_deg,
+                physical_windows=cfg.fragment_line.whole_object_physical_windows_enabled)
             out.update(fields)
-            out.update(whole_evidence(native,barred,beam_width=cfg.fragment_line.antenna_beam_width_deg))
+            out.update(whole_evidence(native,barred,beam_width=cfg.fragment_line.antenna_beam_width_deg,
+                physical_windows=cfg.fragment_line.whole_object_physical_windows_enabled))
             whole_morphology=fields['RV2_MORPH_OBJECT_STRONG_MASK']==1
             # Weak nominees do not gain candidate/source/action eligibility.
             # This stage runs AFTER freezing original source identities.

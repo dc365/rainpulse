@@ -36,7 +36,7 @@ def _shoulders(rows, a, b, columns, z, observed, snr, snr_valid, blocked):
     return float(known.mean()), float(clear.mean())
 
 
-def detect(native, blocked, *, beam_width=None, maximum_objects=10000):
+def detect(native, blocked, *, beam_width=None, maximum_objects=10000, physical_windows=False):
     if beam_width is not None and (not np.isfinite(beam_width) or beam_width <= 0.):
         raise ValueError('positive finite antenna beam width required')
     if not isinstance(maximum_objects, int) or maximum_objects < 1:
@@ -144,6 +144,25 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000):
                     known = float(np.mean([e['known'] for e in entries]))
                     clear = float(np.mean([e['clear'] for e in entries]))
                     confirmed = sum(e['known'] >= .8 and e['clear'] >= .8 for e in entries)
+                    physical_count = physical_confirmed = 0
+                    physical_known = physical_clear = 0.
+                    if physical_windows and kind == 'fan':
+                        # Independent 10km evidence bins in the frozen RAW extent.
+                        # Only actual anchor columns contribute, regardless of the
+                        # 5/10/20km scale that found the angular template. Missing
+                        # bins provide no support and cannot inflate this count.
+                        bins = (r[anchor_cols]//10000.).astype(int)
+                        scores = []
+                        for bin_id in np.unique(bins):
+                            columns = anchor_cols[bins == bin_id]
+                            if len(columns)*dr < 500.:
+                                continue
+                            scores.append(_shoulders(rows, track['a'], track['b'], columns,
+                                                     z, observed, snr, snr_valid, blocked))
+                        physical_count = len(scores)
+                        if scores:
+                            physical_known, physical_clear = np.mean(scores, axis=0)
+                            physical_confirmed = sum(k >= .8 and c >= .8 for k, c in scores)
                     holds = []
                     if kind == 'line':
                         # Short tracks require denser support, larger aspect,
@@ -153,6 +172,10 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000):
                         shape |= short
                     else:
                         shape = span >= 100000. and support >= 20000. and len(entries) >= 6
+                        shape |= (physical_windows and span >= 100000. and support >= 20000.
+                                  and physical_count >= 6 and physical_known >= .8
+                                  and physical_clear >= .8
+                                  and physical_confirmed >= .8*physical_count)
                     if not shape:
                         holds.append('insufficient_object_geometry')
                     if known < .8:
@@ -195,19 +218,22 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000):
                                     'radial_aspect': float(aspect), 'windows': len(entries),
                                     'measured_shoulders_fraction': known, 'clear_shoulders_fraction': clear,
                                     'confirmed_windows': confirmed, 'strong': strong, 'holds': holds,
+                                    'physical_windows': physical_count,
+                                    'physical_confirmed_windows': physical_confirmed,
                                     'member_gates': len(rr), 'weather_veto_gates': int(weather[rr, cc].sum()),
                                     'edge_excursion_deg': float(max(max(abs(e['left']-track['left']),
                                                                           abs(e['right']-track['right'])) for e in entries))})
-    return out, {'version': 'native-morphology-objects-v1', 'objects': records,
+    return out, {'version': 'native-morphology-objects-physical-windows-v2' if physical_windows else 'native-morphology-objects-v1', 'objects': records,
                  'candidate_gates': int(out[PREFIX+'MASK'].sum()),
                  'strong_evidence_gates': int(out[PREFIX+'STRONG_MASK'].sum()),
                  'action_gates': 0, 'source_claim': False, 'filled_gates': 0,
                  'recursive_growth': False, 'independent_weather_truth': False}
 
 
-def validate(arrays, native, blocked, *, beam_width=None, maximum_objects=10000):
+def validate(arrays, native, blocked, *, beam_width=None, maximum_objects=10000, physical_windows=False):
     """Validate evidence by replaying original measurements, never trusted IDs."""
-    expected, _ = detect(native, blocked, beam_width=beam_width, maximum_objects=maximum_objects)
+    expected, _ = detect(native, blocked, beam_width=beam_width, maximum_objects=maximum_objects,
+                         physical_windows=physical_windows)
     if set(arrays) != set(expected):
         raise ValueError('whole-object evidence field set differs')
     for key, value in expected.items():
@@ -216,7 +242,7 @@ def validate(arrays, native, blocked, *, beam_width=None, maximum_objects=10000)
             raise ValueError('whole-object evidence does not match original measurements: '+key)
 
 
-def evidence(native, blocked, *, beam_width=None, prefix=PREFIX):
+def evidence(native, blocked, *, beam_width=None, prefix=PREFIX, physical_windows=False):
     """Original measured inputs for serialization and native-order replay."""
     r, az, _, good, gaps = native_geometry(native)
     out = {}
@@ -227,7 +253,7 @@ def evidence(native, blocked, *, beam_width=None, prefix=PREFIX):
         ('NATIVE_GOOD_MASK', good[:, None], 'uint8'),
         ('NATIVE_GAP_MASK', gaps[:, None], 'uint8'),
         ('BEAM_DEG', np.nan if beam_width is None else beam_width, 'float64'),
-        ('VERSION_CODE', 1, 'uint8'),
+        ('VERSION_CODE', 2 if physical_windows else 1, 'uint8'),
         ('BARRED_MASK', blocked, 'uint8'),
     ):
         out[prefix+key] = np.broadcast_to(value, native.shape).astype(dtype).copy()
@@ -255,12 +281,13 @@ def validate_serialized(group, observed, blocked, *, prefix=PREFIX, replay=None)
         if value.shape != shape or value.dtype != np.dtype(dtype) or np.isinf(value).any():
             raise ValueError('invalid whole-object original evidence: '+key)
     order, ranges, angles = (get(k) for k in ('NATIVE_ORDER','NATIVE_RANGE_M','NATIVE_AZ_DEG'))
+    version = get('VERSION_CODE')
     if (not np.isfinite(ranges).all() or not np.isfinite(angles).all() or
             not np.array_equal(order, np.broadcast_to(order[:, :1], shape)) or
             not np.array_equal(np.sort(order[:, 0]), np.arange(shape[0])) or
             not np.array_equal(ranges, np.broadcast_to(ranges[:1], shape)) or
             not np.array_equal(angles, np.broadcast_to(angles[:, :1], shape)) or
-            not (get('VERSION_CODE') == 1).all()):
+            not (np.all(version == 1) or np.all(version == 2))):
         raise ValueError('whole-object native coordinate/order/version differs')
     beam = get('BEAM_DEG')
     if np.isnan(beam).all():
@@ -292,4 +319,7 @@ def validate_serialized(group, observed, blocked, *, prefix=PREFIX, replay=None)
     native = SimpleNamespace(shape=shape, fields=fields, field_available=available,
         ranges=ranges[0], azimuth=angles[rows,0], geometry_good=good[rows,0], gap_after=gaps[rows,0])
     keys = ('MASK','STRONG_MASK','ID','WEATHER_VETO_MASK')
-    (validate if replay is None else replay)({prefix+k:get(k)[rows] for k in keys}, native, barred[rows], beam_width=beam_width)
+    options = {'beam_width': beam_width}
+    if version.flat[0] == 2:
+        options['physical_windows'] = True
+    (validate if replay is None else replay)({prefix+k:get(k)[rows] for k in keys}, native, barred[rows], **options)

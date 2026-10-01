@@ -14,6 +14,16 @@ ROOT=Path(__file__).resolve().parents[1]
 MODULE='rainpulse_algo.radar.qc_engine.review_extension.radial_revision.fragment_constellation'
 
 
+def detector_spec(name):
+    choices={'constellation':('fragment_constellation',{'segment_evidence':True}),
+             'whole-object':('morphology_objects',{}),
+             'physical-windows':('morphology_objects',{'physical_windows':True}),
+             'variable-width':('variable_morphology',{})}
+    if name not in choices:raise ValueError('unknown read-only morphology detector')
+    suffix,options=choices[name]
+    return MODULE.rsplit('.',1)[0]+'.'+suffix,options
+
+
 def validate_plan(plan):
     if not isinstance(plan,list) or not 1<=len(plan)<=16:
         raise ValueError('requires 1–16 frozen normalized volumes')
@@ -59,8 +69,8 @@ for row in p['plan']:
   # Upstream weather/conflict context is absent: this is source-only research.
   blocked=np.zeros(n.shape,bool)
   try:
-   arrays,detail=m.detect(n,blocked,segment_evidence=True)
-   m.validate(arrays,n,blocked,segment_evidence=True)
+   arrays,detail=m.detect(n,blocked,**p['options'])
+   m.validate(arrays,n,blocked,**p['options'])
    strong=arrays[m.PREFIX+'STRONG_MASK']==1
    weather=arrays[m.PREFIX+'WEATHER_VETO_MASK']==1
    assert not (strong&weather).any()
@@ -84,10 +94,25 @@ for row in p['plan']:
     filename=row['radar_id']+'_'+row['scan_id']+'_'+name+'.png'
     emit('NORMALIZED_PREVIEW_META '+json.dumps(dict(filename=filename,sha256=hashlib.sha256(data).hexdigest(),bytes=len(data),chunks=len(chunks))))
     for i,chunk in enumerate(chunks):emit('NORMALIZED_PREVIEW_CHUNK '+filename+' '+str(i)+' '+chunk)
+   reasons={}
+   held=[]
+   for obj in detail['objects']:
+    holds=obj.get('hold_reasons',obj.get('holds',[]))
+    for reason in set(holds):reasons[reason]=reasons.get(reason,0)+1
+    if holds:held.append(obj)
+   largest=sorted(held,key=lambda x:x.get('span_m',x.get('radial_span_m',0)),reverse=True)[:3]
+   keys=('kind','level_dbz','contour_dbz','start_m','end_m','span_m','radial_span_m',
+         'support_m','windows','confirmed_windows','physical_windows','physical_confirmed_windows','radial_aspect','scale_m',
+         'width_deg','width_min_deg','width_max_deg','centre_excursion_deg',
+         'edge_excursion_deg','holds','hold_reasons','measured_shoulders_fraction',
+         'clear_shoulders_fraction','weather_veto_gates')
    cuts.append(dict(sweep=name,elevation_deg=float(np.median(n.elevation)),status='EVALUATED',
     native_shape=list(n.shape),measured_gates=int(n.field_available['DBZH'].sum()),
     observed_weather_gates=int(weather.sum()),candidate_gates=int((arrays[m.PREFIX+'MASK']==1).sum()),
-    strong_gates=int(strong.sum()),objects=len(detail['objects']),work=detail['work'],raw_unchanged=True))
+    strong_gates=int(strong.sum()),objects=len(detail['objects']),work=detail.get('work'),
+    fan_objects=sum(x.get('kind')=='fan' for x in detail['objects']),
+    hold_reason_counts=reasons,largest_held_objects=[{k:x[k] for k in keys if k in x} for x in largest],
+    raw_unchanged=True))
   except m.ResourceLimit as error:
    cuts.append(dict(sweep=name,status='RESOURCE_ABSTAIN',reason=str(error)))
  results.append(dict(**row,raw_artifact_sha256=artifact_sha256(raw),cuts=cuts))
@@ -102,20 +127,23 @@ def main():
     p.add_argument('plan',type=Path);p.add_argument('--output',type=Path,required=True)
     p.add_argument('--host',default='yons@192.168.28.105')
     p.add_argument('--worker',default='rainpulse-radar-qc-worker-1')
+    p.add_argument('--detector',choices=('constellation','whole-object','variable-width','physical-windows'),default='constellation')
     p.add_argument('--preview-dir',type=Path,help='Save hash-verified full RAW/proposal PNGs for cuts with proposals')
     args=p.parse_args()
     if args.output.exists():raise ValueError('output must be new')
     if args.preview_dir and args.preview_dir.exists():raise ValueError('preview directory must be new')
     plan_text=args.plan.read_bytes();plan=validate_plan(json.loads(plan_text))
-    source=(ROOT/'algorithms'/Path(*MODULE.split('.'))).with_suffix('.py').read_text()
-    payload=dict(plan=plan,module=MODULE,source=source,preview=bool(args.preview_dir))
+    module,options=detector_spec(args.detector)
+    source=(ROOT/'algorithms'/Path(*module.split('.'))).with_suffix('.py').read_text()
+    payload=dict(plan=plan,module=module,source=source,options=options,preview=bool(args.preview_dir))
     command=shlex.join(['docker','exec','-i',args.worker,'python','-'])
     result=subprocess.run(['ssh','-o','BatchMode=yes','-o','ConnectTimeout=10',args.host,command],
         input=WORKER.replace('PAYLOAD',repr(json.dumps(payload))),text=True,capture_output=True,timeout=600)
     if result.returncode:raise RuntimeError(result.stderr[-5000:])
     lines=[x[len('NORMALIZED_AUDIT '):] for x in result.stdout.splitlines() if x.startswith('NORMALIZED_AUDIT ')]
     if len(lines)!=1:raise ValueError('incomplete normalized audit receipt')
-    report=json.loads(lines[0]);report.update(plan_sha256=hashlib.sha256(plan_text).hexdigest(),
+    report=json.loads(lines[0]);report.update(detector=args.detector,detector_options=options,
+        plan_sha256=hashlib.sha256(plan_text).hexdigest(),
         detector_sha256=hashlib.sha256(source.encode()).hexdigest(),script_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest())
     if args.preview_dir:
         headers={};chunks={}
