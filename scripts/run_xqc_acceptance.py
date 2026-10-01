@@ -25,6 +25,7 @@ def main():
     parser.add_argument("--gate-script", type=Path)
     parser.add_argument("--raw-image")
     parser.add_argument("--limit-files", type=int)
+    parser.add_argument("--workers", type=int, default=4)
     args = parser.parse_args()
     manifest = Path(args.manifest).resolve()
     script = Path(args.audit_script).resolve()
@@ -37,7 +38,9 @@ def main():
     environment = dict(os.environ)
     environment.update(item.split("=", 1) for item in c["Config"]["Env"] if "=" in item)
     stations = sorted({s["radar_id"] for s in frozen["scans"]})
-    groups = [stations[i::4] for i in range(4)]
+    if not 1 <= args.workers <= 12 or (args.mode != "raw" and args.workers != 4):
+        raise ValueError("only native raw audit supports 1..12 bounded workers")
+    groups = [stations[:] for _ in range(args.workers)] if args.mode == "raw" else [stations[i::4] for i in range(4)]
     image_id = frozen["image_id"]
     raw_args = []
     raw_mounts = []
@@ -73,7 +76,7 @@ def main():
     lock = threading.Lock()
     state = {"status": "RUNNING", "pid": os.getpid(), "manifest_sha256": frozen["manifest_sha256"],
              "audit_script_sha256": hashlib.sha256(script.read_bytes()).hexdigest(), "mode": args.mode,
-             "compute_image_id": image_id,
+             "compute_image_id": image_id, "worker_count": args.workers,
              "started_at": datetime.now(timezone.utc).isoformat(), "workers": {},
              "counts": {}, "meteorological_acceptance": "NOT_COMPLETED"}
     counters = collections.Counter()
@@ -90,7 +93,7 @@ def main():
 
     def run(index, selected):
         name = "rainpulse-xqc-" + args.mode + "-" + frozen["manifest_sha256"][:8] + "-" + str(index)
-        command = ["docker", "run", "--rm", "--name", name, "--cpus", "1", "--memory", "6g" if args.mode == "raw" else "3g",
+        command = ["docker", "run", "--rm", "--name", name, "--cpus", "1", "--memory", "4g" if args.mode == "raw" else "3g",
                    "--network", next(iter(c["NetworkSettings"]["Networks"])),
                    "--read-only", "--tmpfs", "/tmp:rw,size=64m", "-i",
                    "-v", str(script) + ":/opt/compute.py:ro", "--entrypoint", "python"]
@@ -103,6 +106,8 @@ def main():
                     "RAINPULSE_OBJECT_STORE_SECRET_KEY"):
             command += ["-e", key]
         command += [image_id, "/opt/compute.py", args.mode, *raw_args]
+        if args.mode == "raw":
+            command += ["--shards", str(args.workers), "--shard-index", str(index)]
         for station in selected:
             command += ["--station", station]
         for scan in sorted(failed_scans):
@@ -132,7 +137,7 @@ def main():
                 persist()
             return code
 
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    with ThreadPoolExecutor(max_workers=args.workers) as executor:
         codes = list(executor.map(lambda item: run(*item), enumerate(groups)))
     with lock:
         state["status"] = "SURVEY_COMPLETE" if not any(codes) else "SURVEY_PROCESS_FAILED"

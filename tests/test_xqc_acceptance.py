@@ -39,3 +39,14 @@ def test_raw_batch_rejects_decoder_configuration_drift(tmp_path):
     config.write_bytes(b"changed decoder")
     with pytest.raises(ValueError, match="frozen batch identity"):
         raw_module.verify_config(config, expected)
+
+
+def test_native_file_shards_are_complete_and_disjoint():
+    raw_spec = importlib.util.spec_from_file_location("raw_shards", Path(__file__).parents[1] / "scripts/audit_xqc_raw.py")
+    raw_module = importlib.util.module_from_spec(raw_spec)
+    raw_spec.loader.exec_module(raw_module)
+    identities = [module.digest({"raw": i}) for i in range(5466)]
+    groups = [{s for s in identities if raw_module.shard_for_file(s, 8) == i} for i in range(8)]
+    assert set.union(*groups) == set(identities)
+    assert sum(len(g) for g in groups) == len(identities)
+    assert max(map(len, groups)) < 800

@@ -16,6 +16,12 @@ import uuid
 from datetime import datetime, timezone
 
 
+def shard_for_file(raw_sha256, shards):
+    if not 1 <= shards <= 12:
+        raise ValueError("invalid bounded worker count")
+    return int(raw_sha256, 16) % shards
+
+
 def verify_config(path, expected):
     data = path.read_bytes()
     if hashlib.sha256(data).hexdigest() != expected:
@@ -123,16 +129,22 @@ def main():
     parser.add_argument("--configs", type=Path, required=True)
     parser.add_argument("--limit-files", type=int)
     parser.add_argument("--config-identities", type=Path, required=True)
+    parser.add_argument("--shard-index", type=int, default=0)
+    parser.add_argument("--shards", type=int, default=1)
     args = parser.parse_args()
     manifest = json.load(sys.stdin)
     sha = manifest.pop("manifest_sha256")
     if digest(manifest) != sha or hashlib.sha256(args.raw_records.read_bytes()).hexdigest() != args.raw_sha256:
         raise ValueError("frozen source/network manifest changed")
+    if not 0 <= args.shard_index < args.shards <= 12:
+        raise ValueError("invalid shard index")
     config_identities = json.loads(args.config_identities.read_text())
     network = Network.from_bytes(json.dumps(manifest["network"]).encode())
     count = 0
     for line in args.raw_records.read_text().splitlines():
         record = json.loads(line)
+        if shard_for_file(record["sha256"], args.shards) != args.shard_index:
+            continue
         if args.station and record["radar_id"] not in args.station:
             continue
         if args.limit_files is not None and count >= args.limit_files:
