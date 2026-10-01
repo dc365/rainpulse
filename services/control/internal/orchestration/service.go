@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -586,7 +587,8 @@ func (service *Service) CreateRadarGrid(
 		return workflow.Job{}, err
 	}
 	now := service.now().UTC()
-	identity := []string{input.RunID.String(), input.HybridScanVersion}
+	inputDigest := fmt.Sprintf("%x", sha256.Sum256([]byte(input.QCURI)))
+	identity := []string{input.RunID.String(), input.HybridScanVersion, inputDigest}
 	if input.RegenerationID != uuid.Nil {
 		identity = append(identity, input.RegenerationID.String())
 	}
@@ -602,6 +604,7 @@ func (service *Service) CreateRadarGrid(
 	if input.RegenerationID != uuid.Nil {
 		outputPrefix += "regenerations/" + input.RegenerationID.String() + "/"
 	}
+	outputPrefix += "inputs/" + inputDigest + "/"
 	request := RadarGridRequested{
 		SchemaVersion: SchemaVersion,
 		EventID:       eventID,
@@ -684,6 +687,19 @@ func (service *Service) CreateAnalysisMosaic(
 		analysisTime.Format(time.RFC3339), input.GridID, input.GridConfigVersion,
 		input.MosaicConfigVersion, input.MosaicAlgorithmVersion,
 	}
+	// Hash only the selected immutable inputs, with stable ordering and UTC
+	// timestamps. Old successful analyses must not alias newly gridded QC.
+	lineage := make([][]string, 0, len(selected))
+	for _, candidate := range selected {
+		lineage = append(lineage, []string{candidate.RadarID, candidate.ScanID.String(),
+			candidate.GridURI, candidate.HybridScanVersion, candidate.VolumeEndTime.UTC().Format(time.RFC3339Nano)})
+	}
+	sort.Slice(lineage, func(i, j int) bool { return lineage[i][0] < lineage[j][0] })
+	lineageJSON, err := json.Marshal(lineage)
+	if err != nil {
+		return workflow.AnalysisCycle{}, workflow.Job{}, err
+	}
+	identity = append(identity, fmt.Sprintf("%x", sha256.Sum256(lineageJSON)))
 	if input.RegenerationID != uuid.Nil {
 		identity = append(identity, input.RegenerationID.String())
 	}

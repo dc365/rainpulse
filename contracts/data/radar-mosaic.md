@@ -69,3 +69,10 @@ not single-radar reflectivity or QC masks. Weight normalization must be stable
 at long range. Missing is never zero rain. The old highest-QI selection method
 and frozen profiles are unchanged. This is an engineering candidate, not RFI
 classification or proof that contaminated single-radar echoes have been removed.
+
+## Selected-input lineage
+
+Mosaic analysis/run identity includes the sorted selected contributor identities:
+radar, scan, immutable grid URI, Hybrid Scan version, and actual UTC volume time.
+Changing a selected grid must create a new analysis and isolated output prefix.
+Candidate order and changes to unselected candidates must not create a new result.

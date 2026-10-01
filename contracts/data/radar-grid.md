@@ -91,3 +91,11 @@ WGS84 ellipsoidal surface distance from the configured radar to each valid grid
 centre. Missing grid cells remain NaN. This is neither pixel distance nor slant
 range, and cannot be inferred from an unavailable `QI_RANGE`. Old profiles omit
 this extension; new profiles must have a distinct algorithm/config identity.
+
+## Immutable input identity
+
+A grid task identity includes its exact immutable QC input URI. Replacing QC for
+one scan creates a new grid task and an isolated `inputs/<QC-URI-digest>/` output
+prefix even when the Hybrid Scan algorithm/profile is unchanged. Repeating the
+same QC input remains idempotent. A prior successful job using another QC URI is
+not proof that the currently committed QC result has been gridded.

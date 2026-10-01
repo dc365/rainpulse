@@ -34,3 +34,15 @@ identity contract. No v3 refreshed image was published. v4 uses a short explicit
 label with a digest of the complete parent settings. The profile parser now rejects
 unpublishable labels before reading radar arrays; the refresh driver resumes live
 jobs and reuses succeeded stages under the exact profile hash.
+
+## Downstream lineage correction
+
+The initial grid receipts were old SUCCEEDED jobs, not fresh grids: the grid
+identity omitted the current QC URI. All four scans remained QC_READY and the
+mosaic planner correctly rejected zero ready contributors. Grid identity/output
+now include the immutable QC URI digest; mosaic identity includes the sorted
+selected grids and acquisition times. Regression tests failed on the old code
+for both aliasing paths and passed after the fix. The resumable refresh driver
+uses the rebuilt orchestrator and reruns downstream stages while reusing the
+four completed v4 QC jobs. Prior claims of fresh grid completion are superseded
+by this evidence. No direct database edits or input-time changes are used.

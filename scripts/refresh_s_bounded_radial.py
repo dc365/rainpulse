@@ -14,7 +14,7 @@ for entry in Path('/proc/'+pid+'/environ').read_bytes().split(b'\0'):
     if b'=' in entry:
         k,v=entry.split(b'=',1); env[k.decode()]=v.decode()
 env['PGPASSWORD']=env['RAINPULSE_DATABASE_PASSWORD']
-binary=str(ROOT/'.build/sx-priority1/sx-priority1-orchestrator')
+binary=str(ROOT/'.build/s-bounded-radial-20261001-release/orchestrator')
 def query(sql):
     return subprocess.check_output(['psql','-h',env.get('RAINPULSE_DATABASE_HOST','127.0.0.1'),'-p',env.get('RAINPULSE_DATABASE_PORT','5432'),'-U','rainpulse','-d',env.get('RAINPULSE_DATABASE_NAME','rainpulse'),'-At','-c',sql],env=env,text=True).strip()
 def request(*args):
@@ -45,14 +45,20 @@ else:
 def step(stage,target,*args):
     # Reattach to a persisted live/succeeded job; never replace it on a timeout.
     prior=[j for j in state['jobs'] if j.get('profile_sha256')==expected and
-           j['slot']==slot and j['stage']==stage and j.get('target')==target]
+           j['slot']==slot and j['stage']==stage and j.get('target')==target and
+           (stage=='qc' or j.get('submission_revision')==2)]
     for receipt in reversed(prior):
         status=query("SELECT status FROM jobs WHERE job_id='"+str(uuid.UUID(receipt['job_id']))+"'")
         if status not in ('FAILED','CANCELLED','DEAD'):
             wait(receipt['job_id']); return receipt
     receipt=request(*args)
-    state['jobs'].append({'slot':slot,'stage':stage,'target':target,'profile_sha256':expected,**receipt})
-    save(); wait(receipt['job_id']); return receipt
+    state['jobs'].append({'slot':slot,'stage':stage,'target':target,'profile_sha256':expected,'submission_revision':2,**receipt})
+    save(); wait(receipt['job_id'])
+    if stage=='grid':
+        consumed=query("SELECT request_payload->'payload'->>'input_uri' FROM jobs WHERE job_id='"+str(uuid.UUID(receipt['job_id']))+"'")
+        committed=query("SELECT qc_uri FROM radar_scan_runs WHERE scan_id='"+str(uuid.UUID(target))+"'")
+        if consumed!=committed:raise RuntimeError('grid completed from another QC input')
+    return receipt
 try:
     if state.get('profile_sha256')!=expected: state['completed']=[]
     state['profile_sha256']=expected; state.pop('error',None)

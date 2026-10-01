@@ -351,8 +351,8 @@ func TestCreateRadarGridUsesQCInputAndVersionIsolatedOutput(t *testing.T) {
 		t.Fatalf("unexpected radar grid request: %#v", requested)
 	}
 	wantPrefix := "s3://rainpulse/radar/grid/z9598/" + input.ScanID.String() +
-		"/hybrid-scan-1.0.0/"
-	if requested.Payload.OutputPrefix != wantPrefix {
+		"/hybrid-scan-1.0.0/inputs/"
+	if !strings.HasPrefix(requested.Payload.OutputPrefix, wantPrefix) {
 		t.Fatalf("radar grid output must be algorithm-version isolated: %q", requested.Payload.OutputPrefix)
 	}
 	second, err := service.CreateRadarGrid(context.Background(), input)
@@ -363,6 +363,22 @@ func TestCreateRadarGridUsesQCInputAndVersionIsolatedOutput(t *testing.T) {
 		t.Fatal("radar grid workflow identifiers are not deterministic")
 	}
 
+	// A newer immutable QC result of the same scan must not reuse an old grid.
+	input.QCURI = "s3://rainpulse/radar/qc/z9598/scan/rebuilds/new-qc/volume.zarr"
+	changed, err := service.CreateRadarGrid(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var changedRequest RadarGridRequested
+	if err := json.Unmarshal(repository.radarGrid.Outbox.Payload, &changedRequest); err != nil {
+		t.Fatal(err)
+	}
+	if changed.ID == job.ID || changedRequest.Payload.OutputPrefix == requested.Payload.OutputPrefix {
+		t.Fatal("changed QC input reused the old grid job or output")
+	}
+	if changedRequest.Payload.InputURI != input.QCURI {
+		t.Fatal("new grid did not consume the new QC artifact")
+	}
 	input.CurrentStatus = workflow.RadarScanNormalized
 	if _, err := service.CreateRadarGrid(context.Background(), input); err == nil {
 		t.Fatal("normalized radar scan must pass QC before gridding")
@@ -435,6 +451,26 @@ func TestCreateAnalysisMosaicAlignsClosestReadyGridAndUsesV2Contract(t *testing.
 	}
 	if secondAnalysis.ID != analysis.ID || secondJob.ID != job.ID {
 		t.Fatal("analysis mosaic workflow identifiers are not deterministic")
+	}
+	// An unselected candidate does not change an analysis, but an updated
+	// selected grid must produce a new analysis and isolated product prefix.
+	input.Candidates[0].GridURI += "-unselected-update"
+	unchanged, _, err := service.CreateAnalysisMosaic(context.Background(), input)
+	if err != nil || unchanged.ID != analysis.ID {
+		t.Fatalf("unselected grid changed the analysis: %v", err)
+	}
+	input.Candidates[1].GridURI += "-selected-update"
+	changed, changedJob, err := service.CreateAnalysisMosaic(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed.ID == analysis.ID || changedJob.ID == job.ID {
+		t.Fatal("new selected grid reused the old mosaic")
+	}
+	input.Candidates[0], input.Candidates[1] = input.Candidates[1], input.Candidates[0]
+	reordered, _, err := service.CreateAnalysisMosaic(context.Background(), input)
+	if err != nil || reordered.ID != changed.ID {
+		t.Fatalf("candidate order changed the analysis: %v", err)
 	}
 }
 
