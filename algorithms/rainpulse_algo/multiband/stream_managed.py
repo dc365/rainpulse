@@ -365,7 +365,7 @@ def _execute_x_qc(executor, request, reader, *, started):
                             adapt_mark = time.perf_counter()
                             raw = cuts.read(number)
                             raw.metadata["input_uri"] = source["input_uri"]
-                            raw.validate(station, require_geometry=False)
+                            raw.validate(station, require_geometry=False, native_polar_qc=True)
                             metrics["peak_input_cut_array_bytes"] = max(
                                 metrics["peak_input_cut_array_bytes"], raw.nbytes
                             )

@@ -295,6 +295,54 @@ def test_40cut_native_managed_really_runs_same_executor(tmp_path):
     assert metrics["packed_staged_bytes"] > 0
 
 
+def test_streaming_x_duplicate_azimuth_preserves_native_rays(tmp_path, monkeypatch):
+    from rainpulse_algo.multiband.model import Station
+    from rainpulse_algo.multiband import stream_managed
+
+    st = Station(
+        "x1", "X", "native_bundle", frequency_hz=9.4e9, enabled=False,
+        x_qc_enabled=True, geometry_verified=False, calibration_verified=False,
+        calibration_id="unverified", x_qc=station().x_qc,
+    )
+    net = write_network(tmp_path / "net.json", replace(network([st]), products={}))
+    v = volume(st, cuts=2, rays=12, gates=16)
+    for sweep in v.sweeps:
+        sweep.azimuth_deg[1] = sweep.azimuth_deg[0]
+    with pytest.raises(ValueError, match="duplicate azimuth"):
+        v.validate(st, require_geometry=False)
+    original_preview = stream_managed.x_qc_objects
+    checked = []
+
+    def checked_preview(volumes):
+        def checked_volumes():
+            for result in volumes:
+                for sweep in result.sweeps:
+                    original = v.sweeps[sweep.number]
+                    np.testing.assert_array_equal(sweep.azimuth_deg, original.azimuth_deg)
+                    np.testing.assert_array_equal(sweep.ray_time_epoch, original.ray_time_epoch)
+                    np.testing.assert_array_equal(sweep.fields["DBZH_RAW"], original.fields["DBZH"])
+                    checked.append(sweep.number)
+                yield result
+        return original_preview(checked_volumes())
+
+    monkeypatch.setattr(stream_managed, "x_qc_objects", checked_preview)
+    store = Store(encode_volume(v), schema="3.0", pack_bytes=128 * 1024)
+    executor = Executor(
+        tmp_path / "net.json",
+        execution=Options(streaming=True, scratch_parent=str(tmp_path), layer_memory_bytes=0),
+    )
+    req = request(v, net, "x_qc")
+    req["payload"].pop("product_id")
+    req["payload"]["execution_sha256"] = executor.execution_policy_sha256
+    objects, _, metrics = executor.execute(req, store.reader(), artifact_digest=lambda x: store.sha)
+    assert metrics["gate_count"] == 2 * 12 * 16
+    assert metrics["qc_executions"] == 2
+    assert checked == [0, 1]
+    assert len(json.loads(objects["manifest.json"])["comparison"]["sweeps"]) == 2
+    assert any(key.endswith(".png") for key in objects)
+    assert not list(tmp_path.glob("rainpulse-multiband-*"))
+
+
 def test_cache_byte_entry_limits_and_expiry():
     from rainpulse_algo.multiband.managed import VolumeCache
 

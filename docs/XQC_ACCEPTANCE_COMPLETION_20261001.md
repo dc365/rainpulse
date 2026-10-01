@@ -30,6 +30,8 @@
 
 ## 完整原生回放与容量恢复
 
+- ZF702 08:08:25正常任务022987e3…在第四层进入质控前因duplicate azimuth FAILED，旧凭据保留。定位为X单站stream_managed入口误用严格空间投影校验；x_qc本身已有native_polar_qc重复射线支持，投影已有代表射线选择。仅将该入口显式改为native_polar_qc=True，不放宽S或融合校验、不修改RAW。完整Executor→质控→PNG两层回归先红后绿，并逐行核对原始反射率/方位角/射线时间。相关33项通过；历史reference兼容用例3失败（旧参考Network不兼容当前配置），2个numba用例因本地未安装跳过，未将其算作通过。
+
 - raw-v1已冻结5466份文件的完整字节SHA，manifest为dd296e75686373120d3498e5f78d67709b5d3a9da05fba7e176060726fddbaf7。解码时间和六分钟覆盖仍待全量验证。
 - pilot-v3-bound已结束：247层机械门通过，2层FAIL均为ZF702原问题体扫2/9动作预算弃权；四路退出0不等于验收通过。两层拟排除比例73.49%/73.72%超过原70%保护线，源模块完整计算，无资源弃权。budget-source-probe.jsonl保留逐模块证据，不能直接提高预算或把形态模型当独立降水真值。
 - raw-smoke-v2完成四个真实原生体扫、160个反射率层，全部机械门通过。离线镜像xqc-native-acceptance-c5537fe基于当前53beaba，仅采用已接受56796d4归一化writer；未切换生产服务。
