@@ -296,3 +296,31 @@ def test_distance_partition_evidence_cannot_change_masks_or_weather_authority():
     for field in legacy:assert np.array_equal(legacy[field],evidence[field])
     assert all('original_distance_partitions' in record for record in report['objects'])
     assert all('original_distance_partitions' not in record for record in base['objects'])
+
+
+def test_short_center_uses_original_edges_not_uneven_gate_population():
+    module=load('radial_revision.fragment_constellation')
+    history=[dict(angular_width_deg=2.,bearing_deg=35.+i*.2,
+        original_left_deg=34.,original_right_deg=36.,bilateral_fraction=1.,
+        observed_weather_gates=0,lower_parent_weather_gates=0,protected_gates=0,
+        lower_parent_protected_gates=0) for i in range(4)]
+    ranges=300000.+np.concatenate([np.arange(i,i+6)*250 for i in (0,24,48,72)])
+    result=module.short_segment_assessment(history,ranges,250,1,False)
+    assert result['qualified'] and result['center_drift_deg']==0
+    assert result['center_basis']=='complete_original_edges'
+    # Actual boundaries translate; a constant population centroid cannot hide it.
+    for i,member in enumerate(history):
+        member.update(bearing_deg=35.,original_left_deg=34.+i*.2,original_right_deg=36.+i*.2)
+    result=module.short_segment_assessment(history,ranges,250,1,False)
+    assert not result['qualified'] and 'unstable_short_center' in result['hold_reasons']
+
+
+def test_short_partial_or_invalid_original_edge_history_is_rejected():
+    module=load('radial_revision.fragment_constellation')
+    history=[dict(angular_width_deg=2.,bearing_deg=35.,bilateral_fraction=1.,
+        observed_weather_gates=0,lower_parent_weather_gates=0,protected_gates=0,
+        lower_parent_protected_gates=0) for _ in range(4)]
+    ranges=300000.+np.arange(80)*250
+    history[0]['original_left_deg']=34.
+    with pytest.raises(ValueError,match='complete finite original edges'):
+        module.short_segment_assessment(history,ranges,250,1,False)

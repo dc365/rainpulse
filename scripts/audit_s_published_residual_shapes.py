@@ -10,7 +10,9 @@ import numpy as np
 from rainpulse_algo.radar.qc_engine.review_extension.radial_revision import fragment_constellation, morphology_objects
 
 
-def audit(snapshot, receipt):
+def audit(snapshot, receipt, *, shoulder_windows=False, shoulder_band=False):
+    if shoulder_band and not shoulder_windows:
+        raise ValueError('shoulder band requires measured windows')
     report = json.loads(receipt.read_text())
     if report.get('scope') != 'exact_Web_consumed_stored_QC_not_replay':
         raise ValueError('actual published QC receipt required')
@@ -47,7 +49,8 @@ def audit(snapshot, receipt):
     blocked = (a['WEATHER']==1) | (a['CONFLICTS']==1)
     summaries = {}
     for name, module, options in (
-        ('constellation', fragment_constellation, {'segment_evidence':True,'partition_evidence':True}),
+        ('constellation', fragment_constellation, {'segment_evidence':True,'partition_evidence':True,
+             'shoulder_windows':shoulder_windows,'shoulder_band':shoulder_band}),
         ('whole_object', morphology_objects, {'physical_windows':True})):
         fields, evidence = module.detect(native, blocked, **options)
         prefix = module.PREFIX
@@ -70,9 +73,12 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('snapshot',type=Path);p.add_argument('receipt',type=Path)
     p.add_argument('--output',type=Path,required=True)
+    p.add_argument('--shoulder-windows',action='store_true',help='Research measured 1/2/5km bilateral windows')
+    p.add_argument('--shoulder-band',action='store_true',help='Research bounded exterior band; requires windows')
     args=p.parse_args()
     if args.output.exists():raise ValueError('new output required')
-    result=audit(args.snapshot,args.receipt)
+    result=audit(args.snapshot,args.receipt,shoulder_windows=args.shoulder_windows,shoulder_band=args.shoulder_band)
+    result['research_options']=dict(shoulder_windows=args.shoulder_windows,shoulder_band=args.shoulder_band)
     with args.output.open('x') as f:json.dump(result,f,indent=2,allow_nan=False);f.write('\n')
     print(json.dumps({k:v for k,v in result.items() if k!='detectors'}))
     for name,value in result['detectors'].items():

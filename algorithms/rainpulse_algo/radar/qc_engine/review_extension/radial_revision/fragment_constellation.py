@@ -59,6 +59,16 @@ def short_segment_assessment(history, ranges, dr, beam, parent_hold):
     distance=np.asarray(ranges,dtype=float)
     widths=np.array([m['angular_width_deg'] for m in history])
     bearings=np.rad2deg(np.unwrap(np.deg2rad([m['bearing_deg'] for m in history])))
+    has_edges=any('original_left_deg' in m or 'original_right_deg' in m for m in history)
+    if has_edges:
+        if not all('original_left_deg' in m and 'original_right_deg' in m for m in history):
+            raise ValueError('complete finite original edges required')
+        left=np.array([m['original_left_deg'] for m in history])
+        right=np.array([m['original_right_deg'] for m in history])
+        if (not np.isfinite(left).all() or not np.isfinite(right).all() or
+            np.any(right <= left) or not np.allclose(right-left,widths,rtol=0,atol=1e-6)):
+            raise ValueError('complete finite original edges required')
+        bearings=np.rad2deg(np.unwrap(np.deg2rad((left+right)/2)))
     span=float(distance[-1]-distance[0]+dr)
     support=float(len(distance)*dr)
     windows=[len(np.unique((distance-distance[0])//scale)) for scale in (1000,2000,5000)]
@@ -76,7 +86,8 @@ def short_segment_assessment(history, ranges, dr, beam, parent_hold):
     if width_drift>.5*beam:holds.append('unstable_short_width')
     return dict(research_only=True,action_authority=False,qualified=not holds,
         radial_span_m=span,actual_range_support_m=support,range_window_counts=windows,
-        center_drift_deg=center_drift,width_drift_deg=width_drift,hold_reasons=holds)
+        center_drift_deg=center_drift,width_drift_deg=width_drift,hold_reasons=holds,
+        center_basis='complete_original_edges' if has_edges else 'legacy_population_centroid')
 
 
 def measured_shoulder_windows(r,dr,columns,known,quiet,protected,charge):
@@ -263,6 +274,8 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                         range_min_m=float(r[fc].min()), range_max_m=float(r[fc].max()+dr),
                         bearing_deg=fragment['bearing'] % 360,
                         angular_width_deg=float(np.ptp(angle[fr])+spacing),
+                        original_left_deg=float(angle[fr].min()-spacing/2),
+                        original_right_deg=float(angle[fr].max()+spacing/2),
                         observed_weather_gates=int(weather[segment[fr], fc].sum()),
                         protected_gates=int(barred[segment[fr], fc].sum()),
                         lower_parent_ids=list(map(int,parent_ids)),lower_parent_weather_gates=parent_weather,

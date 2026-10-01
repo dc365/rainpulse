@@ -38,3 +38,8 @@ def test_audit_rejects_unbound_or_forged_native_targets(tmp_path,change,match):
     if change=='count':data['renderer_eligible_visible_gates']=0
     receipt.write_text(json.dumps(data))
     with pytest.raises(ValueError,match=match):m.audit(snapshot,receipt)
+
+
+def test_bounded_exterior_band_requires_measured_windows(tmp_path):
+    with pytest.raises(ValueError,match='requires measured windows'):
+        m.audit(tmp_path/'unused.npz',tmp_path/'unused.json',shoulder_band=True)

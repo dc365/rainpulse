@@ -1269,3 +1269,37 @@ Related radial+published tests pass (303 collected cases), with six additional
 negative receipt-binding tests passing separately. Default array identity is
 verified with and without partition evidence; a shared lower-weather bridge is
 not split. Source/bounds/known-vs-missing and short-weather counterexamples remain.
+
+### Short-object center uses original edges, 2026-10-02
+
+A RED regression reproduced a shape measurement error: a fixed two-ray envelope
+with uneven gate populations shifts the average occupied-gate bearing, despite
+stable left/right boundaries. The short research assessment now uses the midpoint
+of complete original cell edges (native ray centers +/-half native spacing).
+Widths must match those edges, and partial/nonfinite/inverted history is rejected.
+Legacy standalone histories without any edge fields retain their prior basis.
+No tolerance increases; genuine translated boundaries remain held. Two new
+regressions GREEN; related suite311PASS plus added CLI dependency test PASS.
+
+Actual published09:48 fullRAW replay `published-v6-0948-edge-center-v3.json`:
+remote354–385km center drift0 versus prior population-centroid0.257–0.329deg.
+Only strict bilateral support still holds that partition. Explicit research CLI
+`--shoulder-windows` and `--shoulder-band` retain existing actual-known/quiet/
+protected semantics. Both `edge-windows-v4` and `edge-band-v5` remain0newstrong;
+short qualification still fails. These variants must not be promoted as effective
+removal or as independent weather truth. Next inspect the exact observed opposing
+samples and multi-window gaps, then combine complete-object edge evidence with
+available source/volume history without inventing dry air from missing returns.
+
+CI36937869862 for priorf3a7fb8: opensource-QC job succeeded; overall FAILED due
+C/D fusion sources-metadata comparisons and4910lint findings. Full failed log
+retained under `.build/s-bounded-radial-20261001-release/ci-f3a7fb8-failed.log`.
+Do not claim all CI green. 105sameunit3730153active:09:48/08:18complete,
+current08:36. No research branch activation.
+
+Eight complete native snapshots additionally compared current arrays against
+committede07493ea module loaded directly from Git into memory (no source checkout
+or source copy). All returned candidate/strong/ID/weather fields identical and RAW
+unchanged on all eight cuts; receipt `edge-center-eight-array-invariance-v1.json`.
+Only research short-shape explanations change. ConcurrentXadvancedHEAD to c4fc70c;
+this S change is staged separately and does not include their working files.
