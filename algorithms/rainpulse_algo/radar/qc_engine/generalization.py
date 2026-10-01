@@ -164,7 +164,8 @@ def broad_source_review(
             )
         ) != 0
         broad_arrays, broad_summary = infer_broad_source(
-            native, cfg.broad_source, weather=independent, conflicts=broad_conflict
+            native, cfg.broad_source, weather=independent, conflicts=broad_conflict,
+            independent_weather_available=weather_available,
         )
         if profile.geometry.phase_period_deg != 360:
             raise ValueError("broad source currently requires 360-degree phase convention")

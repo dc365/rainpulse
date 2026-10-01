@@ -106,7 +106,7 @@ def shared_range_term(native, valid, reference):
     }
 
 
-def infer_broad_source(native, cfg, *, weather=None, conflicts=None):
+def infer_broad_source(native, cfg, *, weather=None, conflicts=None, independent_weather_available=None):
     if (
         cfg.mode not in {"audit", "experiment_quarantine"}
         or cfg.maximum_range_m <= cfg.minimum_range_m
@@ -136,6 +136,7 @@ def infer_broad_source(native, cfg, *, weather=None, conflicts=None):
                 native, cfg.source_review, reference=source_reference,
                 residual=source_residual, weather=protected, conflicts=conflict,
                 reference_available=(source_fold > 0),
+                independent_weather_available=independent_weather_available,
             )
             source_extra["SRC_REVIEW_REFERENCE_FOLD_ID"] = source_fold
             if cfg.source_review.mode == 'experiment_quarantine':
@@ -436,6 +437,7 @@ def infer_broad_source(native, cfg, *, weather=None, conflicts=None):
             native, cfg.source_review, reference=source_reference,
             residual=source_residual, weather=protected, conflicts=conflict | plateau,
             reference_available=(source_fold > 0),
+            independent_weather_available=independent_weather_available,
         )
         source_extra["SRC_REVIEW_REFERENCE_FOLD_ID"] = source_fold
         added_source = qualified_source & ~candidate

@@ -56,13 +56,14 @@ def empty_arrays(shape, cfg):
     return result
 
 
-def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, conflicts=None, records_out=None):
+def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, conflicts=None, records_out=None, independent_weather_available=None):
     r, az, dr, good, gaps = native_geometry(native)
     z, observed = moment(native, "DBZH")
     observed = observed & good[:, None]
     source = mask(legacy_source, native.shape, "legacy source")
     delta = numeric(legacy_residual, native.shape, "legacy residual")
     blocked = mask(weather, native.shape, "weather") | mask(conflicts, native.shape, "conflicts")
+    weather_available = mask(independent_weather_available, native.shape, 'independent weather availability')
     source = source & observed & np.isfinite(delta) & (abs(delta) <= 2.5)
     base = {"version": cfg.version, "step": cfg.step, "mode": cfg.mode,
             "operational_eligible": False, "confirmed_gates": 0, "filled_gates": 0,
@@ -87,6 +88,8 @@ def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, confl
         group_polar = np.zeros(native.shape, bool)
         group_morph = np.zeros(native.shape, bool)
         residual = np.zeros(native.shape, bool)
+        discontinuous = np.zeros(native.shape, bool)
+        envelope = np.zeros(native.shape, bool)
         if cfg.fragment_line is not None:
             from .fragment_line import detect, coherent_source
             fields, line_report = detect(native, cfg.fragment_line, barred, source=source & ~barred)
@@ -109,6 +112,25 @@ def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, confl
             line_report['group_morphology_gates'] = int(group_morph.sum())
             line_report['group_candidate_gates'] = int(out['RV2_GROUP_MASK'].sum())
             line_report['group_polar_gates'] = int(group_polar.sum())
+        if cfg.fragment_line is not None and cfg.fragment_line.raw_fragment_families_enabled:
+            from .raw_families import detect as detect_raw_families
+            fields, family_report = detect_raw_families(native, barred, beam_width=cfg.fragment_line.antenna_beam_width_deg)
+            out.update(fields)
+            # Diagnostic nomination remains outside existing source-fit/action inputs.
+            line_report['raw_fragment_families'] = family_report
+        if cfg.fragment_line is not None and cfg.fragment_line.source_envelope_enabled:
+            from .source_envelope import detect as detect_envelope
+            # Freeze before residual/discontinuous association. Never seed from
+            # a previously accepted remnant or from derived DBZH_QC.
+            seeds = source | line_source | line_morphology | line_isolated | group_morph
+            nomination = seeds | (out.get('RV2_LINE_MASK', np.zeros(native.shape, 'uint8')) == 1) | (out.get('RV2_GROUP_MASK', np.zeros(native.shape, 'uint8')) == 1)
+            fields, envelope_report = detect_envelope(
+                native, barred, seeds, nomination,
+                beam_width=cfg.fragment_line.antenna_beam_width_deg)
+            out.update(fields)
+            envelope = fields['RV2_ENVELOPE_MASK'] == 1
+            candidate |= envelope
+            line_report['source_envelopes'] = envelope_report
         if cfg.fragment_line is not None and cfg.fragment_line.residual_objects_enabled:
             from .residual_objects import detect as detect_residual
             fields, residual_report = detect_residual(
@@ -118,6 +140,14 @@ def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, confl
             residual = (fields['RV2_RESIDUAL_LINK_MASK'] | fields['RV2_RESIDUAL_DIRECT_MASK']) == 1
             candidate |= residual
             line_report['residual_objects'] = residual_report
+        if cfg.fragment_line is not None and cfg.fragment_line.discontinuous_tracks_enabled:
+            from .discontinuous import detect as detect_discontinuous
+            fields, track_report = detect_discontinuous(
+                native, barred, beam_width=cfg.fragment_line.antenna_beam_width_deg)
+            out.update(fields)
+            discontinuous = fields['RV2_DISCONTINUOUS_MASK'] == 1
+            candidate |= fields['RV2_DISCONTINUOUS_CANDIDATE_MASK'] == 1
+            line_report['discontinuous_tracks'] = track_report
         source_report = {"status": "disabled", "reference_folds": 0, "reference_models": 0}
         if cfg.step >= 2:
             # Target plateau veto is already in candidate. Training plateau
@@ -127,12 +157,70 @@ def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, confl
                 native, cfg, candidate, blocked | ~good[:, None], records_out=local_records
             )
             out.update(fields)
+        snr, snr_ok = moment(native, "SNR")
+        polar_ok = np.logical_and.reduce([moment(native, k)[1] for k in ("RHOHV", "ZDR", "PHIDP")])
+        original_receiver = source & snr_ok & (snr >= cfg.minimum_coherent_snr_db) & polar_ok & (out["RV2_WEAK_MATCH_MASK"]==0)
+        original_source = (original_receiver | line_source | line_morphology | line_isolated | group_morph) & observed & ~barred
+        if cfg.fragment_line is not None and cfg.fragment_line.source_ledger_enabled:
+            from .source_ledger import freeze as freeze_source_ledger
+            kinds = (original_receiver.astype('uint8') | (line_source.astype('uint8')*2) |
+                     (line_morphology.astype('uint8')*4) | (line_isolated.astype('uint8')*8) |
+                     (group_morph.astype('uint8')*16))
+            fields,ledger_report = freeze_source_ledger(native,barred,original_source,
+                out['RV2_RAW_FAMILY_MASK'],beam_width=cfg.fragment_line.antenna_beam_width_deg,source_kind=kinds)
+            out.update(fields)
+            line_report['complete_source_ledger'] = ledger_report
+        if cfg.fragment_line is not None and cfg.fragment_line.raw_fan_families_enabled:
+            from .raw_fans import detect as detect_raw_fans
+            fields,fan_report=detect_raw_fans(native,barred,out['RV2_SOURCE_LEDGER_SEED_ID'],
+                beam_width=cfg.fragment_line.antenna_beam_width_deg)
+            out.update(fields)
+            line_report['raw_fan_families']=fan_report
+        source_footprint=np.zeros(native.shape,bool)
+        if cfg.fragment_line is not None and cfg.fragment_line.source_footprint_enabled:
+            from .source_footprint import qualify as qualify_footprint, evidence as footprint_evidence
+            fields,footprint_report=qualify_footprint(native,barred,out)
+            out.update(fields)
+            out.update(footprint_evidence(native))
+            source_footprint=fields['RV2_SOURCE_FOOTPRINT_QUALIFIED_MASK']==1
+            candidate|=source_footprint
+            line_report['source_footprint']=footprint_report
+        fan_joint=np.zeros(native.shape,bool)
+        if cfg.fragment_line is not None and cfg.fragment_line.fan_joint_enabled:
+            from .fan_joint import qualify as qualify_fans
+            fields,fan_joint_report=qualify_fans(native,barred,out)
+            out.update(fields)
+            fan_joint=fields['RV2_FAN_JOINT_QUALIFIED_MASK']==1
+            candidate|=fan_joint
+            line_report['fan_joint']=fan_joint_report
+        if cfg.fragment_line is not None and cfg.fragment_line.fan_power_states_enabled:
+            from .fan_states import diagnose as diagnose_fan_states
+            fields, states_report = diagnose_fan_states(native, barred, out)
+            out.update(fields)
+            line_report['fan_power_states'] = states_report
+        source_window=np.zeros(native.shape,bool)
+        if cfg.fragment_line is not None and cfg.fragment_line.source_window_tracks_enabled:
+            from .source_window import detect as detect_source_windows
+            fields,window_report=detect_source_windows(native,barred,out,
+                beam_width=cfg.fragment_line.antenna_beam_width_deg)
+            out.update(fields)
+            source_window=fields['RV2_SOURCE_WINDOW_QUALIFIED_MASK']==1
+            candidate|=fields['RV2_SOURCE_WINDOW_CANDIDATE_MASK']==1
+            line_report['source_window_tracks']=window_report
+        joint = np.zeros(native.shape,bool)
+        if cfg.fragment_line is not None and cfg.fragment_line.family_joint_enabled:
+            from .family_joint import qualify as qualify_families
+            # Source seeds come only from original independently accepted paths,
+            # before any new family qualification or residual association.
+            fields,joint_report = qualify_families(native,out,barred,original_source)
+            out.update(fields)
+            joint = fields['RV2_FAMILY_JOINT_QUALIFIED_MASK']==1
+            candidate |= joint
+            line_report['family_joint'] = joint_report
         link_report = {"identity_count": 0, "identity_links": 0, "filled_gates": 0}
         if cfg.step >= 3:
             fields, link_report = fragment_identities(native, cfg, candidate, barred)
             out.update(fields)
-        snr, snr_ok = moment(native, "SNR")
-        polar_ok = np.logical_and.reduce([moment(native, k)[1] for k in ("RHOHV", "ZDR", "PHIDP")])
         weak = candidate & (~snr_ok | (snr < cfg.minimum_coherent_snr_db) | ~polar_ok |
                             (out["RV2_WEAK_MATCH_MASK"] == 1))
         # The persisted source path must not claim weak states; proposal-only
@@ -140,14 +228,15 @@ def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, confl
         out["RV2_SEGMENT_MATCH_MASK"] &= (~weak).astype("uint8")
         legacy_match = candidate & source & ~barred
         segment_match = (out["RV2_SEGMENT_MATCH_MASK"] == 1) & candidate & ~barred & ~weak
-        qualified = legacy_match | segment_match | line_source | line_morphology | line_isolated | group_polar | group_morph | residual
-        proposal = (legacy_match | (segment_match & cfg.allow_segmented_quarantine)
-                    | line_source | line_morphology | line_isolated | group_polar
-                    | group_morph | residual) & ~weak
+        geometry = (line_morphology | line_isolated | group_polar | group_morph | residual | discontinuous | envelope | joint | source_window | fan_joint | source_footprint) & observed & ~barred
+        qualified = legacy_match | segment_match | line_source | geometry
+        receiver = (legacy_match | (segment_match & cfg.allow_segmented_quarantine) | line_source) & ~weak
+        geometry_action = geometry & (cfg.mode == 'experiment_quarantine')
+        proposal = receiver | geometry_action
         if cfg.mode != "experiment_quarantine":
             proposal[:] = False
         reason = out["RV2_REASON"]
-        reason[group_polar | group_morph] |= int(Reason.GROUP_POLAR_MORPHOLOGY)
+        reason[group_polar | group_morph | discontinuous | envelope | joint | source_window | fan_joint | source_footprint] |= int(Reason.GROUP_POLAR_MORPHOLOGY)
         if "RV2_LINE_MASK" in out:
             reason[out["RV2_LINE_MASK"] == 1] |= int(Reason.FRAGMENT_LINE)
             reason[line_source] |= int(Reason.COHERENT_LINE_SOURCE)
@@ -171,6 +260,8 @@ def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, confl
             "RV2_LEGACY_MATCH_MASK": legacy_match.astype("uint8"),
             "RV2_QUALIFIED_MASK": qualified.astype("uint8"),
             "RV2_ACTION_PROPOSAL_MASK": proposal.astype("uint8"),
+            "RV2_GEOMETRY_ACTION_MASK": geometry_action.astype("uint8"),
+            "RV2_INDEPENDENT_WEATHER_AVAILABLE_MASK": (weather_available & observed).astype('uint8'),
             "RV2_BARRED_MASK": (barred & observed).astype("uint8"),
             "RV2_PLATEAU_MASK": (plateau & observed).astype("uint8"),
         })
@@ -183,6 +274,11 @@ def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, confl
                      "segmented_source_supported_gates": int(segment_match.sum()),
                      "qualified_gates": int(qualified.sum()), "action_proposal_gates": int(proposal.sum()),
                      "weak_actions": int((proposal & weak).sum()),
+                     "geometry_weak_actions": int((geometry_action & weak).sum()),
+                     "receiver_weak_actions": int((receiver & weak).sum()),
+                     "action_policy": "independent_geometry_receiver_split_v1",
+                     "independent_weather_available_gates": int((candidate & weather_available).sum()),
+                     "independent_weather_unknown_gates": int((candidate & ~weather_available).sum()),
                      "source": source_report, "identity": link_report, "fragment_line": line_report}
     except ResourceLimit as exc:
         out = empty_arrays(native.shape, cfg)

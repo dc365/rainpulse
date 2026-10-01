@@ -25,6 +25,9 @@ def validate_revision_fields(group, observed, legacy_source, blocked):
         raise ValueError("inconsistent radial revision mode/step")
     candidate = get("RV2_CANDIDATE_MASK") == 1
     barred = get("RV2_BARRED_MASK") == 1
+    if "RV2_RAW_FAMILY_MASK" in group:
+        from .raw_families import validate as validate_raw_families
+        validate_raw_families(group, observed, barred | blocked)
     topology = get("RV2_TOPOLOGY_MASK") == 1
     bundle = get("RV2_BUNDLE_MASK") == 1
     line = np.zeros(shape, bool)
@@ -98,7 +101,120 @@ def validate_revision_fields(group, observed, legacy_source, blocked):
                 np.any((anchors > 0) & (~observed | blocked | barred)) or
                 not np.isin(parent[track], anchors[anchors > 0]).all()):
                 raise ValueError('track lacks frozen anchor lineage')
-    if not np.array_equal(candidate, (topology | bundle | line | group_candidate | residual_objects) & ~barred):
+    discontinuous = np.zeros(shape, bool)
+    discontinuous_candidate = discontinuous.copy()
+    if 'RV2_DISCONTINUOUS_MASK' in group:
+        value = get('RV2_DISCONTINUOUS_MASK')
+        if value.dtype != np.dtype('uint8'):
+            raise ValueError('invalid discontinuous mask dtype')
+        discontinuous = mask(value, shape, 'discontinuous tracks')
+        discontinuous_candidate = discontinuous.copy()
+        if 'RV2_DISCONTINUOUS_CANDIDATE_MASK' in group:
+            value = get('RV2_DISCONTINUOUS_CANDIDATE_MASK')
+            if value.dtype != np.dtype('uint8'):
+                raise ValueError('invalid discontinuous candidate dtype')
+            discontinuous_candidate = mask(value, shape, 'discontinuous candidates')
+            measured = get('RV2_DISCONTINUOUS_MEASURED_MASK')
+            windows = get('RV2_DISCONTINUOUS_WINDOW_BITS')
+            if (measured.dtype != np.dtype('uint8') or windows.dtype != np.dtype('uint8') or windows.shape != shape or
+                    not np.isin(windows, [0,1,2,3]).all()):
+                raise ValueError('invalid measured window evidence')
+            measured = mask(measured, shape, 'measured bilateral shoulders')
+            if np.any(measured & ~discontinuous_candidate) or np.any(discontinuous & (~measured | (windows != 3))):
+                raise ValueError('unanchored action lacks two measured window scales')
+            edge = get('RV2_DISCONTINUOUS_EDGE_DB')
+            if (edge.shape != shape or edge.dtype != np.dtype('float32') or np.isinf(edge).any() or
+                    not np.array_equal(np.isfinite(edge), measured) or np.any(measured & (edge < 6.))):
+                raise ValueError('unanchored contrast is not measured')
+            for scale in (20,60):
+                fraction = get('RV2_DISCONTINUOUS_WINDOW'+str(scale)+'_FRACTION')
+                if (fraction.shape != shape or fraction.dtype != np.dtype('float32') or np.isinf(fraction).any() or
+                        not np.array_equal(np.isfinite(fraction), discontinuous_candidate) or
+                        np.any(discontinuous_candidate & ((fraction < 0.) | (fraction > 1.))) or
+                        np.any(discontinuous & (fraction < .75-1e-6))):
+                    raise ValueError('unanchored measured fraction lacks scale support')
+        identity = get('RV2_DISCONTINUOUS_OBJECT_ID')
+        if identity.shape != shape or identity.dtype != np.dtype('uint32'):
+            raise ValueError('invalid discontinuous object identity')
+        evidence = []
+        for suffix in ('LEFT_DEG', 'RIGHT_DEG', 'SUPPORT_M', 'SPAN_M'):
+            v = get('RV2_DISCONTINUOUS_'+suffix)
+            if (v.shape != shape or v.dtype != np.dtype('float32') or np.isinf(v).any() or
+                    not np.array_equal(np.isfinite(v), discontinuous_candidate)):
+                raise ValueError('invalid discontinuous evidence')
+            evidence.append(v)
+        left, right, support, span = evidence
+        if (not np.array_equal(identity > 0, discontinuous_candidate) or np.any(discontinuous & ~discontinuous_candidate) or
+                np.any(discontinuous_candidate & (~observed | blocked | barred | (right <= left) |
+                         (right-left > 3.000001) | (support < 8000.) | (span < 80000.) | (support > span)))):
+            raise ValueError('discontinuous object lacks bounded geometry')
+    envelope = np.zeros(shape, bool)
+    seeds = np.zeros(shape, 'uint32')
+    if 'RV2_ENVELOPE_MASK' in group:
+        value = get('RV2_ENVELOPE_MASK')
+        if value.dtype != np.dtype('uint8'):
+            raise ValueError('invalid source envelope dtype')
+        envelope = mask(value, shape, 'source envelope')
+        parent, seeds, raw = (get('RV2_ENVELOPE_'+k) for k in ('PARENT_ID','SEED_ID','RAW_OBJECT_ID'))
+        for value in (parent, seeds, raw):
+            if value.shape != shape or value.dtype != np.dtype('uint32'):
+                raise ValueError('invalid source envelope lineage')
+        ev = []
+        for suffix in ('LEFT_DEG','RIGHT_DEG','START_M','END_M','ANCHOR_DISTANCE_M'):
+            value = get('RV2_ENVELOPE_'+suffix)
+            if (value.shape != shape or value.dtype != np.dtype('float32') or np.isinf(value).any() or
+                    not np.array_equal(np.isfinite(value), envelope)):
+                raise ValueError('invalid source envelope bounds')
+            ev.append(value)
+        left, right, start, end, distance = ev
+        if (not np.array_equal(parent > 0, envelope) or not np.isin(parent[envelope], seeds[seeds > 0]).all() or
+                np.any(envelope & ((seeds > 0) | ~observed | blocked | barred | (right <= left) |
+                         (right-left > 8.000001) | (start < 0.) | (end-start < 60000.) |
+                         (distance < 0.) | (distance > 120000.))) or
+                np.any((raw > 0) & (~observed | barred | blocked)) or
+                np.any((seeds > 0) & (seeds != raw))):
+            raise ValueError('source envelope lost original lineage or crossed barrier')
+        if 'range' in group:
+            r = get('range')[None,:]
+            if np.any(envelope & ((r < start-10000.) | (r >= end+10000.))):
+                raise ValueError('source envelope advanced beyond frozen bounds')
+        if 'RV2_ENVELOPE_ORIGINAL_LEFT_DEG' in group:
+            original_left, original_right, beam = (get('RV2_ENVELOPE_'+k) for k in
+                ('ORIGINAL_LEFT_DEG','ORIGINAL_RIGHT_DEG','BEAM_PROXY_DEG'))
+            for value in (original_left, original_right, beam):
+                if (value.shape != shape or value.dtype != np.dtype('float32') or np.isinf(value).any() or
+                        not np.array_equal(np.isfinite(value), envelope)):
+                    raise ValueError('invalid original angular envelope')
+            if np.any(envelope & ((beam <= 0.) | (original_right <= original_left) |
+                         (abs(left-original_left) > beam+1e-4) | (abs(right-original_right) > beam+1e-4))):
+                raise ValueError('source envelope advanced beyond original angular bounds')
+    if 'RV2_INDEPENDENT_WEATHER_AVAILABLE_MASK' in group:
+        value = get('RV2_INDEPENDENT_WEATHER_AVAILABLE_MASK')
+        if value.dtype != np.dtype('uint8') or np.any(mask(value, shape, 'weather availability') & ~observed):
+            raise ValueError('invalid independent weather availability')
+    joint = np.zeros(shape,bool)
+    if 'RV2_FAMILY_JOINT_QUALIFIED_MASK' in group:
+        joint = mask(get('RV2_FAMILY_JOINT_QUALIFIED_MASK'),shape,'joint families')
+    source_footprint=np.zeros(shape,bool)
+    if 'RV2_SOURCE_FOOTPRINT_QUALIFIED_MASK' in group:
+        from .source_footprint import validate as validate_source_footprint
+        validate_source_footprint(group,observed,barred|blocked)
+        source_footprint=mask(get('RV2_SOURCE_FOOTPRINT_QUALIFIED_MASK'),shape,'source footprint')
+    fan_joint=np.zeros(shape,bool)
+    if 'RV2_FAN_JOINT_QUALIFIED_MASK' in group:
+        from .fan_joint import validate as validate_fan_joint
+        validate_fan_joint(group,observed,barred|blocked)
+        fan_joint=mask(get('RV2_FAN_JOINT_QUALIFIED_MASK'),shape,'fan joint qualification')
+    if 'RV2_FAN_STATE_MATCH_MASK' in group:
+        from .fan_states import validate as validate_fan_states
+        validate_fan_states(group, observed, barred|blocked)
+    source_window=np.zeros(shape,bool);window_candidate=source_window.copy()
+    if 'RV2_SOURCE_WINDOW_QUALIFIED_MASK' in group:
+        from .source_window import validate as validate_source_window
+        validate_source_window(group,observed,barred|blocked)
+        source_window=mask(get('RV2_SOURCE_WINDOW_QUALIFIED_MASK'),shape,'window source qualification')
+        window_candidate=mask(get('RV2_SOURCE_WINDOW_CANDIDATE_MASK'),shape,'window source candidates')
+    if not np.array_equal(candidate, (topology | bundle | line | group_candidate | residual_objects | discontinuous_candidate | envelope | joint | window_candidate | fan_joint | source_footprint) & ~barred):
         raise ValueError("radial candidate differs from raw evidence")
     if np.any(candidate & blocked) or np.any((get("RV2_PLATEAU_MASK") == 1) & candidate):
         raise ValueError("radial candidate crossed a barrier")
@@ -180,16 +296,50 @@ def validate_revision_fields(group, observed, legacy_source, blocked):
                     raise ValueError('invalid window evidence')
                 if suffix.endswith('FRACTION') and np.any(support & ((value < -1e-6)|(value > 1.000001))):
                     raise ValueError('invalid missing fraction')
-    if not np.array_equal(qualified, legacy | segment | line_source | morph | isolated | group_polar | group_morph | residual_objects):
+    if np.any((seeds > 0) & ~(legacy_source | line_source | morph | isolated | group_morph)):
+        raise ValueError('envelope seed was not an original independent source')
+    if 'RV2_SOURCE_LEDGER_SEED_MASK' in group:
+        from .source_ledger import validate as validate_ledger
+        original = mask(get('RV2_SOURCE_LEDGER_SEED_MASK'),shape,'complete original source')
+        kinds = get('RV2_SOURCE_LEDGER_KIND')
+        old_paths=(legacy_source,line_source,morph,isolated,group_morph)
+        if (np.any(kinds>31) or np.any(original&~np.logical_or.reduce(old_paths)) or
+            any(np.any(((kinds&bit)!=0)&~path) for bit,path in zip((1,2,4,8,16),old_paths))):
+            raise ValueError('ledger kind acquired a new source path')
+        if not np.array_equal(get('RV2_SOURCE_LEDGER_CANDIDATE_MASK'),get('RV2_RAW_FAMILY_MASK')):
+            raise ValueError('ledger targets differ from RAW family nominations')
+        validate_ledger(group,observed,barred|blocked,original)
+    if 'RV2_RAW_FAN_MASK' in group:
+        from .raw_fans import validate as validate_raw_fans
+        validate_raw_fans(group,observed,barred|blocked,get('RV2_SOURCE_LEDGER_SEED_ID'))
+    if 'RV2_FAMILY_JOINT_QUALIFIED_MASK' in group:
+        from .family_joint import validate as validate_joint
+        # The complete original-source mask is persisted separately; geometry
+        # seeds must be old independent paths, never another joint member.
+        original_joint_source = get('RV2_FAMILY_JOINT_ORIGINAL_SOURCE_MASK') == 1
+        if np.any(original_joint_source & ~((legacy_source & (get('RV2_WEAK_CANDIDATE_MASK')==0)) | line_source | morph | isolated | group_morph)):
+            raise ValueError('joint source was not an original independent path')
+        validate_joint(group,observed,barred | blocked,original_joint_source)
+    geometry = morph | isolated | group_polar | group_morph | residual_objects | discontinuous | envelope | joint | source_window | fan_joint | source_footprint
+    if not np.array_equal(qualified, legacy | segment | line_source | geometry):
         raise ValueError("radial qualification not equal to its source paths")
     weak_candidate = get("RV2_WEAK_CANDIDATE_MASK") == 1
     weak = get("RV2_WEAK_MATCH_MASK") == 1
-    expected = ((legacy | (segment & (allow == 1)) | line_source | morph | isolated
-                 | group_polar | group_morph | residual_objects) & ~weak_candidate) & (mode == 1)
+    geometry_action = np.zeros(shape, bool)
+    if 'RV2_GEOMETRY_ACTION_MASK' in group:
+        value = get('RV2_GEOMETRY_ACTION_MASK')
+        if value.dtype != np.dtype('uint8'):
+            raise ValueError('invalid geometry action dtype')
+        geometry_action = mask(value, shape, 'geometry action')
+        if not np.array_equal(geometry_action, geometry & (mode == 1) & observed & ~barred & ~blocked):
+            raise ValueError('geometry action differs from qualified geometry')
+        expected = (((legacy | (segment & (allow == 1)) | line_source) & ~weak_candidate) | geometry_action) & (mode == 1)
+    else:
+        expected = ((legacy | (segment & (allow == 1)) | line_source | geometry) & ~weak_candidate) & (mode == 1)
     proposal = get("RV2_ACTION_PROPOSAL_MASK") == 1
     if not np.array_equal(proposal, expected):
         raise ValueError("radial action differs from explicit policy")
-    if np.any(weak_candidate & segment) or np.any(proposal & weak_candidate & ~legacy & ~line_source & ~morph & ~isolated & ~group_polar & ~group_morph):
+    if np.any(weak_candidate & segment) or np.any(proposal & weak_candidate & ~geometry_action):
         raise ValueError("weak hypothesis acquired an independent censor action")
     if np.any((get("RV2_LINKED_SEGMENT_MASK") == 1) & ~candidate):
         raise ValueError("identity links filled a noncandidate interval")

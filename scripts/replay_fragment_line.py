@@ -32,6 +32,8 @@ def main():
     p.add_argument('--sparse-isolated', action='store_true')
     p.add_argument('--group-morphology', action='store_true')
     p.add_argument('--window-tracks', action='store_true')
+    p.add_argument('--discontinuous-tracks', action='store_true')
+    p.add_argument('--source-envelope', action='store_true')
     a = p.parse_args()
     if a.window_tracks:
         a.group_morphology = True
@@ -64,6 +66,10 @@ def main():
                             'group_morphology_enabled': a.group_morphology,
                             'window_tracks_enabled': a.window_tracks}
             child = dict(sc, radial_revision=dict(sc['radial_revision'], fragment_line=line_cfg))
+            if a.discontinuous_tracks:
+                line_cfg.update(residual_objects_enabled=True, discontinuous_tracks_enabled=True)
+            if a.source_envelope:
+                line_cfg.update(residual_objects_enabled=True, source_envelope_enabled=True)
             current, new, detail = source(n, config.model_validate(child), ref, residual, **kw)
             new['SRC_REVIEW_REFERENCE_FOLD_ID'] = get('SRC_REVIEW_REFERENCE_FOLD_ID')
             load('source_validation').validate_source_fields(new, n.field_available['DBZH'])

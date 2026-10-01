@@ -24,12 +24,40 @@ class FragmentLineConfig(BaseModel):
     window_tracks_enabled: bool = False
     power_fan_enabled: bool = False
     residual_objects_enabled: bool = False
+    discontinuous_tracks_enabled: bool = False
+    source_envelope_enabled: bool = False
+    raw_fragment_families_enabled: bool = False
+    family_joint_enabled: bool = False
+    source_ledger_enabled: bool = False
+    source_window_tracks_enabled: bool = False
+    raw_fan_families_enabled: bool = False
+    fan_joint_enabled: bool = False
+    fan_power_states_enabled: bool = False
+    source_footprint_enabled: bool = False
     antenna_beam_width_deg: float | None = Field(default=None, gt=0., le=5.)
     isolated_link_gap_m: float = Field(default=30000., ge=0, le=30000.)
 
     @model_validator(mode="after")
     def check(self):
         import math
+        if self.family_joint_enabled and not self.raw_fragment_families_enabled:
+            raise ValueError("family joint qualification requires RAW families")
+        if self.source_ledger_enabled and not self.raw_fragment_families_enabled:
+            raise ValueError("complete source ledger requires RAW families")
+        if self.source_window_tracks_enabled and not self.source_ledger_enabled:
+            raise ValueError("window source tracks require complete source ledger")
+        if self.raw_fan_families_enabled and not self.source_ledger_enabled:
+            raise ValueError("RAW fan families require complete source ledger")
+        if self.source_footprint_enabled and not self.raw_fan_families_enabled:
+            raise ValueError("source footprint requires RAW fans and original source ledger")
+        if self.fan_joint_enabled and not self.raw_fan_families_enabled:
+            raise ValueError("fan joint qualification requires RAW fan families")
+        if self.fan_power_states_enabled and not self.fan_joint_enabled:
+            raise ValueError("fan power states require original fan joint references")
+        if self.discontinuous_tracks_enabled and not self.residual_objects_enabled:
+            raise ValueError("discontinuous tracks require residual objects")
+        if self.source_envelope_enabled and not self.residual_objects_enabled:
+            raise ValueError("source envelopes require residual objects")
         if self.power_fan_enabled and not self.group_morphology_enabled:
             raise ValueError("power fans require group morphology")
         if self.window_tracks_enabled and not self.group_morphology_enabled:

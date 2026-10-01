@@ -4,7 +4,7 @@ from .arrays import mask, numeric, moment
 from .multiscale import multiscale_radials
 
 
-def source_additions(native, cfg, reference, residual, *, weather=None, conflicts=None, reference_available=None, revision_records=None):
+def source_additions(native, cfg, reference, residual, *, weather=None, conflicts=None, reference_available=None, revision_records=None, independent_weather_available=None):
     shape = native.shape
     observed = moment(native, "DBZH")[1]
     protected = mask(weather, shape, "weather")
@@ -35,6 +35,7 @@ def source_additions(native, cfg, reference, residual, *, weather=None, conflict
         extra, detail = evaluate(
             native, cfg.radial_revision, source, delta,
             weather=protected, conflicts=conflict, records_out=revision_records,
+            independent_weather_available=independent_weather_available,
         )
         arrays.update(extra)
         qualified |= extra["RV2_ACTION_PROPOSAL_MASK"] == 1

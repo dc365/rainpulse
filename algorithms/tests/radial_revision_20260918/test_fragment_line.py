@@ -28,6 +28,7 @@ def test_morphology_alone_cannot_quarantine_and_audit_is_inert():
     out, _ = evaluate(n, cfg())
     assert out['RV2_LINE_MASK'].sum() > 0
     assert out['RV2_ACTION_PROPOSAL_MASK'].sum() == 0
+    n = Native(n.fields['DBZH'], fields={'SNR': 25., 'RHOHV': .99, 'ZDR': .5, 'PHIDP': 30.})
     source = n.fields['DBZH'] == 45
     out, _ = evaluate(n, cfg(), source)
     assert out['RV2_ACTION_PROPOSAL_MASK'].sum() > 0
@@ -109,7 +110,9 @@ def test_resource_abstention_retains_legacy_and_config_is_opt_in():
 def test_final_projection_does_not_restore_line_quarantine():
     from types import SimpleNamespace as S
     import importlib
-    n = fragmented(); source = n.fields['DBZH'] == 45
+    base = fragmented()
+    n = Native(base.fields['DBZH'], fields={'SNR': 25., 'RHOHV': .99, 'ZDR': .5, 'PHIDP': 30.})
+    source = n.fields['DBZH'] == 45
     evidence, _ = evaluate(n, cfg(), source)
     isolation = evidence['RV2_ACTION_PROPOSAL_MASK'] == 1
     assert isolation.any()
