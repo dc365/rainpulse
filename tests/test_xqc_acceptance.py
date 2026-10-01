@@ -50,3 +50,28 @@ def test_native_file_shards_are_complete_and_disjoint():
     assert set.union(*groups) == set(identities)
     assert sum(len(g) for g in groups) == len(identities)
     assert max(map(len, groups)) < 800
+
+
+def test_corpus_summary_requires_every_native_cut_and_preserves_cross_day():
+    summary_spec = importlib.util.spec_from_file_location("raw_summary", Path(__file__).parents[1] / "scripts/summarize_xqc_raw_acceptance.py")
+    summary = importlib.util.module_from_spec(summary_spec)
+    summary_spec.loader.exec_module(summary)
+    source = {"sha256": "a", "radar_id": "zf701", "relative_path": "sample"}
+    prefix = {"raw_sha256": "a", "radar_id": "zf701"}
+    rows = [(0, {**prefix, "state": "RAW_DECODE_VERIFIED", "ref_sweep_numbers": [0, 1],
+                 "decoder_config_sha256": "cfg", "observed_start_utc": "2026-08-28T23:59:00+00:00",
+                 "observed_end_utc": "2026-08-29T00:02:00+00:00"}),
+            (0, {**prefix, "state": "RAW_FILE_COMPLETE"}),
+            (0, {**prefix, "state": "RAW_MECHANICAL_GATES_PASSED", "sweep": 0})]
+    incomplete = summary.summarize([source], rows, {"zf701": "cfg"})
+    assert not incomplete["mechanical_corpus_complete"]
+    assert "REF_CUT_COVERAGE_INCOMPLETE" in incomplete["failure_reasons"]
+    rows.append((0, {**prefix, "state": "RAW_MECHANICAL_GATES_PASSED", "sweep": 1}))
+    accepted = summary.summarize([source], rows, {"zf701": "cfg"})
+    assert accepted["mechanical_corpus_complete"]
+    assert accepted["meteorological_acceptance"] == "NOT_COMPLETED"
+    assert {(r["clock"], r["date"]) for r in accepted["native_start_coverage"]} == {
+        ("UTC", "2026-08-28"), ("UTC+08", "2026-08-29")}
+    drift = summary.summarize([source], rows, {"zf701": "changed"})
+    assert not drift["mechanical_corpus_complete"]
+    assert "DECODER_CONFIG_DRIFT" in drift["failure_reasons"]
