@@ -16,9 +16,12 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
+from dataclasses import replace
 from datetime import datetime, timezone
 
 MANDATORY = (
+    "d42663f7-67de-5f8a-901a-7c9163a1d1d2",
     "07bdd490-9202-5772-8c90-2d529688298d",
     "93d2d253-7dc8-55fd-b428-c1d8b76ad8ef",
     "5418017f-36f5-554b-b763-a7551b4b0e86",
@@ -186,16 +189,124 @@ def audit(manifest, station_filter=None):
                               "error_type": type(error).__name__, "detail": str(error)[:240]}), flush=True)
 
 
+def pilot(manifest, station_filter=None):
+    """Compare source activation on stratified native cuts without publication.
+
+    Only three explicit source switches change. Existing thresholds, floor,
+    backgrounds, deletion caps and all S profiles remain identical.
+    """
+    import numpy as np
+    import zarr
+    from zarr.storage import MemoryStore
+    from rainpulse_algo.worker.object_store import ArtifactObjectReader, minio_client_from_environment
+    from rainpulse_algo.multiband.model import Network
+    from rainpulse_algo.multiband.adapters import read_x_qc_sweep
+    from rainpulse_algo.multiband.quality import x_qc
+    from rainpulse_algo.multiband.xqc_v2.config import XQCConfig
+
+    expected = manifest.pop("manifest_sha256")
+    if digest(manifest) != expected:
+        raise ValueError("frozen manifest identity mismatch")
+    network = Network.from_bytes(json.dumps(manifest["network"]).encode())
+    reader = ArtifactObjectReader(minio_client_from_environment(), max_workers=2)
+    grouped = collections.defaultdict(list)
+    for scan in manifest["scans"]:
+        if scan.get("normalized_uri"):
+            grouped[scan["radar_id"]].append(scan)
+    for sid, scans in grouped.items():
+        if station_filter and sid not in station_filter:
+            continue
+        station = network.stations[sid]
+        if station.x_qc is None or station.x_qc.enhancement is None:
+            print(json.dumps({"scan_id": scans[0]["scan_id"], "radar_id": sid,
+                              "state": "EXCLUDED", "reason": "NO_QUALIFIED_NATIVE_FORMAT"}), flush=True)
+            continue
+        selected = {scans[i]["scan_id"]: scans[i] for i in {0, len(scans)//2, len(scans)-1}}
+        for scan in scans:
+            if scan["scan_id"] in MANDATORY:
+                selected[scan["scan_id"]] = scan
+        cfg = XQCConfig.model_validate(station.x_qc.enhancement)
+        patch = {"radial_source_enabled": True, "radial_source_block_model_enabled": True,
+                 "radial_source_fan_model_enabled": True}
+        child_cfg = XQCConfig.model_validate({**cfg.model_dump(mode="json"), **patch})
+        child_station = replace(station, x_qc=replace(station.x_qc, enhancement=child_cfg.model_dump(mode="json")))
+        for scan in selected.values():
+            prefix = {"manifest_sha256": expected, "scan_id": scan["scan_id"], "radar_id": sid,
+                      "source_activation_changed": cfg.digest != child_cfg.digest,
+                      "parent_policy_sha256": cfg.digest, "child_policy_sha256": child_cfg.digest}
+            try:
+                task = scan.get("task") or {}
+                if task.get("state") == "SUCCEEDED":
+                    source = task["spec"]["request"]["payload"]["sources"][0]
+                    sha = task["spec"]["inputs"][0]["sha256"]
+                else:
+                    source = {"scan_id": scan["scan_id"], "radar_id": sid,
+                              "input_uri": scan["normalized_uri"],
+                              "volume_start": scan["start"], "volume_end": scan["end"]}
+                    sha = None
+                snapshot = reader.open(source["input_uri"], expected_sha256=sha)
+                sha = snapshot.index.sha256
+                objects = snapshot.load()
+                store = MemoryStore()
+                store.update(objects)
+                root = zarr.open_group(store=store, mode="r")
+                numbers = [int(i) for i in root["sweep_number"][:]
+                           if "DBZH" in root[f"sweep_{int(i):03d}"]]
+                # Low, middle and top REF cuts cover elevation behaviour.
+                chosen = sorted({numbers[i] for i in {0, len(numbers)//2, len(numbers)-1}})
+                if scan["scan_id"] in MANDATORY:
+                    chosen = numbers  # Every user-reported volume gets ALL REF cuts.
+                for number in chosen:
+                    volume, _ = read_x_qc_sweep(objects, station, source, number, asset_sha256=sha,
+                                               maximum_bytes=network.maximum_input_bytes)
+                    original = volume.sweeps[0]
+                    raw = original.fields["DBZH"].copy()
+                    started = time.monotonic()
+                    before = x_qc(volume, station, manifest["network_sha256"]).sweeps[0]
+                    after = (x_qc(volume, child_station, manifest["network_sha256"]).sweeps[0]
+                             if cfg.digest != child_cfg.digest else before)
+                    fields = after.fields
+                    record = after.xqc_diagnostics
+                    held = fields["XQC_WITHHELD_MASK"] != 0
+                    rejected = fields["XQC_REJECTED_MASK"] != 0
+                    kwargs = dict(raw_equal=bool(np.array_equal(fields["DBZH_RAW"], raw, equal_nan=True) and
+                                                  np.array_equal(original.fields["DBZH"], raw, equal_nan=True)),
+                                  geometry_equal=bool(np.array_equal(after.azimuth_deg, original.azimuth_deg) and
+                                                      np.array_equal(after.range_m, original.range_m)),
+                                  held_visible=int(np.count_nonzero(held & np.isfinite(fields["DBZH_QC"]))),
+                                  held_admitted=int(np.count_nonzero(held & (fields["REFLECTIVITY_ELIGIBLE_FOR_CR"] != 0))),
+                                  protected_rejected=int(np.count_nonzero(rejected & (fields["XQC_HARD_WEATHER_MASK"] != 0))),
+                                  qpe_enabled=bool(fields["QPE_ELIGIBLE_MASK"].any()))
+                    failures = cut_failures(record, **kwargs)
+                    newly_rejected = rejected & ~(before.fields["XQC_REJECTED_MASK"] != 0)
+                    print(json.dumps({**prefix, "sweep": number, "input_sha256": sha,
+                                      "state": "FAIL" if failures else "PILOT_MECHANICAL_GATES_PASSED",
+                                      "failures": failures, "seconds": time.monotonic()-started,
+                                      "before_cut_status": before.xqc_diagnostics.get("status"),
+                                      "after_cut_status": record.get("status"),
+                                      "before_source_gates": int(before.fields["XQC_RADIAL_SOURCE_MASK"].sum()),
+                                      "after_source_gates": int(fields["XQC_RADIAL_SOURCE_MASK"].sum()),
+                                      "newly_rejected_gates": int(newly_rejected.sum()),
+                                      "new_local_weather_overlap": int(np.count_nonzero(newly_rejected & (fields["XQC_LOCAL_WEATHER_MASK"] != 0))),
+                                      "independent_weather_acceptance": "PENDING", **kwargs}), flush=True)
+            except Exception as error:
+                print(json.dumps({**prefix, "state": "FAIL", "failures": ["PILOT_ERROR"],
+                                  "error_type": type(error).__name__, "detail": str(error)[:240]}), flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("freeze").add_argument("output")
     sub.add_parser("audit").add_argument("--station", action="append")
+    sub.add_parser("pilot").add_argument("--station", action="append")
     args = parser.parse_args()
     if args.command == "freeze":
         freeze(args.output)
-    else:
+    elif args.command == "audit":
         audit(json.load(sys.stdin), args.station)
+    else:
+        pilot(json.load(sys.stdin), args.station)
 
 
 if __name__ == "__main__":

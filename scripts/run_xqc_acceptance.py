@@ -4,6 +4,7 @@ import argparse
 import collections
 from concurrent.futures import ThreadPoolExecutor
 import json
+import hashlib
 import os
 from pathlib import Path
 import subprocess
@@ -16,6 +17,7 @@ def main():
     parser.add_argument("manifest")
     parser.add_argument("audit_script")
     parser.add_argument("output")
+    parser.add_argument("--mode", choices=("audit", "pilot"), default="audit")
     args = parser.parse_args()
     manifest = Path(args.manifest).resolve()
     script = Path(args.audit_script).resolve()
@@ -31,6 +33,7 @@ def main():
     groups = [stations[i::4] for i in range(4)]
     lock = threading.Lock()
     state = {"status": "RUNNING", "pid": os.getpid(), "manifest_sha256": frozen["manifest_sha256"],
+             "audit_script_sha256": hashlib.sha256(script.read_bytes()).hexdigest(), "mode": args.mode,
              "started_at": datetime.now(timezone.utc).isoformat(), "workers": {},
              "counts": {}, "meteorological_acceptance": "NOT_COMPLETED"}
     counters = collections.Counter()
@@ -46,7 +49,7 @@ def main():
         persist()
 
     def run(index, selected):
-        name = "rainpulse-xqc-acceptance-" + frozen["manifest_sha256"][:8] + "-" + str(index)
+        name = "rainpulse-xqc-" + args.mode + "-" + frozen["manifest_sha256"][:8] + "-" + str(index)
         command = ["docker", "run", "--rm", "--name", name, "--cpus", "1", "--memory", "3g",
                    "--network", next(iter(c["NetworkSettings"]["Networks"])),
                    "--read-only", "--tmpfs", "/tmp:rw,size=64m", "-i",
@@ -54,7 +57,7 @@ def main():
         for key in ("RAINPULSE_OBJECT_STORE_ENDPOINT", "RAINPULSE_OBJECT_STORE_ACCESS_KEY",
                     "RAINPULSE_OBJECT_STORE_SECRET_KEY"):
             command += ["-e", key]
-        command += [frozen["image_id"], "/opt/xqc_acceptance.py", "audit"]
+        command += [frozen["image_id"], "/opt/xqc_acceptance.py", args.mode]
         for station in selected:
             command += ["--station", station]
         output = folder / ("audit-" + str(index) + ".jsonl")
