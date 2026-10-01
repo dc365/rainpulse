@@ -96,3 +96,15 @@ def test_invalid_period_does_not_hide_supported_raw_moments(nyquist):
     report = run(cut_with_velocity([1, 2, 3, 4, 5]), nyquist)
     assert report['period_status'] == 'UNAVAILABLE'
     assert report['rays'][0]['raw_absolute_delta_mps'] == [1., 1., 1.]
+
+
+def test_branch_jump_sensitivity_does_not_confuse_smooth_weather_with_random_velocity():
+    # Diagnostic hypotheses only: integer branch jumps of one-third the
+    # declared period can destroy the fundamental coherence of smooth wind.
+    values = np.arange(120) * .02 + np.random.default_rng(9).choice([0., 20 / 3, -20 / 3], 120)
+    report = run(cut_with_velocity(values))['rays'][0]
+    assert report['declared_period_pair_coherence'] < .2
+    assert report['period_harmonic_pair_coherence']['3'] > .99
+    values = np.random.default_rng(37).uniform(-10, 10, 120)
+    report = run(cut_with_velocity(values))['rays'][0]
+    assert max(report['period_harmonic_pair_coherence'].values()) < .3

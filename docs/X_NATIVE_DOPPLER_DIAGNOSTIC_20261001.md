@@ -32,3 +32,5 @@ python scripts/audit_x_native_doppler.py < task.json > diagnostic.json
 ```
 
 动作升级前需验证双 PRF 混叠的敏感性与独立天气对照；本诊断不接入动作引擎，不改变已有保留/隔离资格。原文件往返 v3 回执 SHA 为 2dbc85c8f444ed88b7f6f67cc4375ece0f9b5792aba7e912dae86647bb045369；官方 PDF SHA 为 5040fedbf500a86f30818b9dc04ab2f0cf2530fdc39de3ce1800711f2da5b439。私有矩量和完整证据保留于本地及 105 的验收 build 目录，不提交。
+
+v2 增加声明周期的 1–6 次谐波相干统计，逐一保存，不选择“最优模式”或据此生成污染标记。正常平滑风场叠加整周分支跳变的合成反例表明：基频相干低不等于源速度真的不连续。此敏感性检查不声称覆盖所有厂商处理模式。双 PRF 与交错 PRT 的处理错误不同，不能互套修正公式，参见 [Alford 等 2022 原论文，NOAA 存档](https://repository.library.noaa.gov/view/noaa/47757/noaa_47757_DS1.pdf)。

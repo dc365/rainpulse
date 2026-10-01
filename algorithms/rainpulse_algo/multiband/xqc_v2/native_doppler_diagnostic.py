@@ -54,10 +54,17 @@ def summarize(cut, cfg, *, declared_nyquist_mps=None, gate_selection=None):
             'declared_period_pair_coherence':
                 float(abs(np.exp(1j * np.pi * circular / ny).mean()))
                 if circular is not None and circular.size else None,
+            # Bounded hypotheses, not an inferred processor mode. Integer
+            # branch jumps can destroy the fundamental but preserve a higher
+            # harmonic. Keep all six; do not select one to classify a gate.
+            'period_harmonic_pair_coherence': {
+                str(h): float(abs(np.exp(1j * h * np.pi * circular / ny).mean()))
+                for h in range(1, 7)
+            } if circular is not None and circular.size else {},
             'spectrum_width_mps': _quantiles(sw.values[row, valid[row]]),
         })
     return {
-        'version': 'native-doppler-diagnostic-v1',
+        'version': 'native-doppler-diagnostic-v2',
         'action_eligible': False,
         'doppler_verified': False,
         'period_status': 'DECLARED_ONLY_UNVERIFIED' if period_ok else 'UNAVAILABLE',
