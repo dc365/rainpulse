@@ -9,6 +9,8 @@ from pathlib import Path
 
 
 def summarize(inventory, receipts, configurations, *, day="2026-08-28"):
+    if not inventory:
+        raise ValueError("empty raw acceptance corpus")
     expected = {r["sha256"]: r for r in inventory}
     if len(expected) != len(inventory):
         raise ValueError("duplicate raw identity needs explicit file disambiguation")
@@ -24,7 +26,7 @@ def summarize(inventory, receipts, configurations, *, day="2026-08-28"):
     buckets = defaultdict(set)
     exclusion_counts = Counter()
     for sha, source in expected.items():
-        evidence = rows[sha]
+        evidence = rows.get(sha, [])
         decoded = [r for r in evidence if r["state"] == "RAW_DECODE_VERIFIED"]
         excluded = [r for r in evidence if r["state"] == "EXCLUDED"]
         complete = sum(r["state"] == "RAW_FILE_COMPLETE" for r in evidence)
@@ -72,7 +74,8 @@ def summarize(inventory, receipts, configurations, *, day="2026-08-28"):
                          "product_time_alignment_proven": False})
     return {"files_expected": len(expected), "files_with_receipts": len(rows),
             "file_states": dict(Counter(r["state"] for r in matrix)),
-            "failure_reasons": dict(Counter(f for r in matrix for f in r["failures"])),
+            "failure_reasons": dict(Counter(f for r in matrix if r["state"] == "FAIL" for f in r["failures"])),
+            "pending_checks": dict(Counter(f for r in matrix if r["state"] == "PENDING" for f in r["failures"])),
             "source_identity_errors": errors, "exclusions": dict(exclusion_counts),
             "requested_utc_day": day, "native_start_coverage": coverage,
             "mechanical_corpus_complete": not errors and all(r["state"] in {"MECHANICAL_GATES_PASSED", "EXCLUDED"} for r in matrix),
@@ -91,6 +94,9 @@ def main():
     data = (a.inventory / "raw-files.jsonl").read_bytes()
     if frozen["status"] != "FROZEN" or hashlib.sha256(data).hexdigest() != frozen["manifest_sha256"]:
         raise ValueError("raw corpus freeze mismatch")
+    inventory = [json.loads(x) for x in data.splitlines()]
+    if len(inventory) != frozen["files_expected"]:
+        raise ValueError("raw corpus file count changed")
     receipts = []
     for f in a.batch.glob("audit-*.jsonl"):
         shard = int(f.stem.split("-")[1])
@@ -99,7 +105,7 @@ def main():
             if int(r["raw_sha256"], 16) % state["worker_count"] != shard:
                 raise ValueError("receipt assigned to wrong file shard")
             receipts.append((shard, r))
-    result = summarize([json.loads(x) for x in data.splitlines()], receipts,
+    result = summarize(inventory, receipts,
                        json.loads((a.batch / "decoder-config-identities.json").read_text()))
     result.update(batch_status=state["status"], batch_script_sha256=state["audit_script_sha256"],
                   compute_image_id=state["compute_image_id"], raw_manifest_sha256=frozen["manifest_sha256"])

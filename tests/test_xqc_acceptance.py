@@ -75,3 +75,15 @@ def test_corpus_summary_requires_every_native_cut_and_preserves_cross_day():
     drift = summary.summarize([source], rows, {"zf701": "changed"})
     assert not drift["mechanical_corpus_complete"]
     assert "DECODER_CONFIG_DRIFT" in drift["failure_reasons"]
+
+
+def test_unprocessed_files_do_not_inflate_receipt_coverage():
+    spec = importlib.util.spec_from_file_location("coverage_summary", Path(__file__).parents[1] / "scripts/summarize_xqc_raw_acceptance.py")
+    summary = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(summary)
+    sources = [{"sha256": s, "radar_id": "zf701", "relative_path": s} for s in ("a", "b")]
+    receipts = [(0, {"raw_sha256": "a", "radar_id": "zf701", "state": "RAW_FILE_COMPLETE"})]
+    result = summary.summarize(sources, receipts, {})
+    assert result["files_with_receipts"] == 1
+    assert result["file_states"]["PENDING"] == 1
+    assert not result["mechanical_corpus_complete"]
