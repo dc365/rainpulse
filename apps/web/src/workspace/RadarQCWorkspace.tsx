@@ -8,6 +8,7 @@ import { ReflectivityLegend } from '../ReflectivityLegend'
 import { REFLECTIVITY_LEGEND, REFLECTIVITY_STOPS } from '../reflectivityPalette'
 import { panelByID, qcFlagLabel, qcSweepOptions, radarIDs, type CycleList, type WorkspaceCycleDetail, type WorkspaceFrame, type WorkspacePanel } from './model'
 import { readCycleCatalog } from './readCycleCatalog'
+import { readRadarCatalog } from './readRadarCatalog'
 import { WorkspacePresets } from './WorkspacePresets'
 import { SharedTimeline } from './MainWorkspace'
 import './radar-qc-workspace.css'
@@ -37,18 +38,20 @@ const dayWindow = (day: string) => {
 }
 const slot = (time: string) => Math.floor(Date.parse(time) / 360_000)
 const SCAN_MATCH_MS = 180_000
-function useJSON<T>(url: string, revision: number) {
+async function readJSON<T>(url: string, signal: AbortSignal): Promise<T> {
+  const response = await fetch(url, { signal, cache: 'no-store' })
+  if (!response.ok) throw new Error(`读取失败（${response.status}）`)
+  return response.json() as Promise<T>
+}
+function useJSON<T>(url: string, revision: number, reader: (url: string, signal: AbortSignal) => Promise<T> = readJSON) {
   const [state, setState] = useState<{ url: string; revision: number; data?: T; error?: string }>()
   useEffect(() => {
     if (!url) return
     const controller = new AbortController()
-    void fetch(url, { signal: controller.signal, cache: 'no-store' }).then(async response => {
-      if (!response.ok) throw new Error(`读取失败（${response.status}）`)
-      return response.json() as Promise<T>
-    }).then(data => { if (!controller.signal.aborted) setState({ url, revision, data }) })
+    void reader(url, controller.signal).then(data => { if (!controller.signal.aborted) setState({ url, revision, data }) })
       .catch(error => { if (!controller.signal.aborted) setState({ url, revision, error: String(error) }) })
     return () => controller.abort()
-  }, [url, revision])
+  }, [url, revision, reader])
   return state?.url === url && state.revision === revision ? state : undefined
 }
 function useSCatalog(revision: number) {
@@ -123,7 +126,7 @@ export function RadarQCWorkspace() {
   const [revision, setRevision] = useState(0)
   const sharedView = useMemo(() => new View({ center: [119.1, 26.1], zoom: 7, projection: 'EPSG:4326' }), [])
   const catalog = useSCatalog(revision)
-  const xStations = useJSON<XStations>(`${prefix}radar-stations?band=all${dayWindow(day)}`, revision)
+  const xStations = useJSON<XStations>(`${prefix}radar-stations?band=all${dayWindow(day)}`, revision, readRadarCatalog)
   const linkedCycle = initial.get('cycle') ? catalog?.data?.items.find(c=>c.cycle_id===initial.get('cycle')) : undefined
   const date = day || (band === 'X' ? xStations?.data ? localDay(xStations.data.start) : '' : linkedCycle ? localDay(linkedCycle.issue_time) : catalog?.data?.items[0] ? localDay(catalog.data.items[0].issue_time) : '')
   const compositeTimeline = useCompositeTimeline(mode==='fusion'?date:'',revision)
@@ -135,7 +138,7 @@ export function RadarQCWorkspace() {
   const sIDs = [...new Set([sStationID, ...(sDetail ? radarIDs(sDetail) : []), ...(xStations?.data?.items.filter(s=>s.band==='S').map(s=>s.radar_id)??[])].filter(Boolean))]
   const selectedSID = sStationID || sIDs.find(id=>sDetail && panelByID(sDetail, `dbzh_raw:${id}`)?.frames.length && panelByID(sDetail, `dbzh_qc:${id}`)?.frames.length) || sIDs[0] || ''
   const selectedX = xStationID ? xStations?.data?.items.find(s=>s.radar_id===xStationID) : xStations?.data?.items.find(s=>s.band!=='S'&&s.qc_ready>0) ?? xStations?.data?.items.find(s=>s.band!=='S')
-  const xScans = useJSON<XScans>(selectedX && date ? `${prefix}radar-scans?radar_id=${encodeURIComponent(selectedX.radar_id)}${dayWindow(date)}` : '', revision)
+  const xScans = useJSON<XScans>(selectedX && date ? `${prefix}radar-scans?radar_id=${encodeURIComponent(selectedX.radar_id)}${dayWindow(date)}` : '', revision, readRadarCatalog)
   const scans = useMemo(() => [...(xScans?.data?.items ?? [])].sort((a,b)=>Date.parse(a.volume_start)-Date.parse(b.volume_start)), [xScans?.data])
   const nearestXScan = (time: string, bounded: boolean) => scans.reduce<XScan | undefined>((best, s) => {
     if (!s.results.length) return best

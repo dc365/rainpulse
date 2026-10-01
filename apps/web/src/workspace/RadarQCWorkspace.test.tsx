@@ -268,3 +268,22 @@ it('selects the whole 4 S + 24 X network without silently truncating stations',a
  const calls=vi.mocked(fetch).mock.calls.filter(([url])=>String(url).includes('radar-layer-resolutions'))
  expect(JSON.parse(String(calls.at(-1)?.[1]?.body)).radar_ids).toHaveLength(24)
 })
+
+
+it('loads a deep-linked native scan from the second catalog page', async () => {
+  setup()
+  const original = globalThis.fetch
+  const fetcher = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
+    const url = String(input)
+    if (url.includes('radar-scans')) return new Response(JSON.stringify(url.includes('cursor=older') ? scans : {
+      items: [{ ...scans.items[0], scan_id: 'newer-scan', volume_start: evening, results: [] }], next_cursor: 'older',
+    }))
+    return original(input, options)
+  })
+  vi.stubGlobal('fetch', fetcher)
+  window.history.replaceState({}, '', '/?preset=qc&band=X&date=2026-08-28&time=2026-08-28T00:06:00Z&station=zf101&scan=scan-x')
+  render(<RadarQCWorkspace />)
+  await waitFor(() => expect(document.querySelectorAll('[data-image^="/map-"]')).toHaveLength(2))
+  expect(fetcher.mock.calls.some(([url]) => String(url).includes('cursor=older'))).toBe(true)
+  expect((screen.getByRole('combobox', { name: '仰角' }) as HTMLSelectElement).value).toBe('3')
+})
