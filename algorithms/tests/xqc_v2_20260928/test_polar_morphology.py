@@ -623,3 +623,49 @@ def test_anchor_does_not_follow_both_moving_edges_even_if_width_increases():
         anchored_fans_enabled=True,
     )
     assert not detect(s, p).mask.any()
+
+
+def test_v3_original_anchor_fan_enters_normal_qc_as_candidate_only():
+    from rainpulse_algo.multiband.model import Sweep as XCut
+    from rainpulse_algo.multiband.model import Volume
+    from rainpulse_algo.multiband.quality import x_qc
+
+    from .helpers import config, fixture, station
+
+    s, _ = expanding_scene()
+    offset = (s.azimuth[:, None] - 100 + 180) % 360 - 180
+    grow = np.clip(np.floor((s.ranges - 5000) / 10000) / 4, 0, 1)[None, :] * 8
+    body = (offset >= -1) & (offset <= 1 + grow)
+    body &= (s.ranges[None, :] >= 5000) & (s.ranges[None, :] < 55000)
+    fields = {
+        "DBZH": np.where(body, 20, 0).astype("float32"),
+        "SNR": np.where(body, 15, -2).astype("float32"),
+        "OBSERVED_MASK": np.ones(s.shape, "uint8"),
+        "NO_ECHO_MASK": np.zeros(s.shape, "uint8"),
+    }
+    cut = XCut(0, s.azimuth, s.ranges, s.elevation, 1787875200.0 + s.ray_time_s, fields)
+    parent, _ = fixture("empty")
+    policy = MorphologyPolicy(
+        version="x-polar-morphology-20261002-v3",
+        expanding_fans_enabled=True,
+        anchored_fans_enabled=True,
+        local_weather_policy="joint_review",
+    )
+    cfg = config(
+        mode="quarantine",
+        receiver_enabled=False,
+        radial_objects_enabled=False,
+        clutter_enabled=False,
+        isolation_enabled=False,
+        morphology=policy.model_dump(),
+    )
+    raw = fields["DBZH"].copy()
+    product = x_qc(Volume(parent.metadata, [cut]), station(cfg), "b" * 64)
+    arrays = product.sweeps[0].fields
+    assert arrays["XQC_MORPHOLOGY_MASK"][body].all()
+    assert (arrays["QC_ACTION"][body] == 3).all()
+    assert not arrays["XQC_SOURCE_KIND"].any()
+    assert not arrays["REFLECTIVITY_ELIGIBLE_FOR_CR"][body].any()
+    assert not np.isfinite(arrays["DBZH_QC"][body]).any()
+    np.testing.assert_array_equal(arrays["DBZH_RAW"], raw)
+    np.testing.assert_array_equal(cut.fields["DBZH"], raw)
