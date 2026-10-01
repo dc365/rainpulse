@@ -8,6 +8,31 @@
 
 ##### 默认关闭的 engine／写出校验接入
 
+###### 09:48 基线重冻结与 105 候选镜像实际回放
+
+保留旧失败快照。新增 `refreeze_s_source_baseline.py`，要求全部新 engine 输出
+字段在旧快照中存在、shape/dtype 一致，差异只可为有效 uint8 来源范围拒绝码；
+任何来源、候选、动作、证据或其它字段变化均拒绝。另存新快照，逐字段重新
+验证原始输入和非诊断字段未变，记录父快照、旧／新模块及输出 SHA。
+这是本地来源阶段基线重冻结，不能冒充正常已发布 QC 输入更新。
+
+09:48 `refrozen-current-source-0948-v1` 只有上述四门诊断变化，其余逐字段
+相同。严格 engine 回放 `constellation-engine-0948-refrozen-v1` 通过，新增
+目标区 72 门、全层 165 门提议，来源编号／类型未变，写出重放校验通过。
+重冻结脚本两个测试加入后，相关整套 277 项通过。
+
+105 候选镜像 `rainpulse-cpu-worker:s-fragment-constellation-baf1c56-candidate`
+已构建，固定提交 baf1c56 的 28 个 radial_revision 模块逐个 SHA 核验。
+镜像 config SHA `a267c8c4c44fb8f58ee38f72fef24ab80856bd5e963769bca821ce283deaeeb4`。
+在候选镜像内读取同一真实重冻结快照（SHA
+`b70a6ce7555813ebe99f6dbd15b29569871d4e6cdc98d328cc43ba38d507825a`），
+实际已安装 engine 再次确认 72/165 门提议、RAW 写出重放、来源保持、默认关闭
+和 audit 无动作。回执 `.build/s-bounded-radial-20261001-release/constellation-image-test-receipt.txt`。
+构建语法检查限定到提交 manifest 的 28 个源码文件，避免读取基础镜像额外
+非 UTF-8 `.py` 文件；两次失败构建后已修复并取得成功镜像／实际运行回执。
+当前两台生产 S Worker 仍为 v5、running；没有切换 profile 或新增 Web 图件。
+独立天气留出、其余目标形态和正常产品验收继续未完成。
+
 `FragmentLineConfig.fragment_constellation_enabled=False`，开启时按完整历史
 分段合同执行，只将 `STRONG_MASK` 纳入几何隔离提议。原始来源账本先冻结，
 弱候选不能变为来源或动作。audit 模式无动作。序列化独立前缀绑定 RAW、
