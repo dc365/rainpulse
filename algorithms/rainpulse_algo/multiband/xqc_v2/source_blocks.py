@@ -12,7 +12,8 @@ import numpy as np
 
 
 def detect(
-    s, cfg, *, protected, fan=False, family_width_deg=None, prepared=None, response_quantile=90
+    s, cfg, *, protected, fan=False, family_width_deg=None, prepared=None, response_quantile=90,
+    domain=None,
 ):
     out = np.zeros(s.shape, bool)
     z, za = s.moment("DBZH")
@@ -28,6 +29,13 @@ def detect(
     if not fan:
         signal &= z < cfg.radial_maximum_dbzh
     signal &= (s.ranges[None, :] >= cfg.receiver.minimum_range_m) & ~protected
+    if domain is not None:
+        # A frozen RAW family limits both targets and training references.
+        # The receiver shoulders still use all actually measured RAW samples;
+        # outside-family measurements never become fictitious quiet receivers.
+        if not isinstance(domain, np.ndarray) or domain.shape != s.shape or domain.dtype != bool:
+            raise ValueError("source domain must be a boolean native-sweep matrix")
+        signal &= domain
     from .source_summary import SourceStatistics
 
     stats = (prepared or SourceStatistics.build(s, cfg)).use(s, cfg)
