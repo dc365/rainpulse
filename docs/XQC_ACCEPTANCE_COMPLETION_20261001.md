@@ -48,6 +48,10 @@
 
 ## 2026-10-01 批量筛查证据与在途执行
 
+- 配置生成器release_profiles的preserve/source/fan对稀疏父档原本会填入51/50/48个未要求的默认键；三项精确变更回归先红后绿。r2仅验证Pydantic配置并保留父档显式键，相关17测试通过。使用冻结父bee28feb重新生成22站fan候选，逐字节复现既有398ccfb1…（52变更，17站三开关+release_id）；没有切换105网络或服务，仍受天气保护/完整回放门约束。
+- 独立降水资料发现105 `/data/Weather/SURF/SURF_ATMO_DATA/2026/08/28` 有RAIN_ONEMINUTE/RAIN_SUM/QC_RAIN_SUM，存储为base64→完整ZIP→站点CSV。抽查2516站分钟值仅0/0.1、约半数0.1；同站RAIN_SUM三列多0；现有StationInfo_140000_county为山西且缺ZIP中央目录，不能作福建站点来源。尚未确认实测/测试来源、时间基准、单位、三列区间、QC码与福建坐标，不能用这份资料声明误删验收通过。已向用户请求来源说明，其他复核继续。
+- scripts/inspect_xqc_precip_controls.py可按文件时钟完整小时做只读SHA/ZIP-CRC/CSV身份与分钟-累积算术探查，缺测保持缺测；始终UNVERIFIED_CONTROL_CONTRACT，不赋天气真值或修改雷达。6测试覆盖零/缺测、重复站、非有限值、列数及残缺ZIP、缺失小时。输出只存105/build本地证据，不提交私有观测内容。
+
 本轮代码已先合入本地main并push，再在105运行只读脚本。冻结目录位于部署根 `.build/xqc-acceptance-20261001/`，所有脚本、清单与输出保留SHA和进程/容器句柄，不保存认证信息。
 
 - manifest-v1 SHA `fc6d5815f793e6bb6baa3689d2f1c4a24fb89cf3268974a69754cec9d7e5169f`：1452个登记体扫，786个有成功质控任务，666个无成功产品。24站包含22个可用实验候选站及2个明确格式排除站，不能把登记集等同于完整原始资料集。

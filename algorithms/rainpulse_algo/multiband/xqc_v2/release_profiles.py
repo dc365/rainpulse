@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 from .config import XQCConfig
 
-REVISION = 'xqc-hardening-20260929-r1'
+REVISION = 'xqc-hardening-20261001-r2'
 
 
 def parse_json(raw):
@@ -90,8 +90,10 @@ def generate(raw, *, parent_sha256, radar_ids, release_id, preset='preserve', up
             raise ValueError('station updates must be an object')
         values = merge(values, patch)
         # No implicit 3 dB, 7 degree or 65% transfer from the tuned ZF701 case.
-        cfg = XQCConfig.model_validate(values)
-        profile['enhancement'] = cfg.model_dump(mode='json')
+        XQCConfig.model_validate(values)
+        # Validation must not materialize implicit defaults as release edits.
+        # Preserve the parent's explicit keys and apply only requested changes.
+        profile['enhancement'] = values
     encoded = (json.dumps(child,indent=2,ensure_ascii=False,allow_nan=False)+'\n').encode()
     if len(encoded)>1024**2:
         raise ValueError('child network exceeds 1 MiB')

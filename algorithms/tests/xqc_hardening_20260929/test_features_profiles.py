@@ -56,6 +56,26 @@ def test_fan_upgrade_explicit_floor_and_no_hidden_case_parameters():
     assert c['radial_source_maximum_width_deg']==3. and c['maximum_new_exclusion_fraction']==1.
 
 
+@pytest.mark.parametrize('preset', ['preserve', 'source', 'fan'])
+def test_sparse_release_preserves_implicit_defaults_without_materializing(preset):
+    p = parent()
+    sparse = {'noise_censor_snr_db': 4., 'maximum_new_exclusion_fraction': .7,
+              'receiver': {'block_m': 12000.}}
+    p['stations']['x01']['x_qc']['enhancement'] = copy.deepcopy(sparse)
+    encoded, receipt = upgrade(p, preset=preset)
+    expected = copy.deepcopy(sparse)
+    if preset in ('source', 'fan'):
+        expected['radial_source_enabled'] = True
+    if preset == 'fan':
+        expected.update(radial_source_block_model_enabled=True,
+                        radial_source_fan_model_enabled=True)
+    assert json.loads(encoded)['stations']['x01']['x_qc']['enhancement'] == expected
+    expected_paths = {'/release_id'} | {
+        '/stations/x01/x_qc/enhancement/' + k for k in set(expected) - set(sparse)
+    }
+    assert {change['path'] for change in receipt['changes']} == expected_paths
+
+
 @pytest.mark.parametrize('raw',[b'{"a":1,"a":2}',b'{"a":NaN}',b'{"a":Infinity}'])
 def test_release_json_is_strict(raw):
     with pytest.raises(ValueError):parse_json(raw)
