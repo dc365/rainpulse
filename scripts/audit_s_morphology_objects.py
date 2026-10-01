@@ -30,9 +30,13 @@ def main():
                         help='Read-only bounded measured exterior of variable-width branches')
     parser.add_argument('--radial-backbone', action='store_true',
                         help='Full-history frozen radial core and fringe; optional experimental engine replay')
+    parser.add_argument('--fragment-constellation', action='store_true',
+                        help='Read-only RAW transverse fragments in frozen radial neighborhoods')
     parser.add_argument('--engine-quarantine', action='store_true',
                         help='Validate opt-in experiment proposals through the actual engine; no product writes')
     args = parser.parse_args()
+    if args.fragment_constellation and (args.radial_backbone or args.variable_width or args.branch_shoulders or args.engine_quarantine):
+        raise ValueError('fragment constellation is a separate read-only research mode')
     if args.radial_backbone and (args.variable_width or args.branch_shoulders):
         raise ValueError('radial backbone is a separate detector mode')
     if args.branch_shoulders and not args.variable_width:
@@ -40,7 +44,8 @@ def main():
     if args.variable_width and args.engine_quarantine:
         raise ValueError('variable-width prototype is evidence-only; not wired to engine actions')
     global DETECTOR
-    module_name = ('radial_backbone' if args.radial_backbone else
+    module_name = ('fragment_constellation' if args.fragment_constellation else
+                   'radial_backbone' if args.radial_backbone else
                    'variable_morphology' if args.variable_width else 'morphology_objects')
     DETECTOR = importlib.import_module('morph_object_runtime.engine.review_extension.radial_revision.'+module_name)
     args.output.mkdir(parents=True, exist_ok=False)
@@ -142,6 +147,9 @@ def main():
                 ('RAW observed DBZH', 'Existing source-stage remaining', third_title), strict=True):
                 ax.scatter(x[use], y[use], c=a['RAW'][use], cmap='turbo', vmin=0, vmax=70, s=.6, rasterized=True)
                 if ax is axes[-1] and not args.engine_quarantine:
+                    if args.fragment_constellation:
+                        nominated = remaining & candidate & ~strong
+                        ax.scatter(x[nominated], y[nominated], c='#f28e00', s=3., rasterized=True)
                     hit = remaining & strong
                     ax.scatter(x[hit], y[hit], c='#d00000', s=2., rasterized=True)
                 ax.set(xlim=(-470, 470), ylim=(-470, 470), title=title, xlabel='East (km)', ylabel='North (km)')
@@ -160,6 +168,7 @@ def main():
               'script_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
               'variable_width_prototype': args.variable_width,
               'radial_backbone_prototype': args.radial_backbone,
+              'fragment_constellation_prototype': args.fragment_constellation,
               'detector_sha256': hashlib.sha256(Path(DETECTOR.__file__).read_bytes()).hexdigest(),
               'cases': records}
     (args.output/'report.json').write_text(json.dumps(report, indent=2)+'\n')
