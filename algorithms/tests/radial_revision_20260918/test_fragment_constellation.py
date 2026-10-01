@@ -324,3 +324,52 @@ def test_short_partial_or_invalid_original_edge_history_is_rejected():
     history[0]['original_left_deg']=34.
     with pytest.raises(ValueError,match='complete finite original edges'):
         module.short_segment_assessment(history,ranges,250,1,False)
+
+
+def test_shoulder_diagnostics_distinguish_observed_nonquiet_unknown_and_protected():
+    module=load('radial_revision.fragment_constellation')
+    z=np.array([[25.,25.,25.,25.,25.],[20.,np.nan,np.nan,np.nan,np.nan]])
+    observed=np.isfinite(z);snr=np.array([[20.]*5,[20.,4.,np.nan,0.,0.]])
+    available=np.isfinite(snr);barred=np.zeros(z.shape,bool);barred[1,3]=True
+    result=module.shoulder_failure_samples(1,np.zeros(5,dtype=int),np.arange(5),
+        np.arange(2),np.arange(5)*250.,z,observed,snr,available,barred,limit=3)
+    assert result['failed_gate_count']==4 and result['samples_truncated']
+    assert [s['observation_state'] for s in result['samples']]==[
+        'observed_dbzh','measured_nonquiet_snr','unknown']
+    assert result['samples'][1]['opposing_dbzh'] is None and result['samples'][1]['opposing_snr']==4.
+    assert result['samples'][2]['opposing_snr'] is None
+    assert not result['action_authority']
+
+
+def test_short_measured_subset_retains_complete_geometry_and_weather_members():
+    module=load('radial_revision.fragment_constellation')
+    ranges=300000.+np.arange(100)*250
+    columns=[np.arange(i,i+6) for i in (0,24,48,72)]
+    group=[dict(ident=i+1,cols=c) for i,c in enumerate(columns)]
+    parents=[dict(component_id=i+1,range_min_m=ranges[c[0]],range_max_m=ranges[c[-1]]+250,
+        mean_range_m=float(ranges[c].mean()),angular_width_deg=2.) for i,c in enumerate(columns)]
+    history=[dict(range_min_m=p['range_min_m'],range_max_m=p['range_max_m'],lower_parent_ids=[p['component_id']],
+        angular_width_deg=2.,bearing_deg=35.,original_left_deg=34.,original_right_deg=36.,
+        bilateral_fraction=1.,observed_weather_gates=0,lower_parent_weather_gates=0,
+        protected_gates=0,lower_parent_protected_gates=0) for p in parents]
+    accepted=[np.ones(len(c),bool) for c in columns];accepted[1][0]=False
+    history[1]['bilateral_fraction']=5/6
+    part=module.original_distance_partitions(group,history,parents,ranges,250,1,measured_accept=accepted)[0]
+    assert not part['assessment']['qualified']
+    assert part['measured_subset']['qualified'] and not part['measured_subset']['action_authority']
+    assert part['original_components']==[1,2,3,4] and part['measured_subset']['measured_range_support_m']==5750
+    # An original weather member cannot be dropped and have its evidence borrowed.
+    history[1]['lower_parent_weather_gates']=1;accepted[1][:]=False
+    part=module.original_distance_partitions(group,history,parents,ranges,250,1,measured_accept=accepted)[0]
+    assert not part['measured_subset']['qualified']
+    assert 'weather_or_protected_original_member' in part['measured_subset']['hold_reasons']
+
+
+def test_short_subset_requires_window_proof_and_keeps_production_arrays_identical():
+    n=fixture()
+    with pytest.raises(ValueError,match='requires complete partition'):
+        detect(n,short_subset_evidence=True)
+    base,_=detect(n,partition_evidence=True,shoulder_windows=True)
+    proposal,_=detect(n,partition_evidence=True,shoulder_windows=True,short_subset_evidence=True)
+    for key in base:assert np.array_equal(base[key],proposal[key])
+    assert P+'SHORT_RESEARCH_MASK' in proposal

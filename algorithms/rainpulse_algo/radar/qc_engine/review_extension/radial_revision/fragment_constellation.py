@@ -11,7 +11,29 @@ from .geometry import ResourceLimit
 PREFIX = 'RV2_CONSTELLATION_'
 
 
-def original_distance_partitions(group, history, parents, ranges, dr, beam):
+def shoulder_failure_samples(row, fr, fc, segment, ranges, z, observed, snr, snr_available,
+                             barred, *, limit=32):
+    """Bounded measurement diagnostics; missing DBZH is never called dry air."""
+    quiet=~observed[row,fc]&snr_available[row,fc]&(snr[row,fc]<=3)
+    contrast=observed[row,fc]&(z[row,fc]<=z[segment[fr],fc]-6)
+    failed=barred[row,fc]|~(quiet|contrast)
+    indices=np.flatnonzero(failed)
+    finite=lambda value:float(value) if np.isfinite(value) else None
+    samples=[]
+    for i in indices[:limit]:
+        col=int(fc[i])
+        kind=('observed_dbzh' if observed[row,col] else 'measured_quiet_snr' if quiet[i] else
+              'measured_nonquiet_snr' if snr_available[row,col] else 'unknown')
+        samples.append(dict(target_row=int(segment[fr[i]]),column=col,opposing_row=int(row),
+            range_m=float(ranges[col]),target_dbzh=finite(z[segment[fr[i]],col]),
+            opposing_dbzh=finite(z[row,col]) if observed[row,col] else None,
+            opposing_snr=finite(snr[row,col]) if snr_available[row,col] else None,
+            observation_state=kind,protected=bool(barred[row,col])))
+    return dict(failed_gate_count=int(failed.sum()),samples=samples,
+                samples_truncated=len(indices)>limit,action_authority=False)
+
+
+def original_distance_partitions(group, history, parents, ranges, dr, beam, *, measured_accept=None):
     """Research-only RAW topology partitions; never cut a shared lower parent.
 
     A 20km gap separates candidates, not evidence of dry air. Full lower-parent
@@ -45,12 +67,30 @@ def original_distance_partitions(group, history, parents, ranges, dr, beam):
             hold |= (np.polyfit(np.log(distance),np.log(width),1)[0] <= -.4 and
                      np.corrcoef(np.log(distance),np.log(width))[0,1] <= -.7)
         columns = np.unique(np.concatenate([group[i]['cols'] for i in indices]))
-        result.append(dict(original_components=[group[i]['ident'] for i in indices],
+        assessment=short_segment_assessment(members,ranges[columns],dr,beam,hold)
+        record=dict(original_components=[group[i]['ident'] for i in indices],
             original_lower_parent_ids=ids, original_lower_parent_geometry_hold=bool(hold),
             parent_start_m=min(p['range_min_m'] for p in local),
             parent_end_m=max(p['range_max_m'] for p in local),
-            assessment=short_segment_assessment(members,ranges[columns],dr,beam,hold),
-            gap_is_not_dry_evidence=True, action_authority=False))
+            assessment=assessment,
+            gap_is_not_dry_evidence=True, action_authority=False)
+        if measured_accept is not None:
+            # Full original geometry and every weather member remain in scope.
+            # Only independently confirmed observations contribute support.
+            selected=[i for i in indices if np.asarray(measured_accept[i],bool).any()]
+            accepted_columns=np.unique(np.concatenate([group[i]['cols'][measured_accept[i]]
+                for i in selected])) if selected else np.array([],dtype=int)
+            windows=[len(np.unique((ranges[accepted_columns]-ranges[columns[0]])//scale))
+                     for scale in (1000,2000,5000)]
+            holds=[h for h in assessment['hold_reasons'] if h!='short_requires_complete_bilateral_observations']
+            if len(selected)<4 or len(accepted_columns)*dr<5000 or min(windows)<4:
+                holds.append('insufficient_independently_measured_short_support')
+            record['measured_subset']=dict(research_only=True,action_authority=False,
+                qualified=not holds,original_geometry_unchanged=True,
+                measured_original_components=[group[i]['ident'] for i in selected],
+                measured_range_support_m=float(len(accepted_columns)*dr),
+                measured_window_counts=windows,hold_reasons=holds)
+        result.append(record)
     return result
 
 
@@ -113,9 +153,11 @@ def measured_shoulder_windows(r,dr,columns,known,quiet,protected,charge):
 
 
 def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_evidence=False,
-           shoulder_windows=False,shoulder_band=False, partition_evidence=False):
+           shoulder_windows=False,shoulder_band=False, partition_evidence=False, short_subset_evidence=False):
     if shoulder_band and not shoulder_windows:
         raise ValueError('bounded shoulder band requires measured window research')
+    if short_subset_evidence and not (partition_evidence and shoulder_windows):
+        raise ValueError('short subset requires complete partition and measured window evidence')
     r, az, dr, good, gaps = native_geometry(native)
     if native.shape[0] < 3:
         raise ValueError('at least three native rays required')
@@ -132,6 +174,8 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
            PREFIX+'STRONG_MASK': np.zeros(native.shape, 'uint8'),
            PREFIX+'ID': np.zeros(native.shape, 'uint32'),
            PREFIX+'WEATHER_VETO_MASK': weather.astype('uint8')}
+    if short_subset_evidence:
+        out[PREFIX+'SHORT_RESEARCH_MASK']=np.zeros(native.shape,'uint8')
     steps = (np.diff(az) + 180) % 360 - 180
     positive = steps[steps > 0]
     if not len(positive):
@@ -232,6 +276,9 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                             measured_quiet_snr_fraction=float(quiet.mean()),
                             measured_nonquiet_snr_fraction=float((~observed[row,fc]&sa[row,fc]&~quiet).mean()),
                             unknown_fraction=float((~observed[row, fc] & ~sa[row,fc]).mean())))
+                        if partition_evidence:
+                            sides[-1]['point_failure_diagnostics']=shoulder_failure_samples(
+                                row,fr,fc,segment,r,z,observed,snr,sa,barred)
                         if shoulder_windows:
                             cache_key=(fragment['ident'],side)
                             if cache_key in window_cache:
@@ -345,7 +392,17 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                     strong=not holds, hold_reasons=holds))
                 if partition_evidence:
                     records[-1]['original_distance_partitions'] = original_distance_partitions(
-                        group,member_history,lower_history,r,dr,beam)
+                        group,member_history,lower_history,r,dr,beam,
+                        measured_accept=accept if short_subset_evidence else None)
+                    if short_subset_evidence:
+                        for partition in records[-1]['original_distance_partitions']:
+                            if not partition['measured_subset']['qualified']:
+                                continue
+                            ids=set(partition['original_components'])
+                            for fragment,confirmed in zip(group,accept,strict=True):
+                                if fragment['ident'] in ids:
+                                    out[PREFIX+'SHORT_RESEARCH_MASK'][segment[fragment['rows'][confirmed]],
+                                        fragment['cols'][confirmed]]=1
     return out, dict(objects=records, source_claim=False, recursive_growth=False,
         action_gates=0, research_only=True, shoulder_windows=bool(shoulder_windows),
         shoulder_band=bool(shoulder_band),work=work)

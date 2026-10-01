@@ -10,9 +10,11 @@ import numpy as np
 from rainpulse_algo.radar.qc_engine.review_extension.radial_revision import fragment_constellation, morphology_objects
 
 
-def audit(snapshot, receipt, *, shoulder_windows=False, shoulder_band=False):
+def audit(snapshot, receipt, *, shoulder_windows=False, shoulder_band=False, short_subset=False):
     if shoulder_band and not shoulder_windows:
         raise ValueError('shoulder band requires measured windows')
+    if short_subset and not shoulder_windows:
+        raise ValueError('short subset requires measured windows')
     report = json.loads(receipt.read_text())
     if report.get('scope') != 'exact_Web_consumed_stored_QC_not_replay':
         raise ValueError('actual published QC receipt required')
@@ -50,7 +52,7 @@ def audit(snapshot, receipt, *, shoulder_windows=False, shoulder_band=False):
     summaries = {}
     for name, module, options in (
         ('constellation', fragment_constellation, {'segment_evidence':True,'partition_evidence':True,
-             'shoulder_windows':shoulder_windows,'shoulder_band':shoulder_band}),
+             'shoulder_windows':shoulder_windows,'shoulder_band':shoulder_band,'short_subset_evidence':short_subset}),
         ('whole_object', morphology_objects, {'physical_windows':True})):
         fields, evidence = module.detect(native, blocked, **options)
         prefix = module.PREFIX
@@ -62,6 +64,11 @@ def audit(snapshot, receipt, *, shoulder_windows=False, shoulder_band=False):
             unmatched=int((remaining & (fields[prefix+'ID']==0)).sum()),
             objects=[dict(target_overlap=int(count), **lookup[int(ident)])
                      for ident,count in zip(ids,counts) if ident])
+        if prefix+'SHORT_RESEARCH_MASK' in fields:
+            mask=fields[prefix+'SHORT_RESEARCH_MASK']==1
+            summaries[name]['short_research_overlap']=int((mask&remaining).sum())
+            summaries[name]['short_research_total']=int(mask.sum())
+            summaries[name]['short_protected_overlap']=int((mask&blocked).sum())
     assert np.array_equal(native.fields['DBZH'], a['RAW'], equal_nan=True)
     return dict(scope='complete_RAW_shapes_explaining_actual_published_residuals',
         snapshot_sha256=report['snapshot_sha256'],published_receipt_sha256=hashlib.sha256(receipt.read_bytes()).hexdigest(),
@@ -75,10 +82,13 @@ def main():
     p.add_argument('--output',type=Path,required=True)
     p.add_argument('--shoulder-windows',action='store_true',help='Research measured 1/2/5km bilateral windows')
     p.add_argument('--shoulder-band',action='store_true',help='Research bounded exterior band; requires windows')
+    p.add_argument('--short-subset',action='store_true',help='Research independently measured short subsets; requires windows')
     args=p.parse_args()
     if args.output.exists():raise ValueError('new output required')
-    result=audit(args.snapshot,args.receipt,shoulder_windows=args.shoulder_windows,shoulder_band=args.shoulder_band)
-    result['research_options']=dict(shoulder_windows=args.shoulder_windows,shoulder_band=args.shoulder_band)
+    result=audit(args.snapshot,args.receipt,shoulder_windows=args.shoulder_windows,
+        shoulder_band=args.shoulder_band,short_subset=args.short_subset)
+    result['research_options']=dict(shoulder_windows=args.shoulder_windows,
+        shoulder_band=args.shoulder_band,short_subset=args.short_subset)
     with args.output.open('x') as f:json.dump(result,f,indent=2,allow_nan=False);f.write('\n')
     print(json.dumps({k:v for k,v in result.items() if k!='detectors'}))
     for name,value in result['detectors'].items():

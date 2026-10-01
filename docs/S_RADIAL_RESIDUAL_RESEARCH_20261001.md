@@ -1303,3 +1303,32 @@ or source copy). All returned candidate/strong/ID/weather fields identical and R
 unchanged on all eight cuts; receipt `edge-center-eight-array-invariance-v1.json`.
 Only research short-shape explanations change. ConcurrentXadvancedHEAD to c4fc70c;
 this S change is staged separately and does not include their working files.
+
+### Independently measured short subsets, research only
+
+Point-failure diagnostics on complete RAW show only three far-member target gates
+failing bilateral evidence: opposingDBZH missing but actualSNR4/9 at363.125/
+366.375km. These are measured nonquiet observations, not dry air/unknown samples.
+Bounded32sample diagnostics retain native indices, actualvalues, cause-state,
+protection and explicit truncation; they cannot change decisions.
+
+Research `short_subset_evidence=True` requires original partition evidence AND
+measured1/2/5km bilateral windows. It preserves every original member, full RAW
+edges and lower-parent weather/geometry history. Only individually window-confirmed
+observations contribute short support (four original members,5km actual support,
+four windows per scale); failed gates remain unselected. It outputs a distinct
+`RV2_CONSTELLATION_SHORT_RESEARCH_MASK`, never changes productionstrong/proposal
+arrays, and has no engine/profile/writer/action authority. A weather member cannot
+be dropped to restart a group. Generic default detector arrays are unchanged.
+
+Actual09:48 `published-v6-0948-short-subset-v7.json`:83research observations overall,
+only2of31actual published residual targets nominated, protectedoverlap0. Eight
+completeRAW replay `short-subset-eight-v1.json`:83/0/0/0/0/0/86/38 nominations,
+all protected/weatherproxyoverlap0, RAWunchanged, productionarraysidentical. These
+are nominations, not newisolations or independent contamination truth. Most
+remaining target gates require original lower-intensity footprint checking; any
+such extension must be one-time within frozen originalparents and independently
+revalidate weak target observations, never recursively promote newly linked pieces.
+
+315relatedtestsPASS, plusnewCLIdependencytestPASS; direct34targetedtestsPASS.
+Remaining actualpublishedtarget29notcovered bythisprototype; no deployment.
