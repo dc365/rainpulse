@@ -33,3 +33,35 @@
 - 架构与安全复核已修复具体问题。旧 config/pipeline 存在历史 lint 报错，不把新增文件 lint 与相关测试绿色冒充全量 CI 绿色。
 
 此节记录只读回放证据，不代表新 Worker、正常任务图件、真实天气独立对照或界面已经验收。候选范围先为 ZF701/ZF702，算法不包含它们的站号或固定方位特例；扩站须追加同样的真实资料复核。
+
+
+## 候选部署与正常发布（2026-10-02，UTC 17:49 后）
+
+代码724500b已合并本地main并push。105四个ops multiband Worker切换到`rainpulse-cpu-worker:xqc-polar-morphology-724500b-compat-mb`，image ID `sha256:0e8a8f84e24ba2a0f0ce291ae5f6f9615adfa2c4d9a05e8224d5d07bf339b84c`。安装后合成扇形2613门运行检查通过，原始值不变、仅形态候选action3、不取得QPE资格。
+
+镜像从原f6b6b39父镜像派生，只变config/core/pipeline/polar_morphology四个模块，791个既有Python文件逐文件SHA相同。当前main的父pipeline包含尚未部署的radome_quality依赖，因此实际pipeline由已提交724500b的pipeline增量应用到父镜像原pipeline生成；未同时部署该radome/相位扩展及decoder2.2.1。生成pipeline SHA `a5fceda6385b7036609a047135a7effd4e525d01cc11b792f981397c4764da6c`，父pipeline SHA `4b617bf66e6625f4c540658fb5946d50df57dbb4b7ab98291e27cc6f62b59124`，增量SHA `b5c5943008f8a346e1fc41ead9aa85734b508cbe0cfdee1c5fc2594d59353e3b`；不能宣称整个main后台已部署。
+
+候选网络SHA `aa2356cc45846c510754ffffd7d70a836b5aeec1bdb1bbe72ba72a38e5870381`，只改变release_id以及ZF701/ZF702的morphology字段。r2生成器保持父配置显式参数；拒绝旧r1生成器隐式写入默认参数的首个草案。release fingerprint `b69c8995849aad480776cd337008f62e3a1c90185556ca21d669cb3f87fb9575`。S主Worker未变，decoder/controller未切换，小时跟进未恢复。
+
+六体扫均按正常API规划/提交，源输入身份与旧计划一致；未改SQL状态，旧失败/旧产品保留。正常任务及attempt：
+
+|体扫|新task|新attempt|最新结果|
+|---|---|---|---|
+|ZF701 08:03|04214061-40d9-4fe5-b87b-59aed7b69c2e|f836dd21-1550-483a-9c5b-d37dc7da2e15|SUCCEEDED，9层检查|
+|ZF701 08:07|94d7d228-305e-4d52-a564-f3d5432f59fd|4aef42de-9372-4214-9ff7-f6bc23ca617f|SUCCEEDED，9层检查；第2层新增形态预算待复核|
+|ZF701 08:49|3d2059ae-8812-42ad-89ca-b3114fb485ed|7f1f5164-bedd-4a92-8c28-bb74b17cede5|SUCCEEDED，9层检查|
+|ZF702 08:08|3c5afa78-076a-48ed-a9a1-69f9d810bba1|65eab672-4040-4dbd-bc58-0ee87890cb66|SUCCEEDED，9层检查|
+|ZF702 08:33|d4d590bc-a610-470e-82b8-52c919f1222d|0b7decee-419f-4681-865c-88b76be0a9af|SUCCEEDED，9层检查|
+|ZF702 08:26原问题|198c0180-ac2c-4edd-a377-8e517e8a8f13|4cb3b6a6-9bfb-4d66-9067-410affdf516d|RUNNING/COMPUTE，必须继续观察，不作为完成|
+
+新正常图件45层校验原始反射率/方位/距离/仰角/采集时间相等，图件与原生数组SHA通过；形态候选质控图/CR排除、硬天气重叠0。44层机械门通过，ZF70108:07第2层标记`DEGRADED_MORPHOLOGY_ACTION_BUDGET`，不能忽略警示或改判通过。
+
+新旧ZF70208:08正常产品对比SHA `3b6e72167bbab5ff6722a90e9e9bbf8be8ccb0ab4be64359425dbf8efca07836`：第4层ray364剩余205门降到4离散门，新增形态命中201；第9层ray208剩余996门降到0。原始身份逐值相等，9层均无新增可见门。action3候选不能称为已确认污染。
+
+实际浏览器观察并保存五张完整页面截图：ZF70108:03第0/3层、08:07第0层，ZF70208:08第4/9层；明显长径向和南侧扇形已消除。文件在本地`.build/xqc-polar-morphology/normal/*-ui.png`。第1层截图工具超时未计入观察，不能把未观察层算进UI验收。尚未进行独立真实天气负样本验收；只读54层、新正常45层和实际UI5层是三个不同计数。
+
+后台收尾driver PID2022470，目录105`.build/xqc-acceptance-20261001/polar-morphology-normal-724500b`，状态/日志持久化。原问题任务新鲜heartbeat，计算Worker约100%CPU/1.34GiB，未重启。实际MinIO卷发布前可用567588171776字节/100256917 inode，保护线通过。任务运行不等于全部验收，目标仍active。
+
+代码CI36900071920已结束failure：build通过；parameter hash旧断言、fusion对照、lint与通用test仍失败，日志在本地build。相关191项XQC-v2通过不代表全CI绿色。
+
+复验：在仓库根执行`PYTHONPATH=algorithms algorithms/.venv/bin/python -m pytest algorithms/tests/xqc_v2_20260928 -q`。下一步完成原问题体扫正常发布和预算层真实地图复核，然后补独立天气反例及扩站复核；当前不得开启可信S+X/QPE/预报。
