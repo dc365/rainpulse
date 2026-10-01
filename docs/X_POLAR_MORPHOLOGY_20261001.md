@@ -273,3 +273,12 @@ v6新增branching_envelopes_enabled显式身份/JSON契约，默认关闭且要�
 修复只复用单节点原始测量事实；多节点分裂/合并窗口仅生成完整对象rows×cols信号、重新测外侧和全历史，不复用资格、不改变门限。75m/0.5deg合成相同16340成员，工作计数10244704→7565313；冻结9M工作限的已提交e07493e内存隔离fixture实际RED，当前修复GREEN。完整形态/正常动作与既有政策保持，下一步v2独立目录同冻源复验，不能覆盖v1失败。
 
 同时读取ZF50505正常cut2已验证SHA的真实证据：radial_source PARTIAL_RESOURCE_LIMIT、failed_module fan、reason X source model-trial budget exceeded；不是形态未运行或显示缓存，已有source_gates86932保留。该模块完整性告警尚未解决，不提高预算伪造验收，也不凭shape补造确认RF源。独立天气/所有网页仍未验收。
+
+
+### v6优化回放终态和真实正常v5对照图
+
+c4fc70c先main push后仅同步形态模块到活动源、镜像与发布仍v5。源4040542/配对4040543均终止SOURCE_REPLAY_COMPLETED；20源492层及同8配对72层全部EVALUATED/资源弃权0，v5 mask逐门子集保留。28task/output receipt SHA本地核验，verified-summary.json留存。v5源总477835，v6-only151238；同源配对新增101718不重复增加unique。新增跨ZF103/401/402/505/701/702，证明非站号/固定方位专门规则，但不证明无误删。ZF40202 cut4局部天气代理选中253，ZF50505 cut6为40，ZF70205 cut7为49，保留复核冲突，不能用候选数替代天气验收。
+
+branching-render-v1绑定当前已正常发布v5任务ad439bbd（不是旧失败产品），完整RAW/当前QC/形态mask/研究减去mask四栏。505cut4/5两PNG SHA d500918b…/a443e477…本地核验并实际观察：cut4仍可见的长径向进一步覆盖，cut5当前v5已大幅清除，v6再覆盖13个可见原始成员。cut4新mask亦涉及团块附近回波，尚无独立真值，不能称只删污染或将v6直接上线。预览不是正常新v6产品/网页。render/audit SHA dad338bed122d8d9ac0a848754012faec6f7af5bc716f9bb8ae181aacaec58e0。
+
+当前262全XQC-v2测试PASS，ruff/diffcheckPASS，c4fc70c和e07493e gh run list无结果，不称CI绿。IAB截图后getTab恢复仍超时，新增UI仅此前70105一张，累计6实际观察；保持地图复核未完成。正常v5六任务54层已完成但四复核告警保留；radial_source fan model-trial cap部分弃权另需优化。下一步优先完整组件与紧凑天气回波叠加反例、独立S/天气对照及源模块资源诊断，再决定v6候选安装/正常新任务，而非调整全局门限或按方位删图。目标active/小时automation停用/业务可信融合QPE预报不启用。
