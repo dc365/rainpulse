@@ -3,8 +3,11 @@
 import argparse
 import hashlib
 import json
+import sys
 from pathlib import Path
 import numpy as np
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from audit_s_source_footprint import select_roi
 
 
 def read(path):
@@ -23,12 +26,13 @@ def seconds(values):
     return values
 
 
-def audit(target_path,donor_paths):
+def audit(target_path,donor_paths, *, azimuth=None, range_min=0., range_max=None):
     target,meta=read(target_path)
     tr=target['RANGE'];ta=target['AZIMUTH'];tt=seconds(target['RAY_TIME'])
     obs=target['AVAILABLE_DBZH']==1
     if ta.shape!=tt.shape or obs.shape!=(len(ta),len(tr)):raise ValueError('native target geometry mismatch')
-    roi=(tr[None,:]>=250000)&(ta[:,None]>=285)&(ta[:,None]<=340) if meta['radar_id']=='z9591' else (tr[None,:]>=100000)&(ta[:,None]>=160)&(ta[:,None]<=280)
+    roi=select_roi(ta,tr,range_min=range_min,range_max=range_max,
+        azimuth_start=azimuth[0] if azimuth else None,azimuth_end=azimuth[1] if azimuth else None)
     remaining=target['BEFORE']&~target['ADDED']&roi
     rows=[];used=set();cumulative=np.zeros(obs.shape,'uint8')
     for path in donor_paths:
@@ -80,6 +84,7 @@ def audit(target_path,donor_paths):
             typed_radial_flag_total=int(stored_radial.sum()) if radial_bit is not None and flags is not None else None,radial_flag_definition_available=radial_bit is not None))
     return dict(scope='same_volume_radio_coordinate_source_audit_not_weather_absence',
         product_writes=False,actions=0,independent_weather_truth=False,
+        selection={'azimuth':azimuth,'range_min':range_min,'range_max':range_max},
         target_snapshot_sha256=hashlib.sha256(target_path.read_bytes()).hexdigest(),
         normalized_volume_sha256=meta['raw_artifact_sha256'],scan_id=meta['scan_id'],
         remaining_roi_gates=int(remaining.sum()),donors=rows,
@@ -89,9 +94,11 @@ def audit(target_path,donor_paths):
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('target',type=Path);p.add_argument('donors',nargs='+',type=Path)
+    p.add_argument('--azimuth',type=float,nargs=2)
+    p.add_argument('--range-min',type=float,default=0.);p.add_argument('--range-max',type=float)
     p.add_argument('--output',required=True,type=Path);a=p.parse_args()
     if a.output.exists():raise ValueError('output must be new')
-    result=audit(a.target,a.donors)
+    result=audit(a.target,a.donors,azimuth=a.azimuth,range_min=a.range_min,range_max=a.range_max)
     a.output.parent.mkdir(parents=True,exist_ok=True)
     a.output.write_text(json.dumps(result,indent=2,allow_nan=False)+'\n')
     print(json.dumps(result,indent=2))

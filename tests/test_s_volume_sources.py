@@ -64,3 +64,16 @@ def test_independent_cuts_time_and_range_boundaries(tmp_path):
     mismatch = snapshot(tmp_path/'wrong.npz', 4, scan='other')
     with pytest.raises(ValueError, match='identity'):
         module.audit(target, [mismatch])
+
+
+def test_selection_is_explicit_and_not_inferred_from_station(tmp_path):
+    target=snapshot(tmp_path/'target.npz',0)
+    donor=snapshot(tmp_path/'donor.npz',2,flag_bit=8)
+    for path in (target,donor):
+        with np.load(path) as d:arrays={k:d[k] for k in d.files}
+        meta=json.loads(str(arrays['METADATA']));meta['radar_id']='z9591'
+        arrays['METADATA']=np.array(json.dumps(meta));np.savez(path,**arrays)
+    assert module.audit(target,[donor])['remaining_roi_gates']==9
+    selected=module.audit(target,[donor],azimuth=(200.,201.),range_min=100300.)
+    assert selected['remaining_roi_gates']==4
+    assert selected['donors'][0]['native_measured_remaining_gates']==4

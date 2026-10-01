@@ -24,9 +24,16 @@ def main():
     parser.add_argument('--azimuth', type=float, nargs=2)
     parser.add_argument('--range-min', type=float, default=0.)
     parser.add_argument('--plot', action='store_true')
+    parser.add_argument('--variable-width', action='store_true',
+                        help='Read-only complete variable-envelope prototype; no engine actions')
     parser.add_argument('--engine-quarantine', action='store_true',
                         help='Validate opt-in experiment proposals through the actual engine; no product writes')
     args = parser.parse_args()
+    if args.variable_width and args.engine_quarantine:
+        raise ValueError('variable-width prototype is evidence-only; not wired to engine actions')
+    global DETECTOR
+    module_name = 'variable_morphology' if args.variable_width else 'morphology_objects'
+    DETECTOR = importlib.import_module('morph_object_runtime.engine.review_extension.radial_revision.'+module_name)
     args.output.mkdir(parents=True, exist_ok=False)
     from audit_s_source_footprint import select_roi
     records = []; seen = set()
@@ -140,7 +147,8 @@ def main():
               'product_writes': False, 'independent_weather_truth': False,
               'selection': {'azimuth': args.azimuth, 'range_min': args.range_min},
               'script_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-              'detector_sha256': hashlib.sha256((ENGINE/'review_extension/radial_revision/morphology_objects.py').read_bytes()).hexdigest(),
+              'variable_width_prototype': args.variable_width,
+              'detector_sha256': hashlib.sha256(Path(DETECTOR.__file__).read_bytes()).hexdigest(),
               'cases': records}
     (args.output/'report.json').write_text(json.dumps(report, indent=2)+'\n')
 
