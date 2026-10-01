@@ -200,7 +200,8 @@ def pilot(manifest, station_filter=None, scan_filter=None):
     from zarr.storage import MemoryStore
     from rainpulse_algo.worker.object_store import ArtifactObjectReader, minio_client_from_environment
     from rainpulse_algo.multiband.model import Network
-    from rainpulse_algo.multiband.adapters import read_x_qc_sweep
+    from rainpulse_algo.multiband.stream_io import GroupCuts
+    from rainpulse_algo.multiband.execution import ExecutionOptions
     from rainpulse_algo.multiband.quality import x_qc
     from rainpulse_algo.multiband.xqc_v2.config import XQCConfig
 
@@ -253,6 +254,9 @@ def pilot(manifest, station_filter=None, scan_filter=None):
                 store = MemoryStore()
                 store.update(objects)
                 root = zarr.open_group(store=store, mode="r")
+                cuts = GroupCuts(root, station, source, sha256=sha,
+                                 options=ExecutionOptions(streaming=True),
+                                 maximum_bytes=network.maximum_input_bytes)
                 numbers = [int(i) for i in root["sweep_number"][:]
                            if "DBZH" in root[f"sweep_{int(i):03d}"]]
                 # Low, middle and top REF cuts cover elevation behaviour.
@@ -260,8 +264,7 @@ def pilot(manifest, station_filter=None, scan_filter=None):
                 if scan["scan_id"] in MANDATORY:
                     chosen = numbers  # Every user-reported volume gets ALL REF cuts.
                 for number in chosen:
-                    volume, _ = read_x_qc_sweep(objects, station, source, number, asset_sha256=sha,
-                                               maximum_bytes=network.maximum_input_bytes)
+                    volume = cuts.read(number)
                     original = volume.sweeps[0]
                     raw = original.fields["DBZH"].copy()
                     started = time.monotonic()
@@ -287,6 +290,8 @@ def pilot(manifest, station_filter=None, scan_filter=None):
                                       "failures": failures, "seconds": time.monotonic()-started,
                                       "before_cut_status": before.xqc_diagnostics.get("status"),
                                       "after_cut_status": record.get("status"),
+                                      "context": record.get("module_records", {}).get("context", {}),
+                                      "mixed_review_gates": int(fields["XQC_SOURCE_MIXED_MASK"].sum()),
                                       "before_source_gates": int(before.fields["XQC_RADIAL_SOURCE_MASK"].sum()),
                                       "after_source_gates": int(fields["XQC_RADIAL_SOURCE_MASK"].sum()),
                                       "newly_rejected_gates": int(newly_rejected.sum()),
