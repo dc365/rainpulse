@@ -1,5 +1,6 @@
 FROM rainpulse-cpu-worker:s-elevation-09eecdd
 ARG SOURCE_REVISION
+COPY algorithms/rainpulse_algo/radar/qc_engine/profile.py /opt/rainpulse/rainpulse_algo/radar/qc_engine/profile.py
 LABEL org.opencontainers.image.revision=$SOURCE_REVISION
 COPY algorithms/rainpulse_algo/radar/qc_engine/broad_source.py algorithms/rainpulse_algo/radar/qc_engine/generalization.py /opt/rainpulse/rainpulse_algo/radar/qc_engine/
 COPY algorithms/rainpulse_algo/radar/qc_engine/review_extension/source.py /opt/rainpulse/rainpulse_algo/radar/qc_engine/review_extension/

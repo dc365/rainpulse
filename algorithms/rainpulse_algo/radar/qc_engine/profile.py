@@ -253,7 +253,7 @@ class OpenSourceQCProfile(FrozenConfig):
     volume_review: VolumeReviewConfig | None = None
     schema_version: Literal["1.1"] = "1.1"
     engine: Literal["open_source"] = "open_source"
-    profile_version: str = "fujian-qc-opensource-v1"
+    profile_version: str = Field(default="fujian-qc-opensource-v1", max_length=512)
     pipeline_version: Literal[
         "qc-opensource-1.0.0",
         "qc-opensource-2.0.0",

@@ -40,3 +40,23 @@ def test_audit_parent_and_repeated_child_are_rejected():
     p['generalization']['broad_source']['source_review']['radial_revision']['mode'] = 'audit'
     with pytest.raises(ValueError):
         module.generate(p)
+
+
+def test_long_parent_generates_bounded_unique_summary_identity():
+    p = parent()
+    p['profile_version'] = 'review-20260917-radial-20260918-' + 'x' * 460
+    frozen = copy.deepcopy(p)
+    child = module.generate(p)
+    assert len(child['profile_version']) <= 512
+    assert p == frozen
+    other = copy.deepcopy(p)
+    # Identity reflects the entire accepted parent, even if display labels match.
+    other['profile_version'] += '-different'
+    assert module.generate(other)['profile_version'] != child['profile_version']
+
+
+def test_profile_rejects_unpublishable_identity_before_computation():
+    p = parent()
+    p['profile_version'] = 'review-20260917-radial-20260918-' + 'x' * 512
+    with pytest.raises(ValueError, match='512'):
+        module.OpenSourceQCProfile.model_validate(p)

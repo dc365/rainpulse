@@ -26,10 +26,11 @@ def generate(parent):
                 'raw_fragment_families_enabled', 'source_ledger_enabled',
                 'raw_fan_families_enabled', 'source_footprint_enabled'):
         line[key] = True
-    suffix = '-s-bounded-radial-20261001-v3'
-    if child['profile_version'].endswith(suffix):
+    version = 's-bounded-radial-20261001-v4-review-20260917-radial-20260918'
+    if child['profile_version'].startswith(version) or child['profile_version'].endswith('-s-bounded-radial-20261001-v3'):
         raise ValueError('parent is already the discontinuous child')
-    child['profile_version'] += suffix
+    parent_digest = hashlib.sha256(json.dumps(parent, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    child['profile_version'] = version + '-parent-' + parent_digest[:16]
     OpenSourceQCProfile.model_validate(child)
     return child
 

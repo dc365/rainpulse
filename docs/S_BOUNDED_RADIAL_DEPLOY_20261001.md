@@ -25,3 +25,12 @@ residual remains unresolved. Experimental eligibility remains false.
 Targeted algorithm tests passed. Repository-wide GitHub CI for this commit failed
 on legacy parameter-hash expectations and fusion equivalence checks; it is not a
 fully green release. See the workflow run 36864181136 for the complete evidence.
+
+## Completion publication fix
+
+The first v3 job completed QC calculation/array validation but failed in completion
+metadata: the inherited profile label plus suffix exceeded the 512-character
+identity contract. No v3 refreshed image was published. v4 uses a short explicit
+label with a digest of the complete parent settings. The profile parser now rejects
+unpublishable labels before reading radar arrays; the refresh driver resumes live
+jobs and reuses succeeded stages under the exact profile hash.
