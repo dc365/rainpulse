@@ -913,3 +913,39 @@ SNR实测≤3dB”的侧邻；这和侧邻全部缺测不同，不可填零伪�
 实测低SNR侧邻可作为有效噪声观测，不能自动转换为气象真值；缺测侧邻仍
 弃权。高相关回波及独立天气证据必须保留，不能为清除367门而直接降低删除
 阈值。证据JSON保存于上述输出和web-aligned-0818-sw-moments-v2.json。
+
+### 2026-10-02: actual published lineage corrects the 11:24 residual diagnosis
+
+The reusable published-QC audit now has explicit `--selection source-added` in
+addition to the unchanged default `source-remaining`. Both selections require
+matching finite binary masks and are observations only, with the original
+snapshot/scan/RAW and exact diagnostic-consumed QC URI checks preserved.
+Eight audit tests pass. This does not activate a morphology candidate.
+
+Fresh 105 v5 refresh state is DONE for all eight slots. Actual Web catalog and
+stored QC were independently read for Z9591 sweep 2, NW 270–360 degrees and
+range above 300 km:
+
+- 11:24: 130 locally proposed gates; all 130 quarantined in the exact Web-consumed
+  QC, zero renderer-eligible. Diagnostic 9262c85d-6088-5a8e-ac87-120aa60e518d.
+  The fetched current QC PNG was inspected: the remote NW fragment group is gone.
+  Earlier zero new candidate count was not proof that this case remained unresolved.
+- 10:42: 36 local residual gates; six already quarantined, 30 still eligible.
+  Diagnostic cdcd1a34-d2a5-5212-a501-4a532b6120b1. Current fetched PNG inspected;
+  the remote NW fragments remain. Both QC parameter hashes equal the active v5
+  parameters, and original RAW equality passes. This is not a stale-profile explanation.
+
+Receipts and actual PNGs are retained locally as
+`.build/s-discontinuous-20261001/published-source-added-1124-v1.{json,png}` and
+`published-source-remaining-1042-v1.{json,png}`. They are private local evidence,
+not committed data or independent weather truth.
+
+The complete original 10:42 constellation history contains qualified-looking
+and insufficiently observed members; unknown side measurements are retained.
+Its remote group spans only about 21 km. Current segment requirements therefore
+cannot authorize it independently; one longer segment also spans only three
+20-km windows. Next investigate a separately validated short-object shape rule
+or genuinely observed repeated geometry evidence, without globally lowering
+length/window thresholds, borrowing support across failed members, or treating
+missing observations as dry. Broad weather-connected fans remain a separate
+unfinished requirement. No claim that all eight cases are solved.

@@ -24,6 +24,25 @@ def test_bind_to_rendered_input_instead_of_latest_scan_qc():
     assert m.published_input(web,receipt)=='consumed-old-qc'
 
 
+def test_proposed_and_remaining_selection_are_disjoint_and_roi_bound():
+    import numpy as np
+    before=np.array([[1,1,0,1]])
+    added=np.array([[1,0,1,1]])
+    roi=np.array([[1,1,1,0]])
+    remaining=m.target_selection(before,added,roi)
+    proposed=m.target_selection(before,added,roi,'source-added')
+    assert remaining.tolist()==[[False,True,False,False]]
+    assert proposed.tolist()==[[True,False,False,False]]
+    assert not (remaining & proposed).any()
+
+
+@pytest.mark.parametrize('bad',[[[0,2]],[[0,float('nan')]],[[1]]])
+def test_target_selection_rejects_invalid_masks(bad):
+    import numpy as np
+    with pytest.raises(ValueError,match='finite binary'):
+        m.target_selection(np.array([[1,1]]),np.array(bad),np.array([[1,1]]))
+
+
 def test_mismatched_raw_qc_generation_is_rejected():
     web,receipt=fixture();web['raw_frame']={'image_url':'/api/v1/diagnostics/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/layers/raw'}
     with pytest.raises(ValueError,match='generation'):m.published_input(web,receipt)

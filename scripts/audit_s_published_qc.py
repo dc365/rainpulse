@@ -45,6 +45,18 @@ def evidence_selection(path,snapshot,shape):
         diagnostic_selection_only=True,field=fields[0])
 
 
+def target_selection(before,added,roi,mode='source-remaining'):
+    """Select local proposals or residuals for observation, never QC authority."""
+    masks=[np.asarray(x) for x in (before,added,roi)]
+    if any(x.shape!=masks[0].shape or not np.isfinite(x).all() or
+           not np.isin(x,[0,1]).all() for x in masks):
+        raise ValueError('target selection requires matching finite binary masks')
+    if mode not in ('source-remaining','source-added'):
+        raise ValueError('unknown target selection mode')
+    before,added,roi=[x.astype(bool) for x in masks]
+    return before & (added if mode=='source-added' else ~added) & roi
+
+
 def remote(host,worker,code,timeout=120):
     r=subprocess.run(['ssh','-o','BatchMode=yes','-o','ConnectTimeout=10',host,
         shlex.join(['docker','exec','-i',worker,'python','-'])],input=code,text=True,
@@ -112,6 +124,8 @@ def main():
     p.add_argument('--web-base',default='http://192.168.28.105:4173')
     p.add_argument('--azimuth',type=float,nargs=2);p.add_argument('--range-min',type=float,default=0.)
     p.add_argument('--evidence',type=Path,help='Restrict read-only audit to bound prototype strong nominations')
+    p.add_argument('--selection',choices=('source-remaining','source-added'),default='source-remaining',
+        help='Audit local source-stage residuals or already-proposed gates in actual published QC')
     args=p.parse_args()
     if args.output.exists():raise ValueError('output must be new')
     with np.load(args.snapshot,allow_pickle=False) as d:a={k:d[k] for k in d.files}
@@ -128,7 +142,7 @@ def main():
     diagnostic=json.loads(receipt.stdout);qc_uri=published_input(web,diagnostic)
     roi=select_roi(a['AZIMUTH'],a['RANGE'],range_min=args.range_min,
         azimuth_start=args.azimuth[0] if args.azimuth else None,azimuth_end=args.azimuth[1] if args.azimuth else None)
-    target=a['BEFORE'].astype(bool)&~a['ADDED'].astype(bool)&roi
+    target=target_selection(a['BEFORE'],a['ADDED'],roi,args.selection)
     evidence={}
     if args.evidence:
         selected,evidence=evidence_selection(args.evidence,args.snapshot,target.shape)
@@ -140,7 +154,7 @@ def main():
         azimuth=a['AZIMUTH'][rows].tolist(),range_m=a['RANGE'][cols].tolist(),raw_dbzh=a['RAW'][rows,cols].tolist())
     result=remote(args.host,args.worker,WORKER.replace('PAYLOAD',repr(json.dumps(payload))))
     result.update(web_frame_identity=web,diagnostic_job_id=job,diagnostic_analysis_id=diagnostic['analysis_id'],
-        selection={'azimuth':args.azimuth,'range_min':args.range_min,**evidence},
+        selection={'mode':args.selection,'azimuth':args.azimuth,'range_min':args.range_min,**evidence},
         snapshot_sha256=hashlib.sha256(args.snapshot.read_bytes()).hexdigest(),
         script_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest())
     with args.output.open('x') as f:json.dump(result,f,indent=2,allow_nan=False);f.write('\n')
