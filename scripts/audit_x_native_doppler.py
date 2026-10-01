@@ -46,7 +46,9 @@ def main():
                                    asset_sha256=sha, maximum_bytes=net.maximum_input_bytes)
         cut = volume.sweeps[0]
         for name, actual in [('DBZH_RAW', cut.fields['DBZH']),
-                             ('azimuth', cut.azimuth_deg), ('range_m', cut.range_m)]:
+                             ('azimuth', cut.azimuth_deg), ('range_m', cut.range_m),
+                             ('elevation', cut.elevation_deg),
+                             ('ray_time_epoch', cut.ray_time_epoch)]:
             np.testing.assert_array_equal(native[name], actual)
         sampling = root[f'sweep_{number:03d}'].attrs.get('native_cut_sampling')
         nyquist = root[f'sweep_{number:03d}'].attrs.get('nyquist_velocity_m_s')
