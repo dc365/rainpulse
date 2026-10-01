@@ -6,6 +6,29 @@
 
 #### 原始历史约束下的独立分段证据
 
+##### 默认关闭的 engine／写出校验接入
+
+`FragmentLineConfig.fragment_constellation_enabled=False`，开启时按完整历史
+分段合同执行，只将 `STRONG_MASK` 纳入几何隔离提议。原始来源账本先冻结，
+弱候选不能变为来源或动作。audit 模式无动作。序列化独立前缀绑定 RAW、
+矩量有效性、坐标、原始顺序、扫描断口、波束和屏障，另有 uint8
+`SEGMENT_MODE=1` 合同；写出时重建原生顺序、重新检测，模式篡改不能通过。
+两个新增集成测试覆盖实际 source writer、顺序恢复、RAW／掩膜／模式篡改、
+默认关闭及 audit。相关整套共 275 项通过。
+
+严格实际 engine 回放通过：10:24 新增目标区 24 门（全层 50 门）提议，
+Z9598 08:36 新增目标区 23 门；均保持原始来源编号／类型不变、写出校验
+通过，回执 `constellation-engine-1024-v1`、`constellation-engine-0836-v1`。
+这些仍是源阶段实验提议，不是正常 Worker 已发布图件，也没有 Web 更新。
+
+09:48 严格 baseline 回放拒绝，未跳过比较。差异只有
+`RV2_SOURCE_FOOTPRINT_REJECTION_CODE` 的四门，旧值 2、新值 4，距离
+243.625–292.375 km；其余捕获字段一致。旧快照来源范围模块 SHA
+`234400eca5c8beee2de9da93f3938cbca22ed2ba02afe5e3af5f69cd2610f6f3`，
+当前 `8203ccad11f45e1ae98ac0d1bb3dfec9ad1dd89f7014699eb49a00cfdd5f7a25`。
+差异回执 `constellation-engine-0948-baseline-drift.json` 保留完整比较信息；
+必须重新冻结当前来源阶段基线再验收，旧快照不能当作当前 engine 验收通过。
+
 新增可选 `--fragment-constellation --fragment-segments`。保留整个 RAW 父对象
 和每个原始成员的距离、方位宽度、天气／保护门及双侧观测历史；失败成员的
 原始距离区间阻断其它重叠成员，不通过递归新关联扩大阻断或授权区。

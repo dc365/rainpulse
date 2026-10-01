@@ -39,8 +39,10 @@ def main():
     args = parser.parse_args()
     if args.fragment_segments and not args.fragment_constellation:
         raise ValueError('fragment segments require constellation research mode')
-    if args.fragment_constellation and (args.radial_backbone or args.variable_width or args.branch_shoulders or args.engine_quarantine):
-        raise ValueError('fragment constellation is a separate read-only research mode')
+    if args.fragment_constellation and (args.radial_backbone or args.variable_width or args.branch_shoulders):
+        raise ValueError('fragment constellation is a separate research mode')
+    if args.fragment_constellation and args.engine_quarantine and not args.fragment_segments:
+        raise ValueError('engine constellation replay requires the full-history segment contract')
     if args.radial_backbone and (args.variable_width or args.branch_shoulders):
         raise ValueError('radial backbone is a separate detector mode')
     if args.branch_shoulders and not args.variable_width:
@@ -84,7 +86,8 @@ def main():
             config = importlib.import_module('morph_object_runtime.engine.review_extension.radial_revision.config')
             validator = importlib.import_module('morph_object_runtime.engine.review_extension.radial_revision.validation')
             cfg = config.RadialRevisionConfig.model_validate(meta['config'])
-            feature='radial_backbone_enabled' if args.radial_backbone else 'whole_object_morphology_enabled'
+            feature=('fragment_constellation_enabled' if args.fragment_constellation else
+                     'radial_backbone_enabled' if args.radial_backbone else 'whole_object_morphology_enabled')
             cfg = cfg.model_copy(update={'mode':'experiment_quarantine', 'fragment_line':
                 cfg.fragment_line.model_copy(update={feature:False})})
             barrier = (a['WEATHER'] == 1) | (a['CONFLICTS'] == 1)

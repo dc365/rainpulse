@@ -94,3 +94,51 @@ def test_full_original_fixed_km_width_history_cannot_be_evaded_by_segmentation()
     assert report['objects']
     assert any(obj['full_parent_narrowing_weather_hold'] for obj in report['objects'])
     assert not arrays[P+'STRONG_MASK'].any()
+
+
+def native_fixture():
+    from .conftest import Native
+    measured=fixture()
+    native=Native(measured.fields['DBZH'],dr=250,start=100000,
+        fields={'SNR':measured.fields['SNR']})
+    native.azimuth=measured.azimuth.copy()
+    return native
+
+
+def test_engine_opt_in_strong_only_and_original_sources_preserved():
+    from .conftest import evaluate
+    n=native_fixture()
+    cfg=load('radial_revision.config').RadialRevisionConfig(step=3,
+        mode='experiment_quarantine',fragment_line={'fragment_constellation_enabled':True,
+        'source_ledger_enabled':True,'raw_fragment_families_enabled':True})
+    arrays,_=evaluate(n,cfg);hit=arrays[P+'STRONG_MASK']==1
+    assert hit.any() and arrays['RV2_GEOMETRY_ACTION_MASK'][hit].all()
+    assert arrays['RV2_ACTION_PROPOSAL_MASK'][hit].all()
+    baseline,_=evaluate(n,cfg.model_copy(update={'fragment_line':cfg.fragment_line.model_copy(
+        update={'fragment_constellation_enabled':False})}))
+    assert P+'STRONG_MASK' not in baseline
+    for key in ('RV2_SOURCE_LEDGER_SEED_ID','RV2_SOURCE_LEDGER_KIND'):
+        assert np.array_equal(arrays[key],baseline[key])
+    audit,_=evaluate(n,cfg.model_copy(update={'mode':'audit'}))
+    assert not audit['RV2_ACTION_PROPOSAL_MASK'].any()
+    load('radial_revision.validation').validate_revision_fields(arrays,n.field_available['DBZH'],
+        np.zeros(n.shape,bool),np.zeros(n.shape,bool))
+
+
+def test_writer_native_order_raw_and_segment_contract_bound():
+    n=native_fixture();source=np.zeros(n.shape,bool)
+    cfg=load('config').SourceReviewConfig(narrow_enabled=False,radial_revision={
+        'step':3,'mode':'experiment_quarantine','fragment_line':{'fragment_constellation_enabled':True}})
+    _,arrays,_=load('source').source_additions(n,cfg,source,np.zeros(n.shape,'float32'))
+    arrays['SRC_REVIEW_REFERENCE_FOLD_ID']=np.zeros(n.shape,'uint32')
+    arrays['DBZH_RAW']=n.fields['DBZH'].copy()
+    validator=load('source_validation').validate_source_fields
+    validator(arrays,n.field_available['DBZH'])
+    order=np.random.default_rng(29).permutation(n.shape[0])
+    restored={key:value[order].copy() for key,value in arrays.items()}
+    validator(restored,n.field_available['DBZH'][order])
+    for key,index in ((P+'STRONG_MASK',(0,0)),(P+'SEGMENT_MODE',(0,0)),
+                      (P+'MEASURED_DBZH',(5,100))):
+        forged={k:v.copy() for k,v in arrays.items()}
+        forged[key][index]=0 if key.endswith('MODE') else forged[key][index]+1
+        with pytest.raises(ValueError):validator(forged,n.field_available['DBZH'])

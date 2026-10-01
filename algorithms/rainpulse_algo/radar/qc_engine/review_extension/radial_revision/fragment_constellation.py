@@ -174,6 +174,29 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
 
 def validate(arrays, native, blocked, **options):
     expected, _ = detect(native, blocked, **options)
+    if set(arrays) != set(expected):
+        raise ValueError('constellation proof field set mismatch')
     for key, value in expected.items():
-        if key not in arrays or not np.array_equal(arrays[key], value):
+        actual=np.asarray(arrays[key])
+        if actual.dtype != value.dtype or actual.shape != value.shape or not np.array_equal(actual, value):
             raise ValueError('constellation proof mismatch: '+key)
+
+
+def evidence(native, blocked, *, beam_width=None):
+    from .morphology_objects import evidence as native_evidence
+    arrays=native_evidence(native,blocked,prefix=PREFIX,beam_width=beam_width)
+    arrays[PREFIX+'SEGMENT_MODE']=np.ones(native.shape,'uint8')
+    return arrays
+
+
+def validate_serialized(group, observed, blocked):
+    from .morphology_objects import validate_serialized as replay_native_evidence
+    key=PREFIX+'SEGMENT_MODE'
+    if key not in group:
+        raise ValueError('constellation segment contract missing')
+    mode=np.asarray(group[key][:])
+    if mode.dtype != np.dtype('uint8') or mode.shape != observed.shape or not (mode==1).all():
+        raise ValueError('constellation segment contract differs')
+    def replay(arrays,native,barred,**options):
+        validate(arrays,native,barred,segment_evidence=True,**options)
+    replay_native_evidence(group,observed,blocked,prefix=PREFIX,replay=replay)
