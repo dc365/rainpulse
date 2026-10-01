@@ -22,7 +22,14 @@ for path in "${required_files[@]}"; do
   }
 done
 
-rg --quiet 'DECODER_VERSION = "cma-rstm-2.1.0"' algorithms/rainpulse_algo/radar/fmt.py
+# The worker rejects requests with any other decoder version. Check the
+# control/compute boundary rather than pinning this check to an old release.
+decoder_version=$(awk -F '"' '/^DECODER_VERSION = / { print $2 }' algorithms/rainpulse_algo/radar/fmt.py)
+requested_version=$(awk -F '"' '/RadarDecoderVersion[[:space:]]*=/ { print $2 }' services/control/internal/orchestration/events.go)
+[[ -n "$decoder_version" && "$decoder_version" == "$requested_version" ]] || {
+  printf 'control decoder %s differs from worker %s\n' "$requested_version" "$decoder_version" >&2
+  exit 1
+}
 rg --quiet 'geometry_encoding.*sweep_groups_v1|GEOMETRY_ENCODING = "sweep_groups_v1"' algorithms/rainpulse_algo/radar/zarr_volume.py
 rg --quiet 'raw_reserved_codes' algorithms/rainpulse_algo/radar/zarr_volume.py
 rg --quiet 'radar-decode-fmt' algorithms/rainpulse_algo/worker/handlers.py
