@@ -85,3 +85,13 @@ Generic type 1 continues to use the existing site frequency in MHz.
   marker instead of overwriting its artifact.
 - Output is stored at
   `radar/normalized/{radar_id}/{yyyy}/{mm}/{dd}/{scan_time}/volume.zarr`.
+# Native beam evidence
+
+Optional root attribute `clutter_context_contract` may carry a
+`native-site-beam-v1` record: `beam_width_deg`, `beam_source`, `input_sha256`,
+and `radar_config_version`. For regular FMT this is the finite vertical beam
+width in the checked site header, bounded to (0,3] degrees and tied to the
+archived raw input hash. A missing or malformed header does not inherit a
+draft hardware width. Phased-array receiver/transmitter widths do not imply
+an equivalent site-wide contract. Legacy objects without this attribute remain
+readable but provide no action-grade upper-beam verification through it.

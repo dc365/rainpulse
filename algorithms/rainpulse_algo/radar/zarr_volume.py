@@ -101,6 +101,18 @@ def build_zarr_store(
             "known_source_issues": list(config.known_issues),
         }
     )
+    # A regular FMT site header declares the vertical beam directly. Keep that
+    # checked measurement with its raw-file identity; never substitute a draft
+    # hardware value for absent phased-array or malformed header evidence.
+    width = volume.site.beam_width_vertical_deg
+    if volume.generic_type == 1 and width is not None and np.isfinite(width) and 0 < width <= 3:
+        root.attrs["clutter_context_contract"] = {
+            "version": "native-site-beam-v1",
+            "beam_width_deg": float(width),
+            "beam_source": "RSTM type-1 site header checked at decode",
+            "input_sha256": volume.input_sha256,
+            "radar_config_version": config.config_version,
+        }
     if health is not None:
         root.attrs.update(
             {

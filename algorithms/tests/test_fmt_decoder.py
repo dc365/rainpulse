@@ -273,6 +273,30 @@ def test_normalized_zarr_round_trip(tmp_path: Path) -> None:
     assert "health/summary.json" in objects
 
 
+def test_native_site_beam_evidence_survives_normalization(tmp_path: Path) -> None:
+    config = load_radar_config(make_config(tmp_path))
+    volume = decode_fmt_volume(make_fmt_fixture(tmp_path), config)
+    objects = build_zarr_store(volume, config, asset_id=UUID(int=1), source_uri="s3://radar/raw")
+    store = MemoryStore()
+    store.update(objects)
+    contract = zarr.open_group(store=store, mode="r").attrs["clutter_context_contract"]
+    assert contract["beam_width_deg"] == pytest.approx(volume.site.beam_width_vertical_deg)
+    assert contract["input_sha256"] == volume.input_sha256
+    assert contract["radar_config_version"] == config.config_version
+    assert contract["version"] == "native-site-beam-v1"
+
+
+@pytest.mark.parametrize("width", [None, float("nan"), 0., 4.])
+def test_missing_native_beam_does_not_fall_back_to_configuration(tmp_path: Path, width) -> None:
+    config = load_radar_config(make_config(tmp_path))
+    volume = decode_fmt_volume(make_fmt_fixture(tmp_path), config)
+    volume = replace(volume, site=replace(volume.site, beam_width_vertical_deg=width))
+    objects = build_zarr_store(volume, config, asset_id=UUID(int=1), source_uri="s3://radar/raw")
+    store = MemoryStore()
+    store.update(objects)
+    assert "clutter_context_contract" not in zarr.open_group(store=store, mode="r").attrs
+
+
 def test_health_summary_detects_missing_sweep_and_noise_telemetry(tmp_path: Path) -> None:
     config = load_radar_config(make_config(tmp_path))
     volume = decode_fmt_volume(make_fmt_fixture(tmp_path), config)
