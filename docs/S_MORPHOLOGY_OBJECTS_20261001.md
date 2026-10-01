@@ -27,6 +27,15 @@
 旧版本运行一致性，不能作为当前保护修正后的上线候选；镜像未曾启用生产。
 正常 Web、独立天气留出、其余碎片／宽扇形仍未验收。
 
+修正版代码 f579a7d 已推送。105 新候选镜像
+`rainpulse-cpu-worker:s-fragment-constellation-f579a7d-candidate` 已构建，
+config SHA `05b6ccb0c9666545fc51f57cace2aa259fcb024c85ed28319e3ca1a7c79197f6`。
+同一真实 09:48 快照在已安装镜像中再次核验全部 28 模块 SHA，新增目标
+66 门、全层 134 门提议，基线逐字段一致、来源保持、RAW 写出重放、默认关闭
+和 audit 无动作通过；镜像内固定公里宽低外围／高细芯反例也通过。
+回执 `constellation-f579a7d-image-test-receipt.txt`。此次更新仅为候选环境，
+没有生产 profile 切换或 Web 图件发布。
+
 ##### 默认关闭的 engine／写出校验接入
 
 ###### 09:48 基线重冻结与 105 候选镜像实际回放
