@@ -1,7 +1,7 @@
 """Whole RAW objects, rather than independently qualified surviving fragments."""
 import numpy as np
 import pytest
-from .conftest import Native, load
+from .conftest import Native, load, evaluate
 
 P = 'RV2_MORPH_OBJECT_'
 
@@ -166,3 +166,47 @@ def test_full_ppi_native_array_seam_has_real_shoulders_but_sector_does_not_wrap(
     n.gap_after[-1] = True
     arrays, _ = detect(n)
     assert not arrays[P+'STRONG_MASK'][n.field_available['DBZH']].any()
+
+
+def test_opt_in_engine_geometry_disposition_and_audit_preserve_source_identity():
+    n = fixture()
+    cfg = load('radial_revision.config').RadialRevisionConfig(step=3,
+        mode='experiment_quarantine', fragment_line={'whole_object_morphology_enabled': True})
+    fields, report = evaluate(n, cfg)
+    hit = fields[P+'STRONG_MASK'] == 1
+    assert hit.any() and fields['RV2_ACTION_PROPOSAL_MASK'][hit].all()
+    assert fields['RV2_GEOMETRY_ACTION_MASK'][hit].all()
+    assert not fields['RV2_LEGACY_MATCH_MASK'].any()
+    load('radial_revision.validation').validate_revision_fields(
+        fields, n.field_available['DBZH'], np.zeros(n.shape, bool), np.zeros(n.shape, bool))
+    audit, _ = evaluate(n, cfg.model_copy(update={'mode': 'audit'}))
+    assert np.array_equal(audit[P+'STRONG_MASK'], fields[P+'STRONG_MASK'])
+    assert not audit['RV2_ACTION_PROPOSAL_MASK'].any()
+    baseline, _ = evaluate(n, cfg.model_copy(update={'fragment_line':
+        cfg.fragment_line.model_copy(update={'whole_object_morphology_enabled': False})}))
+    assert not baseline['RV2_ACTION_PROPOSAL_MASK'].any()
+    assert report['fragment_line']['whole_object_morphology']['source_claim'] is False
+
+
+def test_writer_replays_restored_native_measurements_and_binds_raw():
+    n = fixture()
+    cfg = load('config').SourceReviewConfig(narrow_enabled=False, radial_revision={
+        'step': 3, 'mode': 'experiment_quarantine',
+        'fragment_line': {'whole_object_morphology_enabled': True}})
+    source = np.zeros(n.shape, bool)
+    _, arrays, _ = load('source').source_additions(n, cfg, source, np.zeros(n.shape, 'float32'))
+    arrays['SRC_REVIEW_REFERENCE_FOLD_ID'] = np.zeros(n.shape, 'uint32')
+    arrays['DBZH_RAW'] = n.fields['DBZH'].copy()
+    validator = load('source_validation').validate_source_fields
+    validator(arrays, n.field_available['DBZH'])
+    order = np.random.default_rng(20).permutation(n.shape[0])
+    restored = {key: value[order].copy() for key, value in arrays.items()}
+    validator(restored, n.field_available['DBZH'][order])
+    forged = {key: value.copy() for key, value in arrays.items()}
+    forged[P+'STRONG_MASK'][0, 0] = 1
+    with pytest.raises(ValueError):
+        validator(forged, n.field_available['DBZH'])
+    forged = {key: value.copy() for key, value in arrays.items()}
+    forged[P+'MEASURED_DBZH'][20, 120] += 1.
+    with pytest.raises(ValueError, match='RAW'):
+        validator(forged, n.field_available['DBZH'])

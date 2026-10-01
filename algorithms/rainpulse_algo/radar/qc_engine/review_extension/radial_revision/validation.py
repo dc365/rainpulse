@@ -200,6 +200,11 @@ def validate_revision_fields(group, observed, legacy_source, blocked):
         from .source_footprint import validate as validate_source_footprint
         validate_source_footprint(group,observed,barred|blocked)
         source_footprint=mask(get('RV2_SOURCE_FOOTPRINT_QUALIFIED_MASK'),shape,'source footprint')
+    whole_morphology=np.zeros(shape,bool)
+    if 'RV2_MORPH_OBJECT_STRONG_MASK' in group:
+        from .morphology_objects import validate_serialized
+        validate_serialized(group,observed,barred|blocked)
+        whole_morphology=mask(get('RV2_MORPH_OBJECT_STRONG_MASK'),shape,'whole-object morphology')
     fan_joint=np.zeros(shape,bool)
     if 'RV2_FAN_JOINT_QUALIFIED_MASK' in group:
         from .fan_joint import validate as validate_fan_joint
@@ -214,7 +219,7 @@ def validate_revision_fields(group, observed, legacy_source, blocked):
         validate_source_window(group,observed,barred|blocked)
         source_window=mask(get('RV2_SOURCE_WINDOW_QUALIFIED_MASK'),shape,'window source qualification')
         window_candidate=mask(get('RV2_SOURCE_WINDOW_CANDIDATE_MASK'),shape,'window source candidates')
-    if not np.array_equal(candidate, (topology | bundle | line | group_candidate | residual_objects | discontinuous_candidate | envelope | joint | window_candidate | fan_joint | source_footprint) & ~barred):
+    if not np.array_equal(candidate, (topology | bundle | line | group_candidate | residual_objects | discontinuous_candidate | envelope | joint | window_candidate | fan_joint | source_footprint | whole_morphology) & ~barred):
         raise ValueError("radial candidate differs from raw evidence")
     if np.any(candidate & blocked) or np.any((get("RV2_PLATEAU_MASK") == 1) & candidate):
         raise ValueError("radial candidate crossed a barrier")
@@ -320,7 +325,7 @@ def validate_revision_fields(group, observed, legacy_source, blocked):
         if np.any(original_joint_source & ~((legacy_source & (get('RV2_WEAK_CANDIDATE_MASK')==0)) | line_source | morph | isolated | group_morph)):
             raise ValueError('joint source was not an original independent path')
         validate_joint(group,observed,barred | blocked,original_joint_source)
-    geometry = morph | isolated | group_polar | group_morph | residual_objects | discontinuous | envelope | joint | source_window | fan_joint | source_footprint
+    geometry = morph | isolated | group_polar | group_morph | residual_objects | discontinuous | envelope | joint | source_window | fan_joint | source_footprint | whole_morphology
     if not np.array_equal(qualified, legacy | segment | line_source | geometry):
         raise ValueError("radial qualification not equal to its source paths")
     weak_candidate = get("RV2_WEAK_CANDIDATE_MASK") == 1

@@ -34,6 +34,7 @@ class FragmentLineConfig(BaseModel):
     fan_joint_enabled: bool = False
     fan_power_states_enabled: bool = False
     source_footprint_enabled: bool = False
+    whole_object_morphology_enabled: bool = False
     antenna_beam_width_deg: float | None = Field(default=None, gt=0., le=5.)
     isolated_link_gap_m: float = Field(default=30000., ge=0, le=30000.)
 

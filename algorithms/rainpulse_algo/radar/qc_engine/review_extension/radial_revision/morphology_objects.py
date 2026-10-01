@@ -214,3 +214,82 @@ def validate(arrays, native, blocked, *, beam_width=None, maximum_objects=10000)
         actual = np.asarray(arrays[key])
         if actual.dtype != value.dtype or actual.shape != value.shape or not np.array_equal(actual, value):
             raise ValueError('whole-object evidence does not match original measurements: '+key)
+
+
+def evidence(native, blocked, *, beam_width=None):
+    """Original measured inputs for serialization and native-order replay."""
+    r, az, _, good, gaps = native_geometry(native)
+    out = {}
+    for key, value, dtype in (
+        ('NATIVE_RANGE_M', r[None, :], 'float64'),
+        ('NATIVE_AZ_DEG', az[:, None], 'float64'),
+        ('NATIVE_ORDER', np.arange(native.shape[0])[:, None], 'uint32'),
+        ('NATIVE_GOOD_MASK', good[:, None], 'uint8'),
+        ('NATIVE_GAP_MASK', gaps[:, None], 'uint8'),
+        ('BEAM_DEG', np.nan if beam_width is None else beam_width, 'float64'),
+        ('VERSION_CODE', 1, 'uint8'),
+        ('BARRED_MASK', blocked, 'uint8'),
+    ):
+        out[PREFIX+key] = np.broadcast_to(value, native.shape).astype(dtype).copy()
+    for name in ('DBZH', 'SNR', 'RHOHV'):
+        value, available = moment(native, name)
+        out[PREFIX+'MEASURED_'+name] = np.where(available, value, np.nan).astype('float32')
+        out[PREFIX+name+'_AVAILABLE_MASK'] = available.astype('uint8')
+    return out
+
+
+def validate_serialized(group, observed, blocked):
+    """Bind proof to immutable RAW, then recompute geometry and gate eligibility."""
+    from types import SimpleNamespace
+    shape = observed.shape
+    typed = {'NATIVE_RANGE_M':'float64', 'NATIVE_AZ_DEG':'float64', 'BEAM_DEG':'float64',
+             'NATIVE_ORDER':'uint32', 'NATIVE_GOOD_MASK':'uint8', 'NATIVE_GAP_MASK':'uint8',
+             'VERSION_CODE':'uint8', 'BARRED_MASK':'uint8',
+             **{'MEASURED_'+n:'float32' for n in ('DBZH','SNR','RHOHV')},
+             **{n+'_AVAILABLE_MASK':'uint8' for n in ('DBZH','SNR','RHOHV')}}
+    get = lambda key: np.asarray(group[PREFIX+key][:])
+    if any(PREFIX+key not in group for key in typed):
+        raise ValueError('missing whole-object original evidence')
+    for key, dtype in typed.items():
+        value = get(key)
+        if value.shape != shape or value.dtype != np.dtype(dtype) or np.isinf(value).any():
+            raise ValueError('invalid whole-object original evidence: '+key)
+    order, ranges, angles = (get(k) for k in ('NATIVE_ORDER','NATIVE_RANGE_M','NATIVE_AZ_DEG'))
+    if (not np.isfinite(ranges).all() or not np.isfinite(angles).all() or
+            not np.array_equal(order, np.broadcast_to(order[:, :1], shape)) or
+            not np.array_equal(np.sort(order[:, 0]), np.arange(shape[0])) or
+            not np.array_equal(ranges, np.broadcast_to(ranges[:1], shape)) or
+            not np.array_equal(angles, np.broadcast_to(angles[:, :1], shape)) or
+            not (get('VERSION_CODE') == 1).all()):
+        raise ValueError('whole-object native coordinate/order/version differs')
+    beam = get('BEAM_DEG')
+    if np.isnan(beam).all():
+        beam_width = None
+    elif np.isfinite(beam).all() and (beam > 0.).all() and np.ptp(beam) == 0.:
+        beam_width = float(beam.flat[0])
+    else:
+        raise ValueError('whole-object beam metadata differs within native sweep')
+    good, gaps = (mask(get(k), shape, k) for k in ('NATIVE_GOOD_MASK','NATIVE_GAP_MASK'))
+    if any(not np.array_equal(v, np.broadcast_to(v[:, :1], shape)) for v in (good,gaps)):
+        raise ValueError('whole-object ray geometry varies by gate')
+    barred = mask(get('BARRED_MASK'), shape, 'whole-object original barriers')
+    if np.any(blocked & ~barred) or not np.array_equal(barred[observed], blocked[observed]):
+        raise ValueError('whole-object original barriers differ')
+    rows = np.argsort(order[:, 0])
+    fields, available = {}, {}
+    for name in ('DBZH','SNR','RHOHV'):
+        value = get('MEASURED_'+name)
+        present = mask(get(name+'_AVAILABLE_MASK'), shape, name+' original availability')
+        if not np.array_equal(np.isfinite(value), present):
+            raise ValueError('whole-object measurement availability differs')
+        fields[name], available[name] = value[rows], present[rows]
+    if not np.array_equal(get('DBZH_AVAILABLE_MASK') == 1, observed):
+        raise ValueError('whole-object RAW availability differs')
+    if 'DBZH_RAW' in group:
+        raw = np.asarray(group['DBZH_RAW'][:])
+        if raw.shape != shape or not np.array_equal(raw[observed], get('MEASURED_DBZH')[observed], equal_nan=True):
+            raise ValueError('whole-object evidence differs from immutable RAW')
+    native = SimpleNamespace(shape=shape, fields=fields, field_available=available,
+        ranges=ranges[0], azimuth=angles[rows,0], geometry_good=good[rows,0], gap_after=gaps[rows,0])
+    keys = ('MASK','STRONG_MASK','ID','WEATHER_VETO_MASK')
+    validate({PREFIX+k:get(k)[rows] for k in keys}, native, barred[rows], beam_width=beam_width)
