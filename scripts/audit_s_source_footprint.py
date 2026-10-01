@@ -15,11 +15,30 @@ REASONS = {
 }
 
 
+def select_roi(azimuth, ranges, *, azimuth_start=None, azimuth_end=None,
+               range_min=0., range_max=None):
+    """Native sector selection, including north crossing; no station/time rule."""
+    az=np.asarray(azimuth,dtype=float)[:,None] % 360.
+    r=np.asarray(ranges,dtype=float)[None,:]
+    roi=np.isfinite(az)&np.isfinite(r)&(r>=range_min)
+    if range_max is not None:roi &= r<=range_max
+    if (azimuth_start is None)!=(azimuth_end is None):
+        raise ValueError('both azimuth boundaries are required')
+    if azimuth_start is not None:
+        lo,hi=azimuth_start % 360.,azimuth_end % 360.
+        roi &= ((az>=lo)&(az<=hi)) if lo<=hi else ((az>=lo)|(az<=hi))
+    return roi
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('snapshots',type=Path)
     parser.add_argument('replays',type=Path)
     parser.add_argument('--output',required=True,type=Path)
+    parser.add_argument('--azimuth',type=float,nargs=2,metavar=('START','END'))
+    parser.add_argument('--range-min',type=float,default=0.)
+    parser.add_argument('--range-max',type=float)
+    parser.add_argument('--exclude-qualified',action='store_true',help='diagnose remaining after source-footprint proposal; not a production action')
     args=parser.parse_args()
     if args.output.exists():raise ValueError('audit output must be new')
     rows=[]
@@ -31,8 +50,12 @@ def main():
             if sha!=replay['input_snapshot_sha256'] or meta['scan_id']!=replay['scan_id']:
                 raise ValueError('audit input identity mismatch')
             az=a['AZIMUTH'][:,None];r=a['RANGE'][None,:]
-            roi=(r>=250000)&(az>=285)&(az<=340) if meta['radar_id']=='z9591' else (r>=100000)&(az>=160)&(az<=280)
+            roi=select_roi(a['AZIMUTH'],a['RANGE'],
+                azimuth_start=args.azimuth[0] if args.azimuth else None,
+                azimuth_end=args.azimuth[1] if args.azimuth else None,
+                range_min=args.range_min,range_max=args.range_max)
             remaining=a['BEFORE']&~a['ADDED']&roi
+            if args.exclude_qualified: remaining &= b['RV2_SOURCE_FOOTPRINT_QUALIFIED_MASK']!=1
             family=b['RV2_RAW_FAN_ID'];source=b['RV2_SOURCE_LEDGER_SEED_ID']
             candidate=b['RV2_SOURCE_FOOTPRINT_CANDIDATE_MASK']==1
             codes=b['RV2_SOURCE_FOOTPRINT_REJECTION_CODE']
@@ -72,7 +95,9 @@ def main():
                 decisions=counts,parents=parents))
     args.output.parent.mkdir(parents=True,exist_ok=True)
     args.output.write_text(json.dumps(dict(scope='offline_residual_decision_audit_not_weather_truth',
-        classification_changed=False,product_writes=False,cases=rows),indent=2,allow_nan=False)+'\n')
+        classification_changed=False,product_writes=False,
+        selection={'azimuth':args.azimuth,'range_min':args.range_min,'range_max':args.range_max,
+                   'exclude_qualified':args.exclude_qualified},cases=rows),indent=2,allow_nan=False)+'\n')
     for row in rows:
         print(row['case'],json.dumps({k:v for k,v in row['decisions'].items() if v}))
 

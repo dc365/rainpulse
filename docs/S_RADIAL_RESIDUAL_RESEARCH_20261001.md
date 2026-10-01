@@ -824,3 +824,34 @@ families; selecting SNR>=5 does not reconnect its27–32km unanchored patches in
 promoting zero target gains or noisy assumptions. Next work must address actual
 native width/segmentation and independent available volume support; not lower
 reference requirements simply to force these patches to match.
+
+## 2026-10-01 新版发布恢复与西南无锚分区
+
+v3的首个正常QC Worker完成计算/数组验证后，因继承名称追加超过摘要512字符
+而发布失败；v4改为短版本名+完整父配置语义摘要，parser在数组读取前拒绝
+超长名称。新job b9460c88…已在105正常SUCCEEDED，对应grid完成，顺序脚本
+正在下一个雷达站继续。未宣称组合/PNG已更新；状态和日志为权威证据。
+
+复核脚本audit_s_source_footprint.py默认全原生视场，可显式选择跨北方位角和
+实际米制距离，不再把站点ID当区域规则。命令：
+
+```bash
+.build/xqc-zf702-investigation/venv/bin/python scripts/audit_s_source_footprint.py \
+  .build/s-discontinuous-20261001/web-aligned-0818-v1 \
+  .build/s-discontinuous-20261001/web-aligned-0818-components-v2 \
+  --azimuth 210 270 --range-min 100000 --exclude-qualified \
+  --output .build/s-discontinuous-20261001/web-aligned-0818-sw-v2.json
+```
+
+实际Z9598 08:18 scan9ee02e8c…西南210–270°/100km外，在已有提议之外剩余
+367可见门，全部source-footprint理由为no_original_source；第3层同区0。
+367门均有实测SNR，中位8.5dB；239门有RHOHV，中位0.98，247门有
+ZDR/PHIDP。中心两侧±2原生射线，367个目标分别有281/287个“DBZH不可用但
+SNR实测≤3dB”的侧邻；这和侧邻全部缺测不同，不可填零伪造无回波。
+原discontinuous候选/实测判定/动作均0，还未证明单片1km门槛是唯一原因。
+
+下一诊断：保持原始几何、窗口总支撑、边界稳定及天气保护不变，分离连续
+单片长度与整个对象支撑的影响，复核真实短片是否只是被候选提名挡住。
+实测低SNR侧邻可作为有效噪声观测，不能自动转换为气象真值；缺测侧邻仍
+弃权。高相关回波及独立天气证据必须保留，不能为清除367门而直接降低删除
+阈值。证据JSON保存于上述输出和web-aligned-0818-sw-moments-v2.json。
