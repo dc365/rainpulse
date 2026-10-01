@@ -1,0 +1,15 @@
+{
+  "policy_id": "x-native-source-family-required-v1",
+  "selection": "experimental X stations with an existing enhancement and registered receiver noise floor",
+  "parent_network_sha256": "bee28feb378aca50a8820f451ea5924a117e27424e11708353a73960983dfa21",
+  "preset": "fan",
+  "changes": {
+    "radial_source_enabled": true,
+    "radial_source_block_model_enabled": true,
+    "radial_source_fan_model_enabled": true
+  },
+  "threshold_transfer": false,
+  "action_budget_increase": false,
+  "operational_eligible": false,
+  "deployment_status": "requires full bounded-context replay and weather protection acceptance"
+}
