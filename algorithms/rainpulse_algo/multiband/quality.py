@@ -181,6 +181,10 @@ def x_qc(volume: Volume, station: Station, release_sha256: str) -> Volume:
                 raise ValueError("invalid blockage fraction")
             blocked = ~np.isfinite(blockage) | (blockage >= cfg.max_blockage_fraction)
             flags[observed & blocked] |= int(Flag.BLOCKED)
+        if station.band == "X":
+            from .radome_quality import assess_radome
+
+            assess_radome(sweep.fields, sweep.range_m, volume.metadata)
         # Phase-correction modes require the upstream phase quality masks; the
         # classifier derives them from moments when the input carries none.
         if cfg.attenuation in ("zphi", "phidp_linear") and station.band == "X":
