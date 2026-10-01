@@ -1,3 +1,41 @@
+## 2026-10-02 质控界面审核微调（第十六批 Web，已部署 105）
+
+- 用户要求整体界面审核（简单/直接/清晰/交互方便，重点质控）。审核结论：模式感知工具栏、顶栏统一、
+  防闪系列等既有基础良好；本轮落地三处：① fusion 模式隐藏恒禁用的"对照布局"组（overlay 保留，
+  双图=原始+质控有实义）；② fusion 隐藏近乎空白的"地图图例"条（组合图例在图区内，原条只剩
+  折叠的资料详情）；③ X 站名去重——下拉与侧栏 "ZF101 · ZF101 X 波段候选站" →
+  "ZF101 · X 波段候选站"（model.ts 新增 stationDisplayName 去前导站号）。
+- 168 用例全绿+build；部署 hash `d7bd7cc1…`，105 实测 fusion 工具栏仅剩
+  验证方式|刷新|更多，overlay/单站不受影响。提交 `29a4483` 已 push。
+- 注意：105 web dist 会被并行会话重新构建部署（10-01 出现过），联调前先比对
+  dist/index.html hash 与本地构建。其余审核候选（预报页控件分组、时间轴密度）暂缓，待用户反馈。
+
+## 2026-10-01 S 径向残留再研究（非生产发布）
+
+- 用户明确只有基数据，无SQI/脉冲统计/IQ，要求用其他方法；后续不再将额外信号域资料作为主线前置条件。105八固定体扫source_moments实际清单均无SQI；audit_s_source_moments.py保留只读原始矩量/QC上下文复核，original-moment-inventory-v1及base-only-context-inventory-v1回执有输入SHA。
+- fan_angular.py诊断原始跨射线曲线落地（不接生产动作），三独立原射线/目标+保护块排除/双侧两波束内插值/中间射线独立验证/几何与天气屏障/120km来源界限。5新增用例通过，相关套件通过；fan-angular-probe-final-v1七ROI模型/匹配全部0。08:36 1354候选分区653不足3原射线、663不足3邻近射线、38不足3独立模型。宽父单侧/原参考不足仍未解决，不能放宽拟合冒充改善。
+- 新上下文发现：7目标扇区固定QC的V7_VERTICAL_SUPPORT_SCORE/V7_CROSS_RADAR_SUPPORT_SCORE/WEATHER_SUPPORT_SCORE实际有限门0，不能当无天气。Z9598已有较丰富TEMPORAL_CANDIDATE_PERSISTENCE，定义为候选票而非确认来源；下一步核验过去独立Stage A的确认来源及冻结时空注册。不能仅凭重复出现动作。未部署/生产写入；全链/天气验收仍未完成。
+- base-only-context-inventory-v3成功解析QC径向上下文JSON，Z9598三例各有6个冻结上下文artifact及真实decision_cutoff/参数SHA/支持统计，可沿这些既有基数据输入复算过去独立来源；不得重新选择未来体扫或借当前弱片训练。
+
+- 下一轮fan_states.py/default-off fan_power_states_enabled已落地：仅原始同射线训练功率状态，目标+保护块排除，独立块验证、实测SNR、争用永久弃权，只有诊断无新动作/来源。六新增测试含source writer通过，完整相关套件通过。回放fan-power-states-final-v1七ROI新增匹配增益0；10:42/11:24匹配1/4，与原模型重叠，Z9598均0。未部署，不声称解决。
+- 互斥原因fan-power-state-partition-v1.json：10:24 93无有界同射线原来源/13状态不足；08:36 52未提名/1294无同射线来源/60状态不足；08:42 227/352/202。后续需完整原始父对象跨射线角向关系+独立上下文，禁止目标弱片自建新状态。两复核脚本新增--power-states，保留原快照SHA。
+
+- 保留scripts/audit_s_fan_processing.py：目标+保护块全部射线排除后，配对DBZH/SNR距离校正只读反证；Z9591 10:42一致性1→3、11:24 4→5，Z9598 08:36/08:42仍0，不生成动作。回执.build/s-discontinuous-20261001/fan-processing-audit-v2.json冻结输入/模型/模块/脚本SHA。
+- fan-residual-availability-v1.json：Z9591四抽查区无全偏振且SNR≥10门；Z9598部分实测rho中位数约.965–.980，不能把全部残留当低相关杂波。形态提名不等于污染真值，09:48仍缺准确截图scan。
+- docs/S_RADIAL_RESIDUAL_RESEARCH_20261001.md新增顺序：冻结宽父弱状态独立检验→实测偏振/SQI可用性→无锚时空上下文→天气对照及完整QC/Hybrid/组合/Web。相关radial_revision测试通过；本轮仅研究审计，无部署/服务重启/产品写入，未彻底解决。
+
+## 2026-10-01 S 宽RAW对象诊断落地
+
+- raw_fans.py/default-off raw_fan_families_enabled接完整账本，20km块稀疏2–90°角域、首块固定±两波束/60km块距、单条短内侧片保留；天气/几何切断、原始来源ID不晋升，只有诊断不动作。8新增测试，相关164passed，旧fit/动作逐字段不变及writer验证通过。
+- 固定八快照raw-fan-v2 SHA0fce5f8a…通过：10:24宽提名106/106（窄62），08:36为1354/1406（窄174），08:42为554/781（窄64）；仅覆盖、非清除/真值。08:18有352宽候选无任何原来源线索，08:42有227未进宽模型，需独立资格和互补窄路径。
+- scripts/plot_s_raw_fans.py保留，两例图+输入/replay/image SHA在raw-fan-visual-v2；红色候选仅诊断。下一步原来源/宽父模型身份核验及来源目标窗口分离、独立偏振/上下文，随后C/留出/全产品验证。没有提交、105部署或生产写入；目标仍active。
+
+## 2026-10-01 S 窗口追踪效果与继续研究
+
+- source_window可变宽20/60km窗口本地候选已实现，相关156测试通过，未部署。八旧快照window-source-v1中七有残留抽查区2947门仅10新增资格（10:42三门、08:36六门、08:42一门），不是生产删除/干扰真值；09:48仍未精确绑定截图。
+- 新增只读scripts/audit_s_source_window.py，校验输入scan/SHA并互斥分类；failure-partition.json显示Z9598 08:36有1221/1406、08:42有716/781未进窄家族或窗口，Z9591 11:24有169/185窄提名却无合格窗口父。先补宽RAW扇区父模型，再补无父独立观测判别，不继续整体降门槛。
+- 已完整网页读取MIT ATC-454第3节：弱断续spike还使用SQI保护混合天气，不能移植形态后忽略SQI缺失。研究方案docs/S_RADIAL_RESIDUAL_RESEARCH_20261001.md顶部追加实施/停止条件；仍需宽父、上下文、独立天气/留出及QC→Hybrid→组合→图/Web验收，无新服务/产品写入。
+
 ## 2026-09-30 ZF702 径向源预算修复复核
 
 - 本地 main 已 push a5ed2bb、3027252；105 专用 `rainpulse-ops-xqc-budget-r3-worker` 使用镜像 `xqc-budget-3027252`。保留其他 Worker/历史凭据，未重启全天 X 定时。
@@ -1448,6 +1486,25 @@ operational data here.
   （winner 层仍 S 驱动，X 值未被错误订正）。待相位分类器就绪后无需再动配置即可点亮。
 - 交叉定标重跑补齐：控制服务恢复后 zf101/zf102 补验尚未做（与 zf103-105 预期一致）。
 
+## 2026-09-30 调研：wradlib/Py-ART 对 Z–Φ 与相位质量分类的支持度（结论：可直接用，无需自写求解器）
+
+- **关键事实：两个库已在 worker 镜像内**（wradlib 2.9.5 + Py-ART 2.2.5，xarray 2026.7）——S 波段
+  开源质控链本来就把它们带进了镜像，零新增依赖。许可证 MIT / BSD-3，兼容。
+- Z–Φ 求解器：wradlib `atten.specific_attenuation_zphi(phidp, dbz, alpha, b, rng)` 裸数组接口、
+  系数显式传入（可直接挂我们的登记出处）；Py-ART `correct.calculate_attenuation_zphi`（Gu 2011，
+  a_coef/beta/c/d 显式 + gatefilter + fzl）需 Radar 对象。另有 wradlib `pia_from_kdp`、
+  约束法 `correct_attenuation_constrained`。
+- 相位质量分类：两库都没有"开箱即用分类器"，但要件齐全——wradlib `dp.phidp_kdp_vulpiani`
+  （去斑+展开+迭代 ΦDP/KDP 全流程）、`dp.unfold_phi`(Wang2009)、`system_phidp_*`（系统相位）、
+  `util.texture/despeckle`、`dp.rhohv_noise_correction(rho,snr)`；Py-ART `phase_proc_lp`
+  （Giangrande-Ryzhkov LP）、`filters.GateFilter`、`retrieve.hydroclass_semisupervised`
+  （9 类水凝物→LIQUID_MASK 可由 LR/RP/RN 类导出）。
+- 附加发现：wradlib `atten.correct_radome_attenuation_empirical(gateset, frequency, hydrophobicity)`
+  可作为天线罩**证据生产者**（雨期近场经验估计），是 radome 门的一个诚实数据来源选项。
+- 建议架构（后续立项）：自写薄适配层产出逐门 PHASE_VALID_MASK+LIQUID_MASK（wradlib 原语拼装，
+  阈值走配置+登记），喂给既有 `_zphi`（保留我们的契约：无 S 参考、出处、逐门保护）；
+  wradlib/Py-ART 的 ZPHI 作交叉验证对照，不替换主求解器（避免 Radar 对象转换与契约缺口）。
+
 
 ## 2026-09-30 ZF702 径向预算与接收机模式修复已发布
 
@@ -1466,6 +1523,17 @@ operational data here.
 - 实图复核ZF701 08:03:32/3.36°、ZF702 08:33:05/0.54°强扇形条带消失，近场蓝色及独立西南绿色回波保留。不能据此声明独立真值误删率0或全网验收完成。
 - 证据及后续入口：docs/XQC_SOURCE_BUDGET_FIX_20260930.md，`.build/xqc-zf702-investigation/*-verified.jsonl`，105 `.build/xqc-budget-c2918a1/representative/`。下一步增加高污染与真实降水对照样本，复核70%保护所涉及的大面积候选；不盲调上限，不恢复小时定时/全天大批次。
 
+## 2026-09-30 Z–Φ 相位质量分类器链（wradlib 优先）落地回执
+
+- 结论：XQC 相位基础设施四件套已合入 main 并全测试通过（`tests/sx_path_20260929/ tests/xqc_v2_20260928/` → 176 passed, 1 skipped）：
+  - `94f82b9` phase_quality.py 分类器：PHASE_VALID_MASK / LIQUID_MASK / 雨段锚（PATH_ANCHOR_*）合成，hook 在 quality.py x_qc 逐层 correct_sweep 之前，仅 X 波段 zphi/phidp_linear 启用；证据方法说明真实 sha256 固化于 ANCHOR_EVIDENCE_SHA256。
+  - `699ba43` 雨段锚：归一化体数据无回波区为全 NaN、逐径向数据从首个回波门开始，OBSERVED_MASK=isfinite(DBZH)；锚在雨段首个相位支撑门（e≤k≤e+tol，tol=max(3,500m/dr)），解决 INITIAL_LOSS_UNKNOWN 全线失效。
+  - `024c04e` Vulpiani 升级：phidp_kdp_vulpiani 重建 PHIDP 桥接纹理/噪声孔洞，粗差下限 RhoHV(噪校)≥0.90、SNR≥4dB 取代严格纹理门；锚/液态判据/证据契约不变。本地 venv 与 worker 镜像均 wradlib 2.9.5。
+- 真实数据测量（zf101 00:18–00:19 体 sweep_000，105 离线 docker-run，镜像 x-sxfusion-vulp-mb）：锚 46 行、证据 sha 就位、支撑门 10187；锚处有支撑 23 行；满足 ≥1km 连续段仅 2 行（row46 anchor@696 run=45门/1350m、row47 anchor@694 run=49门/1470m）。e2e x_qc 仍 eligible=0 / pia_finite=0。
+- 判定：链路各环节已点亮，剩余是求解器级连续支撑稀缺——下一步是对 minimum_delta_phase_deg(3°)/endpoint_noise(3°)/minimum_segment_m(1000)/RhoHV/SNR 下限做系统性阈值标定研究（对照 wradlib specific_attenuation_zphi 交叉验证），而不是继续单点盲调；两个候选拒绝原因为 Δφdp<3°（1.35km 轻雨）或端点噪声>3°。
+- 独立遗留：融合准入还差 radome 证据门（RADOME_UNVERIFIED）；候选诚实证据生产者为 wradlib correct_radome_attenuation_empirical，未实施。
+- 105 网络注册态：x_qc.attenuation=zphi、α=0.32/β=0.85（coefficient_id xphi-9p4ghz-anchor-20260828-v1）已注册；回滚备份 `.build/sx-priority1/.before-xcal-20260930-115729.bak`、`.before-xphi-20260930-143911.bak`。
+
 ## 2026-09-30 X 径向质控同期 S 冲突筛查
 
 - 已完成 ZF701 UTC00:03:32 / ZF702 UTC00:33:05 两体扫18仰角只读筛查，6份同期S输入经正常组合预检冻结，未提交组合重算、未切换worker、未恢复定时或全天任务。
@@ -1480,6 +1548,14 @@ operational data here.
 - ray81十三门对照下一体扫UTC00:07:21完成，原生同8.96°、方位偏差0.12°；原DBZH29–33/SNR13.5–16/ZDR−5.25至−2.75，下一时次10门有REF26–28/SNR9–12.5。持续接收功率和异常极化不能排除降水叠加，3门缺测不等于无雨。
 - docs/XQC_S_CONTROL_SCREEN_20260930.md含续验；.build/xqc-zf702-investigation/scontrol-{gates,63-signature,source-models,candidate-height,next-raw}.jsonl全部最终执行退出0。无算法/部署/预算/定时修改。下一关口：18个源与降水共存候选的独立几何及可信降水证据，不能宣布全网漏检误删验收通过。
 
+## 2026-09-30 Z–Φ 阈值标定研究回执（链路修复 + 全层量化）
+
+- 主链修复三连（全部已提交、177 测试通过）：`4d2d653` 管线入口合成缺失掩膜（prepare_phase 此前把全零占位当"已声明"，baseline 分类器永不运行于增强站点）；`37a77d5` 分类器写出 `PHIDP_RECON`（Vulpiani 重建，证据 sha ccc7b292…）且 `_zphi` 仅凭证据消费它，原始 PHIDP 仍是测量记录；`0562e59` 把合成后的 cut 传入 prepare_phase（此前副本被 active 分支丢弃）。
+- 量化结果（zf101 00:18–00:19 体，sweep 0/5/10/20，镜像 0562e59）：分类器 14334 支撑门/46 锚行；prepare_phase 网络阈值收紧至 3056、放宽（0.90/4/7.5）后 10187；求解器注册档（Δφ≥3°/噪声≤3°/段≥1km）0 行——锚段累积相位中位数仅 1.07°；放宽档（1.5°/5°/600m）1 行/层（sweep 20：PIA 1.13 dB，24 门）。交叉验证：与纯相位积分 MAPE 5e-8、与 KDP 链 4.1%；wradlib.atten.specific_attenuation_zphi 在唯一段上返回 NaN 待查（注意：该 API 在 wradlib.atten 不在 wradlib.dp）。
+- 生产路径：链路已全开（xqc_phase 4881–15534/层）但 PIA 仍 0。最终归因：XQC 候选扣留 8582 门（回波 33%）经距离 cummax 扩张为 85543 个 ATTENUATION_UNRELIABLE 门，斩断全部锚段；同一放宽求解器配置绕过候选层即可出 PIA——这是"可疑测量后不发明无衰减重启"的诚实契约，不是缺陷。
+- 决策建议（研究 JSON：`.build/sx-zphi-tuning-20260930/zphi-tuning-study-20260930.json`，含 4 份原始矩阵）：A 先降 zf101 候选覆盖率（候选核质量线），B 再注册放宽阈值（zphi Δφ≥1.5°/噪声≤5°/段≥600m + enhancement 0.90/4/7.5），C 放松污染语义不可取（违反不得伪造契约）。网络注册维持不动，直至 A 落地。RADOME_UNVERIFIED 仍独立阻断 CR 准入。
+- 镜像：105 上 `rainpulse-cpu-worker:x-sxfusion-0562e59-mb`（离线验证用，未部署到编排）。注意镜像 ENTRYPOINT 是 worker，脚本验证须 `--entrypoint python`。
+
 ## 2026-09-30 X 上层天气上下文选层缺陷已修复部署
 
 - 实测内存context_for_cut按绝对仰角差选下层占满2供体，evaluate_context只能接受正上层高度差，且与流式GroupContextProvider行为不同。共享upper_delta，只选实际仰角差>0.2°上层，不改天气阈值/动作预算。两回归实跑红后绿，相关XQC+context 131passed。
@@ -1487,6 +1563,28 @@ operational data here.
 - 冻结ZF701 RAW新镜像审计退出0：cut5供体6/7匹配668门、cut6供体7/8匹配71门，旧路径均0。18门目标天气初筛只有1门满足；全18无已验证上层天气支持，缺波束契约不能当无雨。
 - 默认4MB Worker闲置核验后切换，4/4ready/healthy，fingerprint ca853767299e4a9f9d87dd0b024f807d9cb7e8fc52ff60c4aae5715a41a966c6，网络74bfcf66未变，context仍disabled。S Worker/阈值/预算/定时未改；无雷达产品/UI变化。
 - docs/XQC_S_CONTROL_SCREEN_20260930.md续验；105.build/xqc-upper-context-20260930/promotion.json，本地upper-image-real.jsonl/upper-hashes.txt/upper-tests.txt。下一关口为可核验波束证据+冻结样本mixed_review验证，仍不能宣布18门无降水或全天全网完成。
+
+## 2026-10-01 Z–Φ 事件级验证回执（原"强降水个例"计划的诚实替代）
+
+- 归档盘点结论：实验重建归档只覆盖 2026-08-28 00:00–00:56 UTC 单一降雨事件（zf101×10、zf505×10、其余站×1；无 rebuilds 的 scan 只有 DBZH 无矩量，Z–Φ 不可用）。**不存在强降水个例**，改对全部 10 个 zf101 体（事件全程，回波 9.8k→157k 门）做全电池验证。
+- 结果（sweeps 0/10/20 × 4 臂，镜像 0562e59）：solver 注册档（Δφ≥3°/噪声≤3°/段≥1km）在 8/30 个 case-sweep 出 PIA——产量随事件强度增长，最强时刻 00:54 sweep20 达 5 行/210 门（中位 2.0、最大 3.7 dB），00:36 sweep10 单段 PIA 4.9 dB；放宽档仅增加 ~1 dB 边际段。生产路径（含候选层）全臂 PIA=0，即使相位有效门高达 77k。交叉验证 n=33：与纯相位积分 MAPE 1.5e-8；wradlib specific_attenuation_zphi 全部 33 段返回 NaN（开放问题）。
+- 决策更新：**B（注册放宽阈值）被证据否决**——注册阈值在本事件强单体已出 4.9 dB 订正，放宽只买边际段还松质量门；**A（候选覆盖率）确认为唯一生产阻断**（solver 与生产差异完全来自候选+污染累积层）；eligible=0 全程成立，radome 证据仍是 CR 准入独立硬门槛。
+- 证据：`.build/sx-zphi-tuning-20260930/eventwide-addendum-20261001.json` + heavy-*/inventory-* 产物。下一步唯一优先：A（与对端协调候选核），radome 证据生产者次之。
+
+## 2026-10-01 Z–Φ 生产阻断 2×2 反事实闭合（A 证据交付）
+
+- 方法：三个体（00:18/00:36/00:54）× sweeps 0/10/20，注册档求解器选项不变，变换两个轴——增强层相位阈值（网络 0.95/10/5 vs 对齐求解器契约 0.90/4/7.5）× 污染（仅确认 vs 现行候选 cummax）。
+- 矩阵结果：网络阈值+无污染=0；对齐阈值+无污染=**出产量**（34d8a880 s10 单段 4.94 dB、50e028fe s20 5 行/中位 2.03/最大 3.68 dB）；对齐阈值+现行污染=0。两个独立且各自充分的阻断确认：**增强层双重门**（比 zphi 系数自身有效期 0.90 还严的 0.95，支撑 10187→3056 碎片化）与**候选污染累积**。
+- 污染构成：zf101 上唯一污染源是 v2 evaluate_cut 分类器的 proposals（8.6k–42.7k 门/层，回波 9–32%）；budget=0、prior_candidate=0（DBZH 非气象核零命中）、原始 cut 无 CONFIRMED_NONMET。proposals 落在弱回波（中位比未标记低 4–8 dB）。
+- 注册决策更新：增强层阈值对齐（0.95→0.90、10→4、5→7.5）有注册依据（与系数有效期一致性，非任意放宽），但因 vB 证明其单独不解锁（污染仍斩段），**推迟到候选覆盖工作落地后一并注册**；求解器 zphi 阈值维持注册值（B 维持否决）。
+- 证据：`.build/sx-zphi-tuning-20260930/blocker-matrix-20261001.json` + contam*.json。候选核证据已可交付对端（唯一污染源、逐层计数、DBZ 构成、解锁矩阵）。下一优先：radome 证据生产者（eligible=0 的独立硬门槛）。
+
+## 2026-10-01 radome 证据生产者落地回执（X 准入链第二硬门槛打通）
+
+- 实现（`0a3bba7`，183 测试全绿）：`radome_quality.py` — wradlib Merceret-2000 经验湿雷达罩双向损耗估计，输入=每径向近雷达（≤10km）最大有限 DBZH 门（保守统计），标准材料 0.165，站频段 8–12GHz 才评估；`verified_negligible` 仅当全部被测径向 ≤1.0 dB 且被测径向 ≥30 条；证据 sha 为方法声明（含 C/S 波段拟合外推至 9.4GHz 的明示）的真实 sha256。拒绝粘性 + 后层更湿则降级撤销先前 negligible 声明；无近雷达测量的径向保持 RADOME_UNVERIFIED；已有声明永不覆盖。接线：baseline x_qc 循环 + v2 管线入口（与相位分类器同位）。
+- 真实数据验证（10 体 × sweeps 0/10/20，镜像 0a3bba7-mb，离线）：**7/10 体 verified_negligible**（worst 0.0–0.003 dB），RADOME_QUALIFIED_MASK 点亮最高 42.5 万门/层，RADOME_UNVERIFIED 从全回波降至 ~2k–50k（未测径向）；4/10 体诚实弃权（measured=0，全部径向近雷达无回波）。无一体被误判 admitted。
+- 至此 X 准入链状态：定标✓（交叉定标注册）、radome✓（本生产者，按体自证）、路径有效性✓基础设施但生产产量被两阻断（增强层双重门 + 候选污染，见 blocker-matrix-20261001.json）。eligible>0 的最后一步仍系于那两阻断的解决。
+- 证据：`.build/sx-zphi-tuning-20260930/radome-check-20261001.json`；镜像 `rainpulse-cpu-worker:x-sxfusion-0a3bba7-mb`（105，未部署编排）。
 
 ## 2026-10-01 X 原生波束证据、混合回波复核已部署验收
 
@@ -1496,3 +1594,324 @@ operational data here.
 - 线上正常任务1569935c/asset a2033863…已SUCCEEDED且九层逐门验收PASSED：1092混合门action=3、非确认拒绝、不恢复质控显示或组合；RAW及整层CR准入与前版相等，流式/离线结果一致。先前18个S重合重点源门仍无验证上层支持，不等于无降水。
 - 实浏览器ZF70108:49及ZF702原问题0.54°新图径向/扇形消失；未固定result入口已自动选新结果。历史result链接保留历史产品。证据docs/XQC_NATIVE_BEAM_CONTEXT_20261001.md，105.build/xqc-upper-context-20260930/beam及本地.build/xqc-zf702-investigation/beam-receipts。实际MinIO空闲122080387072字节，低于120GiB全天保护线，未恢复全天/小时任务。
 - 下一主线：高污染层与独立降水对照、其他站/时次回归及完整全天验收；缺原生等价波束的相控阵保持未知。不宣称全天全网全部完成，不启用候选可信融合/QPE/预报。
+
+## 2026-10-01 S 断续径向优化本地实现与只读回放
+
+- 修复独立形态资格被全局 SNR≥20/完整偏振要求否决：接收机来源路径条件保留，形态动作单独存 RV2_GEOMETRY_ACTION_MASK，原因/弱状态与序列化校验完整。新增 opt-in discontinuous_tracks_enabled（≥4片、8km实测支撑、80km跨度、物理宽度及双侧约束），原始缺测不补值，天气/冲突/几何屏障有效，无递归扩张。
+- 123 项相关用例通过。精确父配置子档生成器 scripts/make_discontinuous_radial_profile.py 只新增开关及版本后缀，保留背景资产与其他阈值，尚未启用生产或部署。
+- 105 进程内只读候选回放：Z9591 10:24/1.51°西北抽查139可见门新增隔离提议33；Z9598 08:42/0.5°西南4795门新增4014。来自形态弱状态修复，新断续链这两例额外命中0；保护/缺测动作均0。不能声明全部短碎片已解决或独立天气误删率0。无Web产品更新，无后台重算。
+- 入口 docs/S_RADIAL_DISCONTINUOUS_20261001.md；回执及模块SHA .build/s-discontinuous-20261001/replay-receipt.json。下一步部署需以105实际S父档生成子档并完整QC→出图验收，保持X/定标/衰减并行任务不变。
+
+## 2026-10-01 S 原始射线范围追踪与严格无锚判别（本地 v2）
+
+- 第3点：source_envelope_enabled 冻结原始独立种子及 RAW 对象范围/边界/父 ID，支持弱尾段及相邻原生射线单跳；尾段距原始种子≤120km，范围仅原对象±10km，不以新尾段递归扩张。可追溯字段和序列化校验已接入。
+- 第4点：新断续无锚路径分离几何候选与动作，要求双侧实测≥6dB差、20/60km窗口双侧有效支持≥75%、边界稳定；缺测不能当零回波。接入既有邻站/多仰角天气可用状态及正证据保护；旧长射线判别未整体替换。
+- 176项相关用例通过，git diff --check通过。105只读来源阶段回放：Z9591 10:24/1.51°抽查139→新增提议33，Z9598 08:42/0.5°4795→4014；v2原对象追踪这两例额外可见命中0，后者71个无锚几何候选因实测不足保留。保护/缺测动作0、RAW不变，无独立天气真值。
+- 文档 docs/S_RADIAL_DISCONTINUOUS_20261001.md；最终回执 .build/s-discontinuous-20261001/envelope-v2-replay.json。未提交/部署/发布产品或后台重算，Web未更新。生产启用仍须基于实际S父配置并完整QC→出图验证。
+
+## 2026-10-01 S 断续径向复核出图
+
+- 保留 scripts/plot_s_radial_review.py：指定日期/站/时次/层/局部范围，只读105 Worker进程内回放，保存NPZ+SHA+实际体扫时刻+配置，render-only可离线重画。不改服务/生产产品。
+- 出图 .build/s-discontinuous-20261001/visual-review-final：Z9591 10:24/1.51°全层新增提议45，西北小条改善有限；Z9598 08:42/0.5°全层9702，西南明显减少但北东南有残留。单独第3/4点额外可见命中0。校正：71是无锚几何候选，不是最终保留数；68被其他规则隔离，最终保留3个，双窗口均不足。只复核两例，未完整Worker/组合验证或Web发布。
+
+## 2026-10-01 用户授权清理未使用模型，X 全天容量阻塞解除
+
+- 用户明确授权 `/home/yons/hwapp/dis` 下未使用资源可删除；已核对模型进程、容器挂载、systemd/启动脚本引用、软链接和可读文件映射。当前 Qwen36 服务使用系统盘 `/home/yons/hwapp/Qwen3.6-35B-A3B-GGUF`；TURBO 文件仍有 serve.sh 引用，保留。
+- 删除无发现引用的 `dis/Qwen3.6-27B-GGUF`、`Qwen3.6-27B-NVFP4-MTP-GGUF.gguf`、`Qwen3.6-35B-A3B-NVFP4-MTP-HQ.gguf`；精确文件清单、inode/大小和删除前后空间记录保留105部署目录 `.build/xqc-acceptance-20261001/storage-cleanup-unused-models.json`，状态COMPLETE。未删除MinIO/RainPulse/雷达资料；其他模型保留。
+- 释放464131375104字节（432.25GiB），数据盘可用586090844160字节（545.84GiB）。仅解除容量阻塞，不表示全天质控/图件验收通过。下一步继续固定验收清单的通用修复、完整回放与正常生命周期发布。
+
+## 2026-10-01 S径向残留进一步研究
+
+- 8个只读诊断快照，7例目标扇区有残留；09:48最近前序体扫与截图对象位置不一致，不能记为解决。出图脚本新增diagnostics/精确scan-id，保留audit_s_radial_residuals.py离线原因复核。
+- Z9591 10:24剩余106门均未进入候选，62有RAW窄走廊却无锚/提名；7例目标剩余均不落在合格原始范围对象。扩大所有RAW提名反证仍不命中目标残留。需短碎片家族原始对象+独立联合判别，不能单纯放宽删门阈值。
+- 两站低层REF460km与Doppler230km分层、时间/方位不同；Z9591≥250km残留超出VR/SW覆盖。近处仅可作真实位置受限上下文，远距需其他证据。MIT ATC-454 S波段组合方案作为研究参考，未照搬阈值或实现。
+- 方案docs/S_RADIAL_RESIDUAL_RESEARCH_20261001.md；证据.build/s-discontinuous-20261001/research-diagnostics及research-moment-inventory-v2。只改诊断工具，未改算法/部署/生产产品。无独立天气真值，不能保证全部清除且零误删。
+
+## 2026-10-01 X 全量原生复核在途（八路）
+
+- pilot-v3-bound实际结束247层机械通过、2层预算FAIL（ZF702原问题2/9）；raw-smoke-v2四份原生体扫160REF层全部机械通过。诊断budget-source-probe.jsonl证明源模型完整，fan为主，仍不能绕过70%大面积动作保护。
+- main最新8381d1b，审计逻辑2c4c3f8已push后部署；4测试通过。精确父网络bee28feb不变，离线原生镜像xqc-native-acceptance-c5537fe只补已接受56796d4 writer，不切生产MB。所有decoder YAML字节SHA冻结。
+- 全量raw-full-v1四路实际每路2GiB/一CPU、主机可用49GiB；为加速明确停止该自有回放，保留旧回执及superseded-for-parallelism.json，不因超时重启。raw-full-v2-eight driver PID1754097，105部署.build/xqc-acceptance-20261001/raw-full-v2-eight，8个rainpulse-xqc-raw-5174e300-0..7、各1CPU/4GiB；完整5466原始SHA分片互斥，每个文件全部REF层，只有审计小记录，不写产品。以最终v2唯一文件/层回执验收，不累加旧部分计数。
+- 待复核8路实际句柄/失败矩阵/原生日期与6分钟桶、预算两层和天气保护；新网络候选SHA398ccfb1…只17站×3开关+release_id共52变化，本地source-activation-v2，未部署。完整新产品及UI仍未完成。容量已解除（约546GiB空闲），S/定时/可信融合/QPE/预报未改。
+
+## 2026-10-01 S 原始短碎片家族 A 步本地落地
+
+- 新增raw_families.py与raw_fragment_families_enabled，保留<1km/单门片段，原始首片固定边界单跳相邻径向，范围≤180km/缺口≤60km；长连续片分段并保留原始长度。实测双窗口/ID/物理宽度/弃权原因/波束代理字段可序列化。诊断提名不进入旧来源拟合或动作，独立证据未接入前不删除。
+- 新增11测试，相关130passed；8个固定旧诊断快照最终回放全部非预算弃权、缺测/保护候选0、动作/补门0。Z9591 10:24剩余106门提名62，11:24 185提名169；Z9598 08:36 1406提名174，08:42 781提名64，宽扇区仍待B模型。09:48仍非截图精确输入。
+- 保留scripts/replay_s_raw_families.py，出图快照入口支持--raw-families。最终证据.build/s-discontinuous-20261001/raw-family-a-final；方案文档A回执已追加。尚未提交/部署/产品发布；目标active，下一步B独立联合判别及冻结来源关联，随后C有条件清理和完整QC→图/Web验收，不得把A诊断覆盖当完成。
+
+## 2026-10-01 S B 步窄家族联合判别初版
+
+- 新增family_joint.py/开关，原来源拟合先于新资格且候选输入不变，step3身份在合并后生成。窄RAW家族原始种子≥10km/稳定边界/距原种子≤120km可隔离弱尾；无锚要求8km/80km/长宽比12/双20&60km实测窗口+既有可靠偏振票。相位圆统计/rho纹理只诊断，不造缺测票/新来源/递归扩张。新增8测试，相关138passed，父ID/原种子支撑距离/偏振票可序列化复验。
+- 八快照7红框扇区新增隔离均0；10:18/10:42全层新增3/2（扇区外），其他全层0。105进程内完整来源阶段两例回放通过、RAW/保护不变，10:24/08:42全层仍45/9702，与前版一致。证据family-joint-b-final及family-joint-transport-probe（Z9591）/family-joint-transport-z9598-probe（Z9598），脚本--joint/--family-joint保留。
+- B尚未全部完成：需完整原始来源/宽扇区模型（当前来源受窄RAW家族截断）、可用邻站/仰角/多普勒或过去确认来源上下文；随后C有条件清理、完整QC→图/Web验收。不部署无目标改善的初版，不把候选/通过合成测试当解决红框。目标继续active，无新生产发布。
+
+## 2026-10-01 X 重复方位角正常发布入口修复
+
+- main05db916已push后105仅替换实际53beaba父镜像的stream_managed一行：X单站显式native_polar_qc=True，严格S/融合校验保持。完整Executor回归先红后绿，原RAW/重复方位角/射线时间保留，33相关测试通过；旧reference兼容3失败不算通过。
+- 镜像xqc-duplicate-05db916-mb，4Worker ready，网络bee28feb未变，新指纹10700d99e3c9f52bef35f7e1d77c6722a7679f68e8a7f6a46a78123068b6e768。正常旧FAILED022987e3…保留；相同源身份新task19f77464-731d-4544-941e-2e72c1bf027a/run5720fa32-2adc-4e48-a720-c638845cf1c3 SUCCEEDED。
+- ZF70208:08:25第六体扫9REF层全部数值/证据SHA/4PNG核验，第5层1重复方位角保留，RAW/几何/原生时间逐值一致，withheld-visible/admitted/hard-weather-rejected=0。证据105 .build/xqc-acceptance-20261001/zf702-0808-duplicate-verified.jsonl。浏览器自动化两次超时，真实UI未验收；内部不变量非独立天气误删率。
+- raw-summary-03：254有回执/246机械文件完成/5220待完成，当前已完成无FAIL。raw-full-v2-eight原driver1754097与8容器继续；不得因观察超时重启，仍用现有冻结SHA和唯一码汇总。两层预算问题、独立天气、全日产品/UI、17站源开关启用仍未完成；第一优先未闭合，不进入S+X量化。
+
+- B末次传输故障已定位为大诊断数据同一流丢块现象；工具改为按体分别取流+3072字符包+字节/SHA校验/原子保存。单体两例完整992/2743包通过；失败family-joint-b-live-final*不算成功。完整源邻域只读probe发现10:24有17、11:24有75个窄残留在原始源120km内且直连无屏障，仍需完整父对象判别，不能直接删。
+
+## 2026-10-01 S B 完整原始来源账本本地落地
+
+- source_ledger.py/默认关闭开关保留全部原始独立来源，不受窄RAW家族180km截断；来源类型/支撑/边界/原RAW范围/父ID可复验，单跳120km，三源争用永久歧义，不产生动作。新增8测试、相关146passed；旧拟合/候选/动作逐字段一致，writer保存校验通过。
+- 最终八快照complete-source-ledger-final七目标扇区新几何关联仍0，全层10:18/10:42仅5/1残留获诊断关联；RAW/保护/缺测不变、动作/填门0。105内实际两例完整source阶段complete-source-ledger-live-v1抓包+出图通过，仍45/9702，与前版一致，非Web发布；latest-validation补充保留原运行SHA。
+- 10:24两个原始源实际支撑14.75/11km，拒绝关联是窄边界不足而非长度；11:24多数源缺窄边界或不稳。下一步需距离窗口可变宽边界和完整宽扇区父对象（当前只原始射线来源ID），不能整范围清空。--ledger/--source-ledger复核入口保留，未部署/重启/生产重算；目标继续active，完整B/C/全链验收仍未完成。
+
+## 2026-10-01 X 固定验收继续收口
+
+- main e14758d已push并105发布静态Web（旧assets保留、index原子切换，无服务重启）；统一QC目录跟随全部next_cursor，按scan_id/radar_id去重，坏身份/循环/后页失败不返回部分日。第二页精确scan链接先红后绿，17相关测试/TS/ESLint/Vite通过，105实际chunk含分页保护。当前ZF70170/ZF70268无下一页，此修复不是它们径向残留的解释。真实UI仍未验收（CUA三次通道超时）。
+- 同指纹10700d99五批后台driver2217431，07:15Z四个新增必测体扫各9层数值/PNG审核通过，加第六重复方位角例共5体扫45层；原问题taskbc376635…仍RUNNING，正常旧失败保留。全量原生raw-full-v2-eight driver1754097/8容器持续：07:15:51Z493解码、486文件完成、19532层机械通过，未完成5466全量。不得重新启动现有句柄。
+- 0fa932b修复稀疏父配置生成器补默认导致漂移，3红→绿及17相关测试通过；精确bee父复现候选398ccfb1共52差异，候选网络未启用。17站源开关门控、2层动作预算和气象误删/真实UI未完成，不能进入S+X量化或提高预算冒充通过。
+- 独立SURF控制探查脚本已提交部署（6测试）；同日文件base64完整ZIP/CSV可核验，但00时60分钟2516站与RAIN_SUM第一列全部不一致（同单位/前60分钟仅未证实假设），福建坐标和时间/列语义缺失，不能当真值。已异步询问用户实测/测试、福建字典及字段说明，未答。receipt precip-control-hour00.json状态UNVERIFIED_CONTROL_CONTRACT；不推断伪造/单位、不用它调参。
+
+## 2026-10-01 X 六体扫正常发布已全部结束
+
+- 原taskbc376635…于07:29Z正常SUCCEEDED，observer2387501正常结束NORMAL_PUBLICATION_AUDITED。全部六必测54REF层当前指纹10700d99有新产品，52机械通过、2层(原ZF7022/9)CUT_ACTION_BUDGET_ABSTAINED；source_complete/RAW几何时间/SHA/4PNG均核验。两失败层withheld-visible/admitted/hard-weather-rejected均0，实际QC>=15dBZ门2680/28，但扣留不等于确认污染清除，不改预算或改失败状态。回执zf702-original-verified.jsonl SHA5e0397769a3fe4d01336bb6ffef6dfc593b72ea481351522f381f8b100dafa72。
+- 本轮CUA短暂恢复，六例中的ZF70208:08第5/10层全页截图与9层DOM选择、ZF70108:07第0层默认最新版本+全页双图已复核；后续循环/再次getTab超时，未验证层不算UI成功。本地ui-observations-20261001.json保留观察记录，截图在本任务工具输出。完整界面与气象误删仍未完成。
+- raw-summary-04冻结5466文件，545有回执/539机械完成/4927待完成，已完成FAIL0/身份错误0；8路driver1754097实际仍live。进一步完成全日、预算2层与独立天气/全部UI；不进入第二优先。
+
+## 2026-10-01 X 预算层上下文复核
+
+- 对新正常taskbc376635…读取不可变产品/输入完整SHA，新增只读product-audit-context.py。105 current-budget-context.jsonl保留9层；第2层上下文reader=verified_groupcuts/EVALUATED、21000测量、842已验证天气冲突，两上层4/6实际60,133,128字节；第9层上层10实际24,751,968字节、77测量/0天气冲突。线上与有界回放入口均绑定GroupContextProvider，排除“上下层上下文丢失”假设。
+- 旧budget-source-probe输入asset df19897…并非新原生波束身份d014707…，旧context=0不能代表本轮产品；新物理几何上下文已验证。源门总数不变：第2层fan320882/union321183，额外内部关联6204；第9层fan23747/union23766，关联360。去掉关联也不足把第2层拟动作降到70%，未发现能解释整体73.49/73.72%的意外扩大范围；不凭内部拟合断言误删为0。
+- 8路实际1CPU/约2GiB，主机available37GiB/load11.26；driver1754097继续live。07:32Z566文件完成/22815层机械通过，非全天最终值；未改变分片/重启或启用17站候选。CUA再次恢复后仰角三步循环仍30秒超时，不算新增UI通过。地面雨量字段语义/福建站点资料仍待用户信息，Go源码搜索无RAIN_ONEMINUTE/QC_RAIN_SUM来源实现，未猜单位/累积窗。
+
+## 2026-10-01 X 体扫切换与历史结果身份修复
+
+- main cce68e2已push后105发布静态Web：固定历史result显示版本提示并可显式切到最新；当前与保留产品同时核验radar_id/scan_id/result_id，避免同站切体扫时沿用上一图件/预算状态。两项集成回归未修代码实际红、修复绿，22相关测试/TS/限定ESLint/Vite通过。旧assets保留、index原子切换，无服务或Worker重启。
+- 105实际HTTP index SHA4aa040cb827ca34ac1a21ea7bb345075f052ef8390da090ded3abfe9a8f04852，RadarQCWorkspace-gzNku5Bt.js SHA763c97e5927916bdd44500b5d6199a4c5a4be1ea10a462de9f5b5318eadeb03b，与本地构建一致；rainpulse.service active。CUA连接连续超时，视觉验收仍未完成，不能以静态字节/React测试代替浏览器验收。
+- 原问题公开API新resultbc376635….24a157aa…第2/9层确实返回ACTION_BUDGET_ABSTAINED/quarantine，其余EVALUATED。两层预算/独立天气、全日产品/完整UI仍未闭合；17站候选网络未切换。8路driver1754097仍live。raw-summary-05：676机械完成/4790待，ZF101238与ZF102244全部冻结文件已处理，起报UTC桶237/234，缺口和北京时间跨日尾段单列，不填零或宣称全日对齐完成。
+
+- 补充只读地面对照查找：Weather深度4/hwapp-ruiyun-bdp深度5未发现福建站点字典；SURF_ATMO_STAT/StationInfo_river_key_jy完整base64/ZIP CRC通过、39站、福建候选区域内0站，不能用来定位福建雨量。SURF_CHN_MUL_MIN_SOURCE仅5字节test文件，目标日PARQUET目录不存在。新证据surface-control-discovery-02.json本地build保存，RAIN_SUM字段/时间单位仍未证实，原用户资料问题仍待答，不拿它作真值。
+- raw-summary-06逐SHA关联800有回执、792机械完成、4674待，已完成FAIL0/身份错误0；driver1754097于02:35elapsed仍实际live。新增UI版本已发布但CUA getState再次30秒超时，未算视觉通过，未重启现有计算或改变候选网络。
+
+
+## 真实界面两体扫全仰角复核（2026-10-01）
+
+cce68e2静态Web已在真实浏览器加载。ZF70108:07:21九个原生REF仰角0–8全部完成双地图截图，主要长径向与南侧扇形主体在QC图不再显示，近站弱回波保留。ZF702原问题08:26:55九个原生REF仰角0/2/4/5/6/7/8/9/10全部双图复核；第2/9层明确显示ACTION_BUDGET_ABSTAINED警告，不能因QC近空白判为通过，第0层西南小回波没有独立分类依据。仍未完成其余四体扫全部层的真实UI与独立降水验收。
+
+用户旧result链接实际出现历史版本提示；点击查看最新结果后URL切到bc376635….24a157aa…，历史提示消失，预算弃权层警告保留。快速切层出现原始栅格尚未加载的暂时空白，等加载后重拍才计入复核；未把先前空白截图算通过。原始时间仍为08:26:55，六分钟分析轴08:24并非伪造原始时刻。
+
+ui-observations-03.json保留本地详细身份与工具截图记录。raw-summary-07唯一SHA关联921有回执、913机械完成、4553待，已完成失败0；driver1754097和8容器实际仍运行。实际MinIO命名卷只读statvfs核验可用585746448384字节/100607185 inode，检查容器已正常移除；rainpulse.service active，未重启计算或启用候选17站网络。两层预算与气象保护、完整全天产品及其余UI仍是剩余主线，不进入S+X量化。
+
+
+## 2026-10-01 S 仅基数据过去来源复核
+
+- 用户确认没有SQI/IQ/脉冲统计，不再把其作为前提。新增只读scripts/audit_s_past_sources.py，冻结旧manifest URI/SHA后按当前105实际profile独立Stage A重算过去体扫；检查时间/健康/原生几何，重复形态非确认、预算降级不出票、无动作。
+- 八例past-source-all-v1完成：Z9598 08:18/08:36/08:42过去径向＋偏振拒绝同门重合11/1018/314，08:42双体扫124；Z9591非空四ROI均0且过去测量仅0/1/0/3。此为当前污染线索非真值、当前profile多数不同旧回执明确记录；09:48仍未复现截图。
+- 旧跨站/垂直支持实际被current_beam_missing/terrain_missing阻断，不把分数缺测当无天气。下一步冻结过去源对象范围并和当前父对象/偏振/屏障联合资格、补实际几何上下文；未部署/重算产品/Web，完整天气与全链验收仍未完成。
+
+
+## 新发现弱径向残留：候选提名遗漏（2026-10-01）
+
+ZF70208:08:25全部九个原生REF层已完成真实双图复核（补0/2/4/6/7/8/9，前次5/10保留）。第4层南向及第9层南向仍有弱长径向形态，记REVIEW_REQUIRED，不能把9层机械门通过写为9层全部清干净。ZF70108:03新增0/1层真实双图，其余层未算验收。至此54层中29层有实际全页截图（含前轮），独立天气和整体清除验收未闭合。
+
+对第4层读取正常不可变产品及原生输入，校验native SHA570fb857…、输入3e3b090d…；主射线176.555°、820可见门、64.3–208.9km、跨度144.6km。RAW与QC逐门相等；所有残留门source/proposed/withheld/hard-weather/budget mask为0，原因3584仅定量资格限制。原生370射线没有重复/几何间断，SNR与REF支持完整，排除几何、保护、预算或图件版本导致这条残留的假设。诊断方位只用于定位证据，不进入算法特例。
+
+只读原模块插桩对90/50两模式逐矩阵及整个原模块记录相等，拒绝原因主要是参考块比例、可用块不足/范围杠杆及部分斜率，不是资源退出。保留首个探针relative-import失败，v2修复诊断环境后成功，生产代码未改。两个只读替代实验分别把参考比例分母限定到有配对测量的块、把fan硬编码1dB成员窗口替换为既有spread，均未命中主射线820残留门；前者仅次射线有261门提名、后者整体提名反而下降，均不部署、不记为修复。
+
+105及本地build保留residual-native/moment/model-v2/denominator/membership探针、完整SHA回执和ui-observations-04.json。当前需要进一步建立跨距离功率模式与原始源家族的联合判别，并完整回归；不能只改缺测比例或放宽窗口宣称解决。原问题两个预算层和独立降水对照仍未关闭。八路driver1754097于08:52Z实际live，984文件机械完成，继续原分片，不重启。
+
+
+## 2026-10-01 S 固定过去来源联合资格回放
+
+- 新增默认未接入引擎的past_sources.py及replay --past-sources；独立过去原始拒绝门冻结10km/60km/3块来源，单跳原始范围内且120km，当前RAW父对象/实测SNR与rho/20&60km窗口仍强制，无递归/新源/填门/动作。6新增、径向修订185测试通过。
+- past-source-bounds-all-v3输入身份回执与past-source-joint-v2完成：Z9598 08:18/08:36/08:42候选11/1255/306，合资格0；当前缺可靠测量9/993/271、天气型偏振2/262/35，不能把历史重合当新增清理效果。详细past-source-joint-partition-v1，未生产发布/Web仍未变。
+- 105 S Worker实机ENV三项几何资源全部缺失、load_geometry_resources返回radar_config_directory_unavailable；配置bind存在，实际Compose链未含V7资源覆盖层。后续补资源加载/地形和基准真实性审计，或同站相对几何正向天气支持；不冒称1985/文学转换为verified。全链与独立天气验收仍未完成，目标active。
+
+
+## 2026-10-01 S 几何资源与相对天气支持复核
+
+- 105一次性只读容器加载已有配置/DEM成功、manifest SHA9f4108b…，1985基准仍incompatible_with_epsg_3855；不能只补ENV宣称可信跨站支持恢复。新增独立Compose资源覆盖层仅S/只读、不换镜像profile，未线上启用/重启Worker。
+- 新relative_vertical.py、audit_s_relative_vertical.py仅同站同体扫地面弧长/相对高度、实际时间/足迹、独立干净上层正向天气支持；不借绝对高程/DEM作跨站证明，缺测NaN不作负票。4新测试，相关189通过，默认未接入引擎。
+- 08:36/08:42实际ROI正向支持仍0；08:42几何观测对97384、可靠连续上层0；current-and-past-source-all-v1确认八输入当前独立Stage A径向＋偏振拒绝残留0且无预算降级。不是改配置即可清除/仅Stage A更新即可修复。代码/回执保存，未部署产品/Web，天气真值与全链验收未闭合、目标active。
+
+
+## 弱径向两条漏检路径已区分（2026-10-01）
+
+只读读取同一正常产品19f77464…及原生输入3e3b090d…，未修改生产策略或图件。第4层主射线820可见门在5dBZ轮廓中被原生4连通拆成161个组件；最大组件538门、跨度10.95km、角宽6.842°、长宽比1.237；15dBZ最大组件长宽比2.812。两级没有一个残留门获得径向几何提名（要求长宽比至少3），虽有166门具实测侧翼对比。原始全长144.6km不能代表任一组件通过。候选遗漏的具体路径是`label_native`的逐门连续性与`extract_objects`对每个碎片单独作长宽比检查，不能通过降低宽度/比例阈值代替家族关联。
+
+有界同射线诊断按既有1500m间隔且全部SNR有测量串联RAW片段，不填任何门。若把每个间隔低于噪声底都当作家族身份阻断，231个原始区间仅归成221组；区分“间歇源家族身份”和“逐门动作”后，200个片段可形成66.56–160.01km的诊断组，覆盖764/820残留门。此组本身不是污染分类：418门有rho测量，其中59门rho>=.97，只有144门达到既有偏振SNR门槛；超过1500m或缺测的间隔仍保留边界。不得把诊断组全删、把缺测补成零或把低SNR间隔视为动作许可。family-v3中的rejected_gaps仍按旧严格floor条件计数，仅代表原动作屏障，不代表新版身份分组拒绝计数。
+
+第9层native SHA10041ed4…与第4层不同。主弱射线996门中307已获径向几何提名，却仍source/proposed/quarantine为0，local天气保护仅29门；694门有rho，rho中位.975，SNR中位7。该层存在下游实测偏振/SNR资格限制，不能把第4层的碎块提名修复外推为第9层清除。高rho本身也未构成独立降水真值。接下来需完整原始家族的距离窗口可变宽边界、源功率/跨仰角证据与逐门资格联合，先证明真实残留改善与天气保护，再正常重算。
+
+对应object4/object9/family-v2/family-v3/moment9五份不可变只读回执及SHA账本`residual-topology-receipts.json`保留105验收目录和本地build。第一份family诊断因NumPy整数JSON序列化退出，原失败空文件保留；v2仅修诊断序列化后成功，生产代码无改动。一次SSH路径漏写bdp-dp导致读取失败，经实际路径与同一live PID核验后在正确目录读取，未重启计算。
+
+ZF70108:03所有0–8层真实双地图截图已补齐，主体明显减少，3/7层仍有弱南向形态REVIEW_REQUIRED，2层南向孤立回波未分类；不能写成全部清干净。累计六例36/54层实际截图、剩余两体扫18层；ui-observations-05保留身份及观察。本轮浏览器选择后超时，但URL实际已切第2层，恢复同一tab后截图才计入；未把超时算成功。
+
+raw-summary-08逐一关联冻结5466个SHA：1481有回执、1473文件机械完成、3993待完成、已完成FAIL0/身份错误0。机械检查未涵盖本轮发现的全部弱形态清除，不能据此撤销REVIEW_REQUIRED；原八路继续。
+
+补充：ZF70108:49第0/1层真实双图已加载并截图，0层强广域径向主体不再显示，1层RAW/QC以近站弱回波为主；余2–8未验收。六例实际截图38/54，ui-observations-06追加保存，不能当作全部54层通过。
+
+
+## 2026-10-01 S 原始来源轮廓首次目标增益
+
+- 原始RAW父对象来源足迹审计发现当前原始源范围内的弱残留因功率拟合被排除。新增source_footprint.py/--source-footprint，冻结原始源角向轮廓/范围，目标+邻距块不训练、3外部块连续原始源射线、10km/60km支撑、边界漂移2原生间距、原始距离120km；天气/冲突屏障分段、可靠天气型偏振保守保留；无递归/新源/填门。仅离线资格，未接入引擎动作。
+- 5新增/相关194测试通过，source-footprint-v2最终ROI增益：10:42=8、08:36=7、08:42=53，其余0；08:42全层428（含北向明显残留），08:36全层8、10:42全层9。不是确认污染门/误删率/线上结果。
+- plot_s_source_projection.py保留，source-footprint-images-v1三幅SHA图件；实际打开08:42观察北向长带减少，南侧部分碎片改动，仍有大量残留。合同/研究文档已记输出研究边界，未部署/Web未变。下一步默认关闭引擎接入+writer原证据重算校验、105实际源回放/全链及无锚目标；独立天气与完整目标仍未闭合，active。
+
+## 2026-10-01 S 来源轮廓引擎接入与105只读回放
+
+- 默认关闭source_footprint_enabled已接引擎候选/geometry提议及writer验证；原始ledger先冻结，弱尾不变新源，audit无动作。序列化原生次序/坐标/good/gap及实测rho/SNR，writer从原始parent/seed重算而非信任合格标志或支撑计数。
+- 新增3测试（相关197全通过）：伪造证明/来源/边界/屏障拒绝、原生恢复次序、实测偏振veto、非零引擎提议与source writer。8固定NPZ原证据回放通过，ROI增益仍8/7/53。
+- 105真实08:42固定scan只读candidate进程live-source-footprint-v2成功：当前profile文件SHA63fd29b1…，该开关单独新增428可见门、南侧ROI53；RAW不变，序列化验证通过。总10130是多个研究路径提议不能当本次增益；v1误带window开关，v2修正并显式单开关baseline。保留plot_s_radial_review.py --source-footprint供复核。
+- 尚未部署/线上重算/Web更新，仍需其他目标、独立天气保护和完整QC→Hybrid→组合→PNG验收；未彻底解决，goal active。
+
+
+## 原始片段家族内源拟合（2026-10-01）
+
+main410e21b新增RAW片段提名模块（未接生产），真实第4层主射线提名706/820门；套用原偏振与侧翼联合仅4门合格，说明只加几何提名不足。只读插桩把参考及目标限定在RAW家族范围，逐矩阵与旧全true路径模型记录相等；主射线距离留出源模型从0到q90 526/q50 665门。此为因果诊断，两个原家族不允许跨范围合并。
+
+进一步实现source_blocks的可选布尔domain及独立fragment_source入口：逐RAW家族、90/50模式、窄实测角宽，保持原参考跨度/杠杆/比例/源功率及REF响应和资源上限；最终交集只保留原几何观测门，不覆盖保护或填门。54项相关回归通过，包括跨零与不同仰角、目标/邻块留出、短家族不能借远处参考、天气变化与增强、保护、缺测、超限弃权。没有新配置项、生产core接入或线上图件变化。
+
+105同一19f77464正常不可变产品与3e3b090d输入SHA只读验证：第4层全层1359门有新源资格，主残留射线615/820合格；原北向高rho天气型182残留门新提名和资格均0。第9层全层105门合格，但主残留996门仍0。故本轮不能写成全部残留解决。第9层冻结RAW家族26.29–71.96km的q90接收功率从27dB降至约12dB，实际模式不能组成足够具有20km跨度/1.75范围杠杆的稳定参考块；不是资源、缺测或预算拦截。后段85.76–108.56km只5块且范围杠杆不足，保持拒绝，不能放宽阈值掩盖。完整插桩与原mask/record逐字段相等。
+
+fragment-source-receipts-v1账本保留本地build与105验收目录，四份完整不可变JSON及SHA，不提交私有测量。八路原driver1754097于05:06elapsed和8容器实际live；未重启全日检查。下一步扩大同一新路径跨仰角/体扫验证，并用实际原生多层/时间证据辨别非稳定功率径向，保持原预算及独立天气门。第一优先尚未完成，S+X量化未开始。
+
+## 2026-10-01 S 残留精确保留原因与实测侧翼线索
+
+- source_footprint新增REJECTION_CODE完整决策轨迹，writer原证据重算验证；资格不变。可复用audit_s_source_footprint.py校验输入SHA/scan、逐例ROI完整分区及父对象原始来源/种类、RAW范围和实测外侧SNR。198相关测试通过、8例所有旧资格/证明数组逐元素相同。
+- decision-audit-v2证据：08:18的362候选352无来源；08:36有486超原始角距范围、389参照不足、209无来源；08:42有292超范围、172参照不足、227未提名。不能简单放宽来源边界覆盖这些。
+- 新线索08:18无锚parent59 257残留/32km/3.96°，target SNR中位9.5，双侧实测100%且全部<=3dB；08:36parent107 205/27.25km/2.95°/SNR8，双侧同。只作证据线索，短跨度/实测极化不可靠尚不足删除。下一步检查原生RAW家族分段+多窗口实测SNR对比，保持无锚严格规则；未部署/未新增处置，goal active。
+
+
+### 六体扫54层新路径实际复核完成
+
+105两路只读driver3666883正常结束，fragment-source-fixed-06c9763/state.json为DIAGNOSTIC_COMPLETE，54/54 DIAGNOSTIC_EVALUATED、失败0。逐receipt SHA、原task身份、模块SHA、原生输入/图件SHA和全部9层检查完成，汇总SHA3c31f2719e40b38eb55773126710c898433b52d20fc284131bfc5014f69b38b2；本地build保存fragment-source-fixed-summary-06c9763.json。实际增加源资格的当前可见残留为620门，仅4层：early第1/2层各1、ZF70208:33第2层3、ZF70208:08第4层615。不能用全层源资格数冒充残留改善，也不能把空间跨度超过20km的647个扫描射线记录当作647条确认污染；其中含正常/未知天气与间断回波，该计数仅诊断候选清单。
+
+这说明新RAW家族范围修复确实解决第4层部分漏检，但尚不能覆盖第9层的非稳定接收功率或其他未知天气形态。生产core、镜像、目录和Web未切新算法；正常旧FAILED、两预算层和候选可信融合资格保持。CUA当前页面状态与恢复同一tab各一次30秒超时，未增加UI通过数，仍38/54实际截图。下一步集中核对非稳定家族的原始字段语义、跨层/相邻真实体扫同源证据与独立天气保护，再完成动作接入和正常生命周期重算；当前目标未完成。
+
+## 2026-10-01 S 实测信号域跟踪试验未获目标增益
+
+- 新signal_tracks.py与replay --signal-tracks仅诊断：真实REF/SNR选择，冻结角向首边界，60km/8°、3外部20km块/20km实测支撑、目标+邻块不训练，固定双侧90%实测/<=3dB，>=80%参照窗合格，稳态SNR差与可靠天气型偏振veto；不确认来源/不删/不填/不递归。小范围侧翼污染只从参照剔除，不放行污染目标。
+- 5新测试通过；signal-tracks-v1/v2八例红框目标模型匹配全部0。全层394/566/3902不是目标改善或污染真值；v1有5440/7680天气型veto证明单凭信号形态不应删。08:18短片段仍无60km独立长对象，不能靠降门槛强行删除。
+- 可复用脚本/模块/失败研究结果保留，未接生产/未部署；来源轮廓已有428真实08:42只读增益仍待完整发布验收。下一步继续真实可变宽度分段/可用体扫支持，goal active。
+- 本轮最终相关radial_revision整套203测试通过，git diff --check通过；测试绿色不等于未匹配目标已解决。
+
+
+## 2026-10-01 S 复核体扫身份纠正（优先于此前8例结论）
+
+- 用户确认仅有基数据，没有SQI/IQ/脉冲功率统计；继续使用现有实测矩量，不再索要这些数据。
+- 发现旧复核脚本按最近前序volume_start猜测体扫，8例中4例与Web实际raw/QC帧不一致：Z9591 09:48、11:24及Z9598 08:18、08:36。此前这些案例的ROI零增益、无来源、多层缺测及signal_tracks结论只能作独立研究样本，不能代表用户截图。08:42及10:42体扫一致，但最新QC数组与Web图件代次仍未闭合。
+- 新s_web_identity.py按Web cycle精确valid_time/sweep/配对scan选择，plot_s_radial_review默认绑定Web，移除最近时间回退；单独研究必须显式offline-selection+scan-id。保存帧身份与latest_QC_not_Web_generation_verified标记。测试覆盖身份错配、缺帧、重复、目录分页循环。
+- 实际08:18 Web scan9ee02e8c-c049-5d7d-8ff2-7c119f99d160，web-aligned-0818-v1最低层source_footprint单开关新增186可见门，第3层新增334（合格340，6与其他路径重叠）；总研究路径新增1592/6525不可当本路径增益。实际打开两层图件，东南射线减少但西南长线仍残留，未完成/未部署/Web未更新。
+- audit_s_volume_sources读取原生ray_time/矩量有效性及冻结flag定义，同scan/normalizedSHA/URI、独立cut、300秒/半原生门匹配；未知位定义保留null、缺测不能当来源、禁止超距外推。新增3测试及Web身份4测试共7通过。仅射电坐标同源诊断，不能冒充真实地面位置天气验证。
+
+## X 原生采样链与片段家族接入（2026-10-01）
+
+本轮main07af471保存native_cut_sampling到writer/eager和流式adapter，绑定原始SHA/配置/原层，opaque波形保持semantic_verification=false。ZF70208:08全部9REF层原文件往返字段/码/几何/时间逐值不变，新逻辑SHAa661d478…；原输入3e3b090d…仍兼容，无Doppler动作升级。主第9层速度334对高SNR相邻门循环差中位9.5m/s仅诊断；PRF1200/800和波形8不能猜语义。
+
+mainf4ec681把RAW片段家族独立来源接入既有block开关下的radial_source完整阶段，kind位8、同一资源账本、完整阶段才发布，硬保护/上下文/预算仍门控。2个接入测试先旧入口RED再GREEN，160相关测试通过，新增资源阶段故障测试后fragment_source10通过。未切生产Worker。a3a2d58文档记正常产品前置门控。
+
+105只读fragment-core-fixed-v1 driver4012791已ps确认Ssl，最新12/54引擎回放EVALUATED、失败0；early1/2各新增1隔离门。回放context=None不能替代正常产品上下文或界面。原raw八路driver1754097同时ps确认Ssl elapsed06:12:41。正常后台不得仅因观察超时重启。已推main，准备仅覆盖source_blocks/fragment_geometry/fragment_source/radial_source的f4ec681镜像，Docker build SSH session90477尚待结果；旧生产镜像仍05db916，尚未发布。下一步检查54层阶段资源及预算，正常六例重算、补界面；第9层非稳态功率残留仍未解决，目标未验收完成。
+
+- 校正后的09:48 source_footprint新增0、11:24新增1可见门。正确08:18跨层只读映射：剩余扇区2511门，第3层实际REF匹配86，其中原始ledger来源79、typed radial15；第5层仅几何覆盖1617但实际REF匹配0；两个typed来源层共同支持0。此为射电坐标来源线索不能推广成天气负票，原“高层完全没有来源”不适用于校正体扫。
+- 正确08:18剩余：最低层766无源、1124原始相邻边界训练支持不足，原parent31有4842源门/7射线却仍1121残留；无源parent85有281门/32.75km/3.93°/SNR9.5。信号域新回放最低层目标0、第3层目标4（仅模型匹配不处置）。
+- 四例批量读取前两份成功、08:36传输chunk不完整被严格拒绝，未用损坏输入；成功NPZ另行render-only出图，新增逐例transport回执失败前保存。正在独立重取08:36，不影响生产数据/Worker。
+
+补充：f4ec681 X镜像构建成功，image config SHA65eb77b0225b6200071fde1a9f758150a7eae017b04586b194c274d89f1f218e；构建stdout已核验父镜像15ed6130…。完整引擎回放最新21/54 EVALUATED、错误0、新残留隔离5门，driver4012791 ps Ssl elapsed05:55，不能当全批完成。原生采样往返receipt已复制本地build，SHA b3b875351f24d64be196e2f6746bd52b1623029d4face2a006cd1fb25221216d。新旧镜像包逐py文件差异检查SSH session66157待结果，期望仅4个X文件改变。未生产切换。
+
+SSH一次ConnectTimeout后同一状态读取恢复成功，driver4012791仍Ssl elapsed08:13；最新35/54 EVALUATED、失败0、19待完成。ZF70208:08第4/9层仍PENDING，原job未重启。镜像差异核验session66157仅连接层失败、未执行远端检查，后续重试该只读核验即可。
+
+- 08:36独立重取再次缺尾23个传输包，manifest共2947、收到2924、SHA数据未发布；已有逐例失败回执。emit_packet已防短写/InterruptedError并有1测试，尚未证明能修复Docker尾包截断；不能称重取成功。相关算法及身份/来源7测试共210通过，新增传输测试与7项复跑8通过，diff-check通过。生产未变化。
+
+
+## 2026-10-01 S 原始来源分束修复
+
+- 正确08:18 parent31原source行162–165、167–168、170，旧“每窗整个source行集合必须连续”使两束有原始来源的稳定条带均被拒绝。source_footprint v2按冻结原始连续来源行岛分别追踪；独立维持2射线/10km/3外部参考窗60km/边界漂移/原范围/天气屏障与偏振保留，不能填166/169、借其它父对象、短束支撑或弱尾接力。接口及writer原证据重算保持、默认关闭。
+- 实际08:18同两SHA快照相较v1最低层新增424可见门（扇区417、全来自parent31），第3层新增47（parent6/15、目标扇区0）；旧资格损失0，逐束writer重算通过。新增2反例测试、相关整套213通过，diff-check通过。
+- 已打开SHA1f5cfe1e…分束对照图：东南残留一条带减少，西南长射线无改动，不能把宽扇区417计数冒充西南目标彻底解决。replay/validation/image可重复脚本保留；105同一Webscan只读引擎验证进行中，尚未部署/Web未更新，目标active。
+
+- 105同一正确08:18最低层只读引擎live-web-aligned-components-v2完成：原始/基线数组相等、rawSHA6716efae…/QCSHA99a5a56c…/profileSHA63fd29b1…一致；v2来源轮廓单开关新增610可见门（v1为186，净增424），原提议损失0，总2016包含其他研究路径不能冒充本模块增益；完整revision writer校验在脚本内通过。未写产品或重启Worker，完整发布与天气验收仍待完成。
+
+## X 全层引擎回放与超时恢复（2026-10-01）
+
+v1 driver4012791已终止为DIAGNOSTIC_FAILED：54层中50完成、4观察TimeoutExpired（原ZF70208:26的0/2/4/5层），不是算法错误结论；240秒杀Docker CLI后旧容器一度仍live，先确认全部旧容器消失，保留原失败/empty pending后仅恢复4项。重点ZF70208:08第4层source/quarantine新增均615、第9层均0；receipt SHA分别a7662a49…及e7c742ff…，无跨层context仅引擎回放，不替代正常图件。
+
+mainf6b6b39已推：domain只遍历有信号的good射线，空行原逻辑本来也不产生模型/资源计数；新测试旧版360次块索引遍历RED、优化后1次GREEN。完整xqc_v2 132项通过；冻结同一测试输入新旧mask/model/work receipt逐字段相等，单次39.7ms→24.8ms，不宣称真实大层加速已验证。没有阈值/动作改变。
+
+恢复driver4165085、fragment-core-recovery-v2/state.json已ps确认Ssl elapsed06:12，4项PENDING、失败0，cut0/2两个容器实际Up6m。移除观察脚本240s退出，用后台长运行Docker CLI完整等待；源模块SHA仍冻结，父v1终态SHA、task身份绑定，不改原失败。该批次必须继续核验，不盲重启。
+
+f6b6b39镜像已构建并真实比较：imageID a8ff28951c91c3df15ad976b6aeaa69eed7e1fa33f8262b1037ce6f121f90d61，仅四个X文件改变、790个py未改变。旧f4ec681实际imageID0b0a8c77…不是configSHA65eb77…，准备脚本已纠正；无线上切换。新deploy-fragment-fast.py先结合50旧成功+4恢复完整回执、严格normal/预算状态与source complete，再核验空闲worker/冻结network/旧fingerprint后切候选发布。replan-fragment-fast-six.py准备好重算六例，均未执行。第一优先仍未完成、第9层另一来源未解决、不启用可信融合/QPE/预报。SSH曾连接超时，随后同一作业状态读成功。
+
+补充：恢复v2四层全部DIAGNOSTIC_EVALUATED，cut2保持ACTION_BUDGET_ABSTAINED；合计54层回放全部返回且部署脚本source_complete/回执身份校验通过。生产候选已正常切f6b6b39：4Worker ready，image a8ff2895…，network bee28feb…未变，新multiband fingerprint 0f31e8f767c384d18782289b5d9098cb7f49e91eaec47b9c0a2e8579d3e97cc3。后台delivery PID61263 ps Ss elapsed01:19，state RUNNING_AUDIT_SIX；verify/deploy/submit均exit0，尚未产品/UI完成。
+
+新六正常task：early600f808f-fee1-46ed-9897-02e53c282c8b；nexta7951227-bc8e-4714-a56d-b8413759ffd0；zf7021f760dfd-6d86-4221-9bf9-18ec9a993b66；zf701-08492af26183-e4fc-4e68-9efe-a8779f084c55；zf702-original8346af7a-2418-40ed-966e-68d94a9b768c；zf702-0808fd6c60de-18ac-4e01-a111-58b30cf061f3。normal目录fragment-core-normal-f6b6b39，driver-log与fragment-delivery-state.json保留。finish已修复旧脚本FAILED也可能写NORMAL_PUBLICATION_AUDITED的观察分支，失败立即STOPPED_NORMAL_TASK_FAILED；机械失败仍显式留下review-required，不能当作全部验收。UI需打开新result_id，原URL固定旧result不能期待改写旧图件。
+
+### X 新正常产品复核（2026-10-01 后续）
+
+候选五正常任务完成/45层机械检查通过，原ZF70208:26 task8346af7a…仍RUNNING/COMPUTE，13:00Z实际新鲜heartbeat与CPU118%、RSS约1.1GiB；不重启。delivery61263/finish66144继续。实际浏览器已恢复，ZF70208:08新result fd6c60de-18ac-4e01-a111-58b30cf061f3.faf320de-61e3-4464-8652-2a839246a4aa全9层新图件截图观察完成（第7层首次loading未计，重访完成）；新增新结果UI9/54，其余旧38/54不能混计。
+
+新旧正常产品源/RAW/几何/时间相等：cut4主ray364原820、新隔离615 kind8、仍205；cut9 ray208原996、新隔离0、仍996。compare-fragment-normal.py及-diagnostic.py/回执保留105验收dir/localbuild，未写产品。剩余cut4 205/nom91、cut9 996/nom456，无SNR缺测/低于3dB/硬天气保护；reason3584为phase/calibration/attenuation unknown，不是budget。下一步聚焦RAW提名边界与非稳态源模型，保持真实天气反例和跨体扫证据，不放宽阈值或猜waveform8。
+
+raw八路driver1754097新鲜live7h、快照3033RAW_FILE_COMPLETE/112540机械层检查；不是新f6全天验收或天气接受。独立失败快照raw-failure-independent-review-v1.json SHA ad08dece1dd437abf402b16ae3d60318084b65979fd53589219cfe7fd24c1e11：38份冻结SHA源bzip2独立全读EOF，另5个不同源为预算/倒序，快照会继续增长，保留原FAILED。MinIO实际所在数据盘free585492312064字节/inode100593119。第一优先未完成，S+X量化未开始。
+
+更新：六正常任务最终全部SUCCEEDED，normal state为NORMAL_PUBLICATION_AUDITED，52/54机械门通过，原ZF70208:26第2/9层保留CUT_ACTION_BUDGET_ABSTAINED；此终态优先于前文RUNNING。新产品对比诊断本地SHA13fb4a80170b4a998045c0c845107a167bcfadf8fd15ff49a7117c87a60e54e4。文档main7cb78ed已push，其间并发S提交5f639fc/4eee2e6在同main，未随X镜像部署；X实际image保持f6b6b39四模块。
+
+## 2026-10-01 S 发布恢复与无锚残留推进
+
+- 算法5f639fc已推送；v3正常Worker计算/数组验证通过但profile_version长度513触发摘要512上限，首job31080398终止。ee70342已改短版本+完整父配置摘要、profile parser预检查及后台按profileSHA/对象复用已成功/活跃任务；105两主S Worker现为s-bounded-radial-20261001-v4，配置SHA ebaa36fa24c147ebc4b4975062a9e4c39cbdd1623685e2d581e92ba3a660db68。首QC b9460c88已SUCCEEDED且grid完成；后台脚本PID469093运行，state当前08:18第三站QC，未确认组合/PNG发布。X未重启。
+- 441ad7f复核脚本默认全原生视场，显式方位/距离支持跨北；实际9ee02e8c…08:18西南210–270°/100km外367剩余均无原来源，SNR中位8.5、RHOHV239门中位0.98；侧邻±2射线有281/287门为DBZH缺失但实测SNR≤3。下一步只读验证短片1km候选门槛及实测噪声侧邻，不能直接扩父边界/删高相关天气。证据web-aligned-0818-sw-v2.json与sw-moments-v2.json；方法泛化与完整PNG链仍未完成。
+
+## 2026-10-01 S 本轮提交与105 Web交付核验
+
+- ab5664f已推origin/main：微碎片/实测噪声侧翼只读四因素复核、三项测试与部署研究记录；相关radial_revision测试通过，两层正确08:18快照默认detect全部数组/报告与提交前相同。诊断代码已同步105现有目录，脚本SHA5580a8ac…与模块SHA116a0bca…本地远端一致；只读probe未接生产。并发X的2f506f2另有提交，未随本次擅自推送。
+- 线上主S两Worker仍healthy/v4/profileSHAebaa36fa…，dff524c新orchestrator已部署。08:18正常QC→grid→mosaic→QPE→diagnostics完整发布，实际Web API选analysis cb2e4c83…及job79c0f459…，PNG下载/观察完成；离散径向仍有残留。后台732063实际live，08:36已进入mosaic，无error；其余八例顺序继续，未重启重复任务。
+- 最新全量GitHub CI36879262437终态failure，包含旧参数hash、fusion对照及其他test/lint失败；不能宣称全量绿色。当前交付证据见S_BOUNDED_RADIAL_DEPLOY_20261001.md。目标未彻底解决，不把微碎片提名/独立源stage增益当完整天气泛化验收。
+
+## 2026-10-01 X 常规 FMT 参数保留与54层速度谱宽诊断
+
+用户假期无法核实厂家波形8/相位0；不等待厂家，不再次索要IQ/SQI，用已有Level2继续。官方QXT653 PDF表6核验常规FMT偏移16/64/68/72/76；2f506f2新增解模糊模式、两采样数、相位模式、大气损耗原样保留，decoder2.2.1，PA布局不猜。真实ZF702九REF层往返v3通过、原矩量/码/坐标/时间逐值相同，新参数semantic_verification=false；回执SHA2dbc85c8…，本地build已复制。元数据修复尚未切生产decoder/Worker，不能说已部署算法。
+
+834ca88新增native_doppler_diagnostic与scripts/audit_x_native_doppler.py，只读原生有效相邻门统计；无动作资格，声明Nyquist仅敏感性检查，不代表双PRF解模糊验证。11新测试及解码/adapter/XQC整套186通过（现有NumPy兼容警告1）；首6新测试实际RED后GREEN。39f6ad1证据文档已pushmain；并发S无关dirty/untracked保留。
+
+105 native-doppler-v1六task54层全完成exit0，六JSON/receipt SHA校验并复制本地。脚本SHAf9d56315…、模块c747dd13…、imagea8ff2895…绑定，未写公开产品。ZF70208:08剩余cut4ray364有80有效相邻对、声明周期差中位8.5m/s/相干0.091/SW中位4.5；cut9ray208有334对、9.5/0.047/7。部分ZF701保留回波SW10.5但相干.66-.73，不能用谱宽单阈值删除。跨体扫短时支持超时间窗、跨层偏振签名不同、合格相邻同源参考缺失，均保留只读反证，不能放宽源阈值强行匹配。
+
+实际浏览器新原问题体扫8346af7a…/cut2地图与ACTION_BUDGET_ABSTAINED警示已观察；新结果UI观察10/54（含这项review-required），不混旧38/54。原六正常task仍52/54机械通过；cut4余205/cut9余996未解决。下一步验证双PRF别名敏感性和独立天气对照，发展可复验的非稳态源证据，再正常生命周期重算/UI；目标未完成。
+
+raw八路旧冻结driver1754097新鲜ps Ssl elapsed9h03m，快照4197 RAW_FILE_COMPLETE、4138 DECODE_VERIFIED、148254机械门/88FAIL记录，1worker已COMPLETE；这不是f6新算法全日天气接受。实际MinIO卷经只读root容器statvfs可用581848674304字节/inode100525349，保护线之上；/data是NFS不得代替。最初df容器无工具、宿主卷目录权限不足均未作为盘量证据，不涉及清理/重启。最新并发S记全量CI36879262437失败，相关186绿色不代表全量CI通过。
+
+## S native temporal audit, 2026-10-01 (5d42e71 pushed)
+
+- New reusable audit/test: 9 passed. Native acquisition time, half-bin angular/range matching, elevation, gaps, distinct raw inputs and weather/conflict barriers. Diagnostic recurrence only; zero actions and no source promotion.
+- Actual four 08:18 short parents occupy different angles, so association into one long source is disproven. New Web-paired 08:36 scan5172b858 and 08:42 scand12ac95a snapshots pass complete transport SHA checks. native-temporal-0836-v2: 1079 SW residuals, only 2 co-located past DBZH observations. native-temporal-0842-v2: 781 broad-sector residuals, two past DBZH votes36, two typed radial votes2, two stable-SNR votes0. Fixed recurrence is insufficient; details in S_RADIAL_RESIDUAL_RESEARCH_20261001.md.
+- Last verified 105 driver732063 live at39:09; 08:18 and08:36 published, 08:42 grid. Later SSH timeout/API502, new script sync NOT completed (scp connection closed), no restart. CI36882213341 failure, not green. Goal remains incomplete.
+
+### X 最新主线调整：用户要求形态驱动（优先于此前仅稳定源补强路线）
+
+最新用户提出“有没办法跳出来，从形态上解决...肉眼明显径向或扇形”。已回应可行，按原生极坐标的细长径向/断续径向/宽扇形、多尺度边界/中心方位跟踪为主入口；矩量辅助、厂家扩展码未知不阻止形态检测。天气团/弯曲雨带/固定公里宽雨带反例及原始数据回放必须保留。新形态分类尚未实施/处置，不能把已有窄fragment_geometry提名当作完成；下一goal turn应集中做此方向，停止单纯稳定功率/相位阈值补丁研究。完整方案在docs/X_NATIVE_DOPPLER_DIAGNOSTIC_20261001.md末节。
+
+速度谐波v2十二测试通过，原平滑风+分支跳变反例先RED后GREEN；正常六体扫54层v2全部成功，核对elevation/time等全部原生身份。JSON/receipt均复制本地并校验，summary SHA1b2c18e87277286eba4c94770945e65b6edae389c951c3ce6e546139e929dc40；cut9所有1–6谐波相干最大.2534，cut4最大.4838，仅有限分支敏感性结果，未动作升级。脚本SHA54fa81ae…、模块eb73e2aa…。代码47e6eaa/c35d0bf已push（c35一次GitHubSSL失败后原协议重试成功）。
+
+6c19ca8同步Go RadarDecoderVersion到2.2.1，Pythonworker会严格拒绝版本不等请求，防止后续元数据发布启动即失败；原RP006硬钉2.1.0结构检查改控制/计算一致性，版本不等实际RED后GREEN；Go TestCreateRadarDecode通过。所有新解码代码仍未部署，105旧生产decode/controller不能只切其中一端；现有在途旧任务版本保持，不盲重启。候选X生产仍f6b6b39。目标active、未验收完成，下一步新形态算法实施与真实天气/用户案例验证。
+
+
+## S whole-object morphology, 2026-10-02 (0ffbd38 pushed)
+
+- New morphology_objects.py and reusable audit_s_morphology_objects.py: RAW angular templates at 5/10/20km and multiple DBZH levels, no stable-power or prior-source requirement; frozen boundaries, measured bilateral shoulders, per-target recheck, weather veto, no gap filling or recursive growth. Real gap-free PPI seam supported; sectors never wrap. Fourteen new tests plus related radial_revision regression passed. Evidence replay rejects forged masks; resource exhaustion returns no partial acceptance.
+- All eight actual Web-paired native inputs replayed in native-morphology-objects-all-v3. Remaining evidence hits by case: Z9598 08:18=0, 08:36=832, 08:42=646; Z9591 09:48=0, 10:18=37, 10:24=0, 10:42=18, 11:24=0. SW210-270/>100km 08:36=800/1079, 08:18=0/367. Broad160-280/>100km 08:42=1/781, so most full-field gain is northern tails, not southern target improvement. Evidence is not confirmed pollution or full Worker/Web acceptance; independent weather holdout remains incomplete.
+- Four committed files synchronized in place to105 and SHA matched: detector1ae372bf..., script3946002f.... No production action/image/config switch for this module. Deployment doc S_MORPHOLOGY_OBJECTS_20261001.md and repeatable PNGs retained. v4 driver732063 actually live at1:27:15, completed08:18/08:36/08:42/09:48/10:18, processing10:24; actual08:42 Web API now references diagnostics2ea995b4.... Not restarted. Goal still incomplete; next focus short/wide fragment substructure and independent weather counterexamples, not lowering all span thresholds.
+
+
+## S whole-object engine integration, 2026-10-02 (1079765 pushed)
+
+- Default-off FragmentLineConfig.whole_object_morphology_enabled now routes only strong whole-object evidence into experiment geometry quarantine after original source identities freeze. Audit keeps zero actions; weak nominees never gain source/action eligibility. Persist original measurement/availability, native coordinates/order, beam/good/gap and barriers; writer binds DBZH_RAW and recomputes masks after restoring native order. Two meaningful integration/writer tests added; 16 morphology tests and related 224-test radial_revision suite passed; diff-check passed.
+- Actual engine replay with captured baseline equality succeeded for correct Web-paired Z9598 08:18 (live-web-aligned-components-v2 full snapshot), 08:36, 08:42. SW 08:36 strong AND extra visible proposals 800/1079, proof validator passed, no withdrawn old proposals or promoted original source identity. New reusable --engine-quarantine PNG shows experiment-after at native-morphology-engine-effect-v1; opened actual image. 08:18 remains zero new hits.
+- Strict replay rejected 09:48 old snapshot SOURCE_FOOTPRINT_REJECTION_CODE drift and 10:18 SEGMENT_RESIDUAL_DB drift. Earlier components-v2 77-field diagnosis bundles are not complete raw snapshots (no sweep/Web/config). Do NOT skip baseline check, merge mismatched identities, or claim eight engine cases passed. Need capture updated full snapshots before remaining cases and weather holdout.
+- Seven committed files synchronized in place to105; SHA checked (engine244a77b..., detectora567c7f..., validation68e2424..., scriptd84400f...). NO new production image/profile activation or Web publication for whole-object module. Fresh previous driver732063 still S at2:07:07; 7/8 published, processing11:24; v4 image and ebaa36 profile unchanged. Do not alter active file until driver terminal and queue idle. CI36893706818 in_progress at last read, not all-CI-green claim.
+- Next: correct full baseline snapshots, frozen experimental child image/profile, normal QC-Hybrid-mosaic-PNG publication after current driver; independent weather negatives; short/wide subbranch morphology remains unresolved. Goal active. X WIP untouched.
+
+
+### S morphology v5 experimental deployment, 2026-10-02 (defe096/c13561e pushed)
+
+- Old v4 driver finished DONE, all eight slots published, PID732063 gone. New v5 child YAML SHA1f9803eab58c3eb8ee602a346c7304d2076073f5a95c5fe8e416850aa9397cd5 enables whole_object_morphology_enabled under existing experiment_quarantine only. Reusable refresh driver now accepts frozen profile/output/plan and priority UTC slot, checks distinct four-station groups and persisted plan SHA. Original v4 plan reused, 08:36 prioritized.
+- 105 built rainpulse-cpu-worker:s-whole-morphology-20261002-v5 from v4, only config/engine/morphology_objects/validation copied. Image config SHA7832a8626a3f13e438acfc573a34e92016d15acb59b2819ddcd24fe1642a87c4. Initial compileall failed due inherited macOS sidecars and bytecode permissions; c13561e fixes read-only compilation of four copied files, rebuilt successfully. Actual image engine+writer test passed (100 synthetic geometry proposals, audit zero), child profile parsed.
+- Queue idle and old image/profile/DONE preflight passed; parent active profile backed up .build/s-bounded-radial-20261001-release/morph-v5-parent.yaml, atomic child switch, both primary QC workers healthy on v5. X workers/decoder/controller unchanged.
+- Background systemd unit rainpulse-s-whole-morphology-v5-refresh started, MainPID1694012 active/running. First root Docker/chroot launcher failed bus connection and created no unit; verified not-found then retried with host PID/network namespaces, succeeded; no duplicate driver. State/log .build/s-whole-morphology-20261002-v5-refresh. New Web publication remains pending until normal stages complete; do not claim images updated yet.
+- c13561e CI36895280658 completed failure, previous1079765 CI has legacy parameter hashes/fusion/lint/general test failures; related224 tests/build/image smoke are green, not global CI acceptance. Independent weather holdout and short/wide morphology unresolved. Goal remains active.
+
+- Final v5 launch receipt: RUNNING at08:36CST, first normal QC job115916e9-0e3f-55be-b1ae-ae5817858e8a submitted with childSHA1f9803ea; current Web pictures not yet regenerated. New image installed module SHA checks performed independently after activation; next turn inspect job completion/proof arrays and published PNG before claiming effect in Web.
