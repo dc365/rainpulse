@@ -50,6 +50,32 @@ def validate_native_arrays(arrays, shape):
             raise ValueError("native array shape mismatch: " + name)
 
 
+def optional_mask_count(arrays, key, selected):
+    """Absent historical diagnostics are unknown, not negative observations."""
+    if key not in arrays:
+        return None
+    return int((checked_diagnostic_mask(arrays[key], selected.shape) & selected).sum())
+
+
+def checked_diagnostic_mask(value, shape):
+    from rainpulse_algo.radar.qc_engine.volume_review.data import checked_mask
+    return checked_mask(value, shape, "published diagnostic mask")
+
+
+def baseline_union(arrays):
+    keys = ["XQC_" + name + "_MASK" for name in (
+        "RECEIVER", "PARTIAL", "RADIAL_POLAR", "RADIAL_FRAGMENT",
+        "RADIAL_SOURCE", "CLUTTER", "ISOLATED",
+    )]
+    missing = [key for key in keys if key not in arrays]
+    if missing:
+        return None, missing
+    result = np.zeros(arrays[keys[0]].shape, bool)
+    for key in keys:
+        result |= checked_diagnostic_mask(arrays[key], result.shape)
+    return result, missing
+
+
 def load_bounded(objects, keys, maximum_bytes):
     total = sum(objects.session.index.logical[key][2] for key in keys)
     if total > maximum_bytes:
@@ -200,36 +226,32 @@ def run(stack):
             actual_cfg = XQCConfig.model_validate(
                 net.stations[source["radar_id"]].x_qc.enhancement
             )
-            baseline = np.zeros(selected.shape, bool)
-            for name in (
-                "RECEIVER",
-                "PARTIAL",
-                "RADIAL_POLAR",
-                "RADIAL_FRAGMENT",
-                "RADIAL_SOURCE",
-                "CLUTTER",
-                "ISOLATED",
-            ):
-                baseline |= arrays["XQC_" + name + "_MASK"] == 1
-            baseline &= arrays["XQC_AVAILABLE_MASK"] == 1
-            baseline &= arrays["XQC_HARD_WEATHER_MASK"] == 0
-            union = baseline | (
-                selected
-                & (arrays["XQC_AVAILABLE_MASK"] == 1)
-                & (arrays["XQC_HARD_WEATHER_MASK"] == 0)
-            )
-            observed_count = int((arrays["XQC_AVAILABLE_MASK"] == 1).sum())
-            rec["baseline_candidate_fraction"] = float(baseline.sum()) / max(
-                observed_count, 1
-            )
-            rec["prospective_candidate_fraction"] = float(union.sum()) / max(
-                observed_count, 1
-            )
-            rec["prospective_action_budget_abstained"] = int(
-                union.sum()
-            ) > actual_cfg.maximum_new_exclusion_fraction * max(observed_count, 1)
-            rec["selected_context_weather_gates"] = int(
-                (selected & (arrays["XQC_CONTEXT_WEATHER_MASK"] == 1)).sum()
+            baseline, missing = baseline_union(arrays)
+            rec["baseline_missing_masks"] = missing
+            if baseline is None:
+                rec["baseline_candidate_fraction"] = None
+                rec["prospective_candidate_fraction"] = None
+                rec["prospective_action_budget_abstained"] = None
+            else:
+                baseline &= arrays["XQC_AVAILABLE_MASK"] == 1
+                baseline &= arrays["XQC_HARD_WEATHER_MASK"] == 0
+                union = baseline | (
+                    selected
+                    & (arrays["XQC_AVAILABLE_MASK"] == 1)
+                    & (arrays["XQC_HARD_WEATHER_MASK"] == 0)
+                )
+                observed_count = int((arrays["XQC_AVAILABLE_MASK"] == 1).sum())
+                rec["baseline_candidate_fraction"] = float(baseline.sum()) / max(
+                    observed_count, 1
+                )
+                rec["prospective_candidate_fraction"] = float(union.sum()) / max(
+                    observed_count, 1
+                )
+                rec["prospective_action_budget_abstained"] = int(
+                    union.sum()
+                ) > actual_cfg.maximum_new_exclusion_fraction * max(observed_count, 1)
+            rec["selected_context_weather_gates"] = optional_mask_count(
+                arrays, "XQC_CONTEXT_WEATHER_MASK", selected
             )
         except ResourceLimit as exc:
             rec = {

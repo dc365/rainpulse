@@ -62,3 +62,31 @@ def test_staging_limits_pack_count_even_when_byte_count_is_zero():
     )
     with pytest.raises(ValueError, match="pack count"):
         audit().check_staging_budget(session, 512 * 1024**2)
+
+
+def test_missing_optional_history_mask_is_unknown_not_zero():
+    module = audit()
+    selected = np.ones((2, 3), bool)
+    assert module.optional_mask_count({}, "XQC_CONTEXT_WEATHER_MASK", selected) is None
+    assert module.optional_mask_count(
+        {"XQC_CONTEXT_WEATHER_MASK": np.zeros((2, 3), "uint8")},
+        "XQC_CONTEXT_WEATHER_MASK", selected,
+    ) == 0
+    assert module.optional_mask_count(
+        {"XQC_CONTEXT_WEATHER_MASK": np.ones((2, 3), "uint8")},
+        "XQC_CONTEXT_WEATHER_MASK", selected,
+    ) == 6
+
+
+def test_incomplete_legacy_baseline_has_no_fabricated_fraction():
+    module = audit()
+    shape = (2, 3)
+    fields = {"XQC_" + name + "_MASK": np.zeros(shape, "uint8") for name in
+              ("RECEIVER", "PARTIAL", "RADIAL_POLAR", "RADIAL_FRAGMENT",
+               "RADIAL_SOURCE", "CLUTTER", "ISOLATED")}
+    fields["XQC_RECEIVER_MASK"][0, 0] = 1
+    baseline, missing = module.baseline_union(fields)
+    assert baseline.sum() == 1 and missing == []
+    del fields["XQC_RADIAL_SOURCE_MASK"]
+    baseline, missing = module.baseline_union(fields)
+    assert baseline is None and missing == ["XQC_RADIAL_SOURCE_MASK"]

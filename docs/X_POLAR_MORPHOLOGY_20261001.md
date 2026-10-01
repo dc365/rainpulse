@@ -65,3 +65,16 @@
 代码CI36900071920已结束failure：build通过；parameter hash旧断言、fusion对照、lint与通用test仍失败，日志在本地build。相关191项XQC-v2通过不代表全CI绿色。
 
 复验：在仓库根执行`PYTHONPATH=algorithms algorithms/.venv/bin/python -m pytest algorithms/tests/xqc_v2_20260928 -q`。下一步完成原问题体扫正常发布和预算层真实地图复核，然后补独立天气反例及扩站复核；当前不得开启可信S+X/QPE/预报。
+
+
+## 正常六体扫完成与扩站审计修复（UTC 2026-10-01 18:14–18:28）
+
+本节终态优先于上节五完成/一运行的快照。六正常任务全部SUCCEEDED，后台driver2022470正常终止，状态NORMAL_PUBLICATION_AUDITED。54层均完成原始/坐标/时间/图件校验；48层EVALUATED，6层预算待复核：ZF70108:07 cut2，ZF70208:26 cut0/2/4/7/9。其中cut2/9保留旧ACTION_BUDGET_ABSTAINED，其他为新增形态DEGRADED_MORPHOLOGY_ACTION_BUDGET；不改判通过。
+
+实际安装模块2b27c36f…对六份新正常产品重新回放54层，全EVALUATED、被形态选中但仍显示的门0、硬天气命中0，六份JSON/receipt均SHA核对。原问题体扫回放SHA `dd5a1f373e4b504ac8584499187ba5453bf28db07ee27bac8c296b70ebf50aa8`。剩余4离散门核对为64.3125/69.7875/173.6625/208.9125km、6/8/17.5/20.5dBZ，不冒充独立降水真值，也不扩展已冻结对象去补删；回执SHA `b9b4ef606eecf77b232594de266ca7ea3cd10a97b8a1c7ebe704ddd1f0b9a74a`。
+
+真实浏览器后续连接超时，未新增界面观察计数，仍为此前5张实际截图。正常任务原生图件检查不代替全层界面和真实天气误删验收。原问题任务runtime1455779ms，性能日志显示主要耗时在继承的X v2 evidence链，而只读形态回放约数秒级；未调低旧来源预算以冒充快速通过。
+
+为验证站间通用性，在看雷达值前冻结九个非试点站首个UTC00:00–01:00已发布native-v2样本：ZF101/102/103/104/105/401/402/505/605，共268层。算法/参数冻结不变，只有只读回放，不改这些站线上网络。另11站选定旧结果无native-v2数组，不混入这次计数；ZF703/ZF801继续按缺乏格式证据排除。目录105polar-morphology-expanded-frozen-v1/protocol.json保留选样及源身份。
+
+首轮expanded-replay-v1仅ZF505成功，其余旧产品缺XQC_CONTEXT_WEATHER_MASK或XQC_RADIAL_SOURCE_MASK导致审计脚本KeyError；失败回执保留，不能当形态检测失败或成功。新增两个实际RED/GREEN测试：缺历史可选诊断输出null，显式0仍为0；不完整旧来源掩码输出缺项清单，基线/预期预算比例null，不拼部分掩码或伪造无上下文冲突。必需原始/几何/时间/可用性身份及形态规则不变。下一步用同样冻结九样本重跑v2；独立真实天气负例仍未完成，目标active。
