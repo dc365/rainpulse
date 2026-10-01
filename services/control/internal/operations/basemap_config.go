@@ -105,7 +105,7 @@ func renderBasemapTemplate(template string, z, x, y int, token string) (string, 
 	if m := basemapRangePattern.FindString(rendered); m != "" {
 		var from, to int
 		if _, err := fmt.Sscanf(m, "{%d-%d}", &from, &to); err == nil && from <= to && to-from < 16 {
-			pick := from + (x*7+y*3)% (to - from + 1)
+			pick := from + (x*7+y*3)%(to-from+1)
 			rendered = strings.Replace(rendered, m, fmt.Sprint(pick), 1)
 		}
 	}

@@ -1188,3 +1188,27 @@ pipeline contract. Other profile settings remain inherited fromv5. Initial
 attempts to invent pipeline7.3.10 or omit review-child naming were rejected by
 profile validation and corrected before deployment. Installed combined engine
 replay is also required before activating this profile.
+
+### v6 activation and CI identity guard correction, 2026-10-02
+
+Both105primarySQCworkers now run installed image s-physical-windows-0b417e3-candidate
+and are healthy, with exact active v6 profileSHA91d7f00a5b26bba86f4f3af7cd068dafbe16757a9e2116cace9184d73d0b46c4.
+Sequential background unit rainpulse-s-physical-constellation-v6-refresh started
+with MainPID3730153. Frozen32scan/eightslot plan prioritizes09:48CST/01:48UTC;
+firstZ9591QC and grid completed, subsequentstations remain inprogress. NewWeb
+publication has not yet been verified. Failedhelperargument-length/hostbus/UTC
+priority attempts ended before jobs or restoredv5; actualunit andDBjobcheckedlive
+before reporting it running. Reuse persisted jobs; do not restart on timeout.
+
+CI36933310335 for7c3e357 failed two legacy identity checks, performance-source
+metadata comparisons and oneGoformatcheck. The legacy hash implementation already
+excluded null review_extension_version/nonprecip_review/volume_review before the
+newSbranch (checked6380c9f profile.py); tests failed to exclude those absent
+extensions. Tests now assert allthreeareNone, exclude them from independently
+reconstructedfrozenparameters and pin exactV1/V3hashes7de1109ac5b749ee34fcd50ed220d80ac59df6b0da6df8820420e96e091efd0f
+and8a94f6bc8d7c2ab5c4a4a317a0dfc0d26b95a35141ee85cb735e66abc56c2ce0.
+Both targeted tests pass. No runtime hash or QC behavior changed by thisfix.
+Goformatonlycorrects spacing inbasemaprangeexpression. Broader local twofile
+suite:40passed/26failed because thislocalvenvlacksarm_pyart2.2.5; notclaimedgreen.
+PerformanceCD sourcesmetadata difference remains uninvestigated; no allCIgreen
+claim. Keep S morphology/actualpublication as the main task.

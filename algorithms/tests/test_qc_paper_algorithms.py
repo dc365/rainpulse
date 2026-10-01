@@ -281,6 +281,9 @@ def test_version_coherence_and_old_parameter_hash():
         OpenSourceQCProfile.model_validate(data)
     v3 = load_qc_profile(V3, FLAGS)
     data = v3.model_dump(mode="json")
+    # Independent frozen baseline: absent review extensions are not parameters.
+    for key in ("review_extension_version", "nonprecip_review", "volume_review"):
+        assert data.pop(key) is None
     data["context"].pop("split_radial_weather_support", None)  # Frozen optional context default.
     data.pop("generalization", None)  # Absent 7.2 extension is not a frozen parameter.
     data.pop("literature")
@@ -293,6 +296,7 @@ def test_version_coherence_and_old_parameter_hash():
         json.dumps(data, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
     assert v3.parameters_hash == digest
+    assert digest == "8a94f6bc8d7c2ab5c4a4a317a0dfc0d26b95a35141ee85cb735e66abc56c2ce0"
     assert p.literature == LiteratureConfig()
 
 

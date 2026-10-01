@@ -192,6 +192,9 @@ def test_v1_parameter_identity_is_unchanged():
 
     old = load_qc_profile(ROOT / "configs/qc/fujian-qc-opensource-v1.yaml", FLAGS)
     data = old.model_dump(mode="json")
+    # Disabled review extensions are absent from the original frozen identity.
+    for key in ("review_extension_version", "nonprecip_review", "volume_review"):
+        assert data.pop(key) is None
     data["context"].pop("split_radial_weather_support", None)  # Frozen optional context default.
     data.pop("evidence_graph", None)  # Absent V7 extension is not a frozen V1 parameter.
     data.pop("generalization", None)  # Absent 7.2 extension is not a frozen parameter.
@@ -206,6 +209,7 @@ def test_v1_parameter_identity_is_unchanged():
             json.dumps(data, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()
     )
+    assert old.parameters_hash == "7de1109ac5b749ee34fcd50ed220d80ac59df6b0da6df8820420e96e091efd0f"
 
 
 def test_profile_requires_explicit_coordinated_versions():
