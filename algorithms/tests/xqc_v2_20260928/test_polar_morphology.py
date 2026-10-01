@@ -1048,3 +1048,16 @@ def test_branching_full_normal_qc_withholds_original_members_without_confirming_
     assert not np.isfinite(a["DBZH_QC"][body]).any()
     assert not a["REFLECTIVITY_ELIGIBLE_FOR_CR"][body].any()
     np.testing.assert_array_equal(a["DBZH_RAW"], z)
+
+
+def test_branch_graph_reuses_original_measurements_within_frozen_work_limit():
+    s, body = scene("fan", dr=75.0, da=0.5)
+    z, sn = s.fields["DBZH"].copy(), s.fields["SNR"].copy()
+    gap = (abs(s.azimuth[:, None] - 100) <= 1) & (s.ranges[None, :] >= 50000)
+    z[gap], sn[gap], body[gap] = 0, -2, False
+    s = replace(s, fields={**s.fields, "DBZH": z, "SNR": sn})
+    policy = branching_policy().model_copy(update={"maximum_work": 9000000})
+    ev = detect(s, policy)
+    assert ev.mask[body].all()
+    assert not ev.mask[~body].any()
+    assert ev.record["work"] < policy.maximum_work

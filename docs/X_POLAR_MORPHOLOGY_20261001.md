@@ -264,3 +264,12 @@ junctions-v1实际原生探针确认：ZF50505 cut5 5km尺度父轨迹336–354�
 v6新增branching_envelopes_enabled显式身份/JSON契约，默认关闭且要求grouped父分支。原始逐距离窗口节点按相邻窗口重叠建立连通关系；只对存在分裂/合并的完整组件重新测量每个窗口的全部外轮廓、原始body和独立外侧肩部，再用原跨度/角宽/初始边界/固定公里宽反例/双肩/资源政策验收。不继承旧父或碎片的合格权，不截断原始失败历史，不填缺测门，不跨hard-weather/显式角缺口。节点/关联/重复测量纳入既有20k对象/50M工作上限。旧线性与v5路径保留；shape-only仍候选action3。
 
 两末端分裂正例（普通方位/北缝）先在已支持v6政策但未实现graph的旧逻辑实际RED（原RAW body未全选），实现后GREEN。另split→rejoin的两原生分辨率、原始固定公里宽/弯曲/团块天气反例、缺肩、hard-weather/几何隔断、默认关闭/版本契约、资源弃权及完整正常x_qc动作验证通过。CLI --branching-envelopes源级和配对路由实际RED后GREEN。全XQC-v2 261测试PASS/NumPy ABI警告1、ruff和diffcheck通过。实样v6尚未回放/生产启用；先同20源/8配对冻结样本核查v5资格保留和新增完整形态，再决定候选部署。
+
+
+### v6首次实样回放发现资源回归，保留失败并减少重复测量
+
+源3993700/配对3993701均终止SOURCE_REPLAY_COMPLETED，20源492层/同8配对72层；ZF50505 cut0/2发生morphology work budget exceeded，不能称v5资格全部保留或通过。cut4/5/6新增19534/11522/6844门，提示完整分支根因有效但仍需修复资源回归。v1目录全部保留。原因是每个组件、每个窗口重复生成全层signal，即使单节点窗口已有完整不可变RAW测量。
+
+修复只复用单节点原始测量事实；多节点分裂/合并窗口仅生成完整对象rows×cols信号、重新测外侧和全历史，不复用资格、不改变门限。75m/0.5deg合成相同16340成员，工作计数10244704→7565313；冻结9M工作限的已提交e07493e内存隔离fixture实际RED，当前修复GREEN。完整形态/正常动作与既有政策保持，下一步v2独立目录同冻源复验，不能覆盖v1失败。
+
+同时读取ZF50505正常cut2已验证SHA的真实证据：radial_source PARTIAL_RESOURCE_LIMIT、failed_module fan、reason X source model-trial budget exceeded；不是形态未运行或显示缓存，已有source_gates86932保留。该模块完整性告警尚未解决，不提高预算伪造验收，也不凭shape补造确认RF源。独立天气/所有网页仍未验收。

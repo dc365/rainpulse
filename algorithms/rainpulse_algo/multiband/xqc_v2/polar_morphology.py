@@ -242,7 +242,11 @@ def detect(sweep, policy, *, protected=None):
         )
         if width > p.maximum_width_deg:
             return None
-        block = signal[rows]
+        block = (
+            raw[np.ix_(rows, cols)] & (z[np.ix_(rows, cols)] >= level)
+            if signal is None
+            else signal[rows]
+        )
         active = block.any(axis=0)
         if not active.any():
             return None
@@ -617,9 +621,12 @@ def detect(sweep, policy, *, protected=None):
                             continue
                         complete, barred = [], False
                         for bucket, nodes in sorted(by_bucket.items()):
+                            if len(nodes) == 1:
+                                # This immutable RAW measurement already is the
+                                # complete envelope; reuse facts, not decisions.
+                                complete.append(nodes[0])
+                                continue
                             cols = np.flatnonzero(buckets == bucket)
-                            charge(len(cols) * shape[0])
-                            signal = raw[:, cols] & (z[:, cols] >= level)
                             reference = nodes[0]["left"]
                             first = min(nodes, key=lambda e: float(wrap(e["left"] - reference)))
                             start = int(first["rows"][0])
@@ -638,7 +645,8 @@ def detect(sweep, policy, *, protected=None):
                                 break
                             observed = np.zeros(shape[0], bool)
                             observed[indices] = True
-                            entry = measure_entry(rows, cols, signal, ~observed, bucket)
+                            charge(len(cols) * len(rows))
+                            entry = measure_entry(rows, cols, None, ~observed, bucket)
                             if entry is None:
                                 barred = True
                                 break
