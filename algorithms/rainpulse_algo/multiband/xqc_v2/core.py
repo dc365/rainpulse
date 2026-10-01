@@ -65,6 +65,7 @@ def empty(cut, status, reason=""):
         "RADIAL_FRAGMENT",
         "RADIAL_SOURCE",
         "MORPHOLOGY",
+        "MORPHOLOGY_COUNTEREXAMPLE",
         "CLUTTER",
         "ISOLATED",
         "HARD_WEATHER",
@@ -404,6 +405,10 @@ def _evaluate(cut, metadata, cfg, *, context=None):
             )
             morph = detect_morphology(s, cfg.morphology, protected=protection)
             morphology = morph.mask
+            if morph.counterexample_mask is not None:
+                a["XQC_MORPHOLOGY_COUNTEREXAMPLE_MASK"] = view.restore(
+                    morph.counterexample_mask
+                ).astype("uint8")
             a["XQC_MORPHOLOGY_OBJECT_ID"] = view.restore(morph.object_id)
             morph.record["local_proxy_policy"] = cfg.morphology.local_weather_policy
             morph.record["local_proxy_conflict_gates"] = int((morphology & local).sum())

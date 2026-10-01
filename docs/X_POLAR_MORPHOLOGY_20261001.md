@@ -282,3 +282,31 @@ c4fc70c先main push后仅同步形态模块到活动源、镜像与发布仍v5�
 branching-render-v1绑定当前已正常发布v5任务ad439bbd（不是旧失败产品），完整RAW/当前QC/形态mask/研究减去mask四栏。505cut4/5两PNG SHA d500918b…/a443e477…本地核验并实际观察：cut4仍可见的长径向进一步覆盖，cut5当前v5已大幅清除，v6再覆盖13个可见原始成员。cut4新mask亦涉及团块附近回波，尚无独立真值，不能称只删污染或将v6直接上线。预览不是正常新v6产品/网页。render/audit SHA dad338bed122d8d9ac0a848754012faec6f7af5bc716f9bb8ae181aacaec58e0。
 
 当前262全XQC-v2测试PASS，ruff/diffcheckPASS，c4fc70c和e07493e gh run list无结果，不称CI绿。IAB截图后getTab恢复仍超时，新增UI仅此前70105一张，累计6实际观察；保持地图复核未完成。正常v5六任务54层已完成但四复核告警保留；radial_source fan model-trial cap部分弃权另需优化。下一步优先完整组件与紧凑天气回波叠加反例、独立S/天气对照及源模块资源诊断，再决定v6候选安装/正常新任务，而非调整全局门限或按方位删图。目标active/小时automation停用/业务可信融合QPE预报不启用。
+
+## 2026-10-02 v7 compact shape counterexamples (default off)
+
+A synthetic compact core attached to an anchored fan reproduces an unsafe v6
+proposal: 587 of 589 core gates selected. Explicit v7 retains original compact
+contours as geometric ambiguity diagnostics before applying whole-object radial
+candidates. It does not label those contours as precipitation or confirmed RF.
+
+Complete native 35/25/15 dBZ contour components are measured in physical XY.
+Declared angular gaps and invalid geometry remain barriers; a measured north
+seam remains adjacency. Compact qualification uses original component support,
+physical covariance and range growth. No hole filling, dilation, station/bearing
+exception or weather-label inheritance is used. A higher contour core does not
+grant its attached lower contour parent protection. Weak mixed components can
+remain ambiguous, including some radial members: independent weather evidence
+is still needed to resolve them. Resource caps and atomic abstention remain.
+
+`compact_counterexamples_enabled` requires explicit v7 and the complete branch
+graph. `XQC_MORPHOLOGY_COUNTEREXAMPLE_MASK` is a native uint8 diagnostic, default
+zero; it does not grant hard-weather or source-kind authority. Existing defaults
+and the installed v5 candidate remain unchanged.
+
+Actual RED/GREEN covers attached cores, north seam, native resolutions, weak
+mixed shapes, clear radial/fan/broken forms, schema dependencies, resource
+abstention and normal QC diagnostics. Scoped XQC-v2 suite: 277 passing, one
+existing NumPy ABI warning. Ruff and diff whitespace checks pass. Read-only
+source and paired audits accept explicit `--compact-counterexamples`; real
+replay and normal publication acceptance are pending. No CI success claimed.

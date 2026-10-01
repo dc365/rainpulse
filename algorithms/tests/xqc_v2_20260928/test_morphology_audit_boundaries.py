@@ -449,3 +449,22 @@ def test_cli_routes_branching_envelopes_as_explicit_read_only_v6(monkeypatch, so
     p = module.policy_for_audit(branching_envelopes=True)
     assert p.version.endswith("v6") and p.branching_envelopes_enabled
     assert p.grouped_envelopes_enabled
+
+
+@pytest.mark.parametrize("source", [False, True])
+def test_cli_routes_compact_counterexamples_as_explicit_read_only_v7(monkeypatch, source):
+    module = audit()
+    calls = []
+    monkeypatch.setattr(
+        module.sys,
+        "argv",
+        ["audit", "--compact-counterexamples"] + (["--source-only"] if source else []),
+    )
+    monkeypatch.setattr(module, "run", lambda stack, **kw: calls.append((False, kw)))
+    monkeypatch.setattr(module, "run_source_only", lambda stack, **kw: calls.append((True, kw)))
+    module.main()
+    assert calls[0][0] == source
+    assert calls[0][1]["compact_counterexamples"] is True
+    p = module.policy_for_audit(compact_counterexamples=True)
+    assert p.version.endswith("v7") and p.compact_counterexamples_enabled
+    assert p.branching_envelopes_enabled

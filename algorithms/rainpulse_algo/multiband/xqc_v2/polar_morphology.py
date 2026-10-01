@@ -26,12 +26,14 @@ class MorphologyPolicy(BaseModel):
         "x-polar-morphology-20261002-v4",
         "x-polar-morphology-20261002-v5",
         "x-polar-morphology-20261002-v6",
+        "x-polar-morphology-20261002-v7",
     ] = "x-polar-morphology-20261001-v1"
     expanding_fans_enabled: bool = False
     anchored_fans_enabled: bool = False
     pulsing_fans_enabled: bool = False
     grouped_envelopes_enabled: bool = False
     branching_envelopes_enabled: bool = False
+    compact_counterexamples_enabled: bool = False
     local_weather_policy: Literal["protect", "joint_review"] = "protect"
     scales_m: tuple[Annotated[float, Field(ge=2000.0, le=20000.0)], ...] = Field(
         default=(5000.0, 10000.0),
@@ -72,6 +74,7 @@ class MorphologyPolicy(BaseModel):
             "x-polar-morphology-20261002-v4",
             "x-polar-morphology-20261002-v5",
             "x-polar-morphology-20261002-v6",
+            "x-polar-morphology-20261002-v7",
         ):
             raise ValueError("expanding fan geometry requires v2 or v3 identity")
         if self.anchored_fans_enabled and (
@@ -81,6 +84,7 @@ class MorphologyPolicy(BaseModel):
                 "x-polar-morphology-20261002-v4",
                 "x-polar-morphology-20261002-v5",
                 "x-polar-morphology-20261002-v6",
+                "x-polar-morphology-20261002-v7",
             )
             or not self.expanding_fans_enabled
         ):
@@ -91,6 +95,7 @@ class MorphologyPolicy(BaseModel):
                 "x-polar-morphology-20261002-v4",
                 "x-polar-morphology-20261002-v5",
                 "x-polar-morphology-20261002-v6",
+                "x-polar-morphology-20261002-v7",
             )
             or not self.anchored_fans_enabled
             or not self.expanding_fans_enabled
@@ -99,12 +104,18 @@ class MorphologyPolicy(BaseModel):
         if self.grouped_envelopes_enabled and self.version not in (
             "x-polar-morphology-20261002-v5",
             "x-polar-morphology-20261002-v6",
+            "x-polar-morphology-20261002-v7",
         ):
             raise ValueError("grouped envelopes require explicit v5 identity")
         if self.branching_envelopes_enabled and (
-            self.version != "x-polar-morphology-20261002-v6" or not self.grouped_envelopes_enabled
+            self.version not in ("x-polar-morphology-20261002-v6", "x-polar-morphology-20261002-v7")
+            or not self.grouped_envelopes_enabled
         ):
             raise ValueError("branching envelopes require explicit v6 grouped identity")
+        if self.compact_counterexamples_enabled and (
+            self.version != "x-polar-morphology-20261002-v7" or not self.branching_envelopes_enabled
+        ):
+            raise ValueError("compact counterexamples require explicit v7 branch identity")
         if (
             not self.scales_m
             or not self.levels_dbz
@@ -125,6 +136,7 @@ class MorphologyEvidence:
     object_id: np.ndarray
     objects: list[dict]
     record: dict
+    counterexample_mask: np.ndarray | None = None
 
 
 def _angular_runs(occupied, sweep):
@@ -196,6 +208,95 @@ def detect(sweep, policy, *, protected=None):
         for lo, hi in runs(~known_native[row]):
             if (hi - lo) * sweep.dr > p.maximum_unknown_gap_m:
                 long_unknown[row, lo:hi] = True
+
+    counterexamples = np.zeros(shape, bool)
+    compact_records = []
+    if p.compact_counterexamples_enabled:
+        from scipy.ndimage import find_objects, label
+
+        # Complete original contours supply counterexamples, not weather truth.
+        # A local compact body attached to a radial envelope must not inherit
+        # the whole envelope's radial decision. No hole filling or dilation.
+        gap_rows = np.flatnonzero(sweep.gap_after)
+        start = (int(gap_rows[0]) + 1) % shape[0] if len(gap_rows) else 0
+        order = (np.arange(shape[0]) + start) % shape[0]
+        segments = np.split(order, np.flatnonzero(sweep.gap_after[order[:-1]]) + 1)
+        for level in (35.0, 25.0, 15.0):
+            charge(shape[0] * shape[1])
+            signal = raw & (z >= level)
+            labels = np.zeros(shape, np.int32)
+            total = 0
+            for rows in segments:
+                found, count = label(signal[rows])
+                if total + count > p.maximum_objects:
+                    raise ResourceLimit("morphology compact-contour object budget exceeded")
+                found[found > 0] += total
+                labels[rows] = found
+                total += count
+            # A measured north seam is adjacency; declared gaps stay barriers.
+            if not len(gap_rows) and sweep.good[0] and sweep.good[-1]:
+                parent = list(range(total + 1))
+
+                def root_label(index):
+                    while parent[index] != index:
+                        charge(1)
+                        parent[index] = parent[parent[index]]
+                        index = parent[index]
+                    return index
+
+                active = (labels[0] > 0) & (labels[-1] > 0)
+                for a, b in np.unique(
+                    np.stack([labels[0, active], labels[-1, active]], axis=1), axis=0
+                ):
+                    parent[root_label(int(a))] = root_label(int(b))
+                charge(shape[0] * shape[1])
+                canonical = np.array([root_label(i) for i in range(total + 1)], np.int32)
+                labels = canonical[labels]
+            charge(shape[0] * shape[1])
+            for number, box in enumerate(find_objects(labels), start=1):
+                if box is None:
+                    continue
+                charge((box[0].stop - box[0].start) * (box[1].stop - box[1].start))
+                rr, cc = np.nonzero(labels[box] == number)
+                rr += box[0].start
+                cc += box[1].start
+                # A compact high-contour core does not grant its attached
+                # lower-intensity parent authority to retain radial tails.
+                if counterexamples[rr, cc].any():
+                    continue
+                if len(np.unique(rr)) < 3 or len(np.unique(cc)) < 8:
+                    continue
+                begin, end = float(sweep.ranges[cc.min()]), float(sweep.ranges[cc.max()])
+                if end - begin + sweep.dr < p.minimum_span_m / 2:
+                    continue
+                if end / max(begin, sweep.dr) >= p.minimum_fan_range_ratio:
+                    continue
+                theta = np.radians(sweep.azimuth[rr])
+                xy = np.stack(
+                    [np.sin(theta) * sweep.ranges[cc], np.cos(theta) * sweep.ranges[cc]], axis=1
+                )
+                centered = xy - xy.mean(axis=0)
+                eigenvalues = np.linalg.eigvalsh(centered.T @ centered / len(rr))
+                if eigenvalues[0] <= 0:
+                    continue
+                ratio = float(np.sqrt(eigenvalues[1] / eigenvalues[0]))
+                if ratio > 3.0 or 2 * np.sqrt(eigenvalues[0]) < p.minimum_range_m:
+                    continue
+                if len(compact_records) >= p.maximum_objects:
+                    raise ResourceLimit("morphology compact-counterexample record budget exceeded")
+                counterexamples[rr, cc] = True
+                compact_records.append(
+                    dict(
+                        kind="compact_reflectivity_counterexample",
+                        level_dbz=level,
+                        range_begin_m=begin,
+                        range_end_m=end,
+                        member_gates=len(rr),
+                        physical_axis_ratio=ratio,
+                        weather_truth=False,
+                        source_verified=False,
+                    )
+                )
 
     def exterior_flank(start, direction, boundary, cols, strength, active):
         known = np.zeros(len(cols), bool)
@@ -419,7 +520,7 @@ def detect(sweep, policy, *, protected=None):
         for entry in entries:
             rows = entry["rows"]
             cols = entry["window_cols"]
-            block = raw[np.ix_(rows, cols)]
+            block = raw[np.ix_(rows, cols)] & ~counterexamples[np.ix_(rows, cols)]
             old = mask[np.ix_(rows, cols)]
             mask[np.ix_(rows, cols)] = old | block
             ii = ids[np.ix_(rows, cols)]
@@ -672,7 +773,11 @@ def detect(sweep, policy, *, protected=None):
             doppler_required=False,
             grouped_envelopes_enabled=p.grouped_envelopes_enabled,
             branching_envelopes_enabled=p.branching_envelopes_enabled,
+            compact_counterexamples_enabled=p.compact_counterexamples_enabled,
+            compact_counterexample_gates=int(counterexamples.sum()),
+            compact_counterexamples=compact_records,
             objects=records,
             review_objects=reviews,
         ),
+        counterexample_mask=counterexamples,
     )

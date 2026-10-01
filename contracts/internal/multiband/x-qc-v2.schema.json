@@ -2457,7 +2457,8 @@
             "x-polar-morphology-20261002-v3",
             "x-polar-morphology-20261002-v4",
             "x-polar-morphology-20261002-v5",
-            "x-polar-morphology-20261002-v6"
+            "x-polar-morphology-20261002-v6",
+            "x-polar-morphology-20261002-v7"
           ]
         },
         "local_weather_policy": {
@@ -2626,6 +2627,11 @@
           "default": false,
           "type": "boolean",
           "title": "Branching Envelopes Enabled"
+        },
+        "compact_counterexamples_enabled": {
+          "default": false,
+          "type": "boolean",
+          "title": "Compact Counterexamples Enabled"
         }
       },
       "title": "MorphologyPolicy",
@@ -2650,7 +2656,8 @@
                   "x-polar-morphology-20261002-v3",
                   "x-polar-morphology-20261002-v4",
                   "x-polar-morphology-20261002-v5",
-                  "x-polar-morphology-20261002-v6"
+                  "x-polar-morphology-20261002-v6",
+                  "x-polar-morphology-20261002-v7"
                 ]
               }
             },
@@ -2677,7 +2684,8 @@
                   "x-polar-morphology-20261002-v3",
                   "x-polar-morphology-20261002-v4",
                   "x-polar-morphology-20261002-v5",
-                  "x-polar-morphology-20261002-v6"
+                  "x-polar-morphology-20261002-v6",
+                  "x-polar-morphology-20261002-v7"
                 ]
               },
               "expanding_fans_enabled": {
@@ -2707,7 +2715,8 @@
                 "enum": [
                   "x-polar-morphology-20261002-v4",
                   "x-polar-morphology-20261002-v5",
-                  "x-polar-morphology-20261002-v6"
+                  "x-polar-morphology-20261002-v6",
+                  "x-polar-morphology-20261002-v7"
                 ]
               },
               "anchored_fans_enabled": {
@@ -2740,7 +2749,8 @@
               "version": {
                 "enum": [
                   "x-polar-morphology-20261002-v5",
-                  "x-polar-morphology-20261002-v6"
+                  "x-polar-morphology-20261002-v6",
+                  "x-polar-morphology-20261002-v7"
                 ]
               }
             },
@@ -2763,7 +2773,10 @@
           "then": {
             "properties": {
               "version": {
-                "const": "x-polar-morphology-20261002-v6"
+                "enum": [
+                  "x-polar-morphology-20261002-v6",
+                  "x-polar-morphology-20261002-v7"
+                ]
               },
               "grouped_envelopes_enabled": {
                 "const": true
@@ -2772,6 +2785,32 @@
             "required": [
               "version",
               "grouped_envelopes_enabled"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "compact_counterexamples_enabled": {
+                "const": true
+              }
+            },
+            "required": [
+              "compact_counterexamples_enabled"
+            ]
+          },
+          "then": {
+            "properties": {
+              "version": {
+                "const": "x-polar-morphology-20261002-v7"
+              },
+              "branching_envelopes_enabled": {
+                "const": true
+              }
+            },
+            "required": [
+              "version",
+              "branching_envelopes_enabled"
             ]
           }
         }

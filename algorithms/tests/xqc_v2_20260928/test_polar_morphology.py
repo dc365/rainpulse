@@ -1061,3 +1061,154 @@ def test_branch_graph_reuses_original_measurements_within_frozen_work_limit():
     assert ev.mask[body].all()
     assert not ev.mask[~body].any()
     assert ev.record["work"] < policy.maximum_work
+
+
+def compact_policy():
+    return branching_policy().model_copy(
+        update={
+            "version": "x-polar-morphology-20261002-v7",
+            "compact_counterexamples_enabled": True,
+        }
+    )
+
+
+@pytest.mark.parametrize("bearing", [100.0, 359.0])
+def test_radial_fan_with_attached_compact_core_preserves_core_and_cleans_external_radial(bearing):
+    s, radial = scene("fan", bearing=bearing)
+    diff = (s.azimuth[:, None] - bearing + 180) % 360 - 180
+    compact = ((diff - 9) / 6) ** 2 + ((s.ranges[None, :] - 32000) / 8000) ** 2 <= 1
+    z, sn = s.fields["DBZH"].copy(), s.fields["SNR"].copy()
+    z[compact], sn[compact] = 38, 15
+    s = replace(s, fields={**s.fields, "DBZH": z, "SNR": sn})
+    old = detect(s, branching_policy())
+    assert (old.mask & compact).any()  # witnessed contamination of a compact core
+    before = s.digest
+    new = detect(s, compact_policy())
+    assert not new.mask[compact].any()
+    assert new.mask[radial & ~compact].all()
+    assert new.counterexample_mask[compact].all()
+    assert s.digest == before
+
+
+@pytest.mark.parametrize("dr,da", [(75.0, 0.5), (1000.0, 2.0)])
+def test_compact_counterexample_uses_physical_shape_across_native_resolutions(dr, da):
+    s, radial = scene("fan", dr=dr, da=da, elevation=9.88)
+    diff = (s.azimuth[:, None] - 100 + 180) % 360 - 180
+    core = ((diff - 9) / 6) ** 2 + ((s.ranges[None, :] - 32000) / 8000) ** 2 <= 1
+    z, sn = s.fields["DBZH"].copy(), s.fields["SNR"].copy()
+    z[core], sn[core] = 38, 15
+    s = replace(s, fields={**s.fields, "DBZH": z, "SNR": sn})
+    ev = detect(s, compact_policy())
+    assert ev.counterexample_mask[core].all()
+    assert not ev.mask[core].any()
+    assert ev.mask[radial & ~core].all()
+
+
+@pytest.mark.parametrize("amplitude", [18, 23, 28])
+def test_weak_compact_overlap_is_retained_as_a_whole_ambiguous_original_component(amplitude):
+    s, radial = scene("fan")
+    diff = (s.azimuth[:, None] - 100 + 180) % 360 - 180
+    core = ((diff - 9) / 6) ** 2 + ((s.ranges[None, :] - 32000) / 8000) ** 2 <= 1
+    z, sn = s.fields["DBZH"].copy(), s.fields["SNR"].copy()
+    z[core], sn[core] = amplitude, 15
+    s = replace(s, fields={**s.fields, "DBZH": z, "SNR": sn})
+    ev = detect(s, compact_policy())
+    assert not ev.mask[core].any()
+    assert ev.counterexample_mask[core].all()
+    # Lower contour can contain overlapping radial members too. Keep that
+    # original mixed component; a compact core is not independent weather truth.
+    external = radial & ~ev.counterexample_mask
+    assert external.any() and ev.mask[external].all()
+    assert all(not record["weather_truth"] for record in ev.record["compact_counterexamples"])
+
+
+@pytest.mark.parametrize("kind", ["line", "fan", "broken"])
+def test_compact_counterexamples_do_not_retain_complete_original_radial_forms(kind):
+    s, body = scene(kind)
+    ev = detect(s, compact_policy())
+    assert not ev.counterexample_mask.any()
+    assert ev.mask[body].all()
+
+
+def test_compact_counterexamples_default_off_explicit_schema_and_atomic_budget():
+    import json
+    from pathlib import Path
+
+    import jsonschema
+
+    schema = json.loads(
+        (
+            Path(__file__).resolve().parents[3] / "contracts/internal/multiband/x-qc-v2.schema.json"
+        ).read_text()
+    )["$defs"]["MorphologyPolicy"]
+    assert not MorphologyPolicy().compact_counterexamples_enabled
+    jsonschema.validate(compact_policy().model_dump(mode="json"), schema)
+    invalid = compact_policy().model_dump(mode="json")
+    invalid["version"] = "x-polar-morphology-20261002-v6"
+    with pytest.raises(ValueError):
+        MorphologyPolicy.model_validate(invalid)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(invalid, schema)
+    s, _ = scene("fan")
+    with pytest.raises(ResourceLimit):
+        detect(s, compact_policy().model_copy(update={"maximum_work": 1}))
+
+
+def test_complete_compact_core_wraps_measured_north_seam_and_excludes_invalid_geometry():
+    s, _ = scene("fan", bearing=359.0)
+    diff = (s.azimuth[:, None] - 359 + 180) % 360 - 180
+    core = (diff / 6) ** 2 + ((s.ranges[None, :] - 32000) / 8000) ** 2 <= 1
+    z, sn = s.fields["DBZH"].copy(), s.fields["SNR"].copy()
+    z[core], sn[core] = 38, 15
+    s = replace(s, fields={**s.fields, "DBZH": z, "SNR": sn})
+    ev = detect(s, compact_policy())
+    assert ev.counterexample_mask[core].all()
+    assert not ev.mask[core].any()
+    assert any(
+        record["member_gates"] == int(core.sum()) for record in ev.record["compact_counterexamples"]
+    )
+    good = s.good.copy()
+    good[0] = False
+    altered = detect(replace(s, good=good), compact_policy())
+    assert not altered.counterexample_mask[0].any()
+
+
+def test_compact_counterexamples_enter_normal_qc_as_diagnostic_not_confirmed_weather():
+    from rainpulse_algo.multiband.model import Sweep as XCut
+    from rainpulse_algo.multiband.model import Volume
+    from rainpulse_algo.multiband.quality import x_qc
+
+    from .helpers import config, fixture, station
+
+    s, radial = scene("fan")
+    diff = (s.azimuth[:, None] - 100 + 180) % 360 - 180
+    core = ((diff - 9) / 6) ** 2 + ((s.ranges[None, :] - 32000) / 8000) ** 2 <= 1
+    z, sn = s.fields["DBZH"].copy(), s.fields["SNR"].copy()
+    z[core], sn[core] = 38, 15
+    fields = {
+        "DBZH": z,
+        "SNR": sn,
+        "OBSERVED_MASK": np.ones(s.shape, "uint8"),
+        "NO_ECHO_MASK": np.zeros(s.shape, "uint8"),
+    }
+    cut = XCut(0, s.azimuth, s.ranges, s.elevation, 1787875200 + s.ray_time_s, fields)
+    parent, _ = fixture("empty")
+    cfg = config(
+        mode="quarantine",
+        receiver_enabled=False,
+        radial_objects_enabled=False,
+        clutter_enabled=False,
+        isolation_enabled=False,
+        morphology=compact_policy()
+        .model_copy(update={"local_weather_policy": "joint_review"})
+        .model_dump(),
+    )
+    product = x_qc(Volume(parent.metadata, [cut]), station(cfg), "b" * 64)
+    a = product.sweeps[0].fields
+    assert a["XQC_MORPHOLOGY_COUNTEREXAMPLE_MASK"][core].all()
+    assert not a["XQC_MORPHOLOGY_MASK"][core].any()
+    assert np.isfinite(a["DBZH_QC"][core]).all()
+    assert not a["XQC_HARD_WEATHER_MASK"].any()
+    assert not a["XQC_SOURCE_KIND"].any()
+    assert not np.isfinite(a["DBZH_QC"][radial & ~core]).any()
+    np.testing.assert_array_equal(a["DBZH_RAW"], z)

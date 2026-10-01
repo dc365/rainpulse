@@ -174,6 +174,11 @@ def main():
         action="store_true",
         help="Explicit v6 complete original split/join graph; read-only",
     )
+    parser.add_argument(
+        "--compact-counterexamples",
+        action="store_true",
+        help="Explicit v7 compact shape ambiguity protection; read-only",
+    )
     args = parser.parse_args()
     with ExitStack() as stack:
         if args.source_only:
@@ -183,16 +188,30 @@ def main():
                 or args.anchored_fans
                 or args.pulsing_fans
                 or args.grouped_envelopes
-                or args.branching_envelopes,
+                or args.branching_envelopes
+                or args.compact_counterexamples,
                 anchored_fans=args.anchored_fans
                 or args.pulsing_fans
                 or args.grouped_envelopes
-                or args.branching_envelopes,
+                or args.branching_envelopes
+                or args.compact_counterexamples,
                 pulsing_fans=args.pulsing_fans
                 or args.grouped_envelopes
-                or args.branching_envelopes,
-                grouped_envelopes=args.grouped_envelopes or args.branching_envelopes,
-                **({"branching_envelopes": True} if args.branching_envelopes else {}),
+                or args.branching_envelopes
+                or args.compact_counterexamples,
+                grouped_envelopes=args.grouped_envelopes
+                or args.branching_envelopes
+                or args.compact_counterexamples,
+                **(
+                    {"branching_envelopes": True}
+                    if args.branching_envelopes or args.compact_counterexamples
+                    else {}
+                ),
+                **(
+                    {"compact_counterexamples": True}
+                    if args.compact_counterexamples
+                    else {}
+                ),
             )
         else:
             run(
@@ -201,16 +220,30 @@ def main():
                 or args.anchored_fans
                 or args.pulsing_fans
                 or args.grouped_envelopes
-                or args.branching_envelopes,
+                or args.branching_envelopes
+                or args.compact_counterexamples,
                 anchored_fans=args.anchored_fans
                 or args.pulsing_fans
                 or args.grouped_envelopes
-                or args.branching_envelopes,
+                or args.branching_envelopes
+                or args.compact_counterexamples,
                 pulsing_fans=args.pulsing_fans
                 or args.grouped_envelopes
-                or args.branching_envelopes,
-                grouped_envelopes=args.grouped_envelopes or args.branching_envelopes,
-                **({"branching_envelopes": True} if args.branching_envelopes else {}),
+                or args.branching_envelopes
+                or args.compact_counterexamples,
+                grouped_envelopes=args.grouped_envelopes
+                or args.branching_envelopes
+                or args.compact_counterexamples,
+                **(
+                    {"branching_envelopes": True}
+                    if args.branching_envelopes or args.compact_counterexamples
+                    else {}
+                ),
+                **(
+                    {"compact_counterexamples": True}
+                    if args.compact_counterexamples
+                    else {}
+                ),
             )
 
 
@@ -296,10 +329,13 @@ def policy_for_audit(
     pulsing_fans=False,
     grouped_envelopes=False,
     branching_envelopes=False,
+    compact_counterexamples=False,
 ):
     return MorphologyPolicy(
         version=(
-            "x-polar-morphology-20261002-v6"
+            "x-polar-morphology-20261002-v7"
+            if compact_counterexamples
+            else "x-polar-morphology-20261002-v6"
             if branching_envelopes
             else "x-polar-morphology-20261002-v5"
             if grouped_envelopes
@@ -315,14 +351,22 @@ def policy_for_audit(
         or anchored_fans
         or pulsing_fans
         or grouped_envelopes
-        or branching_envelopes,
+        or branching_envelopes
+        or compact_counterexamples,
         anchored_fans_enabled=anchored_fans
         or pulsing_fans
         or grouped_envelopes
-        or branching_envelopes,
-        pulsing_fans_enabled=pulsing_fans or grouped_envelopes or branching_envelopes,
-        grouped_envelopes_enabled=grouped_envelopes or branching_envelopes,
-        branching_envelopes_enabled=branching_envelopes,
+        or branching_envelopes
+        or compact_counterexamples,
+        pulsing_fans_enabled=pulsing_fans
+        or grouped_envelopes
+        or branching_envelopes
+        or compact_counterexamples,
+        grouped_envelopes_enabled=grouped_envelopes
+        or branching_envelopes
+        or compact_counterexamples,
+        branching_envelopes_enabled=branching_envelopes or compact_counterexamples,
+        compact_counterexamples_enabled=compact_counterexamples,
         local_weather_policy="joint_review",
     )
 
@@ -335,6 +379,7 @@ def run_source_only(
     pulsing_fans=False,
     grouped_envelopes=False,
     branching_envelopes=False,
+    compact_counterexamples=False,
 ):
     """Bounded raw-only evidence; never invent old survivors or weather labels."""
     import os
@@ -377,6 +422,7 @@ def run_source_only(
         pulsing_fans=pulsing_fans,
         grouped_envelopes=grouped_envelopes,
         branching_envelopes=branching_envelopes,
+        compact_counterexamples=compact_counterexamples,
     )
     cuts = []
     for number in numbers:
@@ -484,6 +530,7 @@ def run(
     pulsing_fans=False,
     grouped_envelopes=False,
     branching_envelopes=False,
+    compact_counterexamples=False,
 ):
     from rainpulse_algo.multiband.model import Network
     import os
@@ -519,6 +566,7 @@ def run(
         pulsing_fans=pulsing_fans,
         grouped_envelopes=grouped_envelopes,
         branching_envelopes=branching_envelopes,
+        compact_counterexamples=compact_counterexamples,
     )
     cuts = []
     from rainpulse_algo.multiband.adapters import read_x_qc_sweep
