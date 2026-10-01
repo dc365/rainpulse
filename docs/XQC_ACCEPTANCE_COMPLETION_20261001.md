@@ -31,6 +31,9 @@
 ## 完整原生回放与容量恢复
 
 - ZF702 08:08:25正常任务022987e3…在第四层进入质控前因duplicate azimuth FAILED，旧凭据保留。定位为X单站stream_managed入口误用严格空间投影校验；x_qc本身已有native_polar_qc重复射线支持，投影已有代表射线选择。仅将该入口显式改为native_polar_qc=True，不放宽S或融合校验、不修改RAW。完整Executor→质控→PNG两层回归先红后绿，并逐行核对原始反射率/方位角/射线时间。相关33项通过；历史reference兼容用例3失败（旧参考Network不兼容当前配置），2个numba用例因本地未安装跳过，未将其算作通过。
+- 05db916已main push后105部署：镜像xqc-duplicate-05db916-mb基于实际53beaba父镜像，仅stream_managed一行变化；网络bee28feb不变，四Worker ready，CAS选择新指纹10700d99e3c9f52bef35f7e1d77c6722a7679f68e8a7f6a46a78123068b6e768。原FAILED任务不可变；新正常计划保留相同源URI/完成标记/完整SHA，新任务19f77464-731d-4544-941e-2e72c1bf027a、run5720fa32-2adc-4e48-a720-c638845cf1c3已SUCCEEDED。
+- 第六体扫9层(0/2/4/5/6/7/8/9/10)全部原生产品核验通过：第5层确有1个重复方位角，RAW/azimuth/range/elevation/原生秒时间全部逐值一致；每层数值文件/证据SHA、4张原始/质控PPI与地图PNG已核验。withheld-visible、withheld-admitted、hard-weather-rejected均0；这些是内部不变量，不是独立降水误删率。回执105部署.build/xqc-acceptance-20261001/zf702-0808-duplicate-verified.jsonl。浏览器自动化两次超时，本轮未完成该体扫真实UI复核，不用PNG核验替代UI。
+- raw-summary-03关联冻结5466份：254份有回执，246文件机械完成，5220待完成，无已完成文件FAIL；八路原进程持续运行。完整日、两层预算和独立天气/界面验收仍未完成。
 
 - raw-v1已冻结5466份文件的完整字节SHA，manifest为dd296e75686373120d3498e5f78d67709b5d3a9da05fba7e176060726fddbaf7。解码时间和六分钟覆盖仍待全量验证。
 - pilot-v3-bound已结束：247层机械门通过，2层FAIL均为ZF702原问题体扫2/9动作预算弃权；四路退出0不等于验收通过。两层拟排除比例73.49%/73.72%超过原70%保护线，源模块完整计算，无资源弃权。budget-source-probe.jsonl保留逐模块证据，不能直接提高预算或把形态模型当独立降水真值。
