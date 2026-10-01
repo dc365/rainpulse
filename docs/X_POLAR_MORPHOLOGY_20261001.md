@@ -166,3 +166,8 @@ ZF505独立来源反证v2成功，回执SHA `7836b1616aa7bc8fb4681ab320e49b66672
 完整图显示残留尚未解决：ZF505 cut4一完整169.6km对象宽增长2.96足迹、回缩0，但中心漂移1.48，故v2仍不合格；另166.6km对象宽增长约8足迹、中心漂移2.00，同样未通过。cut5一个170km对象中心0.49但中途回缩3.07足迹、总增长0，不能直接按扩宽分支通过。下一步须用完整边界轨迹/持续核心解释不对称扩宽及回缩，不能单纯调高中心/边界容差、切掉失败前缀重启尾端或丢弃天气反例。
 
 可复验只读入口新增`python scripts/audit_x_polar_morphology.py --expanding-fans < frozen-task.json`；没有历史native产品时加`--source-only`。必须在安装对应v2模块且绑定只读冻源对象访问的环境执行。CLI显式选择v2，默认v1；两类审计的原有SHA/资源/身份/缺项语义保留，无发布动作。3项CLI实际RED（原选项/路由不存在）后GREEN；相关XQC-v2整套209测试通过，既有NumPy二进制兼容警告1，ruff/diff-check通过，不声称全CI绿色。目标active，生产尚未启用v2/新正常图件，不以研究预览代替地图验收。
+
+
+CLI安装烟测已实际完成：4a8a9f2先push后同步活动scripts/audit_x_polar_morphology.py，SHA01f397ffbf3c790c27f958f1400852c3ab7c10e238b16c1785068bead879a8d0；独立只读容器绑定活动v2模块，对同一ZF50505冻源分别跑source-only与paired两种--expanding-fans入口，均exit0/9层，逐层提名计数与之前冻结wrapper回放一致。source输出SHA946a4d8c744fa12e0394122a4ae683cc59bd6b17eb2793a275899548a8d55c8e；paired输出SHA43ce63544e3e890b9b2cea24c6a6962b7a015342a46519018696f7a90bdf9273。JSON/receipt已下载本地并验证。未新增正常产品/唯一源样本计数。
+
+最终现场核对四X Worker均healthy，容器内真实形态SHA仍2b27c36f（v1），网络仍288690f1；新的活动源文件不会自动替换运行镜像。没有悄悄启用v2或把研究预览当网页更新。下轮优先验证完整稳定边界锚定/持续核心假说，再决定正常候选子镜像/配置及重算范围。
