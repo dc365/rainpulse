@@ -484,3 +484,24 @@ def test_draft_unknown_azimuth_resolution_keeps_health_unknown(tmp_path: Path) -
     assert health.value['expected_radial_count'] == 0
     assert health.value['scan_completeness'] == 0
     assert 'SCAN_GEOMETRY_UNKNOWN' in health.value['health_reasons']
+
+
+def test_native_cut_sampling_parameters_survive_normalization(tmp_path: Path) -> None:
+    config = load_radar_config(make_config(tmp_path))
+    volume = decode_fmt_volume(make_fmt_fixture(tmp_path), config)
+    changed = replace(volume.cuts[0], waveform=8, process_mode=1, prf1_hz=1200., prf2_hz=800.)
+    volume = replace(volume, cuts=(changed,*volume.cuts[1:]))
+    objects=build_zarr_store(volume,config,asset_id=UUID(int=1),source_uri='s3://radar/raw')
+    store=MemoryStore();store.update(objects);root=zarr.open_group(store=store,mode='r')
+    sampling=root['sweep_000'].attrs['native_cut_sampling']
+    assert sampling['version']=='native-cut-sampling-v1'
+    assert sampling['input_sha256']==volume.input_sha256
+    assert sampling['radar_config_version']==config.config_version
+    assert sampling['source_sweep_number']==volume.sweeps[0].source_sweep_number
+    assert sampling['waveform_code']==8 and sampling['process_mode_code']==1
+    assert sampling['prf1_hz']==1200 and sampling['prf2_hz']==800
+    assert sampling['log_resolution_m']==changed.log_resolution_m
+    assert sampling['doppler_resolution_m']==changed.doppler_resolution_m
+    assert sampling['nyquist_velocity_m_s']==changed.nyquist_velocity_m_s
+    assert sampling['semantic_verification'] is False
+    np.testing.assert_array_equal(root['sweep_000/DBZH'][:],volume.sweeps[0].fields['DBZH'])

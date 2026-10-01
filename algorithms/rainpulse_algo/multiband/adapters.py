@@ -135,6 +135,36 @@ def ray_seconds(values: np.ndarray, units: str | None) -> np.ndarray:
     return values.astype(np.float64) * scales[unit] + epoch(origin)
 
 
+def _native_cut_sampling(attrs, group):
+    """Preserve checked cut identity; never promote opaque waveform semantics."""
+    record = group.attrs.get("native_cut_sampling")
+    if record is None:
+        return None
+    if (not isinstance(record, dict)
+            or record.get("version") != "native-cut-sampling-v1"
+            or record.get("semantic_verification") is not False):
+        raise ValueError("invalid native cut sampling record")
+    raw_sha = record.get("input_sha256")
+    if (not isinstance(raw_sha, str) or len(raw_sha) != 64
+            or any(c not in "0123456789abcdef" for c in raw_sha)
+            or raw_sha != attrs.get("input_sha256")
+            or not record.get("radar_config_version")
+            or record["radar_config_version"] != attrs.get("radar_config_version")
+            or record.get("source_sweep_number") != group.attrs.get("source_sweep_number")):
+        raise ValueError("native cut sampling identity differs from source")
+    for key in ("source_sweep_number", "process_mode_code", "waveform_code"):
+        if type(record.get(key)) is not int:
+            raise ValueError("native cut sampling integer code required")
+    for key in ("prf1_hz", "prf2_hz", "log_resolution_m", "doppler_resolution_m", "nyquist_velocity_m_s"):
+        value = record.get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not np.isfinite(value):
+            raise ValueError("native cut sampling finite measurement required")
+    if ("nyquist_velocity_m_s" in group.attrs
+            and record["nyquist_velocity_m_s"] != group.attrs["nyquist_velocity_m_s"]):
+        raise ValueError("native cut sampling Nyquist differs from sweep")
+    return dict(record)
+
+
 def from_group(
     root,
     station: Station,
@@ -170,6 +200,7 @@ def from_group(
     if np.prod(numbers.shape) > MAX_SWEEPS:
         raise ValueError("too many native sweeps")
     result = []
+    sampling = {}
     byte_count, gate_count = 0, 0
     for number in numbers[:]:
         number = int(number)
@@ -177,6 +208,9 @@ def from_group(
         field = "DBZH_RAW" if station.source == "s_qc_zarr" else "DBZH"
         if field not in g:
             continue  # No reflectivity is manufactured for Doppler-only cuts.
+        native_sampling = _native_cut_sampling(attrs, g)
+        if native_sampling is not None:
+            sampling[str(number)] = native_sampling
         arr = g[field]
         if (
             len(arr.shape) != 2
@@ -289,6 +323,8 @@ def from_group(
         "qc_pipeline_version": attrs.get("qc_pipeline_version"),
         "no_echo_semantics": "explicit_mask_or_unknown_no_return",
     }
+    if sampling:
+        metadata["native_cut_sampling"] = sampling
     copy_path_provenance(attrs, metadata)
     # If a precise ingest availability exists it may strengthen, never weaken,
     # the catalog's availability cutoff.
@@ -366,6 +402,7 @@ def read_x_qc_sweep(objects: dict[str, bytes], station: Station, source: dict, s
     group = root[group_name]
     if "DBZH" not in group:
         return None, 0
+    native_sampling = _native_cut_sampling(attrs, group)
     reflectivity = group["DBZH"]
     if (
         len(reflectivity.shape) != 2
@@ -427,6 +464,8 @@ def read_x_qc_sweep(objects: dict[str, bytes], station: Station, source: dict, s
                 "phase_anchor_verified": _normalized_phase_anchor(attrs, station)[0],
                 "pia_at_first_gate_db": _normalized_phase_anchor(attrs, station)[1],
                 "no_echo_semantics": "explicit_mask_or_unknown_no_return"}
+    if native_sampling is not None:
+        metadata["native_cut_sampling"] = {str(sweep_number): native_sampling}
     copy_path_provenance(attrs, metadata)
     sweep = Sweep(sweep_number, np.asarray(group["azimuth"][:], dtype=float), np.asarray(group["range"][:], dtype=float),
                   np.asarray(group["elevation"][:], dtype=float),

@@ -44,3 +44,54 @@ def test_actual_sdk_roundtrip_preserves_path_inputs(streaming):
     out = x_qc(got, s, SHA)
     assert out.sweeps[0].fields['PATH_VALID_MASK'].any()
     np.testing.assert_array_equal(got.sweeps[0].fields['DBZH'], v.sweeps[0].fields['DBZH'])
+
+
+@pytest.mark.parametrize('streaming', [False,True])
+def test_native_sampling_roundtrip_retains_cut_identity_without_promotion(streaming):
+    s,v,root,store,source=fixture()
+    root.attrs.update(input_sha256='a'*64,radar_config_version='native-test')
+    sampling={'version':'native-cut-sampling-v1','input_sha256':'a'*64,'radar_config_version':'native-test','source_sweep_number':10,'process_mode_code':1,'waveform_code':8,'prf1_hz':1200.,'prf2_hz':800.,'log_resolution_m':75.,'doppler_resolution_m':75.,'nyquist_velocity_m_s':19.3,'semantic_verification':False}
+    root['sweep_000'].attrs.update(source_sweep_number=10,native_cut_sampling=sampling)
+    if streaming:
+        got,_=read_x_qc_sweep(dict(store),s,source,0,asset_sha256=SHA,maximum_bytes=10**7)
+    else:
+        got=from_group(root,s,source,asset_sha256=SHA,maximum_bytes=10**7)
+    assert got.metadata['native_cut_sampling']=={'0':sampling}
+    assert got.metadata.get('doppler_verification_id') is None
+    assert got.metadata.get('doppler_waveform') is None
+    np.testing.assert_array_equal(got.sweeps[0].fields['DBZH'],v.sweeps[0].fields['DBZH'])
+
+
+@pytest.mark.parametrize('mismatch', ['input_sha256','radar_config_version','source_sweep_number'])
+def test_native_sampling_rejects_mismatched_identity(mismatch):
+    s,v,root,store,source=fixture()
+    root.attrs.update(input_sha256='a'*64,radar_config_version='native-test')
+    sampling={'version':'native-cut-sampling-v1','input_sha256':'a'*64,'radar_config_version':'native-test','source_sweep_number':10,'process_mode_code':1,'waveform_code':8,'prf1_hz':1200.,'prf2_hz':800.,'log_resolution_m':75.,'doppler_resolution_m':75.,'nyquist_velocity_m_s':19.3,'semantic_verification':False}
+    sampling[mismatch]=11 if mismatch=='source_sweep_number' else 'wrong'
+    root['sweep_000'].attrs.update(source_sweep_number=10,native_cut_sampling=sampling)
+    with pytest.raises(ValueError,match='native cut sampling'):
+        read_x_qc_sweep(dict(store),s,source,0,asset_sha256=SHA,maximum_bytes=10**7)
+
+
+@pytest.mark.parametrize('streaming', [False,True])
+def test_legacy_asset_without_sampling_does_not_invent_per_cut_metadata(streaming):
+    s,v,root,store,source=fixture()
+    if streaming:
+        got,_=read_x_qc_sweep(dict(store),s,source,0,asset_sha256=SHA,maximum_bytes=10**7)
+    else:
+        got=from_group(root,s,source,asset_sha256=SHA,maximum_bytes=10**7)
+    assert 'native_cut_sampling' not in got.metadata
+
+
+@pytest.mark.parametrize('invalid', ['boolean_waveform','nonfinite_prf','promoted','different_nyquist'])
+def test_native_sampling_rejects_invalid_measurements_and_promotion(invalid):
+    s,v,root,store,source=fixture()
+    root.attrs.update(input_sha256='a'*64,radar_config_version='native-test')
+    sampling={'version':'native-cut-sampling-v1','input_sha256':'a'*64,'radar_config_version':'native-test','source_sweep_number':10,'process_mode_code':1,'waveform_code':8,'prf1_hz':1200.,'prf2_hz':800.,'log_resolution_m':75.,'doppler_resolution_m':75.,'nyquist_velocity_m_s':19.3,'semantic_verification':False}
+    if invalid=='boolean_waveform':sampling['waveform_code']=True
+    elif invalid=='nonfinite_prf':sampling['prf1_hz']=float('nan')
+    elif invalid=='promoted':sampling['semantic_verification']=True
+    else:root['sweep_000'].attrs['nyquist_velocity_m_s']=10.
+    root['sweep_000'].attrs.update(source_sweep_number=10,native_cut_sampling=sampling)
+    with pytest.raises(ValueError,match='native cut sampling'):
+        read_x_qc_sweep(dict(store),s,source,0,asset_sha256=SHA,maximum_bytes=10**7)

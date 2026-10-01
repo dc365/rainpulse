@@ -95,3 +95,20 @@ archived raw input hash. A missing or malformed header does not inherit a
 draft hardware width. Phased-array receiver/transmitter widths do not imply
 an equivalent site-wide contract. Legacy objects without this attribute remain
 readable but provide no action-grade upper-beam verification through it.
+
+## Native cut sampling evidence
+
+Each newly decoded `sweep_NNN` may carry `native_cut_sampling` with version
+`native-cut-sampling-v1`. It preserves the source cut number, process-mode and
+waveform integer codes, PRF1/PRF2 in Hz, log/Doppler gate spacing in metres,
+and source Nyquist velocity in m/s. The record also binds the raw input SHA-256
+and decoder configuration version. Negative sentinel values remain recorded;
+opaque waveform codes are not interpreted as a verified Doppler scheme.
+
+The record has `semantic_verification=false`. It does not assert calibration,
+Doppler action eligibility, weather classification or source contamination.
+Adapters retain these per-cut records in `Volume.metadata.native_cut_sampling`,
+keyed by the normalized sweep number, in eager and streaming paths alike.
+Present records with mismatched raw/config/cut identity are rejected. Legacy
+assets without the record stay readable and never inherit invented PRFs or a
+root-level waveform as a replacement for missing per-cut source parameters.
