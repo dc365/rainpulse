@@ -105,6 +105,31 @@ def native_fixture():
     return native
 
 
+def test_high_intensity_core_cannot_escape_lower_contour_weather_parent():
+    n=fixture();n.fields['DBZH'][:]=np.nan;n.field_available['DBZH'][:]=False
+    for start,width in zip((0,200,400,600,800,1000),(4,3,3,2,2,1),strict=True):
+        n.fields['DBZH'][5-width:6+width,start:start+8]=15
+        n.fields['DBZH'][4:7,start:start+8]=45
+        n.field_available['DBZH'][5-width:6+width,start:start+8]=True
+    arrays,report=detect(n,beam_width=2,segment_evidence=True)
+    assert any(obj['contour_dbz']==35 for obj in report['objects'])
+    assert not arrays[P+'STRONG_MASK'].any()
+
+
+def test_measured_lower_halo_weather_protects_polarization_missing_core():
+    n=fixture();n.fields['RHOHV']=np.full(n.shape,np.nan,'float32')
+    n.field_available['RHOHV']=np.zeros(n.shape,bool)
+    for start in (100,250,400,550,700):
+        n.fields['DBZH'][4:7,start:start+8]=45
+        for row in (3,7):
+            n.fields['DBZH'][row,start:start+8]=15;n.field_available['DBZH'][row,start:start+8]=True
+            n.fields['RHOHV'][row,start:start+8]=.99;n.field_available['RHOHV'][row,start:start+8]=True
+            n.fields['SNR'][row,start:start+8]=20
+    arrays,report=detect(n,beam_width=2,segment_evidence=True)
+    assert any(obj['contour_dbz']==35 for obj in report['objects'])
+    assert not arrays[P+'STRONG_MASK'].any()
+
+
 def test_engine_opt_in_strong_only_and_original_sources_preserved():
     from .conftest import evaluate
     n=native_fixture()

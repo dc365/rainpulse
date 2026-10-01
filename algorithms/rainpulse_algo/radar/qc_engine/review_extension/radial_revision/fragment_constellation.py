@@ -44,12 +44,14 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
             raise ResourceLimit('constellation work budget exceeded; no partial output')
     for segment in np.split(np.arange(len(az)), np.flatnonzero(breaks)+1):
         angle = np.rad2deg(np.unwrap(np.deg2rad(az[segment])))
+        lower_labels=None; lower_parents={}
         for level in (10., 20., 35.):
             charge(len(segment)*len(r))
             use = observed[segment] & good[segment, None] & (z[segment] >= level)
             labels, count = label(use, np.ones((3, 3)))
             if count > 20000:
                 raise ResourceLimit('constellation component budget exceeded')
+            if level==10.:lower_labels=labels
             fragments = []
             for ident, box in enumerate(find_objects(labels), 1):
                 if box is None:
@@ -57,6 +59,12 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                 rr, cc = np.where(labels[box] == ident)
                 rr += box[0].start; cc += box[1].start
                 charge(len(rr))
+                if level==10.:
+                    lower_parents[ident]=dict(component_id=ident,
+                        range_min_m=float(r[cc].min()),range_max_m=float(r[cc].max()+dr),
+                        mean_range_m=float(r[cc].mean()),angular_width_deg=float(np.ptp(angle[rr])+spacing),
+                        weather_gates=int(weather[segment[rr],cc].sum()),
+                        protected_gates=int(barred[segment[rr],cc].sum()))
                 if len(rr) < 3 or np.ptp(r[cc])+dr > 20000 or np.ptp(angle[rr])+spacing > 4*beam:
                     continue
                 bearing = float(angle[rr].mean()); theta = np.deg2rad(angle[rr])
@@ -87,10 +95,26 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                 if len(records) >= maximum_objects:
                     raise ResourceLimit('constellation object budget exceeded; no partial output')
                 holds = []; accept = []; fractions = []; side_observations = []; member_history = []
+                lower_ids=np.unique(lower_labels[rr,cc])
+                lower_history=[lower_parents[int(identity)] for identity in lower_ids]
+                lower_hold=any(p['angular_width_deg']>4*beam for p in lower_history)
+                lower_slope=lower_correlation=None
+                lower_distance=np.array([p['mean_range_m'] for p in lower_history])
+                lower_width=np.array([p['angular_width_deg'] for p in lower_history])
+                if len(lower_history)>=4 and lower_distance.min()>0 and lower_distance.max()/lower_distance.min()>=1.7 and np.ptp(lower_width)>beam:
+                    lower_slope=float(np.polyfit(np.log(lower_distance),np.log(lower_width),1)[0])
+                    lower_correlation=float(np.corrcoef(np.log(lower_distance),np.log(lower_width))[0,1])
+                    lower_hold |= lower_slope<=-.4 and lower_correlation<=-.7
+                if lower_hold:holds.append('full_lower_contour_parent_geometry_hold')
+                if any(p['weather_gates'] for p in lower_history):holds.append('measured_lower_parent_weather')
+                if any(p['protected_gates'] for p in lower_history):holds.append('protected_lower_parent')
                 if weather[segment[rr], cc].any(): holds.append('measured_weather_member')
                 if barred[segment[rr], cc].any(): holds.append('protected_original_member')
                 for fragment in group:
                     fr, fc = fragment['rows'], fragment['cols']
+                    parent_ids=np.unique(lower_labels[fr,fc])
+                    parent_weather=sum(lower_parents[int(i)]['weather_gates'] for i in parent_ids)
+                    parent_protected=sum(lower_parents[int(i)]['protected_gates'] for i in parent_ids)
                     accepted = ~barred[segment[fr], fc] & ~weather[segment[fr], fc]
                     sides = []
                     for side in (fragment['left']-1, fragment['right']+1):
@@ -110,6 +134,8 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                         angular_width_deg=float(np.ptp(angle[fr])+spacing),
                         observed_weather_gates=int(weather[segment[fr], fc].sum()),
                         protected_gates=int(barred[segment[fr], fc].sum()),
+                        lower_parent_ids=list(map(int,parent_ids)),lower_parent_weather_gates=parent_weather,
+                        lower_parent_protected_gates=parent_protected,
                         bilateral_fraction=float(accepted.mean())))
                 # Keep every original member in qualification history; no restarting
                 # the object after discarding a failed/unknown/weather fragment.
@@ -135,7 +161,8 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                 segments = []
                 ordered = np.argsort([m['range_min_m'] for m in member_history])
                 qualifying = np.array([m['bilateral_fraction'] >= .8 and
-                    not m['observed_weather_gates'] and not m['protected_gates'] for m in member_history])
+                    not m['observed_weather_gates'] and not m['lower_parent_weather_gates'] and
+                    not m['protected_gates'] and not m['lower_parent_protected_gates'] for m in member_history])
                 # Any original failed member blocks its observed radial interval,
                 # including another member that overlaps the same interval.
                 for i in np.flatnonzero(~qualifying):
@@ -151,7 +178,7 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                     sc = np.unique(np.concatenate([group[i]['cols'] for i in indices]))
                     ss = float(r[sc[-1]]-r[sc[0]]+dr)
                     sw = [len(np.unique(r[sc]//scale)) for scale in (5000,10000,20000)]
-                    eligible = not narrowing and ss >= 60000 and len(sc)*dr >= 5000 and min(sw) >= 4
+                    eligible = not narrowing and not lower_hold and ss >= 60000 and len(sc)*dr >= 5000 and min(sw) >= 4
                     segments.append(dict(original_components=[group[i]['ident'] for i in indices],
                         radial_span_m=ss, actual_range_support_m=float(len(sc)*dr),
                         range_window_counts=sw, independently_qualified=bool(eligible)))
@@ -167,6 +194,8 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                     member_history=member_history, measured_segments=segments,
                     full_parent_width_slope=slope, full_parent_width_correlation=correlation,
                     full_parent_narrowing_weather_hold=bool(narrowing),
+                    full_lower_contour_history=lower_history,lower_parent_width_slope=lower_slope,
+                    lower_parent_width_correlation=lower_correlation,lower_parent_geometry_hold=bool(lower_hold),
                     strong=not holds, hold_reasons=holds))
     return out, dict(objects=records, source_claim=False, recursive_growth=False,
         action_gates=0, research_only=True, work=work)
