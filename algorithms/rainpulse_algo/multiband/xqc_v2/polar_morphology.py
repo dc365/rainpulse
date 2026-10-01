@@ -19,7 +19,10 @@ MAXIMUM_FLANK_SEARCH_DEG = 3.0
 
 class MorphologyPolicy(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
-    version: Literal["x-polar-morphology-20261001-v1"] = "x-polar-morphology-20261001-v1"
+    version: Literal["x-polar-morphology-20261001-v1", "x-polar-morphology-20261002-v2"] = (
+        "x-polar-morphology-20261001-v1"
+    )
+    expanding_fans_enabled: bool = False
     local_weather_policy: Literal["protect", "joint_review"] = "protect"
     scales_m: tuple[Annotated[float, Field(ge=2000.0, le=20000.0)], ...] = Field(
         default=(5000.0, 10000.0),
@@ -54,6 +57,8 @@ class MorphologyPolicy(BaseModel):
 
     @model_validator(mode="after")
     def physical_scales(self):
+        if self.expanding_fans_enabled and self.version != "x-polar-morphology-20261002-v2":
+            raise ValueError("expanding fan geometry requires v2 identity")
         if (
             not self.scales_m
             or not self.levels_dbz
@@ -197,6 +202,25 @@ def detect(sweep, policy, *, protected=None):
             for e in entries
             for edge in ("left", "right")
         )
+        # Complete original history: a fixed centre with outward widening is
+        # distinct from fixed-km weather narrowing with distance. Never restart
+        # on a far tail or relax the existing fixed-edge test.
+        footprints = np.array([(e["left_spacing"] + e["right_spacing"]) / 2 for e in entries])
+        widths = np.array([e["width"] for e in entries])
+        centers = np.array([abs(float(wrap(e["center"] - entries[0]["center"]))) for e in entries])
+        center_excursion = float(
+            np.max(centers / np.maximum((footprints + footprints[0]) / 2, 1e-6))
+        )
+        narrowing = np.maximum.accumulate(widths) - widths
+        normalized_narrowing = float(np.max(narrowing / np.maximum(footprints, 1e-6)))
+        growth = float((widths[-1] - widths[0]) / max((footprints[-1] + footprints[0]) / 2, 1e-6))
+        expanding = (
+            p.expanding_fans_enabled
+            and center_excursion <= p.boundary_tolerance_rays + 1e-6
+            and normalized_narrowing <= 2 * p.boundary_tolerance_rays + 1e-6
+            and growth > 2 * p.boundary_tolerance_rays
+            and float(widths.max()) <= p.maximum_width_deg
+        )
         cols0 = entries[0]["cols"]
         cols1 = entries[-1]["cols"]
         begin = float(sweep.ranges[cols0[0]])
@@ -215,11 +239,11 @@ def detect(sweep, policy, *, protected=None):
             and len(entries) >= p.minimum_windows
             and span >= p.minimum_span_m
             and support >= p.minimum_support_fraction * span
-            and normalized_excursion <= p.boundary_tolerance_rays + 1e-6
+            and (normalized_excursion <= p.boundary_tolerance_rays + 1e-6 or expanding)
             and width <= p.maximum_width_deg
             and np.all(per_side_known >= p.minimum_flank_fraction * side_total)
             and np.all(per_side_clear >= p.minimum_flank_fraction * side_total)
-            and (not fan or end / max(begin, sweep.dr) >= p.minimum_fan_range_ratio)
+            and (not (fan or expanding) or end / max(begin, sweep.dr) >= p.minimum_fan_range_ratio)
         )
         if not qualified:
             if span >= p.minimum_span_m / 2:
@@ -241,6 +265,10 @@ def detect(sweep, policy, *, protected=None):
                         clear_flank_fraction=clear / max(denom, 1),
                         minimum_bilateral_clear_fraction=float(per_side_clear.min())
                         / max(side_total, 1),
+                        maximum_center_excursion_native_footprints=center_excursion,
+                        maximum_narrowing_native_footprints=normalized_narrowing,
+                        width_growth_native_footprints=growth,
+                        expanding_shape_qualified=bool(expanding),
                         ambiguous=track["ambiguous"],
                         scale_m=scale,
                         level_dbz=level,
@@ -262,7 +290,13 @@ def detect(sweep, policy, *, protected=None):
             ids[np.ix_(rows, cols)] = ii
             members += int(block.sum())
         kind = (
-            "fan" if fan else ("discontinuous_radial" if support < span * 0.85 else "radial_line")
+            "expanding_fan"
+            if expanding
+            else (
+                "fan"
+                if fan
+                else ("discontinuous_radial" if support < span * 0.85 else "radial_line")
+            )
         )
         records.append(
             dict(
@@ -284,6 +318,9 @@ def detect(sweep, policy, *, protected=None):
                 minimum_bilateral_known_fraction=float(per_side_known.min()) / max(side_total, 1),
                 clear_flank_fraction=clear / max(denom, 1),
                 minimum_bilateral_clear_fraction=float(per_side_clear.min()) / max(side_total, 1),
+                maximum_center_excursion_native_footprints=center_excursion,
+                maximum_narrowing_native_footprints=normalized_narrowing,
+                width_growth_native_footprints=growth,
                 member_gates=members,
                 maximum_flank_offset_deg=max(e["maximum_flank_offset_deg"] for e in entries),
                 source_verified=False,

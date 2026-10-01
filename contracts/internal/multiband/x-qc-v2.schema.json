@@ -2448,10 +2448,13 @@
       "additionalProperties": false,
       "properties": {
         "version": {
-          "const": "x-polar-morphology-20261001-v1",
           "default": "x-polar-morphology-20261001-v1",
           "title": "Version",
-          "type": "string"
+          "type": "string",
+          "enum": [
+            "x-polar-morphology-20261001-v1",
+            "x-polar-morphology-20261002-v2"
+          ]
         },
         "local_weather_policy": {
           "default": "protect",
@@ -2594,10 +2597,39 @@
           "minimum": 1,
           "title": "Maximum Work",
           "type": "integer"
+        },
+        "expanding_fans_enabled": {
+          "default": false,
+          "title": "Expanding Fans Enabled",
+          "type": "boolean"
         }
       },
       "title": "MorphologyPolicy",
-      "type": "object"
+      "type": "object",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "expanding_fans_enabled": {
+                "const": true
+              }
+            },
+            "required": [
+              "expanding_fans_enabled"
+            ]
+          },
+          "then": {
+            "properties": {
+              "version": {
+                "const": "x-polar-morphology-20261002-v2"
+              }
+            },
+            "required": [
+              "version"
+            ]
+          }
+        }
+      ]
     }
   },
   "additionalProperties": false,

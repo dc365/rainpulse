@@ -445,3 +445,78 @@ def test_missing_immediate_flank_uses_nearest_measured_exterior_without_treating
     assert not detect(replace(s, available=available, fields=fields), MorphologyPolicy()).mask.any()
     fields["SNR"][92] = -2.0
     assert not detect(replace(s, available=available, fields=fields), MorphologyPolicy()).mask.any()
+
+
+def expanding_scene(*, bearing=100.0, drift=False, shrinking=False):
+    s, _ = scene("line")
+    offset = (s.azimuth[:, None] - bearing + 180) % 360 - 180
+    progress = np.clip(np.floor((s.ranges - 5000) / 10000) / 4, 0, 1)[None, :]
+    halfwidth = (6 - 5 * progress) if shrinking else (1 + 5 * progress)
+    center = progress * 8 if drift else 0
+    body = (
+        (abs(offset - center) <= halfwidth)
+        & (s.ranges[None, :] >= 5000)
+        & (s.ranges[None, :] < 55000)
+    )
+    fields = {
+        "DBZH": np.where(body, 20, 0).astype("float32"),
+        "SNR": np.where(body, 15, -2).astype("float32"),
+    }
+    return replace(s, fields=fields, available={k: np.ones(s.shape, bool) for k in fields}), body
+
+
+@pytest.mark.parametrize("bearing", [100.0, 359.0])
+def test_expanding_fan_uses_complete_center_history_without_looser_fixed_edges(bearing):
+    s, body = expanding_scene(bearing=bearing)
+    assert not detect(s, MorphologyPolicy()).mask.any()
+    p = MorphologyPolicy(version="x-polar-morphology-20261002-v2", expanding_fans_enabled=True)
+    before = s.digest
+    ev = detect(s, p)
+    assert ev.mask[body].all() and not ev.mask[~body].any()
+    assert any(o["kind"] == "expanding_fan" for o in ev.objects)
+    assert s.digest == before
+
+
+@pytest.mark.parametrize("kind", ["fixed_km", "curved", "blob"])
+def test_expanding_mode_still_rejects_weather_counterexamples(kind):
+    s, _ = scene(kind)
+    p = MorphologyPolicy(version="x-polar-morphology-20261002-v2", expanding_fans_enabled=True)
+    assert not detect(s, p).mask.any()
+
+
+@pytest.mark.parametrize("kwargs", [{"drift": True}, {"shrinking": True}])
+def test_expanding_mode_rejects_bending_or_narrowing_whole_envelopes(kwargs):
+    s, _ = expanding_scene(**kwargs)
+    p = MorphologyPolicy(version="x-polar-morphology-20261002-v2", expanding_fans_enabled=True)
+    assert not detect(s, p).mask.any()
+
+
+def test_expanding_mode_does_not_bypass_missing_flanks_weather_or_resource_barriers():
+    s, body = expanding_scene()
+    p = MorphologyPolicy(version="x-polar-morphology-20261002-v2", expanding_fans_enabled=True)
+    avail = {k: v.copy() for k, v in s.available.items()}
+    for v in avail.values():
+        v[~body] = False
+    assert not detect(replace(s, available=avail), p).mask.any()
+    hard = np.ones(s.shape, bool)
+    assert not detect(s, p, protected=hard).mask.any()
+    with pytest.raises(ResourceLimit):
+        detect(s, p.model_copy(update={"maximum_work": 1}))
+
+
+def test_expanding_policy_requires_distinct_version_and_contract():
+    import json
+    from pathlib import Path
+
+    import jsonschema
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        MorphologyPolicy(expanding_fans_enabled=True)
+    p = MorphologyPolicy(version="x-polar-morphology-20261002-v2", expanding_fans_enabled=True)
+    schema = json.loads(
+        (
+            Path(__file__).resolve().parents[3] / "contracts/internal/multiband/x-qc-v2.schema.json"
+        ).read_text()
+    )
+    jsonschema.Draft202012Validator(schema).validate({"morphology": p.model_dump(mode="json")})
