@@ -78,3 +78,7 @@
 - raw-summary-04逐一关联冻结5466SHA，545文件有回执、539机械完成、4927待完成，源身份错误0、已完成失败0；不能外推余下文件通过。UTC/CST覆盖9行仍是部分站/部分时段，未证明全天完整。
 
 - 07:29Z最终更新：原问题taskbc376635…已正常SUCCEEDED且9REF层审核完成，observer2387501正常结束NORMAL_PUBLICATION_AUDITED。六必测共54层，52机械通过，原ZF702第2/9层仅CUT_ACTION_BUDGET_ABSTAINED失败；两层source_complete、RAW/几何/时间、4PNG均核验，withheld-visible/admitted/hard-weather-rejected均0。正常任务成功不是预算决策通过；两层仍阻塞验收。最终回执SHA5e0397769a3fe4d01336bb6ffef6dfc593b72ea481351522f381f8b100dafa72。
+
+## 预算层上下文假设排除
+
+新正常产品current-budget-context.jsonl的第2层21000门具有有界上层测量、842门触发已验证天气冲突，第9层仅77门测量/0冲突；上下层供体完整、原生波束身份d014707…已核验。旧probe的df19897…输入无当前波束身份，context=0不能用来断言本輪入口漏装供体。实际GroupCuts.read与X单站均绑定同一GroupContextProvider。扇形额外内部关联分别6204/360门，主要拟动作来自RAW距离留出源模型，而非关联传播；去掉这些关联亦不足让第2层通过70%门。未知上层覆盖不能当作无降水，当前证据不足以关闭独立天气误删门，继续保持两层失败和原预算。
