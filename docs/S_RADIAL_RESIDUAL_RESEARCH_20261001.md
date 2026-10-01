@@ -975,3 +975,34 @@ No production activation or added deletion authority. Next test observed exterio
 windows against local contamination and actual multi-cut corroboration, retaining
 missing observations and full original object boundaries; do not tune the short
 rule solely until this screenshot passes.
+
+### 2026-10-02: physical exterior-window experiment rejected for promotion
+
+Implemented research-only `--shoulder-windows` under the existing complete RAW
+constellation replay. It measures both fixed original exterior rays in 1/2/5-km
+windows, records known/quiet/unknown/contamination fractions separately, requires
+>=90% known and >=80% quiet samples with <=10% contamination, and rejects any
+weather/barrier sample or clipped/undersampled window. No new fragment anchors,
+object expansion, RAW edits or filled gates. CLI explicitly rejects this mode
+with engine quarantine; serialized production proof remains the default detector.
+
+Eight immutable full-RAW replays retained under shoulder-windows-z9591-v1 and
+shoulder-windows-z9598-v1. Selected strong counts: Z9591 09:48/10:18/10:24/
+10:42/11:24 = 0/0/0/0/0; Z9598 08:18/08:36/08:42 = 0/3/0. These are evidence
+counts, not product deletions. The actual 10:42 diagnostic PNG was inspected.
+Compared with the default segment experiment this variant reduces qualification;
+it is not a production improvement and must not replace the existing feature.
+
+For 10:42 original component137, one exterior ray has 40%/22.2%/14.3% unknown
+samples in 1/2/5-km windows; component140 has 40%/44.4%/23.8%. Component138
+also encounters up to22.2% unknown and9.5% local contamination. The opposite ray
+is fully measured quiet. Thus the failure is asymmetric incomplete exterior
+measurement, not merely isolated observed contamination. Wider distance windows
+alone do not resolve it. Next evaluate a geometrically bounded angular exterior
+band and available actual multi-cut observations, while retaining all unknown
+fractions, weather vetoes and original boundaries. No unbounded flank search.
+
+Three additional tests cover local contamination vs unknowns, weather/barrier
+and range-edge rejection, unchanged RAW and original candidate footprint.
+288 scoped tests passed, including engine/writer proof and weather counterexamples.
+No production deployment/profile switch or new Web publication this experiment.

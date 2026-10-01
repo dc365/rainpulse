@@ -36,7 +36,30 @@ def short_segment_assessment(history, ranges, dr, beam, parent_hold):
         center_drift_deg=center_drift,width_drift_deg=width_drift,hold_reasons=holds)
 
 
-def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_evidence=False):
+def measured_shoulder_windows(r,dr,columns,known,quiet,protected,charge):
+    """Bounded physical windows; unknown samples never contribute quiet support."""
+    decisions=np.ones(len(columns),bool);records=[]
+    charge(3*len(r)+3*len(columns))
+    cumulative=[np.r_[0,np.cumsum(x,dtype='int64')] for x in (known,quiet,protected)]
+    for width in (1000.,2000.,5000.):
+        lo=r[columns]-width/2;hi=r[columns]+width/2
+        left=np.searchsorted(r,lo);right=np.searchsorted(r,hi,side='right')
+        size=right-left
+        known_fraction=(cumulative[0][right]-cumulative[0][left])/size
+        quiet_fraction=(cumulative[1][right]-cumulative[1][left])/size
+        protected_count=cumulative[2][right]-cumulative[2][left]
+        complete=(lo>=r[0]-dr/2)&(hi<=r[-1]+dr/2)&(size>=5)
+        contamination=known_fraction-quiet_fraction
+        decisions &= complete&(known_fraction>=.9)&(quiet_fraction>=.8)&(contamination<=.1+1e-12)&(protected_count==0)
+        records.append(dict(width_m=width,minimum_known_fraction=float(known_fraction.min()),
+            minimum_quiet_fraction=float(quiet_fraction.min()),maximum_unknown_fraction=float((1-known_fraction).max()),
+            maximum_contamination_fraction=float(contamination.max()),protected_windows=int((protected_count>0).sum()),
+            incomplete_windows=int((~complete).sum())))
+    return decisions,records
+
+
+def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_evidence=False,
+           shoulder_windows=False):
     r, az, dr, good, gaps = native_geometry(native)
     if native.shape[0] < 3:
         raise ValueError('at least three native rays required')
@@ -151,7 +174,17 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                         sides.append(dict(observed_dbzh_fraction=float(observed[row, fc].mean()),
                             measured_quiet_snr_fraction=float(quiet.mean()),
                             unknown_fraction=float((~observed[row, fc] & ~quiet).mean())))
-                        accepted &= ~barred[row, fc] & (quiet | contrast)
+                        if shoulder_windows:
+                            reference=float(np.median(z[segment[fr],fc]))
+                            row_quiet=(~observed[row]&sa[row]&(snr[row]<=3))|(
+                                observed[row]&(z[row]<=reference-6))
+                            row_known=observed[row]|(~observed[row]&sa[row]&(snr[row]<=3))
+                            window_accept,window_report=measured_shoulder_windows(r,dr,fc,
+                                row_known,row_quiet,barred[row]|weather[row],charge)
+                            sides[-1]['distance_windows']=window_report
+                            accepted &= window_accept
+                        else:
+                            accepted &= ~barred[row, fc] & (quiet | contrast)
                     fractions.append(float(accepted.mean())); accept.append(accepted); side_observations.append(sides)
                     member_history.append(dict(component_id=fragment['ident'],
                         range_min_m=float(r[fc].min()), range_max_m=float(r[fc].max()+dr),
@@ -225,7 +258,7 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                     lower_parent_width_correlation=lower_correlation,lower_parent_geometry_hold=bool(lower_hold),
                     strong=not holds, hold_reasons=holds))
     return out, dict(objects=records, source_claim=False, recursive_growth=False,
-        action_gates=0, research_only=True, work=work)
+        action_gates=0, research_only=True, shoulder_windows=bool(shoulder_windows),work=work)
 
 
 def validate(arrays, native, blocked, **options):

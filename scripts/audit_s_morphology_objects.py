@@ -34,9 +34,13 @@ def main():
                         help='Read-only RAW transverse fragments in frozen radial neighborhoods')
     parser.add_argument('--fragment-segments', action='store_true',
                         help='Read-only independent measured segments retaining full RAW parent history')
+    parser.add_argument('--shoulder-windows', action='store_true',
+                        help='Research-only 1/2/5-km measured fragment exterior windows')
     parser.add_argument('--engine-quarantine', action='store_true',
                         help='Validate opt-in experiment proposals through the actual engine; no product writes')
     args = parser.parse_args()
+    if args.shoulder_windows and (not args.fragment_constellation or args.engine_quarantine):
+        raise ValueError('shoulder windows require research-only constellation; no engine actions')
     if args.fragment_segments and not args.fragment_constellation:
         raise ValueError('fragment segments require constellation research mode')
     if args.fragment_constellation and (args.radial_backbone or args.variable_width or args.branch_shoulders):
@@ -76,7 +80,9 @@ def main():
         start = time.monotonic()
         options={'beam_width':meta['config']['fragment_line'].get('antenna_beam_width_deg')}
         if args.variable_width:options['branch_shoulders']=args.branch_shoulders
-        if args.fragment_constellation:options['segment_evidence']=args.fragment_segments
+        if args.fragment_constellation:
+            options['segment_evidence']=args.fragment_segments
+            options['shoulder_windows']=args.shoulder_windows
         arrays, detail = DETECTOR.detect(native, blocked, **options)
         DETECTOR.validate(arrays, native, blocked, **options)
         integration = {}

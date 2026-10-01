@@ -194,3 +194,38 @@ def test_short_research_rejects_weather_parent_and_unstable_boundaries():
     assert not result['qualified']
     assert set(result['hold_reasons'])=={'weather_or_protected_original_member',
         'full_parent_geometry_hold','unstable_short_center','unstable_short_width'}
+
+
+def test_physical_shoulder_windows_tolerate_local_contamination_but_not_unknowns():
+    module=load('radial_revision.fragment_constellation')
+    r=100000.+np.arange(100)*100
+    known=np.ones(100,bool);quiet=known.copy();protected=np.zeros(100,bool)
+    quiet[50]=False
+    accepted,report=module.measured_shoulder_windows(r,100,np.array([50]),known,quiet,protected,lambda _:None)
+    assert accepted.all() and report[0]['maximum_contamination_fraction']>0
+    known[46:55]=False;quiet[46:55]=False
+    accepted,report=module.measured_shoulder_windows(r,100,np.array([50]),known,quiet,protected,lambda _:None)
+    assert not accepted.any() and report[0]['maximum_unknown_fraction']>.5
+
+
+def test_physical_shoulder_windows_preserve_weather_barriers_and_range_edges():
+    module=load('radial_revision.fragment_constellation')
+    r=100000.+np.arange(100)*100
+    known=np.ones(100,bool);quiet=known.copy();protected=np.zeros(100,bool)
+    protected[50]=True
+    accepted,_=module.measured_shoulder_windows(r,100,np.array([50]),known,quiet,protected,lambda _:None)
+    assert not accepted.any()
+    protected[:]=False
+    accepted,report=module.measured_shoulder_windows(r,100,np.array([0]),known,quiet,protected,lambda _:None)
+    assert not accepted.any() and all(x['incomplete_windows']==1 for x in report)
+
+
+def test_window_research_does_not_fill_raw_or_expand_original_object():
+    n=fixture();n.fields['DBZH'][3,103]=30;n.field_available['DBZH'][3,103]=True
+    baseline,_=detect(n,segment_evidence=True)
+    original=n.fields['DBZH'].copy()
+    arrays,report=detect(n,segment_evidence=True,shoulder_windows=True)
+    assert report['shoulder_windows'] and report['action_gates']==0
+    assert not arrays[P+'STRONG_MASK'][~n.field_available['DBZH']].any()
+    assert np.array_equal(arrays[P+'MASK'],baseline[P+'MASK'])
+    assert np.array_equal(n.fields['DBZH'],original,equal_nan=True)
