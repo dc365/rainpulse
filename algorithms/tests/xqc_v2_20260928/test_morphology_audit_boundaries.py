@@ -279,15 +279,17 @@ def test_source_only_runtime_never_reads_product_or_invents_comparison(monkeypat
 
 
 @pytest.mark.parametrize(
-    "args,source,expanding",
+    "args,source,expanding,anchored",
     [
-        ([], False, False),
-        (["--source-only", "--expanding-fans"], True, True),
-        (["--expanding-fans"], False, True),
+        ([], False, False, False),
+        (["--source-only", "--expanding-fans"], True, True, False),
+        (["--expanding-fans"], False, True, False),
+        (["--anchored-fans"], False, True, True),
+        (["--source-only", "--anchored-fans"], True, True, True),
     ],
 )
 def test_cli_expanding_policy_is_explicit_and_routes_to_bounded_audit(
-    monkeypatch, args, source, expanding
+    monkeypatch, args, source, expanding, anchored
 ):
     module = audit()
     calls = []
@@ -295,7 +297,8 @@ def test_cli_expanding_policy_is_explicit_and_routes_to_bounded_audit(
     monkeypatch.setattr(module, "run", lambda stack, **kw: calls.append((False, kw)))
     monkeypatch.setattr(module, "run_source_only", lambda stack, **kw: calls.append((True, kw)))
     module.main()
-    assert calls == [(source, {"expanding_fans": expanding})]
-    p = module.policy_for_audit(expanding)
+    assert calls == [(source, {"expanding_fans": expanding, "anchored_fans": anchored})]
+    p = module.policy_for_audit(expanding, anchored_fans=anchored)
     assert p.expanding_fans_enabled == expanding and p.local_weather_policy == "joint_review"
-    assert p.version.endswith("v2" if expanding else "v1")
+    assert p.anchored_fans_enabled == anchored
+    assert p.version.endswith("v3" if anchored else ("v2" if expanding else "v1"))

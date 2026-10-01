@@ -520,3 +520,106 @@ def test_expanding_policy_requires_distinct_version_and_contract():
         ).read_text()
     )
     jsonschema.Draft202012Validator(schema).validate({"morphology": p.model_dump(mode="json")})
+
+
+@pytest.mark.parametrize("bearing,side", [(100.0, 1), (359.0, -1)])
+def test_asymmetric_expanding_fan_requires_original_stable_edge(bearing, side):
+    s, _ = expanding_scene(bearing=bearing)
+    offset = (s.azimuth[:, None] - bearing + 180) % 360 - 180
+    grow = np.clip(np.floor((s.ranges - 5000) / 10000) / 4, 0, 1)[None, :] * 8
+    body = (side * offset >= -1) & (side * offset <= 1 + grow)
+    body &= (s.ranges[None, :] >= 5000) & (s.ranges[None, :] < 55000)
+    s = replace(
+        s,
+        fields={
+            "DBZH": np.where(body, 20, 0).astype("float32"),
+            "SNR": np.where(body, 15, -2).astype("float32"),
+        },
+    )
+    v2 = MorphologyPolicy(version="x-polar-morphology-20261002-v2", expanding_fans_enabled=True)
+    assert not detect(s, v2).mask.any()
+    v3 = MorphologyPolicy(
+        version="x-polar-morphology-20261002-v3",
+        expanding_fans_enabled=True,
+        anchored_fans_enabled=True,
+    )
+    ev = detect(s, v3)
+    assert ev.mask[body].all() and not ev.mask[~body].any()
+    assert any(o["kind"] == "anchored_expanding_fan" for o in ev.objects)
+    assert all(
+        min(o["left_edge_excursion_native_footprints"], o["right_edge_excursion_native_footprints"])
+        <= 1.05
+        for o in ev.objects
+    )
+
+
+@pytest.mark.parametrize("kind", ["curved", "fixed_km", "blob"])
+def test_anchor_branch_does_not_accept_weather_by_following_a_far_tail(kind):
+    s, _ = scene(kind)
+    p = MorphologyPolicy(
+        version="x-polar-morphology-20261002-v3",
+        expanding_fans_enabled=True,
+        anchored_fans_enabled=True,
+    )
+    assert not detect(s, p).mask.any()
+
+
+def test_anchor_identity_and_observed_weather_barriers_remain_required():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        MorphologyPolicy(version="x-polar-morphology-20261002-v2", anchored_fans_enabled=True)
+    with pytest.raises(ValidationError):
+        MorphologyPolicy(version="x-polar-morphology-20261002-v3", anchored_fans_enabled=True)
+    s, body = expanding_scene()
+    p = MorphologyPolicy(
+        version="x-polar-morphology-20261002-v3",
+        expanding_fans_enabled=True,
+        anchored_fans_enabled=True,
+    )
+    protected = np.zeros(s.shape, bool)
+    protected[:, (s.ranges >= 24000) & (s.ranges < 36000)] = True
+    ev = detect(s, p, protected=protected)
+    assert not ev.mask[protected].any()
+    available = {k: v.copy() for k, v in s.available.items()}
+    for v in available.values():
+        v[~body] = False
+    assert not detect(replace(s, available=available), p).mask.any()
+
+
+def test_anchor_policy_json_contract_requires_both_version_and_parent_branch():
+    import json
+    from pathlib import Path
+
+    import jsonschema
+
+    p = MorphologyPolicy(
+        version="x-polar-morphology-20261002-v3",
+        expanding_fans_enabled=True,
+        anchored_fans_enabled=True,
+    )
+    schema = json.loads(
+        (
+            Path(__file__).resolve().parents[3] / "contracts/internal/multiband/x-qc-v2.schema.json"
+        ).read_text()
+    )
+    validator = jsonschema.Draft202012Validator(schema)
+    validator.validate({"morphology": p.model_dump(mode="json")})
+    for key, value in [
+        ("version", "x-polar-morphology-20261002-v2"),
+        ("expanding_fans_enabled", False),
+    ]:
+        invalid = p.model_dump(mode="json")
+        invalid[key] = value
+        with pytest.raises(jsonschema.ValidationError):
+            validator.validate({"morphology": invalid})
+
+
+def test_anchor_does_not_follow_both_moving_edges_even_if_width_increases():
+    s, _ = expanding_scene(drift=True)
+    p = MorphologyPolicy(
+        version="x-polar-morphology-20261002-v3",
+        expanding_fans_enabled=True,
+        anchored_fans_enabled=True,
+    )
+    assert not detect(s, p).mask.any()

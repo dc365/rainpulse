@@ -2453,7 +2453,8 @@
           "type": "string",
           "enum": [
             "x-polar-morphology-20261001-v1",
-            "x-polar-morphology-20261002-v2"
+            "x-polar-morphology-20261002-v2",
+            "x-polar-morphology-20261002-v3"
           ]
         },
         "local_weather_policy": {
@@ -2602,6 +2603,11 @@
           "default": false,
           "title": "Expanding Fans Enabled",
           "type": "boolean"
+        },
+        "anchored_fans_enabled": {
+          "default": false,
+          "title": "Anchored Fans Enabled",
+          "type": "boolean"
         }
       },
       "title": "MorphologyPolicy",
@@ -2621,11 +2627,40 @@
           "then": {
             "properties": {
               "version": {
-                "const": "x-polar-morphology-20261002-v2"
+                "enum": [
+                  "x-polar-morphology-20261002-v2",
+                  "x-polar-morphology-20261002-v3"
+                ]
               }
             },
             "required": [
               "version"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "anchored_fans_enabled": {
+                "const": true
+              }
+            },
+            "required": [
+              "anchored_fans_enabled"
+            ]
+          },
+          "then": {
+            "properties": {
+              "version": {
+                "const": "x-polar-morphology-20261002-v3"
+              },
+              "expanding_fans_enabled": {
+                "const": true
+              }
+            },
+            "required": [
+              "version",
+              "expanding_fans_enabled"
             ]
           }
         }
