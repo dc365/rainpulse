@@ -746,3 +746,44 @@ SHA：114 层没有重复方位，3 层执行完整视图；合计新增识别 6
 回归使用原始 X 08:08:25 对应分析周期 08:06，同时检验图头、分析时次标注、
 URL 采集时间和扫描身份。新增测试在修复前失败，修复后通过；相关两组
 界面测试 21 项通过，生产构建成功。
+
+
+## Native gate floor: normal publication verification (2026-10-02)
+
+Candidate 23c0171 / image e6a1f199 is deployed on 105, with four ready workers.
+Only the existing ZF505/ZF701/ZF702 candidate scope is enabled. All 13 normal
+tasks succeeded; all 117 cuts passed RAW, native geometry/time, candidate-mask,
+asset SHA and polar PNG byte verification. 103 passed mechanical gates;
+14 existing action-budget warnings remain, without meteorological promotion.
+
+Normal product comparison covers all 69 native fields: 114 cuts are identical;
+three repeated-azimuth cuts changed 373 original gates, including 257 formerly
+visible gates beyond 10 km (256/1/0). Only noise actions/display and the existing
+downstream phase-path diagnostics changed. The verifier checks the exact native
+ray prefix and existing PATH_BROKEN, NOISE_FLOOR and PHASE_PATH_BLOCKED bits.
+No other field/location or RAW changed. The initial local-only whitelist failed
+on this existing phase contract; its receipt is retained. The corrected checker
+passed one positive and three tampered cases, then all 117 actual normal cuts.
+
+Local SHA-verified evidence:
+
+- `.build/xqc-polar-morphology/native-floor-publication-audit/verified-summary.json`
+- `.build/xqc-polar-morphology/native-floor-normal-array-delta-v2/verified-summary.json`
+- `.build/xqc-polar-morphology/native-floor-paired-compact-proof.json`
+
+Full paired evidence tables remain on 105. The interrupted 40 MiB transfer is
+marked partial; it is not a complete local copy. The complete compact proof and
+all 117 mask hashes were verified separately.
+
+Actual new maps inspected: original ZF702 cut 5, ZF702 08:08 cut 5 and ZF701
+08:07 cut 1. Strong fans, long spokes and the repeated-row weak north stripe
+are removed; near-site echoes and sparse protected residuals remain. Screenshots
+are under `output/playwright/`. Remaining 14 warnings and unlabelled protected
+residuals still require object-level acceptance, not blanket action-3 removal.
+
+Web time-label fix 8f5c545 is pushed/deployed; all 15 build files and HTTP index
+match their hashes. Actual map headers keep native acquisition time, while the
+shared axis says analysis time. Related 21 UI tests and production build pass.
+Whole-repository CI remains failed: the parent already failed test/lint/
+performance-cd. Both test runs stop on the missing legacy RP-029
+AdminWorkspace.tsx; no whole-repository CI success is claimed.
