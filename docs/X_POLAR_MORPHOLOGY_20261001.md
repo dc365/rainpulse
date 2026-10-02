@@ -409,3 +409,27 @@ work is bounded reuse of identical reference fits, preserving the target/guard
 exclusion, target-dependent reference coverage, model-record cap and all action
 criteria. It is not implemented or accepted yet. Normal candidate rollout and
 meteorological acceptance remain incomplete; installed production stays v5.
+
+### Bounded reference-fit reuse (2026-10-02)
+
+Implemented a call-local cache recreated for each original RAW ray. Keys are
+actual reference-block members after excluding the current target and guard.
+Quantile, domain, fan mode, RAW and configuration cannot cross cache scope.
+Coverage and target admission are always recomputed. Failed reference fits may
+also be reused; neither target decisions nor native gate arrays are cached.
+Scalar fits and immutable member keys have conservative byte accounting and
+LRU eviction inside the original 32 MiB summary headroom. Trial/model caps and
+all numerical criteria remain unchanged. Zero headroom recomputes normally.
+
+The regression fails on the frozen original at an 18th trial with a 17-trial
+budget; reuse completes with exactly the same 781 gates and 13 model records.
+Five new tests compare masks and complete model records against the original
+Git module in RAM across domains, quantiles, fan modes, protected gates,
+changed targets, two different RAW rays and guard widths. They also exercise
+zero headroom, LRU eviction, cached failure and pre-fit trial rejection.
+The complete XQC suite passes 290 tests (one existing NumPy ABI warning).
+Scoped Ruff and diff whitespace checks pass. Concurrent S work is preserved.
+
+Real cut-2 replay under the original 500000 budget, high-budget reference
+comparison, normal candidate publication and actual UI remain required.
+This optimization alone does not constitute weather truth or full acceptance.

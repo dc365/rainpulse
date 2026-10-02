@@ -8,7 +8,11 @@ votes. No station, bearing, clock time, or screenshot region is encoded here.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
+
+from .reference_fit import ReferenceFit, ReferenceFits
 
 
 def detect(
@@ -117,6 +121,7 @@ def detect(
             & (abs(powers[:, None] - powers[None, :]) <= (1.0 if fan else spread))
             & (abs(responses[:, None] - responses[None, :]) <= spread)
         )
+        fits = ReferenceFits(stats, cfg.source_maximum_summary_bytes - stats.workspace_bytes)
         for target in np.flatnonzero((count > 0) & geometry):
             outside = abs(ids - ids[target]) > cfg.receiver.guard_blocks
             eligible = (count >= minimum) & geometry & outside
@@ -128,56 +133,38 @@ def detect(
                 if identity in seen or len(members) < 3:
                     continue
                 seen.add(identity)
-                stats.trial()
-                ranges = center_range[members]
-                if (
-                    np.ptp(ranges) < cfg.radial_source_minimum_span_m
-                    or max(ranges) / max(min(ranges), s.dr) < 1.75
-                ):
+                # Keys describe the actual post-target/guard reference blocks.
+                # The cache is recreated for each RAW ray in this detector call,
+                # so RAW domain, quantile and all configuration remain fixed.
+                key = np.asarray(members, dtype='<i8').tobytes()
+                fit = fits.get(key, lambda: _reference_fit(
+                    s, cfg, members, center_range, count, powers, responses, fan, spread
+                ))
+                if fit is None:
                     continue
-                # Require a resolved response slope as well as range leverage.
-                # Flat REF has -20 dB/decade residual slope and cannot qualify
-                # by selecting a short far-range window with a small spread.
-                slope = float(np.polyfit(np.log10(ranges), responses[members], 1)[0])
-                if abs(slope) > 8.0:
-                    continue
-                # Fan evidence needs stationary measured receiver power,
-                # in addition to the reflectivity range-response model.
-                if fan and abs(float(np.polyfit(np.log10(ranges), powers[members], 1)[0])) > 2.0:
-                    continue
+                # Coverage depends on the current target/guard exclusion and
+                # is always recomputed; it is never inherited from another target.
                 between = outside & (ids >= ids[members[0]]) & (ids <= ids[members[-1]])
                 if len(members) / max(int(between.sum()), 1) < cfg.radial_source_minimum_fraction:
                     continue
-                train = np.concatenate([gates[i] for i in members])
-                if len(train) < cfg.receiver.minimum_pair_samples:
-                    continue
-                power = float(np.median(powers[members]))
-                response = float(np.median(responses[members]))
-                if (
-                    max(abs(powers[members] - power)) > spread
-                    or max(abs(responses[members] - response)) > spread
-                ):
-                    continue
-                # Block-center stability and an empirical gate envelope serve
-                # different purposes: speckled sources need not be smooth at
-                # each gate. The envelope is bounded and target-independent.
-                trend = (
-                    slope * np.log10(np.maximum(s.ranges, s.dr) / 1000)
-                    if fan
-                    else np.zeros_like(s.ranges)
-                )
-                response_limits = np.median(
-                    [
+                slope, power = fit.slope, fit.power
+                trend = (slope * np.log10(np.maximum(s.ranges, s.dr) / 1000)
+                         if fan else np.zeros_like(s.ranges))
+                if fit.bounds is None:
+                    response_limits = np.median([
                         np.percentile(z[row, gates[i]] - law[gates[i]] - trend[gates[i]], [5, 95])
                         for i in members
-                    ],
-                    axis=0,
-                )
-                power_limits = np.median(
-                    [np.percentile(sn[row, gates[i]], [5, 95]) for i in members], axis=0
-                )
-                low, high = response_limits + [-1.0, 1.0]
-                power_low, power_high = power_limits + [-1.0, 1.0]
+                    ], axis=0)
+                    power_limits = np.median([
+                        np.percentile(sn[row, gates[i]], [5, 95]) for i in members
+                    ], axis=0)
+                    low, high = response_limits + [-1.0, 1.0]
+                    power_low, power_high = power_limits + [-1.0, 1.0]
+                    fit = replace(
+                        fit, bounds=(float(low), float(high), float(power_low), float(power_high))
+                    )
+                    fits.put(key, fit)
+                low, high, power_low, power_high = fit.bounds
                 g = gates[target]
                 response_gate = z[row, g] - law[g] - trend[g]
                 # Once REF and independent receiver power establish a source,
@@ -200,14 +187,14 @@ def detect(
                         ray=int(row),
                         target_block=int(ids[target]),
                         reference_blocks=ids[members].tolist(),
-                        reference_gates=len(train),
+                        reference_gates=fit.reference_gates,
                         target_gates=len(fresh),
                         response_quantile=response_quantile if fan else None,
                         response_slope_db_per_decade=slope,
                         response_bounds_detrended=bool(fan),
                         trend_reference_range_m=1000.0,
                         response_lower_bound_applied=not fan,
-                        reference_span_m=float(np.ptp(ranges)),
+                        reference_span_m=fit.reference_span,
                         snr_center_db=power,
                         snr_bounds_db=[float(power_low), float(power_high)],
                         response_bounds_db=[float(low), float(high)],
@@ -222,3 +209,25 @@ def detect(
         minimum_reference_range_ratio=1.75,
         maximum_response_slope_db_per_decade=8.0,
     )
+
+
+def _reference_fit(s, cfg, members, center_range, count, powers, responses, fan, spread):
+    ranges = center_range[members]
+    span = float(np.ptp(ranges))
+    if span < cfg.radial_source_minimum_span_m or max(ranges) / max(min(ranges), s.dr) < 1.75:
+        return None
+    slope = float(np.polyfit(np.log10(ranges), responses[members], 1)[0])
+    if abs(slope) > 8.0:
+        return None
+    if fan and abs(float(np.polyfit(np.log10(ranges), powers[members], 1)[0])) > 2.0:
+        return None
+    samples = int(count[members].sum())
+    if samples < cfg.receiver.minimum_pair_samples:
+        return None
+    power, response = float(np.median(powers[members])), float(np.median(responses[members]))
+    if (
+        max(abs(powers[members] - power)) > spread
+        or max(abs(responses[members] - response)) > spread
+    ):
+        return None
+    return ReferenceFit(slope, power, samples, span)

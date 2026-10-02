@@ -1,8 +1,11 @@
 """Cut-local, raw-only source statistics. Never caches a fitted target model."""
 from __future__ import annotations
-from dataclasses import dataclass
+
 import warnings
+from dataclasses import dataclass
+
 import numpy as np
+
 from rainpulse_algo.radar.qc_engine.volume_review.data import ResourceLimit
 
 
@@ -24,6 +27,11 @@ class SourceStatistics:
     models: int = 0
     seed_comparisons: int = 0
     geometry_comparisons: int = 0
+    workspace_bytes: int = 0
+    fit_cache_hits: int = 0
+    fit_cache_misses: int = 0
+    fit_cache_evictions: int = 0
+    fit_cache_peak_bytes: int = 0
 
     @classmethod
     def build(cls, s, cfg):
@@ -51,7 +59,8 @@ class SourceStatistics:
         for a in (blocks, ids, block_index, receiver, coverage, law, center, *indices):
             a.setflags(write=False)
         return cls(s, blocks, ids, indices, block_index, law, center, receiver, coverage,
-                   cfg.digest, cfg.source_maximum_trials, cfg.source_maximum_models)
+                   cfg.digest, cfg.source_maximum_trials, cfg.source_maximum_models,
+                   workspace_bytes=expected)
 
     def use(self, s, cfg):
         if s is not self.sweep or cfg.digest != self.parameter_sha256:
@@ -81,4 +90,10 @@ class SourceStatistics:
                 'distance_blocks': len(self.ids), 'model_trials': self.trials,
                 'model_records': self.models, 'seed_comparisons': self.seed_comparisons,
                 'geometry_comparisons': self.geometry_comparisons,
-                'fitted_model_cache': False}
+                'fitted_model_cache': bool(self.fit_cache_hits),
+                'reference_fit_cache_scope': 'current_detector_call_and_raw_ray_only',
+                'reference_fit_cache_hits': self.fit_cache_hits,
+                'reference_fit_cache_misses': self.fit_cache_misses,
+                'reference_fit_cache_evictions': self.fit_cache_evictions,
+                'reference_fit_cache_peak_bytes': self.fit_cache_peak_bytes,
+                'summary_workspace_bytes': self.workspace_bytes}
