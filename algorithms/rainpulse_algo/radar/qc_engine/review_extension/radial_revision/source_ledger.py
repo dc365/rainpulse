@@ -25,6 +25,7 @@ class Hold(IntFlag):
 def freeze(native, blocked, original_source, nominations, *, beam_width=None, source_kind=None):
     r,az,dr,good,gaps = native_geometry(native)
     z,observed = moment(native,'DBZH')
+    snr,snr_ok = moment(native,'SNR')
     blocked = mask(blocked,native.shape,'source ledger barriers') | ~good[:,None]
     seeds = mask(original_source,native.shape,'original ledger sources') & observed & ~blocked
     candidates = mask(nominations,native.shape,'ledger nominations') & observed & ~blocked
@@ -53,7 +54,8 @@ def freeze(native, blocked, original_source, nominations, *, beam_width=None, so
             if i not in cache:
                 if len(rows)<5 or not 2<=i<len(rows)-2 or not np.isfinite(beam):
                     cache[i]=(np.zeros(len(r),bool),np.full(len(r),np.nan),np.full(len(r),np.nan),~blocked[rows[i]])
-                else:cache[i]=_corridor(rows,angles,i,beam,z,observed,blocked,r)
+                else:cache[i]=_corridor(rows,angles,i,beam,z,observed,blocked,r,
+                                      snr=snr,snr_ok=snr_ok)
             return cache[i]
         for i,row in enumerate(rows):
             if not seeds[row].any():continue
@@ -140,7 +142,8 @@ def freeze(native, blocked, original_source, nominations, *, beam_width=None, so
                         out[PREFIX+'LINK_PARENT_ID'][rr,targets]=np.where(ambiguous,0,identity)
                         out[PREFIX+'LINK_DISTANCE_M'][rr,targets]=np.where(ambiguous,np.nan,distance)
     out[PREFIX+'LINK_MASK'][:]=out[PREFIX+'LINK_PARENT_ID']>0
-    return out,{'version':'complete-source-ledger-v1','objects':objects,'narrow_supported_objects':eligible,
+    return out,{'version':'complete-source-ledger-v2-measured-nearest-flanks',
+                'objects':objects,'narrow_supported_objects':eligible,
                 'original_seed_gates':int(seeds.sum()),'linked_gates':int(out[PREFIX+'LINK_MASK'].sum()),
                 'ambiguous_gates':int((out[PREFIX+'LINK_HOLD']==int(Hold.AMBIGUOUS_PARENT)).sum()),
                 'action_gates':0,'filled_gates':0,'recursive_growth':False,'source_claim':False}

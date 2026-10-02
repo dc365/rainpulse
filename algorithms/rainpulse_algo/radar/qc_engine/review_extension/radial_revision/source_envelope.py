@@ -7,14 +7,41 @@ import numpy as np
 from ..arrays import mask, moment, native_geometry, runs
 
 
-def _corridor(rows, angles, i, beam, z, obs, blocked, r):
+def _nearest_flank(angles, desired, centre, spacing):
+    choices = np.clip([np.searchsorted(angles, desired)-1,
+                       np.searchsorted(angles, desired)], 0, len(angles)-1)
+    # Resolve exact ties inward; never jump an extra ray just to reach a
+    # nominal beam boundary when real acquisition angles jitter around it.
+    index = min(choices, key=lambda j: (abs(angles[j]-desired), abs(angles[j]-centre)))
+    return int(index) if abs(angles[index]-desired) <= spacing/2+1e-6 else -1
+
+
+def _corridor(rows, angles, i, beam, z, obs, blocked, r, *, snr=None, snr_ok=None):
     row = rows[i]
     left = np.full(len(r), np.nan); right = left.copy()
     safe = ~blocked[rows[i-2:i+3]].any(axis=0)
     valid = obs[row] & ~blocked[row] & (z[row] >= 0.) & (r >= 2000.)
+    spacing = float(np.median(np.diff(angles)))
+    pairs = []
     for half in (beam, 2*beam, 3*beam):
-        a = np.searchsorted(angles, angles[i]-half+1e-8, side='right')-1
-        b = np.searchsorted(angles, angles[i]+half-1e-8, side='left')
+        pairs.append((np.searchsorted(angles, angles[i]-half+1e-8, side='right')-1,
+                      np.searchsorted(angles, angles[i]+half-1e-8, side='left'), False))
+    legacy = {(a,b) for a,b,_ in pairs}
+    valid_legacy = [(a,b) for a,b in legacy if
+                    0 <= a < i < b < len(rows) and angles[b]-angles[a] <= 8.]
+    if valid_legacy:
+        outer_a = min(a for a,b in valid_legacy)
+        outer_b = max(b for a,b in valid_legacy)
+    else:
+        outer_a, outer_b = i, i
+    for half in (beam, 2*beam, 3*beam):
+        a = _nearest_flank(angles, angles[i]-half, angles[i], spacing)
+        b = _nearest_flank(angles, angles[i]+half, angles[i], spacing)
+        # Correct inward sampling only. A supplementary pair must not enlarge
+        # the original protection stencil and revoke already accepted proof.
+        if (a,b) not in legacy and outer_a <= a < i < b <= outer_b:
+            pairs.append((a,b,True))
+    for a,b,measured_only in pairs:
         if a < 0 or b >= len(rows) or a >= i or b <= i or angles[b]-angles[a] > 8.:
             continue
         local_safe = ~blocked[rows[a:b+1]].any(axis=0)
@@ -22,6 +49,15 @@ def _corridor(rows, angles, i, beam, z, obs, blocked, r):
         interior = (obs[rows[a+1:b]] & (z[rows[a+1:b]] >= z[row]-6.)).mean(axis=0) >= .6
         flanks = ((~obs[rows[a]] | (z[row]-z[rows[a]] >= 6.)) &
                   (~obs[rows[b]] | (z[row]-z[rows[b]] >= 6.)))
+        if measured_only:
+            # Newly recovered geometric evidence requires actual shoulders.
+            # A missing DBZH is quiet only with an observed quiet receiver SNR.
+            def shoulder(j):
+                known = obs[rows[j]].copy()
+                if snr is not None and snr_ok is not None:
+                    known |= snr_ok[rows[j]] & (snr[rows[j]] >= -50.) & (snr[rows[j]] <= 3.)
+                return known
+            flanks &= shoulder(a) & shoulder(b)
         accepted = valid & local_safe & interior & flanks & ~np.isfinite(left)
         left[accepted], right[accepted] = angles[a], angles[b]
     return valid & safe & np.isfinite(left), left, right, safe
@@ -30,6 +66,7 @@ def _corridor(rows, angles, i, beam, z, obs, blocked, r):
 def detect(native, blocked, seeds, nomination, *, beam_width=None):
     r, az, dr, good, gaps = native_geometry(native)
     z, obs = moment(native, 'DBZH')
+    snr, snr_ok = moment(native, 'SNR')
     blocked = mask(blocked, native.shape, 'source envelope barriers') | ~good[:, None]
     seeds = mask(seeds, native.shape, 'original source seeds') & obs & ~blocked
     nomination = mask(nomination, native.shape, 'raw nominations') & obs & ~blocked
@@ -51,7 +88,8 @@ def detect(native, blocked, seeds, nomination, *, beam_width=None):
         cache = {}
         def corridor(index):
             if index not in cache:
-                cache[index] = _corridor(rows, angles, index, beam, z, obs, blocked, r)
+                cache[index] = _corridor(rows, angles, index, beam, z, obs, blocked, r,
+                                         snr=snr, snr_ok=snr_ok)
             return cache[index]
         for i in range(2, len(rows)-2):
             row = rows[i]
@@ -125,6 +163,6 @@ def detect(native, blocked, seeds, nomination, *, beam_width=None):
             'RV2_ENVELOPE_PARENT_ID': parent, 'RV2_ENVELOPE_SEED_ID': seed_id,
             'RV2_ENVELOPE_RAW_OBJECT_ID': raw_id,
             **{'RV2_ENVELOPE_'+k: v for k,v in evidence.items()}}, {
-                'version': 'frozen-raw-envelope-v2', 'objects': object_id,
+                'version': 'frozen-raw-envelope-v3-measured-nearest-flanks', 'objects': object_id,
                 'gates': int(hit.sum()), 'filled_gates': 0, 'recursive_growth': False,
                 'extent_padding_m': 10000., 'maximum_original_seed_distance_m': 120000.}
