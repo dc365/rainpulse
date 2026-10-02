@@ -17,7 +17,7 @@ from .reference_fit import ReferenceFit, ReferenceFits
 
 def detect(
     s, cfg, *, protected, fan=False, family_width_deg=None, prepared=None, response_quantile=90,
-    domain=None,
+    domain=None, near_floor_references=False,
 ):
     out = np.zeros(s.shape, bool)
     z, za = s.moment("DBZH")
@@ -30,6 +30,15 @@ def detect(
         else cfg.radial_source_maximum_width_deg
     )
     signal = za & sa & (sn >= cfg.noise_censor_snr_db)
+    if near_floor_references:
+        if fan or cfg.noise_censor_snr_db is None:
+            raise ValueError('near-floor reference research requires a narrow receiver contract')
+        # Research only: retain paired measurements on both sides of the noise
+        # floor as references. This never fills a missing REF/SNR or promotes
+        # below-floor measurements to targets. Keep the existing spread bound.
+        signal = za & sa & (
+            abs(sn - cfg.noise_censor_snr_db) <= cfg.radial_source_maximum_spread_db
+        )
     if not fan:
         signal &= z < cfg.radial_maximum_dbzh
     signal &= (s.ranges[None, :] >= cfg.receiver.minimum_range_m) & ~protected
@@ -40,6 +49,7 @@ def detect(
         if not isinstance(domain, np.ndarray) or domain.shape != s.shape or domain.dtype != bool:
             raise ValueError("source domain must be a boolean native-sweep matrix")
         signal &= domain
+    targets = signal & (sn >= cfg.noise_censor_snr_db)
     from .source_summary import SourceStatistics
 
     stats = (prepared or SourceStatistics.build(s, cfg)).use(s, cfg)
@@ -166,6 +176,8 @@ def detect(
                     fits.put(key, fit)
                 low, high, power_low, power_high = fit.bounds
                 g = gates[target]
+                if near_floor_references:
+                    g = g[targets[row, g]]
                 response_gate = z[row, g] - law[g] - trend[g]
                 # Once REF and independent receiver power establish a source,
                 # a REF-only dropout does not make that measurement clean.
@@ -208,6 +220,8 @@ def detect(
         missing_ref_is_continuity_failure=False,
         minimum_reference_range_ratio=1.75,
         maximum_response_slope_db_per_decade=8.0,
+        **({'diagnostic_only': True, 'near_floor_references': True,
+            'below_floor_targets': False} if near_floor_references else {}),
     )
 
 
