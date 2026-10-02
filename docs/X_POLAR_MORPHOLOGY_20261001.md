@@ -566,3 +566,16 @@ PYTHONPATH=algorithms algorithms/.venv/bin/python -m pytest algorithms/tests/xqc
 全部 117 层 v2 诊断选中 394069 门点，其中 2592 是当前 5 dBZ、10 km 之外可见回波，hard/local-weather 交集为零；但有 14376 个既有 compact 歧义门点交集（当前可见 100，涉及 5 层）。因此 v2 **不能直接进入正常动作**。后续 v3 将完整 hard/local/compact 原始保护对象同时排除出目标和参考，不能仅在输出末端删掉交集；只有这套保护入口验证通过后才考虑正常候选试点。v1/v2/v3 都没有改写现有发布结果。
 
 v3 已完成 13/13、117/117 层且本地逐输入/输出 SHA 核验：376778 个诊断候选、2447 个当前可见；hard/local/compact 总交集及当前可见交集全部为零，RAW 不变。冻结 `next` cut1 的西向效果仍为 40/41、10/46；南向 194.49° 的 53 个当前可见门点未被本方法选中。比简单减去 compact 输出交集还额外撤回了部分候选，说明保护参考也有实际作用。完整协议和逐层摘要保存在私有 `near-floor-normal-corpus-v3/verified-summary.json`，不计入新增唯一样本或界面上线。下一步重点是用实测门点双侧对比核对块级中位数的掩盖效应与独立参考覆盖，保留原约束，再扩大冻结来源及正常发布验收。
+
+## 完整近噪声源家族与候选动作入口（2026-10-02）
+
+逐门实测否定“块中位数掩盖双肩”的初始假设：270.40°/272.38° 只有 6/41、14/46 个可见点的左右距离之和符合现有窄径向宽度。完整源带应使用现有最大 45° 的多射线模型；没有扩大窄径向 7° 上限。`source_fans.detect(..., near_floor_references=True)` 将近噪声成对 RAW 参考带入既有 primary/upper 距离留出模型、完整家族支撑/相干条件及有限内部关联。实际冻结 next cut1：西向 40/41、46/46（86/87），南向 53 个可见点仍未选中，hard/local/compact 交集全部为零。唯一余点仍不符合独立功率边界，未放宽门限。单层凭据 SHA `0b312bfbcf2e68ff8ba2e53ca1c8d31ff5759118822651dd32c2e42bb0f329c6`。
+
+新增显式默认关闭的 `near_floor_source_candidates_enabled`，Python/JSON 都要求 receiver floor 和完整 compact 保护。正常入口先完成 RAW 形态保护，再用 hard/local/compact 整个对象排除目标及参考；新 `XQC_NEAR_FLOOR_SOURCE_MASK` 与原因位 262144 单独记录。进入既有唯一终处理器及既有候选预算，动作 3、QC NaN、CR=0；不加入已确认污染，不改变 RAW、QPE 或可信融合资格。Audit 保留原显示/动作/CR。源模型 trial/model 总额度继承当前层此前源模块消耗，不能新建 pass 重置额度；新模块资源/保护失败整模块弃权并明确降级，保留既有完成证据。
+
+回归新增完整弱扇形、天气/未知/保护、正常候选动作、动作预算、保护失败、摘要资源失败、audit、JSON 依赖及额度不能重置。完整 JSON 校验同时发现既有 schema 缺少 11 个实际 X 参数（noise censor、fragment、radial_flank_mode），已按原 Python 定义补齐并保留全部旧 allOf 身份/保护约束；没有重生成并丢弃既有约束。
+
+实际完整 standalone `x_qc` 对照 v1 因本地 pipeline 中既有 radome producer 与当前候选镜像依赖不匹配而 13/13 FAILED，保留失败、不计验收；v2 以当前安装 pipeline 加本次精确补丁验证。单独冻结 next 体扫 9 层已完成，随后 4 路 13 体扫/117 层对照正在进行。它验证 RAW/原生坐标/旧源与形态掩膜不变、旧 withheld 全保留、新候选 QC NaN/CR=0/新增动作3；仍不替代正常任务发布、上下文及真实界面验收。候选镜像尚未切换，推广前还需完成共享源额度最终版本核验。
+
+
+完整管道 v2 中，ZF505 05 时次 cut1 出现核心整层弃权后处理 `module_records` KeyError；初始失败凭据保留。新增两条实际 RED/GREEN 回归：后处理兼容整层弃权；新增模块无损证据超限时仅撤回该模块，重新执行同一终处理器并保留全部旧掩膜/证据，不重新拟合、不重置预算、不截断证据。完整 XQC-v2 326 项通过，保留原 NumPy ABI warning；独立新文件/核心/source Ruff 与 diff check 通过。最终源额度与资源修复版本准备 4 路真实 13 体扫/117 层对照 v3，原始弃权原因需从复跑状态核实。105 SSH 随后连接超时，安装 pipeline 补丁读取的结果尚未知，未启动最终复跑、未正常启用或界面验收。

@@ -185,9 +185,22 @@ def run(volume, station, release_sha256, *, baseline):
             f["XQC_REASON"][observed] |= int(Reason.CALIBRATION_UNKNOWN)
         f["XQC_REASON"][observed & ((f["MB_QC_FLAGS"] & int(Flag.ATTENUATION_UNKNOWN)) != 0)] |= int(Reason.ATTENUATION_UNKNOWN)
         if cfg.morphology is not None:
-            ev.record["module_records"]["morphology"]["withheld_candidate_gates"] = int(
+            module = ev.record.setdefault("module_records", {}).setdefault(
+                "morphology", {"status": "UNAVAILABLE_AFTER_CUT_ABSTENTION"}
+            )
+            module["withheld_candidate_gates"] = int(
                 ((ev.arrays["XQC_MORPHOLOGY_MASK"] == 1) & withheld & ~rejected).sum()
             )
+        if cfg.near_floor_source_candidates_enabled:
+            candidate = ev.arrays.get(
+                'XQC_NEAR_FLOOR_SOURCE_MASK', np.zeros(f['DBZH'].shape, 'uint8')
+            )
+            f['XQC_NEAR_FLOOR_SOURCE_MASK'] = candidate
+            ev.record.setdefault('module_records', {}).setdefault(
+                'near_floor_source', {'status': 'UNAVAILABLE_AFTER_CUT_ABSTENTION'}
+            )[
+                'withheld_candidate_gates'
+            ] = int(((candidate == 1) & withheld & ~rejected).sum())
         target.fields = f
         # Per-cut records do not go into Volume.metadata: source-major fusion
         # demands exactly the same volume metadata for all cuts of a source.

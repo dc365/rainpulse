@@ -87,3 +87,203 @@ def test_excursion_outside_independent_raw_bounds_stays_unqualified():
     r = v.sweeps[0].range_m
     f['DBZH'][row, excursions] = 5. + 20*np.log10(r[excursions]/1000) - 20
     assert not evaluate(v, research=True)[0].any()
+
+
+def weak_family():
+    v, row, excursions = sample()
+    f = v.sweeps[0].fields
+    for other in range(row-10, row+11):
+        f['SNRH'][other] = f['SNRH'][row]
+        f['DBZH'][other] = f['DBZH'][row]
+    f['OBSERVED_MASK'][:] = np.isfinite(f['DBZH'])
+    return v, row, excursions
+
+
+def family(v, protected=None, *, research=True):
+    from rainpulse_algo.multiband.xqc_v2.source_fans import detect as detect_fans
+    cfg = config(radial_source_enabled=True, noise_censor_snr_db=3.)
+    view = adapt(v.sweeps[0], cfg)
+    p = np.zeros(view.sweep.shape, bool) if protected is None else protected[view.order]
+    kwargs = {'near_floor_references': True} if research else {}
+    mask, record = detect_fans(view.sweep, cfg, protected=p, **kwargs)
+    return view.restore(mask), record
+
+
+@pytest.mark.parametrize('shift,elevation', [(0,.47), (239,3.36), (45,14.55)])
+def test_complete_weak_family_uses_family_shoulders_and_heldout_models(shift, elevation):
+    v, row, excursions = weak_family()
+    for name, values in v.sweeps[0].fields.items():
+        v.sweeps[0].fields[name] = np.roll(values, shift, axis=0)
+    row = (row+shift) % len(v.sweeps[0].azimuth_deg)
+    v.sweeps[0].elevation_deg[:] = elevation
+    assert not evaluate(v, research=True)[0].any()  # narrow width remains unchanged
+    assert not family(v, research=False)[0][row, excursions].any()
+    mask, record = family(v)
+    assert mask[row, excursions].sum() > 20
+    assert not mask[row, ~excursions].any()
+    assert record['maximum_family_width_deg'] == 45.
+    assert record['diagnostic_only'] is True
+
+
+@pytest.mark.parametrize('kind', ['range_weather', 'unknown', 'protected'])
+def test_weak_family_keeps_weather_unknown_and_original_object_protection(kind):
+    v, row, _ = weak_family()
+    f = v.sweeps[0].fields
+    p = np.zeros(f['DBZH'].shape, bool)
+    if kind == 'range_weather':
+        f['DBZH'][row-10:row+11] = 25.
+    elif kind == 'unknown':
+        f['SNRH'][:] = np.nan
+    else:
+        p[row-10:row+11] = True
+    assert not family(v, p)[0].any()
+
+
+def candidate_config(**changes):
+    from .test_centered_pulsing_morphology import policy
+    return config(
+        mode='quarantine', receiver_enabled=False, radial_objects_enabled=False,
+        clutter_enabled=False, isolation_enabled=False,
+        morphology=policy().model_dump(mode='json'), noise_censor_snr_db=3.,
+        near_floor_source_candidates_enabled=True, **changes,
+    )
+
+
+def test_normal_candidate_owner_withholds_without_confirming_pollution():
+    from rainpulse_algo.multiband.quality import x_qc
+
+    from .helpers import station
+    v, row, excursions = weak_family()
+    original = v.sweeps[0].fields['DBZH'].copy()
+    out = x_qc(v, station(candidate_config()), 'a'*64).sweeps[0].fields
+    selected = out['XQC_NEAR_FLOOR_SOURCE_MASK'].astype(bool)
+    assert selected[row, excursions & (v.sweeps[0].range_m < 40000)].sum() > 10
+    assert not (selected & out['XQC_MORPHOLOGY_COUNTEREXAMPLE_MASK'].astype(bool)).any()
+    assert np.all(out['QC_ACTION'][selected] == 3)
+    assert np.isnan(out['DBZH_QC'][selected]).all()
+    assert not out['REFLECTIVITY_ELIGIBLE_FOR_CR'][selected].any()
+    np.testing.assert_array_equal(v.sweeps[0].fields['DBZH'], original)
+
+
+def test_compact_protection_failure_abstains_new_module_only():
+    from rainpulse_algo.multiband.xqc_v2.core import evaluate_cut
+    cfg = candidate_config()
+    cfg = cfg.model_copy(update={'morphology':cfg.morphology.model_copy(update={'maximum_work':1})})
+    v, _, _ = weak_family()
+    ev = evaluate_cut(v.sweeps[0], v.metadata, cfg)
+    assert not ev.arrays['XQC_NEAR_FLOOR_SOURCE_MASK'].any()
+    status = ev.record['module_records']['near_floor_source']['status']
+    assert status == 'UNAVAILABLE_COMPACT_PROTECTION'
+
+
+def test_candidate_action_budget_never_restores_visible_source():
+    from rainpulse_algo.multiband.quality import x_qc
+
+    from .helpers import station
+    v, _, _ = weak_family()
+    profile = station(candidate_config(maximum_new_exclusion_fraction=.001))
+    out = x_qc(v, profile, 'a'*64).sweeps[0].fields
+    selected = out['XQC_NEAR_FLOOR_SOURCE_MASK'].astype(bool)
+    assert selected.any()
+    assert out['XQC_BUDGET_WITHHELD_MASK'][selected].all()
+    assert np.isnan(out['DBZH_QC'][selected]).all()
+    assert not out['REFLECTIVITY_ELIGIBLE_FOR_CR'][selected].any()
+
+
+def test_activation_requires_explicit_receiver_and_compact_contract():
+    from pydantic import ValidationError
+    assert not config().near_floor_source_candidates_enabled
+    with pytest.raises(ValidationError):
+        config(near_floor_source_candidates_enabled=True, noise_censor_snr_db=3.)
+
+
+def test_new_summary_resource_abstention_keeps_existing_evidence():
+    from rainpulse_algo.multiband.xqc_v2.core import evaluate_cut
+    v, _, _ = weak_family()
+    ev = evaluate_cut(v.sweeps[0], v.metadata, candidate_config(source_maximum_summary_bytes=4096))
+    assert not ev.arrays['XQC_NEAR_FLOOR_SOURCE_MASK'].any()
+    assert ev.record['module_records']['near_floor_source']['status'] == 'RESOURCE_LIMIT_ABSTAINED'
+    assert ev.record['module_records']['morphology']['status'] == 'EVALUATED'
+
+
+def test_audit_mode_preserves_existing_display_and_admission():
+    from rainpulse_algo.multiband.quality import x_qc
+
+    from .helpers import station
+    v, _, _ = weak_family()
+    cfg = candidate_config().model_copy(update={'mode':'audit'})
+    old_cfg = cfg.model_copy(update={'near_floor_source_candidates_enabled':False})
+    old = x_qc(v, station(old_cfg), 'a'*64).sweeps[0].fields
+    new = x_qc(v, station(cfg), 'a'*64).sweeps[0].fields
+    assert new['XQC_NEAR_FLOOR_SOURCE_MASK'].any()
+    for name in ['DBZH_QC','DBZH_QC_DISPLAY','QC_ACTION','REFLECTIVITY_ELIGIBLE_FOR_CR']:
+        np.testing.assert_array_equal(old[name], new[name])
+
+
+def test_json_contract_preserves_existing_guards_and_new_dependencies():
+    import json
+    from pathlib import Path
+
+    import jsonschema
+    schema = json.loads((Path(__file__).resolve().parents[3]/
+                         'contracts/internal/multiband/x-qc-v2.schema.json').read_text())
+    data = candidate_config().model_dump(mode='json')
+    jsonschema.validate(data, schema)
+    for change in [{'noise_censor_snr_db':None}, {'morphology':None},
+                   {'near_floor_source_candidates_enabled':'true'}]:
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(data|change, schema)
+
+
+def test_new_pass_cannot_restart_source_model_allowance(monkeypatch):
+    from rainpulse_algo.multiband.xqc_v2 import radial_source
+    from rainpulse_algo.multiband.xqc_v2.core import evaluate_cut
+    v, _, _ = weak_family()
+    def exhausted(s, cfg, **kwargs):
+        return np.zeros(s.shape, bool), {'status':'EVALUATED',
+            'work':{'model_trials':cfg.source_maximum_trials, 'model_records':0}}
+    monkeypatch.setattr(radial_source, 'detect', exhausted)
+    ev = evaluate_cut(v.sweeps[0], v.metadata, candidate_config())
+    assert not ev.arrays['XQC_NEAR_FLOOR_SOURCE_MASK'].any()
+    record = ev.record['module_records']['near_floor_source']
+    assert record['status'] == 'RESOURCE_LIMIT_ABSTAINED'
+    assert record['work'] == {}
+
+
+def test_pipeline_resource_abstention_is_reported_instead_of_crashing(monkeypatch):
+    from rainpulse_algo.multiband.quality import x_qc
+    from rainpulse_algo.multiband.xqc_v2 import pipeline
+    from rainpulse_algo.multiband.xqc_v2.core import empty
+
+    from .helpers import station
+    v, _, _ = weak_family()
+    monkeypatch.setattr(pipeline, 'evaluate_cut', lambda cut, *a, **kw:
+                        empty(cut, 'RESOURCE_OR_GEOMETRY_ABSTAINED', 'frozen evidence limit'))
+    result = x_qc(v, station(candidate_config()), 'a'*64).sweeps[0]
+    assert result.xqc_diagnostics['status'] == 'RESOURCE_OR_GEOMETRY_ABSTAINED'
+    assert result.xqc_diagnostics['detail'] == 'frozen evidence limit'
+    assert not result.fields['XQC_NEAR_FLOOR_SOURCE_MASK'].any()
+
+
+def test_new_record_overflow_keeps_completed_legacy_evidence(monkeypatch):
+    from rainpulse_algo.multiband.xqc_v2 import core
+    from rainpulse_algo.multiband.xqc_v2.core import evaluate_cut
+    v, _, _ = weak_family()
+    cfg = candidate_config()
+    old = evaluate_cut(v.sweeps[0], v.metadata,
+                       cfg.model_copy(update={'near_floor_source_candidates_enabled':False}))
+    original = core.json.dumps
+    def overflow(value, *args, **kwargs):
+        near = (value.get('module_records', {}).get('near_floor_source', {})
+                if isinstance(value, dict) else {})
+        if near.get('status') == 'EVALUATED':
+            return 'x' * (cfg.maximum_evidence_bytes+1)
+        return original(value, *args, **kwargs)
+    monkeypatch.setattr(core.json, 'dumps', overflow)
+    new = evaluate_cut(v.sweeps[0], v.metadata, cfg)
+    for name in old.arrays:
+        np.testing.assert_array_equal(old.arrays[name], new.arrays[name])
+    assert not new.arrays['XQC_NEAR_FLOOR_SOURCE_MASK'].any()
+    status = new.record['module_records']['near_floor_source']['status']
+    assert status == 'EVIDENCE_BUDGET_ABSTAINED'
+    assert new.record['module_records']['morphology']['status'] == 'EVALUATED'

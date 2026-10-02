@@ -47,6 +47,7 @@ class Reason(IntFlag):
     RADIAL_SOURCE = 32768
     CONTEXT_CONFLICT = 65536
     MORPHOLOGY = 131072
+    NEAR_FLOOR_SOURCE = 262144
 
 
 @dataclass(frozen=True)
@@ -428,6 +429,55 @@ def _evaluate(cut, metadata, cfg, *, context=None):
         # and CR, preserving raw values, cause and review state (action 3).
     else:
         records["module_records"]["morphology"] = {"status": "DISABLED"}
+    near_floor = np.zeros(s.shape, bool)
+    if cfg.near_floor_source_candidates_enabled:
+        if records['module_records']['morphology'].get('status') != 'EVALUATED':
+            near_record = {'status':'UNAVAILABLE_COMPACT_PROTECTION', 'source_gates':0}
+        else:
+            from .source_fans import detect as detect_near_floor
+            from .source_summary import SourceStatistics
+
+            # Full original objects are removed from references as well as
+            # targets. A failed morphology pass cannot provide their absence.
+            compact = a['XQC_MORPHOLOGY_COUNTEREXAMPLE_MASK'][view.order].astype(bool)
+            protected = hard | local | compact
+            stats = None
+            previous_work = source_record.get('work', {})
+            previous_trials = int(previous_work.get('model_trials', 0))
+            previous_models = int(previous_work.get('model_records', 0))
+            try:
+                if (previous_trials >= cfg.source_maximum_trials
+                        or previous_models >= cfg.source_maximum_models):
+                    raise ResourceLimit('X source allowance exhausted before near-floor candidates')
+                stats = SourceStatistics.build(s, cfg)
+                # This new source pass cannot restart the cut's model allowance.
+                # Existing completed evidence has precedence; full RAW remains
+                # the reference input and no partial new mask is published.
+                stats.maximum_trials -= previous_trials
+                stats.maximum_models -= previous_models
+                near_floor, near_record = detect_near_floor(
+                    s, cfg, protected=protected, prepared=stats, near_floor_references=True,
+                )
+                near_floor &= observed & ~protected
+                near_record = dict(
+                    near_record, status='EVALUATED', diagnostic_only=False,
+                    action_semantics='candidate_withheld_not_confirmed',
+                    source_gates=int(near_floor.sum()), work=stats.receipt(),
+                    previous_source_trials=previous_trials,
+                    cumulative_source_trials=previous_trials + stats.trials,
+                )
+            except ResourceLimit as exc:
+                near_floor[:] = False
+                near_record = {
+                    'status':'RESOURCE_LIMIT_ABSTAINED', 'reason':str(exc),
+                    'source_gates':0, 'work':stats.receipt() if stats is not None else {},
+                }
+        if near_record['status'] != 'EVALUATED':
+            records['status'] = 'DEGRADED_NEAR_FLOOR_SOURCE_UNAVAILABLE'
+            records.setdefault('degraded_modules', []).append('near_floor_source')
+        records['module_records']['near_floor_source'] = near_record
+        a['XQC_NEAR_FLOOR_SOURCE_MASK'] = view.restore(near_floor.astype('uint8'))
+        why[near_floor] |= int(Reason.NEAR_FLOOR_SOURCE)
     from .limited_context import evaluate_context
 
     context_weather, context_record, context_measured, context_donor, context_ray, context_gate = (
@@ -444,84 +494,126 @@ def _evaluate(cut, metadata, cfg, *, context=None):
     a["XQC_CONTEXT_RAY"] = view.restore(context_ray)
     a["XQC_CONTEXT_GATE"] = view.restore(context_gate)
     a["XQC_SOURCE_MIXED_MASK"] = view.restore(mixed.astype("uint8"))
-    baseline_proposed = (
-        (receiver | partial | noisy | fragments | radial_source | clutter | isolated)
-        & observed
-        & ~hard
-    )
-    proposed = baseline_proposed | (morphology & observed & ~hard)
-    quarantine &= proposed
-    why[hard] |= int(Reason.WEATHER_PROTECTED)
-    denominator = int(observed.sum())
-    budget = cfg.maximum_new_exclusion_fraction * max(denominator, 1)
-    if int(baseline_proposed.sum()) > budget:
-        # Preserve the pre-existing full-enhancement abstention contract.
-        why[proposed] |= int(Reason.ACTION_BUDGET)
-        proposed = np.zeros(s.shape, bool)
-        quarantine = np.zeros(s.shape, bool)
-        records["status"] = "ACTION_BUDGET_ABSTAINED"
-    elif int(proposed.sum()) > budget:
-        # An incremental morphology entry must not undo previously accepted
-        # baseline QC. Keep the same cap and abstain the new proposal as a
-        # whole; do not select arbitrary pixels to fill the remaining budget.
-        why[proposed & ~baseline_proposed] |= int(Reason.ACTION_BUDGET)
-        proposed = baseline_proposed
-        quarantine &= proposed
-        records["module_records"]["morphology"]["action_status"] = "ACTION_BUDGET_ABSTAINED"
-        records["status"] = (
-            "DEGRADED_MORPHOLOGY_ACTION_BUDGET"
-            if baseline_proposed.any() else "ACTION_BUDGET_ABSTAINED"
+    def finalize(near_mask, override=None):
+        # Re-finalize a rejected incremental evidence module without rerunning
+        # fits, resetting work limits, or losing completed legacy masks/models.
+        final_records = dict(records)
+        final_records['module_records'] = {
+            key: dict(value) for key, value in records['module_records'].items()
+        }
+        final_records['degraded_modules'] = list(records.get('degraded_modules', []))
+        if not final_records['degraded_modules']:
+            del final_records['degraded_modules']
+        final_arrays = dict(a)
+        final_why = why.copy()
+        final_quarantine = quarantine.copy()
+        if cfg.near_floor_source_candidates_enabled:
+            final_arrays['XQC_NEAR_FLOOR_SOURCE_MASK'] = view.restore(near_mask.astype('uint8'))
+            final_why &= np.uint32(~int(Reason.NEAR_FLOOR_SOURCE) & 0xffffffff)
+            final_why[near_mask] |= int(Reason.NEAR_FLOOR_SOURCE)
+        if override is not None:
+            final_records['module_records']['near_floor_source'] = override
+            final_records['status'] = 'DEGRADED_NEAR_FLOOR_SOURCE_UNAVAILABLE'
+            final_records.setdefault('degraded_modules', []).append('near_floor_source')
+        baseline_proposed = (
+            (receiver | partial | noisy | fragments | radial_source | clutter | isolated)
+            & observed
+            & ~hard
         )
-    if cfg.morphology is not None:
-        records["module_records"]["morphology"]["withheld_candidate_gates"] = int(
-            (morphology & (proposed | ((why & int(Reason.ACTION_BUDGET)) != 0))
-             & ~quarantine).sum()
+        proposed = baseline_proposed | ((morphology | near_mask) & observed & ~hard)
+        final_quarantine &= proposed
+        final_why[hard] |= int(Reason.WEATHER_PROTECTED)
+        denominator = int(observed.sum())
+        budget = cfg.maximum_new_exclusion_fraction * max(denominator, 1)
+        if int(baseline_proposed.sum()) > budget:
+            # Preserve the pre-existing full-enhancement abstention contract.
+            final_why[proposed] |= int(Reason.ACTION_BUDGET)
+            proposed = np.zeros(s.shape, bool)
+            final_quarantine = np.zeros(s.shape, bool)
+            final_records["status"] = "ACTION_BUDGET_ABSTAINED"
+        elif int(proposed.sum()) > budget:
+            # An incremental morphology entry must not undo previously accepted
+            # baseline QC. Keep the same cap and abstain the new proposal as a
+            # whole; do not select arbitrary pixels to fill the remaining budget.
+            final_why[proposed & ~baseline_proposed] |= int(Reason.ACTION_BUDGET)
+            proposed = baseline_proposed
+            final_quarantine &= proposed
+            final_records["module_records"]["morphology"]["action_status"] = (
+                "ACTION_BUDGET_ABSTAINED"
+            )
+            if cfg.near_floor_source_candidates_enabled:
+                final_records['module_records']['near_floor_source']['action_status'] = (
+                    'ACTION_BUDGET_ABSTAINED'
+                )
+            final_records["status"] = (
+                "DEGRADED_MORPHOLOGY_ACTION_BUDGET"
+                if baseline_proposed.any() else "ACTION_BUDGET_ABSTAINED"
+            )
+        if cfg.morphology is not None:
+            final_records["module_records"]["morphology"]["withheld_candidate_gates"] = int(
+                (morphology & (proposed | ((final_why & int(Reason.ACTION_BUDGET)) != 0))
+                 & ~final_quarantine).sum()
+            )
+        # The censor carries its own integrity cap and never triggers, nor is
+        # subject to, the heuristic action budget.
+        proposed |= censor
+        final_quarantine |= censor
+        for key, value in (
+            ("RECEIVER", receiver),
+            ("PARTIAL", partial),
+            ("RADIAL_OBJECT", radial),
+            ("RADIAL_POLAR", noisy),
+            ("RADIAL_FRAGMENT", fragments),
+            ("RADIAL_SOURCE", radial_source),
+            ("MORPHOLOGY", morphology),
+            ("CLUTTER", clutter),
+            ("ISOLATED", isolated),
+            ("HARD_WEATHER", hard),
+            ("LOCAL_WEATHER", local),
+            ("NOISE_FLOOR", censor),
+            ("PROPOSED", proposed),
+            ("QUARANTINE", final_quarantine),
+            ("AVAILABLE", observed),
+        ):
+            final_arrays["XQC_" + key + "_MASK"] = view.restore(value.astype("uint8"))
+        final_arrays["XQC_REASON"] = view.restore(final_why)
+        final_records.update(
+            candidate_gates=int(final_arrays["XQC_PROPOSED_MASK"].sum()),
+            quarantine_supported_gates=int(final_arrays["XQC_QUARANTINE_MASK"].sum()),
+            raw_digest=original,
         )
-    # The censor carries its own integrity cap and never triggers, nor is
-    # subject to, the heuristic action budget.
-    proposed |= censor
-    quarantine |= censor
-    for key, value in (
-        ("RECEIVER", receiver),
-        ("PARTIAL", partial),
-        ("RADIAL_OBJECT", radial),
-        ("RADIAL_POLAR", noisy),
-        ("RADIAL_FRAGMENT", fragments),
-        ("RADIAL_SOURCE", radial_source),
-        ("MORPHOLOGY", morphology),
-        ("CLUTTER", clutter),
-        ("ISOLATED", isolated),
-        ("HARD_WEATHER", hard),
-        ("LOCAL_WEATHER", local),
-        ("NOISE_FLOOR", censor),
-        ("PROPOSED", proposed),
-        ("QUARANTINE", quarantine),
-        ("AVAILABLE", observed),
-    ):
-        a["XQC_" + key + "_MASK"] = view.restore(value.astype("uint8"))
-    a["XQC_REASON"] = view.restore(why)
-    records.update(
-        candidate_gates=int(a["XQC_PROPOSED_MASK"].sum()),
-        quarantine_supported_gates=int(a["XQC_QUARANTINE_MASK"].sum()),
-        raw_digest=original,
-    )
-    if s.digest != original:
-        raise RuntimeError("shared X core mutated original measurements")
-    serialized = json.dumps(
-        records, sort_keys=True, separators=(",", ":"), allow_nan=False
-    ).encode()
-    if len(serialized) > cfg.maximum_evidence_bytes:
-        from .evidence_tables import compact, pack_details
-
-        records = compact(records)
+        if s.digest != original:
+            raise RuntimeError("shared X core mutated original measurements")
         serialized = json.dumps(
-            records, sort_keys=True, separators=(",", ":"), allow_nan=False
+            final_records, sort_keys=True, separators=(",", ":"), allow_nan=False
         ).encode()
         if len(serialized) > cfg.maximum_evidence_bytes:
-            records = pack_details(records)
+            from .evidence_tables import compact, pack_details
+
+            final_records = compact(final_records)
             serialized = json.dumps(
-                records, sort_keys=True, separators=(",", ":"), allow_nan=False
+                final_records, sort_keys=True, separators=(",", ":"), allow_nan=False
             ).encode()
-        if len(serialized) > cfg.maximum_evidence_bytes:
-            raise ResourceLimit("X evidence record budget exceeded after lossless compaction")
-    return Evidence(a, records)
+            if len(serialized) > cfg.maximum_evidence_bytes:
+                final_records = pack_details(final_records)
+                serialized = json.dumps(
+                    final_records, sort_keys=True, separators=(",", ":"), allow_nan=False
+                ).encode()
+            if len(serialized) > cfg.maximum_evidence_bytes:
+                raise ResourceLimit("X evidence record budget exceeded after lossless compaction")
+        return Evidence(final_arrays, final_records)
+
+    try:
+        return finalize(near_floor)
+    except ResourceLimit:
+        if (not cfg.near_floor_source_candidates_enabled
+                or records['module_records']['near_floor_source']['status'] != 'EVALUATED'):
+            raise
+        # Evidence must fit losslessly. Withdraw only the new module as a
+        # whole, preserving previous complete evidence and the original cap.
+        near_record = records['module_records']['near_floor_source']
+        return finalize(np.zeros(s.shape, bool), {
+            'status': 'EVIDENCE_BUDGET_ABSTAINED',
+            'reason': 'combined lossless evidence exceeds existing record allowance',
+            'source_gates': 0, 'work': near_record.get('work', {}),
+        })

@@ -11,17 +11,19 @@ import numpy as np
 from .source_blocks import detect as detect_blocks
 
 
-def detect(s, cfg, *, protected, prepared=None):
+def detect(s, cfg, *, protected, prepared=None, near_floor_references=False):
     from .source_summary import SourceStatistics
 
     stats = (prepared or SourceStatistics.build(s, cfg)).use(s, cfg)
 
     def modes(width=None):
+        research = {'near_floor_references': True} if near_floor_references else {}
         # A single upper quantile switches processor modes when their mixture
         # crosses 10%. Fit primary and upper modes independently, each with the
         # same target/guard exclusion and physical response tests.
         mask, record = detect_blocks(
-            s, cfg, protected=protected, fan=True, family_width_deg=width, prepared=stats
+            s, cfg, protected=protected, fan=True, family_width_deg=width, prepared=stats,
+            **research,
         )
         primary, primary_record = detect_blocks(
             s,
@@ -31,6 +33,7 @@ def detect(s, cfg, *, protected, prepared=None):
             family_width_deg=width,
             prepared=stats,
             response_quantile=50,
+            **research,
         )
         mask |= primary
         record["primary_mode"] = primary_record
@@ -77,6 +80,11 @@ def detect(s, cfg, *, protected, prepared=None):
     _, za = s.moment("DBZH")
     sn, sa = s.moment("SNR")
     eligible = za & sa & (sn >= cfg.noise_censor_snr_db) & ~protected
+    if near_floor_references:
+        # Bound interior associations to the same actually measured research
+        # domain as targets/references; stronger unexpected receiver returns
+        # cannot inherit a weak near-floor source identity.
+        eligible &= sn <= cfg.noise_censor_snr_db + cfg.radial_source_maximum_spread_db
     eligible &= s.ranges[None, :] >= cfg.receiver.minimum_range_m
     coherent = np.zeros(s.shape[0], bool)
     for row in np.flatnonzero(s.good):

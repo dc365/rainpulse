@@ -31,8 +31,8 @@ def detect(
     )
     signal = za & sa & (sn >= cfg.noise_censor_snr_db)
     if near_floor_references:
-        if fan or cfg.noise_censor_snr_db is None:
-            raise ValueError('near-floor reference research requires a narrow receiver contract')
+        if cfg.noise_censor_snr_db is None:
+            raise ValueError('near-floor reference research requires a receiver floor contract')
         # Research only: retain paired measurements on both sides of the noise
         # floor as references. This never fills a missing REF/SNR or promotes
         # below-floor measurements to targets. Keep the existing spread bound.

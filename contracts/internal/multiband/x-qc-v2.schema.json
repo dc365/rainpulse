@@ -3196,10 +3196,137 @@
         }
       ],
       "default": null
+    },
+    "near_floor_source_candidates_enabled": {
+      "default": false,
+      "title": "Near Floor Source Candidates Enabled",
+      "type": "boolean"
+    },
+    "fragment_phase_minimum_fraction": {
+      "default": 0.8,
+      "exclusiveMinimum": 0.5,
+      "maximum": 1.0,
+      "title": "Fragment Phase Minimum Fraction",
+      "type": "number"
+    },
+    "fragment_association_difference_db": {
+      "default": 8.0,
+      "maximum": 12.0,
+      "minimum": 4.0,
+      "title": "Fragment Association Difference Db",
+      "type": "number"
+    },
+    "noise_censor_snr_db": {
+      "anyOf": [
+        {
+          "maximum": 10.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Noise Censor Snr Db"
+    },
+    "fragment_phase_variance_minimum": {
+      "default": 0.085,
+      "exclusiveMaximum": 1.0,
+      "exclusiveMinimum": 0.0,
+      "title": "Fragment Phase Variance Minimum",
+      "type": "number"
+    },
+    "fragment_minimum_echo_dbz": {
+      "default": -5.0,
+      "maximum": 10.0,
+      "minimum": -20.0,
+      "title": "Fragment Minimum Echo Dbz",
+      "type": "number"
+    },
+    "noise_censor_minimum_coverage": {
+      "default": 0.5,
+      "exclusiveMinimum": 0.0,
+      "maximum": 1.0,
+      "title": "Noise Censor Minimum Coverage",
+      "type": "number"
+    },
+    "fragment_maximum_distance_m": {
+      "default": 0.0,
+      "maximum": 30000.0,
+      "minimum": 0.0,
+      "title": "Fragment Maximum Distance M",
+      "type": "number"
+    },
+    "noise_censor_maximum_fraction": {
+      "default": 0.8,
+      "exclusiveMinimum": 0.0,
+      "maximum": 1.0,
+      "title": "Noise Censor Maximum Fraction",
+      "type": "number"
+    },
+    "radial_flank_mode": {
+      "default": "both",
+      "enum": [
+        "both",
+        "either"
+      ],
+      "title": "Radial Flank Mode",
+      "type": "string"
+    },
+    "fragment_phase_window_gates": {
+      "default": 5,
+      "maximum": 21,
+      "minimum": 3,
+      "title": "Fragment Phase Window Gates",
+      "type": "integer"
+    },
+    "fragment_minimum_anchor_gates": {
+      "default": 4,
+      "maximum": 64,
+      "minimum": 2,
+      "title": "Fragment Minimum Anchor Gates",
+      "type": "integer"
     }
   },
   "title": "XQCConfig",
   "type": "object",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "x-qc-v2.schema.json"
+  "$id": "x-qc-v2.schema.json",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "near_floor_source_candidates_enabled": {
+            "const": true
+          }
+        },
+        "required": [
+          "near_floor_source_candidates_enabled"
+        ]
+      },
+      "then": {
+        "required": [
+          "noise_censor_snr_db",
+          "morphology"
+        ],
+        "properties": {
+          "noise_censor_snr_db": {
+            "type": "number"
+          },
+          "morphology": {
+            "type": "object",
+            "required": [
+              "compact_counterexamples_enabled"
+            ],
+            "properties": {
+              "compact_counterexamples_enabled": {
+                "const": true
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }
