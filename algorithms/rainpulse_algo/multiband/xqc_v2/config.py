@@ -111,6 +111,8 @@ class XQCConfig(BaseModel):
     # None disables the censor (the default keeps S-parity behaviour).
     # The integrity cap and coverage floor guard a broken SNR field: a censor
     # that would swallow the sweep abstains entirely instead.
+    # Independent native gate validity applies even at ambiguous bearings;
+    # spatial source algorithms retain their separate angular barriers.
     noise_censor_snr_db: float | None = Field(default=None, ge=0., le=10.)
     noise_censor_maximum_fraction: float = Field(default=.8, gt=0., le=1.)
     noise_censor_minimum_coverage: float = Field(default=.5, gt=0., le=1.)

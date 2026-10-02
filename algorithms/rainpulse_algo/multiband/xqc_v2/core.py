@@ -335,10 +335,24 @@ def _evaluate(cut, metadata, cfg, *, context=None):
     # censoring is a calibration policy, bounded by a field-integrity cap.
     censor = np.zeros(s.shape, bool)
     if cfg.noise_censor_snr_db is not None:
-        sn_c, sa_c = s.moment("SNR")
-        coverage = float((observed & sa_c).sum()) / max(float(observed.sum()), 1.0)
-        candidate = observed & sa_c & np.isfinite(sn_c) & (sn_c < cfg.noise_censor_snr_db) & ~hard
-        fraction = float(candidate.sum()) / max(float(observed.sum()), 1.0)
+        from ..moment_support import moment_support
+
+        # The receiver floor is an independent native gate measurement. An
+        # ambiguous angular neighbour must remain a spatial-model barrier,
+        # but must not invalidate the SNR measured on that acquisition row.
+        shape = cut.fields["DBZH"].shape
+        sn_support = moment_support(cut.fields, "SNR", shape)
+        z_support = moment_support(cut.fields, "DBZH", shape)
+        floor_observed = (
+            mask(cut.fields, "OBSERVED_MASK", shape)
+            & ~mask(cut.fields, "NO_ECHO_MASK", shape)
+            & z_support.valid & (z_support.values >= -32) & (z_support.values <= 80)
+        )[view.order]
+        sn_c, sa_c = sn_support.values[view.order], sn_support.valid[view.order]
+        denominator = max(float(floor_observed.sum()), 1.0)
+        coverage = float((floor_observed & sa_c).sum()) / denominator
+        candidate = floor_observed & sa_c & (sn_c < cfg.noise_censor_snr_db) & ~hard
+        fraction = float(candidate.sum()) / denominator
         if (
             coverage < cfg.noise_censor_minimum_coverage
             or fraction > cfg.noise_censor_maximum_fraction
@@ -349,6 +363,7 @@ def _evaluate(cut, metadata, cfg, *, context=None):
                 "snr_coverage": coverage,
                 "censored_fraction": fraction,
                 "censored_gates": 0,
+                "measurement_support": "original_gate_moment_masks",
             }
         else:
             censor = candidate
@@ -365,6 +380,8 @@ def _evaluate(cut, metadata, cfg, *, context=None):
                 "censored_fraction": fraction,
                 "censored_gates": int(censor.sum()),
                 "by_range_km": bands,
+                "measurement_support": "original_gate_moment_masks",
+                "ambiguous_row_censored_gates": int(censor[~s.good].sum()),
             }
     else:
         records["module_records"]["noise_censor"] = {"status": "DISABLED"}
