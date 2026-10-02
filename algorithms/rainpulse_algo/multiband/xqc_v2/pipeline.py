@@ -201,6 +201,14 @@ def run(volume, station, release_sha256, *, baseline):
             )[
                 'withheld_candidate_gates'
             ] = int(((candidate == 1) & withheld & ~rejected).sum())
+        if cfg.native_alternative_source_candidates_enabled:
+            candidate = ev.arrays.get(
+                'XQC_NATIVE_ALTERNATIVE_SOURCE_MASK', np.zeros(f['DBZH'].shape, 'uint8')
+            )
+            f['XQC_NATIVE_ALTERNATIVE_SOURCE_MASK'] = candidate
+            ev.record.setdefault('module_records', {}).setdefault(
+                'native_alternative_source', {'status': 'UNAVAILABLE_AFTER_CUT_ABSTENTION'}
+            )['withheld_candidate_gates'] = int(((candidate == 1) & withheld & ~rejected).sum())
         target.fields = f
         # Per-cut records do not go into Volume.metadata: source-major fusion
         # demands exactly the same volume metadata for all cuts of a source.

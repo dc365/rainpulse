@@ -48,6 +48,7 @@ class Reason(IntFlag):
     CONTEXT_CONFLICT = 65536
     MORPHOLOGY = 131072
     NEAR_FLOOR_SOURCE = 262144
+    NATIVE_ALTERNATIVE_SOURCE = 524288
 
 
 @dataclass(frozen=True)
@@ -478,6 +479,23 @@ def _evaluate(cut, metadata, cfg, *, context=None):
         records['module_records']['near_floor_source'] = near_record
         a['XQC_NEAR_FLOOR_SOURCE_MASK'] = view.restore(near_floor.astype('uint8'))
         why[near_floor] |= int(Reason.NEAR_FLOOR_SOURCE)
+    native_source = np.zeros(s.shape, bool)
+    if cfg.native_alternative_source_candidates_enabled:
+        from .native_alternatives import evaluate as evaluate_native
+
+        if records['module_records']['morphology'].get('status') != 'EVALUATED':
+            native_record = {'status': 'UNAVAILABLE_COMPACT_PROTECTION', 'source_gates': 0}
+        else:
+            compact = a['XQC_MORPHOLOGY_COUNTEREXAMPLE_MASK'][view.order].astype(bool)
+            original_protected = view.restore(hard | local | compact)
+            original_mask, native_record = evaluate_native(
+                cut, cfg, original_protected, records['module_records'],
+            )
+            native_source = original_mask[view.order] & observed & ~(hard | local | compact)
+        records['module_records']['native_alternative_source'] = native_record
+        if native_record['status'] not in ('EVALUATED', 'NO_REPEATED_RAYS'):
+            records.setdefault('degraded_modules', []).append('native_alternative_source')
+            records['status'] = 'DEGRADED_NATIVE_ALTERNATIVE_SOURCE_UNAVAILABLE'
     from .limited_context import evaluate_context
 
     context_weather, context_record, context_measured, context_donor, context_ray, context_gate = (
@@ -494,7 +512,9 @@ def _evaluate(cut, metadata, cfg, *, context=None):
     a["XQC_CONTEXT_RAY"] = view.restore(context_ray)
     a["XQC_CONTEXT_GATE"] = view.restore(context_gate)
     a["XQC_SOURCE_MIXED_MASK"] = view.restore(mixed.astype("uint8"))
-    def finalize(near_mask, override=None):
+    def finalize(near_mask, override=None, native_mask=None, native_override=None):
+        if native_mask is None:
+            native_mask = native_source
         # Re-finalize a rejected incremental evidence module without rerunning
         # fits, resetting work limits, or losing completed legacy masks/models.
         final_records = dict(records)
@@ -515,12 +535,20 @@ def _evaluate(cut, metadata, cfg, *, context=None):
             final_records['module_records']['near_floor_source'] = override
             final_records['status'] = 'DEGRADED_NEAR_FLOOR_SOURCE_UNAVAILABLE'
             final_records.setdefault('degraded_modules', []).append('near_floor_source')
+        if cfg.native_alternative_source_candidates_enabled:
+            final_arrays['XQC_NATIVE_ALTERNATIVE_SOURCE_MASK'] = view.restore(
+                native_mask.astype('uint8'))
+            final_why[native_mask] |= int(Reason.NATIVE_ALTERNATIVE_SOURCE)
+        if native_override is not None:
+            final_records['module_records']['native_alternative_source'] = native_override
+            final_records.setdefault('degraded_modules', []).append('native_alternative_source')
+            final_records['status'] = 'DEGRADED_NATIVE_ALTERNATIVE_SOURCE_UNAVAILABLE'
         baseline_proposed = (
             (receiver | partial | noisy | fragments | radial_source | clutter | isolated)
             & observed
             & ~hard
         )
-        proposed = baseline_proposed | ((morphology | near_mask) & observed & ~hard)
+        proposed = baseline_proposed | ((morphology | near_mask | native_mask) & observed & ~hard)
         final_quarantine &= proposed
         final_why[hard] |= int(Reason.WEATHER_PROTECTED)
         denominator = int(observed.sum())
@@ -543,6 +571,10 @@ def _evaluate(cut, metadata, cfg, *, context=None):
             )
             if cfg.near_floor_source_candidates_enabled:
                 final_records['module_records']['near_floor_source']['action_status'] = (
+                    'ACTION_BUDGET_ABSTAINED'
+                )
+            if cfg.native_alternative_source_candidates_enabled:
+                final_records['module_records']['native_alternative_source']['action_status'] = (
                     'ACTION_BUDGET_ABSTAINED'
                 )
             final_records["status"] = (
@@ -603,17 +635,30 @@ def _evaluate(cut, metadata, cfg, *, context=None):
                 raise ResourceLimit("X evidence record budget exceeded after lossless compaction")
         return Evidence(final_arrays, final_records)
 
+    native_fallback = None
     try:
         return finalize(near_floor)
     except ResourceLimit:
+        if (cfg.native_alternative_source_candidates_enabled
+                and records['module_records']['native_alternative_source']['status'] == 'EVALUATED'):
+            native_record = records['module_records']['native_alternative_source']
+            native_fallback = {
+                'status': 'EVIDENCE_BUDGET_ABSTAINED',
+                'reason': 'combined lossless evidence exceeds existing record allowance',
+                'source_gates': 0, 'work': native_record.get('work', {}),
+            }
+            try:
+                return finalize(near_floor, native_mask=np.zeros(s.shape, bool),
+                                native_override=native_fallback)
+            except ResourceLimit:
+                pass
         if (not cfg.near_floor_source_candidates_enabled
                 or records['module_records']['near_floor_source']['status'] != 'EVALUATED'):
             raise
-        # Evidence must fit losslessly. Withdraw only the new module as a
-        # whole, preserving previous complete evidence and the original cap.
+        # Withdraw newest evidence first, retaining completed parent modules.
         near_record = records['module_records']['near_floor_source']
         return finalize(np.zeros(s.shape, bool), {
             'status': 'EVIDENCE_BUDGET_ABSTAINED',
             'reason': 'combined lossless evidence exceeds existing record allowance',
             'source_gates': 0, 'work': near_record.get('work', {}),
-        })
+        }, native_mask=np.zeros(s.shape, bool), native_override=native_fallback)
