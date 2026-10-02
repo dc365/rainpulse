@@ -456,3 +456,44 @@ for these two probes. Next gate is broader real source-cut validation followed
 by normal candidate recomputation, publication and UI, plus weather ambiguity
 acceptance. Repository CI for cac7a4a is failed (test/lint/performance-CD);
 build and independent QC comparison suites pass, so full CI is not claimed.
+
+### Full native comparison and normal candidate rollout (2026-10-02)
+
+The same frozen ZF505/ZF701/ZF702 05 volumes completed both candidate and old
+high-budget-reference runs: 6 jobs, 3 unique volumes, 27 unique native cuts.
+All 2044 native-array SHA comparisons match. Complete module model records
+also match after removing only computation-work counters. Trials total
+1024737 vs1562161, with537424 cache hits; no source resource-limit cut remains.
+Three existing action-budget warnings persist at ZF505 cuts4/5 and ZF702cut7;
+shape-selected QC-visible and CR-admitted counts are zero throughout. This is
+per-cut actual x_qc evidence, not neighbor-context or publication evidence.
+
+Candidate rollout now completed on 105's four ops multiband workers:
+image `sha256:c2afb43ac626fa5a3e0486e8cb43b15e607c44320a3fbe1681d2cd89a718cb5d`,
+network SHA `0b88aba83f774288c1e524d9c431c8f446de26f5c35371803014a02bb128da47`,
+fingerprint `453032980fd593912f2a7bf2e234a662ed8732e0c598e54a439a5a03c17d4e39`.
+All four workers were idle before replacement and ready afterward; the release
+channel was selected with its original revision21 CAS. Only the release ID and
+ZF505/ZF701/ZF702 morphology version and three v8 switches change in the
+network. Installed manifest verification against previous production shows
+five changed/new modules and791 unchanged. Installed smoke preserves1373
+compact gates while isolating2613 radial candidate gates, RAW unchanged,
+without confirmed source/weather or operational/QPE admission.
+
+Release preparation v1 rejected the image's old generator because it expanded
+unrequested defaults. V2 failed before generation because its helper path was
+absent/unwritable. Both failed artifacts remain; v3 uses the already committed,
+SHA-verified generator in the active remote deployment and enforces the narrow
+13-path network diff. These were preparation failures; no production network
+was replaced before the successful candidate deployment.
+
+Thirteen normal historical tasks were submitted through genuine plans/runs,
+including the user-reported early/next/08:49 and ZF702original/08:08 scans,
+the six frozen cross-time volumes, and the original ZF505 volume. Every plan
+checks exact input identities and source objects, and stores an idempotency key.
+Normal publication and audit are ongoing. The latest verified local snapshot
+has11 audited tasks/99 native cuts: RAW/coordinates/time unchanged, source
+complete, withheld/shape gates absent from QC and CR, PNGs verified. Warnings
+are retained as failures in individual mechanical ledgers. This snapshot is
+not a completion claim for all13 tasks, meteorology or UI. Browser reads are
+currently failing; computer tool reports a locked Mac, and UI remains pending.
