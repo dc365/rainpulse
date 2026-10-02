@@ -34,10 +34,16 @@ def qualify(native, blocked, group):
     blocks=(r//20000.).astype(int)
     source_components=0
     for identity in np.unique(parent[candidate]):
-        parent_source=original&(parent==identity)
-        parent_rows=np.unique(np.where(parent_source)[0])
+        clues=original&(parent==identity)
+        parent_rows=np.unique(np.where(clues)[0])
         members=candidate&(parent==identity)
         if not len(parent_rows):continue
+        # RAW tiles are local association regions, not original-source bounds.
+        # Recover only the complete frozen IDs touching this tile; freeze the
+        # tile's original angular rows so distant gates cannot widen a bundle.
+        source_ids=np.unique(seed[clues])
+        parent_source=original&np.isin(seed,source_ids)
+        parent_source[~np.isin(np.arange(native.shape[0]),parent_rows)]=False
         rejection[members]=2
         # Freeze disconnected ORIGINAL source bundles separately. Their empty
         # angular gap is not part of either bundle and can never train/grow one.
@@ -58,7 +64,7 @@ def qualify(native, blocked, group):
     for v in proof.values():v[retain]=np.nan
     return {PREFIX+'CANDIDATE_MASK':candidate.astype('uint8'),PREFIX+'QUALIFIED_MASK':qualified.astype('uint8'),
         PREFIX+'HOLD_REASON':hold,PREFIX+'REJECTION_CODE':rejection,PREFIX+'RAW_PARENT_ID':np.where(qualified,parent,0).astype('uint32'),
-        **{PREFIX+k:v for k,v in proof.items()}}, {'version':'original-source-footprint-v2',
+        **{PREFIX+k:v for k,v in proof.items()}}, {'version':'original-source-footprint-v3-complete-ledger',
         'candidate_gates':int(candidate.sum()),'qualified_gates':int(qualified.sum()),'actions':0,
         'original_source_components':source_components,
         'current_polar_retained_gates':int(retain.sum()),

@@ -53,6 +53,39 @@ def temporal_overlay(snapshot, report_path, raw):
     return hit
 
 
+def footprint_overlay(snapshot, published, report_path, raw):
+    report = json.loads(report_path.read_text())
+    if (
+        report.get("scope") != "complete_original_source_replay_not_published_QC"
+        or report.get("action_authority") is not False
+        or report.get("product_writes") is not False
+    ):
+        raise ValueError("footprint replay must remain non-actionable")
+    matches = [r for r in report["results"] if r["snapshot_sha256"] == digest(snapshot)]
+    if len(matches) != 1:
+        raise ValueError("unique bound footprint snapshot required")
+    record = matches[0]
+    if (
+        record.get("published_receipt_sha256") != digest(published)
+        or record.get("action_authority") is not False
+    ):
+        raise ValueError("footprint published binding/authority mismatch")
+    path = Path(record["diagnostics"])
+    if digest(path) != record["diagnostics_sha256"]:
+        raise ValueError("footprint diagnostic digest mismatch")
+    with np.load(path, allow_pickle=False) as data:
+        recovered = data["RECOVERED_MASK"]
+    if (
+        recovered.shape != raw.shape
+        or recovered.dtype != np.dtype("uint8")
+        or not np.isin(recovered, (0, 1)).all()
+        or np.any((recovered == 1) & ~np.isfinite(raw))
+        or int(recovered.sum()) != record["recovered_gates"]
+    ):
+        raise ValueError("invalid recovered footprint mask")
+    return recovered == 1
+
+
 def render(
     snapshot,
     published,
@@ -60,6 +93,7 @@ def render(
     shape_report=None,
     source_report=None,
     temporal_report=None,
+    footprint_report=None,
 ):
     if output.exists() or output.with_suffix(".json").exists():
         raise ValueError("new image and receipt required")
@@ -101,6 +135,18 @@ def render(
     candidates = np.zeros(raw.shape, bool)
     source_matches = candidates.copy()
     temporal_matches = candidates.copy()
+    footprint_matches = candidates.copy()
+    if footprint_report:
+        footprint_matches = (
+            footprint_overlay(snapshot, published, footprint_report, raw) & visible
+        )
+        record = next(
+            r
+            for r in json.loads(footprint_report.read_text())["results"]
+            if r["snapshot_sha256"] == digest(snapshot)
+        )
+        if footprint_matches.sum() != record["recovered_published_overlap"]:
+            raise ValueError("footprint published overlap mismatch")
     if temporal_report:
         temporal_matches = temporal_overlay(snapshot, temporal_report, raw) & visible
     for path in [shape_report, source_report]:
@@ -162,13 +208,17 @@ def render(
         & (y >= bounds[2])
         & (y <= bounds[3])
     )
-    panels = 3 if shape_report or source_report or temporal_report else 2
+    panels = (
+        3 if shape_report or source_report or temporal_report or footprint_report else 2
+    )
     fig, axes = plt.subplots(1, panels, figsize=(5 * panels, 5.5), layout="constrained")
     titles = [
         f"RAW audited targets: {selected.sum()}",
         f"Published QC visible targets: {visible.sum()}",
         f"Research: shape {candidates.sum()}, source {source_matches.sum()}, past {temporal_matches.sum()}",
     ]
+    if footprint_report:
+        titles[2] = f"Offline recovered: {footprint_matches.sum()}\nNot published QC"
     for index, ax in enumerate(axes):
         ax.scatter(x[context], y[context], color="#d9e1e8", s=0.6, rasterized=True)
         use = selected if index == 0 else visible
@@ -184,6 +234,16 @@ def render(
             rasterized=True,
         )
         if index == 2:
+            if footprint_report:
+                ax.scatter(
+                    x[footprint_matches],
+                    y[footprint_matches],
+                    color="#ed2939",
+                    s=40,
+                    edgecolors="#263238",
+                    linewidths=0.5,
+                    label="Complete original-source proof (not removal)",
+                )
             ax.scatter(
                 x[candidates],
                 y[candidates],
@@ -233,6 +293,7 @@ def render(
         shape_report_sha256=digest(shape_report) if shape_report else None,
         source_report_sha256=digest(source_report) if source_report else None,
         temporal_report_sha256=digest(temporal_report) if temporal_report else None,
+        footprint_report_sha256=digest(footprint_report) if footprint_report else None,
         script_sha256=digest(Path(__file__)),
         image_sha256=digest(output),
         selected=int(selected.sum()),
@@ -240,6 +301,7 @@ def render(
         shape_candidates=int(candidates.sum()),
         source_agreements=int(source_matches.sum()),
         past_source_matches=int(temporal_matches.sum()),
+        recovered_footprint_matches=int(footprint_matches.sum()),
         scope="audited_selection_only_with_RAW_context",
         research_is_removal=False,
         product_writes=False,
@@ -257,6 +319,7 @@ if __name__ == "__main__":
     parser.add_argument("--shape-report", type=Path)
     parser.add_argument("--source-report", type=Path)
     parser.add_argument("--temporal-report", type=Path)
+    parser.add_argument("--footprint-report", type=Path)
     args = parser.parse_args()
     print(
         json.dumps(
@@ -267,6 +330,7 @@ if __name__ == "__main__":
                 args.shape_report,
                 args.source_report,
                 args.temporal_report,
+                args.footprint_report,
             )
         )
     )
