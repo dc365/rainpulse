@@ -1,0 +1,272 @@
+#!/usr/bin/env python3
+"""Render bound native QC audit targets; research overlays never mean removal."""
+
+import argparse
+import hashlib
+import json
+from pathlib import Path
+
+import numpy as np
+
+
+def digest(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def temporal_overlay(snapshot, report_path, raw):
+    report = json.loads(report_path.read_text())
+    if (
+        report.get("scope") != "past_original_seed_recurrence_not_published_QC_delta"
+        or report.get("action_authority") is not False
+        or report.get("product_writes") is not False
+    ):
+        raise ValueError("temporal evidence must remain non-actionable")
+    matches = [r for r in report["results"] if r["snapshot_sha256"] == digest(snapshot)]
+    if len(matches) != 1 or matches[0].get("action_authority") is not False:
+        raise ValueError("unique bound temporal snapshot required")
+    record = matches[0]
+    path = Path(record["diagnostics"])
+    if digest(path) != record["diagnostics_sha256"]:
+        raise ValueError("temporal diagnostic digest mismatch")
+    with np.load(path, allow_pickle=False) as data:
+        masks = {
+            key: data["ST_" + key + "_MASK"]
+            for key in ("MATCH", "CANDIDATE", "MEASURED", "BOUNDARY_SUPPORTED")
+        }
+    for value in masks.values():
+        if (
+            value.shape != raw.shape
+            or value.dtype != np.dtype("uint8")
+            or not np.isin(value, (0, 1)).all()
+        ):
+            raise ValueError("invalid temporal overlay mask")
+    hit = masks["MATCH"] == 1
+    if (
+        np.any(
+            hit
+            & (~np.isfinite(raw) | (masks["CANDIDATE"] != 1) | (masks["MEASURED"] != 1))
+        )
+        or np.any((masks["BOUNDARY_SUPPORTED"] == 1) & ~hit)
+        or int(hit.sum()) != record["matched_gates"]
+    ):
+        raise ValueError("temporal overlay lacks original measured candidate")
+    return hit
+
+
+def render(
+    snapshot,
+    published,
+    output,
+    shape_report=None,
+    source_report=None,
+    temporal_report=None,
+):
+    if output.exists() or output.with_suffix(".json").exists():
+        raise ValueError("new image and receipt required")
+    receipt = json.loads(published.read_text())
+    if receipt["scope"] != "exact_Web_consumed_stored_QC_not_replay":
+        raise ValueError("actual published QC audit required")
+    if digest(snapshot) != receipt["snapshot_sha256"]:
+        raise ValueError("snapshot does not match published audit")
+    with np.load(snapshot, allow_pickle=False) as data:
+        raw = data["RAW"]
+        az = data["AZIMUTH"]
+        ranges = data["RANGE"]
+        meta = json.loads(str(data["METADATA"]))
+    if meta["scan_id"] != receipt["web_frame_identity"]["web_scan_id"]:
+        raise ValueError("native scan mismatch")
+    selected = np.zeros(raw.shape, bool)
+    visible = selected.copy()
+    qc = np.full(raw.shape, np.nan)
+    for record in receipt["target_records"]:
+        row, col = record["row"], record["column"]
+        if selected[row, col] or not np.isclose(
+            raw[row, col], record["raw_dbzh"], atol=0.0001, rtol=0
+        ):
+            raise ValueError("duplicate or unbound native measurement")
+        if not (
+            np.isclose(az[row], record["azimuth_deg"], atol=0.0001, rtol=0)
+            and np.isclose(ranges[col], record["range_m"], atol=0.001, rtol=0)
+        ):
+            raise ValueError("native coordinate mismatch")
+        selected[row, col] = True
+        visible[row, col] = record["renderer_visible"]
+        if record["qc_dbzh"] is not None:
+            qc[row, col] = record["qc_dbzh"]
+    if (
+        selected.sum() != receipt["target_gates"]
+        or visible.sum() != receipt["renderer_eligible_visible_gates"]
+    ):
+        raise ValueError("published count mismatch")
+    candidates = np.zeros(raw.shape, bool)
+    source_matches = candidates.copy()
+    temporal_matches = candidates.copy()
+    if temporal_report:
+        temporal_matches = temporal_overlay(snapshot, temporal_report, raw) & visible
+    for path in [shape_report, source_report]:
+        if path is None:
+            continue
+        report = json.loads(path.read_text())
+        if (
+            report["snapshot_sha256"] != digest(snapshot)
+            or report["published_receipt_sha256"] != digest(published)
+            or report["action_authority"]
+            or report["product_writes"]
+        ):
+            raise ValueError("research report binding/authority mismatch")
+        if path == shape_report:
+            evidence = report["detectors"]["variable_object"]
+            for original in evidence["boundary_target_hypotheses"]:
+                for run in original["matched_original_runs"]:
+                    rr = slice(run["native_row_start"], run["native_row_end"])
+                    columns = (ranges // original["scale_m"]).astype(int) == run[
+                        "block"
+                    ]
+                    candidates[rr] |= columns[None, :] & (
+                        raw[rr] >= original["level_dbz"]
+                    )
+            candidates &= visible
+            if candidates.sum() != evidence["boundary_candidate_overlap"]:
+                raise ValueError("research candidate count mismatch")
+        if path == source_report:
+            evidence = report["detectors"]["source_segments"]
+            for record in evidence["records"]:
+                if record["combined_source_agreement"]:
+                    source_matches[record["row"], record["column"]] = True
+            if (source_matches & ~visible).any() or source_matches.sum() != evidence[
+                "target_same_source_agreement"
+            ]:
+                raise ValueError("source agreement count mismatch")
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    theta = np.deg2rad(az[:, None])
+    radius = ranges[None, :] / 1000.0
+    x = radius * np.sin(theta)
+    y = radius * np.cos(theta)
+    rr, cc = np.where(selected)
+    margin = 25.0
+    bounds = (
+        float(x[rr, cc].min() - margin),
+        float(x[rr, cc].max() + margin),
+        float(y[rr, cc].min() - margin),
+        float(y[rr, cc].max() + margin),
+    )
+    context = (
+        np.isfinite(raw)
+        & (raw >= 5)
+        & (x >= bounds[0])
+        & (x <= bounds[1])
+        & (y >= bounds[2])
+        & (y <= bounds[3])
+    )
+    panels = 3 if shape_report or source_report or temporal_report else 2
+    fig, axes = plt.subplots(1, panels, figsize=(5 * panels, 5.5), layout="constrained")
+    titles = [
+        f"RAW audited targets: {selected.sum()}",
+        f"Published QC visible targets: {visible.sum()}",
+        f"Research: shape {candidates.sum()}, source {source_matches.sum()}, past {temporal_matches.sum()}",
+    ]
+    for index, ax in enumerate(axes):
+        ax.scatter(x[context], y[context], color="#d9e1e8", s=0.6, rasterized=True)
+        use = selected if index == 0 else visible
+        values = raw if index == 0 else qc
+        points = ax.scatter(
+            x[use],
+            y[use],
+            c=values[use],
+            cmap="turbo",
+            vmin=0,
+            vmax=70,
+            s=5,
+            rasterized=True,
+        )
+        if index == 2:
+            ax.scatter(
+                x[candidates],
+                y[candidates],
+                color="#f28e00",
+                s=8,
+                label="Shape candidate",
+            )
+            ax.scatter(
+                x[source_matches],
+                y[source_matches],
+                color="#a400b5",
+                s=13,
+                label="Original source agreement",
+            )
+            ax.scatter(
+                x[temporal_matches],
+                y[temporal_matches],
+                color="#00c9c9",
+                s=35,
+                edgecolors="#263238",
+                linewidths=0.4,
+                label="Past original seed match (not removal)",
+            )
+            ax.legend(loc="lower left", fontsize=8)
+        ax.scatter([0], [0], marker="+", color="#263238", s=40)
+        ax.set(
+            xlim=bounds[:2],
+            ylim=bounds[2:],
+            title=titles[index],
+            xlabel="East (km)",
+            ylabel="North (km)",
+        )
+        ax.set_aspect("equal")
+        ax.grid(alpha=0.2)
+    fig.colorbar(points, ax=axes[:2], shrink=0.6, label="dBZ")
+    fig.suptitle(
+        f"{meta['radar_id'].upper()} {meta['local_time']} CST | sweep {meta['sweep']}\n"
+        "Gray = RAW context, not QC; colored = audited selection only; research overlays are NOT removals",
+        fontsize=11,
+    )
+    output.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output, dpi=150)
+    plt.close(fig)
+    result = dict(
+        snapshot_sha256=digest(snapshot),
+        published_sha256=digest(published),
+        shape_report_sha256=digest(shape_report) if shape_report else None,
+        source_report_sha256=digest(source_report) if source_report else None,
+        temporal_report_sha256=digest(temporal_report) if temporal_report else None,
+        script_sha256=digest(Path(__file__)),
+        image_sha256=digest(output),
+        selected=int(selected.sum()),
+        published_visible=int(visible.sum()),
+        shape_candidates=int(candidates.sum()),
+        source_agreements=int(source_matches.sum()),
+        past_source_matches=int(temporal_matches.sum()),
+        scope="audited_selection_only_with_RAW_context",
+        research_is_removal=False,
+        product_writes=False,
+    )
+    with output.with_suffix(".json").open("x") as stream:
+        json.dump(result, stream, indent=2)
+    return result
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("snapshot", type=Path)
+    parser.add_argument("published", type=Path)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--shape-report", type=Path)
+    parser.add_argument("--source-report", type=Path)
+    parser.add_argument("--temporal-report", type=Path)
+    args = parser.parse_args()
+    print(
+        json.dumps(
+            render(
+                args.snapshot,
+                args.published,
+                args.output,
+                args.shape_report,
+                args.source_report,
+                args.temporal_report,
+            )
+        )
+    )
