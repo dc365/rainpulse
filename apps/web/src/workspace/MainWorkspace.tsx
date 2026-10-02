@@ -742,6 +742,7 @@ export function updateLayerErrorState(
 export function SharedTimeline({
   observationOnly = false,
   observationLabel = '体扫',
+  timeBasis = 'observation',
   cycleControls,
   productMode = 'rain_rate',
   onProductMode,
@@ -762,6 +763,7 @@ export function SharedTimeline({
 }: {
   observationOnly?: boolean
   observationLabel?: string
+  timeBasis?: 'observation' | 'analysis'
   cycleControls?: React.ReactNode
   productMode?: ProductMode
   onProductMode?: (mode: ProductMode) => void
@@ -933,7 +935,7 @@ export function SharedTimeline({
           <span>{playing ? <i aria-hidden="true" /> : null}{playing
             ? `播放中 · ${activeIndex + 1}/${values.length} 帧`
             : productMode !== 'rain_rate' ? `${values.length} 个累计区间`
-            : observationOnly ? `${values.length} ${observationLabel} · 真实观测时间` : `${values.length} 帧${intervalMinutes ? ` · ${intervalMinutes} 分钟间隔` : ''}`}</span>
+            : observationOnly ? `${values.length} ${observationLabel} · ${timeBasis === 'analysis' ? '分析时次' : '真实观测时间'}` : `${values.length} 帧${intervalMinutes ? ` · ${intervalMinutes} 分钟间隔` : ''}`}</span>
           {!observationOnly && !cycleControls && <span className="workspace-timeline-issue"><small>起报</small>{formatCycleTime(issueTime)}</span>}
           <strong>{highlighted ? `${intervalLabel(issueTime, highlighted)}${intervalBusy && !draftInterval ? ' · 计算中…' : ''}` : productMode === 'rain_rate' ? `${timelineDateTime(new Date(activeValue))} 北京时间`
             : `${accumulationLabel(issueTime, activeValue, productMode)} · ${timelineDateTime(new Date(activeValue))} 北京时间`}</strong>

@@ -329,3 +329,22 @@ it('loads a deep-linked native scan from the second catalog page', async () => {
   expect(fetcher.mock.calls.some(([url]) => String(url).includes('cursor=older'))).toBe(true)
   expect((screen.getByRole('combobox', { name: '仰角' }) as HTMLSelectElement).value).toBe('3')
 })
+
+it('labels the shared analysis grid separately from the native X acquisition time', async () => {
+  setup()
+  const nativeTime = '2026-08-28T00:08:25Z'
+  const fallback = vi.mocked(fetch).getMockImplementation()!
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    if (String(input).includes('radar-scans')) return { ok: true, json: async () => ({
+      ...scans, items: [{ ...scans.items[0], volume_start: nativeTime, volume_end: '2026-08-28T00:09:00Z' }],
+    }) } as Response
+    return fallback(input, init)
+  })
+  window.history.replaceState({}, '', '/?preset=qc&band=X&date=2026-08-28&time=2026-08-28T00:08:25Z&station=zf101&scan=scan-x&result=result-x')
+  render(<RadarQCWorkspace />)
+  await screen.findAllByText('08:08:25')
+  expect(screen.getByText('2 分析周期 · 分析时次')).toBeTruthy()
+  expect(screen.getByText('08/28 08:06 北京时间')).toBeTruthy()
+  expect(new URLSearchParams(window.location.search).get('time')).toBe(nativeTime)
+  expect(new URLSearchParams(window.location.search).get('scan')).toBe('scan-x')
+})
