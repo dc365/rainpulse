@@ -132,7 +132,13 @@ def detect(
             & (abs(responses[:, None] - responses[None, :]) <= spread)
         )
         fits = ReferenceFits(stats, cfg.source_maximum_summary_bytes - stats.workspace_bytes)
-        for target in np.flatnonzero((count > 0) & geometry):
+        target_blocks = count > 0
+        if near_floor_references:
+            # Below-floor blocks remain measured training references. A block
+            # with no eligible target cannot produce an action or a model
+            # record, so do not spend held-out fitting budget on it.
+            target_blocks = np.array([targets[row, g].any() for g in stats.indices])
+        for target in np.flatnonzero(target_blocks & geometry):
             outside = abs(ids - ids[target]) > cfg.receiver.guard_blocks
             eligible = (count >= minimum) & geometry & outside
             seen = set()

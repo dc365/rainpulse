@@ -287,3 +287,16 @@ def test_new_record_overflow_keeps_completed_legacy_evidence(monkeypatch):
     status = new.record['module_records']['near_floor_source']['status']
     assert status == 'EVIDENCE_BUDGET_ABSTAINED'
     assert new.record['module_records']['morphology']['status'] == 'EVALUATED'
+
+
+def test_reference_only_blocks_do_not_consume_target_fit_budget():
+    from rainpulse_algo.multiband.xqc_v2.source_summary import SourceStatistics
+    v, row, _ = sample()
+    v.sweeps[0].fields['SNRH'][row] = 2.1
+    cfg = config(radial_source_enabled=True, noise_censor_snr_db=3.)
+    sweep = adapt(v.sweeps[0], cfg).sweep
+    stats = SourceStatistics.build(sweep, cfg)
+    mask, record = detect(sweep, cfg, protected=np.zeros(sweep.shape, bool),
+                          prepared=stats, near_floor_references=True)
+    assert not mask.any() and record['models'] == []
+    assert stats.trials == 0
