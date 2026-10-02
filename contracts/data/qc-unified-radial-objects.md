@@ -35,3 +35,14 @@ Eight historical examples are regression data, not independent generalization
 evidence. Compare on fixed inputs and report weather retention, held-out object
 recall, runtime and per-reason abstention. Independent dates/sites are required
 before broad readiness; additional gate counts alone do not establish correctness.
+
+Stable subbands may be measured inside a mixed complete parent. Each band starts
+from an actual RAW angular run, matches only its frozen original boundary, and
+retains every range window's matched/merged/forked/unknown history. Membership is
+actual RAW inside the original measured extent. Target plus adjacent windows
+train neither boundaries nor edge confirmation. At least five remote measured
+windows spanning150km are required. Actual exterior noise/weak reflectivity is
+required; an available but nonquiet SNR with missing DBZH proves coverage only.
+Local reliable weather stays in measured occupancy and never creates dry edges.
+Pure curved/narrowing RAW parents cannot restart as clean subbands; an unresolved
+fork remains an abstention. This route has no old source-ID prerequisite.

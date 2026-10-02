@@ -19,6 +19,7 @@ class MeasuredWindow:
     known_fraction: float
     contrast_fraction: float
     anchor_support_m: float
+    reference_blocks: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,7 @@ class RawObject:
     history_holds: tuple[str, ...]
     origin_ids: tuple[int, ...] = ()
     native_segment_start: int = 0
+    history_states: tuple[tuple[int, str], ...] = ()
 
     @property
     def members(self):

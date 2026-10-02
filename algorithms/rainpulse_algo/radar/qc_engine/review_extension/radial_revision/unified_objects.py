@@ -5,6 +5,8 @@ on the legacy strong mask or rejected-source IDs. Evidence scores are not
 weather probabilities and the default is read-only audit.
 """
 
+from dataclasses import replace
+
 import numpy as np
 
 from ..arrays import mask, moment, native_geometry
@@ -97,6 +99,7 @@ def evaluate(
     mode="audit",
     maximum_objects=50000,
     projection_enabled=True,
+    subbands_enabled=False,
 ):
     if mode not in ("audit", "quarantine"):
         raise ValueError("unified object mode must be audit or quarantine")
@@ -116,6 +119,8 @@ def evaluate(
 
     def collect(obj):
         nonlocal member_count
+        if len(objects) >= maximum_objects:
+            raise ResourceLimit("unified original object budget exceeded; no partial result")
         member_count += sum(len(w.members) for w in obj.windows)
         if member_count > 5000000:
             raise ResourceLimit("unified original membership budget exceeded; no partial result")
@@ -125,12 +130,25 @@ def evaluate(
     detect(
         native, blocked, beam_width=beam_width, maximum_objects=maximum_objects, object_sink=collect
     )
+    original_objects = tuple(objects)
+    nomination_identity = max((o.identity for o in original_objects), default=0)
+
+    def collect_nomination(obj):
+        nonlocal nomination_identity
+        nomination_identity += 1
+        collect(replace(obj, identity=nomination_identity))
+
+    if subbands_enabled:
+        from .native_subbands import nominate as nominate_subbands
+
+        for obj in nominate_subbands(native, blocked, original_objects, beam):
+            collect_nomination(obj)
     if projection_enabled:
         from .projected_objects import nominate
 
-        projected = nominate(objects, beam, ranges, dr)
+        projected = nominate(original_objects, beam, ranges, dr)
         for obj in projected:
-            collect(obj)
+            collect_nomination(obj)
     arrays = {
         PREFIX + name: np.zeros(native.shape, "uint8")
         for name in (
@@ -143,6 +161,8 @@ def evaluate(
         )
     }
     arrays[PREFIX + "ID"] = np.zeros(native.shape, "uint32")
+    if subbands_enabled:
+        arrays[PREFIX + "SUBBAND_PROPOSAL_MASK"] = np.zeros(native.shape, "uint8")
     records = []
     for obj in objects:
         members = np.asarray(obj.members, dtype=np.int64)
@@ -171,6 +191,8 @@ def evaluate(
             arrays[PREFIX + "SEGMENT_RETAIN_MASK"].flat[index[~allow]] = 1
             chosen = index[allow]
             arrays[PREFIX + "PROPOSAL_MASK"].flat[chosen] = 1
+            if obj.kind == "subband":
+                arrays[PREFIX + "SUBBAND_PROPOSAL_MASK"].flat[chosen] = 1
             arrays[PREFIX + "ID"].flat[chosen] = obj.identity
             proposals.extend(map(int, chosen))
         records.append(
@@ -187,6 +209,12 @@ def evaluate(
                 original_nomination_ids=list(obj.origin_ids),
                 native_segment_start=obj.native_segment_start,
                 original_history_holds=list(obj.history_holds),
+                reference_windows=[
+                    dict(target_block=w.block, blocks=list(w.reference_blocks))
+                    for w in obj.windows
+                    if w.reference_blocks
+                ],
+                original_window_states=list(obj.history_states),
             )
         )
     # A duplicate abstaining nomination cannot cancel another complete proof.
@@ -195,7 +223,7 @@ def evaluate(
     if mode == "quarantine":
         arrays[PREFIX + "ACTION_MASK"][hit] = 1
     return arrays, dict(
-        version=VERSION,
+        version="unified-native-objects-candidate-v2-subbands" if subbands_enabled else VERSION,
         mode=mode,
         objects=records,
         candidate_gates=int(arrays[PREFIX + "CANDIDATE_MASK"].sum()),

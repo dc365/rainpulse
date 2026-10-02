@@ -60,3 +60,74 @@ frozen NPZ inputs, `--published` exact stored-Web receipts, `--plot`, and a fres
 `--output` directory. It writes three-way figures, diagnostic masks and a bound
 JSON report. Use the same eight snapshot paths listed in the private final
 heldout-sparse-target report; no raw private data is committed.
+
+## Original subbands, candidate v2
+
+`native_subbands.py` adds optional original angular-band nominations inside
+mixed RAW parents. A frozen native boundary, measured outer edges, at least five
+remote reference windows spanning 150 km, complete matched/merged/forked/unknown
+window states and exact observed membership are retained. The target and its
+adjacent windows cannot train its references. Available nonquiet SNR with missing
+DBZH is coverage, not quiet-air evidence. Local unions may explain a parent's
+centre shift only with stable measured subband edges over at least 80% of its
+active history; narrowing-weather histories and unresolved forks still veto.
+Providers consume the original RAW nominations independently. New subbands and
+accepted proposals never become projected-source parents; IDs and shared object
+and membership budgets remain unique/bounded.
+
+The default remains v1. Enable `--subbands` in the audit driver for four-way
+comparison. Final private evidence is
+`.build/s-discontinuous-20261001/unified-subbands-20261002-v2/report.json`.
+All eight input/code/mask/image hashes match; RAW is unchanged, protected/missing
+proposal overlap is zero and all previous v1 proposals are retained. The fixed,
+variable, unified and subband regression suite passes 70 tests, including half
+degree resolution, rotation across north, local unions, true forks, sparse held
+out targets, reliable weather, curved/narrowing counterexamples and proof replay.
+Nominal new-detector runtimes are 0.77–2.35 seconds (exclude validation/plotting).
+
+The exact historical stored-Web overlap is still 0/2094 at Z9598 08:18, and
+increases from 2/728 to 19/728 at 08:42. These counts are nominations intersecting
+the old frozen residual list, not new Web removals or pollution accuracy.
+For 08:18, source-stage overlap increases from zero to 412, but it does not
+resolve that stored residual list. Larger whole-RAW candidate counts must not
+be reported as success on the main target. Initial v1 subband report is
+superseded by v2 after unique-provider IDs and scoped checks were completed.
+
+The measured wide original fan at 08:18 has stable geometry but most sampled
+windows have only 0.61–0.79 simultaneous known/contrasting bilateral coverage;
+the current source-window gate requires 0.8. Separate observation of the two
+sides is being discarded before object classification. This is an architectural
+bottleneck, not evidence that each remaining point needs its own station/time
+rule. Some targets also carry weather-compatible measurements; neither missing
+polarimetry nor visual alignment alone establishes their cause.
+
+## Generalization direction and research basis
+
+Next separate nomination from confirmation fully: nominate native radial and
+fan objects using multiscale physical geometry/occupancy before source IDs or
+per-gate flank tests; aggregate *separate* left/right measured support over held
+out physical windows; combine radial anisotropy, angular boundary consistency,
+along/across texture, available polarimetric/Doppler evidence and positive
+weather evidence at object level. Keep uncertain windows/gates locally and
+freeze original membership. This needs a new contract and counterexamples for
+alternating observed sides, broad radial weather and overlapping precipitation;
+simply lowering the present coverage threshold is not a verified solution.
+
+The [RADVOL-QC 2022 paper](https://amt.copernicus.org/articles/15/261/2022/)
+explicitly distinguishes wide, narrow, discontinuous, shorter-longitudinal and
+inverse spikes. Its discontinuous route uses broad radial statistics followed
+by dBZ/linear-reflectivity changeability checks to avoid weather-edge confusion.
+The [BALTRAD SPIKE interface](https://baltrad.github.io/cookbook/cookbook_RADVOL_SPIKE)
+accepts native volume/scan reflectivity without mandatory additional moments.
+This supports a base-data morphology route; it does not establish transfer of
+its thresholds from the published network to these S-band radars. Our current
+candidate is not an implementation or benchmark of that reference algorithm.
+
+Freeze whole-object annotated radial/fan cases and clear-weather, convective
+edge, narrow rainband and near-clutter controls across independent dates/sites.
+Report object recall, retained weather, uncertainty, runtime and current-version
+Web publication separately. Eight examples reused during development cannot
+prove generalization. Near-site broad clutter and isolated points still need
+their own evidence/cleanup stage; a radial detector does not replace them.
+Production engine/writer integration, reference baseline, independent holdout
+and installed runtime/Web verification remain pending; no 105 change this round.

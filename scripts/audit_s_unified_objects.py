@@ -66,7 +66,7 @@ def published_targets(paths, snapshot, a, meta):
     return selected[0] if selected else (None, None)
 
 
-def replay(path, output, receipts, plot):
+def replay(path, output, receipts, plot, subbands=False):
     before = digest(path)
     with np.load(path, allow_pickle=False) as source:
         a = {key: source[key] for key in source.files}
@@ -93,22 +93,23 @@ def replay(path, output, receipts, plot):
         ("variable", "variable_morphology", {}),
         ("unified", "unified_objects", {}),
     )
+    if subbands:
+        methods += (
+            ("unified_subbands", "unified_objects", {"subbands_enabled": True}),
+        )
     all_arrays, rows = {}, {}
     visible, receipt_sha = published_targets(receipts, path, a, meta)
     remaining = a["BEFORE"].astype(bool) & ~a["ADDED"].astype(bool)
     for label, name, options in methods:
         module = importlib.import_module(BASE + name)
         start = time.monotonic()
-        func = module.evaluate if label == "unified" else module.detect
+        unified = name == "unified_objects"
+        func = module.evaluate if unified else module.detect
         arrays, report = func(native, blocked, beam_width=beam, **options)
         elapsed = time.monotonic() - start
         module.validate(arrays, native, blocked, beam_width=beam, **options)
         chosen = (
-            arrays[
-                module.PREFIX
-                + ("PROPOSAL_MASK" if label == "unified" else "STRONG_MASK")
-            ]
-            == 1
+            arrays[module.PREFIX + ("PROPOSAL_MASK" if unified else "STRONG_MASK")] == 1
         )
         if (chosen & blocked).any() or (chosen & ~native.field_available["DBZH"]).any():
             raise ValueError("proposal crossed external protection or missing")
@@ -128,7 +129,7 @@ def replay(path, output, receipts, plot):
             protection_overlap=0,
         )
         all_arrays[label + "_PROPOSAL"] = chosen.astype("uint8")
-        if label == "unified":
+        if unified:
             rows[label]["objects"] = report["objects"]
             all_arrays.update(arrays)
     if (
@@ -161,7 +162,9 @@ def replay(path, output, receipts, plot):
         x, y = r * np.sin(az), r * np.cos(az)
         observed = native.field_available["DBZH"] & np.isfinite(raw) & (raw >= 0)
         target = visible if visible is not None else remaining
-        fig, axes = plt.subplots(1, 3, figsize=(15, 5), constrained_layout=True)
+        fig, axes = plt.subplots(
+            1, len(rows), figsize=(5 * len(rows), 5), constrained_layout=True
+        )
         for ax, label in zip(axes, rows, strict=True):
             ax.scatter(
                 x[observed], y[observed], color="#cccccc", s=0.2, rasterized=True
@@ -204,11 +207,15 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--published", type=Path, action="append", default=[])
     parser.add_argument("--plot", action="store_true")
+    parser.add_argument(
+        "--subbands", action="store_true", help="Compare original subbands with v1"
+    )
     args = parser.parse_args()
     modules = (
         "unified_objects.py",
         "object_model.py",
         "projected_objects.py",
+        "native_subbands.py",
         "variable_morphology.py",
         "morphology_objects.py",
     )
@@ -220,7 +227,8 @@ def main():
         raise ValueError("duplicate output identity")
     args.output.mkdir(parents=True, exist_ok=False)
     records = [
-        replay(p, args.output, args.published, args.plot) for p in args.snapshots
+        replay(p, args.output, args.published, args.plot, args.subbands)
+        for p in args.snapshots
     ]
     if any(digest(ROOT / p) != sha for p, sha in hashes.items()):
         raise ValueError("algorithm bytes changed during replay")
