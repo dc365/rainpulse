@@ -433,3 +433,26 @@ Scoped Ruff and diff whitespace checks pass. Concurrent S work is preserved.
 Real cut-2 replay under the original 500000 budget, high-budget reference
 comparison, normal candidate publication and actual UI remain required.
 This optimization alone does not constitute weather truth or full acceptance.
+
+Installed actual ZF50505 cut-2 comparison is now terminal and hash verified.
+Both use frozen task SHA
+`7ed9da6b616ba7e77ba36a63c19a425c5286611e0b64cf479e602f9a69c0da50`.
+Old v8 high-budget reference uses 575242 trials; the cached candidate uses
+347720 under the unchanged 500000 limit, with 227522 reference-cache hits.
+Both produce 32068 model records and exactly identical SHA256 values for all
+74 native output arrays. Both terminate `EVALUATED`, with RAW unchanged,
+shape-selected QC-visible/CR-admitted counts zero. Summary workspace1333944
+plus cache peak1715600 bytes remains below32MiB; evidence3963736 bytes below
+4194304. These are actual full per-cut x_qc results, without adjacent-cut
+context, object writing or normal publication.
+
+Candidate image
+`sha256:c2afb43ac626fa5a3e0486e8cb43b15e607c44320a3fbe1681d2cd89a718cb5d`
+changes only source_blocks/source_summary/reference_fit against the previous
+v8 image; 793 other Python modules are identical. Production remains v5.
+Private hash-checked receipts live under reference-fit-{candidate,reference}-v1;
+comparison is reference-fit-actual-verification.json. No job remains running
+for these two probes. Next gate is broader real source-cut validation followed
+by normal candidate recomputation, publication and UI, plus weather ambiguity
+acceptance. Repository CI for cac7a4a is failed (test/lint/performance-CD);
+build and independent QC comparison suites pass, so full CI is not claimed.
