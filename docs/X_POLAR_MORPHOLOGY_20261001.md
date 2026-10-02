@@ -380,3 +380,32 @@ receipt are retained separately. The image has not replaced production workers.
 Full installed x_qc on the actual cut-4/cut-5 source and model-trial geometry
 instrumentation on the existing cut-2 partial-source failure are running as
 bounded read-only probes. Their completion and normal publication are pending.
+
+### Complete existing frozen corpus and actual pipeline terminal evidence
+
+The complete pre-existing corpus (22 stations, 46 unique scans, 1219 native
+cuts) was re-evaluated with the same v8 policy, four bounded workers. Every task
+terminated successfully and every cut was EVALUATED; no morphology resource
+abstention and no previously v7-protected gate was reintroduced. All 46 output
+hashes and frozen task hashes match the protocol, SHA256
+`c26cca2749709904396c519e63284937e7710d337e3874394a3d91ee2ca89629`.
+Counts: v6 candidates 2165502, v7 2015500, v8 2012637. The only v8 subtraction
+is the measured 2863-gate transverse contour. These are proposal counts, not
+weather-verified pollution removal. Unique source coverage remains 1219.
+
+The installed full x_qc probe completed both real cuts and its audit hash was
+verified. Cut 4: 119412 morphology gates, 3344 contour ambiguity gates, 2863 of
+those still visible in QC; morphology-selected QC visibility and CR admission
+both zero. Cut 5: 114434 morphology gates, both selected visibility/CR zero.
+Existing action-budget warnings remain; evidence sizes 1655679/1452549 bytes
+are below the original 4194304 cap. RAW is unchanged. This proves installed
+per-cut behavior, not normal object publication, neighbor context or UI.
+
+Cut-2 source trial diagnostics independently terminated and were hash checked:
+500001 trials are consumed, with 185114 repeated eligible training keys within
+the same original detector-call/raw-ray context (block 26609, fan 158505).
+Geometry prechecks alone exclude only about twenty-four thousand trials. Next
+work is bounded reuse of identical reference fits, preserving the target/guard
+exclusion, target-dependent reference coverage, model-record cap and all action
+criteria. It is not implemented or accepted yet. Normal candidate rollout and
+meteorological acceptance remain incomplete; installed production stays v5.
