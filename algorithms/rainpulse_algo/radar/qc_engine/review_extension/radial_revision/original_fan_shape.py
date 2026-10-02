@@ -1,5 +1,7 @@
 """Held-out complete RAW fan geometry; diagnostic proposals, never new sources."""
 
+import hashlib
+
 import numpy as np
 
 from ..arrays import mask, moment, native_geometry, runs
@@ -170,8 +172,21 @@ def qualify(native, blocked, group):
                     start_m=float(r[start]),
                     end_m=float(r[end - 1] + dr),
                     reference_blocks=refs,
-                    reference_gate_columns=rc.tolist(),
-                    source_reference_gates=source_refs,
+                    reference_gate_column_count=len(rc),
+                    reference_gate_columns_sha256=hashlib.sha256(
+                        np.asarray(rc, dtype="<u4").tobytes()
+                    ).hexdigest(),
+                    source_reference_gates={
+                        key: dict(
+                            row=ref["row"],
+                            source_id=ref["source_id"],
+                            gate_count=len(ref["columns"]),
+                            columns_sha256=hashlib.sha256(
+                                np.asarray(ref["columns"], dtype="<u4").tobytes()
+                            ).hexdigest(),
+                        )
+                        for key, ref in source_refs.items()
+                    },
                     proposed_gates=len(yy),
                 )
             )
@@ -179,7 +194,7 @@ def qualify(native, blocked, group):
             if work > 50000000:
                 raise ResourceLimit("original fan work exceeded; no partial result")
     return out, dict(
-        version="complete-original-fan-shape-v4-weather-islands-native-refs",
+        version="complete-original-fan-shape-v5-compact-native-proof",
         records=records,
         qualified_gates=int(out[PREFIX + "QUALIFIED_MASK"].sum()),
         work=int(work),

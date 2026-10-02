@@ -30,14 +30,16 @@ weather validation prevent a completion or generalization claim.
   protection remain unavailable to this branch. No receiver-power fit is needed.
 
 `source_footprint.py` v5 persists actual DBZH, original-fan masks, original source
-ownership and the source-reference mask. Policy marker2 replays the complete
+ownership and the source-reference mask. Exact reference column sets use canonical
+little-endian uint32 counts and SHA256 in metadata rather than repeated large
+JSON lists; native proof replay remains exact. Policy marker2 replays the complete
 fan and narrow-object paths; marker1 retains the previous narrow-only path,
 and absent markers retain historical v3 geometry. Audit and disabled policy
 cannot introduce action. Altered saved masks/source proof fail replay.
 
 ## Current evidence
 
-Private authoritative receipt: `complete-fan-integration-20261002-v2/report.json`
+Private authoritative receipt: `complete-fan-integration-20261002-v3/report.json`
 under the existing discontinuous-S evidence root. It binds eight native input
 snapshots, both child modules, footprint module/driver, original published
 receipts and output masks by SHA, against baseline commit `8426ddb` (v7).
@@ -60,8 +62,8 @@ The failed earlier serialization replay remains historical evidence only.
 weather shoulders, native gaps, target-only support, unrelated parents,
 protected bridges/references, shared source IDs on multiple rays and proof
 alteration. Engine/action, writer serialization, restored native order,
-historical policy and audit/no-action tests pass. The scoped current shared
-checkout suite passes484 tests; 20 overlay cases cover narrow and fan reports.
+historical policy and audit/no-action tests pass. The latest scoped shared
+checkout suite passes456 tests; 20 overlay cases cover narrow and fan reports.
 This is not a clean installed-image or all-weather production proof.
 
 The 08:18 left edge, scattered internal members and unrelated isolated objects
@@ -86,7 +88,7 @@ PYTHONPATH=algorithms .build/xqc-zf702-investigation/venv/bin/python \
  scripts/render_s_qc_review.py \
  .build/s-discontinuous-20261001/live-web-aligned-components-v2/z9598_0818_sweep_000.npz \
  .build/s-discontinuous-20261001/published-v6-z9598-0818-fan-v1.json \
- --footprint-report .build/s-discontinuous-20261001/complete-fan-integration-20261002-v2/report.json \
+ --footprint-report .build/s-discontinuous-20261001/complete-fan-integration-20261002-v3/report.json \
  --output FRESH_REVIEW_IMAGE.png
 ```
 

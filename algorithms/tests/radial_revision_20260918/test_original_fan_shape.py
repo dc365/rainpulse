@@ -113,10 +113,11 @@ def test_local_weather_is_neither_target_nor_reference_and_does_not_blank_whole_
     assert out[m.PREFIX + "QUALIFIED_MASK"][3, 153] == 1
     assert not out[m.PREFIX + "QUALIFIED_MASK"][6, [60, 155, 240]].any()
     assert out[m.PREFIX + "QUALIFIED_MASK"][3, 155] == 1
+    refs = out[m.PREFIX + "SOURCE_REFERENCE_MASK"].astype(bool)
+    assert not refs[6, [60, 155, 240]].any()
     for record in report["records"]:
         for ref in record["source_reference_gates"].values():
-            if ref["row"] == 6:
-                assert not set(ref["columns"]) & {60, 155, 240}
+            assert ref["gate_count"] > 0 and len(ref["columns_sha256"]) == 64
 
 
 def test_weather_on_a_shoulder_cannot_be_deleted_to_manufacture_a_dry_edge():
