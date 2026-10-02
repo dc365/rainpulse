@@ -178,7 +178,9 @@ def measured_parent_footprint(fr,fc,segment,r,z,observed,snr,sa,barred,weather,d
 
 def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_evidence=False,
            shoulder_windows=False,shoulder_band=False, partition_evidence=False, short_subset_evidence=False,
-           short_parent_footprint=False):
+           short_parent_footprint=False, geometry_evidence=False):
+    if geometry_evidence and not partition_evidence:
+        raise ValueError('geometry evidence requires complete original partitions')
     if shoulder_band and not shoulder_windows:
         raise ValueError('bounded shoulder band requires measured window research')
     if short_subset_evidence and not (partition_evidence and shoulder_windows):
@@ -205,6 +207,8 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
         out[PREFIX+'SHORT_RESEARCH_MASK']=np.zeros(native.shape,'uint8')
     if short_parent_footprint:
         out[PREFIX+'SHORT_PARENT_RESEARCH_MASK']=np.zeros(native.shape,'uint8')
+    if geometry_evidence:
+        out[PREFIX+'GEOMETRY_RESEARCH_MASK']=np.zeros(native.shape,'uint8')
     steps = (np.diff(az) + 180) % 360 - 180
     positive = steps[steps > 0]
     if not len(positive):
@@ -237,7 +241,7 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                 rr += box[0].start; cc += box[1].start
                 charge(len(rr))
                 if level==10.:
-                    if short_parent_footprint:
+                    if short_parent_footprint or geometry_evidence:
                         lower_footprints[ident]=(rr.copy(),cc.copy())
                     lower_parents[ident]=dict(component_id=ident,
                         range_min_m=float(r[cc].min()),range_max_m=float(r[cc].max()+dr),
@@ -359,6 +363,16 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                         lower_parent_ids=list(map(int,parent_ids)),lower_parent_weather_gates=parent_weather,
                         lower_parent_protected_gates=parent_protected,
                         bilateral_fraction=float(accepted.mean())))
+                    if geometry_evidence:
+                        flanks=[fragment['left']-1,fragment['right']+1]
+                        known_fraction=0.; flank_protected=True
+                        if min(flanks)>=0 and max(flanks)<len(segment):
+                            charge(2*len(fc))
+                            ix=np.ix_(segment[flanks],fc)
+                            known_fraction=float((observed[ix]|sa[ix]).mean(axis=1).min())
+                            flank_protected=bool((barred[ix]|weather[ix]).any())
+                        member_history[-1].update(geometry_known_fraction=known_fraction,
+                            geometry_flank_protected=flank_protected)
                 # Keep every original member in qualification history; no restarting
                 # the object after discarding a failed/unknown/weather fragment.
                 if min(fractions) < .8: holds.append('incomplete_measured_bilateral_boundaries')
@@ -410,7 +424,8 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                         for i in indices:
                             f = group[i]; selected = accept[i]
                             out[PREFIX+'STRONG_MASK'][segment[f['rows'][selected]],f['cols'][selected]] = 1
-                records.append(dict(id=object_id, contour_dbz=level, original_components=list(key),
+                records.append(dict(id=object_id, native_segment_start=int(segment[0]),
+                    contour_dbz=level, original_components=list(key),
                     anchor_bearing_deg=anchor['bearing'] % 360, neighborhood_half_width_deg=beam,
                     radial_span_m=span, actual_range_support_m=float(len(cols)*dr),
                     range_window_counts=windows, bilateral_fractions=fractions,
@@ -425,6 +440,23 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                     records[-1]['original_distance_partitions'] = original_distance_partitions(
                         group,member_history,lower_history,r,dr,beam,
                         measured_accept=accept if short_subset_evidence else None)
+                    if geometry_evidence:
+                        from .shape_constellation import assess
+                        for partition in records[-1]['original_distance_partitions']:
+                            ids=set(partition['original_components'])
+                            indices=[i for i,f in enumerate(group) if f['ident'] in ids]
+                            local_parents=[lower_parents[p] for p in partition['original_lower_parent_ids']]
+                            charge(len(indices)+len(local_parents))
+                            columns=np.unique(np.concatenate([group[i]['cols'] for i in indices]))
+                            proof=assess([member_history[i] for i in indices],local_parents,
+                                r[columns],dr,beam,partition['original_lower_parent_geometry_hold'])
+                            partition['geometry_hypothesis']=proof
+                            if proof['qualified']:
+                                for parent_id in partition['original_lower_parent_ids']:
+                                    pr,pc=lower_footprints[parent_id]
+                                    charge(len(pc))
+                                    selected=~barred[segment[pr],pc]&~weather[segment[pr],pc]
+                                    out[PREFIX+'GEOMETRY_RESEARCH_MASK'][segment[pr[selected]],pc[selected]]=1
                     if short_subset_evidence:
                         for partition in records[-1]['original_distance_partitions']:
                             if not partition['measured_subset']['qualified']:

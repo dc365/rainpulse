@@ -35,6 +35,61 @@ def test_original_transverse_fragments_group_without_residual_selection_or_fill(
     assert np.array_equal(rotated[P+'STRONG_MASK'], arrays[P+'STRONG_MASK'])
 
 
+def geometry_fixture():
+    n=fixture(); n.fields['DBZH'][:]=np.nan; n.field_available['DBZH'][:]=False
+    for start in (100,120,140,160,180,200,500,700,900):
+        n.fields['DBZH'][4:7,start:start+8]=25
+        n.field_available['DBZH'][4:7,start:start+8]=True
+    # Actual nonquiet observations, deliberately not dry-air proof.
+    n.fields['SNR'][:]=4
+    return n
+
+
+def test_geometry_hypothesis_uses_complete_shapes_not_quiet_flank_relabelling():
+    n=geometry_fixture(); raw=n.fields['DBZH'].copy()
+    baseline,_=detect(n,partition_evidence=True)
+    arrays,report=detect(n,partition_evidence=True,geometry_evidence=True)
+    assert all(np.array_equal(v,arrays[k]) for k,v in baseline.items())
+    assert not arrays[P+'STRONG_MASK'].any()
+    assert arrays[P+'GEOMETRY_RESEARCH_MASK'].sum()==6*3*8
+    assert not arrays[P+'GEOMETRY_RESEARCH_MASK'][:,700:708].any()
+    proofs=[p['geometry_hypothesis'] for o in report['objects']
+            for p in o['original_distance_partitions']]
+    assert any(p['qualified'] and not p['requires_quiet_flanks'] for p in proofs)
+    assert all(not p['action_authority'] and not p['production_eligible'] for p in proofs)
+    assert np.array_equal(raw,n.fields['DBZH'],equal_nan=True)
+    n.azimuth=(n.azimuth+317)%360
+    rotated,_=detect(n,partition_evidence=True,geometry_evidence=True)
+    assert np.array_equal(rotated[P+'GEOMETRY_RESEARCH_MASK'],arrays[P+'GEOMETRY_RESEARCH_MASK'])
+
+
+@pytest.mark.parametrize('case',['unknown','weather','barrier','too_few','width_drift'])
+def test_geometry_hypothesis_keeps_negative_original_members(case):
+    n=geometry_fixture(); blocked=np.zeros(n.shape,bool)
+    if case=='unknown':n.field_available['SNR'][3,100:108]=False
+    if case=='weather':
+        n.fields['RHOHV']=np.full(n.shape,.99,'float32')
+        n.field_available['RHOHV']=n.field_available['DBZH'].copy()
+        n.fields['SNR'][5,101]=20
+    if case=='barrier':blocked[5,101]=True
+    if case=='too_few':
+        n.fields['DBZH'][:,100:108]=np.nan;n.field_available['DBZH'][:,100:108]=False
+    if case=='width_drift':
+        n.fields['DBZH'][7,100:108]=25;n.field_available['DBZH'][7,100:108]=True
+    arrays,_=detect(n,blocked,partition_evidence=True,geometry_evidence=True)
+    assert not arrays[P+'GEOMETRY_RESEARCH_MASK'].any()
+
+
+def test_geometry_hypothesis_requires_partitions_and_exact_replay():
+    n=geometry_fixture(); module=load('radial_revision.fragment_constellation')
+    with pytest.raises(ValueError,match='complete original partitions'):
+        detect(n,geometry_evidence=True)
+    arrays,_=detect(n,partition_evidence=True,geometry_evidence=True)
+    arrays[P+'GEOMETRY_RESEARCH_MASK'][0,0]=1
+    with pytest.raises(ValueError,match='proof mismatch'):
+        module.validate(arrays,n,np.zeros(n.shape,bool),partition_evidence=True,geometry_evidence=True)
+
+
 def test_unknown_sides_never_authorize_fragment_group():
     n = fixture(); n.field_available['SNR'][:] = False
     arrays, report = detect(n)

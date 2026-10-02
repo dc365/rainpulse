@@ -53,3 +53,37 @@ def test_short_subset_cannot_run_without_measured_window_evidence(tmp_path):
 def test_parent_footprint_cannot_run_without_short_original_evidence(tmp_path):
     with pytest.raises(ValueError,match='parent footprint requires short subset evidence'):
         m.audit(tmp_path/'unused.npz',tmp_path/'unused.json',parent_footprint=True)
+
+
+@pytest.mark.parametrize('extra',[[],['--fragment-constellation','--engine-quarantine']])
+def test_geometry_preview_cannot_route_to_engine_actions(tmp_path,extra):
+    import subprocess
+    result=subprocess.run([sys.executable,str(ROOT/'scripts/audit_s_morphology_objects.py'),
+        str(tmp_path/'unused.npz'),'--output',str(tmp_path/'unused-output'),
+        '--geometry-evidence',*extra],capture_output=True,text=True)
+    assert result.returncode!=0
+    assert 'geometry evidence requires research-only constellation; no engine actions' in result.stderr
+    assert not (tmp_path/'unused-output').exists()
+
+
+def test_original_parent_diagnosis_keeps_full_raw_and_native_gap_identity():
+    from types import SimpleNamespace
+    shape=(6,12);raw=np.full(shape,np.nan)
+    raw[1,3:7]=20.;raw[4,3:7]=20.
+    native=SimpleNamespace(shape=shape,fields={'DBZH':raw},field_available={'DBZH':np.isfinite(raw)},
+        ranges=100000.+np.arange(12)*250,azimuth=(359.+np.arange(6))%360,
+        geometry_good=np.ones(6,bool),gap_after=np.array([0,0,1,0,0,0],bool))
+    targets=np.zeros(shape,bool);targets[1,4]=True;targets[4,4]=True
+    proposal=np.zeros(shape,bool);proposal[1,4]=True
+    evidence={'objects':[{'native_segment_start':0,'original_distance_partitions':[
+        {'original_lower_parent_ids':[1],'measured_subset':{'qualified':True}}]}]}
+    results=m.original_parent_target_diagnosis(native,targets,proposal,evidence)
+    assert [(p['native_segment_start'],p['original_lower_parent_id']) for p in results]==[(0,1),(3,1)]
+    assert [p['original_gate_count'] for p in results]==[4,4]
+    assert [p['originally_authorized_parent'] for p in results]==[True,False]
+    assert [p['targets'][0]['research_nominated'] for p in results]==[True,False]
+    assert all(p['original_radial_span_m']==1000 for p in results)
+    # Selecting one point never shrinks the complete original four-gate object.
+    targets[4,4]=False
+    narrowed=m.original_parent_target_diagnosis(native,targets,proposal,evidence)
+    assert len(narrowed)==1 and narrowed[0]['original_gate_count']==4

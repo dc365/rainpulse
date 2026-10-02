@@ -38,9 +38,13 @@ def main():
                         help='Research-only 1/2/5-km measured fragment exterior windows')
     parser.add_argument('--shoulder-band',action='store_true',
                         help='Research-only complete exterior band within two actual beam widths')
+    parser.add_argument('--geometry-evidence',action='store_true',
+                        help='Shadow complete repeated-shard shape; no engine actions')
     parser.add_argument('--engine-quarantine', action='store_true',
                         help='Validate opt-in experiment proposals through the actual engine; no product writes')
     args = parser.parse_args()
+    if args.geometry_evidence and (not args.fragment_constellation or args.engine_quarantine):
+        raise ValueError('geometry evidence requires research-only constellation; no engine actions')
     if args.shoulder_band and not args.shoulder_windows:
         raise ValueError('bounded shoulder band requires shoulder window research')
     if args.shoulder_windows and (not args.fragment_constellation or args.engine_quarantine):
@@ -88,6 +92,9 @@ def main():
             options['segment_evidence']=args.fragment_segments
             options['shoulder_windows']=args.shoulder_windows
             options['shoulder_band']=args.shoulder_band
+            if args.geometry_evidence:
+                options['partition_evidence']=True
+                options['geometry_evidence']=True
         arrays, detail = DETECTOR.detect(native, blocked, **options)
         DETECTOR.validate(arrays, native, blocked, **options)
         integration = {}
@@ -138,6 +145,7 @@ def main():
         remaining = a['BEFORE'].astype(bool) & ~a['ADDED'].astype(bool)
         candidate = arrays[DETECTOR.PREFIX+'MASK'] == 1
         strong = arrays[DETECTOR.PREFIX+'STRONG_MASK'] == 1
+        geometry = arrays.get(DETECTOR.PREFIX+'GEOMETRY_RESEARCH_MASK',np.zeros(native.shape,'uint8')) == 1
         proof = {'scan_id': meta['scan_id'], 'sweep': meta['sweep'],
                  'input_snapshot_sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
                  'detector_sha256': hashlib.sha256(Path(DETECTOR.__file__).read_bytes()).hexdigest(),
@@ -146,6 +154,7 @@ def main():
                  'candidate_remaining_selected': int((remaining & roi & candidate).sum()),
                  'strong_remaining_selected': int((remaining & roi & strong).sum()), **detail, **integration}
         proof['extra_visible_proposals_selected'] = int((remaining & roi & extra_proposals).sum())
+        proof['geometry_hypothesis_selected'] = int((geometry & roi).sum())
         output = args.output/(path.stem+'.npz')
         if output.exists():
             raise ValueError('duplicate output stem')
@@ -162,14 +171,16 @@ def main():
             after = remaining & ~extra_proposals if args.engine_quarantine else remaining
             third_title = ('Experiment after morphology quarantine' if args.engine_quarantine
                            else 'Strong morphology evidence in red')
+            if args.geometry_evidence:
+                third_title='Shadow geometry hypothesis in red: not QC removal'
             for ax, use, title in zip(axes, (raw, remaining, after),
                 ('RAW observed DBZH', 'Existing source-stage remaining', third_title), strict=True):
                 ax.scatter(x[use], y[use], c=a['RAW'][use], cmap='turbo', vmin=0, vmax=70, s=.6, rasterized=True)
                 if ax is axes[-1] and not args.engine_quarantine:
-                    if args.fragment_constellation:
+                    if args.fragment_constellation and not args.geometry_evidence:
                         nominated = remaining & candidate & ~strong
                         ax.scatter(x[nominated], y[nominated], c='#f28e00', s=3., rasterized=True)
-                    hit = remaining & strong
+                    hit = geometry if args.geometry_evidence else remaining & strong
                     ax.scatter(x[hit], y[hit], c='#d00000', s=2., rasterized=True)
                 ax.set(xlim=(-470, 470), ylim=(-470, 470), title=title, xlabel='East (km)', ylabel='North (km)')
                 ax.set_aspect('equal'); ax.grid(alpha=.2)
@@ -189,6 +200,7 @@ def main():
               'radial_backbone_prototype': args.radial_backbone,
               'fragment_constellation_prototype': args.fragment_constellation,
               'fragment_segments_prototype': args.fragment_segments,
+              'geometry_hypothesis':args.geometry_evidence,
               'detector_sha256': hashlib.sha256(Path(DETECTOR.__file__).read_bytes()).hexdigest(),
               'cases': records}
     (args.output/'report.json').write_text(json.dumps(report, indent=2)+'\n')
