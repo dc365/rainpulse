@@ -28,6 +28,7 @@ class MorphologyPolicy(BaseModel):
         "x-polar-morphology-20261002-v6",
         "x-polar-morphology-20261002-v7",
         "x-polar-morphology-20261002-v8",
+        "x-polar-morphology-20261002-v9",
     ] = "x-polar-morphology-20261001-v1"
     expanding_fans_enabled: bool = False
     anchored_fans_enabled: bool = False
@@ -36,6 +37,7 @@ class MorphologyPolicy(BaseModel):
     branching_envelopes_enabled: bool = False
     compact_counterexamples_enabled: bool = False
     transverse_counterexamples_enabled: bool = False
+    centered_pulsing_fans_enabled: bool = False
     local_weather_policy: Literal["protect", "joint_review"] = "protect"
     scales_m: tuple[Annotated[float, Field(ge=2000.0, le=20000.0)], ...] = Field(
         default=(5000.0, 10000.0),
@@ -78,6 +80,7 @@ class MorphologyPolicy(BaseModel):
             "x-polar-morphology-20261002-v6",
             "x-polar-morphology-20261002-v7",
             "x-polar-morphology-20261002-v8",
+            "x-polar-morphology-20261002-v9",
         ):
             raise ValueError("expanding fan geometry requires v2 or v3 identity")
         if self.anchored_fans_enabled and (
@@ -89,6 +92,7 @@ class MorphologyPolicy(BaseModel):
                 "x-polar-morphology-20261002-v6",
                 "x-polar-morphology-20261002-v7",
                 "x-polar-morphology-20261002-v8",
+                "x-polar-morphology-20261002-v9",
             )
             or not self.expanding_fans_enabled
         ):
@@ -101,6 +105,7 @@ class MorphologyPolicy(BaseModel):
                 "x-polar-morphology-20261002-v6",
                 "x-polar-morphology-20261002-v7",
                 "x-polar-morphology-20261002-v8",
+                "x-polar-morphology-20261002-v9",
             )
             or not self.anchored_fans_enabled
             or not self.expanding_fans_enabled
@@ -111,6 +116,7 @@ class MorphologyPolicy(BaseModel):
             "x-polar-morphology-20261002-v6",
             "x-polar-morphology-20261002-v7",
             "x-polar-morphology-20261002-v8",
+            "x-polar-morphology-20261002-v9",
         ):
             raise ValueError("grouped envelopes require explicit v5 identity")
         if self.branching_envelopes_enabled and (
@@ -119,20 +125,30 @@ class MorphologyPolicy(BaseModel):
                 "x-polar-morphology-20261002-v6",
                 "x-polar-morphology-20261002-v7",
                 "x-polar-morphology-20261002-v8",
+                "x-polar-morphology-20261002-v9",
             )
             or not self.grouped_envelopes_enabled
         ):
             raise ValueError("branching envelopes require explicit v6 grouped identity")
         if self.compact_counterexamples_enabled and (
-            self.version not in ("x-polar-morphology-20261002-v7", "x-polar-morphology-20261002-v8")
+            self.version
+            not in (
+                "x-polar-morphology-20261002-v7",
+                "x-polar-morphology-20261002-v8",
+                "x-polar-morphology-20261002-v9",
+            )
             or not self.branching_envelopes_enabled
         ):
             raise ValueError("compact counterexamples require explicit v7 branch identity")
         if self.transverse_counterexamples_enabled and (
-            self.version != "x-polar-morphology-20261002-v8"
+            self.version not in ("x-polar-morphology-20261002-v8", "x-polar-morphology-20261002-v9")
             or not self.compact_counterexamples_enabled
         ):
             raise ValueError("transverse counterexamples require explicit v8 compact identity")
+        if self.centered_pulsing_fans_enabled and (
+            self.version != "x-polar-morphology-20261002-v9" or not self.pulsing_fans_enabled
+        ):
+            raise ValueError("centered pulsing fans require explicit v9 pulsing identity")
         if (
             not self.scales_m
             or not self.levels_dbz
@@ -475,9 +491,16 @@ def detect(sweep, policy, *, protected=None):
         peak_growth = float(
             np.max((widths - widths[0]) / np.maximum((footprints + footprints[0]) / 2, 1e-6))
         )
+        # A complete fan can pulse about a measured fixed centre while BOTH
+        # exterior edges move. Requiring an anchored edge misses this shape.
+        # Retain every original window and the initial-width contraction guard:
+        # fixed-km rain narrowing with range still cannot qualify on a far tail.
+        centered_pulse = (
+            p.centered_pulsing_fans_enabled and center_excursion <= p.boundary_tolerance_rays + 1e-6
+        )
         pulsing = (
             p.pulsing_fans_enabled
-            and anchored
+            and (anchored or centered_pulse)
             and initial_contraction <= 2 * p.boundary_tolerance_rays + 1e-6
             and peak_growth > 2 * p.boundary_tolerance_rays
             and normalized_narrowing > 2 * p.boundary_tolerance_rays
@@ -563,7 +586,7 @@ def detect(sweep, policy, *, protected=None):
             ids[np.ix_(rows, cols)] = ii
             members += int(block.sum())
         kind = (
-            "anchored_pulsing_fan"
+            ("anchored_pulsing_fan" if anchored else "centered_pulsing_fan")
             if pulsing
             else (
                 "anchored_expanding_fan"
@@ -810,6 +833,7 @@ def detect(sweep, policy, *, protected=None):
             branching_envelopes_enabled=p.branching_envelopes_enabled,
             compact_counterexamples_enabled=p.compact_counterexamples_enabled,
             transverse_counterexamples_enabled=p.transverse_counterexamples_enabled,
+            centered_pulsing_fans_enabled=p.centered_pulsing_fans_enabled,
             compact_counterexample_gates=int(counterexamples.sum()),
             compact_counterexamples=compact_records,
             objects=records,

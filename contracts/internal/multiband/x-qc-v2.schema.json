@@ -2459,7 +2459,8 @@
             "x-polar-morphology-20261002-v5",
             "x-polar-morphology-20261002-v6",
             "x-polar-morphology-20261002-v7",
-            "x-polar-morphology-20261002-v8"
+            "x-polar-morphology-20261002-v8",
+            "x-polar-morphology-20261002-v9"
           ]
         },
         "local_weather_policy": {
@@ -2638,6 +2639,10 @@
           "type": "boolean",
           "default": false,
           "title": "Transverse Counterexamples Enabled"
+        },
+        "centered_pulsing_fans_enabled": {
+          "type": "boolean",
+          "default": false
         }
       },
       "title": "MorphologyPolicy",
@@ -2664,7 +2669,8 @@
                   "x-polar-morphology-20261002-v5",
                   "x-polar-morphology-20261002-v6",
                   "x-polar-morphology-20261002-v7",
-                  "x-polar-morphology-20261002-v8"
+                  "x-polar-morphology-20261002-v8",
+                  "x-polar-morphology-20261002-v9"
                 ]
               }
             },
@@ -2693,7 +2699,8 @@
                   "x-polar-morphology-20261002-v5",
                   "x-polar-morphology-20261002-v6",
                   "x-polar-morphology-20261002-v7",
-                  "x-polar-morphology-20261002-v8"
+                  "x-polar-morphology-20261002-v8",
+                  "x-polar-morphology-20261002-v9"
                 ]
               },
               "expanding_fans_enabled": {
@@ -2725,7 +2732,8 @@
                   "x-polar-morphology-20261002-v5",
                   "x-polar-morphology-20261002-v6",
                   "x-polar-morphology-20261002-v7",
-                  "x-polar-morphology-20261002-v8"
+                  "x-polar-morphology-20261002-v8",
+                  "x-polar-morphology-20261002-v9"
                 ]
               },
               "anchored_fans_enabled": {
@@ -2760,7 +2768,8 @@
                   "x-polar-morphology-20261002-v5",
                   "x-polar-morphology-20261002-v6",
                   "x-polar-morphology-20261002-v7",
-                  "x-polar-morphology-20261002-v8"
+                  "x-polar-morphology-20261002-v8",
+                  "x-polar-morphology-20261002-v9"
                 ]
               }
             },
@@ -2786,7 +2795,8 @@
                 "enum": [
                   "x-polar-morphology-20261002-v6",
                   "x-polar-morphology-20261002-v7",
-                  "x-polar-morphology-20261002-v8"
+                  "x-polar-morphology-20261002-v8",
+                  "x-polar-morphology-20261002-v9"
                 ]
               },
               "grouped_envelopes_enabled": {
@@ -2815,7 +2825,8 @@
               "version": {
                 "enum": [
                   "x-polar-morphology-20261002-v7",
-                  "x-polar-morphology-20261002-v8"
+                  "x-polar-morphology-20261002-v8",
+                  "x-polar-morphology-20261002-v9"
                 ]
               },
               "branching_envelopes_enabled": {
@@ -2842,7 +2853,10 @@
           "then": {
             "properties": {
               "version": {
-                "const": "x-polar-morphology-20261002-v8"
+                "enum": [
+                  "x-polar-morphology-20261002-v8",
+                  "x-polar-morphology-20261002-v9"
+                ]
               },
               "compact_counterexamples_enabled": {
                 "const": true
@@ -2851,6 +2865,32 @@
             "required": [
               "version",
               "compact_counterexamples_enabled"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "centered_pulsing_fans_enabled": {
+                "const": true
+              }
+            },
+            "required": [
+              "centered_pulsing_fans_enabled"
+            ]
+          },
+          "then": {
+            "properties": {
+              "version": {
+                "const": "x-polar-morphology-20261002-v9"
+              },
+              "pulsing_fans_enabled": {
+                "const": true
+              }
+            },
+            "required": [
+              "version",
+              "pulsing_fans_enabled"
             ]
           }
         }

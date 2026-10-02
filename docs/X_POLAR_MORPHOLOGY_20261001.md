@@ -497,3 +497,33 @@ complete, withheld/shape gates absent from QC and CR, PNGs verified. Warnings
 are retained as failures in individual mechanical ledgers. This snapshot is
 not a completion claim for all13 tasks, meteorology or UI. Browser reads are
 currently failing; computer tool reports a locked Mac, and UI remains pending.
+
+## 2026-10-02: centered pulsing envelopes (v9 candidate)
+
+Real map review after v8 publication (13 tasks / 117 cuts audited) remains
+**not accepted**. ZF701 08:03 cut 3 has a narrow southern residual. A frozen
+normal-native probe shows those visible gates have HARD_WEATHER=0,
+LOCAL_WEATHER=0, BUDGET_WITHHELD=0 and MORPHOLOGY=0. The complete grouped
+5 dBZ envelope over 1.5385–68.8885 km has 7 original 10 km windows,
+center excursion 1.029924 native footprints, both edge excursions
+2.337201/1.757444, initial contraction 0, peak growth 4.004904 and
+peak-to-current narrowing 3.917477. Bilateral measured known/clear fractions
+are 0.994438. Existing anchored pulsing rejects it because neither edge is
+fixed; the expanding branch rejects its return after widening.
+
+The explicit v9 `centered_pulsing_fans_enabled` flag (default false) adds a
+fixed-centre alternative to the anchored pulsing branch. It retains the same
+native-footprint centre tolerance, full initial-width contraction guard,
+minimum span/support/windows, bilateral measured flank contrast, fan range
+ratio, immutable RAW membership, gaps, protection and compact/transverse
+counterexamples. No fixed station/time/angle, mask dilation, Doppler assumption,
+threshold reduction, source claim or confirmed contamination action is added.
+
+Regression: original v8 misses the full double-moving pulse; with the new
+identity/flag but unchanged detector the new test ran RED on actual mask
+assertion. Detector patch ran GREEN: 11 tests across spacing, gate length,
+north seam and elevations plus moving-centre, constant-km/curved/blob,
+unavailable flank, protected membership and JSON/Pydantic identity checks.
+All scoped XQC tests: 301 passed, one pre-existing NumPy ABI warning.
+Actual source replay, normal candidate publication and fresh map acceptance
+are still required before deployment/acceptance of v9.
