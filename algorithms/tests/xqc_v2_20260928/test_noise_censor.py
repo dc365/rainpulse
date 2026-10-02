@@ -1,10 +1,12 @@
 """Detection-floor censor: SNRH below the floor is noise, not echo."""
 import numpy as np
 import pytest
-from .helpers import config, fixture, station
+
 from rainpulse_algo.multiband.quality import x_qc
-from rainpulse_algo.multiband.xqc_v2.core import evaluate_cut
 from rainpulse_algo.multiband.xqc_v2.config import XQCConfig
+from rainpulse_algo.multiband.xqc_v2.core import evaluate_cut
+
+from .helpers import config, fixture, station
 
 
 def weather_volume_with_ghosts():
@@ -183,7 +185,9 @@ def test_repeated_only_low_snr_cannot_bypass_whole_field_integrity_cap():
 
 @pytest.mark.parametrize("angle,elevation,reverse", [(0., .5, False), (299.9, 3.4, True),
                                                      (123.5, 8.5, False)])
-def test_native_floor_is_independent_of_bearing_elevation_and_acquisition_order(angle, elevation, reverse):
+def test_native_floor_is_independent_of_bearing_elevation_and_acquisition_order(
+    angle, elevation, reverse,
+):
     from dataclasses import replace
     v, _ = repeated_floor_volume()
     cut = v.sweeps[0]
