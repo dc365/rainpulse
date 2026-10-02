@@ -527,3 +527,18 @@ unavailable flank, protected membership and JSON/Pydantic identity checks.
 All scoped XQC tests: 301 passed, one pre-existing NumPy ABI warning.
 Actual source replay, normal candidate publication and fresh map acceptance
 are still required before deployment/acceptance of v9.
+
+
+## v9 实际发布复核（2026-10-02）
+
+`12ce5954fa310ba5249747f699576d9ceaf2c1f9` 已合并本地 main、push 后部署。4 个候选 Worker 使用 `xqc-centered-12ce595-candidate-mb`；仅 ZF505/ZF701/ZF702 三个既有试点启用 v9，新规则保持默认关闭。RAW、可信融合、QPE 和预报资格不变。
+
+- 22 站冻结 46 个唯一体扫、1219 原生层逐报告 SHA 核验通过；全部 EVALUATED，无资源弃权；旧候选全部保留、反例掩膜不变。新增 4 层、35830 个候选门点：ZF401 cut0、ZF701 首体扫 cut3、ZF702 用户 08:24 样本 cut4/5。它们是形态候选，不是独立污染真值。新发现的 ZF401 尚未正常重算，不能把只读回放算作该站上线。
+- 正常 API 发布 13 个体扫、117 层全部 SUCCEEDED，并逐份核验 source 完整、RAW/原生几何/时间一致、withheld 未进入 QC/CR、PNG 完整。保留 13 层 `DEGRADED_MORPHOLOGY_ACTION_BUDGET` 或 `ACTION_BUDGET_ABSTAINED`，不能计入完整验收通过。
+- 实际地图复核：ZF701 08:03 cut3 原残留南向长条已清除；ZF701 08:07 cut1 主扇形清除但仍有弱蓝色向西细线；ZF702 08:08 cut0 主东南扇形/西向直线清除并保留西南紧凑块；ZF702 08:24 cut4 多方位大径向体清除，页面仍正确显示动作预算未完成告警。截图和 SHA 绑定审阅记录保存在私有 `.build/xqc-polar-morphology/`，不提交雷达图件。
+- 105 系统盘普通用户可用空间归零，正常复核 observer 退出；计算任务仍有新鲜心跳并最终成功。仅迁移本任务 `.build/xqc-acceptance-20261001` 至数据盘 `rainpulse-xqc-evidence-20261002`，2243 文件 SHA256 校验并保留原路径符号链接，恢复约 742 MiB；修复迁移后证据目录写入所有权，恢复相同 SHA observer。未重启计算任务或删除其他模型。系统盘仍空间紧张。
+- 完整回放 v1 wrapper 使用错入口，已终止并保留失败记录，其输出不计验收；v2 使用 `run_source_only`，46 份报告完成本地 SHA 与冻结来源核验。
+
+当前结论是**部分实际地图通过，整体未验收完成**。下一步逐门分析弱残线的形态/保护/动作记录，解决动作预算层的完整处理与安全验收，并对新增 ZF401 候选完成正常管道对照，之后再扩大各站全天发布。不能通过扩大清除比例、降低保护阈值或隐藏告警宣称彻底解决。
+
+弱线逐门续证：正常新 `next` 体扫 cut1、显示阈值 5 dBZ、10 km 以外，270.40° 与272.38°分别仍有41/46个可见门点（15.79–54.64 /12.34–65.36km）。这些门点 morphology/proposed/withheld/budget/hard/local/counterexample 全为0，故不能将当前细线归因于保护或动作预算。此为残留定位，不是完整 RAW 形态资格证明；下一轮需核对它们所在原始历史的支持/间断/肩部测量，不能仅降低阈值强行清除。原始逐门凭据 SHA `1a21b6995a12984cfed60d4ded81613c0e3e88bac881b57c40c701df19ad4228`。该 probe 第一次因系统盘满写入损坏而失败，v2 在迁移恢复后通过，原失败保留。
