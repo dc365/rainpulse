@@ -27,6 +27,7 @@ class MorphologyPolicy(BaseModel):
         "x-polar-morphology-20261002-v5",
         "x-polar-morphology-20261002-v6",
         "x-polar-morphology-20261002-v7",
+        "x-polar-morphology-20261002-v8",
     ] = "x-polar-morphology-20261001-v1"
     expanding_fans_enabled: bool = False
     anchored_fans_enabled: bool = False
@@ -34,6 +35,7 @@ class MorphologyPolicy(BaseModel):
     grouped_envelopes_enabled: bool = False
     branching_envelopes_enabled: bool = False
     compact_counterexamples_enabled: bool = False
+    transverse_counterexamples_enabled: bool = False
     local_weather_policy: Literal["protect", "joint_review"] = "protect"
     scales_m: tuple[Annotated[float, Field(ge=2000.0, le=20000.0)], ...] = Field(
         default=(5000.0, 10000.0),
@@ -75,6 +77,7 @@ class MorphologyPolicy(BaseModel):
             "x-polar-morphology-20261002-v5",
             "x-polar-morphology-20261002-v6",
             "x-polar-morphology-20261002-v7",
+            "x-polar-morphology-20261002-v8",
         ):
             raise ValueError("expanding fan geometry requires v2 or v3 identity")
         if self.anchored_fans_enabled and (
@@ -85,6 +88,7 @@ class MorphologyPolicy(BaseModel):
                 "x-polar-morphology-20261002-v5",
                 "x-polar-morphology-20261002-v6",
                 "x-polar-morphology-20261002-v7",
+                "x-polar-morphology-20261002-v8",
             )
             or not self.expanding_fans_enabled
         ):
@@ -96,6 +100,7 @@ class MorphologyPolicy(BaseModel):
                 "x-polar-morphology-20261002-v5",
                 "x-polar-morphology-20261002-v6",
                 "x-polar-morphology-20261002-v7",
+                "x-polar-morphology-20261002-v8",
             )
             or not self.anchored_fans_enabled
             or not self.expanding_fans_enabled
@@ -105,17 +110,29 @@ class MorphologyPolicy(BaseModel):
             "x-polar-morphology-20261002-v5",
             "x-polar-morphology-20261002-v6",
             "x-polar-morphology-20261002-v7",
+            "x-polar-morphology-20261002-v8",
         ):
             raise ValueError("grouped envelopes require explicit v5 identity")
         if self.branching_envelopes_enabled and (
-            self.version not in ("x-polar-morphology-20261002-v6", "x-polar-morphology-20261002-v7")
+            self.version
+            not in (
+                "x-polar-morphology-20261002-v6",
+                "x-polar-morphology-20261002-v7",
+                "x-polar-morphology-20261002-v8",
+            )
             or not self.grouped_envelopes_enabled
         ):
             raise ValueError("branching envelopes require explicit v6 grouped identity")
         if self.compact_counterexamples_enabled and (
-            self.version != "x-polar-morphology-20261002-v7" or not self.branching_envelopes_enabled
+            self.version not in ("x-polar-morphology-20261002-v7", "x-polar-morphology-20261002-v8")
+            or not self.branching_envelopes_enabled
         ):
             raise ValueError("compact counterexamples require explicit v7 branch identity")
+        if self.transverse_counterexamples_enabled and (
+            self.version != "x-polar-morphology-20261002-v8"
+            or not self.compact_counterexamples_enabled
+        ):
+            raise ValueError("transverse counterexamples require explicit v8 compact identity")
         if (
             not self.scales_m
             or not self.levels_dbz
@@ -276,11 +293,25 @@ def detect(sweep, policy, *, protected=None):
                     [np.sin(theta) * sweep.ranges[cc], np.cos(theta) * sweep.ranges[cc]], axis=1
                 )
                 centered = xy - xy.mean(axis=0)
-                eigenvalues = np.linalg.eigvalsh(centered.T @ centered / len(rr))
+                covariance = centered.T @ centered / len(rr)
+                eigenvalues = np.linalg.eigvalsh(covariance)
                 if eigenvalues[0] <= 0:
                     continue
                 ratio = float(np.sqrt(eigenvalues[1] / eigenvalues[0]))
-                if ratio > 3.0 or 2 * np.sqrt(eigenvalues[0]) < p.minimum_range_m:
+                center = xy.mean(axis=0)
+                center_radius = float(np.linalg.norm(center))
+                radial_axis = center / center_radius if center_radius > 0 else np.array([1.0, 0.0])
+                transverse_axis = np.array([-radial_axis[1], radial_axis[0]])
+                radial_variance = float(radial_axis @ covariance @ radial_axis)
+                transverse_variance = float(transverse_axis @ covariance @ transverse_axis)
+                transverse = (
+                    p.transverse_counterexamples_enabled
+                    and center_radius >= p.minimum_range_m
+                    and transverse_variance >= radial_variance
+                )
+                if (ratio > 3.0 and not transverse) or 2 * np.sqrt(
+                    eigenvalues[0]
+                ) < p.minimum_range_m:
                     continue
                 if len(compact_records) >= p.maximum_objects:
                     raise ResourceLimit("morphology compact-counterexample record budget exceeded")
@@ -293,6 +324,10 @@ def detect(sweep, policy, *, protected=None):
                         range_end_m=end,
                         member_gates=len(rr),
                         physical_axis_ratio=ratio,
+                        radial_variance_m2=radial_variance,
+                        transverse_variance_m2=transverse_variance,
+                        transverse_counterexample=bool(transverse),
+                        bearing_resolved=center_radius >= p.minimum_range_m,
                         weather_truth=False,
                         source_verified=False,
                     )
@@ -774,6 +809,7 @@ def detect(sweep, policy, *, protected=None):
             grouped_envelopes_enabled=p.grouped_envelopes_enabled,
             branching_envelopes_enabled=p.branching_envelopes_enabled,
             compact_counterexamples_enabled=p.compact_counterexamples_enabled,
+            transverse_counterexamples_enabled=p.transverse_counterexamples_enabled,
             compact_counterexample_gates=int(counterexamples.sum()),
             compact_counterexamples=compact_records,
             objects=records,

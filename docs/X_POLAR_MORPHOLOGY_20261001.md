@@ -329,3 +329,27 @@ ambiguity. This is an explicit remaining counterexample; v7 is not activated,
 weather acceptance and new normal publication remain incomplete. Next diagnosis
 must measure complete original contour connectivity and radial/body overlap,
 without station exceptions, contour filling or assumed weather labels.
+
+## 2026-10-02 v8 physical transverse counterexample (default off)
+
+The remaining cut-4 contour was measured from unchanged RAW: at 25 dBZ it
+contains 2863 selected native gates over 29 rays and 19.575 km of range. Its
+range growth is 1.246, physical axis ratio 3.229, radial variance 23.719 million
+m² and transverse variance 100.820 million m². The v7 axis-ratio cap rejects
+this contour despite most variation being across, rather than along, the radar
+radius. The 15 dBZ complete parent also includes long radials (growth 9.685)
+and must not inherit the body's protection.
+
+Explicit v8 adds resolved physical direction to the original contour test:
+transverse variance at least radial variance is a geometric counterexample to
+radial elongation. The original compact-axis cap remains unchanged. All support,
+range-growth, native-gap, original-contour and resource constraints remain;
+undefined bearings near the origin cannot grant transverse protection. This is
+still ambiguity, not precipitation truth or confirmed source evidence.
+
+Two attached transverse-body regressions failed on v7 and pass on v8, including
+a measured north-seam case. Coarse/fine native resolution, radial elongation,
+pure line/fan/broken forms, explicit schema identity and both read-only CLI
+routes are covered. All 285 scoped XQC tests pass, with one existing NumPy ABI
+warning. Ruff/diff checks pass. Real v8 replay and normal publication are pending;
+production is still v5, and this section does not claim final acceptance.

@@ -179,6 +179,11 @@ def main():
         action="store_true",
         help="Explicit v7 compact shape ambiguity protection; read-only",
     )
+    parser.add_argument(
+        "--transverse-counterexamples",
+        action="store_true",
+        help="Explicit v8 physical transverse ambiguity; read-only",
+    )
     args = parser.parse_args()
     with ExitStack() as stack:
         if args.source_only:
@@ -189,27 +194,33 @@ def main():
                 or args.pulsing_fans
                 or args.grouped_envelopes
                 or args.branching_envelopes
-                or args.compact_counterexamples,
+                or (args.compact_counterexamples or args.transverse_counterexamples),
                 anchored_fans=args.anchored_fans
                 or args.pulsing_fans
                 or args.grouped_envelopes
                 or args.branching_envelopes
-                or args.compact_counterexamples,
+                or (args.compact_counterexamples or args.transverse_counterexamples),
                 pulsing_fans=args.pulsing_fans
                 or args.grouped_envelopes
                 or args.branching_envelopes
-                or args.compact_counterexamples,
+                or (args.compact_counterexamples or args.transverse_counterexamples),
                 grouped_envelopes=args.grouped_envelopes
                 or args.branching_envelopes
-                or args.compact_counterexamples,
+                or (args.compact_counterexamples or args.transverse_counterexamples),
+                **(
+                    {"transverse_counterexamples": True}
+                    if args.transverse_counterexamples
+                    else {}
+                ),
                 **(
                     {"branching_envelopes": True}
-                    if args.branching_envelopes or args.compact_counterexamples
+                    if args.branching_envelopes
+                    or (args.compact_counterexamples or args.transverse_counterexamples)
                     else {}
                 ),
                 **(
                     {"compact_counterexamples": True}
-                    if args.compact_counterexamples
+                    if (args.compact_counterexamples or args.transverse_counterexamples)
                     else {}
                 ),
             )
@@ -221,27 +232,33 @@ def main():
                 or args.pulsing_fans
                 or args.grouped_envelopes
                 or args.branching_envelopes
-                or args.compact_counterexamples,
+                or (args.compact_counterexamples or args.transverse_counterexamples),
                 anchored_fans=args.anchored_fans
                 or args.pulsing_fans
                 or args.grouped_envelopes
                 or args.branching_envelopes
-                or args.compact_counterexamples,
+                or (args.compact_counterexamples or args.transverse_counterexamples),
                 pulsing_fans=args.pulsing_fans
                 or args.grouped_envelopes
                 or args.branching_envelopes
-                or args.compact_counterexamples,
+                or (args.compact_counterexamples or args.transverse_counterexamples),
                 grouped_envelopes=args.grouped_envelopes
                 or args.branching_envelopes
-                or args.compact_counterexamples,
+                or (args.compact_counterexamples or args.transverse_counterexamples),
+                **(
+                    {"transverse_counterexamples": True}
+                    if args.transverse_counterexamples
+                    else {}
+                ),
                 **(
                     {"branching_envelopes": True}
-                    if args.branching_envelopes or args.compact_counterexamples
+                    if args.branching_envelopes
+                    or (args.compact_counterexamples or args.transverse_counterexamples)
                     else {}
                 ),
                 **(
                     {"compact_counterexamples": True}
-                    if args.compact_counterexamples
+                    if (args.compact_counterexamples or args.transverse_counterexamples)
                     else {}
                 ),
             )
@@ -330,10 +347,14 @@ def policy_for_audit(
     grouped_envelopes=False,
     branching_envelopes=False,
     compact_counterexamples=False,
+    transverse_counterexamples=False,
 ):
+    compact_counterexamples = compact_counterexamples or transverse_counterexamples
     return MorphologyPolicy(
         version=(
-            "x-polar-morphology-20261002-v7"
+            "x-polar-morphology-20261002-v8"
+            if transverse_counterexamples
+            else "x-polar-morphology-20261002-v7"
             if compact_counterexamples
             else "x-polar-morphology-20261002-v6"
             if branching_envelopes
@@ -367,6 +388,7 @@ def policy_for_audit(
         or compact_counterexamples,
         branching_envelopes_enabled=branching_envelopes or compact_counterexamples,
         compact_counterexamples_enabled=compact_counterexamples,
+        transverse_counterexamples_enabled=transverse_counterexamples,
         local_weather_policy="joint_review",
     )
 
@@ -380,6 +402,7 @@ def run_source_only(
     grouped_envelopes=False,
     branching_envelopes=False,
     compact_counterexamples=False,
+    transverse_counterexamples=False,
 ):
     """Bounded raw-only evidence; never invent old survivors or weather labels."""
     import os
@@ -423,6 +446,7 @@ def run_source_only(
         grouped_envelopes=grouped_envelopes,
         branching_envelopes=branching_envelopes,
         compact_counterexamples=compact_counterexamples,
+        transverse_counterexamples=transverse_counterexamples,
     )
     cuts = []
     for number in numbers:
@@ -531,6 +555,7 @@ def run(
     grouped_envelopes=False,
     branching_envelopes=False,
     compact_counterexamples=False,
+    transverse_counterexamples=False,
 ):
     from rainpulse_algo.multiband.model import Network
     import os
@@ -567,6 +592,7 @@ def run(
         grouped_envelopes=grouped_envelopes,
         branching_envelopes=branching_envelopes,
         compact_counterexamples=compact_counterexamples,
+        transverse_counterexamples=transverse_counterexamples,
     )
     cuts = []
     from rainpulse_algo.multiband.adapters import read_x_qc_sweep

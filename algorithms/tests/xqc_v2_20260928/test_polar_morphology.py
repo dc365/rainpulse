@@ -1212,3 +1212,87 @@ def test_compact_counterexamples_enter_normal_qc_as_diagnostic_not_confirmed_wea
     assert not a["XQC_SOURCE_KIND"].any()
     assert not np.isfinite(a["DBZH_QC"][radial & ~core]).any()
     np.testing.assert_array_equal(a["DBZH_RAW"], z)
+
+
+@pytest.mark.parametrize("bearing", [100.0, 359.0])
+def test_transverse_elongated_body_attached_to_fan_is_not_a_radial_candidate(bearing):
+    s, radial = scene("fan", bearing=bearing)
+    diff = (s.azimuth[:, None] - bearing + 180) % 360 - 180
+    body = ((diff - 14) / 20) ** 2 + ((s.ranges[None, :] - 51000) / 5500) ** 2 <= 1
+    z, sn = s.fields["DBZH"].copy(), s.fields["SNR"].copy()
+    z[body], sn[body] = 38, 15
+    s = replace(s, fields={**s.fields, "DBZH": z, "SNR": sn})
+    old = detect(s, compact_policy())
+    assert old.mask[body].any()
+    ev = detect(s, transverse_policy())
+    assert not ev.mask[body].any()
+    assert ev.mask[radial & ~body].all()
+    assert ev.counterexample_mask[body].all()
+
+
+def transverse_policy():
+    return compact_policy().model_copy(
+        update={
+            "version": "x-polar-morphology-20261002-v8",
+            "transverse_counterexamples_enabled": True,
+        }
+    )
+
+
+@pytest.mark.parametrize("dr,da", [(75.0, 0.5), (1000.0, 2.0)])
+def test_transverse_body_uses_resolved_physical_direction_across_resolutions(dr, da):
+    s, radial = scene("fan", dr=dr, da=da, elevation=11.5)
+    diff = (s.azimuth[:, None] - 100 + 180) % 360 - 180
+    body = ((diff - 14) / 20) ** 2 + ((s.ranges[None, :] - 51000) / 5500) ** 2 <= 1
+    z, sn = s.fields["DBZH"].copy(), s.fields["SNR"].copy()
+    z[body], sn[body] = 38, 15
+    s = replace(s, fields={**s.fields, "DBZH": z, "SNR": sn})
+    before = s.digest
+    ev = detect(s, transverse_policy())
+    assert not ev.mask[body].any()
+    assert ev.mask[radial & ~body].all()
+    assert any(r["transverse_counterexample"] for r in ev.record["compact_counterexamples"])
+    assert s.digest == before
+
+
+def test_transverse_guard_does_not_protect_radially_elongated_or_complete_fan():
+    s, radial = scene("fan")
+    diff = (s.azimuth[:, None] - 100 + 180) % 360 - 180
+    elongated = (abs(diff) <= 2) & (s.ranges[None, :] >= 40000) & (s.ranges[None, :] <= 60000)
+    z = np.zeros(s.shape, "float32")
+    sn = np.full(s.shape, -2.0, "float32")
+    z[elongated], sn[elongated] = 38, 15
+    altered = replace(s, fields={**s.fields, "DBZH": z, "SNR": sn})
+    ev = detect(altered, transverse_policy())
+    assert not ev.counterexample_mask.any()
+    # Short far-range support has no new qualification authority.
+    np.testing.assert_array_equal(ev.mask, detect(altered, compact_policy()).mask)
+    for kind in ("line", "fan", "broken"):
+        pure, original = scene(kind)
+        ev = detect(pure, transverse_policy())
+        assert not ev.counterexample_mask.any()
+        assert ev.mask[original].all()
+
+
+def test_transverse_guard_requires_version_and_compact_parent_in_both_schemas():
+    import json
+    from pathlib import Path
+
+    import jsonschema
+
+    schema = json.loads(
+        (
+            Path(__file__).resolve().parents[3] / "contracts/internal/multiband/x-qc-v2.schema.json"
+        ).read_text()
+    )["$defs"]["MorphologyPolicy"]
+    assert not MorphologyPolicy().transverse_counterexamples_enabled
+    jsonschema.validate(transverse_policy().model_dump(mode="json"), schema)
+    for change in (
+        {"version": "x-polar-morphology-20261002-v7"},
+        {"compact_counterexamples_enabled": False},
+    ):
+        invalid = transverse_policy().model_dump(mode="json") | change
+        with pytest.raises(ValueError):
+            MorphologyPolicy.model_validate(invalid)
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(invalid, schema)
