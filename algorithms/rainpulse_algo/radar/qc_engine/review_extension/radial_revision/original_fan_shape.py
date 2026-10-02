@@ -10,7 +10,7 @@ from .geometry import ResourceLimit
 PREFIX = "RV2_ORIGINAL_FAN_SHAPE_"
 
 
-def qualify(native, blocked, group):
+def qualify(native, blocked, group, *, sparse_target_enabled=False):
     r, az, dr, good, gaps = native_geometry(native)
     z, observed = moment(native, "DBZH")
     snr, snr_ok = moment(native, "SNR")
@@ -77,9 +77,22 @@ def qualify(native, blocked, group):
             bands.append((lo, hi))
         profiles[int(block)] = bands
         work += len(az) * len(cc)
-    for block, bands in profiles.items():
+    original_bands = sorted({band for bands in profiles.values() for band in bands})
+    for block, local_bands in profiles.items():
         cc = np.flatnonzero(blocks == block)
+        # The original RAW object is frozen by held-out distances. Its target
+        # window may contain only fragments; those fragments train no edges.
+        bands = original_bands if sparse_target_enabled else local_bands
         for lo, hi in bands:
+            if sparse_target_enabled:
+                work += (hi - lo + 2) * len(cc)
+                if work > 50000000:
+                    raise ResourceLimit("original fan work exceeded; no partial result")
+                if (
+                    known[lo - 1 : hi + 1][:, cc].mean(axis=1).min() < 0.8
+                    or max(raw[lo - 1, cc].mean(), raw[hi, cc].mean()) > 0.2
+                ):
+                    continue
             # Target plus adjacent windows train neither edges nor source.
             refs = [v for v, pairs in profiles.items() if abs(v - block) > 1 and (lo, hi) in pairs]
             if len(refs) < 5 or (max(refs) - min(refs)) * 20000 < 150000:
@@ -194,7 +207,11 @@ def qualify(native, blocked, group):
             if work > 50000000:
                 raise ResourceLimit("original fan work exceeded; no partial result")
     return out, dict(
-        version="complete-original-fan-shape-v5-compact-native-proof",
+        version=(
+            "complete-original-fan-shape-v6-heldout-sparse-target"
+            if sparse_target_enabled
+            else "complete-original-fan-shape-v5-compact-native-proof"
+        ),
         records=records,
         qualified_gates=int(out[PREFIX + "QUALIFIED_MASK"].sum()),
         work=int(work),
@@ -204,8 +221,8 @@ def qualify(native, blocked, group):
     )
 
 
-def validate(arrays, native, blocked, group):
-    expected, _ = qualify(native, blocked, group)
+def validate(arrays, native, blocked, group, *, sparse_target_enabled=False):
+    expected, _ = qualify(native, blocked, group, sparse_target_enabled=sparse_target_enabled)
     if arrays.keys() != expected.keys():
         raise ValueError("original fan evidence fields differ")
     for key, value in expected.items():

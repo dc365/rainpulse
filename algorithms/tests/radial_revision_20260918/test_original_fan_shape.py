@@ -66,7 +66,8 @@ def test_full_original_fan_includes_edge_and_sparse_members_without_power_fit():
         "unrelated_parent",
     ],
 )
-def test_full_fan_guards_keep_weather_missing_and_unanchored_returns(case):
+@pytest.mark.parametrize("sparse", [False, True])
+def test_full_fan_guards_keep_weather_missing_and_unanchored_returns(case, sparse):
     n, b, g = fixture()
     if case == "broad":
         n.fields["DBZH"][:] = n.fields["DBZH"][6]
@@ -89,7 +90,7 @@ def test_full_fan_guards_keep_weather_missing_and_unanchored_returns(case):
         n.field_available["DBZH"] = np.isfinite(n.fields["DBZH"])
     else:
         g["RV2_RAW_FAN_ID"][3] = 99
-    out, _ = m.qualify(n, b, g)
+    out, _ = m.qualify(n, b, g, sparse_target_enabled=sparse)
     assert out[m.PREFIX + "QUALIFIED_MASK"][3, 155] == 0
 
 
@@ -163,3 +164,34 @@ def test_one_original_identity_can_have_separate_native_ray_references():
     assert out[m.PREFIX + "QUALIFIED_MASK"][3, 155]
     record = next(v for v in report["records"] if v["target_block"] == 7)
     assert {v["row"] for v in record["source_reference_gates"].values()} == {4, 7, 10}
+
+
+@pytest.mark.parametrize("side_case", ["measured", "unknown", "foreground"])
+def test_sparse_target_window_uses_heldout_original_shape_without_inventing_dry_sides(side_case):
+    n, b, g = fixture()
+    # The target window no longer contains a dense fan. Two short weak pieces
+    # remain within the same immutable original parent/range. Other distances
+    # establish the object; the target cannot train the angular template.
+    n.fields["DBZH"][3:12, 140:160] = np.nan
+    g["RV2_SOURCE_LEDGER_SEED_ID"][:, 140:160] = 0
+    n.fields["DBZH"][3, [146, 147, 153, 154]] = 15
+    if side_case == "unknown":
+        n.fields["SNR"][[2, 12], 140:160] = np.nan
+        n.field_available["SNR"] = np.isfinite(n.fields["SNR"])
+    elif side_case == "foreground":
+        n.fields["DBZH"][[2, 12], 140:160] = 20
+    n.field_available["DBZH"] = np.isfinite(n.fields["DBZH"])
+    raw = n.fields["DBZH"].copy()
+    original = g["RV2_SOURCE_LEDGER_SEED_ID"].copy()
+    out, report = m.qualify(n, b, g, sparse_target_enabled=True)
+    if side_case == "measured":
+        assert out[m.PREFIX + "QUALIFIED_MASK"][3, [146, 147, 153, 154]].all()
+        assert not out[m.PREFIX + "SOURCE_REFERENCE_MASK"][:, 140:160].any()
+        records = [v for v in report["records"] if v["target_block"] == 7]
+        assert records
+        assert all(abs(v - 7) > 1 for rec in records for v in rec["reference_blocks"])
+        m.validate(out, n, b, g, sparse_target_enabled=True)
+    else:
+        assert not out[m.PREFIX + "QUALIFIED_MASK"][:, 140:160].any()
+    assert np.array_equal(original, g["RV2_SOURCE_LEDGER_SEED_ID"])
+    assert np.array_equal(raw, n.fields["DBZH"], equal_nan=True)

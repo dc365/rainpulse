@@ -272,7 +272,7 @@ def test_anchored_integration_persists_actual_raw_and_replays_native_order():
         bad = {k: v.copy() for k, v in arrays.items()}
         bad[module.PREFIX + key][2, 155] = {
             "DBZH_AVAILABLE_MASK": 0,
-            "ANCHORED_POLICY_CODE": 3,
+            "ANCHORED_POLICY_CODE": 255,
             "MEASURED_DBZH": -1,
         }[key]
         with pytest.raises(ValueError):
@@ -408,3 +408,27 @@ def test_complete_fan_proof_reaches_engine_writer_but_audit_does_not_act():
     assert fields["RV2_SOURCE_FOOTPRINT_ORIGINAL_FAN_ADDED_MASK"][3, 155]
     load("source_validation").validate_source_fields(fields, n.field_available["DBZH"])
     assert np.array_equal(raw, n.fields["DBZH"], equal_nan=True)
+
+
+def test_sparse_policy_preserves_historical_dense_policy_and_binds_new_proof():
+    import pytest
+
+    from .test_original_fan_shape import fixture as fan_fixture
+
+    n, b, g = fan_fixture()
+    n.fields["DBZH"][3:12, 140:160] = np.nan
+    g["RV2_SOURCE_LEDGER_SEED_ID"][:, 140:160] = 0
+    n.fields["DBZH"][3, [146, 147, 153, 154]] = 15
+    n.field_available["DBZH"] = np.isfinite(n.fields["DBZH"])
+    m = load("radial_revision.source_footprint")
+    old, _ = m.qualify(n, b, g, sparse_target_enabled=False)
+    new, _ = m.qualify(n, b, g)
+    assert not old[m.PREFIX + "QUALIFIED_MASK"][3, 153]
+    assert new[m.PREFIX + "QUALIFIED_MASK"][3, 153]
+    for out, policy in [(old, 2), (new, 3)]:
+        assert np.all(out[m.PREFIX + "ANCHORED_POLICY_CODE"] == policy)
+        m.validate({**g, **out, **m.evidence(n)}, n.field_available["DBZH"], b)
+    arrays = {**g, **new, **m.evidence(n)}
+    arrays[m.PREFIX + "ANCHORED_POLICY_CODE"] = np.full(n.shape, 2, "uint8")
+    with pytest.raises(ValueError, match="replay differs"):
+        m.validate(arrays, n.field_available["DBZH"], b)

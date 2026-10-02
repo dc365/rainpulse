@@ -27,7 +27,15 @@ REJECTIONS = {
 }
 
 
-def qualify(native, blocked, group, *, anchored_enabled=True, original_fan_enabled=True):
+def qualify(
+    native,
+    blocked,
+    group,
+    *,
+    anchored_enabled=True,
+    original_fan_enabled=True,
+    sparse_target_enabled=True,
+):
     """Combine frozen footprint and independently replayable object morphology.
 
     The caller's existing source-footprint policy still controls actions. A
@@ -44,7 +52,7 @@ def qualify(native, blocked, group, *, anchored_enabled=True, original_fan_enabl
     added = selected & (fields[PREFIX + "QUALIFIED_MASK"] != 1)
     fields.update(proposals)
     fields[PREFIX + "ANCHORED_POLICY_CODE"] = np.full(
-        native.shape, 2 if original_fan_enabled else 1, "uint8"
+        native.shape, (3 if sparse_target_enabled else 2) if original_fan_enabled else 1, "uint8"
     )
     fields[PREFIX + "ANCHORED_ADDED_MASK"] = added.astype("uint8")
     for name in ("CANDIDATE_MASK", "QUALIFIED_MASK"):
@@ -58,7 +66,9 @@ def qualify(native, blocked, group, *, anchored_enabled=True, original_fan_enabl
         from .original_fan_shape import PREFIX as fan_prefix
         from .original_fan_shape import qualify as qualify_fan
 
-        fan_fields, fan_report = qualify_fan(native, blocked, group)
+        fan_fields, fan_report = qualify_fan(
+            native, blocked, group, sparse_target_enabled=sparse_target_enabled
+        )
         fan_added = (fan_fields[fan_prefix + "QUALIFIED_MASK"] == 1) & (
             fields[PREFIX + "QUALIFIED_MASK"] != 1
         )
@@ -70,7 +80,11 @@ def qualify(native, blocked, group, *, anchored_enabled=True, original_fan_enabl
         fields[PREFIX + "REJECTION_CODE"][fan_added] = 11
         fields[PREFIX + "RAW_PARENT_ID"][fan_added] = np.asarray(group["RV2_RAW_FAN_ID"])[fan_added]
     report.update(
-        version="original-source-footprint-v5-complete-fan"
+        version=(
+            "original-source-footprint-v6-heldout-sparse-target"
+            if sparse_target_enabled
+            else "original-source-footprint-v5-complete-fan"
+        )
         if original_fan_enabled
         else "original-source-footprint-v4-anchored-object",
         candidate_gates=int(fields[PREFIX + "CANDIDATE_MASK"].sum()),
@@ -384,7 +398,7 @@ def validate(group, observed, blocked):
     policy = 0
     if anchored:
         values = np.unique(get("ANCHORED_POLICY_CODE"))
-        if len(values) != 1 or values[0] not in (1, 2):
+        if len(values) != 1 or values[0] not in (1, 2, 3):
             raise ValueError("unsupported anchored source policy")
         policy = int(values[0])
     for name in ("DBZH", "RHOHV", "SNR") if anchored else ("RHOHV", "SNR"):
@@ -412,7 +426,8 @@ def validate(group, observed, blocked):
         blocked[rows],
         originals,
         anchored_enabled=anchored,
-        original_fan_enabled=policy == 2,
+        original_fan_enabled=policy >= 2,
+        sparse_target_enabled=policy == 3,
     )
     for key, value in expected.items():
         actual = np.asarray(group[key][:])[rows]
