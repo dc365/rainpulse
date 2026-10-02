@@ -35,3 +35,23 @@ distinct conflict codes. Exterior reference observations that are unavailable
 or protected are counted separately from known polar distributions that fail
 the reference test. These diagnostic causes do not authorize an action or
 change qualification, thresholds, membership, or missing-data semantics.
+
+## V2 known joint contrast (explicit candidate policy)
+
+The default V1 ordinary-polar reference remains unchanged. V2 must explicitly
+select `reference_mode: known_joint_contrast` with the V2 version identity.
+It measures opposition to the nominated joint signature, not rainfall or RF
+truth: a conjunction is known false when at least one independently valid
+original measurement contradicts it, even when another operand is unavailable.
+Valid no-echo, DBZH below the echo threshold, SNR below the nominated minimum,
+RHOHV above the nominated maximum, or observed normal ZDR may provide that
+counterevidence. No substitute value is used for an unavailable operand.
+Clipped abnormal ZDR is not normal-ZDR counterevidence.
+
+Both sides still require the existing minimum fraction of measured
+counterevidence in each reference window and the existing complete-trajectory
+reference fraction. Source members still require ALL original moments and
+the original joint signature, original geometry/history and protection checks.
+Reference source opposition is not a quiet-background or weather classification.
+This mode remains a read-only candidate until its independent counterexamples
+and normal publication/map checks pass; it does not change a live profile.

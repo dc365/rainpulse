@@ -211,3 +211,79 @@ def test_full_protected_history_reason_is_explicit():
     reasons = {reason for r in result.record["review_objects"] for reason in r["rejection_reasons"]}
     assert "PROTECTED_ORIGINAL_MEMBER" in reasons
     assert "FORK_OR_MERGE_ANCESTRY" not in reasons
+
+
+def contrast_policy():
+    return WindowPolicy(
+        version="x-polar-window-objects-20261003-v2", reference_mode="known_joint_contrast"
+    )
+
+
+@pytest.mark.parametrize("moment,value", [("DBZH", 0), ("SNR", 2), ("RHOHV", 0.98), ("ZDR", 0.5)])
+def test_valid_counterevidence_is_known_false_despite_other_unknown_operands(moment, value):
+    s, source = mixed()
+    fields = {k: v.copy() for k, v in s.fields.items()}
+    available = {k: v.copy() for k, v in s.available.items()}
+    sides = np.isin(np.arange(s.shape[0]), [99, 101])
+    for key in available:
+        available[key][sides] = False
+    available[moment][sides] = True
+    fields[moment][sides] = value
+    s = replace(s, fields=fields, available=available)
+    before = s.digest
+    assert not detect(s, WindowPolicy()).mask.any()
+    result = detect(s, contrast_policy())
+    assert result.mask[source].all() and not result.mask[~source].any()
+    assert s.digest == before and not result.record["weather_truth"]
+    assert all(
+        not w["sides"][0]["ordinary_polar"]
+        for o in result.record["objects"] for w in o["history"]
+    )
+
+
+@pytest.mark.parametrize("value", [20.0, -9.0])
+def test_unknown_or_clipped_operands_cannot_prove_joint_contrast(value):
+    s, _ = mixed()
+    fields = {k: v.copy() for k, v in s.fields.items()}
+    available = {k: v.copy() for k, v in s.available.items()}
+    sides = np.isin(np.arange(s.shape[0]), [99, 101])
+    for key in available:
+        available[key][sides] = False
+    key = "SNR" if value == 20 else "ZDR"
+    available[key][sides] = True
+    fields[key][sides] = value
+    assert not detect(replace(s, fields=fields, available=available), contrast_policy()).mask.any()
+
+
+@pytest.mark.parametrize("kind", ["fixed_km", "curved", "blob"])
+def test_joint_contrast_keeps_nonradial_weather_counterexamples(kind):
+    s, source = mixed(kind)
+    assert source.any() and not detect(s, contrast_policy()).mask.any()
+
+
+def test_joint_contrast_requires_distinct_policy_identity():
+    with pytest.raises(ValueError):
+        WindowPolicy(reference_mode="known_joint_contrast")
+    s, source = mixed()
+    assert not detect(s, contrast_policy(), protected=source).mask.any()
+
+
+def test_partial_valid_counterevidence_cannot_fill_unknown_reference_samples():
+    s, _ = mixed()
+    available = {k: v.copy() for k, v in s.available.items()}
+    sides = np.isin(np.arange(s.shape[0]), [99, 101])
+    for key in available:
+        available[key][sides] = False
+    # Seventy percent known false is below the unchanged eighty-percent gate.
+    available["ZDR"][sides] = (np.arange(s.shape[1]) % 10 < 7)[None, :]
+    result = detect(replace(s, available=available), contrast_policy())
+    assert not result.mask.any()
+    assert all(r["bilateral_reference_fraction"] == 0 for r in result.record["review_objects"])
+
+
+@pytest.mark.parametrize("kind", ["line", "fan"])
+@pytest.mark.parametrize("da,dr,bearing", [(0.5, 75.0, 359.0), (2.0, 1000.0, 100.0)])
+def test_joint_contrast_uses_native_geometry_and_keeps_original_members(kind, da, dr, bearing):
+    s, source = mixed(kind, da=da, dr=dr, bearing=bearing, elevation=14.55)
+    result = detect(s, contrast_policy())
+    assert result.mask[source].all() and not result.mask[~source].any()

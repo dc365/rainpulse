@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from rainpulse_algo.radar.qc_engine.volume_review.data import (
     ResourceLimit,
@@ -18,7 +18,10 @@ from .polar_morphology import _angular_runs
 
 class WindowPolicy(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
-    version: Literal["x-polar-window-objects-20261003-v1"] = "x-polar-window-objects-20261003-v1"
+    version: Literal[
+        "x-polar-window-objects-20261003-v1", "x-polar-window-objects-20261003-v2"
+    ] = "x-polar-window-objects-20261003-v1"
+    reference_mode: Literal["ordinary_polar", "known_joint_contrast"] = "ordinary_polar"
     scale_m: float = Field(default=5000.0, ge=2000.0, le=20000.0)
     minimum_range_m: float = Field(default=1500.0, ge=500.0)
     minimum_span_m: float = Field(default=20000.0, ge=20000.0)
@@ -37,6 +40,12 @@ class WindowPolicy(BaseModel):
     maximum_work: int = Field(default=50000000, ge=1, le=50000000, strict=True)
     maximum_objects: int = Field(default=20000, ge=1, le=20000, strict=True)
     maximum_evidence_bytes: int = Field(default=4 * 1024**2, ge=4096, le=16 * 1024**2, strict=True)
+
+    @model_validator(mode="after")
+    def reference_identity(self):
+        if (self.reference_mode == "known_joint_contrast") != self.version.endswith("-v2"):
+            raise ValueError("joint contrast requires its distinct V2 policy identity")
+        return self
 
 
 @dataclass(frozen=True)
@@ -95,6 +104,36 @@ def detect(sweep, policy, *, protected=None):
     nodes = 0
 
     def reference(row, cols):
+        if p.reference_mode == "known_joint_contrast":
+            charge(len(cols) * 8)
+            # Three-valued conjunction: one VALID contradictory operand is
+            # sufficient to prove false. An unavailable operand is never given
+            # a numerical value or counted as a quiet/background observation.
+            contrary = (
+                sweep.no_echo[row, cols]
+                | (az[row, cols] & (z[row, cols] < 5))
+                | (ass[row, cols] & (sn[row, cols] < p.minimum_snr_db))
+                | (ar[row, cols] & (rho[row, cols] > p.maximum_rhohv))
+                | (ad[row, cols] & (zdr[row, cols] >= -1) & (zdr[row, cols] <= 4))
+            ) & ~hard[row, cols]
+            same = joint[row, cols]
+            contrary_fraction = float(contrary.mean())
+            known_fraction = float((contrary | same).mean())
+            eligible = contrary_fraction >= p.minimum_known_fraction
+            status = "REFERENCE_SUPPORTED" if eligible else "POLAR_CONFLICT"
+            if not eligible and known_fraction < p.minimum_known_fraction:
+                status = "UNAVAILABLE_OR_PROTECTED"
+            return {
+                "known_fraction": known_fraction,
+                "known_moments_fraction": float(known[row, cols].mean()),
+                "known_joint_false_fraction": contrary_fraction,
+                "joint_anomaly_fraction": float(same.mean()),
+                "undetermined_fraction": 1.0 - known_fraction,
+                "ordinary_polar": False,
+                "eligible_reference": eligible,
+                "source_opposition_only": True,
+                "status": status,
+            }
         charge(len(cols) * 4)
         supported = known[row, cols] & ~hard[row, cols]
         fraction = float(supported.mean())
@@ -102,6 +141,7 @@ def detect(sweep, policy, *, protected=None):
             return {
                 "known_fraction": fraction,
                 "ordinary_polar": False,
+                "eligible_reference": False,
                 "status": "UNAVAILABLE_OR_PROTECTED",
             }
         rr = float(np.median(rho[row, cols][supported]))
@@ -114,6 +154,7 @@ def detect(sweep, policy, *, protected=None):
             "zdr_median_db": dd,
             "snr_median_db": ss,
             "ordinary_polar": ordinary,
+            "eligible_reference": ordinary,
             "status": "REFERENCE_SUPPORTED" if ordinary else "POLAR_CONFLICT",
         }
 
@@ -132,7 +173,7 @@ def detect(sweep, policy, *, protected=None):
         )
         support = sum(e["support_m"] for e in history)
         bilateral = min(
-            sum(e["sides"][side]["ordinary_polar"] for e in history) / len(history)
+            sum(e["sides"][side]["eligible_reference"] for e in history) / len(history)
             for side in (0, 1)
         )
         charge(2 * len(history) + 9)
@@ -295,6 +336,7 @@ def detect(sweep, policy, *, protected=None):
         {
             "status": "EVALUATED",
             "version": p.version,
+            "reference_mode": p.reference_mode,
             "diagnostic_only": True,
             "source_verified": False,
             "weather_truth": False,
