@@ -126,6 +126,12 @@ def audit(snapshot, receipt, *, shoulder_windows=False, shoulder_band=False, sho
             summaries[name]['geometry_hypothesis_overlap']=int((mask&remaining).sum())
             summaries[name]['geometry_hypothesis_total']=int(mask.sum())
             summaries[name]['geometry_protected_overlap']=int((mask&blocked).sum())
+            all_objects=evidence['objects']+evidence.get('standalone_geometry_objects',[])
+            summaries[name]['geometry_hypotheses']=[dict(native_segment_start=o['native_segment_start'],
+                original_components=p['original_components'],original_lower_parent_ids=p['original_lower_parent_ids'],
+                standalone=bool(o.get('standalone_geometry_only')),**p['geometry_hypothesis'])
+                for o in all_objects for p in o.get('original_distance_partitions',[])
+                if 'geometry_hypothesis' in p]
     assert np.array_equal(native.fields['DBZH'], a['RAW'], equal_nan=True)
     return dict(scope='complete_RAW_shapes_explaining_actual_published_residuals',
         snapshot_sha256=report['snapshot_sha256'],published_receipt_sha256=hashlib.sha256(receipt.read_bytes()).hexdigest(),
@@ -153,7 +159,7 @@ def main():
     with args.output.open('x') as f:json.dump(result,f,indent=2,allow_nan=False);f.write('\n')
     print(json.dumps({k:v for k,v in result.items() if k!='detectors'}))
     for name,value in result['detectors'].items():
-        print(name,json.dumps({k:v for k,v in value.items() if k not in ('objects','original_target_parents')}))
+        print(name,json.dumps({k:v for k,v in value.items() if k not in ('objects','original_target_parents','geometry_hypotheses')}))
 
 
 if __name__=='__main__':main()

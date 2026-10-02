@@ -37,7 +37,16 @@ def replay(path, *, geometry_evidence=False):
     geometry=extended.get(PREFIX+'GEOMETRY_RESEARCH_MASK',np.zeros(native.shape,'uint8'))==1
     if (geometry&blocked).any() or (geometry&(extended[PREFIX+'WEATHER_VETO_MASK']==1)).any():
         raise ValueError('geometry protected or weather-proxy overlap')
+    proofs=[p['geometry_hypothesis'] for o in report['objects']+report.get('standalone_geometry_objects',[])
+            for p in o.get('original_distance_partitions',[]) if 'geometry_hypothesis' in p]
+    from rainpulse_algo.radar.qc_engine.review_extension.radial_revision import fragment_constellation,shape_constellation
+    code_sha256={name:hashlib.sha256(Path(module.__file__).read_bytes()).hexdigest()
+                 for name,module in [('detector',fragment_constellation),('geometry_assessor',shape_constellation)]}
     return dict(scan_id=meta['scan_id'],sweep=meta['sweep'],snapshot_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+        code_sha256=code_sha256,geometry_evidence=geometry_evidence,
+        standalone_geometry_objects=len(report.get('standalone_geometry_objects',[])),
+        qualified_geometry_hypotheses=sum(p['qualified'] for p in proofs),
+        quantized_weather_ambiguous_hypotheses=sum(p['qualified'] and p['fixed_physical_width_compatible'] for p in proofs),
         geometry_hypothesis_gates=int(geometry.sum()),geometry_only_gates=int((geometry&~proposal).sum()),
         short_research_gates=int(short.sum()),parent_research_gates=int(parent.sum()),
         combined_research_gates=int(proposal.sum()),parent_only_gates=int((parent&~short).sum()),

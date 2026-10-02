@@ -45,6 +45,43 @@ def geometry_fixture():
     return n
 
 
+def test_standalone_short_shape_does_not_need_unrelated_distant_shards():
+    n=geometry_fixture()
+    n.fields['DBZH'][:,300:]=np.nan;n.field_available['DBZH'][:,300:]=False
+    baseline,_=detect(n,partition_evidence=True,shoulder_windows=True,short_subset_evidence=True,
+                      short_parent_footprint=True)
+    arrays,report=detect(n,partition_evidence=True,shoulder_windows=True,short_subset_evidence=True,
+                         short_parent_footprint=True,geometry_evidence=True)
+    assert arrays[P+'GEOMETRY_RESEARCH_MASK'].sum()==6*3*8
+    assert all(np.array_equal(v,arrays[k]) for k,v in baseline.items())
+    assert report['objects']==[]
+    assert report['standalone_geometry_objects']
+    assert all(not o['strong'] for o in report['standalone_geometry_objects'])
+    proofs=[p['geometry_hypothesis'] for o in report['standalone_geometry_objects']
+            for p in o['original_distance_partitions']]
+    assert any(p['qualified'] and p['fixed_physical_width_compatible']
+               and p['independent_weather_evidence_required'] for p in proofs)
+
+
+def test_fixed_physical_width_weather_is_not_a_stable_native_fan():
+    n=geometry_fixture(); n.fields['DBZH'][:]=np.nan;n.field_available['DBZH'][:]=False
+    n.ranges=20000.+np.arange(n.shape[1])*250
+    n.azimuth=np.arange(n.shape[0])*2.+30
+    for start in (0,20,40,60,80,100,120):
+        distance=n.ranges[start]
+        # Constant 3km width at a half-cell centre: 4 rays become 2 rays.
+        half_angle=np.rad2deg(1500/distance)
+        rows=abs(n.azimuth-41)<=half_angle
+        n.fields['DBZH'][rows,start:start+3]=25
+        n.field_available['DBZH'][rows,start:start+3]=True
+    arrays,report=detect(n,partition_evidence=True,geometry_evidence=True)
+    assert report['standalone_geometry_objects'], 'counterexample must reach shape assessment'
+    proofs=[p['geometry_hypothesis'] for o in report['standalone_geometry_objects']
+            for p in o['original_distance_partitions']]
+    assert any('unresolved_or_unstable_transverse_width' in p['hold_reasons'] for p in proofs)
+    assert not arrays[P+'GEOMETRY_RESEARCH_MASK'].any()
+
+
 def test_geometry_hypothesis_uses_complete_shapes_not_quiet_flank_relabelling():
     n=geometry_fixture(); raw=n.fields['DBZH'].copy()
     baseline,_=detect(n,partition_evidence=True)
@@ -63,9 +100,12 @@ def test_geometry_hypothesis_uses_complete_shapes_not_quiet_flank_relabelling():
     assert np.array_equal(rotated[P+'GEOMETRY_RESEARCH_MASK'],arrays[P+'GEOMETRY_RESEARCH_MASK'])
 
 
+@pytest.mark.parametrize('standalone',[False,True])
 @pytest.mark.parametrize('case',['unknown','weather','barrier','too_few','width_drift'])
-def test_geometry_hypothesis_keeps_negative_original_members(case):
+def test_geometry_hypothesis_keeps_negative_original_members(case,standalone):
     n=geometry_fixture(); blocked=np.zeros(n.shape,bool)
+    if standalone:
+        n.fields['DBZH'][:,300:]=np.nan;n.field_available['DBZH'][:,300:]=False
     if case=='unknown':n.field_available['SNR'][3,100:108]=False
     if case=='weather':
         n.fields['RHOHV']=np.full(n.shape,.99,'float32')

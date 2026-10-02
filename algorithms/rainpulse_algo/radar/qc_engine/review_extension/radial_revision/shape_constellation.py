@@ -7,7 +7,7 @@ Weather absence is not independent weather truth, so this proof is shadow only.
 import numpy as np
 
 
-def assess(members, parents, ranges, dr, beam, parent_hold):
+def assess(members, parents, ranges, dr, beam, parent_hold, *, angular_spacing_deg=None):
     from .fragment_constellation import short_segment_assessment
     base = short_segment_assessment(members, ranges, dr, beam, parent_hold)
     holds = [h for h in base['hold_reasons']
@@ -30,9 +30,22 @@ def assess(members, parents, ranges, dr, beam, parent_hold):
         holds.append('unobserved_or_protected_original_flanks')
     if any(p['weather_gates'] or p['protected_gates'] for p in parents):
         holds.append('weather_or_protected_complete_parent')
+    # Native angular quantization can hide the narrowing of a fixed-km ribbon.
+    # Report the competing explanation rather than calling unchanged cells
+    # proof of interference. Antenna blur can only widen this uncertainty.
+    uncertainty=max(beam,angular_spacing_deg or beam)
+    distance=np.array([(m['range_min_m']+m['range_max_m'])/2 for m in members])
+    lower=float(np.max(distance*np.deg2rad(np.maximum(0,widths-uncertainty))))
+    upper=float(np.min(distance*np.deg2rad(widths+uncertainty)))
+    fixed_width_compatible=lower<=upper
     return dict(base, qualified=not holds, hold_reasons=holds,
                 hypothesis='repeated_transverse_shards_in_fixed_native_fan',
                 requires_quiet_flanks=False, nonquiet_is_not_dry=True,
                 independent_original_parents=len(parents),
                 original_transverse_members=len(members),
+                fixed_physical_width_compatible=bool(fixed_width_compatible),
+                compatible_physical_width_interval_m=(
+                    [lower,upper] if fixed_width_compatible else None),
+                native_width_uncertainty_deg=float(uncertainty),
+                independent_weather_evidence_required=bool(fixed_width_compatible),
                 production_eligible=False)

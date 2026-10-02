@@ -217,7 +217,7 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
     if not np.isfinite(beam) or beam <= 0:
         raise ValueError('positive finite beam width required')
     breaks = gaps[:-1] | (steps <= 0) | (steps > 1.5 * spacing)
-    records = []; work = 0
+    records = []; standalone_geometry = []; work = 0
     def charge(amount):
         nonlocal work
         work += int(amount)
@@ -274,9 +274,15 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                 rr = np.concatenate([f['rows'] for f in group]); cc = np.concatenate([f['cols'] for f in group])
                 cols = np.unique(cc); span = float(r[cols[-1]]-r[cols[0]]+dr)
                 windows = [len(np.unique(r[cols]//scale)) for scale in (5000, 10000, 20000)]
-                if span < 60000 or len(cols)*dr < 5000 or min(windows) < 4:
+                legacy_eligible=span>=60000 and len(cols)*dr>=5000 and min(windows)>=4
+                standalone_eligible=False
+                if geometry_evidence and not legacy_eligible and len(members)>=6 and 20000<=span<60000:
+                    charge(3*len(cols))
+                    short_windows=[len(np.unique((r[cols]-r[cols[0]])//scale)) for scale in (1000,2000,5000)]
+                    standalone_eligible=len(cols)*dr>=5000 and min(short_windows)>=4
+                if not legacy_eligible and not standalone_eligible:
                     continue
-                if len(records) >= maximum_objects:
+                if len(records)+len(standalone_geometry) >= maximum_objects:
                     raise ResourceLimit('constellation object budget exceeded; no partial output')
                 holds = []; accept = []; fractions = []; side_observations = []; member_history = []
                 lower_ids=np.unique(lower_labels[rr,cc])
@@ -377,8 +383,9 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                 # the object after discarding a failed/unknown/weather fragment.
                 if min(fractions) < .8: holds.append('incomplete_measured_bilateral_boundaries')
                 object_id = len(records)+1
-                out[PREFIX+'MASK'][segment[rr], cc] = 1
-                out[PREFIX+'ID'][segment[rr], cc] = object_id
+                if legacy_eligible:
+                    out[PREFIX+'MASK'][segment[rr], cc] = 1
+                    out[PREFIX+'ID'][segment[rr], cc] = object_id
                 # Full-parent width history is retained before optional segmentation.
                 # A fixed-km ribbon narrows in angle as range increases; splitting
                 # away its near/weather part must not evade this counterexample.
@@ -391,7 +398,7 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                     narrowing = slope <= -.4 and correlation <= -.7
                 if narrowing:
                     holds.append('full_original_parent_narrowing_weather_counterexample')
-                if not holds:
+                if legacy_eligible and not holds:
                     for f, accepted in zip(group, accept, strict=True):
                         out[PREFIX+'STRONG_MASK'][segment[f['rows'][accepted]], f['cols'][accepted]] = 1
                 segments = []
@@ -420,11 +427,12 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                         range_window_counts=sw, independently_qualified=bool(eligible),
                         short_assessment=short_segment_assessment([member_history[i] for i in indices],
                             r[sc],dr,beam,narrowing or lower_hold)))
-                    if segment_evidence and eligible:
+                    if legacy_eligible and segment_evidence and eligible:
                         for i in indices:
                             f = group[i]; selected = accept[i]
                             out[PREFIX+'STRONG_MASK'][segment[f['rows'][selected]],f['cols'][selected]] = 1
-                records.append(dict(id=object_id, native_segment_start=int(segment[0]),
+                record=dict(id=object_id if legacy_eligible else len(standalone_geometry)+1,
+                    native_segment_start=int(segment[0]),
                     contour_dbz=level, original_components=list(key),
                     anchor_bearing_deg=anchor['bearing'] % 360, neighborhood_half_width_deg=beam,
                     radial_span_m=span, actual_range_support_m=float(len(cols)*dr),
@@ -435,21 +443,29 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                     full_parent_narrowing_weather_hold=bool(narrowing),
                     full_lower_contour_history=lower_history,lower_parent_width_slope=lower_slope,
                     lower_parent_width_correlation=lower_correlation,lower_parent_geometry_hold=bool(lower_hold),
-                    strong=not holds, hold_reasons=holds))
+                    strong=legacy_eligible and not holds, hold_reasons=holds)
+                if legacy_eligible:
+                    records.append(record)
+                else:
+                    # A separate evidence ledger: no legacy ID/mask/short-action
+                    # changes merely because standalone geometry was requested.
+                    record['standalone_geometry_only']=True
+                    standalone_geometry.append(record)
                 if partition_evidence:
-                    records[-1]['original_distance_partitions'] = original_distance_partitions(
+                    record['original_distance_partitions'] = original_distance_partitions(
                         group,member_history,lower_history,r,dr,beam,
                         measured_accept=accept if short_subset_evidence else None)
                     if geometry_evidence:
                         from .shape_constellation import assess
-                        for partition in records[-1]['original_distance_partitions']:
+                        for partition in record['original_distance_partitions']:
                             ids=set(partition['original_components'])
                             indices=[i for i,f in enumerate(group) if f['ident'] in ids]
                             local_parents=[lower_parents[p] for p in partition['original_lower_parent_ids']]
                             charge(len(indices)+len(local_parents))
                             columns=np.unique(np.concatenate([group[i]['cols'] for i in indices]))
                             proof=assess([member_history[i] for i in indices],local_parents,
-                                r[columns],dr,beam,partition['original_lower_parent_geometry_hold'])
+                                r[columns],dr,beam,partition['original_lower_parent_geometry_hold'],
+                                angular_spacing_deg=spacing)
                             partition['geometry_hypothesis']=proof
                             if proof['qualified']:
                                 for parent_id in partition['original_lower_parent_ids']:
@@ -457,8 +473,8 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                                     charge(len(pc))
                                     selected=~barred[segment[pr],pc]&~weather[segment[pr],pc]
                                     out[PREFIX+'GEOMETRY_RESEARCH_MASK'][segment[pr[selected]],pc[selected]]=1
-                    if short_subset_evidence:
-                        for partition in records[-1]['original_distance_partitions']:
+                    if legacy_eligible and short_subset_evidence:
+                        for partition in record['original_distance_partitions']:
                             if not partition['measured_subset']['qualified']:
                                 continue
                             ids=set(partition['original_components'])
@@ -482,9 +498,12 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=10000, segment_e
                                         pc[accepted_parent]]=1
                                     footprint_records.append(dict(original_lower_parent_id=parent_id,**detail))
                                 partition['frozen_parent_footprints']=footprint_records
-    return out, dict(objects=records, source_claim=False, recursive_growth=False,
+    detail=dict(objects=records, source_claim=False, recursive_growth=False,
         action_gates=0, research_only=True, shoulder_windows=bool(shoulder_windows),
         shoulder_band=bool(shoulder_band),work=work)
+    if geometry_evidence:
+        detail['standalone_geometry_objects']=standalone_geometry
+    return out,detail
 
 
 def validate(arrays, native, blocked, **options):
