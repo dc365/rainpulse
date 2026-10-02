@@ -86,6 +86,43 @@ def footprint_overlay(snapshot, published, report_path, raw):
     return recovered == 1
 
 
+def anchored_overlay(snapshot, published, report_path, raw, *, method="anchored-shape"):
+    """Show bound original-object proposals; never imply production removal."""
+    report = json.loads(report_path.read_text())
+    if (report.get("scope") != "original_RAW_boundary_research_not_published_QC"
+            or report.get("method") != method
+            or report.get("action_authority") is not False
+            or report.get("product_writes") is not False):
+        raise ValueError("anchored evidence must remain non-actionable")
+    matches = [r for r in report["results"] if r["snapshot_sha256"] == digest(snapshot)]
+    if len(matches) != 1:
+        raise ValueError("unique bound anchored snapshot required")
+    record = matches[0]
+    if (record.get("published_receipt_sha256") != digest(published)
+            or record.get("action_authority") is not False):
+        raise ValueError("anchored published binding/authority mismatch")
+    path = Path(record["diagnostics"])
+    if digest(path) != record["diagnostics_sha256"]:
+        raise ValueError("anchored diagnostic digest mismatch")
+    with np.load(path, allow_pickle=False) as data:
+        if method not in ("anchored-shape", "original-fan"):
+            raise ValueError("unsupported original-object overlay")
+        prefix = "RV2_ORIGINAL_FAN_SHAPE_" if method == "original-fan" else "RV2_ANCHORED_RADIAL_SHAPE_"
+        qualified = data[prefix + "QUALIFIED_MASK"]
+        owner = data[prefix + "SOURCE_ID"]
+        ambiguous = data[prefix + "AMBIGUOUS_MASK"]
+    if (qualified.shape != raw.shape or qualified.dtype != np.dtype("uint8")
+            or ambiguous.shape != raw.shape or ambiguous.dtype != np.dtype("uint8")
+            or owner.shape != raw.shape or owner.dtype != np.dtype("uint32")
+            or not np.isin(qualified, (0, 1)).all()
+            or not np.isin(ambiguous, (0, 1)).all()
+            or not np.array_equal(qualified == 1, owner > 0)
+            or np.any((qualified == 1) & ((ambiguous == 1) | ~np.isfinite(raw) | (raw < 0)))
+            or int(qualified.sum()) != record["qualified_gates"]):
+        raise ValueError("invalid anchored original-object mask")
+    return qualified == 1
+
+
 def render(
     snapshot,
     published,
@@ -94,9 +131,13 @@ def render(
     source_report=None,
     temporal_report=None,
     footprint_report=None,
+    anchored_report=None,
+    original_fan_report=None,
 ):
     if output.exists() or output.with_suffix(".json").exists():
         raise ValueError("new image and receipt required")
+    if anchored_report and original_fan_report:
+        raise ValueError("select one original-object overlay")
     receipt = json.loads(published.read_text())
     if receipt["scope"] != "exact_Web_consumed_stored_QC_not_replay":
         raise ValueError("actual published QC audit required")
@@ -136,6 +177,15 @@ def render(
     source_matches = candidates.copy()
     temporal_matches = candidates.copy()
     footprint_matches = candidates.copy()
+    anchored_matches = candidates.copy()
+    object_report = original_fan_report or anchored_report
+    if object_report:
+        method = "original-fan" if original_fan_report else "anchored-shape"
+        anchored_matches = anchored_overlay(snapshot, published, object_report, raw, method=method) & visible
+        record = next(r for r in json.loads(object_report.read_text())["results"]
+                      if r["snapshot_sha256"] == digest(snapshot))
+        if anchored_matches.sum() != record["qualified_published_overlap"]:
+            raise ValueError("anchored published overlap mismatch")
     if footprint_report:
         footprint_matches = (
             footprint_overlay(snapshot, published, footprint_report, raw) & visible
@@ -209,7 +259,8 @@ def render(
         & (y <= bounds[3])
     )
     panels = (
-        3 if shape_report or source_report or temporal_report or footprint_report else 2
+        3 if (shape_report or source_report or temporal_report or footprint_report
+              or object_report) else 2
     )
     fig, axes = plt.subplots(1, panels, figsize=(5 * panels, 5.5), layout="constrained")
     titles = [
@@ -219,6 +270,8 @@ def render(
     ]
     if footprint_report:
         titles[2] = f"Offline recovered: {footprint_matches.sum()}\nNot published QC"
+    if object_report:
+        titles[2] = f"Offline original-object proposals: {anchored_matches.sum()}\nNot published QC"
     for index, ax in enumerate(axes):
         ax.scatter(x[context], y[context], color="#d9e1e8", s=0.6, rasterized=True)
         use = selected if index == 0 else visible
@@ -234,6 +287,10 @@ def render(
             rasterized=True,
         )
         if index == 2:
+            if object_report:
+                ax.scatter(x[anchored_matches], y[anchored_matches], color="#ed2939",
+                           s=40, edgecolors="#263238", linewidths=0.5,
+                           label="Original-object shape (not removal)")
             if footprint_report:
                 ax.scatter(
                     x[footprint_matches],
@@ -294,6 +351,7 @@ def render(
         source_report_sha256=digest(source_report) if source_report else None,
         temporal_report_sha256=digest(temporal_report) if temporal_report else None,
         footprint_report_sha256=digest(footprint_report) if footprint_report else None,
+        anchored_report_sha256=digest(anchored_report) if anchored_report else None,
         script_sha256=digest(Path(__file__)),
         image_sha256=digest(output),
         selected=int(selected.sum()),
@@ -302,6 +360,9 @@ def render(
         source_agreements=int(source_matches.sum()),
         past_source_matches=int(temporal_matches.sum()),
         recovered_footprint_matches=int(footprint_matches.sum()),
+        anchored_shape_matches=0 if original_fan_report else int(anchored_matches.sum()),
+        original_fan_matches=int(anchored_matches.sum()) if original_fan_report else 0,
+        original_fan_report_sha256=digest(original_fan_report) if original_fan_report else None,
         scope="audited_selection_only_with_RAW_context",
         research_is_removal=False,
         product_writes=False,
@@ -320,6 +381,8 @@ if __name__ == "__main__":
     parser.add_argument("--source-report", type=Path)
     parser.add_argument("--temporal-report", type=Path)
     parser.add_argument("--footprint-report", type=Path)
+    parser.add_argument("--anchored-report", type=Path)
+    parser.add_argument("--original-fan-report", type=Path)
     args = parser.parse_args()
     print(
         json.dumps(
@@ -331,6 +394,8 @@ if __name__ == "__main__":
                 args.source_report,
                 args.temporal_report,
                 args.footprint_report,
+                args.anchored_report,
+                args.original_fan_report,
             )
         )
     )

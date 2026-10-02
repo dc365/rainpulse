@@ -19,7 +19,57 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def extent_decisions(native, group, blocked, result, targets):
+    """Separate angular loss from range loss without changing qualification.
+
+    Replay the exact frozen-ID and angular-island ownership used by qualify;
+    diagnostic code zero outside the candidate mask is never acceptance.
+    """
+    parent = group["RV2_RAW_FAN_ID"]
+    seed = group["RV2_SOURCE_LEDGER_SEED_ID"]
+    observed = native.field_available["DBZH"]
+    blocked = blocked | ~native.geometry_good[:, None]
+    candidate = result[module.PREFIX + "CANDIDATE_MASK"] == 1
+    code = result[module.PREFIX + "REJECTION_CODE"]
+    labels = {}
+    cache = {}
+    for i, j in zip(*np.where(targets), strict=True):
+        if not candidate[i, j]:
+            reason = "outside_candidate:" + (
+                "blocked" if blocked[i, j] else
+                "already_seed" if seed[i, j] else "no_raw_parent"
+            )
+        elif code[i, j] != 4:
+            reason = module.REJECTIONS[int(code[i, j])]
+        else:
+            identity = int(parent[i, j])
+            if identity not in cache:
+                original = (seed > 0) & observed & ~blocked
+                clues = original & (parent == identity)
+                rows = np.unique(np.where(clues)[0])
+                source = original & np.isin(seed, np.unique(seed[clues]))
+                source[~np.isin(np.arange(native.shape[0]), rows)] = False
+                islands = np.split(rows, np.flatnonzero(np.diff(rows) > 1) + 1)
+                cache[identity] = (source, [v for v in islands if len(v) >= 2])
+            source, islands = cache[identity]
+            island = next((v for v in islands if i in v), None)
+            if island is None:
+                reason = "outside_original_extent:angular"
+            else:
+                columns = np.where(source[island])[1]
+                in_range = (
+                    native.ranges[columns].min() <= native.ranges[j]
+                    <= native.ranges[columns].max()
+                )
+                reason = "outside_original_extent:" + (
+                    "unresolved" if in_range else "range"
+                )
+        labels[reason] = labels.get(reason, 0) + 1
+    return labels
+
+
 def replay(path, old, published):
+    snapshot_sha = digest(path)
     with np.load(path, allow_pickle=False) as data:
         a = {k: data[k] for k in data.files}
     meta = json.loads(str(a["METADATA"]))
@@ -111,7 +161,12 @@ def replay(path, old, published):
             published_visible=int(visible.sum()),
             recovered_published_overlap=int((recovered & visible).sum()),
             withdrawn_published_overlap=int((withdrawn & visible).sum()),
+            published_extent_decisions=extent_decisions(
+                n, group, blocked, after, visible
+            ),
         )
+    if digest(path) != snapshot_sha:
+        raise ValueError("snapshot changed during replay")
     return row, recovered, withdrawn
 
 
@@ -134,6 +189,12 @@ def main():
     old = types.ModuleType("complete_source_baseline")
     old.__package__ = module.__package__
     exec(compile(source, commit + ":" + relative, "exec"), old.__dict__)
+    bound_code = [Path(module.__file__), Path(__file__)]
+    for name in ("anchored_radial_shape.py", "original_fan_shape.py"):
+        child = Path(module.__file__).with_name(name)
+        if child.exists():
+            bound_code.append(child)
+    code_sha = {str(path): digest(path) for path in bound_code}
     args.output.mkdir(parents=True)
     results = []
     for path in args.snapshots:
@@ -162,7 +223,10 @@ def main():
             ),
             flush=True,
         )
+    if any(digest(Path(path)) != sha for path, sha in code_sha.items()):
+        raise ValueError("replay code changed during run")
     report = dict(
+        code_sha256=code_sha,
         scope="complete_original_source_replay_not_published_QC",
         baseline_commit=commit,
         baseline_source_sha256=hashlib.sha256(source.encode()).hexdigest(),
