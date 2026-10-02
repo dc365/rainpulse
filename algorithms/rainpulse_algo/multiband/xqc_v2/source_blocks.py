@@ -51,10 +51,10 @@ def detect(
         signal &= domain
     targets = signal & (sn >= cfg.noise_censor_snr_db)
     if target_exclusion is not None:
-        if (not near_floor_references or not isinstance(target_exclusion, np.ndarray)
+        if (not (near_floor_references or fan) or not isinstance(target_exclusion, np.ndarray)
                 or target_exclusion.shape != s.shape or target_exclusion.dtype != bool):
             raise ValueError(
-                'prior proven target exclusion requires a boolean near-floor sweep mask'
+                'prior proven target exclusion requires a boolean source-fan sweep mask'
             )
         # This affects action targets only. Previously proved source gates
         # remain RAW references for every independently held-out target.
@@ -142,14 +142,14 @@ def detect(
         )
         fits = ReferenceFits(stats, cfg.source_maximum_summary_bytes - stats.workspace_bytes)
         target_blocks = count > 0
-        if near_floor_references:
+        if near_floor_references or target_exclusion is not None:
             # Below-floor blocks remain measured training references. A block
             # with no eligible target cannot produce an action or a model
             # record, so do not spend held-out fitting budget on it.
             target_blocks = np.array([targets[row, g].any() for g in stats.indices])
         for target in np.flatnonzero(target_blocks & geometry):
             target_gates = gates[target]
-            if near_floor_references:
+            if near_floor_references or target_exclusion is not None:
                 target_gates = target_gates[targets[row, target_gates]]
             outside = abs(ids - ids[target]) > cfg.receiver.guard_blocks
             eligible = (count >= minimum) & geometry & outside

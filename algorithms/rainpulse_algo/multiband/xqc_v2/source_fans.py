@@ -16,16 +16,18 @@ def detect(s, cfg, *, protected, prepared=None, near_floor_references=False):
 
     stats = (prepared or SourceStatistics.build(s, cfg)).use(s, cfg)
 
-    def modes(width=None):
+    def modes(width=None, proven=None):
         research = {'near_floor_references': True} if near_floor_references else {}
+        remaining = {'target_exclusion': proven} if proven is not None else {}
         # A single upper quantile switches processor modes when their mixture
         # crosses 10%. Fit primary and upper modes independently, each with the
         # same target/guard exclusion and physical response tests.
         mask, record = detect_blocks(
             s, cfg, protected=protected, fan=True, family_width_deg=width, prepared=stats,
             **research,
+            **remaining,
         )
-        primary_targets = {'target_exclusion': mask} if near_floor_references else {}
+        primary_targets = {'target_exclusion': mask if proven is None else mask | proven}
         primary, primary_record = detect_blocks(
             s,
             cfg,
@@ -72,9 +74,6 @@ def detect(s, cfg, *, protected, prepared=None, near_floor_references=False):
                 if not active.any():
                     break
                 current = other
-    # A single strong spoke has bilateral local shoulders instead of a
-    # multi-ray family. It needs the same held-out physical evidence.
-    narrow, narrow_record = modes(cfg.radial_source_maximum_width_deg)
     # A corridor can establish its own held-out distance evidence. Requiring
     # other REF-bearing rays made missing REF in a measured SNR lobe veto an
     # otherwise proven source. This only admits already fitted gates; it never
@@ -98,7 +97,12 @@ def detect(s, cfg, *, protected, prepared=None, near_floor_references=False):
             and np.ptp(s.ranges[gates]) >= cfg.radial_source_minimum_span_m
             and np.unique(stats.block_index[gates]).size >= cfg.receiver.minimum_reference_blocks
         )
-    out = (candidates & ((support[:, stats.block_index] >= 2) | coherent[:, None])) | narrow
+    out = candidates & ((support[:, stats.block_index] >= 2) | coherent[:, None])
+    # A single strong spoke still requires its own bilateral local shoulders
+    # and held-out physical evidence. Only targets already proved by the full
+    # family can skip this second action proof; all RAW references remain.
+    narrow, narrow_record = modes(cfg.radial_source_maximum_width_deg, proven=out)
+    out |= narrow
     # Associate only bounded interior gaps between two original source anchors.
     # Never iterate newly added gates: no unbounded propagation along a ray.
     z, _ = s.moment("DBZH")
@@ -125,7 +129,7 @@ def detect(s, cfg, *, protected, prepared=None, near_floor_references=False):
     out |= added
     return out, dict(
         record,
-        method="receiver-fan-family-heldout-v2",
+        method="receiver-fan-family-heldout-v3-first-proof",
         associated_interior_gates=int(added.sum()),
         association_maximum_gap_m=cfg.radial_source_maximum_gap_m,
         proposed_gates=int(candidates.sum()),

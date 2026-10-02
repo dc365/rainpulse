@@ -370,12 +370,16 @@ def test_prior_proven_targets_stay_available_as_raw_training_references():
     assert sum(m['target_gates'] for m in record['models']) == int(actual.sum())
 
 
-def test_primary_mode_keeps_same_family_mask_without_duplicate_action_proofs(monkeypatch):
+@pytest.mark.parametrize('research', [False, True])
+def test_primary_mode_keeps_same_family_mask_without_duplicate_action_proofs(monkeypatch, research):
     from rainpulse_algo.multiband.xqc_v2 import source_fans
     v, row, _ = weak_family()
+    if not research:
+        for name in ('SNRH','DBZH'):
+            v.sweeps[0].fields[name][row-10:row+11] += 4.
     cfg = config(radial_source_enabled=True, noise_censor_snr_db=3.)
     sweep = adapt(v.sweeps[0], cfg).sweep
-    kwargs = dict(protected=np.zeros(sweep.shape, bool), near_floor_references=True)
+    kwargs = dict(protected=np.zeros(sweep.shape, bool), near_floor_references=research)
     before = sweep.digest
     actual, record = source_fans.detect(sweep, cfg, **kwargs)
     assert actual.any()
@@ -406,3 +410,42 @@ def test_prior_target_exclusion_is_strictly_scoped(wrong):
     with pytest.raises(ValueError, match='prior proven target exclusion'):
         detect(sweep, cfg, protected=np.zeros(sweep.shape, bool),
                near_floor_references=wrong!='legacy', target_exclusion=mask)
+
+
+@pytest.mark.parametrize('research', [False, True])
+def test_narrow_mode_only_adds_targets_not_already_proven_by_family(monkeypatch, research):
+    from rainpulse_algo.multiband.xqc_v2 import source_fans
+    v, row, _ = sample()
+    if research:
+        ranges = v.sweeps[0].range_m
+        sn = v.sweeps[0].fields['SNRH'][row]
+        sn[(np.arange(len(ranges)) % 3 == 0) & (ranges >= 15000)] = 3.
+        v.sweeps[0].fields['DBZH'][row] = sn + 20*np.log10(ranges/1000) - 20
+    if not research:
+        for name in ('SNRH','DBZH'):
+            v.sweeps[0].fields[name][row] += 4.
+    cfg = config(radial_source_enabled=True, noise_censor_snr_db=3.)
+    sweep = adapt(v.sweeps[0], cfg).sweep
+    kwargs = dict(protected=np.zeros(sweep.shape, bool), near_floor_references=research)
+    actual, record = source_fans.detect(sweep, cfg, **kwargs)
+    assert actual.any()
+    original = source_fans.detect_blocks
+    def repeated(*args, **kw):
+        kw.pop('target_exclusion', None)
+        return original(*args, **kw)
+    monkeypatch.setattr(source_fans, 'detect_blocks', repeated)
+    expected, prior = source_fans.detect(sweep, cfg, **kwargs)
+    np.testing.assert_array_equal(actual, expected)
+    assert record['narrow_model']['source_gates'] == 0
+    assert prior['narrow_model']['source_gates'] > 0
+
+
+def test_sparse_spoke_without_family_support_keeps_its_narrow_proof():
+    from rainpulse_algo.multiband.xqc_v2 import source_fans
+    v, _, _ = sample()
+    cfg = config(radial_source_enabled=True, noise_censor_snr_db=3.)
+    sweep = adapt(v.sweeps[0], cfg).sweep
+    mask, record = source_fans.detect(
+        sweep, cfg, protected=np.zeros(sweep.shape, bool), near_floor_references=True)
+    assert mask.any() and record['coherent_corridors'] == 0
+    assert record['narrow_model']['source_gates'] > 0
