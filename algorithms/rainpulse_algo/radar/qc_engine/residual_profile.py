@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
+
+from .volume_review.clutter_fusion.isolation_config import IsolationConfig
 
 
 class ResidualConfig(BaseModel):
@@ -14,6 +16,8 @@ class ResidualConfig(BaseModel):
     narrow_enabled: bool = True
     association_enabled: bool = True
     speckle_enabled: bool = True
+    # Explicit child policy; absent settings retain frozen legacy hashes/results.
+    speckle_physical_support: IsolationConfig | None = None
     link_maximum_residual_db: float = Field(default=8, gt=0, le=15)
     link_maximum_gap_m: float = Field(default=1000, ge=0, le=3000)
     link_maximum_fraction: float = Field(default=0.1, ge=0, le=0.2)
@@ -49,6 +53,13 @@ class ResidualConfig(BaseModel):
 
     @model_validator(mode="after")
     def consistent(self):
+        if self.speckle_physical_support is not None:
+            if not self.speckle_enabled:
+                raise ValueError("physical speckle support requires enabled speckle review")
+            if self.speckle_physical_support.mode != "audit":
+                raise ValueError("physical speckle geometry supplies evidence only")
+            if self.speckle_physical_support.echo_threshold_dbz > self.minimum_echo_dbz:
+                raise ValueError("physical speckle must include complete lower RAW parents")
         if self.narrow_minimum_measured_m > self.narrow_minimum_span_m:
             raise ValueError("narrow measured support cannot exceed minimum span")
         if self.narrow_maximum_gap_m >= self.narrow_minimum_measured_m:
@@ -58,3 +69,10 @@ class ResidualConfig(BaseModel):
         if self.speckle_window_gates % 2 != 1:
             raise ValueError("speckle window must be odd")
         return self
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_physical(self, handler):
+        data = handler(self)
+        if self.speckle_physical_support is None:
+            data.pop("speckle_physical_support", None)
+        return data

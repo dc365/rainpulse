@@ -177,6 +177,9 @@ def _build_qc_zarr_store_objects(
                 "qc_score_semantics": "uncalibrated_membership_not_probability",
             }
         )
+        residual = result.profile.residual
+        if residual is not None and residual.speckle_physical_support is not None:
+            root.attrs["qc_physical_speckle_parameters"] = residual.model_dump(mode="json")
     if getattr(result.profile, "review_extension_version", None) is not None:
         from .qc_engine.review_extension.runtime import review_attributes
 

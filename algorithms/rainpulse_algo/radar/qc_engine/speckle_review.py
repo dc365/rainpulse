@@ -9,6 +9,11 @@ from .polar_objects import gate_area_km2, label_polar
 
 
 def speckle_candidates(native, cfg, *, baseline_eligible, protected, pol_bad, low_snr):
+    if cfg.speckle_physical_support is not None:
+        from .physical_speckle import physical_candidates
+
+        return physical_candidates(native, cfg, baseline_eligible=baseline_eligible,
+                                   protected=protected, pol_bad=pol_bad, low_snr=low_snr)
     observed = native.field_available["DBZH"] & native.geometry_good[:, None]
     z = native.fields["DBZH"]
     raw_echo = observed & (z >= cfg.minimum_echo_dbz)

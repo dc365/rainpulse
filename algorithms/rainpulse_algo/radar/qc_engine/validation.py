@@ -14,6 +14,13 @@ def validate_sweep(group, attrs) -> None:
         raise ValueError("open-source QC requires v2 cause flags")
     if attrs.get("operational_eligible") is not False:
         raise ValueError("unaccepted open-source QC must remain non-operational")
+    physical = attrs.get("qc_physical_speckle_parameters")
+    if physical is not None:
+        from .physical_speckle import validate_serialized
+
+        validate_serialized(group, physical)
+    elif "V6_PHYSICAL_SPECKLE_CURRENT_MASK" in group:
+        raise ValueError("physical speckle evidence lacks versioned parameters")
     shape = group["VALID_MASK"].shape
     required = {
         "QC_ACTION": "uint8",

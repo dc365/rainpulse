@@ -140,7 +140,7 @@ def _weak(s,z,measured,no,domain,c,out,budget):
             (out["CF_ISO_WEAK_DIAG_B"][r,g]<=c.weak_score_threshold))).astype("uint8")
 
 
-def inspect(s,cfg,base,*,budget=None):
+def inspect(s,cfg,base,*,budget=None,quiet_snr_db=None):
     c=cfg.isolated_objects
     if c is None:raise ValueError("isolation configuration required")
     if np.prod(s.shape)>c.maximum_sweep_gates:raise ResourceLimit("isolation sweep gate budget")
@@ -184,7 +184,15 @@ def inspect(s,cfg,base,*,budget=None):
         if ready.shape!=s.shape or blocked.shape!=s.shape or not np.isin(ready,(0,1)).all() or not np.isin(blocked,(0,1)).all():
             raise ValueError("invalid existing obstruction evidence")
         obstruction=(ready==1)&(blocked==1)
-    known=(measured|no)&~obstruction
+    # Optional noise-limited SUPPORT, not a no-rain claim or synthetic DBZH.
+    # Existing finite RAW echoes always take precedence, even at low SNR.
+    quiet=np.zeros(s.shape,bool)
+    if quiet_snr_db is not None:
+        if isinstance(quiet_snr_db,bool) or not np.isfinite(quiet_snr_db) or not -20 <= quiet_snr_db <= 0:
+            raise ValueError("bounded measured noise-support threshold required")
+        snr,available=s.moment("SNR")
+        quiet=available&s.good[:,None]&~measured&(snr>=-50)&(snr<=quiet_snr_db)
+    known=(measured|no|quiet)&~obstruction
     weather=measured&(z>=cfg.protected_dbz)
     for k in ("CF_HARD_WEATHER_MASK","CF_LOCAL_WEATHER_MASK","CF_LEGACY_PROTECTED_MASK",
               "CF_WEATHER_PROXY_MASK","CF_BG_ENHANCEMENT_MASK","CF_MIXED_MASK"):
@@ -279,5 +287,7 @@ def inspect(s,cfg,base,*,budget=None):
         "objects":n,"small_objects":small_count,"isolated_objects":isolated_count,
         "samples":budget[0]-initial,"object_records":records,
         "unknown_policy":"worst_case_echo_not_zero","iterations":1,
+        **({"noise_limited_support_gates":int(quiet.sum()),"noise_limited_support_db":quiet_snr_db}
+           if quiet_snr_db is not None else {}),
         "support_source":"original_measurements_not_parent_QC", "area_units":"km2_horizontal_4_3_earth",
         "weak_scores":"diagnostic_dBZ_sum_not_physical_power","scores_are_probabilities":False})

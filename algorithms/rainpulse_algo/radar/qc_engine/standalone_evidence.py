@@ -51,6 +51,11 @@ def stage_a_key(native, profile, local_prior=None):
         "residual.py", "narrow_local.py", "narrow_spike.py", "residual_association.py",
         "hypotheses.py", "speckle_review.py", "segments.py", "polar_objects.py",
     )}
+    if profile.residual is not None and profile.residual.speckle_physical_support is not None:
+        for filename in ("physical_speckle.py", "residual_profile.py",
+                         "volume_review/clutter_fusion/isolation_geometry.py",
+                         "volume_review/clutter_fusion/isolation_config.py"):
+            code[filename] = hashlib.sha256((folder / filename).read_bytes()).hexdigest()
     fields = {k: array_digest(v) for k,v in sorted(native.fields.items())}
     availability = {k: array_digest(v) for k,v in sorted(native.field_available.items())}
     identity = {"method": "independent-stage-a-v7", "profile": profile.parameters_hash,
