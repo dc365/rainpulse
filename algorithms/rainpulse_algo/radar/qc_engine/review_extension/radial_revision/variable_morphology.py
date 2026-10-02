@@ -49,7 +49,10 @@ def _branch_edges(rows, a, b, columns, angles, beam, z, observed, snr, sa, barre
 
 
 def detect(native, blocked, *, beam_width=None, maximum_objects=50000, branch_shoulders=False,
-           boundary_hypotheses=False,enclosed_branch_hypotheses=False,variable_boundary_hypotheses=False):
+           boundary_hypotheses=False,enclosed_branch_hypotheses=False,variable_boundary_hypotheses=False,
+           object_sink=None):
+    if object_sink is not None and not callable(object_sink):
+        raise ValueError('object sink must be callable')
     if variable_boundary_hypotheses and not boundary_hypotheses:
         raise ValueError('variable boundaries require full original boundary hypotheses')
     if enclosed_branch_hypotheses and not boundary_hypotheses:
@@ -210,6 +213,7 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=50000, branch_sh
                                 and ((baseline[:,0]>=.8)&(baseline[:,1]>=.8)).mean()>=.8):
                             branch_candidate=False
                     clear=[];known=[];target_rows=[];target_cols=[];allowed=[];exterior=[]
+                    measured_windows=[]
                     for e in entries:
                         a,b,cols=e['a'],e['b'],e['cols']
                         charge((b-a+2)*len(cols))
@@ -246,6 +250,17 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=50000, branch_sh
                             k=rows[side];quiet=sa[k,cc]&(snr[k,cc]<=3)
                             accept &= ~barred[k,cc]&((observed[k,cc]&(z[k,cc]<=z[rr,cc]-6))|(~observed[k,cc]&quiet))
                         target_rows.append(rr);target_cols.append(cc);allowed.append(accept)
+                        if object_sink is not None:
+                            from .object_model import MeasuredWindow
+                            measured_windows.append(MeasuredWindow(
+                                block=e['block'], start_m=float(r[cols[0]]),
+                                end_m=float(r[cols[-1]]+dr),
+                                left_deg=float(e['left']), right_deg=float(e['right']),
+                                left_row=int(rows[left]) if 0<=left<len(rows) else None,
+                                right_row=int(rows[right]) if 0<=right<len(rows) else None,
+                                members=tuple(map(int, rr*native.shape[1]+cc)),
+                                known_fraction=kn, contrast_fraction=cl,
+                                anchor_support_m=float(len(e['anchor'])*dr)))
                     if branch_candidate and len(exterior)==len(entries):
                         edges_array=np.asarray(exterior)
                         if np.max(edges_array[:,1]-edges_array[:,0])>90:
@@ -273,6 +288,14 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=50000, branch_sh
                         exterior_right_max_deg=float(max(x[1] for x in exterior)) if exterior else None,
                         narrowing_log_slope=slope,narrowing_correlation=correlation,strong=not holds,
                         holds=sorted(set(holds)),member_gates=len(rr),qualified_gates=int(accept.sum()) if not holds else 0))
+                    if object_sink is not None:
+                        from .object_model import RawObject
+                        object_sink(RawObject(
+                            identity=identity,kind=kind,scale_m=float(scale),
+                            level_dbz=float(level),start_m=start,end_m=end,
+                            support_m=float(support),windows=tuple(measured_windows),
+                            history_holds=tuple(sorted(set(holds))),
+                            native_segment_start=int(rows[0])))
     report=dict(version='variable-native-morphology-v1',branch_shoulders=bool(branch_shoulders),objects=records,action_gates=0,
         product_writes=False,source_claim=False,filled_gates=0,recursive_growth=False,
         independent_weather_truth=False,strong_evidence_gates=int(result[PREFIX+'STRONG_MASK'].sum()))
