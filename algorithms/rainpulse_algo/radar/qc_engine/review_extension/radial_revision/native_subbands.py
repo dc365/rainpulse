@@ -107,6 +107,7 @@ def nominate(native, blocked, parents, beam, *, maximum_work=50000000):
     for lo, hi in seeds:
         # Native rows, not accepted targets, define this immutable hypothesis.
         reference_blocks = []
+        template_blocks = []
         history = []
         measured_bounds = []
         for block, bands in all_bands.items():
@@ -128,6 +129,8 @@ def nominate(native, blocked, parents, beam, *, maximum_work=50000000):
                 measured_bounds.append((block, bearing[a], bearing[b - 1]))
                 if compatible[0] in profiles[block]:
                     reference_blocks.append(block)
+                    if compatible[0] == (lo, hi):
+                        template_blocks.append(block)
             elif any(a <= lo and b >= hi for a, b in bands):
                 state = "merged"
             history.append((block, state))
@@ -154,6 +157,10 @@ def nominate(native, blocked, parents, beam, *, maximum_work=50000000):
                 continue
             refs = tuple(b for b in reference_blocks if abs(b - block) > 1)
             enough = len(refs) >= 5 and (max(refs) - min(refs)) * 20000 >= 150000
+            # The template itself must occur outside the target's excluded
+            # neighbourhood. Nearby boundaries only confirm continuity; they
+            # cannot validate a new width nominated by the target alone.
+            enough &= sum(abs(b - block) > 1 for b in template_blocks) >= 2
             k, c = _edges(z, observed, snr, sa, barred, lo, hi, cols)
             coverage = known[lo - 1 : hi + 1][:, cols].mean(axis=1).min() >= 0.8
             width_clear = max(raw[lo - 1, cols].mean(), raw[hi, cols].mean()) <= 0.2

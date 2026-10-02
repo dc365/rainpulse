@@ -223,7 +223,7 @@ def evaluate(
     if mode == "quarantine":
         arrays[PREFIX + "ACTION_MASK"][hit] = 1
     return arrays, dict(
-        version="unified-native-objects-candidate-v2-subbands" if subbands_enabled else VERSION,
+        version="unified-native-objects-candidate-v3-subbands" if subbands_enabled else VERSION,
         mode=mode,
         objects=records,
         candidate_gates=int(arrays[PREFIX + "CANDIDATE_MASK"].sum()),

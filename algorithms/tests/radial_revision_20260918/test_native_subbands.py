@@ -152,3 +152,15 @@ def test_subband_work_limit_returns_no_partial_result():
     n = fixture()
     with pytest.raises(load("radial_revision.geometry").ResourceLimit):
         m.nominate(n, np.zeros(n.shape, bool), (), 1.0, maximum_work=10)
+
+
+def test_target_only_boundary_cannot_train_its_held_out_template():
+    n = fixture()
+    n.fields["DBZH"][49:63] = np.nan
+    n.fields["SNR"][:] = np.where(np.isfinite(n.fields["DBZH"]), 8.0, -2.0)
+    cols = (n.ranges >= 260000) & (n.ranges < 280000)
+    n.fields["DBZH"][21:50, cols] = 24.0
+    n.fields["SNR"][21:50, cols] = 8.0
+    n.field_available["DBZH"] = np.isfinite(n.fields["DBZH"])
+    arrays, _ = run(n)
+    assert not arrays["RV2_UNIFIED_SUBBAND_PROPOSAL_MASK"][[21, 49]][:, cols].any()

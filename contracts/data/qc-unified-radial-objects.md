@@ -43,6 +43,9 @@ actual RAW inside the original measured extent. Target plus adjacent windows
 train neither boundaries nor edge confirmation. At least five remote measured
 windows spanning150km are required. Actual exterior noise/weak reflectivity is
 required; an available but nonquiet SNR with missing DBZH proves coverage only.
+The exact nominated template must itself occur in at least two remote original
+reference windows outside the target and adjacent windows. Approximately
+matching boundaries alone cannot validate a width invented by the target.
 Local reliable weather stays in measured occupancy and never creates dry edges.
 Pure curved/narrowing RAW parents cannot restart as clean subbands; an unresolved
 fork remains an abstention. This route has no old source-ID prerequisite.

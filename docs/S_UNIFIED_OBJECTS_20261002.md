@@ -61,14 +61,17 @@ frozen NPZ inputs, `--published` exact stored-Web receipts, `--plot`, and a fres
 JSON report. Use the same eight snapshot paths listed in the private final
 heldout-sparse-target report; no raw private data is committed.
 
-## Original subbands, candidate v2
+## Original subbands, candidate v3
 
 `native_subbands.py` adds optional original angular-band nominations inside
 mixed RAW parents. A frozen native boundary, measured outer edges, at least five
 remote reference windows spanning 150 km, complete matched/merged/forked/unknown
 window states and exact observed membership are retained. The target and its
 adjacent windows cannot train its references. Available nonquiet SNR with missing
-DBZH is coverage, not quiet-air evidence. Local unions may explain a parent's
+DBZH is coverage, not quiet-air evidence. The exact nominated boundary must
+occur in at least two remote original reference windows; approximately matching
+boundaries cannot confirm a width present only in the target window.
+Local unions may explain a parent's
 centre shift only with stable measured subband edges over at least 80% of its
 active history; narrowing-weather histories and unresolved forks still veto.
 Providers consume the original RAW nominations independently. New subbands and
@@ -77,21 +80,25 @@ and membership budgets remain unique/bounded.
 
 The default remains v1. Enable `--subbands` in the audit driver for four-way
 comparison. Final private evidence is
-`.build/s-discontinuous-20261001/unified-subbands-20261002-v2/report.json`.
+`.build/s-discontinuous-20261001/unified-subbands-20261002-v3/report.json`.
 All eight input/code/mask/image hashes match; RAW is unchanged, protected/missing
 proposal overlap is zero and all previous v1 proposals are retained. The fixed,
-variable, unified and subband regression suite passes 70 tests, including half
+variable, unified and subband regression suite passes 71 tests, including half
 degree resolution, rotation across north, local unions, true forks, sparse held
 out targets, reliable weather, curved/narrowing counterexamples and proof replay.
-Nominal new-detector runtimes are 0.77–2.35 seconds (exclude validation/plotting).
+Nominal new-detector runtimes are 0.76–2.21 seconds (exclude validation/plotting).
 
 The exact historical stored-Web overlap is still 0/2094 at Z9598 08:18, and
 increases from 2/728 to 19/728 at 08:42. These counts are nominations intersecting
 the old frozen residual list, not new Web removals or pollution accuracy.
-For 08:18, source-stage overlap increases from zero to 412, but it does not
+For 08:18, source-stage overlap increases from zero to 85, but it does not
 resolve that stored residual list. Larger whole-RAW candidate counts must not
-be reported as success on the main target. Initial v1 subband report is
-superseded by v2 after unique-provider IDs and scoped checks were completed.
+be reported as success on the main target. Initial v1/v2 subband reports are
+superseded by v3 after unique-provider IDs, target-independent template
+confirmation and scoped checks were completed. A new RED/GREEN counterexample
+showed that a target-only width could validate itself under the former route;
+requiring two remote occurrences fixes that new provider. Other nomination
+routes retain their original complete-object logic.
 
 The measured wide original fan at 08:18 has stable geometry but most sampled
 windows have only 0.61–0.79 simultaneous known/contrasting bilateral coverage;
