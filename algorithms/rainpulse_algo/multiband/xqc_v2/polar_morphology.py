@@ -392,8 +392,10 @@ def detect(sweep, policy, *, protected=None):
             + da[leftrow] / 2.0
             + da[rows[-1]] / 2.0
         )
-        if width > p.maximum_width_deg:
-            return None
+        # Width limits qualification in finish(), never original measurement.
+        # Omitting an oversize predecessor lets its later narrow tail restart
+        # without the complete negative boundary history. Keep every measured
+        # window; work/gate/object budgets still bound the full native envelope.
         block = (
             raw[np.ix_(rows, cols)] & (z[np.ix_(rows, cols)] >= level)
             if signal is None
