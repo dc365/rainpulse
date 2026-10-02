@@ -353,3 +353,30 @@ pure line/fan/broken forms, explicit schema identity and both read-only CLI
 routes are covered. All 285 scoped XQC tests pass, with one existing NumPy ABI
 warning. Ruff/diff checks pass. Real v8 replay and normal publication are pending;
 production is still v5, and this section does not claim final acceptance.
+
+### v8 real replay and installed image proof
+
+All 20 source tasks / 492 cuts and the same eight paired tasks / 72 cuts reached
+terminal success, zero morphology resource abstentions. Task and output hashes
+were verified locally. Relative to v7, v8 withdraws exactly 2863 candidate gates
+in ZF505 05 cut 4; zero previously protected gates are reintroduced in this
+frozen corpus. Source qualified count is 607544 (paired 559707 is a subset).
+Both current-normal-bound full PNGs were hash checked and inspected: the measured
+25 dBZ transverse component is now retained in the preview. Lower-intensity
+mixed body/radial overlap still requires independent context; these images are
+not normal publication or weather truth.
+
+An immutable two-module image was built from pushed a3581a4:
+`rainpulse-cpu-worker:xqc-transverse-a3581a4-candidate-mb`, image ID
+`sha256:0957efe71f8801e8a7047e6ab44a16202eee1ce64d93543559344616516f5218`.
+Its parent is installed v5 ec887aacc8. Only core and polar_morphology differ;
+793 other Python modules, including decoder and pipeline, have identical hashes.
+Installed full-QC synthetic smoke preserves 1373 transverse body gates, removes
+external radial candidates from QC/CR, preserves RAW, and grants no confirmed
+weather/source or operational authority. First verifier helper failed before
+algorithm execution due to an undefined synthetic mask; repaired v2 helper and
+receipt are retained separately. The image has not replaced production workers.
+
+Full installed x_qc on the actual cut-4/cut-5 source and model-trial geometry
+instrumentation on the existing cut-2 partial-source failure are running as
+bounded read-only probes. Their completion and normal publication are pending.
