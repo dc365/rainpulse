@@ -55,6 +55,70 @@ def test_parent_footprint_cannot_run_without_short_original_evidence(tmp_path):
         m.audit(tmp_path/'unused.npz',tmp_path/'unused.json',parent_footprint=True)
 
 
+def test_boundary_hypotheses_require_complete_variable_history(tmp_path):
+    with pytest.raises(ValueError,match='require complete variable objects'):
+        m.audit(tmp_path/'unused.npz',tmp_path/'unused.json',boundary_hypotheses=True)
+
+
+def test_enclosures_cannot_bypass_complete_boundary_mode(tmp_path):
+    with pytest.raises(ValueError,match='require full original boundary hypotheses'):
+        m.audit(tmp_path/'unused.npz',tmp_path/'unused.json',enclosed_branches=True)
+
+
+def test_boundary_target_selection_does_not_crop_original_history():
+    from types import SimpleNamespace
+    raw=np.full((5,8),25.);raw[2,5]=5.
+    n=SimpleNamespace(fields={'DBZH':raw},ranges=100000.+1000*np.arange(8))
+    targets=np.zeros(raw.shape,bool)
+    targets[2,1]=True;targets[2,5]=True;targets[4,1]=True
+    original=dict(scale_m=10000.,level_dbz=10.,original_start_m=20000.,original_end_m=300000.,
+        holds=['original_branch_weather'],history=[{'block':2,'state':'unmatched'}],
+        matched_original_runs=[{'block':10,'native_row_start':1,'native_row_end':3}])
+    result=m.boundary_target_diagnosis(n,targets,[original])
+    assert len(result)==1 and result[0]['target_overlap']==1
+    assert result[0]['original_start_m']==20000 and result[0]['original_end_m']==300000
+    assert result[0]['holds']==original['holds'] and result[0]['history']==original['history']
+    assert 'target_overlap' not in original
+
+
+def test_variable_audit_detects_full_raw_before_published_target_selection(tmp_path,monkeypatch):
+    snapshot=tmp_path/'raw.npz';receipt=tmp_path/'published.json'
+    raw=np.full((5,12),np.nan);raw[2,2:10]=25.
+    az=np.arange(5,dtype=float);ranges=100000.+250*np.arange(12)
+    np.savez(snapshot,METADATA=np.array(json.dumps({'scan_id':'original'})),RAW=raw,
+        AZIMUTH=az,RANGE=ranges,GEOMETRY_GOOD=np.ones(5,bool),GAP_AFTER=np.zeros(5,bool),
+        AVAILABLE_DBZH=np.isfinite(raw),WEATHER=np.zeros(raw.shape,'uint8'),
+        CONFLICTS=np.zeros(raw.shape,'uint8'),RV2_BARRED_MASK=np.zeros(raw.shape,'uint8'))
+    receipt.write_text(json.dumps(dict(scope='exact_Web_consumed_stored_QC_not_replay',
+        snapshot_sha256=hashlib.sha256(snapshot.read_bytes()).hexdigest(),
+        web_frame_identity={'web_scan_id':'original'},target_gates=1,renderer_eligible_visible_gates=1,
+        target_records=[dict(row=2,column=5,raw_dbzh=25.,azimuth_deg=2.,
+            range_m=float(ranges[5]),renderer_visible=True)])))
+    calls=[]
+    def detector(module):
+        def detect(native,blocked,**options):
+            # A single published residual must not truncate its eight-gate RAW parent.
+            assert np.array_equal(native.fields['DBZH'],raw,equal_nan=True)
+            calls.append(module.PREFIX)
+            domain=np.isfinite(raw)
+            return {module.PREFIX+'MASK':domain.astype('uint8'),
+                module.PREFIX+'ID':domain.astype('uint32'),
+                module.PREFIX+'STRONG_MASK':np.zeros(raw.shape,'uint8'),
+                module.PREFIX+'WEATHER_VETO_MASK':np.zeros(raw.shape,'uint8')},\
+                {'objects':[{'id':1,'member_gates':8,'holds':['unknown_shoulders']}]}
+        return detect
+    for module in (m.fragment_constellation,m.morphology_objects,m.variable_morphology):
+        monkeypatch.setattr(module,'detect',detector(module))
+    baseline=m.audit(snapshot,receipt)
+    assert 'variable_object' not in baseline['detectors']
+    assert m.variable_morphology.PREFIX not in calls
+    result=m.audit(snapshot,receipt,variable_objects=True)
+    obj=result['detectors']['variable_object']['objects'][0]
+    assert obj['member_gates']==8 and obj['target_overlap']==1
+    assert obj['holds']==['unknown_shoulders']
+    assert result['action_authority'] is False and result['product_writes'] is False
+
+
 @pytest.mark.parametrize('extra',[[],['--fragment-constellation','--engine-quarantine']])
 def test_geometry_preview_cannot_route_to_engine_actions(tmp_path,extra):
     import subprocess

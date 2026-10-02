@@ -7,7 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
-from rainpulse_algo.radar.qc_engine.review_extension.radial_revision import fragment_constellation, morphology_objects
+from rainpulse_algo.radar.qc_engine.review_extension.radial_revision import fragment_constellation, morphology_objects, variable_morphology
 
 
 def original_parent_target_diagnosis(native,targets,proposal,evidence):
@@ -45,8 +45,30 @@ def original_parent_target_diagnosis(native,targets,proposal,evidence):
     return results
 
 
+def boundary_target_diagnosis(native,remaining,hypotheses):
+    """Select actual residuals after RAW measurement, never reanchor a branch."""
+    rr,cc=np.where(remaining)
+    records=[]
+    for original in hypotheses:
+        overlap=np.zeros(len(rr),bool)
+        blocks=(native.ranges[cc]//original['scale_m']).astype(int)
+        for run in original['matched_original_runs']:
+            overlap |= ((blocks==run['block'])&(rr>=run['native_row_start'])&
+                        (rr<run['native_row_end']))
+        overlap &= native.fields['DBZH'][rr,cc]>=original['level_dbz']
+        if overlap.any():
+            records.append(dict(original,target_overlap=int(overlap.sum()),
+                target_range_min_m=float(native.ranges[cc[overlap]].min()),
+                target_range_max_m=float(native.ranges[cc[overlap]].max())))
+    return records
+
+
 def audit(snapshot, receipt, *, shoulder_windows=False, shoulder_band=False, short_subset=False, parent_footprint=False,
-          geometry_evidence=False):
+          geometry_evidence=False, variable_objects=False, boundary_hypotheses=False,enclosed_branches=False):
+    if enclosed_branches and not boundary_hypotheses:
+        raise ValueError('enclosed branches require full original boundary hypotheses')
+    if boundary_hypotheses and not variable_objects:
+        raise ValueError('boundary hypotheses require complete variable objects')
     if shoulder_band and not shoulder_windows:
         raise ValueError('shoulder band requires measured windows')
     if short_subset and not shoulder_windows:
@@ -88,12 +110,16 @@ def audit(snapshot, receipt, *, shoulder_windows=False, shoulder_band=False, sho
     # Selection is used only AFTER full RAW detection, never as its input.
     blocked = (a['WEATHER']==1) | (a['CONFLICTS']==1) | (a['RV2_BARRED_MASK']==1)
     summaries = {}
-    for name, module, options in (
+    detectors = [
         ('constellation', fragment_constellation, {'segment_evidence':True,'partition_evidence':True,
              'shoulder_windows':shoulder_windows,'shoulder_band':shoulder_band,
              'short_subset_evidence':short_subset,'short_parent_footprint':parent_footprint,
              'geometry_evidence':geometry_evidence}),
-        ('whole_object', morphology_objects, {'physical_windows':True})):
+        ('whole_object', morphology_objects, {'physical_windows':True})]
+    if variable_objects:
+        detectors.append(('variable_object', variable_morphology, {'branch_shoulders':True,
+            'boundary_hypotheses':boundary_hypotheses,'enclosed_branch_hypotheses':enclosed_branches}))
+    for name, module, options in detectors:
         fields, evidence = module.detect(native, blocked, **options)
         prefix = module.PREFIX
         ids, counts = np.unique(fields[prefix+'ID'][remaining], return_counts=True)
@@ -104,6 +130,14 @@ def audit(snapshot, receipt, *, shoulder_windows=False, shoulder_band=False, sho
             unmatched=int((remaining & (fields[prefix+'ID']==0)).sum()),
             objects=[dict(target_overlap=int(count), **lookup[int(ident)])
                      for ident,count in zip(ids,counts) if ident])
+        if prefix+'BOUNDARY_HYPOTHESIS_MASK' in fields:
+            summaries[name]['boundary_candidate_overlap']=int((remaining &
+                (fields[prefix+'BOUNDARY_HYPOTHESIS_MASK']==1)).sum())
+            summaries[name]['boundary_qualified_research_overlap']=int((remaining &
+                (fields[prefix+'BOUNDARY_QUALIFIED_RESEARCH_MASK']==1)).sum())
+            summaries[name]['boundary_hypotheses']=evidence['boundary_hypotheses']
+            summaries[name]['boundary_target_hypotheses']=boundary_target_diagnosis(
+                native,remaining,evidence['boundary_hypotheses'])
         if prefix+'SHORT_RESEARCH_MASK' in fields:
             mask=fields[prefix+'SHORT_RESEARCH_MASK']==1
             summaries[name]['short_research_overlap']=int((mask&remaining).sum())
@@ -133,8 +167,15 @@ def audit(snapshot, receipt, *, shoulder_windows=False, shoulder_band=False, sho
                 for o in all_objects for p in o.get('original_distance_partitions',[])
                 if 'geometry_hypothesis' in p]
     assert np.array_equal(native.fields['DBZH'], a['RAW'], equal_nan=True)
+    code_manifest={module.__name__:hashlib.sha256(Path(module.__file__).read_bytes()).hexdigest()
+        for _,module,_ in detectors}
+    if boundary_hypotheses:
+        from rainpulse_algo.radar.qc_engine.review_extension.radial_revision import branch_boundaries
+        code_manifest[branch_boundaries.__name__]=hashlib.sha256(
+            Path(branch_boundaries.__file__).read_bytes()).hexdigest()
     return dict(scope='complete_RAW_shapes_explaining_actual_published_residuals',
         snapshot_sha256=report['snapshot_sha256'],published_receipt_sha256=hashlib.sha256(receipt.read_bytes()).hexdigest(),
+        detector_sha256=code_manifest,
         remaining_visible=int(remaining.sum()),detectors=summaries,product_writes=False,
         action_authority=False,independent_weather_truth=False)
 
@@ -148,18 +189,23 @@ def main():
     p.add_argument('--short-subset',action='store_true',help='Research independently measured short subsets; requires windows')
     p.add_argument('--parent-footprint',action='store_true',help='One-hop frozen weak-parent research; requires short subset')
     p.add_argument('--geometry-evidence',action='store_true',help='Shadow complete transverse-shard geometry; no action authority')
+    p.add_argument('--variable-objects',action='store_true',help='Explain residuals with complete variable-width RAW histories; no actions')
+    p.add_argument('--boundary-hypotheses',action='store_true',help='Frozen original split/merge boundary research; requires variable objects')
+    p.add_argument('--enclosed-branches',action='store_true',help='Measured branches inside frozen original outer edges; requires boundary hypotheses')
     args=p.parse_args()
     if args.output.exists():raise ValueError('new output required')
     result=audit(args.snapshot,args.receipt,shoulder_windows=args.shoulder_windows,
         shoulder_band=args.shoulder_band,short_subset=args.short_subset,parent_footprint=args.parent_footprint,
-        geometry_evidence=args.geometry_evidence)
+        geometry_evidence=args.geometry_evidence,variable_objects=args.variable_objects,
+        boundary_hypotheses=args.boundary_hypotheses,enclosed_branches=args.enclosed_branches)
     result['research_options']=dict(shoulder_windows=args.shoulder_windows,
         shoulder_band=args.shoulder_band,short_subset=args.short_subset,parent_footprint=args.parent_footprint,
-        geometry_evidence=args.geometry_evidence)
+        geometry_evidence=args.geometry_evidence,variable_objects=args.variable_objects,
+        boundary_hypotheses=args.boundary_hypotheses,enclosed_branches=args.enclosed_branches)
     with args.output.open('x') as f:json.dump(result,f,indent=2,allow_nan=False);f.write('\n')
     print(json.dumps({k:v for k,v in result.items() if k!='detectors'}))
     for name,value in result['detectors'].items():
-        print(name,json.dumps({k:v for k,v in value.items() if k not in ('objects','original_target_parents','geometry_hypotheses')}))
+        print(name,json.dumps({k:v for k,v in value.items() if k not in ('objects','original_target_parents','geometry_hypotheses','boundary_hypotheses','boundary_target_hypotheses')}))
 
 
 if __name__=='__main__':main()

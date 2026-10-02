@@ -48,7 +48,10 @@ def _branch_edges(rows, a, b, columns, angles, beam, z, observed, snr, sa, barre
     return best
 
 
-def detect(native, blocked, *, beam_width=None, maximum_objects=50000, branch_shoulders=False):
+def detect(native, blocked, *, beam_width=None, maximum_objects=50000, branch_shoulders=False,
+           boundary_hypotheses=False,enclosed_branch_hypotheses=False):
+    if enclosed_branch_hypotheses and not boundary_hypotheses:
+        raise ValueError('enclosed branches require full original boundary hypotheses')
     r, az, dr, good, gaps = native_geometry(native)
     if beam_width is not None and (not np.isfinite(beam_width) or beam_width <= 0):
         raise ValueError('positive finite antenna beam width required')
@@ -68,6 +71,10 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=50000, branch_sh
               PREFIX+'ID':np.zeros(native.shape,'uint32'),
               PREFIX+'WEATHER_VETO_MASK':weather.astype('uint8')}
     records = []; trials = 0;work=0
+    boundary_records=[]
+    if boundary_hypotheses:
+        result[PREFIX+'BOUNDARY_HYPOTHESIS_MASK']=np.zeros(native.shape,'uint8')
+        result[PREFIX+'BOUNDARY_QUALIFIED_RESEARCH_MASK']=np.zeros(native.shape,'uint8')
     def charge(amount):
         nonlocal work
         work+=int(amount)
@@ -87,6 +94,11 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=50000, branch_sh
         right_edges=angles+np.r_[steps,steps[-1]]/2
         footprints=right_edges-left_edges
         beam=max(spacing, beam_width or spacing)
+        if boundary_hypotheses:
+            from scipy.ndimage import label,find_objects
+            charge(len(rows)*len(r))
+            lower_labels,_=label(raw[rows]&(z[rows]>=10),np.ones((3,3)))
+            lower_boxes=find_objects(lower_labels);lower_cache={}
         for scale in SCALES_M:
             blocks=(r//scale).astype(int)
             for level in LEVELS_DBZ:
@@ -136,6 +148,20 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=50000, branch_sh
                 for i in range(len(nodes)):groups.setdefault(root(i),[]).append(i)
                 for indices in groups.values():
                     entries=[nodes[i] for i in indices]
+                    if boundary_hypotheses:
+                        from .branch_boundaries import measure
+                        for hr,hc,hypothesis in measure(entries,rows,left_edges,right_edges,beam,r,dr,
+                                z,observed,snr,sa,barred,weather,charge,
+                                lower_labels,lower_boxes,lower_cache,
+                                enclosed_branches=enclosed_branch_hypotheses):
+                            if len(boundary_records)>=maximum_objects:
+                                raise ResourceLimit('boundary hypothesis budget exceeded; no partial result')
+                            hypothesis.update(parent_id=len(records)+1,scale_m=scale,level_dbz=level,
+                                              native_segment_start=int(rows[0]))
+                            boundary_records.append(hypothesis)
+                            result[PREFIX+'BOUNDARY_HYPOTHESIS_MASK'][hr,hc]=1
+                            if hypothesis['geometry_qualified']:
+                                result[PREFIX+'BOUNDARY_QUALIFIED_RESEARCH_MASK'][hr,hc]=1
                     widths=np.array([e['right']-e['left'] for e in entries])
                     centres=np.array([(e['right']+e['left'])/2 for e in entries])
                     midrange=np.array([r[e['anchor']].mean() for e in entries])
@@ -244,9 +270,13 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=50000, branch_sh
                         exterior_right_max_deg=float(max(x[1] for x in exterior)) if exterior else None,
                         narrowing_log_slope=slope,narrowing_correlation=correlation,strong=not holds,
                         holds=sorted(set(holds)),member_gates=len(rr),qualified_gates=int(accept.sum()) if not holds else 0))
-    return result,dict(version='variable-native-morphology-v1',branch_shoulders=bool(branch_shoulders),objects=records,action_gates=0,
+    report=dict(version='variable-native-morphology-v1',branch_shoulders=bool(branch_shoulders),objects=records,action_gates=0,
         product_writes=False,source_claim=False,filled_gates=0,recursive_growth=False,
         independent_weather_truth=False,strong_evidence_gates=int(result[PREFIX+'STRONG_MASK'].sum()))
+    if boundary_hypotheses:
+        report['boundary_hypotheses']=boundary_records
+        report['boundary_hypothesis_mode']='enclosed_measured_original_runs' if enclosed_branch_hypotheses else 'single_original_run'
+    return result,report
 
 
 def validate(arrays,native,blocked,**kwargs):
