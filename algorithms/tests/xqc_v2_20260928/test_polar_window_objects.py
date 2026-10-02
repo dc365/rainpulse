@@ -175,3 +175,39 @@ def test_broad_parent_does_not_veto_independent_radial_distribution():
     result = detect(replace(s, fields=fields), WindowPolicy())
     assert result.mask[other & intermittent].all()
     assert not result.mask[broad].any()
+
+
+def test_successful_object_has_no_rejection_reasons():
+    s, source = mixed()
+    result = detect(s, WindowPolicy())
+    assert result.mask[source].all()
+    assert all(r["rejection_reasons"] == [] for r in result.record["objects"])
+
+
+@pytest.mark.parametrize("cause", ["unavailable", "known_conflict"])
+def test_reference_unknown_and_known_conflict_are_distinct(cause):
+    s, source = mixed()
+    fields = {k: v.copy() for k, v in s.fields.items()}
+    available = {k: v.copy() for k, v in s.available.items()}
+    if cause == "unavailable":
+        available["RHOHV"][~source] = False
+    else:
+        fields["RHOHV"][:] = 0.55
+    result = detect(replace(s, fields=fields, available=available), WindowPolicy())
+    assert not result.mask.any()
+    reasons = {reason for r in result.record["review_objects"] for reason in r["rejection_reasons"]}
+    unknown, conflict = "REFERENCE_UNAVAILABLE_OR_PROTECTED", "REFERENCE_POLAR_CONFLICT"
+    expected, opposite = (unknown, conflict) if cause == "unavailable" else (conflict, unknown)
+    assert expected in reasons and opposite not in reasons
+    assert "INSUFFICIENT_BILATERAL_REFERENCE" in reasons
+
+
+def test_full_protected_history_reason_is_explicit():
+    s, source = mixed()
+    protected = np.zeros(s.shape, bool)
+    protected[100, (s.ranges >= 20000) & (s.ranges < 40000) & ~source[100]] = True
+    result = detect(s, WindowPolicy(), protected=protected)
+    assert not result.mask.any()
+    reasons = {reason for r in result.record["review_objects"] for reason in r["rejection_reasons"]}
+    assert "PROTECTED_ORIGINAL_MEMBER" in reasons
+    assert "FORK_OR_MERGE_ANCESTRY" not in reasons

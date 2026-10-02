@@ -28,3 +28,10 @@ The candidate is diagnostic only until paired real-data, weather counterexample,
 normal finalizer, publication and UI verification pass. No production profile,
 action fraction or writer defaults change. Resource failures are atomic and
 explicit; all measured history and qualification reasons remain inspectable.
+
+Every measured object reports all failed qualification checks, rather than a
+single boolean refusal. Fork/merge ancestry and supplied protection have
+distinct conflict codes. Exterior reference observations that are unavailable
+or protected are counted separately from known polar distributions that fail
+the reference test. These diagnostic causes do not authorize an action or
+change qualification, thresholds, membership, or missing-data semantics.

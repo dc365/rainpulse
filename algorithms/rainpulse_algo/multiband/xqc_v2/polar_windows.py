@@ -99,18 +99,22 @@ def detect(sweep, policy, *, protected=None):
         supported = known[row, cols] & ~hard[row, cols]
         fraction = float(supported.mean())
         if fraction < p.minimum_known_fraction:
-            return {"known_fraction": fraction, "ordinary_polar": False}
+            return {
+                "known_fraction": fraction,
+                "ordinary_polar": False,
+                "status": "UNAVAILABLE_OR_PROTECTED",
+            }
         rr = float(np.median(rho[row, cols][supported]))
         dd = float(np.median(zdr[row, cols][supported]))
         ss = float(np.median(sn[row, cols][supported]))
+        ordinary = bool(rr > p.maximum_rhohv and -1 <= dd <= 4 and ss >= p.minimum_snr_db)
         return {
             "known_fraction": fraction,
             "rhohv_median": rr,
             "zdr_median_db": dd,
             "snr_median_db": ss,
-            "ordinary_polar": bool(
-                rr > p.maximum_rhohv and -1 <= dd <= 4 and ss >= p.minimum_snr_db
-            ),
+            "ordinary_polar": ordinary,
+            "status": "REFERENCE_SUPPORTED" if ordinary else "POLAR_CONFLICT",
         }
 
     def finish(track):
@@ -131,18 +135,40 @@ def detect(sweep, policy, *, protected=None):
             sum(e["sides"][side]["ordinary_polar"] for e in history) / len(history)
             for side in (0, 1)
         )
+        charge(2 * len(history) + 9)
+        unknown = [
+            sum(e["sides"][side]["status"] == "UNAVAILABLE_OR_PROTECTED" for e in history)
+            / len(history)
+            for side in (0, 1)
+        ]
+        conflict = [
+            sum(e["sides"][side]["status"] == "POLAR_CONFLICT" for e in history) / len(history)
+            for side in (0, 1)
+        ]
         fan = first["width"] > 3 * spacing
-        qualifies = (
-            not track["ambiguous"]
-            and len(history) >= p.minimum_windows
-            and span >= p.minimum_span_m
-            and support >= p.minimum_support_fraction * span
-            and min(e["known_fraction"] for e in history) >= p.minimum_known_fraction
-            and max(e["width"] for e in history) <= p.maximum_width_deg
-            and excursion <= p.boundary_tolerance_rays
-            and bilateral >= p.minimum_reference_fraction
-            and (not fan or end / max(begin, sweep.dr) >= p.minimum_fan_range_ratio)
-        )
+        checks = {
+            "AMBIGUOUS_OR_PROTECTED_HISTORY": not track["ambiguous"],
+            "INSUFFICIENT_WINDOWS": len(history) >= p.minimum_windows,
+            "INSUFFICIENT_SPAN": span >= p.minimum_span_m,
+            "INSUFFICIENT_ORIGINAL_SUPPORT": support >= p.minimum_support_fraction * span,
+            "INSUFFICIENT_ORIGINAL_MOMENTS": (
+                min(e["known_fraction"] for e in history) >= p.minimum_known_fraction
+            ),
+            "OVERSIZE_ORIGINAL_HISTORY": max(e["width"] for e in history) <= p.maximum_width_deg,
+            "UNSTABLE_ORIGINAL_BOUNDARIES": excursion <= p.boundary_tolerance_rays,
+            "INSUFFICIENT_BILATERAL_REFERENCE": bilateral >= p.minimum_reference_fraction,
+            "INSUFFICIENT_FAN_RANGE_RATIO": (
+                not fan or end / max(begin, sweep.dr) >= p.minimum_fan_range_ratio
+            ),
+        }
+        reasons = [reason for reason, passed in checks.items() if not passed]
+        qualifies = not reasons
+        reasons += sorted(track["causes"])
+        if not checks["INSUFFICIENT_BILATERAL_REFERENCE"]:
+            if max(unknown) > 0:
+                reasons.append("REFERENCE_UNAVAILABLE_OR_PROTECTED")
+            if max(conflict) > 0:
+                reasons.append("REFERENCE_POLAR_CONFLICT")
         record = {
             "track_id": track["track_id"],
             "parent_track_ids": track["parents"],
@@ -156,6 +182,9 @@ def detect(sweep, policy, *, protected=None):
             "bilateral_reference_fraction": bilateral,
             "ambiguous": track["ambiguous"],
             "qualified": bool(qualifies),
+            "rejection_reasons": reasons,
+            "reference_unknown_fractions": unknown,
+            "reference_conflict_fractions": conflict,
             "history": [{k: v for k, v in e.items() if k not in ("rows", "cols")} for e in history],
         }
         if len(records) + len(reviews) >= p.maximum_objects:
@@ -231,12 +260,15 @@ def detect(sweep, policy, *, protected=None):
                 track = tracks[matches[0]]
                 track["history"].append(entry)
                 track["ambiguous"] |= bool(entry["protected_gates"])
+                if entry["protected_gates"]:
+                    track["causes"].add("PROTECTED_ORIGINAL_MEMBER")
                 used.add(matches[0])
                 updated.append(track)
             else:
                 # No new fragment may escape a conflicting original parent.
                 for i in matches:
                     tracks[i]["ambiguous"] = True
+                    tracks[i]["causes"].add("FORK_OR_MERGE_ANCESTRY")
                 # Parents close below with their COMPLETE measurements. A
                 # persistent rejection and explicit ancestry links retain the
                 # conflict without exponentially copying branch histories.
@@ -246,6 +278,10 @@ def detect(sweep, policy, *, protected=None):
                         "track_id": entry["node_id"],
                         "parents": [tracks[i]["track_id"] for i in matches],
                         "ambiguous": bool(matches or entry["protected_gates"]),
+                        "causes": (
+                            ({"FORK_OR_MERGE_ANCESTRY"} if matches else set())
+                            | ({"PROTECTED_ORIGINAL_MEMBER"} if entry["protected_gates"] else set())
+                        ),
                     }
                 )
         for i, track in enumerate(tracks):
