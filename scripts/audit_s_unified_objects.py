@@ -66,7 +66,7 @@ def published_targets(paths, snapshot, a, meta):
     return selected[0] if selected else (None, None)
 
 
-def replay(path, output, receipts, plot, subbands=False):
+def replay(path, output, receipts, plot, subbands=False, separated_edges=False):
     before = digest(path)
     with np.load(path, allow_pickle=False) as source:
         a = {key: source[key] for key in source.files}
@@ -96,6 +96,14 @@ def replay(path, output, receipts, plot, subbands=False):
     if subbands:
         methods += (
             ("unified_subbands", "unified_objects", {"subbands_enabled": True}),
+        )
+    if separated_edges:
+        methods += (
+            (
+                "unified_separate_edges",
+                "unified_objects",
+                {"subbands_enabled": True, "separated_edges_enabled": True},
+            ),
         )
     all_arrays, rows = {}, {}
     visible, receipt_sha = published_targets(receipts, path, a, meta)
@@ -210,6 +218,11 @@ def main():
     parser.add_argument(
         "--subbands", action="store_true", help="Compare original subbands with v1"
     )
+    parser.add_argument(
+        "--separated-edges",
+        action="store_true",
+        help="Compare independent side references",
+    )
     args = parser.parse_args()
     modules = (
         "unified_objects.py",
@@ -227,7 +240,14 @@ def main():
         raise ValueError("duplicate output identity")
     args.output.mkdir(parents=True, exist_ok=False)
     records = [
-        replay(p, args.output, args.published, args.plot, args.subbands)
+        replay(
+            p,
+            args.output,
+            args.published,
+            args.plot,
+            args.subbands,
+            args.separated_edges,
+        )
         for p in args.snapshots
     ]
     if any(digest(ROOT / p) != sha for p, sha in hashes.items()):

@@ -1,6 +1,6 @@
 """Versioned research settings, not empirically accepted operational thresholds."""
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
 
 class FragmentLineConfig(BaseModel):
@@ -38,12 +38,19 @@ class FragmentLineConfig(BaseModel):
     whole_object_physical_windows_enabled: bool = False
     radial_backbone_enabled: bool = False
     fragment_constellation_enabled: bool = False
+    unified_objects_enabled: StrictBool = False
+    unified_subbands_enabled: StrictBool = False
+    unified_separated_edges_enabled: StrictBool = False
     antenna_beam_width_deg: float | None = Field(default=None, gt=0., le=5.)
     isolated_link_gap_m: float = Field(default=30000., ge=0, le=30000.)
 
     @model_validator(mode="after")
     def check(self):
         import math
+        if self.unified_subbands_enabled and not self.unified_objects_enabled:
+            raise ValueError('original subbands require unified objects')
+        if self.unified_separated_edges_enabled and not self.unified_subbands_enabled:
+            raise ValueError('separated edges require original subbands')
         if self.whole_object_physical_windows_enabled and not self.whole_object_morphology_enabled:
             raise ValueError('physical windows require whole-object morphology')
         if self.family_joint_enabled and not self.raw_fragment_families_enabled:

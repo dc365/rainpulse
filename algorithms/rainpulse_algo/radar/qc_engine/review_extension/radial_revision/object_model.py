@@ -20,6 +20,11 @@ class MeasuredWindow:
     contrast_fraction: float
     anchor_support_m: float
     reference_blocks: tuple[int, ...] = ()
+    left_reference_blocks: tuple[int, ...] = ()
+    right_reference_blocks: tuple[int, ...] = ()
+    left_known_blocks: tuple[int, ...] = ()
+    right_known_blocks: tuple[int, ...] = ()
+    separated_reference_support: bool = False
 
 
 @dataclass(frozen=True)

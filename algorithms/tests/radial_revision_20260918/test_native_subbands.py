@@ -53,6 +53,23 @@ def test_sparse_target_does_not_train_reference_or_expand_original_range():
             assert all(abs(b - w["target_block"]) > 1 for b in w["blocks"])
 
 
+def test_separated_provider_preserves_original_independent_sparse_target_proof():
+    n = fixture()
+    cols = (n.ranges >= 240000) & (n.ranges < 260000)
+    n.fields["DBZH"][22:49, cols] = np.nan
+    target = int(np.flatnonzero(n.ranges == 250000)[0])
+    n.fields["DBZH"][23, target] = 12.0
+    n.field_available["DBZH"] = np.isfinite(n.fields["DBZH"])
+    n.fields["SNR"][22:49, cols] = 8.0
+    previous, _ = run(n)
+    current, report = separated_run(n)
+    assert previous["RV2_UNIFIED_PROPOSAL_MASK"][23, target] == 1
+    assert current["RV2_UNIFIED_PROPOSAL_MASK"][23, target] == 1
+    assert np.all(current["RV2_UNIFIED_PROPOSAL_MASK"] >= previous["RV2_UNIFIED_PROPOSAL_MASK"])
+    ids = [o["id"] for o in report["objects"]]
+    assert len(ids) == len(set(ids))
+
+
 @pytest.mark.parametrize("case", ["unknown", "nonquiet", "weather_shoulder"])
 def test_missing_or_wet_exterior_is_not_dry_evidence(case):
     n = fixture()
@@ -164,3 +181,78 @@ def test_target_only_boundary_cannot_train_its_held_out_template():
     n.field_available["DBZH"] = np.isfinite(n.fields["DBZH"])
     arrays, _ = run(n)
     assert not arrays["RV2_UNIFIED_SUBBAND_PROPOSAL_MASK"][[21, 49]][:, cols].any()
+
+
+def alternating_sides():
+    n = fixture()
+    n.fields["DBZH"][49:63] = np.nan
+    n.fields["SNR"][:] = np.where(np.isfinite(n.fields["DBZH"]), 8.0, -2.0)
+    blocks = (n.ranges // 20000).astype(int)
+    for b in range(3, 22):
+        if b == 12:
+            continue
+        row = 21 if b % 2 else 49
+        n.fields["SNR"][row, blocks == b] = np.nan
+    n.field_available["DBZH"] = np.isfinite(n.fields["DBZH"])
+    n.field_available["SNR"] = np.isfinite(n.fields["SNR"])
+    return n
+
+
+def separated_run(n):
+    return load("radial_revision.unified_objects").evaluate(
+        n, np.zeros(n.shape, bool), subbands_enabled=True, separated_edges_enabled=True
+    )
+
+
+def test_separate_remote_side_windows_confirm_clean_target_without_filling_unknowns():
+    n = alternating_sides()
+    old, _ = run(n)
+    new, report = separated_run(n)
+    clean = (n.ranges >= 240000) & (n.ranges < 260000)
+    assert not old["RV2_UNIFIED_SUBBAND_PROPOSAL_MASK"].any()
+    assert new["RV2_UNIFIED_SUBBAND_PROPOSAL_MASK"][22:49, clean].all()
+    assert not new["RV2_UNIFIED_SUBBAND_PROPOSAL_MASK"][22:49, ~clean].any()
+    proof = [o for o in report["objects"] if o["nomination_kind"] == "subband-separated"]
+    assert proof and any(o["confirmed"] for o in proof)
+    for obj in proof:
+        for w in obj["reference_windows"]:
+            assert all(abs(b - w["target_block"]) > 1 for b in w["left_blocks"] + w["right_blocks"])
+
+
+@pytest.mark.parametrize("case", ["unknown_side", "wet_side", "weather_body", "fork", "curved"])
+def test_separate_reference_route_retains_weather_unknowns_and_complete_forks(case):
+    n = alternating_sides()
+    if case == "unknown_side":
+        n.fields["SNR"][21] = np.nan
+        n.field_available["SNR"][21] = False
+    elif case == "wet_side":
+        n.fields["DBZH"][21] = 23.0
+        n.field_available["DBZH"][21] = True
+    elif case == "weather_body":
+        n.fields["RHOHV"] = np.full(n.shape, 0.99, "float32")
+        n.field_available["RHOHV"] = n.field_available["DBZH"].copy()
+        n.fields["SNR"][n.field_available["DBZH"]] = 20.0
+    elif case == "fork":
+        cols = n.ranges >= 240000
+        n.fields["DBZH"][30:34, cols] = np.nan
+        n.field_available["DBZH"] = np.isfinite(n.fields["DBZH"])
+    else:
+        n = weather_fixture("curved")
+    arrays, _ = separated_run(n)
+    assert not arrays["RV2_UNIFIED_SUBBAND_PROPOSAL_MASK"].any()
+
+
+def test_invalid_low_snr_target_shoulders_are_unknown_not_quiet():
+    n = alternating_sides()
+    target = (n.ranges >= 240000) & (n.ranges < 260000)
+    baseline, _ = separated_run(n)
+    assert baseline["RV2_UNIFIED_SUBBAND_PROPOSAL_MASK"][22:49, target].all()
+    n.fields["SNR"][np.ix_([21, 49], target)] = -100
+    assert n.field_available["SNR"][np.ix_([21, 49], target)].all()
+    arrays, _ = separated_run(n)
+    assert not arrays["RV2_UNIFIED_SUBBAND_PROPOSAL_MASK"][:, target].any()
+    from .conftest import evaluate
+    from .test_unified_integration import config
+
+    fields, _ = evaluate(n, config())
+    assert not fields["RV2_GEOMETRY_ACTION_MASK"][:, target].any()

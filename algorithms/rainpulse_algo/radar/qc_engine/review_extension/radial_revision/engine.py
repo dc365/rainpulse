@@ -56,7 +56,7 @@ def empty_arrays(shape, cfg):
     return result
 
 
-def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, conflicts=None, records_out=None, independent_weather_available=None):
+def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, conflicts=None, records_out=None, independent_weather_available=None, geometry_weather_protection=None):
     r, az, dr, good, gaps = native_geometry(native)
     z, observed = moment(native, "DBZH")
     observed = observed & good[:, None]
@@ -223,6 +223,21 @@ def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, confl
             constellation=fields['RV2_CONSTELLATION_STRONG_MASK']==1
             candidate|=constellation
             line_report['fragment_constellation']=constellation_report
+        unified = np.zeros(native.shape, bool)
+        if cfg.fragment_line is not None and cfg.fragment_line.unified_objects_enabled:
+            from .unified_serialized import evaluate as evaluate_unified
+
+            fields, unified_report = evaluate_unified(
+                native, barred, beam_width=cfg.fragment_line.antenna_beam_width_deg,
+                subbands=cfg.fragment_line.unified_subbands_enabled,
+                separated=cfg.fragment_line.unified_separated_edges_enabled,
+                maximum_objects=cfg.maximum_objects,
+                weather_protection=geometry_weather_protection,
+            )
+            out.update(fields)
+            unified = fields["RV2_UNIFIED_PROPOSAL_MASK"] == 1
+            candidate |= unified
+            line_report["unified_objects"] = unified_report
         fan_joint=np.zeros(native.shape,bool)
         if cfg.fragment_line is not None and cfg.fragment_line.fan_joint_enabled:
             from .fan_joint import qualify as qualify_fans
@@ -266,7 +281,7 @@ def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, confl
         out["RV2_SEGMENT_MATCH_MASK"] &= (~weak).astype("uint8")
         legacy_match = candidate & source & ~barred
         segment_match = (out["RV2_SEGMENT_MATCH_MASK"] == 1) & candidate & ~barred & ~weak
-        geometry = (line_morphology | line_isolated | group_polar | group_morph | residual | discontinuous | envelope | joint | source_window | fan_joint | source_footprint | whole_morphology | backbone | constellation) & observed & ~barred
+        geometry = (line_morphology | line_isolated | group_polar | group_morph | residual | discontinuous | envelope | joint | source_window | fan_joint | source_footprint | whole_morphology | backbone | constellation | unified) & observed & ~barred
         qualified = legacy_match | segment_match | line_source | geometry
         receiver = (legacy_match | (segment_match & cfg.allow_segmented_quarantine) | line_source) & ~weak
         geometry_action = geometry & (cfg.mode == 'experiment_quarantine')
@@ -274,7 +289,7 @@ def evaluate(native, cfg, legacy_source, legacy_residual, *, weather=None, confl
         if cfg.mode != "experiment_quarantine":
             proposal[:] = False
         reason = out["RV2_REASON"]
-        reason[group_polar | group_morph | discontinuous | envelope | joint | source_window | fan_joint | source_footprint | whole_morphology | backbone | constellation] |= int(Reason.GROUP_POLAR_MORPHOLOGY)
+        reason[group_polar | group_morph | discontinuous | envelope | joint | source_window | fan_joint | source_footprint | whole_morphology | backbone | constellation | unified] |= int(Reason.GROUP_POLAR_MORPHOLOGY)
         if "RV2_LINE_MASK" in out:
             reason[out["RV2_LINE_MASK"] == 1] |= int(Reason.FRAGMENT_LINE)
             reason[line_source] |= int(Reason.COHERENT_LINE_SOURCE)

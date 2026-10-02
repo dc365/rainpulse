@@ -264,7 +264,7 @@ def evidence(native, blocked, *, beam_width=None, prefix=PREFIX, physical_window
     return out
 
 
-def validate_serialized(group, observed, blocked, *, prefix=PREFIX, replay=None):
+def validate_serialized(group, observed, blocked, *, prefix=PREFIX, replay=None, decision_keys=None):
     """Bind proof to immutable RAW, then recompute geometry and gate eligibility."""
     from types import SimpleNamespace
     shape = observed.shape
@@ -318,7 +318,9 @@ def validate_serialized(group, observed, blocked, *, prefix=PREFIX, replay=None)
             raise ValueError('whole-object evidence differs from immutable RAW')
     native = SimpleNamespace(shape=shape, fields=fields, field_available=available,
         ranges=ranges[0], azimuth=angles[rows,0], geometry_good=good[rows,0], gap_after=gaps[rows,0])
-    keys = ('MASK','STRONG_MASK','ID','WEATHER_VETO_MASK')
+    keys = ('MASK','STRONG_MASK','ID','WEATHER_VETO_MASK') if decision_keys is None else decision_keys
+    if any(prefix+k not in group for k in keys):
+        raise ValueError('missing whole-object decision evidence')
     options = {'beam_width': beam_width}
     if version.flat[0] == 2:
         options['physical_windows'] = True

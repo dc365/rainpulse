@@ -39,6 +39,8 @@ def validate_source_fields(group, observed):
         morphology |= candidate
     blocked = (get("SRC_REVIEW_WEATHER_PROTECTED_MASK") == 1) | (get("SRC_REVIEW_CONFLICT_MASK") == 1)
     expected = source & morphology & ~blocked
+    if any(key.startswith("RV2_UNIFIED_") for key in group) and "RV2_MODE_CODE" not in group:
+        raise ValueError("unified proof requires radial engine mode and qualification")
     if "RV2_MODE_CODE" in group:
         from .radial_revision.validation import validate_revision_fields
         expected |= validate_revision_fields(group, observed, source, blocked)

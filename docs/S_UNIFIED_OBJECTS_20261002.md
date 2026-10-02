@@ -1,4 +1,4 @@
-# Unified native object implementation, candidate v1
+# Unified native objects: development history and current candidate v6
 
 The candidate replaces repeated source-anchor prerequisites with a shared
 immutable RAW object record. `object_model.py` stores actual window boundaries,
@@ -138,3 +138,95 @@ prove generalization. Near-site broad clutter and isolated points still need
 their own evidence/cleanup stage; a radial detector does not replace them.
 Production engine/writer integration, reference baseline, independent holdout
 and installed runtime/Web verification remain pending; no 105 change this round.
+
+## Separate-side prototype and architecture review
+
+The optional candidate-v4 route records independent left/right remote window
+support and permits bounded original boundary variation. The target and its
+adjacent windows are excluded from confirmation; the exact local boundary must
+repeat in remote original windows. Actual local target observations and weather
+barriers remain mandatory. This is still a candidate-mask audit, not a deployed
+QC product or a calibrated classifier.
+
+Private `unified-separate-edges-20261002-v1/report.json` binds all eight input,
+module, evidence and image hashes; they were rechecked against the current
+files. Z9598 08:18 overlaps 742 of the 2094 historically stored-visible residual
+gates, versus zero for v3. At 08:42 it overlaps 18/728 versus v3's 19/728, so the
+new provider is not a strict improvement everywhere. Do not replace an existing
+independently valid route on the strength of the 08:18 result alone. All outputs
+have zero actions/product writes, unchanged RAW and zero external-protection
+overlap. The fixed/variable/unified/subband scoped regression suite passes.
+
+The remaining architectural bottlenecks are strict per-gate bilateral target
+confirmation after object qualification, and conservative complete-parent
+fork/union handling. Neither a large number of new proposals nor alignment with
+a radial proves contamination. Any future relaxation must distinguish missing
+local evidence from positive weather conflict, retain original bounded member
+ownership, and use target-independent object confirmation. Sparse weak targets
+must not become new sources or grow accepted envelopes recursively.
+
+Recommended next acceptance units are: (1) preserve complementary original
+providers under one bounded object ledger; (2) compare radial anisotropy,
+angular-boundary persistence and along/across reflectivity variability at object
+level, with explicit strong/uncertain/weather classes; (3) integrate the frozen
+proof into the actual QC engine/writer and publication chain; (4) run a genuine
+RADVOL reference and independent event/site weather controls with frozen
+parameters. Isolated-point cleanup and near-station clutter remain distinct
+stages. Station-specific static-clutter priors may be necessary; station/time
+exceptions for radial shapes are not an acceptance criterion.
+
+Research corroboration: RADVOL's SPIKE family handles multiple shape classes
+without mandatory polarimetry, while MIT ATC-454 section 3.3 explicitly notes
+weak interference discontinuity and the shortcomings of fixed-width spike
+windows. MIT also uses an SQI weather safeguard, which is unavailable here;
+copying its numerical thresholds or omitting that safeguard is not validated
+for these data. Source: [ATC-454](https://www.ll.mit.edu/sites/default/files/publication/doc/radio-frequency-interference-censoring-scheme-cho-atc-454.pdf).
+
+
+## Current v6 acceptance boundary, 2026-10-02
+
+The original v3 subband provider and separate-side provider now run independently
+under one frozen RAW ledger. Their union preserves the sparse targets that the
+former replacement route lost; neither provider consumes the other provider's
+accepted targets as new ancestry. Shared object/member budgets and unique IDs
+remain mandatory. Private final audit:
+`.build/s-discontinuous-20261001/unified-valid-quiet-20261002-v2/report.json`.
+Eight development inputs have unchanged RAW, zero audit actions and no product
+writes. Exact OLD stored-Web residual overlap: Z9598 08:18 is 742/2094; 08:42 is
+19/728. These counts are candidate coverage, not independent contamination labels
+or new published Web removals. The earlier v4 replacement report is superseded. V6 also rejects target
+shoulders with SNR below -50 dB; availability alone does not make these
+invalid values quiet observations. A new RED/GREEN counterexample reproduces
+1080 erroneous proposals before the fix and zero after, including actual
+engine actions. Reference and final target quiet evidence now share [-50,3] dB.
+
+Default-off flags and frozen proof now enter the actual revision engine,
+BroadSource/P2 disposition and finalizer. Only qualified proposal gates enter
+the outer action mode; strong-object nomination alone cannot act. The writer
+replays all decisions and binds the proof to independently exported RAW
+DBZH/SNR/RHOHV, coordinates and native adapter order/good/gap fields. It rejects
+missing canonical geometry, invented moment availability and proof/RAW
+disagreement. The original self-consistent-but-unbound proof failure was
+reproduced before this binding fix. Shared uncommitted upstream volume-weather
+forwarding work is not included in this candidate integration.
+
+This remains a candidate release boundary. Installed runtime, current Web
+publication, genuine RADVOL comparison and independent date/site holdouts are
+not yet accepted. Exact staged-code checks pass 631 tests: 630 scoped regressions plus one real
+`apply_basic_qc` -> validated Zarr test with shuffled original ray order and
+pinned Py-ART/wradlib. Logs are in `.build/s-unified-integration-20261002/`.
+The earlier missing-Py-ART setup failure was resolved by installing the pinned
+dependency, not by mocking the library. Three dependency warnings remain,
+including a NumPy ABI warning; installed-container verification is still needed. Existing 105 v8 refresh completed all
+eight slots (08:18, 08:36, 08:42, 09:48, 10:18, 10:24, 10:42, 11:24 CST); it
+does not contain or validate this new v6 provider.
+
+The next morphology acceptance unit is an object-level classifier using physical
+multiscale radial/azimuthal occupancy, angular-boundary persistence and along/
+across reflectivity variability. It must expose strong interference, weather
+conflict and insufficient evidence separately. Strong confirmation can support
+weak original fragments within the frozen envelope, but positive weather gates
+remain protected and unknown sides cannot be converted to quiet observations.
+Unanchored sparse fragments need stronger joint confirmation. Freeze parameters
+on development cases, then evaluate complete annotated objects, weather loss
+and uncertainty on untouched dates/sites; no station/time deletion rules.

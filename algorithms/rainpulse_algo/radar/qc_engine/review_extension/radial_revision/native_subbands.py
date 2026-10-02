@@ -19,7 +19,7 @@ def _edges(z, observed, snr, sa, barred, lo, hi, cols):
     clear = np.ones(len(cols), bool)
     known = np.ones(len(cols), bool)
     for row in (lo - 1, hi):
-        noise = sa[row, cols] & (snr[row, cols] <= 3)
+        noise = sa[row, cols] & (snr[row, cols] >= -50) & (snr[row, cols] <= 3)
         known &= ~barred[row, cols] & (observed[row, cols] | noise)
         clear &= ~barred[row, cols] & (
             (observed[row, cols] & (z[row, cols] <= mean - 6)) | (~observed[row, cols] & noise)
@@ -27,7 +27,37 @@ def _edges(z, observed, snr, sa, barred, lo, hi, cols):
     return float(known.mean()), float(clear.mean())
 
 
-def nominate(native, blocked, parents, beam, *, maximum_work=50000000):
+def _separate_edges(z, observed, snr, sa, barred, lo, hi, cols):
+    present = observed[lo:hi][:, cols]
+    mean = np.divide(
+        np.where(present, z[lo:hi][:, cols], 0).sum(axis=0),
+        present.sum(axis=0),
+        out=np.full(len(cols), np.nan),
+        where=present.sum(axis=0) > 0,
+    )
+    result = []
+    for row in (lo - 1, hi):
+        noise = sa[row, cols] & (snr[row, cols] >= -50) & (snr[row, cols] <= 3)
+        known = ~barred[row, cols] & (observed[row, cols] | noise)
+        clear = ~barred[row, cols] & (
+            (observed[row, cols] & (z[row, cols] <= mean - 6)) | (~observed[row, cols] & noise)
+        )
+        result.append((float(known.mean()), float(clear.mean())))
+    return tuple(result)
+
+
+def _side_support(refs, measurements, side):
+    known = tuple(b for b in refs if measurements[b][side][0] >= 0.8)
+    contrasting = tuple(b for b in known if measurements[b][side][1] >= 0.8)
+    enough = (
+        len(contrasting) >= 5
+        and (max(contrasting) - min(contrasting)) * 20000 >= 150000
+        and len(contrasting) >= 0.8 * len(known)
+    )
+    return known, contrasting, enough
+
+
+def nominate(native, blocked, parents, beam, *, maximum_work=50000000, separated_edges=False):
     ranges, az, dr, good, gaps = native_geometry(native)
     bearing = np.rad2deg(np.unwrap(np.deg2rad(az)))
     sectors = np.r_[0, np.cumsum(gaps[:-1])]
@@ -42,6 +72,7 @@ def nominate(native, blocked, parents, beam, *, maximum_work=50000000):
     cols_by_block = {int(b): np.flatnonzero(blocks == b) for b in np.unique(blocks)}
     profiles = {}
     all_bands = {}
+    side_measurements = {}
     work = 0
 
     def charge(count):
@@ -80,14 +111,22 @@ def nominate(native, blocked, parents, beam, *, maximum_work=50000000):
             # Occupancy includes protected/weather observations. Exclusion
             # cannot manufacture an edge or change the denominator.
             if (
-                known[lo - 1 : hi + 1][:, cols].mean(axis=1).min() >= 0.8
+                known[lo if separated_edges else lo - 1 : hi if separated_edges else hi + 1][
+                    :, cols
+                ]
+                .mean(axis=1)
+                .min()
+                >= 0.8
                 and excluded.mean(axis=1).max() <= 0.2
                 and (raw[lo:hi][:, cols] & ~excluded).mean() >= 0.6
                 and max(density[lo - 1], density[hi]) <= 0.2
-                and k >= 0.8
-                and c >= 0.8
+                and (separated_edges or (k >= 0.8 and c >= 0.8))
             ):
                 profiles[block].append((lo, hi))
+                if separated_edges:
+                    side_measurements[block, lo, hi] = _separate_edges(
+                        z, observed, snr, sa, barred, lo, hi, cols
+                    )
     seeds = sorted({band for bands in profiles.values() for band in bands})
     pure_counter = set()
     narrowing_counter = set()
@@ -110,6 +149,8 @@ def nominate(native, blocked, parents, beam, *, maximum_work=50000000):
         template_blocks = []
         history = []
         measured_bounds = []
+        matched_bounds = {}
+        measured_sides = {}
         for block, bands in all_bands.items():
             charge(len(bands))
             compatible = [
@@ -126,11 +167,14 @@ def nominate(native, blocked, parents, beam, *, maximum_work=50000000):
             elif len(compatible) == 1:
                 state = "matched"
                 a, b = compatible[0]
+                matched_bounds[block] = (a, b)
                 measured_bounds.append((block, bearing[a], bearing[b - 1]))
                 if compatible[0] in profiles[block]:
                     reference_blocks.append(block)
                     if compatible[0] == (lo, hi):
                         template_blocks.append(block)
+                    if separated_edges:
+                        measured_sides[block] = side_measurements[block, a, b]
             elif any(a <= lo and b >= hi for a, b in bands):
                 state = "merged"
             history.append((block, state))
@@ -150,8 +194,11 @@ def nominate(native, blocked, parents, beam, *, maximum_work=50000000):
             if not len(cols):
                 continue
             charge((hi - lo + 2) * len(cols))
-            rr, cc = np.where(raw[lo:hi][:, cols])
-            rr += lo
+            window_lo, window_hi = (
+                matched_bounds.get(block, (lo, hi)) if separated_edges else (lo, hi)
+            )
+            rr, cc = np.where(raw[window_lo:window_hi][:, cols])
+            rr += window_lo
             cc = cols[cc]
             if not len(rr):
                 continue
@@ -161,23 +208,46 @@ def nominate(native, blocked, parents, beam, *, maximum_work=50000000):
             # neighbourhood. Nearby boundaries only confirm continuity; they
             # cannot validate a new width nominated by the target alone.
             enough &= sum(abs(b - block) > 1 for b in template_blocks) >= 2
-            k, c = _edges(z, observed, snr, sa, barred, lo, hi, cols)
+            left_known = left_refs = right_known = right_refs = ()
+            reference_support = False
+            if separated_edges:
+                charge(len(refs))
+                left_known, left_refs, left_ok = _side_support(refs, measured_sides, 0)
+                right_known, right_refs, right_ok = _side_support(refs, measured_sides, 1)
+                repeated = (
+                    sum(
+                        abs(b - block) > 1 and matched_bounds[b] == (window_lo, window_hi)
+                        for b in reference_blocks
+                    )
+                    >= 2
+                )
+                reference_support = enough and left_ok and right_ok and repeated
+            k, c = _edges(z, observed, snr, sa, barred, window_lo, window_hi, cols)
             coverage = known[lo - 1 : hi + 1][:, cols].mean(axis=1).min() >= 0.8
-            width_clear = max(raw[lo - 1, cols].mean(), raw[hi, cols].mean()) <= 0.2
+            if separated_edges:
+                coverage = known[window_lo:window_hi][:, cols].mean(axis=1).min() >= 0.8
+            width_clear = max(raw[window_lo - 1, cols].mean(), raw[window_hi, cols].mean()) <= 0.2
             windows.append(
                 MeasuredWindow(
                     block=block,
                     start_m=float(ranges[cols[0]]),
                     end_m=float(ranges[cols[-1]] + dr),
-                    left_deg=float(bearing[lo] - beam / 2),
-                    right_deg=float(bearing[hi - 1] + beam / 2),
-                    left_row=lo - 1,
-                    right_row=hi,
+                    left_deg=float(bearing[window_lo] - beam / 2),
+                    right_deg=float(bearing[window_hi - 1] + beam / 2),
+                    left_row=window_lo - 1,
+                    right_row=window_hi,
                     members=tuple(map(int, rr * native.shape[1] + cc)),
                     known_fraction=k if coverage else 0.0,
                     contrast_fraction=c if enough and width_clear else 0.0,
                     anchor_support_m=float(len(np.unique(cc)) * dr),
                     reference_blocks=refs,
+                    left_reference_blocks=left_refs,
+                    right_reference_blocks=right_refs,
+                    left_known_blocks=left_known,
+                    right_known_blocks=right_known,
+                    separated_reference_support=bool(
+                        reference_support and coverage and width_clear and block in matched_bounds
+                    ),
                 )
             )
         if not windows:
@@ -220,7 +290,7 @@ def nominate(native, blocked, parents, beam, *, maximum_work=50000000):
         output.append(
             RawObject(
                 identity=identity,
-                kind="subband",
+                kind="subband-separated" if separated_edges else "subband",
                 scale_m=20000.0,
                 level_dbz=0.0,
                 start_m=float(ranges[start]),

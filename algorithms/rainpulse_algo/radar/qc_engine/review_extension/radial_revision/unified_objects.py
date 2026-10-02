@@ -35,6 +35,8 @@ def _classify(obj, beam):
     known = np.asarray([w.known_fraction for w in obj.windows])
     contrast = np.asarray([w.contrast_fraction for w in obj.windows])
     measured = (known >= 0.8) & (contrast >= 0.8) & stable
+    if obj.kind == "subband-separated":
+        measured = stable & np.asarray([w.separated_reference_support for w in obj.windows])
     span = obj.end_m - obj.start_m
     windows = len({w.block for w in obj.windows})
     kind = "line" if median_width <= 2 * beam else "fan"
@@ -100,7 +102,10 @@ def evaluate(
     maximum_objects=50000,
     projection_enabled=True,
     subbands_enabled=False,
+    separated_edges_enabled=False,
 ):
+    if separated_edges_enabled and not subbands_enabled:
+        raise ValueError("separated edges require original subband nominations")
     if mode not in ("audit", "quarantine"):
         raise ValueError("unified object mode must be audit or quarantine")
     ranges, az, dr, good, gaps = native_geometry(native)
@@ -143,6 +148,13 @@ def evaluate(
 
         for obj in nominate_subbands(native, blocked, original_objects, beam):
             collect_nomination(obj)
+        if separated_edges_enabled:
+            # Both independent providers consume original parents only. A sparse
+            # target's existing complete proof survives the new dense-band path.
+            for obj in nominate_subbands(
+                native, blocked, original_objects, beam, separated_edges=True
+            ):
+                collect_nomination(obj)
     if projection_enabled:
         from .projected_objects import nominate
 
@@ -181,7 +193,7 @@ def evaluate(
                 if row is None:
                     local[:] = False
                 else:
-                    noise = sa[row, cc] & (snr[row, cc] <= 3)
+                    noise = sa[row, cc] & (snr[row, cc] >= -50) & (snr[row, cc] <= 3)
                     local &= ~blocked[row, cc] & (
                         (observed[row, cc] & (z[row, cc] <= z[rr, cc] - 6))
                         | (~observed[row, cc] & noise)
@@ -191,7 +203,7 @@ def evaluate(
             arrays[PREFIX + "SEGMENT_RETAIN_MASK"].flat[index[~allow]] = 1
             chosen = index[allow]
             arrays[PREFIX + "PROPOSAL_MASK"].flat[chosen] = 1
-            if obj.kind == "subband":
+            if obj.kind.startswith("subband"):
                 arrays[PREFIX + "SUBBAND_PROPOSAL_MASK"].flat[chosen] = 1
             arrays[PREFIX + "ID"].flat[chosen] = obj.identity
             proposals.extend(map(int, chosen))
@@ -210,7 +222,15 @@ def evaluate(
                 native_segment_start=obj.native_segment_start,
                 original_history_holds=list(obj.history_holds),
                 reference_windows=[
-                    dict(target_block=w.block, blocks=list(w.reference_blocks))
+                    dict(
+                        target_block=w.block,
+                        blocks=list(w.reference_blocks),
+                        left_blocks=list(w.left_reference_blocks),
+                        right_blocks=list(w.right_reference_blocks),
+                        left_known_blocks=list(w.left_known_blocks),
+                        right_known_blocks=list(w.right_known_blocks),
+                        separated_reference_support=w.separated_reference_support,
+                    )
                     for w in obj.windows
                     if w.reference_blocks
                 ],
@@ -223,7 +243,11 @@ def evaluate(
     if mode == "quarantine":
         arrays[PREFIX + "ACTION_MASK"][hit] = 1
     return arrays, dict(
-        version="unified-native-objects-candidate-v3-subbands" if subbands_enabled else VERSION,
+        version="unified-native-objects-candidate-v6-valid-quiet-evidence"
+        if separated_edges_enabled
+        else "unified-native-objects-candidate-v3-subbands"
+        if subbands_enabled
+        else VERSION,
         mode=mode,
         objects=records,
         candidate_gates=int(arrays[PREFIX + "CANDIDATE_MASK"].sum()),

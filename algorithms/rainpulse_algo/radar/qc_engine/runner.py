@@ -395,6 +395,10 @@ def run_open_source_qc(
         for field in ("RHOHV", "ZDR", "PHIDP", "VR", "SW", "SNR"):
             if field in sweep.fields:
                 optional[f"{field}_RAW"] = sweep.fields[field].copy()
+        if any(key.startswith("RV2_UNIFIED_") for key in optional):
+            from .review_extension.radial_revision.unified_serialized import canonical_native_fields
+
+            optional.update(canonical_native_fields(sweep))
         temporal = context.get("TEMPORAL_CANDIDATE_PERSISTENCE")
         if temporal is not None and profile.rfi_objects is None:
             optional["TEMPORAL_CANDIDATE_PERSISTENCE"] = np.asarray(temporal)[
