@@ -25,6 +25,7 @@ def detect(s, cfg, *, protected, prepared=None, near_floor_references=False):
             s, cfg, protected=protected, fan=True, family_width_deg=width, prepared=stats,
             **research,
         )
+        primary_targets = {'target_exclusion': mask} if near_floor_references else {}
         primary, primary_record = detect_blocks(
             s,
             cfg,
@@ -34,6 +35,7 @@ def detect(s, cfg, *, protected, prepared=None, near_floor_references=False):
             prepared=stats,
             response_quantile=50,
             **research,
+            **primary_targets,
         )
         mask |= primary
         record["primary_mode"] = primary_record

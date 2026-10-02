@@ -17,7 +17,7 @@ from .reference_fit import ReferenceFit, ReferenceFits
 
 def detect(
     s, cfg, *, protected, fan=False, family_width_deg=None, prepared=None, response_quantile=90,
-    domain=None, near_floor_references=False,
+    domain=None, near_floor_references=False, target_exclusion=None,
 ):
     out = np.zeros(s.shape, bool)
     z, za = s.moment("DBZH")
@@ -50,6 +50,15 @@ def detect(
             raise ValueError("source domain must be a boolean native-sweep matrix")
         signal &= domain
     targets = signal & (sn >= cfg.noise_censor_snr_db)
+    if target_exclusion is not None:
+        if (not near_floor_references or not isinstance(target_exclusion, np.ndarray)
+                or target_exclusion.shape != s.shape or target_exclusion.dtype != bool):
+            raise ValueError(
+                'prior proven target exclusion requires a boolean near-floor sweep mask'
+            )
+        # This affects action targets only. Previously proved source gates
+        # remain RAW references for every independently held-out target.
+        targets &= ~target_exclusion
     from .source_summary import SourceStatistics
 
     stats = (prepared or SourceStatistics.build(s, cfg)).use(s, cfg)
@@ -139,16 +148,29 @@ def detect(
             # record, so do not spend held-out fitting budget on it.
             target_blocks = np.array([targets[row, g].any() for g in stats.indices])
         for target in np.flatnonzero(target_blocks & geometry):
+            target_gates = gates[target]
+            if near_floor_references:
+                target_gates = target_gates[targets[row, target_gates]]
             outside = abs(ids - ids[target]) > cfg.receiver.guard_blocks
             eligible = (count >= minimum) & geometry & outside
             seen = set()
             for seed in np.flatnonzero(eligible):
+                # Accepted gates already carry their first complete proof.
+                # Additional models cannot add a gate or evidence record once
+                # every eligible target gate is covered.
+                if out[row, target_gates].all():
+                    break
                 stats.seed_comparisons += 1
                 members = np.flatnonzero(membership[seed] & outside)
                 identity = tuple(members)
                 if identity in seen or len(members) < 3:
                     continue
                 seen.add(identity)
+                # Coverage is determined by RAW membership, independent of
+                # the fitted coefficients. Reject it before spending a fit.
+                between = outside & (ids >= ids[members[0]]) & (ids <= ids[members[-1]])
+                if len(members) / max(int(between.sum()), 1) < cfg.radial_source_minimum_fraction:
+                    continue
                 # Keys describe the actual post-target/guard reference blocks.
                 # The cache is recreated for each RAW ray in this detector call,
                 # so RAW domain, quantile and all configuration remain fixed.
@@ -157,11 +179,6 @@ def detect(
                     s, cfg, members, center_range, count, powers, responses, fan, spread
                 ))
                 if fit is None:
-                    continue
-                # Coverage depends on the current target/guard exclusion and
-                # is always recomputed; it is never inherited from another target.
-                between = outside & (ids >= ids[members[0]]) & (ids <= ids[members[-1]])
-                if len(members) / max(int(between.sum()), 1) < cfg.radial_source_minimum_fraction:
                     continue
                 slope, power = fit.slope, fit.power
                 trend = (slope * np.log10(np.maximum(s.ranges, s.dr) / 1000)
@@ -181,9 +198,7 @@ def detect(
                     )
                     fits.put(key, fit)
                 low, high, power_low, power_high = fit.bounds
-                g = gates[target]
-                if near_floor_references:
-                    g = g[targets[row, g]]
+                g = target_gates
                 response_gate = z[row, g] - law[g] - trend[g]
                 # Once REF and independent receiver power establish a source,
                 # a REF-only dropout does not make that measurement clean.
@@ -228,6 +243,8 @@ def detect(
         maximum_response_slope_db_per_decade=8.0,
         **({'diagnostic_only': True, 'near_floor_references': True,
             'below_floor_targets': False} if near_floor_references else {}),
+        **({'prior_proven_target_exclusion_gates': int(target_exclusion.sum())}
+           if target_exclusion is not None else {}),
     )
 
 

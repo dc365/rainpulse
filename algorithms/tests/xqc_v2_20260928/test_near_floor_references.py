@@ -300,3 +300,109 @@ def test_reference_only_blocks_do_not_consume_target_fit_budget():
                           prepared=stats, near_floor_references=True)
     assert not mask.any() and record['models'] == []
     assert stats.trials == 0
+
+
+def test_proven_target_is_not_refitted_against_other_reference_families(monkeypatch):
+    from rainpulse_algo.multiband.xqc_v2 import source_blocks
+    from rainpulse_algo.multiband.xqc_v2.reference_fit import ReferenceFit
+    v, row, _ = sample()
+    fields = v.sweeps[0].fields
+    ranges = v.sweeps[0].range_m
+    # Multiple distinct compatible reference families; each successful proof
+    # covers every eligible gate of its held-out target block.
+    fields['SNRH'][row] = 3. + ((ranges // 5000).astype(int) % 3) * .7
+    fields['DBZH'][row] = fields['SNRH'][row] + 20*np.log10(ranges/1000) - 20
+    cfg = config(radial_source_enabled=True, noise_censor_snr_db=3.)
+    sweep = adapt(v.sweeps[0], cfg).sweep
+    calls = []
+    def proven(self, key, factory):
+        calls.append(key)
+        self.stats.trial()
+        return ReferenceFit(0., 3.7, 100, 60000., (-100., 100., 0., 10.))
+    monkeypatch.setattr(source_blocks.ReferenceFits, 'get', proven)
+    mask, record = detect(sweep, cfg, protected=np.zeros(sweep.shape, bool),
+                          fan=True, near_floor_references=True)
+    assert mask.any() and len(record['models']) > 3
+    assert len(calls) == len(record['models'])
+
+
+@pytest.mark.parametrize('fan,quantile', [(False,50), (True,50), (True,90)])
+def test_fit_order_optimization_preserves_frozen_near_floor_proofs(fan, quantile):
+    import subprocess
+    import types
+    source = subprocess.check_output([
+        'git', 'show', 'f49cedac0775eacac3a42c96215f1d4cce1c2e84:'
+        'algorithms/rainpulse_algo/multiband/xqc_v2/source_blocks.py'], text=True)
+    module = types.ModuleType('rainpulse_algo.multiband.xqc_v2._prior_fit_order')
+    module.__package__ = 'rainpulse_algo.multiband.xqc_v2'
+    exec(compile(source, '<prior-fit-order>', 'exec'), module.__dict__)
+    v, row, _ = sample()
+    cfg = config(radial_source_enabled=True, noise_censor_snr_db=3.)
+    sweep = adapt(v.sweeps[0], cfg).sweep
+    protected = np.zeros(sweep.shape, bool)
+    protected[row, 500:510] = True
+    before = sweep.digest
+    kwargs = dict(protected=protected, fan=fan, response_quantile=quantile,
+                  near_floor_references=True)
+    old_mask, old_record = module.detect(sweep, cfg, **kwargs)
+    new_mask, new_record = detect(sweep, cfg, **kwargs)
+    np.testing.assert_array_equal(new_mask, old_mask)
+    assert new_record == old_record
+    assert sweep.digest == before
+
+
+def test_prior_proven_targets_stay_available_as_raw_training_references():
+    v, row, excursions = sample()
+    cfg = config(radial_source_enabled=True, noise_censor_snr_db=3.)
+    view = adapt(v.sweeps[0], cfg)
+    sweep = view.sweep
+    kwargs = dict(protected=np.zeros(sweep.shape, bool), fan=True,
+                  near_floor_references=True)
+    old_mask, _ = detect(sweep, cfg, **kwargs)
+    excluded = old_mask.copy()
+    # Retain only one held-out action block. All other previously proved gates
+    # must still train it; their deletion from signal would destroy the proof.
+    excluded[:, (sweep.ranges>=35000)&(sweep.ranges<40000)] = False
+    assert (old_mask&~excluded).any()
+    actual, record = detect(sweep, cfg, target_exclusion=excluded, **kwargs)
+    np.testing.assert_array_equal(actual, old_mask&~excluded)
+    assert not (actual&excluded).any()
+    assert sum(m['target_gates'] for m in record['models']) == int(actual.sum())
+
+
+def test_primary_mode_keeps_same_family_mask_without_duplicate_action_proofs(monkeypatch):
+    from rainpulse_algo.multiband.xqc_v2 import source_fans
+    v, row, _ = weak_family()
+    cfg = config(radial_source_enabled=True, noise_censor_snr_db=3.)
+    sweep = adapt(v.sweeps[0], cfg).sweep
+    kwargs = dict(protected=np.zeros(sweep.shape, bool), near_floor_references=True)
+    before = sweep.digest
+    actual, record = source_fans.detect(sweep, cfg, **kwargs)
+    assert actual.any()
+    # Reproduce the prior two complete action passes with identical RAW fits.
+    original = source_fans.detect_blocks
+    def repeated(*args, **kw):
+        kw.pop('target_exclusion', None)
+        return original(*args, **kw)
+    monkeypatch.setattr(source_fans, 'detect_blocks', repeated)
+    expected, prior = source_fans.detect(sweep, cfg, **kwargs)
+    np.testing.assert_array_equal(actual, expected)
+    assert record['primary_mode']['source_gates'] == 0
+    assert prior['primary_mode']['source_gates'] > 0
+    assert record['models'] == prior['models']
+    assert sweep.digest == before
+
+
+@pytest.mark.parametrize('wrong', ['legacy', 'shape', 'dtype'])
+def test_prior_target_exclusion_is_strictly_scoped(wrong):
+    v, _, _ = sample()
+    cfg = config(radial_source_enabled=True, noise_censor_snr_db=3.)
+    sweep = adapt(v.sweeps[0], cfg).sweep
+    mask = np.zeros(sweep.shape, bool)
+    if wrong == 'shape':
+        mask = mask[:1]
+    if wrong == 'dtype':
+        mask = mask.astype('uint8')
+    with pytest.raises(ValueError, match='prior proven target exclusion'):
+        detect(sweep, cfg, protected=np.zeros(sweep.shape, bool),
+               near_floor_references=wrong!='legacy', target_exclusion=mask)
