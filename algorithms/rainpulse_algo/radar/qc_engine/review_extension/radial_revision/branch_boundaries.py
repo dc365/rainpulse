@@ -29,6 +29,7 @@ def measure(
     lower_boxes,
     lower_cache,
     enclosed_branches=False,
+    variable_boundaries=False,
 ):
     seeds = sorted({(e["a"], e["b"]) for e in entries})
     blocks = sorted({e["block"] for e in entries})
@@ -46,10 +47,22 @@ def measure(
         if width > 90:
             continue
         charge(len(entries))
-        compatible_indices = np.flatnonzero(
+        compatible = (
             (np.abs(original_left - left_edges[a]) <= beam * 0.5 + 1e-6)
             & (np.abs(original_right - right_edges[b - 1]) <= beam * 0.5 + 1e-6)
         )
+        if variable_boundaries:
+            # Every boundary remains tied to the ORIGINAL seed. No accepted
+            # member becomes a new anchor, so small steps cannot drift forever.
+            # Centre tolerance remains strict while each exterior may breathe
+            # within two measured beam widths. All memberships are RAW runs.
+            seed_centre = (left_edges[a] + right_edges[b - 1]) / 2
+            compatible = (
+                (np.abs((original_left + original_right) / 2 - seed_centre) <= beam * 0.5 + 1e-6)
+                & (np.abs(original_left - left_edges[a]) <= beam * 2 + 1e-6)
+                & (np.abs(original_right - right_edges[b - 1]) <= beam * 2 + 1e-6)
+            )
+        compatible_indices = np.flatnonzero(compatible)
         enclosed_by_block = {block: [] for block in blocks}
         crossing_blocks = set()
         if enclosed_branches:
@@ -141,10 +154,26 @@ def measure(
             holds.append("insufficient_boundary_support")
         if len(matched) / len(blocks) < 0.8:
             holds.append("unstable_complete_boundary_history")
+        maximum_edge_step = 0.0
+        if variable_boundaries and len(matched) > 1:
+            ordered = sorted(matched, key=lambda e: e['block'])
+            maximum_edge_step = max(
+                max(abs(after['left'] - before['left']), abs(after['right'] - before['right']))
+                / beam
+                for before, after in zip(ordered, ordered[1:])
+            )
+            # Gaps do not multiply the allowed step. Missing windows cannot
+            # authorize a larger jump to another original object.
+            if maximum_edge_step > 2.0 + 1e-6:
+                holds.append('unstable_variable_boundary_step')
         # Keep observations along the ENTIRE fixed branch corridor, including
         # merged/failed windows. A clean far tail cannot restart after weather.
-        charge((b - a) * len(all_columns))
-        ix = np.ix_(rows[a:b], all_columns)
+        corridor_a, corridor_b = a, b
+        if variable_boundaries and matched:
+            corridor_a = min(a, min(e['a'] for e in matched))
+            corridor_b = max(b, max(e['b'] for e in matched))
+        charge((corridor_b - corridor_a) * len(all_columns))
+        ix = np.ix_(rows[corridor_a:corridor_b], all_columns)
         if barred[ix].any():
             holds.append("original_branch_barrier")
         if weather[ix].any():
@@ -266,6 +295,10 @@ def measure(
                     holds=sorted(set(holds)),
                     production_eligible=False,
                     recursive_growth=False,
+                    variable_boundary_mode=bool(variable_boundaries),
+                    maximum_seed_edge_offset_beams=2.0 if variable_boundaries else 0.5,
+                    maximum_seed_centre_offset_beams=0.5,
+                    measured_maximum_edge_step_beams=float(maximum_edge_step),
                 ),
             )
         )

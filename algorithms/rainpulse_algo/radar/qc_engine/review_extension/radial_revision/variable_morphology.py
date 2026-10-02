@@ -49,7 +49,9 @@ def _branch_edges(rows, a, b, columns, angles, beam, z, observed, snr, sa, barre
 
 
 def detect(native, blocked, *, beam_width=None, maximum_objects=50000, branch_shoulders=False,
-           boundary_hypotheses=False,enclosed_branch_hypotheses=False):
+           boundary_hypotheses=False,enclosed_branch_hypotheses=False,variable_boundary_hypotheses=False):
+    if variable_boundary_hypotheses and not boundary_hypotheses:
+        raise ValueError('variable boundaries require full original boundary hypotheses')
     if enclosed_branch_hypotheses and not boundary_hypotheses:
         raise ValueError('enclosed branches require full original boundary hypotheses')
     r, az, dr, good, gaps = native_geometry(native)
@@ -153,7 +155,8 @@ def detect(native, blocked, *, beam_width=None, maximum_objects=50000, branch_sh
                         for hr,hc,hypothesis in measure(entries,rows,left_edges,right_edges,beam,r,dr,
                                 z,observed,snr,sa,barred,weather,charge,
                                 lower_labels,lower_boxes,lower_cache,
-                                enclosed_branches=enclosed_branch_hypotheses):
+                                enclosed_branches=enclosed_branch_hypotheses,
+                                variable_boundaries=variable_boundary_hypotheses):
                             if len(boundary_records)>=maximum_objects:
                                 raise ResourceLimit('boundary hypothesis budget exceeded; no partial result')
                             hypothesis.update(parent_id=len(records)+1,scale_m=scale,level_dbz=level,

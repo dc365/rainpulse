@@ -81,6 +81,70 @@ def test_boundary_target_selection_does_not_crop_original_history():
     assert 'target_overlap' not in original
 
 
+def source_inputs():
+    from types import SimpleNamespace
+    from rainpulse_algo.radar.qc_engine.review_extension.radial_revision import source_ledger,raw_fans
+    r=np.arange(1000.,361000.,1000.);shape=(20,len(r))
+    source=np.zeros(shape,bool)
+    for start in (60000.,100000.,140000.,180000.):
+        source[8:15,(r>=start)&(r<start+12000.)]=True
+    target=np.zeros(shape,bool);target[8:15,(r>=240000.)&(r<242000.)]=True
+    valid=source|target;z=np.where(valid,20.+20.*np.log10(r[None,:]/50000.),np.nan)
+    n=SimpleNamespace(shape=shape,ranges=r,azimuth=np.arange(20,dtype=float),
+        geometry_good=np.ones(20,bool),gap_after=np.zeros(20,bool),gate_spacing_m=1000.,
+        fields={'DBZH':z,'SNR':np.where(valid,13.,np.nan),'RHOHV':np.where(valid,.8,np.nan)},
+        field_available={k:valid.copy() for k in ['DBZH','SNR','RHOHV']})
+    n.gap_after[-1]=True;blocked=np.zeros(shape,bool)
+    ledger,_=source_ledger.freeze(n,blocked,source,np.zeros(shape,bool))
+    fans,_=raw_fans.detect(n,blocked,ledger['RV2_SOURCE_LEDGER_SEED_ID'])
+    return n,blocked,{**ledger,**fans},target
+
+
+def test_source_segment_models_use_full_original_sources_and_exclude_target_guard():
+    n,blocked,group,target=source_inputs()
+    baseline=m.source_segment_diagnosis(n,blocked,group,target)
+    assert baseline['target_same_source_agreement']==int(target.sum())
+    assert not baseline['action_authority'] and not baseline['source_agreement_is_pollution_truth']
+    assert all(not r['target_guard_used_for_training'] for r in baseline['records'])
+    n.fields['DBZH'][target]+=15.
+    changed=m.source_segment_diagnosis(n,blocked,group,target)
+    assert changed['target_same_source_agreement']==0
+    assert [r['model']['INTERCEPT_DB'] for r in baseline['records']]==[
+        r['model']['INTERCEPT_DB'] for r in changed['records']]
+
+
+def test_source_agreement_preserves_current_weather_and_target_selection_cannot_train():
+    n,blocked,group,target=source_inputs()
+    n.fields['RHOHV'][target]=.99
+    report=m.source_segment_diagnosis(n,blocked,group,target)
+    assert report['target_joint_matches']==int(target.sum())
+    assert report['target_same_source_agreement']==0
+    assert report['target_current_weather_retained']==int(target.sum())
+    one=np.zeros(n.shape,bool);one[8,240]=True
+    single=m.source_segment_diagnosis(n,blocked,group,one)['records'][0]
+    original=next(r for r in report['records'] if r['row']==8 and r['column']==240)
+    assert single==original
+
+
+@pytest.mark.parametrize('cause',['coordinate','barrier'])
+def test_source_segment_diagnostic_rejects_unbound_or_protected_original_sources(cause):
+    n,blocked,group,target=source_inputs()
+    source=group['RV2_SOURCE_LEDGER_SEED_ID']>0
+    if cause=='coordinate':group['RV2_SOURCE_LEDGER_RANGE_M'][source]+=100.
+    else:blocked[source]=True
+    with pytest.raises(ValueError,match='original source'):
+        m.source_segment_diagnosis(n,blocked,group,target)
+
+
+def test_source_report_preserves_complete_history_but_counts_only_safe_training_section():
+    n,blocked,group,target=source_inputs()
+    blocked[:,89]=True  # Original source IDs are frozen before this later barrier.
+    report=m.source_segment_diagnosis(n,blocked,group,target)
+    assert report['target_same_source_agreement']==int(target.sum())
+    assert all(r['original_source_gates']==48 and r['guard_excluded_reference_gates']==36
+               and r['original_source_start_m']==60000. for r in report['records'])
+
+
 def test_variable_audit_detects_full_raw_before_published_target_selection(tmp_path,monkeypatch):
     snapshot=tmp_path/'raw.npz';receipt=tmp_path/'published.json'
     raw=np.full((5,12),np.nan);raw[2,2:10]=25.

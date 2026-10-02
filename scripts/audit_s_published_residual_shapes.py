@@ -63,8 +63,80 @@ def boundary_target_diagnosis(native,remaining,hypotheses):
     return records
 
 
+def source_segment_diagnosis(native,blocked,group,targets):
+    """Recompute original held-out source models before selecting Web targets.
+
+    Power agreement is evidence, never a pollution classification. The stored
+    source ledger is immutable; models are recomputed from native RAW values.
+    """
+    from rainpulse_algo.radar.qc_engine.review_extension.radial_revision import fan_joint,fan_states
+    from rainpulse_algo.radar.qc_engine.review_extension.arrays import moment,runs
+    if np.prod(native.shape)>2000000 or int(targets.sum())>50000:
+        raise ValueError('bounded source diagnostic size exceeded')
+    seed=np.asarray(group['RV2_SOURCE_LEDGER_SEED_ID'])
+    parent=np.asarray(group['RV2_RAW_FAN_ID'])
+    if any(v.shape!=native.shape or v.dtype!=np.dtype('uint32') for v in [seed,parent]):
+        raise ValueError('original native source/parent IDs required')
+    z,observed=moment(native,'DBZH')
+    if ((seed>0)&(~observed|blocked)).any():
+        raise ValueError('original source crossed native observation/protection')
+    for key,membership in [('RV2_SOURCE_LEDGER_RANGE_M',seed>0),('RV2_RAW_FAN_RANGE_M',parent>0)]:
+        coordinates=np.asarray(group[key])
+        if coordinates.shape!=native.shape or not np.allclose(
+            coordinates[membership],np.broadcast_to(native.ranges,native.shape)[membership],atol=.01,rtol=0):
+            raise ValueError('original source/parent coordinate mismatch')
+    joint,jreport=fan_joint.qualify(native,blocked,group)
+    fan_joint.validate({**group,**joint},observed,blocked)
+    states,sreport=fan_states.diagnose(native,blocked,{**group,**joint})
+    rho,rho_ok=moment(native,'RHOHV');snr,snr_ok=moment(native,'SNR')
+    weather=rho_ok&snr_ok&(rho>=.95)&(snr>=10.)
+    jq=joint[fan_joint.PREFIX+'QUALIFIED_MASK']==1
+    sq=states[fan_states.PREFIX+'MATCH_MASK']==1
+    same_source=joint[fan_joint.PREFIX+'SOURCE_ID']==states[fan_states.PREFIX+'SOURCE_ID']
+    agreement=jq&sq&same_source&~weather&~blocked
+    def scalar(v):
+        return float(v) if np.isfinite(v) else None
+    records=[]
+    safe_sections={int(row):runs(~blocked[row]) for row in np.flatnonzero(targets.any(axis=1))}
+    for row,col in zip(*np.where(targets)):
+        available=bool(joint[fan_joint.PREFIX+'MODEL_AVAILABLE_MASK'][row,col])
+        source=int(joint[fan_joint.PREFIX+'MODEL_SOURCE_ID'][row,col])
+        original=np.flatnonzero(seed[row]==source) if source else np.array([],int)
+        block=int(native.ranges[col]//20000)
+        section=next(((lo,hi) for lo,hi in safe_sections[int(row)] if lo<=col<hi),None)
+        references=original[abs((native.ranges[original]//20000).astype(int)-block)>1]
+        if section is None:references=np.array([],int)
+        else:references=references[(references>=section[0])&(references<section[1])]
+        kinds=np.asarray(group['RV2_SOURCE_LEDGER_KIND'])[row,original]
+        records.append(dict(row=int(row),column=int(col),range_m=float(native.ranges[col]),
+            original_parent_id=int(parent[row,col]),original_source_id=source,
+            original_source_gates=int(len(original)),guard_excluded_reference_gates=int(len(references)),
+            original_source_kind_counts={str(int(kind)):int((kinds==kind).sum()) for kind in np.unique(kinds)},
+            original_source_start_m=float(native.ranges[original[0]]) if len(original) else None,
+            original_source_end_m=float(native.ranges[original[-1]]) if len(original) else None,
+            original_state_source_id=int(states[fan_states.PREFIX+'SOURCE_ID'][row,col]),
+            original_state_id=int(states[fan_states.PREFIX+'STATE_ID'][row,col]),
+            model_available=available,joint_power_match=bool(jq[row,col]),
+            source_state_match=bool(sq[row,col]),same_original_source=bool(same_source[row,col] and source),
+            combined_source_agreement=bool(agreement[row,col]),
+            target_guard_used_for_training=False,
+            raw_dbzh=scalar(z[row,col]),rhohv=scalar(rho[row,col]) if rho_ok[row,col] else None,
+            snr_db=scalar(snr[row,col]) if snr_ok[row,col] else None,
+            current_weather_retained=bool(weather[row,col]),protected=bool(blocked[row,col]),
+            model={key:scalar(joint[fan_joint.PREFIX+key][row,col]) for key in fan_joint.MODEL_FLOATS},
+            action_authority=False))
+    return dict(original_joint_report=jreport,original_state_report=sreport,
+        target_joint_matches=int((targets&jq).sum()),target_state_matches=int((targets&sq).sum()),
+        target_same_source_agreement=int((targets&agreement).sum()),
+        target_current_weather_retained=int((targets&weather).sum()),
+        source_agreement_is_pollution_truth=False,action_authority=False,records=records)
+
+
 def audit(snapshot, receipt, *, shoulder_windows=False, shoulder_band=False, short_subset=False, parent_footprint=False,
-          geometry_evidence=False, variable_objects=False, boundary_hypotheses=False,enclosed_branches=False):
+          geometry_evidence=False, variable_objects=False, boundary_hypotheses=False,enclosed_branches=False,
+          variable_boundaries=False,source_models=False):
+    if variable_boundaries and not boundary_hypotheses:
+        raise ValueError('variable boundaries require full original boundary hypotheses')
     if enclosed_branches and not boundary_hypotheses:
         raise ValueError('enclosed branches require full original boundary hypotheses')
     if boundary_hypotheses and not variable_objects:
@@ -118,7 +190,8 @@ def audit(snapshot, receipt, *, shoulder_windows=False, shoulder_band=False, sho
         ('whole_object', morphology_objects, {'physical_windows':True})]
     if variable_objects:
         detectors.append(('variable_object', variable_morphology, {'branch_shoulders':True,
-            'boundary_hypotheses':boundary_hypotheses,'enclosed_branch_hypotheses':enclosed_branches}))
+            'boundary_hypotheses':boundary_hypotheses,'enclosed_branch_hypotheses':enclosed_branches,
+            'variable_boundary_hypotheses':variable_boundaries}))
     for name, module, options in detectors:
         fields, evidence = module.detect(native, blocked, **options)
         prefix = module.PREFIX
@@ -173,8 +246,14 @@ def audit(snapshot, receipt, *, shoulder_windows=False, shoulder_band=False, sho
         from rainpulse_algo.radar.qc_engine.review_extension.radial_revision import branch_boundaries
         code_manifest[branch_boundaries.__name__]=hashlib.sha256(
             Path(branch_boundaries.__file__).read_bytes()).hexdigest()
+    if source_models:
+        from rainpulse_algo.radar.qc_engine.review_extension.radial_revision import fan_joint,fan_states
+        summaries['source_segments']=source_segment_diagnosis(native,blocked,a,remaining)
+        for module in [fan_joint,fan_states]:
+            code_manifest[module.__name__]=hashlib.sha256(Path(module.__file__).read_bytes()).hexdigest()
     return dict(scope='complete_RAW_shapes_explaining_actual_published_residuals',
         snapshot_sha256=report['snapshot_sha256'],published_receipt_sha256=hashlib.sha256(receipt.read_bytes()).hexdigest(),
+        audit_script_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         detector_sha256=code_manifest,
         remaining_visible=int(remaining.sum()),detectors=summaries,product_writes=False,
         action_authority=False,independent_weather_truth=False)
@@ -192,20 +271,24 @@ def main():
     p.add_argument('--variable-objects',action='store_true',help='Explain residuals with complete variable-width RAW histories; no actions')
     p.add_argument('--boundary-hypotheses',action='store_true',help='Frozen original split/merge boundary research; requires variable objects')
     p.add_argument('--enclosed-branches',action='store_true',help='Measured branches inside frozen original outer edges; requires boundary hypotheses')
+    p.add_argument('--variable-boundaries',action='store_true',help='Measure bounded RAW exterior changes around immutable seed; requires boundary hypotheses')
+    p.add_argument('--source-models',action='store_true',help='Recompute original same-ray source models and held-out state agreement; no actions')
     args=p.parse_args()
     if args.output.exists():raise ValueError('new output required')
     result=audit(args.snapshot,args.receipt,shoulder_windows=args.shoulder_windows,
         shoulder_band=args.shoulder_band,short_subset=args.short_subset,parent_footprint=args.parent_footprint,
         geometry_evidence=args.geometry_evidence,variable_objects=args.variable_objects,
-        boundary_hypotheses=args.boundary_hypotheses,enclosed_branches=args.enclosed_branches)
+        boundary_hypotheses=args.boundary_hypotheses,enclosed_branches=args.enclosed_branches,
+        variable_boundaries=args.variable_boundaries,source_models=args.source_models)
     result['research_options']=dict(shoulder_windows=args.shoulder_windows,
         shoulder_band=args.shoulder_band,short_subset=args.short_subset,parent_footprint=args.parent_footprint,
         geometry_evidence=args.geometry_evidence,variable_objects=args.variable_objects,
-        boundary_hypotheses=args.boundary_hypotheses,enclosed_branches=args.enclosed_branches)
+        boundary_hypotheses=args.boundary_hypotheses,enclosed_branches=args.enclosed_branches,
+        variable_boundaries=args.variable_boundaries,source_models=args.source_models)
     with args.output.open('x') as f:json.dump(result,f,indent=2,allow_nan=False);f.write('\n')
     print(json.dumps({k:v for k,v in result.items() if k!='detectors'}))
     for name,value in result['detectors'].items():
-        print(name,json.dumps({k:v for k,v in value.items() if k not in ('objects','original_target_parents','geometry_hypotheses','boundary_hypotheses','boundary_target_hypotheses')}))
+        print(name,json.dumps({k:v for k,v in value.items() if k not in ('objects','records','original_target_parents','geometry_hypotheses','boundary_hypotheses','boundary_target_hypotheses')}))
 
 
 if __name__=='__main__':main()

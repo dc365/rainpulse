@@ -132,3 +132,50 @@ def test_enclosed_branches_do_not_bypass_lower_weather_or_curved_history():
     for n in [fixture('constant_km'),fixture('curved')]:
         fields,_=m.detect(n,np.zeros(n.shape,bool),boundary_hypotheses=True,enclosed_branch_hypotheses=True)
         assert not fields[P+'BOUNDARY_QUALIFIED_RESEARCH_MASK'].any()
+
+
+@pytest.mark.parametrize('spacing',[.5,1.])
+def test_variable_edges_measure_original_runs_without_moving_seed(spacing):
+    n=merged(spacing=spacing)
+    widths=np.where((n.ranges//20000).astype(int)%2,3.,4.)
+    n.fields['DBZH'][:]=np.where(np.abs(n.azimuth-180)[:,None]<=widths,25.,np.nan)
+    n.field_available['DBZH']=np.isfinite(n.fields['DBZH'])
+    n.fields['SNR']=np.where(n.field_available['DBZH'],8.,-2.)
+    m=load('radial_revision.variable_morphology');blocked=np.zeros(n.shape,bool)
+    base,_=m.detect(n,blocked,boundary_hypotheses=True)
+    assert not base[P+'BOUNDARY_QUALIFIED_RESEARCH_MASK'].any()
+    fields,report=m.detect(n,blocked,boundary_hypotheses=True,variable_boundary_hypotheses=True)
+    assert fields[P+'BOUNDARY_QUALIFIED_RESEARCH_MASK'].any()
+    assert any(h['variable_boundary_mode'] and h['geometry_qualified'] for h in report['boundary_hypotheses'])
+    for k,v in base.items():
+        if 'BOUNDARY' not in k:assert np.array_equal(v,fields[k])
+    assert not fields[P+'BOUNDARY_HYPOTHESIS_MASK'][~n.field_available['DBZH']].any()
+
+
+@pytest.mark.parametrize('kind',['constant_km','curved'])
+def test_variable_edges_do_not_turn_weather_or_drifting_chain_into_ray(kind):
+    from .test_variable_morphology import fixture
+    n=fixture(kind)
+    fields,_=load('radial_revision.variable_morphology').detect(n,np.zeros(n.shape,bool),
+        boundary_hypotheses=True,variable_boundary_hypotheses=True)
+    assert not fields[P+'BOUNDARY_QUALIFIED_RESEARCH_MASK'].any()
+
+
+@pytest.mark.parametrize('cause',['weather','barrier'])
+def test_expanded_variable_corridor_keeps_original_outer_protection(cause):
+    n=merged();widths=np.where((n.ranges//20000).astype(int)%2,3.,4.)
+    n.fields['DBZH'][:]=np.where(np.abs(n.azimuth-180)[:,None]<=widths,25.,np.nan)
+    n.field_available['DBZH']=np.isfinite(n.fields['DBZH'])
+    n.fields['SNR']=np.where(n.field_available['DBZH'],8.,-2.)
+    blocked=np.zeros(n.shape,bool)
+    edge=(np.abs(n.azimuth-180)==4)[:,None]&n.field_available['DBZH']
+    if cause=='barrier':blocked[edge]=True
+    else:
+        n.fields['RHOHV']=np.where(edge,.99,np.nan)
+        n.field_available['RHOHV']=np.isfinite(n.fields['RHOHV'])
+        n.fields['SNR'][edge]=20.
+    fields,report=load('radial_revision.variable_morphology').detect(n,blocked,
+        boundary_hypotheses=True,variable_boundary_hypotheses=True)
+    assert not fields[P+'BOUNDARY_QUALIFIED_RESEARCH_MASK'].any()
+    assert report['boundary_hypotheses']
+    assert all(not h['production_eligible'] for h in report['boundary_hypotheses'])
