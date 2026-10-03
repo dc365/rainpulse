@@ -44,7 +44,9 @@ def detect(cut, *, protected=None):
 
 
 @pytest.mark.parametrize("bearing,elevation", [(180, 0.47), (350, 3.36), (70, 9.88)])
-def test_independently_measured_original_family_predicts_missing_target_shoulder(bearing, elevation):
+def test_independently_measured_original_family_predicts_missing_target_shoulder(
+    bearing, elevation,
+):
     cut, target = case(bearing, elevation)
     assert target.sum() >= 20
     before = {k: value.copy() for k, value in cut.fields.items()}
@@ -55,7 +57,9 @@ def test_independently_measured_original_family_predicts_missing_target_shoulder
         np.testing.assert_array_equal(cut.fields[key], value)
 
 
-@pytest.mark.parametrize("barrier", ["both_missing", "entire_missing", "interior_missing", "stronger_core"])
+@pytest.mark.parametrize(
+    "barrier", ["both_missing", "entire_missing", "interior_missing", "stronger_core"],
+)
 def test_missing_boundary_transfer_cannot_invent_boundaries_or_predict_stronger_weather(barrier):
     cut, target = case(barrier=barrier)
     mask, _ = detect(cut)
