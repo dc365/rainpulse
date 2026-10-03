@@ -24,15 +24,22 @@ def multiband_override(model: dict, network_file: Path, image: str, cpu: float, 
     from rainpulse_algo.multiband.model import Network
 
     n = Network.load(network_file)
-    if not any(s.enabled for s in n.stations.values()):
-        raise ValueError('示例站点尚未核验并启用，不能生成可接单Worker')
+    spatial_station_enabled = any(s.enabled for s in n.stations.values())
+    standalone_x_qc_only = not n.products and any(
+        s.band == 'X' and s.x_qc_enabled for s in n.stations.values()
+    )
+    if not spatial_station_enabled and not standalone_x_qc_only:
+        raise ValueError('需启用空间核验站，或配置无空间产品的独立X-QC候选网络')
     if not image or len(image) > 256 or any(c.isspace() for c in image) or '$' in image:
         raise ValueError('必须提供已构建新代码的明确镜像身份')
     if not (':' in image or '@sha256:' in image) or image.endswith(':latest'):
         raise ValueError('请提供固定镜像标签或digest，不采用latest')
     # This is an admission budget check, not a prediction of real peak memory.
-    tile_bytes = max(min(g.tile_rows,g.height)*g.width*len(g.levels_m_msl)*48 for g in n.products.values())
-    output_bytes = max(g.width*g.height*100 for g in n.products.values())
+    tile_bytes = max(
+        (min(g.tile_rows,g.height)*g.width*len(g.levels_m_msl)*48 for g in n.products.values()),
+        default=0,
+    )
+    output_bytes = max((g.width*g.height*100 for g in n.products.values()), default=0)
     if memory < 3*n.maximum_input_bytes + n.cache_max_bytes + tile_bytes + output_bytes:
         raise ValueError('声明内存不足以容纳输入副本、解码缓存、分层tile和产物预算；请缩小网格/输入或增加配额')
     base = build_override(model,['qc'],{'qc':(cpu,memory)},available_cpu,available_memory)
