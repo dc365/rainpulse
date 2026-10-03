@@ -1402,3 +1402,17 @@ reproduced the masks. RAW, original compact diagnostics and completed parent
 dispositions are unchanged. Native paired figures were inspected. These are
 offline candidate measurements, not confirmed contamination, weather-loss
 acceptance or deployed normal maps. Other strong localized remnants remain.
+
+Three additional synthetic wide-fan controls cover thirteen observed native
+rays at different rotations and elevations, including the azimuth seam. All
+15 fragmented-carrier tests pass. These positive controls supplement the
+unchanged field/local-excess, weather, missing and resource controls.
+
+Installed verification must bind the actual parent module bytes. An existing
+parent image still truncates oversize angular envelopes before complete-history
+measurement, whereas main retains them. The diagnostic preflight refused that
+parent mismatch. Its corrected read-only comparator loads the immutable parent
+module in memory and keeps the candidate on main's complete-history geometry.
+It reproduces the frozen normal arrays and all three independent offline
+candidate/excess/unknown masks. The original failed evidence is retained; a
+normal release still requires full native and weather acceptance.

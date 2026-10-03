@@ -166,3 +166,25 @@ def test_stationary_native_variability_is_not_local_weather_excess():
     result = review(s, policy())
     assert (result.candidate & body).sum() > 1200
     assert not result.local_excess[body].any()
+
+
+@pytest.mark.parametrize("bearing,elevation", [(53.0, 0.5), (178.0, 3.36), (359.0, 8.0)])
+def test_fragmented_wide_fan_keeps_complete_native_identity(bearing, elevation):
+    from rainpulse_algo.multiband.xqc_v2.fragmented_carriers import review
+
+    s, _ = fragmented(bearing, elevation)
+    corridor = (abs((s.azimuth[:, None] - bearing + 180) % 360 - 180) <= 6) & (
+        (s.ranges[None, :] >= 40000) & (s.ranges[None, :] <= 160000)
+    )
+    body = corridor & (((s.ranges[None, :] - 40000) % 17000) < 15000)
+    fields = {"DBZH": np.where(body, 20, 0).astype("float32"),
+              "SNR": np.where(corridor, 15, -2).astype("float32")}
+    s = replace(s, fields=fields)
+    before = s.digest
+    parent = detect(s, policy())
+    out = review(s, policy())
+    # Positive known-source fixture: 13 native rays, not a one-ray line.
+    assert body.sum() > 5000 and parent.counterexample_mask[body].sum() > 1000
+    assert out.candidate[body].sum() > 1000
+    assert not out.candidate[~body].any()
+    assert s.digest == before
