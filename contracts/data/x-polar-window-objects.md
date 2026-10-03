@@ -79,3 +79,7 @@ audit remains unchanged. It never enters the confirmed quarantine mask, asserts
 RF/weather truth, enables QPE or changes the raw/native coordinates. Native
 `XQC_POLAR_WINDOW_MASK`, cause bit 1048576 and a bounded module state/evidence
 record retain the distinction between candidate, abstention and confirmed cause.
+An unavailable incremental stage must not publish an overall `EVALUATED` result:
+it marks an otherwise completed parent as degraded, or retains the existing
+parent failure with a separate module cause. If the parent JSON allowance is
+already full, the pipeline derives that completion warning from native state.

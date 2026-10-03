@@ -53,6 +53,16 @@ def bounded(record, limit):
     raise ResourceLimit("combined polar-window evidence exceeds existing allowance")
 
 
+def attach(records, record):
+    records.setdefault("module_records", {})["polar_windows"] = record
+    if record["status"] != "EVALUATED":
+        if records.get("status") == "EVALUATED":
+            records["status"] = "DEGRADED_POLAR_WINDOW_" + record["status"]
+        degraded = records.setdefault("degraded_modules", [])
+        if "polar_windows" not in degraded:
+            degraded.append("polar_windows")
+
+
 def extend(cut, cfg, parent):
     if not cfg.polar_window_candidates_enabled:
         return parent
@@ -110,7 +120,7 @@ def extend(cut, cfg, parent):
             record = dict(status="RESOURCE_LIMIT_ABSTAINED", reason=str(exc), qualified_gates=0)
             status_code = 3
     record["candidate_gates"] = int(candidate.sum())
-    modules["polar_windows"] = record
+    attach(records, record)
     if candidate.any():
         records["candidate_gates"] = int(
             (mask(parent.arrays, "XQC_PROPOSED_MASK", shape) | candidate).sum()
@@ -121,8 +131,8 @@ def extend(cut, cfg, parent):
         candidate[:] = False
         status_code = 5
         records = expand(copy.deepcopy(parent.record))
-        records.setdefault("module_records", {})["polar_windows"] = dict(
-            status="EVIDENCE_BUDGET_ABSTAINED", qualified_gates=0, candidate_gates=0
+        attach(
+            records, dict(status="EVIDENCE_BUDGET_ABSTAINED", qualified_gates=0, candidate_gates=0)
         )
         try:
             records = bounded(records, cfg.maximum_evidence_bytes)

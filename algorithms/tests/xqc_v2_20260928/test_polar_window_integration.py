@@ -139,6 +139,8 @@ def test_resource_failure_has_no_partial_new_mask(monkeypatch):
     out = extend(cut, cfg, parent)
     assert_parent_unchanged(parent, out)
     assert out.record["module_records"]["polar_windows"]["status"] == "RESOURCE_LIMIT_ABSTAINED"
+    assert out.record["status"] == "DEGRADED_POLAR_WINDOW_RESOURCE_LIMIT_ABSTAINED"
+    assert "polar_windows" in out.record["degraded_modules"]
 
 
 def test_combined_evidence_overflow_preserves_parent(monkeypatch):
@@ -159,6 +161,7 @@ def test_combined_evidence_overflow_preserves_parent(monkeypatch):
     out = extend(cut, cfg, parent)
     assert_parent_unchanged(parent, out)
     assert out.record["module_records"]["polar_windows"]["status"] == "EVIDENCE_BUDGET_ABSTAINED"
+    assert out.record["status"] == "DEGRADED_POLAR_WINDOW_EVIDENCE_BUDGET_ABSTAINED"
 
 
 def test_failed_parent_does_not_claim_absence_of_counterexamples():
@@ -232,3 +235,26 @@ def test_disabled_normal_output_has_exact_prior_numerical_fields():
     ):
         np.testing.assert_array_equal(current.sweeps[0].fields[k], prior.sweeps[0].fields[k])
     assert not (selected & current.sweeps[0].fields["XQC_HARD_WEATHER_MASK"].astype(bool)).any()
+
+
+def test_normal_completion_exports_incremental_refusal_warning(monkeypatch):
+    from unittest.mock import patch
+
+    cut, _, cfg, parent = case(mode="quarantine")
+    volume, _ = fixture("empty")
+    volume = Volume(volume.metadata, [cut])
+
+    def failed(*args, **kwargs):
+        raise ResourceLimit("forced completion refusal")
+
+    monkeypatch.setattr("rainpulse_algo.multiband.xqc_v2.polar_window_integration.detect", failed)
+    with patch("rainpulse_algo.multiband.xqc_v2.pipeline.evaluate_cut", return_value=parent):
+        out = x_qc(volume, station(cfg), "b" * 64).sweeps[0]
+    assert out.xqc_diagnostics["status"].startswith("DEGRADED_POLAR_WINDOW_")
+    assert not out.fields["XQC_WITHHELD_MASK"].any()
+    np.testing.assert_array_equal(out.fields["QC_ACTION"], out.fields["XQC_BASELINE_ACTION"])
+    from rainpulse_algo.multiband.xqc_v2.export import export_sweep
+
+    objects = {}
+    exported = export_sweep(out, volume.metadata, objects)
+    assert exported["status"] == out.xqc_diagnostics["status"]

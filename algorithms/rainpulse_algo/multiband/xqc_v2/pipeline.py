@@ -215,6 +215,13 @@ def run(volume, station, release_sha256, *, baseline):
                 'native_alternative_source', {'status': 'UNAVAILABLE_AFTER_CUT_ABSTENTION'}
             )['withheld_candidate_gates'] = int(((candidate == 1) & withheld & ~rejected).sum())
         target.fields = f
+        if (cfg.polar_window_candidates_enabled
+                and ev.record.get('status') == 'EVALUATED'
+                and int(f['XQC_POLAR_WINDOW_STATE'][0, 0]) != 1):
+            # The bounded parent record may leave no room for an incremental
+            # refusal record. Preserve its science while surfacing completion
+            # honestly through the existing product/status and UI contract.
+            ev.record['status'] = 'DEGRADED_POLAR_WINDOW_UNAVAILABLE'
         # Per-cut records do not go into Volume.metadata: source-major fusion
         # demands exactly the same volume metadata for all cuts of a source.
         target.xqc_diagnostics = {**ev.record, "version": VERSION, "mode": cfg.mode,
