@@ -3297,6 +3297,21 @@
       "default": false,
       "title": "Polar Window Candidates Enabled",
       "type": "boolean"
+    },
+    "complete_source_families_enabled": {
+      "default": false,
+      "title": "Complete Source Families Enabled",
+      "type": "boolean"
+    },
+    "complete_source_family_reference_mode": {
+      "default": "absolute_noise",
+      "enum": [
+        "absolute_noise",
+        "relative_receiver",
+        "heldout_family"
+      ],
+      "title": "Complete Source Family Reference Mode",
+      "type": "string"
     }
   },
   "title": "XQCConfig",
@@ -3386,6 +3401,53 @@
             "required": [
               "compact_counterexamples_enabled"
             ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "complete_source_families_enabled": {
+            "const": true
+          }
+        },
+        "required": [
+          "complete_source_families_enabled"
+        ]
+      },
+      "then": {
+        "required": [
+          "radial_source_fan_model_enabled"
+        ],
+        "properties": {
+          "radial_source_fan_model_enabled": {
+            "const": true
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "complete_source_family_reference_mode": {
+            "enum": [
+              "relative_receiver",
+              "heldout_family"
+            ]
+          }
+        },
+        "required": [
+          "complete_source_family_reference_mode"
+        ]
+      },
+      "then": {
+        "required": [
+          "complete_source_families_enabled"
+        ],
+        "properties": {
+          "complete_source_families_enabled": {
+            "const": true
           }
         }
       }

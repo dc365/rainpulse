@@ -31,6 +31,11 @@ def detect(s, cfg, *, protected, details=None):
     if cfg.radial_source_block_model_enabled:
         from .fragment_source import detect as detect_fragments
         stages.append(("fragment", 8, detect_fragments))
+    if cfg.complete_source_families_enabled:
+        from .source_fans import detect_complete
+        # A separate atomic stage preserves completed legacy source proofs if
+        # the additional family search reaches an unchanged resource budget.
+        stages.append(("complete_fan", 4, detect_complete))
     status, failed_module, failure = "EVALUATED", None, None
     completed = []
     for name, bit, detector in stages:
@@ -62,6 +67,8 @@ def detect(s, cfg, *, protected, details=None):
                     "kind_bits_are_independent_votes": False,
                     "fan_model": records["fan"], "block_model": records["blocks"],
                     "fragment_model": records["fragment"],
+                    **({"complete_family_model": records.get("complete_fan", {})}
+                       if cfg.complete_source_families_enabled else {}),
                     "source_gates": int(result.sum()),
                     "models": records["continuous"].get("models", []),
                     "method": "bilateral-receiver-corridor-heldout-v1",

@@ -89,6 +89,12 @@ class XQCConfig(BaseModel):
     near_floor_source_candidates_enabled: StrictBool = False
     native_alternative_source_candidates_enabled: StrictBool = False
     polar_window_candidates_enabled: StrictBool = False
+    complete_source_families_enabled: StrictBool = False
+    complete_source_family_reference_mode: Literal[
+        "absolute_noise", "relative_receiver", "heldout_family"
+    ] = (
+        "absolute_noise"
+    )
     radial_source_maximum_width_deg: float = Field(default=3., gt=0., le=7.)
     radial_source_minimum_span_m: float = Field(default=20000., ge=10000., le=50000.)
     radial_source_minimum_fraction: float = Field(default=.7, ge=.7, le=1.)
@@ -131,6 +137,11 @@ class XQCConfig(BaseModel):
 
     @model_validator(mode="after")
     def contracts(self):
+        if self.complete_source_families_enabled and not self.radial_source_fan_model_enabled:
+            raise ValueError('complete source families require the held-out receiver-fan model')
+        if (self.complete_source_family_reference_mode != 'absolute_noise'
+                and not self.complete_source_families_enabled):
+            raise ValueError('relative receiver families require explicit candidate activation')
         if self.polar_window_candidates_enabled and (
             self.morphology is None or not self.morphology.compact_counterexamples_enabled
         ):
@@ -174,5 +185,8 @@ class XQCConfig(BaseModel):
         if not self.polar_window_candidates_enabled:
             # Default-off addition must not invalidate frozen legacy products.
             data.pop('polar_window_candidates_enabled')
+        if not self.complete_source_families_enabled:
+            data.pop('complete_source_families_enabled')
+            data.pop('complete_source_family_reference_mode')
         return hashlib.sha256(json.dumps(data, sort_keys=True,
             separators=(",", ":"), allow_nan=False).encode()).hexdigest()

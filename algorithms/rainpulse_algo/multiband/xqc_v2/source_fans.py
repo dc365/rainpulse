@@ -11,7 +11,8 @@ import numpy as np
 from .source_blocks import detect as detect_blocks
 
 
-def detect(s, cfg, *, protected, prepared=None, near_floor_references=False):
+def detect(s, cfg, *, protected, prepared=None, near_floor_references=False,
+           complete_families=False):
     from .source_summary import SourceStatistics
 
     stats = (prepared or SourceStatistics.build(s, cfg)).use(s, cfg)
@@ -19,6 +20,10 @@ def detect(s, cfg, *, protected, prepared=None, near_floor_references=False):
     def modes(width=None, proven=None):
         research = {'near_floor_references': True} if near_floor_references else {}
         remaining = {'target_exclusion': proven} if proven is not None else {}
+        complete = {
+            'complete_family': True,
+            'family_reference_mode': cfg.complete_source_family_reference_mode,
+        } if complete_families else {}
         # A single upper quantile switches processor modes when their mixture
         # crosses 10%. Fit primary and upper modes independently, each with the
         # same target/guard exclusion and physical response tests.
@@ -26,6 +31,7 @@ def detect(s, cfg, *, protected, prepared=None, near_floor_references=False):
             s, cfg, protected=protected, fan=True, family_width_deg=width, prepared=stats,
             **research,
             **remaining,
+            **complete,
         )
         primary_targets = {'target_exclusion': mask if proven is None else mask | proven}
         primary, primary_record = detect_blocks(
@@ -38,6 +44,7 @@ def detect(s, cfg, *, protected, prepared=None, near_floor_references=False):
             response_quantile=50,
             **research,
             **primary_targets,
+            **complete,
         )
         mask |= primary
         record["primary_mode"] = primary_record
@@ -101,8 +108,10 @@ def detect(s, cfg, *, protected, prepared=None, near_floor_references=False):
     # A single strong spoke still requires its own bilateral local shoulders
     # and held-out physical evidence. Only targets already proved by the full
     # family can skip this second action proof; all RAW references remain.
-    narrow, narrow_record = modes(cfg.radial_source_maximum_width_deg, proven=out)
-    out |= narrow
+    narrow_record = {"status": "NOT_APPLICABLE_COMPLETE_FAMILY"}
+    if not complete_families:
+        narrow, narrow_record = modes(cfg.radial_source_maximum_width_deg, proven=out)
+        out |= narrow
     # Associate only bounded interior gaps between two original source anchors.
     # Never iterate newly added gates: no unbounded propagation along a ray.
     z, _ = s.moment("DBZH")
@@ -135,8 +144,12 @@ def detect(s, cfg, *, protected, prepared=None, near_floor_references=False):
         proposed_gates=int(candidates.sum()),
         source_gates=int(out.sum()),
         narrow_model=narrow_record,
-        maximum_family_width_deg=45.0,
+        maximum_family_width_deg=None if complete_families else 45.0,
         minimum_neighbour_models=2,
         coherent_corridors=int(coherent.sum()),
         reflectivity_ceiling_used=False,
     )
+
+
+def detect_complete(s, cfg, *, protected, prepared=None):
+    return detect(s, cfg, protected=protected, prepared=prepared, complete_families=True)

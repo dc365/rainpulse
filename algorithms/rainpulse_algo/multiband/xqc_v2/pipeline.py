@@ -68,7 +68,8 @@ def run(volume, station, release_sha256, *, baseline):
         raise ValueError("X enhancement cannot run on an S observation")
     cfg = XQCConfig.model_validate(station.x_qc.enhancement)
     implementation_revision = (
-        "xqc-polar-window-integration-20261003-v2" if cfg.polar_window_candidates_enabled
+        "xqc-complete-receiver-families-20261003-v1" if cfg.complete_source_families_enabled
+        else "xqc-polar-window-integration-20261003-v2" if cfg.polar_window_candidates_enabled
         else "xqc-polar-morphology-20261001-v1" if cfg.morphology is not None
         else "xqc-mode-pair-20260930-r4"
     )
@@ -82,6 +83,10 @@ def run(volume, station, release_sha256, *, baseline):
         ev = evaluate_cut(cut, volume.metadata, cfg, context=context)
         if cfg.polar_window_candidates_enabled:
             from .polar_window_integration import extend
+
+            ev = extend(cut, cfg, ev)
+        if cfg.complete_source_families_enabled:
+            from .complete_family_integration import extend
 
             ev = extend(cut, cfg, ev)
         active = cfg.mode != "audit"
@@ -131,7 +136,8 @@ def run(volume, station, release_sha256, *, baseline):
         before_cr = np.asarray(f["REFLECTIVITY_ELIGIBLE_FOR_CR"]).copy()
         if active:
             obs = mask(f, "OBSERVED_MASK", f["DBZH"].shape)
-            rejected &= obs; withheld &= obs
+            rejected &= obs
+            withheld &= obs
             flags = np.array(f["MB_QC_FLAGS"], copy=True)
             flags[rejected] |= int(Flag.NONMET_CONFIRMED)
             flags[withheld & ~rejected] |= int(Flag.NONMET_CANDIDATE)
@@ -222,6 +228,10 @@ def run(volume, station, release_sha256, *, baseline):
             # refusal record. Preserve its science while surfacing completion
             # honestly through the existing product/status and UI contract.
             ev.record['status'] = 'DEGRADED_POLAR_WINDOW_UNAVAILABLE'
+        if (cfg.complete_source_families_enabled
+                and ev.record.get('status') == 'EVALUATED'
+                and int(f['XQC_COMPLETE_FAMILY_STATE'][0, 0]) != 1):
+            ev.record['status'] = 'DEGRADED_COMPLETE_FAMILY_UNAVAILABLE'
         # Per-cut records do not go into Volume.metadata: source-major fusion
         # demands exactly the same volume metadata for all cuts of a source.
         target.xqc_diagnostics = {**ev.record, "version": VERSION, "mode": cfg.mode,

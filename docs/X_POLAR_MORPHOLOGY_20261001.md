@@ -1169,3 +1169,129 @@ PNG 字节，最终再核查目录最新结果。异常会停止并保留全部�
 反例通过。修正期间只退出等待中的发布衔接程序，科学批次未中断；
 新程序使用重新冻结的脚本 SHA。上述测试验证验收器，不能代替
 真实正常发布结果或天气真值。
+
+## 2026-10-03 complete measured receiver-family candidate contract
+
+New normal ZF702 products failed visual acceptance in both 5.97 and 9.88 degree
+cuts. Array/PNG consistency is a mechanical gate; it does not establish radial
+cleanup. Prior batch submissions are held while completed receipts are retained.
+
+Three structural defects were reproduced:
+
+1. A fixed 45 degree search truncated the actual enclosing receiver family.
+2. The weather stencil's 80 dBZ ceiling excluded valid X measurements admitted
+   by the existing baseline [-50,100] dBZ domain from source review.
+3. Missing receiver telemetry on an independently measured family shoulder was
+   counted as failed range continuity. Some reference blocks were discarded even
+   though independent original blocks measured the same bilateral shoulders.
+
+The strict default-off `complete_source_families_enabled` child policy requires
+the existing held-out fan model. Its separate `absolute_noise`,
+`relative_receiver`, and `heldout_family` modes have distinct configuration identities. Disabled fields
+are omitted from the legacy configuration digest. Original RAW values, masks,
+ray order, timing and geometry remain unchanged. The shared weather stencil
+keeps its existing range; a separate source view uses baseline measurement support.
+
+Complete families use directed angular distances and distinct measured shoulders.
+There is no fan-width classifier. Native angular/time/elevation barriers, invalid
+receiver values, full circles and a single shared shoulder cannot create a family.
+The implemented relative mode also supports a target with one measured shoulder
+and one unknown shoulder, only when at least three target/guard-excluded original
+reference blocks measure exactly those shoulder coordinates. Missing receiver
+telemetry is not fabricated or treated as quiet. An earlier interior unknown,
+both target shoulders unknown, no independent boundary references, known opposing
+range blocks and stronger unexpected echo remain counterexamples.
+
+Each target still needs the existing stationary receiver, paired range-response
+prediction, 20 km reference span, 1.75 reference range ratio, separated references,
+coverage, trial/model/workspace budgets and hard/context weather protections.
+Local high-rho and compact-shape proxy conflicts are recorded. They are not
+independent rain labels. In source-joint mode, candidates can conflict with these
+proxies; they cannot override the hard or external context weather mask.
+
+This increment changes no completed parent confirmed-source or quarantine mask.
+The normal pipeline is the sole action writer: accepted additions are UNCERTAIN
+(action 3), NaN in QC views and ineligible for reflectivity composites. Audit mode
+changes no actions. The existing rejection cap is unchanged: if the complete
+proposal exceeds it, parent proposed/confirmed masks remain intact and the new
+review points carry explicit ACTION_BUDGET uncertainty withholding. This follows
+the existing core budget writer, and differs from the earlier polar-window pass
+which withdraws its entire increment on budget refusal. Neither disposition
+claims confirmed RF, verified precipitation, trusted fusion, QPE or forecasting.
+
+Native complete-family state distinguishes evaluated (1), unavailable protection
+(2), resource refusal (3), action-budget review (4), and evidence refusal (5).
+Resource/evidence refusal publishes no partial increment and retains the parent.
+A degraded status remains visible even when the bounded parent JSON leaves no
+space for an additional refusal record.
+
+Regression command:
+
+```sh
+PYTHONPATH=algorithms algorithms/.venv/bin/python -m pytest -o addopts='' -q algorithms/tests/xqc_v2_20260928
+```
+
+The wide-family and missing-boundary regression cases were run failing before
+repair and passing afterward. Bearings, elevations and native spacing vary;
+constant reflectivity weather, stronger cores, hard weather, unknown/interior
+boundaries, target/guard self-training, full-ring and resource/evidence failures
+are covered. The final expanded local suite passed 486 cases with seven existing runtime
+warnings. Frozen installed-runtime replay supplements this result before release.
+This shared-checkout result is supplemented by isolated frozen module replay
+against the installed 105 parent; it is not a clean whole-project CI verdict.
+
+A SHA-bound read-only full-pipeline replay of the two actual failing cuts matches
+all parent normal native arrays exactly, preserves RAW and parent dispositions,
+and verifies action 3 / NaN / composite exclusion. The earlier conservative relative-mode replay changed visible >=35 dBZ points
+beyond 10 km from 19348 to 17 and 7290 to 1398. Its obvious thin remnants failed
+visual acceptance. The final heldout-family replay supersedes that measurement
+as recorded below; the new policy has not been selected for normal publication.
+
+Shared range normalization alone did not improve the far residual and was not
+implemented. The remaining 1398 points are under separate raw boundary and
+held-out response investigation. More permissive original-family prediction and
+a competing physical-range response are read-only ablations, not production
+behavior. Cross-site/time/elevation replay, actual new normal maps and independent
+weather loss evidence remain required before declaring generalization complete.
+
+The additional explicit `heldout_family` mode treats the complete original
+receiver corridor as the candidate object. At least three independent original
+distance blocks must supply actual bilateral source geometry and held-out
+receiver/range-response references. A target/guard block cannot train its own
+source identity. Missing shoulder telemetry at the target may be predicted from
+that original family; it is never filled or relabelled as quiet. Known opposing
+boundaries, native geometry/time/elevation barriers and unexpected stronger echo
+remain counterevidence. Only candidate action 3 is allowed in normal output.
+The conservative `relative_receiver` mode retains its exact-shoulder rule.
+
+This addresses the distinction between missing object evidence and negative
+object evidence. It does not establish rainfall truth. Regressions specifically
+exercise both target shoulders missing and interior shoulder telemetry missing,
+with positive RAW source families, missing independent references, fully known
+opposing full circles, weather, target/guard self-training and the sole writer.
+The two target cases were reproduced at zero candidates before the complete
+object prediction, then passed after repair.
+
+A read-only factorial probe found that a physical-range affine response added
+only two strong residual points; it was not adopted. Expanding a rigid exact
+shoulder template alone added only 138. The final full-object held-out pipeline replay completed both cuts. Input,
+output, native mask and all seven injected module SHA identities were verified
+locally against the tested source. The installed parent arrays reproduced
+exactly. Cut 7 changed 19348 strong residual gates to 17, cut 8 changed 7290
+to 37; new candidate masks contain 50299 and 42472 gates respectively. Both
+retain action-budget review state 4, parent dispositions, RAW identity, action
+3 and composite exclusion. Paired native PPI plots were inspected: the wide
+strong fans disappear, but weak intermittent radial remnants are still visible.
+These are read-only results, not published maps or complete visual acceptance.
+Cross-site/time/elevation checks and remaining gate attribution are ongoing.
+
+
+A source-bound native moment probe checked the final residuals: 647 / 3688
+visible >=5 dBZ gates beyond 10 km, including 17 / 37 >=35 dBZ gates, remain
+in cuts 7 / 8. None is below the configured 3 dB receiver floor or above 80 dBZ.
+Therefore the sibling noise-censor 80 dBZ ceiling cannot explain these remnants
+and was left unchanged. Many weak remnants have measured SNR close to the floor;
+others have changing receiver power. Neither low SNR nor missing polarimetry is
+by itself a confirmed nonmeteorological cause. Further original-block model
+attribution is needed; no blanket removal, floor increase or range-response
+coefficient change has been applied.

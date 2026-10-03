@@ -50,6 +50,7 @@ class Reason(IntFlag):
     NEAR_FLOOR_SOURCE = 262144
     NATIVE_ALTERNATIVE_SOURCE = 524288
     POLAR_WINDOW = 1048576
+    COMPLETE_FAMILY = 2097152
 
 
 @dataclass(frozen=True)
@@ -392,7 +393,8 @@ def _evaluate(cut, metadata, cfg, *, context=None):
     try:
         radial_source, source_record = detect_radial_source(
             s,
-            cfg,
+            cfg.model_copy(update={"complete_source_families_enabled": False,
+                                   "complete_source_family_reference_mode": "absolute_noise"}),
             protected=hard | (local if cfg.radial_source_local_policy == "protect" else False),
             details=source_details,
         )

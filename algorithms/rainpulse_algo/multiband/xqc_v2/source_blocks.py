@@ -17,7 +17,8 @@ from .reference_fit import ReferenceFit, ReferenceFits
 
 def detect(
     s, cfg, *, protected, fan=False, family_width_deg=None, prepared=None, response_quantile=90,
-    domain=None, near_floor_references=False, target_exclusion=None,
+    domain=None, near_floor_references=False, target_exclusion=None, complete_family=False,
+    family_reference_mode="absolute_noise",
 ):
     out = np.zeros(s.shape, bool)
     z, za = s.moment("DBZH")
@@ -62,6 +63,20 @@ def detect(
     from .source_summary import SourceStatistics
 
     stats = (prepared or SourceStatistics.build(s, cfg)).use(s, cfg)
+    family_geometry, family_record = None, None
+    family_details = {}
+    if complete_family:
+        if not fan or near_floor_references or family_width_deg is not None:
+            raise ValueError("complete families require the ordinary full receiver-fan model")
+        from .source_family_geometry import complete_geometry
+        family_geometry, family_record = complete_geometry(
+            s, cfg, stats,
+            reference_mode=("relative_receiver" if family_reference_mode == "heldout_family"
+                            else family_reference_mode),
+            details=family_details if family_reference_mode != "absolute_noise" else None,
+        )
+    elif family_reference_mode != "absolute_noise":
+        raise ValueError("relative receiver references require complete measured families")
     ids, law = stats.ids, stats.law
     n = len(ids)
     receiver, center_range = stats.receiver, stats.center_range
@@ -97,42 +112,45 @@ def detect(
                 for g in gates
             ]
         )
-        # Source shoulders bound the whole angular lobe. A weaker edge ray
-        # must not demand the same absolute contrast as its measured peak.
-        peak = powers.copy()
-        for direction in (-1, 1):
-            current = row
-            for step in range(1, s.shape[0]):
-                stats.geometry()
-                other = (row + direction * step) % s.shape[0]
-                edge = current if direction == 1 else other
-                angle = abs(float((s.azimuth[other] - s.azimuth[row] + 180) % 360 - 180))
-                if s.gap_after[edge] or not s.good[other] or angle > maximum_width / 2:
-                    break
-                peak = np.fmax(peak, receiver[other])
-                current = other
-        distances = []
-        for direction in (-1, 1):
-            nearest = np.full(n, np.inf)
-            current = row
-            for step in range(1, s.shape[0]):
-                stats.geometry()
-                other = (row + direction * step) % s.shape[0]
-                edge = current if direction == 1 else other
-                angle = abs(float((s.azimuth[other] - s.azimuth[row] + 180) % 360 - 180))
-                if s.gap_after[edge] or not s.good[other] or angle > maximum_width:
-                    break
-                quiet = (receiver[other] < cfg.noise_censor_snr_db) & (
-                    peak - receiver[other] >= cfg.radial_flank_contrast_db
-                )
-                nearest = np.where(quiet & ~np.isfinite(nearest), angle, nearest)
-                current = other
-            distances.append(nearest)
-        geometry = distances[0] + distances[1] <= maximum_width
-        # Seed membership is a raw-ray statistic, independent of the held-out
-        # target. Compute it once; target/guard blocks are still removed below.
-        # Previously every duplicate seed consumed a model trial before dedup,
-        # exhausting low-elevation, long-range cuts without fitting a model.
+        if family_geometry is not None:
+            geometry = family_geometry[row]
+        else:
+            # Source shoulders bound the whole angular lobe. A weaker edge ray
+            # must not demand the same absolute contrast as its measured peak.
+            peak = powers.copy()
+            for direction in (-1, 1):
+                current = row
+                for step in range(1, s.shape[0]):
+                    stats.geometry()
+                    other = (row + direction * step) % s.shape[0]
+                    edge = current if direction == 1 else other
+                    angle = abs(float((s.azimuth[other] - s.azimuth[row] + 180) % 360 - 180))
+                    if s.gap_after[edge] or not s.good[other] or angle > maximum_width / 2:
+                        break
+                    peak = np.fmax(peak, receiver[other])
+                    current = other
+            distances = []
+            for direction in (-1, 1):
+                nearest = np.full(n, np.inf)
+                current = row
+                for step in range(1, s.shape[0]):
+                    stats.geometry()
+                    other = (row + direction * step) % s.shape[0]
+                    edge = current if direction == 1 else other
+                    angle = abs(float((s.azimuth[other] - s.azimuth[row] + 180) % 360 - 180))
+                    if s.gap_after[edge] or not s.good[other] or angle > maximum_width:
+                        break
+                    quiet = (receiver[other] < cfg.noise_censor_snr_db) & (
+                        peak - receiver[other] >= cfg.radial_flank_contrast_db
+                    )
+                    nearest = np.where(quiet & ~np.isfinite(nearest), angle, nearest)
+                    current = other
+                distances.append(nearest)
+            geometry = distances[0] + distances[1] <= maximum_width
+            # Seed membership is a raw-ray statistic, independent of the held-out
+            # target. Compute it once; target/guard blocks are still removed below.
+            # Previously every duplicate seed consumed a model trial before dedup,
+            # exhausting low-elevation, long-range cuts without fitting a model.
         spread = cfg.radial_source_maximum_spread_db
         reference = (count >= minimum) & geometry
         membership = (
@@ -140,19 +158,49 @@ def detect(
             & (abs(powers[:, None] - powers[None, :]) <= (1.0 if fan else spread))
             & (abs(responses[:, None] - responses[None, :]) <= spread)
         )
-        fits = ReferenceFits(stats, cfg.source_maximum_summary_bytes - stats.workspace_bytes)
+        fits = ReferenceFits(
+            stats, cfg.source_maximum_summary_bytes - stats.workspace_bytes
+            - family_details.get("workspace_bytes", 0),
+        )
         target_blocks = count > 0
         if near_floor_references or target_exclusion is not None:
             # Below-floor blocks remain measured training references. A block
             # with no eligible target cannot produce an action or a model
             # record, so do not spend held-out fitting budget on it.
             target_blocks = np.array([targets[row, g].any() for g in stats.indices])
-        for target in np.flatnonzero(target_blocks & geometry):
+        unknown_target = np.zeros(n, bool)
+        if family_details:
+            states = family_details['states'][row]
+            endpoints = family_details['endpoints'][row]
+            # A target with one measured side may be predicted only if the
+            # exact first unknown receiver is a measured shoulder in held-out
+            # original blocks. Neither an interior hole nor two unknown sides
+            # supplies a family. This remains candidate evidence downstream.
+            unknown_target = (states == 1).sum(axis=1) == 1
+            unknown_target &= (states == 2).sum(axis=1) == 1
+            if family_reference_mode == "heldout_family":
+                # The whole RAW corridor supplies its identity in independent
+                # original distance blocks. Predict only unknown telemetry;
+                # known opposing boundaries and native barriers still refuse.
+                unknown_target = (states == 2).any(axis=1)
+                unknown_target &= np.all(np.isin(states, (1, 2)), axis=1)
+        for target in np.flatnonzero(target_blocks & (geometry | unknown_target)):
             target_gates = gates[target]
             if near_floor_references or target_exclusion is not None:
                 target_gates = target_gates[targets[row, target_gates]]
             outside = abs(ids - ids[target]) > cfg.receiver.guard_blocks
             eligible = (count >= minimum) & geometry & outside
+            same_boundary = np.ones(n, bool)
+            unknown_reference = np.zeros(n, bool)
+            if family_details:
+                same_boundary = np.all(endpoints == endpoints[target], axis=1)
+                unknown_reference = same_boundary & ((states == 2).sum(axis=1) == 1)
+                unknown_reference &= (states == 1).sum(axis=1) == 1
+                if family_reference_mode == "heldout_family":
+                    unknown_reference = (states == 2).any(axis=1)
+                    unknown_reference &= np.all(np.isin(states, (1, 2)), axis=1)
+                elif unknown_target[target]:
+                    eligible &= same_boundary
             seen = set()
             for seed in np.flatnonzero(eligible):
                 # Accepted gates already carry their first complete proof.
@@ -162,6 +210,8 @@ def detect(
                     break
                 stats.seed_comparisons += 1
                 members = np.flatnonzero(membership[seed] & outside)
+                if unknown_target[target] and family_reference_mode != "heldout_family":
+                    members = members[same_boundary[members]]
                 identity = tuple(members)
                 if identity in seen or len(members) < 3:
                     continue
@@ -169,6 +219,10 @@ def detect(
                 # Coverage is determined by RAW membership, independent of
                 # the fitted coefficients. Reject it before spending a fit.
                 between = outside & (ids >= ids[members[0]]) & (ids <= ids[members[-1]])
+                # Missing telemetry on an independently measured same-family
+                # shoulder is unknown, not a failed source continuity sample.
+                # Known competing boundaries and native gaps still count.
+                between &= ~unknown_reference
                 if len(members) / max(int(between.sum()), 1) < cfg.radial_source_minimum_fraction:
                     continue
                 # Keys describe the actual post-target/guard reference blocks.
@@ -231,6 +285,20 @@ def detect(
                         snr_center_db=power,
                         snr_bounds_db=[float(power_low), float(power_high)],
                         response_bounds_db=[float(low), float(high)],
+                        **({'target_boundary_unknown': bool(unknown_target[target]),
+                            'target_measured_or_predicted_shoulders': endpoints[target].tolist(),
+                            'heldout_boundary_match_required': (
+                                bool(unknown_target[target])
+                                and family_reference_mode != "heldout_family"
+                            ),
+                            'boundary_nomination_mode': family_reference_mode,
+                            'unknown_reference_blocks': ids[
+                                unknown_reference & outside
+                                & (ids >= ids[members[0]]) & (ids <= ids[members[-1]])
+                            ].tolist(),
+                            'missing_receiver_filled': False,
+                            'boundary_prediction_is_confirmed': False}
+                           if family_details else {}),
                     )
                 )
     return out, dict(
@@ -241,6 +309,7 @@ def detect(
         missing_ref_is_continuity_failure=False,
         minimum_reference_range_ratio=1.75,
         maximum_response_slope_db_per_decade=8.0,
+        **({'complete_family_geometry': family_record} if complete_family else {}),
         **({'diagnostic_only': True, 'near_floor_references': True,
             'below_floor_targets': False} if near_floor_references else {}),
         **({'prior_proven_target_exclusion_gates': int(target_exclusion.sum())}
