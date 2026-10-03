@@ -1343,3 +1343,62 @@ proposals and old review reasons without promoting the review-only gates.
 The failed product and audit remain immutable evidence. Normal publication
 must pass the original proposal assertion, native-array and PNG checks before
 the batch proceeds; a successful task alone does not pass acceptance.
+
+### Fragmented complete-carrier review (default-off prototype)
+
+Thresholded contours can break a long original radial carrier into short
+components. Their Cartesian footprint can appear compact, especially when a
+native beam is wide at long range. A compact contour is therefore a geometry
+counterexample proxy, not independent rainfall evidence for every member.
+The synthetic regression retains a 120 km carrier with quiet interruptions:
+the established detector nominates 1,272 of 1,275 observed members without the
+compact proxy, but only 12 with that proxy. Rotation and elevation do not
+resolve this structural loss.
+
+An optional `collect_carriers` export now retains exact RAW members of every
+qualified original track before compact disposition. Default calls retain the
+previous masks, IDs and compact diagnostics. Exported histories are not rebuilt
+from rectangles or restarted on shorter tails. Membership work is charged to
+the existing cap.
+
+`fragmented_carriers.review` is an offline increment using those original
+members. It checks held-out SNR on each native ray, excluding a target range
+block and its neighbours. A local power excess, inadequate references,
+unavailable SNR, geometry barrier or weather protection retains uncertainty.
+The original compact diagnostic remains intact. See
+`contracts/data/xqc-fragmented-carrier-review.md` for the frozen admission
+semantics. This code is not called by the production pipeline and does not
+change completed normal products.
+
+Twelve regression controls cover fragmented carriers, local excess, missing
+fields, explicit weather, compact weather, narrowing/curved history, angular
+barriers and shared resource exhaustion. The first six cases were run and
+failed before the export/review implementation. The final scoped morphology
+run passed 128 tests; the final wider X directory passed 505 in the shared working
+checkout. These tests do not replace installed-runtime, publication or
+independent weather-loss acceptance. The prototype must retain the difference
+between the original morphology protection and later context protection when
+compared with normal products.
+
+The first prototype mixed target SNR upper quantiles with reference medians,
+misclassifying ordinary stationary variability as local excess. A deterministic
+variability regression failed before matched 90th-percentile references were
+implemented. A separate smooth-drift regression failed in three rotations;
+nearest held-out support now passes all three. Sorting and native membership
+partitioning share the existing resource ledger; a long valid native carrier
+that would exceed the ledger abstains without a partial increment.
+
+These repairs are part of the default-off review prototype. Source-native
+morphology uses the established weather-stencil validity domain; the receiver
+source view has a different reflectivity validity domain and must not be used
+to assert exact reproduction of the original morphology diagnostics.
+
+Six frozen real native cuts were compared with the unchanged normal parent.
+The fragmented-carrier increment nominates 1,053 additional visible weak gates
+and no additional gates at or above 35 dBZ. In the primary long-carrier case,
+all 809 remaining observed members were nominated; four control cuts had no
+increment. An independent native membership and held-out reference verifier
+reproduced the masks. RAW, original compact diagnostics and completed parent
+dispositions are unchanged. Native paired figures were inspected. These are
+offline candidate measurements, not confirmed contamination, weather-loss
+acceptance or deployed normal maps. Other strong localized remnants remain.

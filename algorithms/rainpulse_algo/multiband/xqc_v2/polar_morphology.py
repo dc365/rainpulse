@@ -170,6 +170,9 @@ class MorphologyEvidence:
     objects: list[dict]
     record: dict
     counterexample_mask: np.ndarray | None = None
+    # Optional diagnostic export: exact RAW members of each qualified original
+    # history, before compact-proxy disposition. Never used by the old writer.
+    carriers: tuple[np.ndarray, ...] = ()
 
 
 def _angular_runs(occupied, sweep):
@@ -195,7 +198,7 @@ def _angular_runs(occupied, sweep):
     return result
 
 
-def detect(sweep, policy, *, protected=None):
+def detect(sweep, policy, *, protected=None, collect_carriers=False):
     p = MorphologyPolicy.model_validate(policy)
     shape = sweep.shape
     if shape[0] * shape[1] > p.maximum_sweep_gates:
@@ -221,6 +224,7 @@ def detect(sweep, policy, *, protected=None):
         )
     spacing = float(np.median(da[valid_edges]))
     records = []
+    carriers = []
     reviews = []
     mask = np.zeros(shape, bool)
     ids = np.zeros(shape, "uint32")
@@ -577,16 +581,28 @@ def detect(sweep, policy, *, protected=None):
             raise ResourceLimit("morphology object budget exceeded")
         oid = len(records) + 1
         members = 0
+        original_parts = []
         for entry in entries:
             rows = entry["rows"]
             cols = entry["window_cols"]
-            block = raw[np.ix_(rows, cols)] & ~counterexamples[np.ix_(rows, cols)]
+            original = raw[np.ix_(rows, cols)]
+            if collect_carriers:
+                charge(len(rows) * len(cols))
+                rr, cc = np.nonzero(original)
+                original_parts.append((rows[rr] * shape[1] + cols[cc]).astype("uint32"))
+            block = original & ~counterexamples[np.ix_(rows, cols)]
             old = mask[np.ix_(rows, cols)]
             mask[np.ix_(rows, cols)] = old | block
             ii = ids[np.ix_(rows, cols)]
             ii[(ii == 0) & block] = oid
             ids[np.ix_(rows, cols)] = ii
             members += int(block.sum())
+        if collect_carriers:
+            original_indices = np.concatenate(original_parts)
+            # Entries have disjoint range windows; the observed native members
+            # need no dilation, rectangular approximation or deduplication.
+            original_indices.setflags(write=False)
+            carriers.append(original_indices)
         kind = (
             ("anchored_pulsing_fan" if anchored else "centered_pulsing_fan")
             if pulsing
@@ -842,4 +858,5 @@ def detect(sweep, policy, *, protected=None):
             review_objects=reviews,
         ),
         counterexample_mask=counterexamples,
+        carriers=tuple(carriers),
     )
