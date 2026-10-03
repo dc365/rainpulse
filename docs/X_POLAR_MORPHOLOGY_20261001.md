@@ -1295,3 +1295,33 @@ others have changing receiver power. Neither low SNR nor missing polarimetry is
 by itself a confirmed nonmeteorological cause. Further original-block model
 attribution is needed; no blanket removal, floor increase or range-response
 coefficient change has been applied.
+
+
+### Sparse target population, complete-family revision v2
+
+An independently distance-held-out source candidate must not lose its source
+proof because unrelated stronger returns occupy the same original ray. The
+legacy ray-population/neighbour support gate caused this additional veto. Only
+the explicit complete-family heldout mode now retains gates already qualified
+by actual bilateral reference blocks, target/guard exclusion, source continuity
+and the unchanged response bounds. The confirmed-source path is unchanged.
+Hard/context weather, action/resource/evidence caps and bounded interior
+association remain in force; unknown or unreferenced gates cannot inherit an
+entire bearing. The record identifies the independent support rule.
+
+Three positive regressions at different bearings/elevations failed before this
+repair and passed after it; three missing-reference/weather/hard-weather
+controls also pass. The expanded working-checkout suite passed 492 cases with
+seven existing warnings. Its result is supplemented by SHA-bound installed
+runtime replay, rather than presented as whole-project CI readiness.
+
+Final two-cut replay reproduces the installed normal parent arrays exactly and
+keeps RAW, parent dispositions, action 3 and composite exclusion. Candidate
+counts are 50394 / 42886; strong residuals remain 17 / 37. Compared with revision
+v1, weak visible residuals beyond 10 km decrease from 647 / 3688 to 611 / 3330,
+without withdrawing any previous candidate. Both retain budget-review state 4.
+Native paired plots were inspected: weak radial remnants persist. These are
+read-only measurements, not published maps or rainfall truth. Lower response
+quantiles were separately tried and not adopted: they provide limited gain and
+do not solve the remaining family-membership/continuity/fit failures. Cross-site
+normal publication and independent weather-loss acceptance remain outstanding.

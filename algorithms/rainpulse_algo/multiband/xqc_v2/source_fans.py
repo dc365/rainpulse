@@ -104,7 +104,19 @@ def detect(s, cfg, *, protected, prepared=None, near_floor_references=False,
             and np.ptp(s.ranges[gates]) >= cfg.radial_source_minimum_span_m
             and np.unique(stats.block_index[gates]).size >= cfg.receiver.minimum_reference_blocks
         )
-    out = candidates & ((support[:, stats.block_index] >= 2) | coherent[:, None])
+    independent_family = (
+        complete_families and cfg.complete_source_family_reference_mode == "heldout_family"
+    )
+    # These candidates already passed measured bilateral family references,
+    # target/guard exclusion and the independent distance-response model.
+    # Unrelated stronger returns on the same RAW ray must not invalidate that
+    # proof by reducing the *target* ray's fitted-gate population fraction.
+    # This rule belongs only to the additional candidate review path. The
+    # legacy confirmed-source detector keeps its existing support conditions.
+    out = (
+        candidates.copy() if independent_family
+        else candidates & ((support[:, stats.block_index] >= 2) | coherent[:, None])
+    )
     # A single strong spoke still requires its own bilateral local shoulders
     # and held-out physical evidence. Only targets already proved by the full
     # family can skip this second action proof; all RAW references remain.
@@ -145,7 +157,11 @@ def detect(s, cfg, *, protected, prepared=None, near_floor_references=False,
         source_gates=int(out.sum()),
         narrow_model=narrow_record,
         maximum_family_width_deg=None if complete_families else 45.0,
-        minimum_neighbour_models=2,
+        minimum_neighbour_models=None if independent_family else 2,
+        **({"source_support_rule": "independent_distance_heldout_measured_family",
+            "target_ray_population_is_source_evidence": False,
+            "confirmed_source_support_changed": False}
+           if independent_family else {}),
         coherent_corridors=int(coherent.sum()),
         reflectivity_ceiling_used=False,
     )
