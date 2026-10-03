@@ -84,6 +84,29 @@ def test_budget_review_keeps_completed_parent_actions():
     )
 
 
+def test_accepted_increment_does_not_promote_parent_budget_review():
+    cut = wide()
+    parent = empty(cut, "EVALUATED")
+    p = parent.arrays
+    p["XQC_REASON"][0, 100:107] = int(Reason.ACTION_BUDGET)
+    p["XQC_PROPOSED_MASK"][1, 100:105] = 1
+    p["XQC_REASON"][1, 100:105] = int(Reason.RADIAL_SOURCE)
+    before = {k: v.copy() for k, v in p.items()}
+    out = extend(cut, policy(maximum_new_exclusion_fraction=1.0), parent)
+    selected = out.arrays["XQC_COMPLETE_FAMILY_MASK"].astype(bool)
+    assert selected.any() and (out.arrays["XQC_COMPLETE_FAMILY_STATE"] == 1).all()
+    assert out.arrays["XQC_PROPOSED_MASK"][selected].all()
+    np.testing.assert_array_equal(
+        out.arrays["XQC_PROPOSED_MASK"].astype(bool),
+        before["XQC_PROPOSED_MASK"].astype(bool) | selected,
+    )
+    np.testing.assert_array_equal(
+        out.arrays["XQC_REASON"][~selected], before["XQC_REASON"][~selected]
+    )
+    for name, value in before.items():
+        np.testing.assert_array_equal(parent.arrays[name], value)
+
+
 @pytest.mark.parametrize("failure", ["resource", "evidence"])
 def test_failed_increment_never_changes_parent_masks(monkeypatch, failure):
     cut = wide()

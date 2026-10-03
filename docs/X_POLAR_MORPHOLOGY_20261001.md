@@ -1325,3 +1325,21 @@ read-only measurements, not published maps or rainfall truth. Lower response
 quantiles were separately tried and not adopted: they provide limited gain and
 do not solve the remaining family-membership/continuity/fit failures. Cross-site
 normal publication and independent weather-loss acceptance remain outstanding.
+
+### Normal-product provenance repair (2026-10-03, revision v3)
+
+The sparse-support replay completed 18 volumes and 162 cuts. Its candidate
+mask proof did not inspect every published proposal disposition. The first
+normal product audit caught a writer defect: an accepted complete-family
+increment also promoted the completed parent's budget-review gates into
+`XQC_PROPOSED_MASK`. Those gates count toward admission but remain review-only.
+The repair separates admission accounting from the accepted parent proposals.
+It leaves candidate detection, budget limits and all previous review reasons
+unchanged. The sibling polar-window writer already preserves this distinction.
+
+A regression with both a nonempty accepted increment and previous budget-review
+gates failed on the original code. The new revision preserves old accepted
+proposals and old review reasons without promoting the review-only gates.
+The failed product and audit remain immutable evidence. Normal publication
+must pass the original proposal assertion, native-array and PNG checks before
+the batch proceeds; a successful task alone does not pass acceptance.

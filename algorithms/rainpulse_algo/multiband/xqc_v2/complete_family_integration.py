@@ -36,7 +36,8 @@ def extend(cut, cfg, parent):
         proposed, proof = detect_complete(view.sweep, cfg, protected=protected[view.order])
         candidate = view.restore(proposed) & ~protected
         candidate &= mask(cut.fields, "OBSERVED_MASK", shape)
-        existing = mask(parent.arrays, "XQC_PROPOSED_MASK", shape)
+        parent_proposed = mask(parent.arrays, "XQC_PROPOSED_MASK", shape)
+        existing = parent_proposed.copy()
         existing |= (parent.arrays["XQC_REASON"] & int(Reason.ACTION_BUDGET)) != 0
         candidate &= ~existing
         censor = mask(parent.arrays, "XQC_NOISE_FLOOR_MASK", shape)
@@ -91,7 +92,9 @@ def extend(cut, cfg, parent):
             # remain uncertain and excluded from display/CR, never rejected.
             arrays["XQC_REASON"][candidate] |= int(Reason.ACTION_BUDGET)
         else:
-            arrays["XQC_PROPOSED_MASK"] = (existing | candidate).astype("uint8")
+            # Budget-review gates count toward admission, but are not accepted
+            # proposals. Preserve that distinction when accepting the increment.
+            arrays["XQC_PROPOSED_MASK"] = (parent_proposed | candidate).astype("uint8")
     # Source-kind, confirmed/source/quarantine masks remain the completed
     # parent's arrays; the sole normal writer applies action=3 to additions.
     return Evidence(arrays, records)
