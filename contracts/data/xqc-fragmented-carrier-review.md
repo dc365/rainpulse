@@ -33,5 +33,35 @@ completed parent action; integration through the sole writer is a separate gate.
 The original morphology work plus exact membership and held-out work share the
 unchanged 50 million work cap and two million gate cap. Exhaustion returns no
 partial increment. Exported memberships are immutable and charged to that cap.
-The detector is not called by the production pipeline until a versioned policy,
-native product proof and representative weather controls are accepted.
+The normal pipeline may prepare this increment behind the strict, default-off
+`fragmented_carrier_candidates_enabled` flag. Activation is a separate release
+gate: complete source-bound replay, native product proof and representative
+weather controls must be reviewed before selecting an enabled release.
+
+## Prepared sole-writer integration
+
+The flag requires an explicit morphology policy with complete compact
+counterexamples. Its disabled value does not change legacy parameter digests,
+native fields or implementation identity. Enabled evaluation follows completed
+parent modules and does not withdraw or reclassify any parent proposal, budget
+review, quarantine, source-kind, compact diagnostic or weather protection.
+
+Either parent's local protection policy declaring `protect` bars local weather:
+the radial-source policy cannot silently relax the morphology policy, or vice
+versa. Joint proxy review requires both explicit policies to allow review;
+hard and external weather always remain barriers.
+
+New exact members are candidates only. The sole X writer applies action 3,
+excludes them from CR, and aligns numerical and display QC; RAW remains intact.
+Audit mode adds diagnostics with no action. No mode enables QPE or confirms RF.
+The new reason is bit 4194304, `FRAGMENTED_CARRIER`; native arrays are
+`XQC_FRAGMENTED_CARRIER_MASK`, `XQC_FRAGMENTED_CARRIER_EXCESS_MASK`,
+`XQC_FRAGMENTED_CARRIER_UNKNOWN_MASK` and `XQC_FRAGMENTED_CARRIER_STATE`.
+
+State 1 means evaluated, 2 missing completed protection, 3 work exhaustion,
+4 action allowance exceeded, 5 evidence allowance exceeded. States 2–5 admit
+no new proposal or action. Existing proposals and ACTION_BUDGET members both
+count toward the unchanged exclusion allowance; review members never become
+accepted parent proposals. Lossless evidence packing is attempted within the
+existing byte cap. If even a warning does not fit, the completed parent record
+is preserved and the native state still surfaces a degraded pipeline status.

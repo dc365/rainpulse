@@ -3312,6 +3312,11 @@
       ],
       "title": "Complete Source Family Reference Mode",
       "type": "string"
+    },
+    "fragmented_carrier_candidates_enabled": {
+      "default": false,
+      "title": "Fragmented Carrier Candidates Enabled",
+      "type": "boolean"
     }
   },
   "title": "XQCConfig",
@@ -3448,6 +3453,36 @@
         "properties": {
           "complete_source_families_enabled": {
             "const": true
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "fragmented_carrier_candidates_enabled": {
+            "const": true
+          }
+        },
+        "required": [
+          "fragmented_carrier_candidates_enabled"
+        ]
+      },
+      "then": {
+        "required": [
+          "morphology"
+        ],
+        "properties": {
+          "morphology": {
+            "type": "object",
+            "properties": {
+              "compact_counterexamples_enabled": {
+                "const": true
+              }
+            },
+            "required": [
+              "compact_counterexamples_enabled"
+            ]
           }
         }
       }

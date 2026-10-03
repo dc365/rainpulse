@@ -51,6 +51,7 @@ def test_disabled_is_exact_parent_and_legacy_parameter_digest():
     cfg = config()
     old = cfg.model_dump(mode="json")
     old.pop("polar_window_candidates_enabled")
+    old.pop("fragmented_carrier_candidates_enabled")
     old.pop("complete_source_families_enabled")
     old.pop("complete_source_family_reference_mode")
     digest = hashlib.sha256(

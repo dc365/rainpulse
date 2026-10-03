@@ -1367,8 +1367,9 @@ block and its neighbours. A local power excess, inadequate references,
 unavailable SNR, geometry barrier or weather protection retains uncertainty.
 The original compact diagnostic remains intact. See
 `contracts/data/xqc-fragmented-carrier-review.md` for the frozen admission
-semantics. This code is not called by the production pipeline and does not
-change completed normal products.
+semantics. The sole-writer integration is prepared behind a strict, default-off
+flag. The enabled release has not been selected; completed normal products
+have not changed through this increment.
 
 Twelve regression controls cover fragmented carriers, local excess, missing
 fields, explicit weather, compact weather, narrowing/curved history, angular
@@ -1416,3 +1417,29 @@ module in memory and keeps the candidate on main's complete-history geometry.
 It reproduces the frozen normal arrays and all three independent offline
 candidate/excess/unknown masks. The original failed evidence is retained; a
 normal release still requires full native and weather acceptance.
+
+## Prepared fragmented-carrier writer integration (2026-10-04)
+
+`fragmented_carrier_candidates_enabled` is a strict boolean, default false.
+Disabled calls preserve legacy parameter digests, native arrays and implementation
+identity. Enabled calls add exact candidates after completed parent evidence,
+while the existing X writer controls audit, CR exclusion and numerical/display
+QC. Added members remain action 3, with no confirmed RF, quarantine or QPE
+promotion. Original compact diagnostics remain available.
+
+One parent protection policy cannot relax another: local proxy review requires
+both the radial-source and morphology policies to explicitly allow joint review.
+A regression reproduced the conflicting-policy override before correction.
+Hard and external weather protections remain unconditional. Existing accepted
+proposals and budget-held reviews both count toward allowance; accepted
+increments never promote old reviews into proposals. Resource, action and
+evidence refusal admit no new action and retain native degraded status.
+
+The installed offline replay now has source-bound independent held-out admission
+checks for 120 added strong gates across 20 native cuts and nine input volumes.
+The exact original geometry detector is shared with the producer; this verifies
+membership, availability, reference calculations and declared protection, not
+independent rainfall truth. The complete 204-volume replay is still running.
+Residual merged-carrier/fan failures, weather loss, independent sites/dates and
+new normal map acceptance remain open. Preparing the writer does not complete
+those gates or enable a release automatically.

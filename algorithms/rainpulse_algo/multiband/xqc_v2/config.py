@@ -89,6 +89,7 @@ class XQCConfig(BaseModel):
     near_floor_source_candidates_enabled: StrictBool = False
     native_alternative_source_candidates_enabled: StrictBool = False
     polar_window_candidates_enabled: StrictBool = False
+    fragmented_carrier_candidates_enabled: StrictBool = False
     complete_source_families_enabled: StrictBool = False
     complete_source_family_reference_mode: Literal[
         "absolute_noise", "relative_receiver", "heldout_family"
@@ -137,6 +138,10 @@ class XQCConfig(BaseModel):
 
     @model_validator(mode="after")
     def contracts(self):
+        if self.fragmented_carrier_candidates_enabled and (
+            self.morphology is None or not self.morphology.compact_counterexamples_enabled
+        ):
+            raise ValueError('fragmented carrier candidates require complete compact protection')
         if self.complete_source_families_enabled and not self.radial_source_fan_model_enabled:
             raise ValueError('complete source families require the held-out receiver-fan model')
         if (self.complete_source_family_reference_mode != 'absolute_noise'
@@ -182,6 +187,8 @@ class XQCConfig(BaseModel):
     @property
     def digest(self):
         data = self.model_dump(mode="json")
+        if not self.fragmented_carrier_candidates_enabled:
+            data.pop('fragmented_carrier_candidates_enabled')
         if not self.polar_window_candidates_enabled:
             # Default-off addition must not invalidate frozen legacy products.
             data.pop('polar_window_candidates_enabled')
