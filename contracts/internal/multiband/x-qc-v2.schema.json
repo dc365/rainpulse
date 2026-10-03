@@ -3292,6 +3292,11 @@
       "type": "boolean",
       "default": false,
       "title": "Native Alternative Source Candidates Enabled"
+    },
+    "polar_window_candidates_enabled": {
+      "default": false,
+      "title": "Polar Window Candidates Enabled",
+      "type": "boolean"
     }
   },
   "title": "XQCConfig",
@@ -3351,6 +3356,36 @@
         "properties": {
           "near_floor_source_candidates_enabled": {
             "const": true
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "polar_window_candidates_enabled": {
+            "const": true
+          }
+        },
+        "required": [
+          "polar_window_candidates_enabled"
+        ]
+      },
+      "then": {
+        "required": [
+          "morphology"
+        ],
+        "properties": {
+          "morphology": {
+            "type": "object",
+            "properties": {
+              "compact_counterexamples_enabled": {
+                "const": true
+              }
+            },
+            "required": [
+              "compact_counterexamples_enabled"
+            ]
           }
         }
       }

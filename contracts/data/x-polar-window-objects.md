@@ -55,3 +55,27 @@ the original joint signature, original geometry/history and protection checks.
 Reference source opposition is not a quiet-background or weather classification.
 This mode remains a read-only candidate until its independent counterexamples
 and normal publication/map checks pass; it does not change a live profile.
+
+## Normal candidate integration
+
+`polar_window_candidates_enabled` is an explicit strict boolean, default false.
+It requires complete compact morphology counterexample protection. Enabled
+policies derive their V2 window thresholds from the existing frozen X policy;
+window minimums and resource ceilings may only tighten those values. No separate
+station, bearing, time or elevation override exists. Disabled configurations
+retain the existing parameter digest and all prior numerical fields.
+
+The additional stage uses immutable RAW and the completed parent evidence. It
+protects hard/local weather, complete compact counterexamples and supplied
+cross-cut weather. Failed parent protection or geometry, resource exhaustion,
+combined evidence overflow or combined heuristic action overflow withdraw the
+whole new stage while preserving all previously completed parent dispositions.
+No partial candidate selection fills the remaining action budget. The independent
+receiver censor remains outside the heuristic budget, as before.
+
+Accepted membership enters the existing sole pipeline writer as proposal only:
+action 3 in active modes, no CR admission, both QC reflectivity views missing;
+audit remains unchanged. It never enters the confirmed quarantine mask, asserts
+RF/weather truth, enables QPE or changes the raw/native coordinates. Native
+`XQC_POLAR_WINDOW_MASK`, cause bit 1048576 and a bounded module state/evidence
+record retain the distinction between candidate, abstention and confirmed cause.

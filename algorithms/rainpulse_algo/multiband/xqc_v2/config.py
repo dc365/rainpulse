@@ -88,6 +88,7 @@ class XQCConfig(BaseModel):
     radial_source_fan_model_enabled: StrictBool = False
     near_floor_source_candidates_enabled: StrictBool = False
     native_alternative_source_candidates_enabled: StrictBool = False
+    polar_window_candidates_enabled: StrictBool = False
     radial_source_maximum_width_deg: float = Field(default=3., gt=0., le=7.)
     radial_source_minimum_span_m: float = Field(default=20000., ge=10000., le=50000.)
     radial_source_minimum_fraction: float = Field(default=.7, ge=.7, le=1.)
@@ -130,6 +131,10 @@ class XQCConfig(BaseModel):
 
     @model_validator(mode="after")
     def contracts(self):
+        if self.polar_window_candidates_enabled and (
+            self.morphology is None or not self.morphology.compact_counterexamples_enabled
+        ):
+            raise ValueError('polar window candidates require complete compact protection')
         if (self.native_alternative_source_candidates_enabled
                 and not self.near_floor_source_candidates_enabled):
             raise ValueError("native alternative candidates require complete near-floor evidence")
@@ -165,5 +170,9 @@ class XQCConfig(BaseModel):
 
     @property
     def digest(self):
-        return hashlib.sha256(json.dumps(self.model_dump(mode="json"), sort_keys=True,
+        data = self.model_dump(mode="json")
+        if not self.polar_window_candidates_enabled:
+            # Default-off addition must not invalidate frozen legacy products.
+            data.pop('polar_window_candidates_enabled')
+        return hashlib.sha256(json.dumps(data, sort_keys=True,
             separators=(",", ":"), allow_nan=False).encode()).hexdigest()

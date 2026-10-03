@@ -49,6 +49,7 @@ class Reason(IntFlag):
     MORPHOLOGY = 131072
     NEAR_FLOOR_SOURCE = 262144
     NATIVE_ALTERNATIVE_SOURCE = 524288
+    POLAR_WINDOW = 1048576
 
 
 @dataclass(frozen=True)

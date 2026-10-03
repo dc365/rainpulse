@@ -68,7 +68,8 @@ def run(volume, station, release_sha256, *, baseline):
         raise ValueError("X enhancement cannot run on an S observation")
     cfg = XQCConfig.model_validate(station.x_qc.enhancement)
     implementation_revision = (
-        "xqc-polar-morphology-20261001-v1" if cfg.morphology is not None
+        "xqc-polar-window-integration-20261003-v2" if cfg.polar_window_candidates_enabled
+        else "xqc-polar-morphology-20261001-v1" if cfg.morphology is not None
         else "xqc-mode-pair-20260930-r4"
     )
     base_profile = replace(station.x_qc, enhancement=None)
@@ -79,6 +80,10 @@ def run(volume, station, release_sha256, *, baseline):
         from .limited_context import context_for_cut
         context = context_for_cut(volume, cut, cfg)
         ev = evaluate_cut(cut, volume.metadata, cfg, context=context)
+        if cfg.polar_window_candidates_enabled:
+            from .polar_window_integration import extend
+
+            ev = extend(cut, cfg, ev)
         active = cfg.mode != "audit"
         # Exceeding the deletion budget is not evidence that a candidate is clean.
         # Preserve measurements for review while excluding them from composites.
