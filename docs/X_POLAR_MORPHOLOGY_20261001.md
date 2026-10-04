@@ -1443,3 +1443,51 @@ independent rainfall truth. The complete 204-volume replay is still running.
 Residual merged-carrier/fan failures, weather loss, independent sites/dates and
 new normal map acceptance remain open. Preparing the writer does not complete
 those gates or enable a release automatically.
+
+
+## Completed replay and remaining carrier geometry (2026-10-04)
+
+The frozen three-pilot replay completed **204 volumes / 1836 cuts**. Independent
+identity, source-manifest and mask accounting found 3461 visible nominations,
+including 580 at or above 35 dBZ, in 67 cuts. Three cuts refused the resource
+budget atomically. This covers approximately UTC 00–07 on 2026-08-28, rather
+than the full day or the complete network. No normal products were changed by
+this diagnostic. The largest three late increments (1453 visible / 420 strong)
+also passed original-source, published-native and independently reconstructed
+held-out disposition checks. These checks are not independent rainfall truth.
+
+Actual unmodified candidate-image tests finished three source cuts, with native
+caller/export, RAW, protection and outside-increment checks. The default
+canonical parent differs from the old installed parent by **1676 restored gates,
+zero removed gates** on the ZF505 example; 12 restored gates exceed 35 dBZ.
+These gates remain uncertain action 3. No explicit weather mask covers them.
+Restoration cannot be counted as interference suppression or called weather
+preservation without further evidence. Other two sampled parents were equal.
+The committed revision `8e6d355` passed **523 X tests**, using committed Python
+modules and a SHA-verified palette resource, without unrelated workspace code.
+
+A separate, unpublished geometry ablation uses the complete original SNR
+angular/range history to nominate carriers before DBZH contours merge. It reuses
+complete-history guards and retains local excess, unavailable support and weather
+protection. Six actual cuts and 22 synthetic positive/negative controls support
+further study; the ZF702 cut-5 example nominates 292 additional visible gates,
+including 80 strong gates. Server source replay reproduced all four diagnostic
+masks bit for bit. An initial one-gate discrepancy was traced to 83.5 dBZ being
+outside the shared weather stencil but inside the existing legal X source domain.
+Using the existing `source_view` preserves that measured gate without altering
+RAW, availability bits or weather-stencil limits.
+
+This SNR experiment has no normal writer or release activation. Its moment
+threshold policy and post-geometry work accounting are not yet production
+contracts. Localized strong excess still survives, so this does not establish
+that all radial/fan problems are solved. A finite 204-volume source-bound SNR
+replay is queued behind current normal-publication and full source acceptance.
+Next: complete those gates, resolve full angular source/mixed/unknown profiles
+and finite persistent residuals, freeze the moment-specific policy and regression
+controls, then validate the normal writer and real map. Do not turn each residual
+into a station, azimuth, time or elevation exception.
+
+The source filename inventory now contains 24 stations across 2026-08-28 and
+2026-09-01/02/03, with 22420 files. It supplies later cross-site/date evaluation
+inputs; filenames alone do not verify header timestamps, units or decode quality.
+ZF703/ZF801 remain excluded until their time format is supported by evidence.
