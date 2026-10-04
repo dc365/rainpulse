@@ -2895,6 +2895,88 @@
           }
         }
       ]
+    },
+    "SNRCarrierPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "const": "x-original-snr-carrier-20261004-v1",
+          "default": "x-original-snr-carrier-20261004-v1",
+          "title": "Version",
+          "type": "string"
+        },
+        "moment": {
+          "const": "SNR",
+          "default": "SNR",
+          "title": "Moment",
+          "type": "string"
+        },
+        "geometry": {
+          "$ref": "#/$defs/MorphologyPolicy"
+        },
+        "levels_db": {
+          "items": {
+            "maximum": 55.0,
+            "minimum": 5.0,
+            "type": "number"
+          },
+          "maxItems": 6,
+          "minItems": 1,
+          "title": "Levels Db",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "reference_block_m": {
+          "const": 5000.0,
+          "default": 5000.0,
+          "title": "Reference Block M",
+          "type": "number"
+        },
+        "reference_guard_blocks": {
+          "const": 1,
+          "default": 1,
+          "title": "Reference Guard Blocks",
+          "type": "integer"
+        },
+        "minimum_reference_blocks": {
+          "const": 3,
+          "default": 3,
+          "title": "Minimum Reference Blocks",
+          "type": "integer"
+        },
+        "minimum_reference_span_m": {
+          "const": 20000.0,
+          "default": 20000.0,
+          "title": "Minimum Reference Span M",
+          "type": "number"
+        },
+        "reference_power_margin_db": {
+          "const": 1.0,
+          "default": 1.0,
+          "title": "Reference Power Margin Db",
+          "type": "number"
+        },
+        "maximum_work": {
+          "default": 50000000,
+          "maximum": 50000000,
+          "minimum": 1,
+          "title": "Maximum Work",
+          "type": "integer"
+        },
+        "maximum_summary_bytes": {
+          "default": 67108864,
+          "maximum": 67108864,
+          "minimum": 1,
+          "title": "Maximum Summary Bytes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "geometry",
+        "levels_db"
+      ],
+      "title": "SNRCarrierPolicy",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -3317,6 +3399,17 @@
       "default": false,
       "title": "Fragmented Carrier Candidates Enabled",
       "type": "boolean"
+    },
+    "snr_carrier_policy": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SNRCarrierPolicy"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     }
   },
   "title": "XQCConfig",
@@ -3473,6 +3566,40 @@
           "morphology"
         ],
         "properties": {
+          "morphology": {
+            "type": "object",
+            "properties": {
+              "compact_counterexamples_enabled": {
+                "const": true
+              }
+            },
+            "required": [
+              "compact_counterexamples_enabled"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "snr_carrier_policy": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "snr_carrier_policy"
+        ]
+      },
+      "then": {
+        "required": [
+          "morphology",
+          "complete_source_families_enabled"
+        ],
+        "properties": {
+          "complete_source_families_enabled": {
+            "const": true
+          },
           "morphology": {
             "type": "object",
             "properties": {

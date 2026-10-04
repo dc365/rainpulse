@@ -13,6 +13,7 @@ from rainpulse_algo.radar.qc_engine.volume_review.clutter_fusion.isolation_confi
 from . import VERSION
 from .limited_context import ContextPolicy
 from .polar_morphology import MorphologyPolicy
+from .snr_carriers import SNRCarrierPolicy
 
 
 class XSegmentConfig(SegmentReferenceConfig):
@@ -90,6 +91,7 @@ class XQCConfig(BaseModel):
     native_alternative_source_candidates_enabled: StrictBool = False
     polar_window_candidates_enabled: StrictBool = False
     fragmented_carrier_candidates_enabled: StrictBool = False
+    snr_carrier_policy: SNRCarrierPolicy | None = None
     complete_source_families_enabled: StrictBool = False
     complete_source_family_reference_mode: Literal[
         "absolute_noise", "relative_receiver", "heldout_family"
@@ -138,6 +140,12 @@ class XQCConfig(BaseModel):
 
     @model_validator(mode="after")
     def contracts(self):
+        if self.snr_carrier_policy is not None:
+            if (not self.complete_source_families_enabled or self.morphology is None
+                    or not self.morphology.compact_counterexamples_enabled):
+                raise ValueError('SNR carrier review requires complete source and weather protection')
+            if self.snr_carrier_policy.geometry != self.morphology:
+                raise ValueError('SNR geometry cannot relax the existing morphology contract')
         if self.fragmented_carrier_candidates_enabled and (
             self.morphology is None or not self.morphology.compact_counterexamples_enabled
         ):
@@ -187,6 +195,8 @@ class XQCConfig(BaseModel):
     @property
     def digest(self):
         data = self.model_dump(mode="json")
+        if self.snr_carrier_policy is None:
+            data.pop('snr_carrier_policy')
         if not self.fragmented_carrier_candidates_enabled:
             data.pop('fragmented_carrier_candidates_enabled')
         if not self.polar_window_candidates_enabled:

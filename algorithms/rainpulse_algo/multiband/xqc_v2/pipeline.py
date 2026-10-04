@@ -68,7 +68,8 @@ def run(volume, station, release_sha256, *, baseline):
         raise ValueError("X enhancement cannot run on an S observation")
     cfg = XQCConfig.model_validate(station.x_qc.enhancement)
     implementation_revision = (
-        "xqc-fragmented-carrier-integration-20261004-v1" if cfg.fragmented_carrier_candidates_enabled
+        "xqc-original-snr-carrier-20261004-v1" if cfg.snr_carrier_policy is not None
+        else "xqc-fragmented-carrier-integration-20261004-v1" if cfg.fragmented_carrier_candidates_enabled
         else "xqc-complete-receiver-families-20261003-v3" if cfg.complete_source_families_enabled
         else "xqc-polar-window-integration-20261003-v2" if cfg.polar_window_candidates_enabled
         else "xqc-polar-morphology-20261001-v1" if cfg.morphology is not None
@@ -92,6 +93,10 @@ def run(volume, station, release_sha256, *, baseline):
             ev = extend(cut, cfg, ev)
         if cfg.fragmented_carrier_candidates_enabled:
             from .fragmented_carrier_integration import extend
+
+            ev = extend(cut, cfg, ev)
+        if cfg.snr_carrier_policy is not None:
+            from .snr_carrier_integration import extend
 
             ev = extend(cut, cfg, ev)
         active = cfg.mode != "audit"
@@ -241,6 +246,10 @@ def run(volume, station, release_sha256, *, baseline):
                 and ev.record.get('status') == 'EVALUATED'
                 and int(f['XQC_FRAGMENTED_CARRIER_STATE'][0, 0]) != 1):
             ev.record['status'] = 'DEGRADED_FRAGMENTED_CARRIER_UNAVAILABLE'
+        if (cfg.snr_carrier_policy is not None
+                and ev.record.get('status') == 'EVALUATED'
+                and int(f['XQC_SNR_CARRIER_STATE'][0, 0]) != 1):
+            ev.record['status'] = 'DEGRADED_SNR_CARRIER_UNAVAILABLE'
         # Per-cut records do not go into Volume.metadata: source-major fusion
         # demands exactly the same volume metadata for all cuts of a source.
         target.xqc_diagnostics = {**ev.record, "version": VERSION, "mode": cfg.mode,

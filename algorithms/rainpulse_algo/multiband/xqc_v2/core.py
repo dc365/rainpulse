@@ -52,6 +52,7 @@ class Reason(IntFlag):
     POLAR_WINDOW = 1048576
     COMPLETE_FAMILY = 2097152
     FRAGMENTED_CARRIER = 4194304
+    SNR_CARRIER = 8388608
 
 
 @dataclass(frozen=True)

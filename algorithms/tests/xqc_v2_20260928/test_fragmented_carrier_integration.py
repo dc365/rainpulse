@@ -82,7 +82,8 @@ def test_disabled_flag_is_identity_and_has_legacy_digest():
 
     payload = disabled.model_dump(mode="json")
     for name in ("fragmented_carrier_candidates_enabled", "polar_window_candidates_enabled",
-                 "complete_source_families_enabled", "complete_source_family_reference_mode"):
+                 "complete_source_families_enabled", "complete_source_family_reference_mode",
+                 "snr_carrier_policy"):
         payload.pop(name)
     expected = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"),
                                         allow_nan=False).encode()).hexdigest()

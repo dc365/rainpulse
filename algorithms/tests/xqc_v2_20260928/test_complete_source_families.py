@@ -149,6 +149,7 @@ def test_strict_default_off_contract_and_digest():
     body.pop("complete_source_family_reference_mode")
     body.pop("polar_window_candidates_enabled")
     body.pop("fragmented_carrier_candidates_enabled")
+    body.pop("snr_carrier_policy")
     assert (
         c.digest
         == hashlib.sha256(

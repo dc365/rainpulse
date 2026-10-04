@@ -54,6 +54,7 @@ def test_disabled_is_exact_parent_and_legacy_parameter_digest():
     old.pop("fragmented_carrier_candidates_enabled")
     old.pop("complete_source_families_enabled")
     old.pop("complete_source_family_reference_mode")
+    old.pop("snr_carrier_policy")
     digest = hashlib.sha256(
         json.dumps(old, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     ).hexdigest()
