@@ -57,8 +57,45 @@ the public catalog and product assets. Neither verifier can claim weather truth
 or browser acceptance. Completion requires both terminal reports, not a started
 process or a successful first task.
 
-At the initial shipment checkpoint this final batch is running; its terminal
-receipt will supersede that checkpoint. The hourly follow-up remains paused.
+The normal controller finished at 2026-10-04 20:59:13 UTC with
+`NORMAL_PUBLICATION_AUDITED`. The independent finisher completed at 20:59:38 UTC
+with `FINITE_FINAL_APPLICATION_DELIVERY_VERIFIED`. Both recorded processes have
+exited; the final runtime check found four healthy, ready, idle workers and no
+remaining owned audit containers. All 22 public catalog entries select the new
+normal task and release. The hourly follow-up remains paused.
+
+| Final evidence | Result |
+| --- | --- |
+| Normal volumes / native cuts | 22 / 198 |
+| Producer PNG checks | 792 |
+| Independently retrieved public map assets | 24 |
+| Additional reported ZF702 08:08:25 map assets | 6, native cuts 0/5/9 |
+| Quality warning cuts | 27: ZF702 14, ZF701 6, ZF505 7 |
+| Warning breakdown | 18 morphology action-budget degradation, 8 action-budget abstentions, 1 complete-family action-budget abstention |
+| Actual MinIO free capacity at runtime closeout | 484,826,603,520 bytes / 97,825,755 inodes |
+
+The final report SHA-256 is
+`9185ed9286dd654e5d7465c6e7c73711f9493524cb545d134e887bb5542e4183`.
+It was retrieved locally and checked against the terminal state, frozen 22-volume
+membership, all 198 distinct cuts, 22 public product metadata hashes and all 24
+retrieved PNG hashes. The normal auditor independently recomputed every published
+native cut; the finisher and local consumer verified that producer evidence and
+did not perform another native recomputation.
+
+Actual selected map assets were inspected across all six reported volumes and
+both untouched controls. Major reported spokes and fans are removed in those
+selected assets; compact returns, some thin fragments and two distant strong
+patches remain. Control cluster retention is an observation, not independent
+weather truth. Transparent background RGB values are not valid radar echoes.
+These are asset checks, not a browser map screenshot or proof that every X
+radial problem is resolved. The user requested final deployment and closure;
+further algorithm research and full-day/network expansion are outside this
+closed candidate shipment.
+
+The private final report, runtime receipt, public products, PNG assets and local
+verification are retained under `snr-final-finish-v2` in the established evidence
+directory and local `.build/xqc-polar-morphology/`. The extra sixth-source assets
+are retained under `final-public-d426-v2` locally. No credentials are included.
 
 ## Operation and recovery
 
@@ -88,6 +125,11 @@ remain quality warnings. They must not be relabelled as fully cleaned weather
 or bypassed by deleting a complete sector. Independent weather/date/site truth
 and unresolved finite/transient strong returns remain stated limitations of
 this candidate delivery.
+
+The original reported ZF702 scan's current candidate is available through
+[the new result link](http://192.168.28.105:4173/?preset=qc&band=X&mode=single&date=2026-08-28&time=2026-08-28T00%3A26%3A55.533865%2B00%3A00&station=zf702&scan=3b3bf9da-aac2-5800-88a5-6d29ed907d9c&result=c17aa0d4-95b5-48dc-8f2c-ec1a318229d3.25e0a556-afa2-40d4-82a0-02869a1c3a5b&sweep=0).
+Its actual source start is 00:26:55.533865 UTC; the older 00:24 query was the
+selection time. Historical result URLs remain unchanged.
 
 The whole-repository CI on `875c6c6` failed with the same test, TypeScript and
 4,898 lint errors as its parent `5e391a1`; the comparison was rechecked. Build
