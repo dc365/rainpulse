@@ -12,6 +12,7 @@ from dataclasses import replace
 
 import numpy as np
 
+from .block_percentiles import measure as block_percentiles
 from .reference_fit import ReferenceFit, ReferenceFits
 
 
@@ -93,25 +94,20 @@ def detect(
         # REF upper/primary modes must use the corresponding receiver mode.
         # Averaging SNR quartiles can mix a changing lower mode with a stable
         # upper source, falsely rejecting its held-out stationary power.
-        powers = np.array(
-            [
-                (np.percentile(sn[row, g], response_quantile) if fan
-                 else np.mean(np.percentile(sn[row, g], [25, 75])))
-                if len(g) else np.nan for g in gates
-            ]
+        temporary_allowance = max(
+            0, cfg.source_maximum_summary_bytes - stats.workspace_bytes
+            - family_details.get("workspace_bytes", 0),
         )
-        responses = np.array(
-            [
-                (
-                    np.percentile(z[row, g] - law[g], response_quantile)
-                    if fan
-                    else np.mean(np.percentile(z[row, g] - law[g], [25, 75]))
-                )
-                if len(g)
-                else np.nan
-                for g in gates
-            ]
+        quantiles = response_quantile if fan else [25, 75]
+        powers = block_percentiles(
+            sn[row], gates, quantiles, maximum_bytes=temporary_allowance,
         )
+        responses = block_percentiles(
+            z[row], gates, quantiles, maximum_bytes=temporary_allowance, offsets=(law,),
+        )
+        if not fan:
+            powers = np.mean(powers, axis=1)
+            responses = np.mean(responses, axis=1)
         if family_geometry is not None:
             geometry = family_geometry[row]
         else:
@@ -238,13 +234,15 @@ def detect(
                 trend = (slope * np.log10(np.maximum(s.ranges, s.dr) / 1000)
                          if fan else np.zeros_like(s.ranges))
                 if fit.bounds is None:
-                    response_limits = np.median([
-                        np.percentile(z[row, gates[i]] - law[gates[i]] - trend[gates[i]], [5, 95])
-                        for i in members
-                    ], axis=0)
-                    power_limits = np.median([
-                        np.percentile(sn[row, gates[i]], [5, 95]) for i in members
-                    ], axis=0)
+                    reference_blocks = tuple(gates[i] for i in members)
+                    allowance = max(0, fits.maximum_bytes - fits.bytes)
+                    response_limits = np.median(block_percentiles(
+                        z[row], reference_blocks, [5, 95], maximum_bytes=allowance,
+                        offsets=(law, trend),
+                    ), axis=0)
+                    power_limits = np.median(block_percentiles(
+                        sn[row], reference_blocks, [5, 95], maximum_bytes=allowance,
+                    ), axis=0)
                     low, high = response_limits + [-1.0, 1.0]
                     power_low, power_high = power_limits + [-1.0, 1.0]
                     fit = replace(

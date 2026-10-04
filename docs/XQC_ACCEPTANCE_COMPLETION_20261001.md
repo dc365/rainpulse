@@ -164,3 +164,22 @@ DBZH 多阈值轮廓会把相邻条带合并成不稳定边界。新增独立 SN
 10个原始体扫90层时序剖面显示部分远距离强残留只在首时次出现；更高仰角有不同原生覆盖范围，不可把未观测当作无回波。固定方位屏蔽、持久重复判据和宽容的全扇形清除不能解决这一类。角向共同增益的只读替代实验未通过原始源/参考一致性，未接入。全网格式抽样显示存在不同原生范围、分辨率和扫描格式，且ZF900首射线没有SNR；SNR只是补充路线，不能成为所有 X 站的必需条件。
 
 新算法正常 Worker、产品目录及真实地图尚未切换；有限/瞬态强回波残留、跨站日期天气反例及正常发布验收仍未关闭，不能宣称径向/扇形问题全部解决。候选不提供可信融合、QPE或预报资格，ZF703/ZF801及未核实的厂家扩展码保持原边界。
+# Source model runtime investigation, 2026-10-04
+
+An unchanged installed candidate caller on the reported ZF702 scan, cut 0,
+took 380.195 seconds under one CPU with cProfile; native export took 0.499
+seconds. Source-block detection accumulated 338.698 seconds over 129 calls.
+There were 8,555,102 NumPy percentile calls, accounting for 269.623 seconds.
+The source-bound profile and receipt are retained privately under
+`.build/xqc-polar-morphology/snr-caller-profile-v1/`. These are diagnostic timings,
+not a normal worker throughput or meteorological acceptance claim.
+
+The response is exact call-local batching of equal-length original blocks,
+using only unused existing source-summary allowance and scalar fallback when
+space is insufficient. No geometric threshold, source model, weather veto,
+action cap or velocity/phase extension meaning changes. A test-first scalar
+counterfactual failed at 40 calls versus the required one; batched regression
+passed. Initial batching exposed a float32 scalar-versus-vector percentile
+rounding difference; the failed test is retained and the scalar call convention
+is now preserved explicitly. Real paired native parity and timing remain required
+before replacing the installed worker.
