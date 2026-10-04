@@ -143,7 +143,9 @@ class XQCConfig(BaseModel):
         if self.snr_carrier_policy is not None:
             if (not self.complete_source_families_enabled or self.morphology is None
                     or not self.morphology.compact_counterexamples_enabled):
-                raise ValueError('SNR carrier review requires complete source and weather protection')
+                raise ValueError(
+                    'SNR carrier review requires complete source and weather protection'
+                )
             if self.snr_carrier_policy.geometry != self.morphology:
                 raise ValueError('SNR geometry cannot relax the existing morphology contract')
         if self.fragmented_carrier_candidates_enabled and (

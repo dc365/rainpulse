@@ -69,7 +69,8 @@ def run(volume, station, release_sha256, *, baseline):
     cfg = XQCConfig.model_validate(station.x_qc.enhancement)
     implementation_revision = (
         "xqc-original-snr-carrier-20261004-v1" if cfg.snr_carrier_policy is not None
-        else "xqc-fragmented-carrier-integration-20261004-v1" if cfg.fragmented_carrier_candidates_enabled
+        else "xqc-fragmented-carrier-integration-20261004-v1"
+        if cfg.fragmented_carrier_candidates_enabled
         else "xqc-complete-receiver-families-20261003-v3" if cfg.complete_source_families_enabled
         else "xqc-polar-window-integration-20261003-v2" if cfg.polar_window_candidates_enabled
         else "xqc-polar-morphology-20261001-v1" if cfg.morphology is not None
