@@ -76,6 +76,23 @@ def test_geometry_and_profile_work_have_one_atomic_limit():
         review(s, configured(maximum_summary_bytes=1), target=body)
 
 
+def test_membership_refusal_precedes_carrier_array_allocation(monkeypatch):
+    s, body = scene("fan")
+    base = s.shape[0] * s.shape[1] * 25 + s.shape[1] * 8
+    concatenations = []
+    original = np.concatenate
+
+    def observe(parts, *args, **kwargs):
+        if isinstance(parts, list) and parts and all(p.dtype == np.uint32 for p in parts):
+            concatenations.append(sum(p.nbytes for p in parts))
+        return original(parts, *args, **kwargs)
+
+    monkeypatch.setattr(np, "concatenate", observe)
+    with pytest.raises(ResourceLimit, match="membership"):
+        review(s, configured(maximum_summary_bytes=base), target=body)
+    assert not concatenations
+
+
 def test_policy_declares_snr_units_and_rejects_invalid_or_implicit_parameters():
     with pytest.raises(ValueError):
         SNRCarrierPolicy(geometry=policy())

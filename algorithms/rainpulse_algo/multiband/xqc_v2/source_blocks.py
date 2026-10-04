@@ -87,6 +87,9 @@ def detect(
     # Empty domain rows previously built a block list only to skip it.
     # They consume no model/geometry counters and cannot alter decisions.
     for row in np.flatnonzero(rows):
+        # Release the previous ray's cache before admitting temporary batches
+        # against the same summary ceiling. Fits never cross RAW ray identity.
+        fits = None
         gates = [g[signal[row, g]] for g in stats.indices]
         count = np.array([len(g) for g in gates])
         if (count >= minimum).sum() < 3:

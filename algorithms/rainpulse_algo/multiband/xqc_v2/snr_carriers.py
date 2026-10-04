@@ -92,7 +92,10 @@ def review(sweep, policy, *, target, protected=None):
             "maximum_work": min(p.geometry.maximum_work, p.maximum_work - work),
         }
     )
-    geometry = detect(signal, geometry_policy, protected=hard, collect_carriers=True)
+    geometry = detect(
+        signal, geometry_policy, protected=hard, collect_carriers=True,
+        maximum_carrier_bytes=p.maximum_summary_bytes - summary_bytes,
+    )
     charge(geometry.record.get("work", 0))
     summary_bytes += sum(ids.nbytes for ids in geometry.carriers)
     if summary_bytes > p.maximum_summary_bytes:

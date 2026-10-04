@@ -198,7 +198,7 @@ def _angular_runs(occupied, sweep):
     return result
 
 
-def detect(sweep, policy, *, protected=None, collect_carriers=False):
+def detect(sweep, policy, *, protected=None, collect_carriers=False, maximum_carrier_bytes=None):
     p = MorphologyPolicy.model_validate(policy)
     shape = sweep.shape
     if shape[0] * shape[1] > p.maximum_sweep_gates:
@@ -225,6 +225,7 @@ def detect(sweep, policy, *, protected=None, collect_carriers=False):
     spacing = float(np.median(da[valid_edges]))
     records = []
     carriers = []
+    carrier_bytes = 0
     reviews = []
     mask = np.zeros(shape, bool)
     ids = np.zeros(shape, "uint32")
@@ -442,6 +443,7 @@ def detect(sweep, policy, *, protected=None, collect_carriers=False):
         )
 
     def finish(track, scale, level):
+        nonlocal carrier_bytes
         entries = track["entries"]
         rows0 = entries[0]["rows"]
         width = entries[0]["width"]
@@ -582,12 +584,22 @@ def detect(sweep, policy, *, protected=None, collect_carriers=False):
         oid = len(records) + 1
         members = 0
         original_parts = []
+        pending_bytes = 0
         for entry in entries:
             rows = entry["rows"]
             cols = entry["window_cols"]
             original = raw[np.ix_(rows, cols)]
             if collect_carriers:
                 charge(len(rows) * len(cols))
+                # Parts coexist with their concatenation. Reserve both before
+                # materializing original membership, including prior carriers.
+                if maximum_carrier_bytes is not None:
+                    charge(original.size)
+                    pending_bytes += int(np.count_nonzero(original)) * 4
+                    if carrier_bytes + 2 * pending_bytes > maximum_carrier_bytes:
+                        raise ResourceLimit(
+                            "original SNR carrier membership summary budget exceeded"
+                        )
                 rr, cc = np.nonzero(original)
                 original_parts.append((rows[rr] * shape[1] + cols[cc]).astype("uint32"))
             block = original & ~counterexamples[np.ix_(rows, cols)]
@@ -603,6 +615,7 @@ def detect(sweep, policy, *, protected=None, collect_carriers=False):
             # need no dilation, rectangular approximation or deduplication.
             original_indices.setflags(write=False)
             carriers.append(original_indices)
+            carrier_bytes += original_indices.nbytes
         kind = (
             ("anchored_pulsing_fan" if anchored else "centered_pulsing_fan")
             if pulsing

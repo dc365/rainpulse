@@ -184,6 +184,18 @@ rounding difference; the failed test is retained and the scalar call convention
 is now preserved explicitly. Real paired native parity and timing remain required
 before replacing the installed worker.
 
+### Final resource-accounting release gates
+
+Release each previous native ray's reference cache before admitting the next
+ray's percentile workspace against the shared summary-byte ceiling. The SNR
+collector must receive the remaining membership allowance and reserve retained
+carriers plus current parts and their concatenation before allocating native
+membership; charge its additional census to the existing geometry-work cap.
+Legacy unbounded collectors retain their original traversal and decisions.
+Normal-product audit retries use separate attempt files, retain failed evidence,
+and publish a validated receipt atomically before advancing the ledger. Each
+audit has a finite timeout within the controller's existing delivery deadline.
+
 ## 中断恢复与本轮复核收尾（2026-10-05，北京时间）
 
 中断前提交 `c5c92b4`（原始 SNR 条带接入）、`7cebde6`（等价格式整理）和
