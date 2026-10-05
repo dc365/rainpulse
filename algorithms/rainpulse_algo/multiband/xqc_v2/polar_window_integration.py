@@ -68,10 +68,11 @@ def extend(cut, cfg, parent):
         return parent
     shape = cut.fields["DBZH"].shape
     candidate = np.zeros(shape, bool)
+    budget_review = np.zeros(shape, bool)
     # Explicit native status survives even if a parent fills its entire JSON
     # allowance. 1 evaluated, 2 protection unavailable, 3 resource, 4 action
-    # budget, 5 evidence budget. No new ACTION_BUDGET bit is set on refused gates:
-    # the existing pipeline interprets that bit as actual withholding.
+    # budget, 5 evidence budget. Qualified action-budget refusals retain exact
+    # novel membership for the existing writer's uncertain withholding.
     status_code = 1
     records = expand(copy.deepcopy(parent.record))
     modules = records.setdefault("module_records", {})
@@ -108,10 +109,15 @@ def extend(cut, cfg, parent):
             )
             existing = mask(parent.arrays, "XQC_PROPOSED_MASK", shape)
             existing |= (parent.arrays["XQC_REASON"] & int(Reason.ACTION_BUDGET)) != 0
+            # An accepted increment cannot turn a parent's uncertain budget
+            # review into an accepted proposal, even when their masks overlap.
+            candidate &= ~existing
+            record["qualified_increment_gates"] = int(candidate.sum())
             censor = mask(parent.arrays, "XQC_NOISE_FLOOR_MASK", shape)
             observed = mask(cut.fields, "OBSERVED_MASK", shape)
             count = int(((existing | candidate) & ~censor & observed).sum())
             if count > cfg.maximum_new_exclusion_fraction * max(int(observed.sum()), 1):
+                budget_review = candidate & ~existing
                 candidate[:] = False
                 record["status"] = "ACTION_BUDGET_ABSTAINED"
                 status_code = 4
@@ -120,6 +126,7 @@ def extend(cut, cfg, parent):
             record = dict(status="RESOURCE_LIMIT_ABSTAINED", reason=str(exc), qualified_gates=0)
             status_code = 3
     record["candidate_gates"] = int(candidate.sum())
+    record["budget_review_gates"] = int(budget_review.sum())
     attach(records, record)
     if candidate.any():
         records["candidate_gates"] = int(
@@ -129,6 +136,7 @@ def extend(cut, cfg, parent):
         records = bounded(records, cfg.maximum_evidence_bytes)
     except ResourceLimit:
         candidate[:] = False
+        budget_review[:] = False
         status_code = 5
         records = expand(copy.deepcopy(parent.record))
         attach(
@@ -142,13 +150,16 @@ def extend(cut, cfg, parent):
             records = copy.deepcopy(parent.record)
     arrays = dict(parent.arrays)
     arrays["XQC_POLAR_WINDOW_MASK"] = candidate.astype("uint8")
+    arrays["XQC_POLAR_WINDOW_BUDGET_REVIEW_MASK"] = budget_review.astype("uint8")
     arrays["XQC_POLAR_WINDOW_STATE"] = np.full(shape, status_code, "uint8")
     if candidate.any():
         arrays["XQC_PROPOSED_MASK"] = (
             mask(parent.arrays, "XQC_PROPOSED_MASK", shape) | candidate
         ).astype("uint8")
+    if candidate.any() or budget_review.any():
         arrays["XQC_REASON"] = parent.arrays["XQC_REASON"].copy()
         arrays["XQC_REASON"][candidate] |= int(Reason.POLAR_WINDOW)
+        arrays["XQC_REASON"][budget_review] |= int(Reason.POLAR_WINDOW | Reason.ACTION_BUDGET)
     # No confirmed quarantine/source mask is changed, nor a parent disposition
     # withdrawn. Only the sole normal pipeline writer applies candidate actions.
     return Evidence(arrays, records)

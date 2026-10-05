@@ -59,8 +59,12 @@ The new reason is bit 4194304, `FRAGMENTED_CARRIER`; native arrays are
 `XQC_FRAGMENTED_CARRIER_UNKNOWN_MASK` and `XQC_FRAGMENTED_CARRIER_STATE`.
 
 State 1 means evaluated, 2 missing completed protection, 3 work exhaustion,
-4 action allowance exceeded, 5 evidence allowance exceeded. States 2–5 admit
-no new proposal or action. Existing proposals and ACTION_BUDGET members both
+4 action allowance exceeded, 5 evidence allowance exceeded. States 2, 3 and 5 admit
+no new proposal or action. State 4 preserves exact novel qualified membership
+in `XQC_FRAGMENTED_CARRIER_BUDGET_REVIEW_MASK`, with the module cause and
+ACTION_BUDGET, for uncertain withholding by the sole writer; it admits no
+accepted proposal or confirmed quarantine. See [action allowance and uncertain
+review](xqc-action-budget-review.md). Existing proposals and ACTION_BUDGET members both
 count toward the unchanged exclusion allowance; review members never become
 accepted parent proposals. Lossless evidence packing is attempted within the
 existing byte cap. If even a warning does not fit, the completed parent record

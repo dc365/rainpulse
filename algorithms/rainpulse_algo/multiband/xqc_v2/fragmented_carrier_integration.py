@@ -28,6 +28,7 @@ def extend(cut, cfg, parent):
         return parent
     shape = cut.fields["DBZH"].shape
     candidate, excess, unknown = (np.zeros(shape, bool) for _ in range(3))
+    budget_review = np.zeros(shape, bool)
     records = expand(copy.deepcopy(parent.record))
     state = 1
     required = tuple("XQC_" + name + "_MASK" for name in (
@@ -70,6 +71,7 @@ def extend(cut, cfg, parent):
             )
             count = int(((existing | candidate) & ~censor & observed).sum())
             if count > cfg.maximum_new_exclusion_fraction * max(int(observed.sum()), 1):
+                budget_review = candidate.copy()
                 candidate[:] = False
                 state = 4
                 record["status"] = "ACTION_BUDGET_ABSTAINED"
@@ -78,6 +80,7 @@ def extend(cut, cfg, parent):
             state = 3
             record = dict(status="RESOURCE_LIMIT_ABSTAINED", reason=str(exc))
     record["accepted_increment_gates"] = int(candidate.sum())
+    record["budget_review_gates"] = int(budget_review.sum())
     attach(records, record)
     if candidate.any():
         records["candidate_gates"] = int((old_proposed | candidate).sum())
@@ -85,6 +88,7 @@ def extend(cut, cfg, parent):
         records = bounded(records, cfg.maximum_evidence_bytes)
     except ResourceLimit:
         candidate[:] = excess[:] = unknown[:] = False
+        budget_review[:] = False
         state = 5
         records = expand(copy.deepcopy(parent.record))
         attach(records, dict(status="EVIDENCE_BUDGET_ABSTAINED", accepted_increment_gates=0))
@@ -95,12 +99,17 @@ def extend(cut, cfg, parent):
     arrays = dict(parent.arrays)
     arrays.update(
         XQC_FRAGMENTED_CARRIER_MASK=candidate.astype("uint8"),
+        XQC_FRAGMENTED_CARRIER_BUDGET_REVIEW_MASK=budget_review.astype("uint8"),
         XQC_FRAGMENTED_CARRIER_EXCESS_MASK=excess.astype("uint8"),
         XQC_FRAGMENTED_CARRIER_UNKNOWN_MASK=unknown.astype("uint8"),
         XQC_FRAGMENTED_CARRIER_STATE=np.full(shape, state, "uint8"),
     )
     if candidate.any():
         arrays["XQC_PROPOSED_MASK"] = (old_proposed | candidate).astype("uint8")
+    if candidate.any() or budget_review.any():
         arrays["XQC_REASON"] = parent.arrays["XQC_REASON"].copy()
         arrays["XQC_REASON"][candidate] |= int(Reason.FRAGMENTED_CARRIER)
+        arrays["XQC_REASON"][budget_review] |= int(
+            Reason.FRAGMENTED_CARRIER | Reason.ACTION_BUDGET
+        )
     return Evidence(arrays, records)

@@ -41,7 +41,12 @@ morphology protection are prerequisites. The integration uses the existing sole 
 candidate action 3, parent proposals and budget reviews, native evidence export,
 and explicit protection/action/evidence refusal states. SNR has its own candidate,
 excess, unknown masks and state (1 evaluated, 2 protection/source unavailable,
-3 resource refusal, 4 action allowance refusal, 5 evidence refusal). Disabled
+3 resource refusal, 4 action allowance refusal, 5 evidence refusal). State 4
+retains exact novel qualified membership in `XQC_SNR_CARRIER_BUDGET_REVIEW_MASK`
+with module cause and ACTION_BUDGET, as uncertain withholding without an
+accepted proposal or confirmed quarantine; other refusal states admit no new
+review. See [action allowance and uncertain review](xqc-action-budget-review.md).
+Disabled
 calls retain legacy parameter digest, implementation identity and arrays.
 Enabling it requires
 source-bound actual pipeline and map verification. A successful synthetic or

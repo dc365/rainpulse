@@ -575,13 +575,26 @@ def _evaluate(cut, metadata, cfg, *, context=None):
         final_why[hard] |= int(Reason.WEATHER_PROTECTED)
         denominator = int(observed.sum())
         budget = cfg.maximum_new_exclusion_fraction * max(denominator, 1)
-        if int(baseline_proposed.sum()) > budget:
+        # The independently qualified detection floor is finalized below and
+        # has its own integrity cap. A second detector nominating the same
+        # measured gate does not make its censor a new heuristic exclusion.
+        baseline_count = int((baseline_proposed & ~censor).sum())
+        proposal_count = int((proposed & ~censor).sum())
+        final_records["action_budget"] = {
+            "observed_gates": denominator,
+            "fraction": cfg.maximum_new_exclusion_fraction,
+            "limit_gates": budget,
+            "baseline_uncensored_gates": baseline_count,
+            "proposed_uncensored_gates": proposal_count,
+            "independent_censor_overlap_gates": int((proposed & censor).sum()),
+        }
+        if baseline_count > budget:
             # Preserve the pre-existing full-enhancement abstention contract.
             final_why[proposed] |= int(Reason.ACTION_BUDGET)
             proposed = np.zeros(s.shape, bool)
             final_quarantine = np.zeros(s.shape, bool)
             final_records["status"] = "ACTION_BUDGET_ABSTAINED"
-        elif int(proposed.sum()) > budget:
+        elif proposal_count > budget:
             # An incremental morphology entry must not undo previously accepted
             # baseline QC. Keep the same cap and abstain the new proposal as a
             # whole; do not select arbitrary pixels to fill the remaining budget.

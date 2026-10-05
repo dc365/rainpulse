@@ -135,8 +135,13 @@ def test_failed_increment_keeps_parent_and_native_warning(monkeypatch, failure, 
     out = extend(c, conf, ev)
     assert not out.arrays["XQC_FRAGMENTED_CARRIER_MASK"].any()
     assert (out.arrays["XQC_FRAGMENTED_CARRIER_STATE"] == state).all()
+    review = out.arrays["XQC_FRAGMENTED_CARRIER_BUDGET_REVIEW_MASK"].astype(bool)
+    assert bool(review.any()) == (failure == "action")
     for name, value in before.arrays.items():
-        np.testing.assert_array_equal(out.arrays[name], value)
+        if failure == "action" and name == "XQC_REASON":
+            np.testing.assert_array_equal(out.arrays[name][~review], value[~review])
+        else:
+            np.testing.assert_array_equal(out.arrays[name], value)
         np.testing.assert_array_equal(ev.arrays[name], value)
 
 

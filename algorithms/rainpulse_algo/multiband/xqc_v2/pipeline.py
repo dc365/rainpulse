@@ -76,6 +76,7 @@ def run(volume, station, release_sha256, *, baseline):
         else "xqc-polar-morphology-20261001-v1" if cfg.morphology is not None
         else "xqc-mode-pair-20260930-r4"
     )
+    implementation_revision += ":censor-budget-review-20261005-v1"
     base_profile = replace(station.x_qc, enhancement=None)
     base_station = replace(station, x_qc=base_profile)
     result = None

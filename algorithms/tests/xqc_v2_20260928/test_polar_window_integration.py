@@ -122,13 +122,19 @@ def assert_parent_unchanged(parent, out):
     assert not out.arrays["XQC_POLAR_WINDOW_MASK"].any()
 
 
-def test_incremental_action_budget_preserves_parent_without_new_withholding():
+def test_incremental_action_budget_preserves_parent_and_retains_uncertain_review():
     cut, source, cfg, parent = case(maximum_new_exclusion_fraction=0.001)
     parent.arrays["XQC_PROPOSED_MASK"][0, 0] = 1
     parent.arrays["XQC_QUARANTINE_MASK"][0, 0] = 1
     parent.arrays["XQC_REASON"][0, 0] = 8
     out = extend(cut, cfg, parent)
-    assert_parent_unchanged(parent, out)
+    review = out.arrays["XQC_POLAR_WINDOW_BUDGET_REVIEW_MASK"].astype(bool)
+    assert review.any() and not out.arrays["XQC_POLAR_WINDOW_MASK"].any()
+    for name, value in parent.arrays.items():
+        if name == "XQC_REASON":
+            np.testing.assert_array_equal(out.arrays[name][~review], value[~review])
+        else:
+            np.testing.assert_array_equal(out.arrays[name], value)
     assert out.record["module_records"]["polar_windows"]["status"] == "ACTION_BUDGET_ABSTAINED"
     assert out.record["module_records"]["polar_windows"]["qualified_gates"] > 0
 
@@ -224,7 +230,7 @@ def test_disabled_normal_output_has_exact_prior_numerical_fields():
     current = x_qc(volume, station(cfg), "b" * 64)
     assert (
         current.sweeps[0].xqc_diagnostics["implementation_revision"]
-        == "xqc-polar-window-integration-20261003-v2"
+        == "xqc-polar-window-integration-20261003-v2:censor-budget-review-20261005-v1"
     )
     selected = current.sweeps[0].fields["XQC_POLAR_WINDOW_MASK"].astype(bool)
     # A complete actual parent run is required; no evidence/writer mocks here.
