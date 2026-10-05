@@ -34,8 +34,8 @@
 105 上独立诊断容器执行源身份冻结的四个实际仰角层，使用当前安装依赖与新 core
 字节，不改变 Worker、活动版本或公开产品。检查原始值、几何、保护及已拒绝门控，
 比较新旧 QC 数值和状态。四层实际重算均完成：三个误报恢复为正常状态，真正
-超限的对照仍保留警告；四层 QC 数值均与已发布结果逐值一致。生产未改变，
-源、导出及计算字节哈希留在私有证据中。警告减少不是图面清除收益。
+超限的对照仍保留警告；四层 QC 数值均与已发布结果逐值一致。此步骤当时未改变
+生产，源、导出及计算字节哈希留在私有证据中。警告减少不是图面清除收益。
 
 ## 已核实的增量候选丢失
 
@@ -72,9 +72,76 @@ SHA 与待复核数组；原始值、几何、保护、已确认隔离和既有�
 模块保持一致；既有 pipeline 前置功能排除保持不变。活动候选指纹前缀
 `36a181d59c1d`，网络 SHA 前缀 `4c1addf27a2c`。其他服务容器未替换。
 
-正常 API 路径的冻结 22 个体扫、198 个仰角层重算和独立图件/目录复核已经启动，
-仍须等待任务、原生数组、792 个 PNG 检查及公开最新目录全部验收，不能以启动
-或 Worker 切换代替完成。小时自动跟进保持暂停。
+## 正常发布与收尾结果
+
+2026-10-05 19:26 UTC，正常 API 路径的冻结 22 个体扫、198 个原始仰角层全部
+重算成功，复用旧结果为 0。独立核验实际重新计算安装版本的所有原生数组，
+核对 RAW、坐标、时间、原始源身份、唯一写入语义和 792 项 PNG 检查；公开目录
+22 个最新结果均绑定本次任务。独立收尾核验器另外检查了 22 份公开产品和
+32 个地图图层文件。六个必测案例的 54 层及 22 个地图文件另有独立补充记录，
+覆盖收尾抽样列表中缺少的 d426 原始身份。
+
+所有 198 层另与父版本正常发布结果逐门比较：新增待复核掩码并集为 1,760 门，
+其中 1,611 门先前仍显示且至少为 5 dBZ，133 门至少为 35 dBZ。所有新增数值
+排除均落在合格待复核位置；原始值、几何、保护、已确认隔离及既有拒绝保持一致，
+待复核范围之外的 QC 值逐值一致，旧排除成员没有恢复。两个独立对照均为 0
+新增排除。上述新增成员仍是不确定状态，不宣称已经证实为干扰。
+
+警告层数由 27 降至 11。17 层核心重叠计数误报已修正，其中 16 层恢复 EVALUATED；
+3868 的第 8 层核心提名 190,987 门低于原上限 214,606 门，但后续完整结构模块
+仍真实超限，故保留其正确警告。最终警告为 8 层 ACTION_BUDGET_ABSTAINED、
+1 层 DEGRADED_MORPHOLOGY_ACTION_BUDGET、2 层
+DEGRADED_COMPLETE_FAMILY_ACTION_BUDGET_ABSTAINED。不能把真实超限隐藏为正常。
+
+19:27 UTC 的最终运行检查确认四个 Worker 均健康、READY、空闲，运行镜像及
+五个模块字节 SHA 与部署凭据一致；活动通道 revision 32，指纹和网络 SHA 未漂移。
+三个本轮有限批次控制器均已退出，本轮审核容器为 0；旧失败控制器仍保持暂停。
+实际 MinIO 盘可用 483,466,223,616 字节、97,763,290 inode，高于保留线。
+小时自动跟进保持暂停。
+
+终态凭据及可复核入口：
+
+- `budget-review-normal-v1/state.json`：NORMAL_PUBLICATION_AUDITED，22/198，目录 22。
+- `budget-review-finish-v1/final-report.json`：SHA256
+  `14070eda5e6bf978d1efbf9b32afe92feb4a619e895cad2027c778883b03bd3d`。
+- `budget-review-delta-v1/report.json`：SHA256
+  `fcfceae964c00b62b5f4b599f9080dbdaf6abb95df90c04e5d1bc6146ec2d6a4`。
+- 以上目录位于 105 的 `/home/yons/hwapp/dis/rainpulse-xqc-evidence-20261002/`。
+  本地独立核对源、成员、任务、原生 SHA、报告及地图文件；本地消费者不再执行
+ 第二次原生计算，原生直接重算由正常发布审核器完成。
+
+105 上只读复核终态与报告哈希：
+
+```python
+import hashlib, json
+from pathlib import Path
+b = Path('/home/yons/hwapp/dis/rainpulse-xqc-evidence-20261002')
+n = json.loads((b / 'budget-review-normal-v1/state.json').read_text())
+assert n['status'] == 'NORMAL_PUBLICATION_AUDITED'
+assert n['audited'] == n['catalog_latest_verified'] == 22 and n['sweeps'] == 198
+for folder, filename in [('budget-review-finish-v1', 'final-report.json'),
+                         ('budget-review-delta-v1', 'report.json')]:
+    state = json.loads((b / folder / 'state.json').read_text())
+    assert hashlib.sha256((b / folder / filename).read_bytes()).hexdigest() == state['report_sha256']
+print('22 scans / 198 cuts; both terminal report hashes match')
+```
+
+复核已有凭据时只读取上述终态和报告，不重新启动已完成的批次。旧固定 result
+链接继续展示不可变的历史结果；验证本次效果应使用公开目录的最新版本。
+[ZF702 本次第 2 层结果](http://192.168.28.105:4173/?preset=qc&band=X&mode=single&date=2026-08-28&station=zf702&scan=3b3bf9da-aac2-5800-88a5-6d29ed907d9c&result=7ce5a466-86fd-4807-8aec-6cd25eb410fb.e4ce54cf-2721-4787-8b1f-595f5b60ded9&sweep=2)。
+
+## 验收限制
+
+本轮两项流程修复和有限候选发布收尾已经完成。公开地图文件已核对，并实际查看
+重点高仰角与两个对照；3868 第 8 层仍有远端直条，第 7 层仍有稀疏碎片，对照
+中的紧凑回波保留。蓝色透明背景以 alpha=0 判断，不当成有限反射率。
+浏览器工具持续超时，未取得真实浏览器渲染验收；不能把 HTTP 图层核验写成
+完整界面验收。也未取得全天网络、其他日期或独立天气真值验收。
+
+专项冻结 X 测试 604 项通过；最终断言换行后的 15 项相关测试通过，源码与
+验证字节已核对。整库 CI 仍失败，最后源码/测试跟进 d78e09e 的失败项与既有
+10 个融合测试、4,898 项 lint 及 TypeScript 问题一致；不得声称整库 CI 全绿。
+远距离强斑块、未知厂家扩展码和候选业务资格限制继续按下面的独立主线处理。
 
 ## 部署与验收步骤
 
