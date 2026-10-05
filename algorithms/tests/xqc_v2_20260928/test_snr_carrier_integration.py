@@ -207,7 +207,9 @@ def test_sole_normal_writer_exports_candidate_without_confirming_source(mode):
         assert np.isnan(out.fields["DBZH_QC_DISPLAY"][new]).all()
         assert not out.fields["REFLECTIVITY_ELIGIBLE_FOR_CR"][new].any()
         assert (out.fields["QC_ACTION"][new] == 3).all()
-    assert out.xqc_diagnostics["implementation_revision"] == "xqc-original-snr-carrier-20261004-v1:censor-budget-review-20261005-v1"
+    assert out.xqc_diagnostics["implementation_revision"] == (
+        "xqc-original-snr-carrier-20261004-v1:censor-budget-review-20261005-v1"
+    )
     np.testing.assert_array_equal(c.fields["DBZH"], out.fields["DBZH_RAW"])
     from rainpulse_algo.multiband.codec import decode_arrays
     from rainpulse_algo.multiband.xqc_v2.export import export_sweep
