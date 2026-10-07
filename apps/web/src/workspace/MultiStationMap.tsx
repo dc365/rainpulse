@@ -5,6 +5,7 @@ import { ReflectivityLegend } from '../ReflectivityLegend'
 import type { MapCoordinate, GISLegendEntry } from '../RasterGISMap'
 import { useComposite, type CompositeResult } from './CompositeMap'
 import { CompositeCoverage } from './CompositeCoverage'
+import { CompositeScope } from './CompositeScope'
 import { RasterGISMap, type GISImageLayer, type GISMapExtent, type GISRadarContext } from '../RasterGISMap'
 import { radarDisplayExtent, radarSiteFor } from '../radarSites'
 import { FUZHOU_GIS_CONTEXT } from '../GISMapContexts'
@@ -19,9 +20,11 @@ type Scan = { scan_id: string; volume_start: string; volume_end: string; results
 type Resolved = { id: string; scan?: Scan; sweeps: Sweep[]; error?: string }
 type Choice = { id: string; visible: boolean; opacity: number; sweep?: number }
 const clock = (time: string) => new Date(Date.parse(time) + 8 * 3600_000).toISOString().slice(11, 19)
-export function MultiStationMap({ sIDs, xStations, detail, time, day, revision, sharedView, layout, composite, onTimes }: {
+export function MultiStationMap({ sIDs, xStations, detail, time, day, revision, sharedView, layout, composite, compositeSeriesID, compositeRequestedRadars, onTimes }: {
   sIDs: string[]; xStations: Station[]; detail?: WorkspaceCycleDetail; time: string; day: string; revision: number;
   onTimes: (times: string[]) => void; sharedView: View; layout: 'single' | 'pair'; composite: boolean;
+  compositeSeriesID?: string;
+  compositeRequestedRadars?: string[];
 }) {
   const stations = useMemo(() => [...sIDs.map(id => ({ id, band: 'S', name: radarSiteFor(id)?.displayName ?? id })), ...xStations.map(s => ({ id: s.radar_id, band: 'X', name: stationDisplayName(s.radar_id, s.display_name) }))], [sIDs, xStations])
   const [choices, setChoices] = useState<Choice[]>(() => {
@@ -36,16 +39,15 @@ export function MultiStationMap({ sIDs, xStations, detail, time, day, revision, 
   const [resolved, setResolved] = useState<{ key: string; items: Resolved[] }>()
   const [point,setPoint] = useState<MapCoordinate|null>(null)
   const [productMode, setProductMode] = useState('s')
-  const compositeState = useComposite(composite ? time : '', revision)
-  // 仅"上次确认为有组合"时才在请求在途期间保留上一份；一旦确认无组合（回退区），
-  // 后续在途窗口不再回放旧组合，避免每次切换闪现旧产品。
-  const [compositeMemory, setCompositeMemory] = useState<{ token: string; data?: CompositeResult }>()
+  const compositeState = useComposite(composite ? time : '', revision, compositeSeriesID)
+  // 同时次、同系列刷新时才保留已确认结果；切时次立即移除旧图，避免贴上新时间。
+  const [compositeMemory, setCompositeMemory] = useState<{ token: string; seriesID?: string; time: string; data?: CompositeResult }>()
   if (compositeState) {
     const token = compositeState.data ? `have:${compositeState.data.result_id}` : 'absent'
-    if (compositeMemory?.token !== token) setCompositeMemory({ token, data: compositeState.data })
+    if (compositeMemory?.token !== token || compositeMemory.seriesID !== compositeSeriesID || compositeMemory.time !== time) setCompositeMemory({ token, seriesID: compositeSeriesID, time, data: compositeState.data })
   }
   const compositeData = compositeState?.data
-    ?? (composite && compositeState === undefined && compositeMemory?.token.startsWith('have:') ? compositeMemory.data : undefined)
+    ?? (composite && compositeSeriesID !== undefined && compositeMemory?.seriesID === compositeSeriesID && compositeMemory.time === time && compositeState === undefined && compositeMemory?.token.startsWith('have:') ? compositeMemory.data : undefined)
   useEffect(()=>{sessionStorage.setItem('rainpulse.multi-station.layers',JSON.stringify(choices))},[choices])
   const xIDs = choices.filter(c => c.visible && stations.some(s => s.id === c.id && s.band === 'X')).map(c => c.id).sort().join(',')
   const key = `${day}/${time}/${revision}/${xIDs}`
@@ -109,21 +111,23 @@ export function MultiStationMap({ sIDs, xStations, detail, time, day, revision, 
     function map(title: string, layers: GISImageLayer[], refs = contexts, mapLegend: readonly GISLegendEntry[] = REFLECTIVITY_LEGEND, unit='dBZ') {
     const computed: GISMapExtent = composite && layers.length ? [Math.min(...layers.map(l=>l.extent[0])),Math.min(...layers.map(l=>l.extent[1])),Math.max(...layers.map(l=>l.extent[2])),Math.max(...layers.map(l=>l.extent[3]))] : DOMAIN
     const fitExtent = fittedExtent ?? computed
-    return <section className="radar-qc-map" aria-label={title}><header><strong>{title}</strong><span>{layers.length} 个图层</span></header><RasterGISMap imageLayers={layers} radarContexts={refs} imageDescription={title} imageExtent={DOMAIN} fitExtent={fitExtent} validTimeLabel={time ? clock(time) : ''} contextLabel="多站资料窗口" productLabel={title} legend={mapLegend} legendUnit={unit} point={point??undefined} onSelectPoint={setPoint} footerNote="" mapLabel={title} resetViewLabel="复位地图" loading={false} sharedView={sharedView} comparisonMode basemapVisible referenceContext={FUZHOU_GIS_CONTEXT} rasterStyle="grid" zoomControls="hidden" emptyStateHint="选择站点后显示该资料窗口的可用图件" /></section> }
+    return <section className="radar-qc-map" aria-label={title}><header><strong>{title}</strong><span>{layers.length} 个图层</span></header><RasterGISMap imageLayers={layers} radarContexts={refs} imageDescription={title} imageExtent={DOMAIN} fitExtent={fitExtent} validTimeLabel={time ? clock(time) : ''} contextLabel="多站资料窗口" productLabel={title} legend={mapLegend} legendUnit={unit} point={point??undefined} onSelectPoint={setPoint} footerNote="" mapLabel={title} resetViewLabel="复位地图" loading={composite && !compositeState} sharedView={sharedView} comparisonMode basemapVisible referenceContext={FUZHOU_GIS_CONTEXT} rasterStyle="grid" zoomControls="hidden" emptyStateHint={composite ? !compositeState ? '正在读取本时次融合结果' : '本时次无可显示的融合图件；缺测不表示无回波' : '选择站点后显示该资料窗口的可用图件'} /></section> }
   const mosaic = detail && panelByID(detail, 'analysis:dbzh_qc')?.frames.find(f => Date.parse(f.valid_time) === Date.parse(time))
   const products = compositeData?.manifest.comparison.products ?? []
   const product = (id: string) => products.find(p=>p.product_id===id)
   const productLayers = (id: string): GISImageLayer[] => { const p=product(id); return p?.map ? [{id,url:p.map.object_path,extent:p.map.bounds,opacity:1}] : [] }
   const sx = product('sx_composite')
-  // 回退层（已发布 S 拼图）：周期详情在途时保留上一帧，避免图层清空与 fitExtent 翻转闪屏。
+  // S 参考图仅在同一时次刷新期间保留，不跨时次回放。
   const fallbackLayers = useMemo<GISImageLayer[]>(() => mosaic ? [{ id: 's-fallback', url: mosaic.image_url, extent: mosaic.bounds ?? detail?.grid.raster_bounds ?? DOMAIN, opacity: 1 }] : [], [mosaic, detail])
-  const [keptFallback, setKeptFallback] = useState<GISImageLayer[] | undefined>()
-  if (fallbackLayers.length && keptFallback?.[0]?.url !== fallbackLayers[0].url) setKeptFallback(fallbackLayers)
-  const fallbackShown = fallbackLayers.length ? fallbackLayers : detail === undefined ? keptFallback ?? [] : []
+  const [keptFallback, setKeptFallback] = useState<{time:string; layers:GISImageLayer[]}>()
+  if (fallbackLayers.length && (keptFallback?.layers[0]?.url !== fallbackLayers[0].url || keptFallback.time !== time)) setKeptFallback({time,layers:fallbackLayers})
+  const fallbackShown = fallbackLayers.length ? fallbackLayers : detail === undefined && keptFallback?.time === time ? keptFallback.layers : []
   // 产品逐帧范围随参差站覆盖微变；冻结首次取景，切帧不再重定位视图（「定位产品」可手动重定位）。
   const [fittedExtent, setFittedExtent] = useState<GISMapExtent | null>(null)
   const freezeSource: GISMapExtent | undefined = mosaic ? mosaic.bounds ?? detail?.grid?.raster_bounds : products.find(p => p.map)?.map?.bounds
   if (composite && freezeSource && !fittedExtent) setFittedExtent([...freezeSource] as GISMapExtent)
+  const compositePending = composite && !compositeState
+  const referenceTitle = compositeState?.error ? 'S 参考图 · 融合结果读取失败' : compositePending ? 'S 参考图 · 融合结果读取中' : 'S 参考图 · 本时次无融合结果'
   const selectedProduct = product(productMode)
   const probeLayers: ProbeLayer[] = point ? composite ? (()=>{
     const ids=productMode==='compare'?['s_only','sx_composite']:productMode==='s'?['s_only']:productMode==='sx'?['sx_composite']:[productMode]
@@ -132,8 +136,8 @@ export function MultiStationMap({ sIDs, xStations, detail, time, day, revision, 
   return <div className="multi-station-workspace">
     <aside className="multi-station-sidebar">
       {composite ? <>
-        <h3>组合反射率 <small>{sIDs.length} S + {xStations.length} X 全部参与</small></h3>
-        <p className="multi-station-hint">组合使用全部已登记站点，无需逐站选择；点击地图可查看产品源数值。</p>
+        <h3>组合反射率 <small>{compositeData ? `本帧输入 ${new Set(compositeData.manifest.sources?.map(s => s.radar_id) ?? []).size} 站` : fallbackShown.length ? '已发布 S 产品' : '所选系列无本帧结果'}</small></h3>
+        <p className="multi-station-hint">本帧回波贡献：{sx?.echo_contributing_bands?.length ? sx.echo_contributing_bands.join(' + ') : compositeData ? sx?.echo_contributing_bands ? '无合格回波' : '旧结果未记录，贡献未知' : compositePending ? '读取中' : '未取得融合结果，贡献未知'}。点击地图可查看产品源数值。</p>
       </> : <>
         <h3>站点与图层 <small>已选 {choices.length}/32</small></h3>
         <input aria-label="搜索站点" placeholder="站号或名称" value={search} onChange={e=>setSearch(e.target.value)}/>
@@ -170,6 +174,6 @@ export function MultiStationMap({ sIDs, xStations, detail, time, day, revision, 
         {!composite && <label>距离圈<select aria-label="距离圈" value={rings} onChange={e=>setRings(e.target.value)}><option value="focus">当前站</option><option value="all">全部</option><option value="off">关闭</option></select></label>}
         <button onClick={fit}>{composite ? '定位产品' : '定位全部'}</button>
       </div>
-    {composite && compositeData && <CompositeCoverage manifest={compositeData.manifest}/>}<RadarProbePanel point={point} layers={probeLayers}/></aside><div className="multi-station-content">{composite ? <>{compositeData?.manifest.display_warning && <p role="status">{compositeData.manifest.display_warning}</p>}<div className="radar-qc-summary"><select aria-label="组合产品" value={productMode} onChange={e=>setProductMode(e.target.value)}><option value="s">S 组合反射率</option><option value="sx">S+X 组合反射率</option><option value="compare">S / S+X 对照</option>{products.filter(p=>!["s_only","sx_composite","x_minus_s"].includes(p.product_id)).map(p=><option key={p.product_id} value={p.product_id}>{p.label}</option>)}</select><span>{compositeData ? '同次计算 · 同网格' : '已发布 S 产品'} · 使用全部站点生成组合</span><a href={`/admin?${new URLSearchParams({view:"new",preset:"sx_composite",radar:stations.map(s=>s.id).join(","),start:time,end:time?new Date(Date.parse(time)+360000).toISOString():""})}`}>生成组合</a></div>{selectedProduct ? map(selectedProduct.label,productLayers(productMode),[],selectedProduct.legend??REFLECTIVITY_LEGEND,selectedProduct.unit??'dBZ') : productMode==='s' ? map('S 组合反射率',productLayers('s_only').length ? productLayers('s_only') : fallbackShown,[]) : productMode==='compare' ? <div className="radar-qc-pair layout-pair">{map('S 组合反射率',productLayers('s_only'),[])}{map('S+X 组合反射率',productLayers('sx_composite'),[])}</div> : map(sx?.label ?? (mosaic ? 'S 组合反射率 · X 未参与' : 'S+X 组合反射率'),productLayers('sx_composite').length ? productLayers('sx_composite') : !sx ? fallbackShown : [],[])}<div className="multi-composite-legend">{selectedProduct?.legend ? <><strong>{selectedProduct.unit}</strong>{selectedProduct.legend.map(e=><span key={e.label}><i style={{background:e.color}}/>{e.label}</span>)}</> : <><strong>dBZ</strong><ReflectivityLegend/></>}</div><p role="status">{compositeState?.error ?? (sx ? sx.reason ?? 'S 与 X 贡献见计算结果；候选产品' : productMode==='s' ? '现有 S 数值组合产品。选择 S / S+X 对照时仅使用同次计算产品。' : 'X 未参与：该分析时次尚无可定位的 S+X 数值组合。单图可参考已发布 S 产品；双图仅显示同次计算结果。')}</p></> : <><div className="radar-qc-summary"><strong>{qcLayers.length}/{choices.length} 站可显示</strong><span>{choices.some(c=>c.opacity<1)?'透明叠加':'站点图层叠加'} · 上方的站在图上层 · 数值组合请切换组合反射率</span></div><div className={`radar-qc-pair layout-${layout}`}>{layout==='single'?<section hidden/>:map('原始反射率',rawShown)}{map('质控后反射率',qcShown)}</div></>}</div>
+    {composite && compositeData && <CompositeCoverage manifest={compositeData.manifest}/>}<RadarProbePanel point={point} layers={probeLayers}/></aside><div className="multi-station-content">{composite ? <><div className="multi-composite-meta">{compositeData && <CompositeScope registered={stations.map(s=>s.id)} requested={compositeRequestedRadars} sources={compositeData.manifest.sources??[]}/>}{compositeData?.manifest.display_warning && <p role="status" title={compositeData.manifest.display_warning}>{compositeData.manifest.display_warning}</p>}</div><div className="radar-qc-summary"><select aria-label="组合产品" value={productMode} onChange={e=>setProductMode(e.target.value)}><option value="s">S 组合反射率</option><option value="sx">S+X 组合反射率</option><option value="compare">S / S+X 对照</option>{products.filter(p=>!["s_only","sx_composite","x_minus_s"].includes(p.product_id)).map(p=><option key={p.product_id} value={p.product_id}>{p.label}</option>)}</select><span>{compositeData ? '同次计算 · 同网格' : fallbackShown.length ? '已发布 S 产品' : '所选系列无本帧结果'} · 实际参与以本帧资料为准</span><a href={`/admin?${new URLSearchParams({view:"new",preset:"sx_composite",radar:stations.map(s=>s.id).join(","),start:time,end:time?new Date(Date.parse(time)+360000).toISOString():""})}`}>生成组合</a></div>{selectedProduct ? map(selectedProduct.label,productLayers(productMode),[],selectedProduct.legend??REFLECTIVITY_LEGEND,selectedProduct.unit??'dBZ') : productMode==='s' ? map(productLayers('s_only').length ? 'S 组合反射率' : fallbackShown.length ? referenceTitle : 'S 组合反射率 · 本时次无结果',productLayers('s_only').length ? productLayers('s_only') : fallbackShown,[]) : productMode==='compare' ? <div className="radar-qc-pair layout-pair">{map('S 组合反射率',productLayers('s_only'),[])}{map('S+X 组合反射率',productLayers('sx_composite'),[])}</div> : map(sx?.label ?? (fallbackShown.length ? referenceTitle : 'S+X 组合反射率 · 本时次无结果'),productLayers('sx_composite').length ? productLayers('sx_composite') : !sx ? fallbackShown : [],[])}<div className="multi-composite-legend">{selectedProduct?.legend ? <><strong>{selectedProduct.unit}</strong>{selectedProduct.legend.map(e=><span key={e.label}><i style={{background:e.color}}/>{e.label}</span>)}</> : <><strong>dBZ</strong><ReflectivityLegend/></>}</div><p className="multi-composite-footnote" role="status">{compositeState?.error ?? (sx ? sx.reason ?? 'S 与 X 贡献见计算结果；候选产品' : productMode==='s' ? fallbackShown.length ? '所选系列本时次无组合结果；现有 S 数值组合产品供单图参考。选择 S / S+X 对照时仅使用同次计算产品。' : '所选系列本时次无组合结果；该时次没有可显示的已发布 S 图件。缺测不表示无回波。' : compositePending ? '正在读取本时次融合结果；X 贡献待核对。' : '所选系列本时次缺少融合结果，无法判断 X 贡献。单图仅显示已发布 S 参考图；双图仅显示同次计算结果。')}</p></> : <><div className="radar-qc-summary"><strong>{qcLayers.length}/{choices.length} 站可显示</strong><span>{choices.some(c=>c.opacity<1)?'透明叠加':'站点图层叠加'} · 上方的站在图上层 · 数值组合请切换组合反射率</span></div><div className={`radar-qc-pair layout-${layout}`}>{layout==='single'?<section hidden/>:map('原始反射率',rawShown)}{map('质控后反射率',qcShown)}</div></>}</div>
   </div>
 }
