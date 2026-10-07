@@ -420,6 +420,9 @@ interface RasterGISMapProps {
   // and comparison rails.
   zoomControls?: 'hidden' | 'corner' | 'edge'
   basemapVisible?: boolean
+  // True while the caller's layer list is still resolving: keep already
+  // rendered layers on screen instead of clearing to the empty state.
+  layersPending?: boolean
   rasterStyle?: GISRasterStyle
   showRasterValues?: boolean
   smoothRaster?: boolean
@@ -462,6 +465,7 @@ export function RasterGISMap({
   comparisonMode = false,
   zoomControls,
   basemapVisible: controlledBasemapVisible,
+  layersPending = false,
   rasterStyle: controlledRasterStyle,
   showRasterValues: controlledShowRasterValues,
   smoothRaster: controlledSmoothRaster,
@@ -895,7 +899,8 @@ export function RasterGISMap({
     if (!map || !imageLayers) return
     const entries=multiLayersRef.current
     const wanted=new Set(imageLayers.map(entry=>entry.id))
-    for(const [id,entry] of entries)if(!wanted.has(id)){map.removeLayer(entry.layer);entry.release();entry.layer.dispose();entries.delete(id)}
+    if(!layersPending)for(const [id,entry] of entries)if(!wanted.has(id)){map.removeLayer(entry.layer);entry.release();entry.layer.dispose();entries.delete(id)}
+    else if(wanted.size===0)for(const [id,entry] of entries)entry.layer.setOpacity(0.55)
     imageLayers.forEach((entry,index)=>{
       const key=`${entry.url}/${entry.extent.join(',')}`
       let existing=entries.get(entry.id)
@@ -922,7 +927,7 @@ export function RasterGISMap({
       existing.layer.setOpacity(entry.opacity);existing.layer.setZIndex(10+index)
     })
     onLayerErrorRef.current?.(false)
-  }, [imageLayers, fitExtentKey, radarContextKey, referenceContext, sharedView])
+  }, [imageLayers, layersPending, fitExtentKey, radarContextKey, referenceContext, sharedView])
   useEffect(()=>()=>{for(const entry of multiLayersRef.current.values()){entry.release();entry.layer.dispose()}multiLayersRef.current.clear();radarImagePool.clearIdle()},[])
 
   useEffect(() => {
