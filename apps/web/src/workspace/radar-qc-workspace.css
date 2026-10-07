@@ -71,3 +71,5 @@
 .composite-coverage>div{display:grid;gap:2px;align-items:start}.composite-coverage strong{white-space:nowrap}.composite-coverage small{line-height:1.5}
 .radar-qc-series { display: flex; align-items: center; gap: 8px; }
 .radar-qc-series select { flex: 1; min-width: 0; width: 0; }
+
+.radar-qc-series-note{min-height:52px}
