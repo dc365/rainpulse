@@ -72,38 +72,10 @@ def shared_range_term(native, valid, reference):
     r = np.asarray(native.ranges, float)
     if np.shape(valid) != native.shape or np.shape(reference) != r.shape:
         raise ValueError("range term reference geometry differs")
-    values = native.fields["DBZH"] - native.fields["SNR"] - 20 * np.log10(np.maximum(r, 1) / 1000)
-    estimates = []
-    for parity in (0, 1):
-        rows = np.arange(native.shape[0]) % 2 == parity
-        use = valid[rows] & reference[None, :]
-        count = use.sum(axis=0)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", RuntimeWarning)
-            y = np.nanmedian(np.where(use, values[rows], np.nan), axis=0)
-        ok = (count >= 5) & np.isfinite(y)
-        if ok.sum() < 100 or np.ptp(r[ok]) < 200000:
-            return 0.0, {"status": "insufficient_paired_support", "groups": estimates}
-        slope, offset = np.polyfit(r[ok] / 1000, y[ok], 1)
-        error = float(np.percentile(abs(y[ok] - slope * r[ok] / 1000 - offset), 90))
-        estimates.append(
-            {
-                "slope_db_per_km": float(slope),
-                "residual_p90_db": error,
-                "range_gates": int(ok.sum()),
-                "span_m": float(np.ptp(r[ok])),
-            }
-        )
-        if not 0 <= slope <= 0.03 or error > 0.5:
-            return 0.0, {"status": "unsupported_range_relation", "groups": estimates}
-    if abs(estimates[0]["slope_db_per_km"] - estimates[1]["slope_db_per_km"]) > 0.002:
-        return 0.0, {"status": "inconsistent_ray_groups", "groups": estimates}
-    coefficient = float(np.mean([x["slope_db_per_km"] for x in estimates]))
-    return coefficient, {
-        "status": "measured_consistent",
-        "coefficient_db_per_km": coefficient,
-        "groups": estimates,
-    }
+    from .paired_range import calibrate
+
+    return calibrate(r, native.fields["DBZH"], native.fields["SNR"],
+                     np.asarray(valid, bool), np.asarray(reference, bool))
 
 
 def infer_broad_source(native, cfg, *, weather=None, conflicts=None, independent_weather_available=None):
