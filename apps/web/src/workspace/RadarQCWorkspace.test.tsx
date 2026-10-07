@@ -49,6 +49,125 @@ function setup(stationCatalog = stations) {
 }
 afterEach(() => { cleanup(); sessionStorage.clear(); vi.unstubAllGlobals(); window.history.replaceState({}, '', '/') })
 
+it('distinguishes reference analysis times and can leave a pinned old composite without changing its time', async () => {
+  setup()
+  const fallback = vi.mocked(fetch).getMockImplementation()!
+  const old = 'a'.repeat(64), latest = 'b'.repeat(64)
+  const series = [latest,old].map(series_id=>({series_id,product_id:'horizontal',requested_radars:['z9591','z9598'],legacy:true}))
+  vi.mocked(fetch).mockImplementation(async (input,init)=>{
+    const url=String(input)
+    if(url.includes('radar-composites?')) {
+      const chosen=new URL(url,'http://localhost').searchParams.get('series_id')||latest
+      return new Response(JSON.stringify({series,selected_series_id:chosen,items:[{result_id:'result',analysis_time:morning,series_id:chosen}]}))
+    }
+    return fallback(input,init)
+  })
+  window.history.replaceState({},'',`/?preset=qc&mode=fusion&date=2026-08-28&time=${morning}&series=${old}`)
+  render(<RadarQCWorkspace />)
+  await screen.findByText(/本系列 1 个组合时次/)
+  expect(screen.getByText(/2 资料时次/)).toBeTruthy()
+  expect(screen.queryByText(/2 组合时次/)).toBeNull()
+  fireEvent.click(screen.getByRole('button',{name:'查看最新组合'}))
+  await waitFor(()=>expect(screen.getByRole('button',{name:'固定当前系列'})).toBeTruthy())
+  expect(new URLSearchParams(window.location.search).has('series')).toBe(false)
+  expect(Date.parse(new URLSearchParams(window.location.search).get('time')!)).toBe(Date.parse(morning))
+})
+
+it('keeps frame queries in the selected series and clears an old series while switching', async () => {
+  setup()
+  const fallback = vi.mocked(fetch).getMockImplementation()!
+  const a = 'a'.repeat(64), b = 'b'.repeat(64)
+  const series = [a,b].map((series_id,index)=>({series_id,product_id:index?'strict-v2':'horizontal',network_release:index?'quality':'experiment',fingerprint:series_id,legacy:false}))
+  let releaseB: (()=>void) | undefined
+  const pendingB = new Promise<void>(resolve=>{releaseB=resolve})
+  const requested: string[] = []
+  vi.mocked(fetch).mockImplementation(async (input,init)=>{
+    const url=String(input)
+    if (url.includes('radar-composites/')) {
+      const chosen=url.endsWith('/result-b')?b:a
+      return new Response(JSON.stringify({result_id:chosen===a?'result-a':'result-b',manifest:{analysis_time:morning,
+        sources:[{radar_id:'z9591',band:'S',volume_end:morning}],comparison:{products:[
+          {product_id:'s_only',label:'S 组合反射率',status:'ready',map:{bounds:[118,25,120,27],object_path:chosen===a?'/series-a.png':'/series-b.png'}},
+          {product_id:'sx_composite',label:'S+X 组合反射率',status:'ready',echo_contributing_bands:['S']},
+        ]}}}))
+    }
+    if (url.includes('radar-composites?')) {
+      const q=new URLSearchParams(url.split('?')[1])
+      const chosen=q.get('series_id')||a
+      const start=q.get('start')??'',end=q.get('end')??''
+      if (Date.parse(end)-Date.parse(start)<86400000) requested.push(chosen)
+      if (chosen===b) await pendingB
+      return new Response(JSON.stringify({series,selected_series_id:chosen,items:[{result_id:chosen===a?'result-a':'result-b',analysis_time:morning,series_id:chosen}]}))
+    }
+    return fallback(input,init)
+  })
+  window.history.replaceState({},'',`/?preset=qc&mode=fusion&date=2026-08-28&time=${morning}`)
+  render(<RadarQCWorkspace />)
+  await waitFor(()=>expect(document.querySelector('[data-layers="/series-a.png"]')).toBeTruthy())
+  expect(requested).toContain(a)
+  expect(screen.getByText(/本帧回波贡献：S。/)).toBeTruthy()
+  fireEvent.change(screen.getByLabelText('组合产品系列'),{target:{value:b}})
+  expect(document.querySelector('[data-layers="/series-a.png"]')).toBeNull()
+  await act(async()=>{releaseB?.()})
+  await waitFor(()=>expect(document.querySelector('[data-layers="/series-b.png"]')).toBeTruthy())
+  expect(requested.at(-1)).toBe(b)
+})
+
+it('labels a missing fusion frame as an S reference and keeps a fixed historical series', async () => {
+  setup()
+  const fallback=vi.mocked(fetch).getMockImplementation()!
+  const fixed='a'.repeat(64)
+  vi.mocked(fetch).mockImplementation(async(input,init)=>{
+    const url=String(input)
+    if(url.includes('radar-composites?'))return new Response(JSON.stringify({items:[],series:[{series_id:fixed,product_id:'full',requested_radars:['z9591','zf101']}],selected_series_id:fixed}))
+    if(url.includes('cycles/cycle-0')){
+      const detail=cycleDetail(0)
+      detail.panels.push({...panel('analysis',morning),panel_id:'analysis:dbzh_qc',frames:[{...panel('analysis',morning).frames[0],image_url:'/s-reference.png'}]})
+      return new Response(JSON.stringify(detail))
+    }
+    return fallback(input,init)
+  })
+  window.history.replaceState({},'',`/?preset=qc&mode=fusion&date=2026-08-28&time=${morning}&series=${fixed}`)
+  render(<RadarQCWorkspace />)
+  await waitFor(()=>expect(document.querySelector('[data-layers="/s-reference.png"]')).toBeTruthy())
+  fireEvent.change(screen.getByLabelText('组合产品'),{target:{value:'sx'}})
+  await screen.findByText('S 参考图 · 本时次无融合结果')
+  expect(screen.getByText(/缺少融合结果，无法判断 X 贡献/)).toBeTruthy()
+  expect(screen.queryByText(/X 未参与/)).toBeNull()
+  expect(new URLSearchParams(location.search).get('series')).toBe(fixed)
+  fireEvent.change(screen.getByLabelText('组合产品'),{target:{value:'compare'}})
+  expect(document.querySelector('[data-layers="/s-reference.png"]')).toBeNull()
+})
+
+it('opens the current time latest frame and preserves automatic selection across reloads', async () => {
+  setup()
+  const fallback=vi.mocked(fetch).getMockImplementation()!
+  const newest='a'.repeat(64), current='b'.repeat(64)
+  const series=[newest,current].map(series_id=>({series_id,product_id:'full',requested_radars:['z9591','zf101']}))
+  vi.mocked(fetch).mockImplementation(async(input,init)=>{
+    const url=String(input)
+    if(url.includes('radar-composites?')){
+      const q=new URL(url,'http://localhost').searchParams
+      const narrow=Date.parse(q.get('end')!)-Date.parse(q.get('start')!)<86400000
+      const selected=q.get('series_id') || (narrow?current:newest)
+      return new Response(JSON.stringify({series:narrow?series.filter(s=>s.series_id===selected):series,selected_series_id:selected,items:[{result_id:selected,analysis_time:selected===current?morning:evening,series_id:selected}]}))
+    }
+    if(url.includes('radar-composites/'))return new Response(JSON.stringify({result_id:current,manifest:{analysis_time:morning,sources:[{radar_id:'z9591',band:'S'},{radar_id:'zf101',band:'X'}],comparison:{products:[{product_id:'sx_composite',label:'S+X 实际组合',status:'available',echo_contributing_bands:['S','X'],map:{bounds:[118,25,120,27],object_path:'/sx-current.png'}}]}}}))
+    return fallback(input,init)
+  })
+  window.history.replaceState({},'',`/?preset=qc&mode=fusion&date=2026-08-28&time=${morning}&series=${newest}`)
+  render(<RadarQCWorkspace />)
+  await screen.findByText(/本系列 1 个组合时次/)
+  fireEvent.click(screen.getByRole('button',{name:'查看最新组合'}))
+  await waitFor(()=>expect(screen.getByText(/本帧回波贡献：S \+ X/)).toBeTruthy())
+  expect(new URLSearchParams(location.search).has('series')).toBe(false)
+  expect(screen.getByLabelText('组合产品系列')).toHaveProperty('value','')
+  fireEvent.change(screen.getByLabelText('组合产品'),{target:{value:'sx'}})
+  expect(document.querySelector('[data-layers="/sx-current.png"]')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button',{name:'固定当前系列'}))
+  await waitFor(()=>expect(new URLSearchParams(location.search).get('series')).toBe(current))
+})
+
 it('identifies a pinned historical X result and refreshes to the latest version', async () => {
   setup()
   const fallback = vi.mocked(fetch).getMockImplementation()!
@@ -266,10 +385,11 @@ it('drops the retained composite once a time is confirmed to have no composite',
   await waitFor(() => expect(document.querySelector('[data-layers="/full.png"]')).toBeTruthy())
   fireEvent.click(screen.getByRole('button', { name: /08\/28 18:36 北京时间/ }))
   await waitFor(() => expect(document.querySelector('[data-layers="/full.png"]')).toBeNull())
-  expect(screen.getByText(/现有 S 数值组合产品|X 未参与/)).toBeTruthy()
+  expect(screen.getByText(/所选系列本时次无组合结果；该时次没有可显示的已发布 S 图件/)).toBeTruthy()
+  expect(screen.getByText('所选系列无本帧结果')).toBeTruthy()
 })
 
-it('keeps the previous fallback layer while the next cycle detail is loading', async () => {
+it('does not label the previous S reference as the next time while detail is loading', async () => {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
   const mosaicDetail = (index: number) => ({ ...cycleDetail(index), panels: [...cycleDetail(index).panels,
     { panel_id: 'analysis:dbzh_qc', algorithm_id: 'radar-analysis', display_name: 'analysis', role: 'qc', lifecycle: 'analysis',
@@ -293,7 +413,10 @@ it('keeps the previous fallback layer while the next cycle detail is loading', a
   await waitFor(() => expect(document.querySelector('[data-layers="/mosaic-0.png"]')).toBeTruthy())
   fireEvent.click(screen.getByRole('button', { name: /08\/28 18:36 北京时间/ }))
   await act(async () => { await new Promise(r => setTimeout(r, 120)) })
+  // While the next detail is loading the previous frame stays visible but is
+  // explicitly labelled as 上一帧 instead of flashing an empty-state overlay.
   expect(document.querySelector('[data-layers="/mosaic-0.png"]')).toBeTruthy()
+  await waitFor(() => expect([...document.querySelectorAll('.radar-qc-map header strong')].some(e => e.textContent?.includes('上一帧'))).toBe(true))
   await act(async () => { pendingCycle1.forEach(resolve => resolve({ ok: true, json: async () => mosaicDetail(1) })) })
   await waitFor(() => expect(document.querySelector('[data-layers="/mosaic-1.png"]')).toBeTruthy())
   expect(document.querySelector('[data-layers="/mosaic-0.png"]')).toBeNull()
@@ -333,15 +456,24 @@ it('loads a deep-linked native scan from the second catalog page', async () => {
 it('labels the shared analysis grid separately from the native X acquisition time', async () => {
   setup()
   const nativeTime = '2026-08-28T00:08:25Z'
+  let releaseScans: (() => void) | undefined
+  const pendingScans = new Promise<void>(resolve => { releaseScans = resolve })
   const fallback = vi.mocked(fetch).getMockImplementation()!
   vi.mocked(fetch).mockImplementation(async (input, init) => {
-    if (String(input).includes('radar-scans')) return { ok: true, json: async () => ({
-      ...scans, items: [{ ...scans.items[0], volume_start: nativeTime, volume_end: '2026-08-28T00:09:00Z' }],
-    }) } as Response
+    if (String(input).includes('radar-scans')) {
+      await pendingScans
+      return { ok: true, json: async () => ({
+        ...scans, items: [{ ...scans.items[0], volume_start: nativeTime, volume_end: '2026-08-28T00:09:00Z' }],
+      }) } as Response
+    }
     return fallback(input, init)
   })
   window.history.replaceState({}, '', '/?preset=qc&band=X&date=2026-08-28&time=2026-08-28T00:08:25Z&station=zf101&scan=scan-x&result=result-x')
   render(<RadarQCWorkspace />)
+  await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('radar-scans'))).toBe(true))
+  expect(new URLSearchParams(window.location.search).get('scan')).toBe('scan-x')
+  expect(new URLSearchParams(window.location.search).get('result')).toBe('result-x')
+  await act(async () => { releaseScans?.() })
   await screen.findAllByText('08:08:25')
   expect(screen.getByText('2 分析周期 · 分析时次')).toBeTruthy()
   expect(screen.getByText('08/28 08:06 北京时间')).toBeTruthy()
