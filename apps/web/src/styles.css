@@ -2577,16 +2577,21 @@ h1 {
 .gis-layer-empty {
   z-index: 4;
   position: absolute;
-  inset: 50% auto auto 50%;
-  min-width: 220px;
-  display: grid;
-  gap: 5px;
-  padding: 14px;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 24px);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 8px;
+  padding: 4px 12px;
   border: 1px solid var(--gis-border);
+  border-radius: 999px;
   color: var(--gis-muted);
   background: var(--gis-control-strong);
   text-align: center;
-  transform: translate(-50%, -50%);
 }
 
 .gis-layer-empty strong {

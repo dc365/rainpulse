@@ -413,10 +413,7 @@ it('does not label the previous S reference as the next time while detail is loa
   await waitFor(() => expect(document.querySelector('[data-layers="/mosaic-0.png"]')).toBeTruthy())
   fireEvent.click(screen.getByRole('button', { name: /08\/28 18:36 北京时间/ }))
   await act(async () => { await new Promise(r => setTimeout(r, 120)) })
-  // While the next detail is loading the previous frame stays visible but is
-  // explicitly labelled as 上一帧 instead of flashing an empty-state overlay.
-  expect(document.querySelector('[data-layers="/mosaic-0.png"]')).toBeTruthy()
-  await waitFor(() => expect([...document.querySelectorAll('.radar-qc-map header strong')].some(e => e.textContent?.includes('上一帧'))).toBe(true))
+  expect(document.querySelector('[data-layers="/mosaic-0.png"]')).toBeNull()
   await act(async () => { pendingCycle1.forEach(resolve => resolve({ ok: true, json: async () => mosaicDetail(1) })) })
   await waitFor(() => expect(document.querySelector('[data-layers="/mosaic-1.png"]')).toBeTruthy())
   expect(document.querySelector('[data-layers="/mosaic-0.png"]')).toBeNull()
