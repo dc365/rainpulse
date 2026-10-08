@@ -39,6 +39,8 @@ type RuntimeStore interface {
 	GetProductAsset(context.Context, uuid.UUID, uuid.UUID) (workflow.ProductAsset, error)
 	ListProductAssets(context.Context, uuid.UUID) ([]workflow.ProductAsset, error)
 	WorkspacePipelineSnapshot(context.Context, string, time.Time) (PipelineSnapshot, error)
+	WorkspaceDataflowSnapshot(context.Context, time.Time, time.Duration) (DataflowSnapshot, error)
+	WorkspaceDataflowRevision(context.Context) (string, error)
 	CancelWorkspaceRegeneration(context.Context, uuid.UUID, string) (RegenerationCancellation, error)
 }
 

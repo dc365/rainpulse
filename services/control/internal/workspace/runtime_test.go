@@ -16,9 +16,14 @@ import (
 )
 
 type runtimeFakeStore struct {
-	diagnostics workflow.AnalysisDiagnostics
-	snapshot    PipelineSnapshot
-	cancelled   RegenerationCancellation
+	diagnostics       workflow.AnalysisDiagnostics
+	snapshot          PipelineSnapshot
+	cancelled         RegenerationCancellation
+	dataflow          DataflowSnapshot
+	dataflowErr       error
+	dataflowRevision  string
+	dataflowCalls     int
+	dataflowLastCalls int
 }
 
 func (store *runtimeFakeStore) GetAnalysisDiagnosticsByJob(context.Context, uuid.UUID) (workflow.AnalysisDiagnostics, error) {
@@ -36,9 +41,29 @@ func (*runtimeFakeStore) ListProductAssets(context.Context, uuid.UUID) ([]workfl
 func (store *runtimeFakeStore) WorkspacePipelineSnapshot(context.Context, string, time.Time) (PipelineSnapshot, error) {
 	return store.snapshot, nil
 }
+func (store *runtimeFakeStore) WorkspaceDataflowSnapshot(_ context.Context, anchor time.Time, window time.Duration) (DataflowSnapshot, error) {
+	store.dataflowCalls++
+	if store.dataflowErr != nil {
+		return DataflowSnapshot{}, store.dataflowErr
+	}
+	return AssembleDataflowSnapshot(anchor, anchor, window, store.RadarLaneBlocks(), nil, nil, nil, nil), nil
+}
+func (store *runtimeFakeStore) WorkspaceDataflowRevision(context.Context) (string, error) {
+	return store.dataflowRevision, nil
+}
 func (store *runtimeFakeStore) CancelWorkspaceRegeneration(_ context.Context, requestID uuid.UUID, reason string) (RegenerationCancellation, error) {
 	store.cancelled = RegenerationCancellation{RequestID: requestID, Status: "CANCELLED", Reason: reason}
 	return store.cancelled, nil
+}
+
+// RadarLaneBlocks exposes the fake's radar scan blocks so the dataflow fake can
+// reuse fixture payloads assembled by tests.
+func (store *runtimeFakeStore) RadarLaneBlocks() []DataflowScanBlock {
+	blocks := make([]DataflowScanBlock, 0)
+	for _, lane := range store.dataflow.RadarLanes {
+		blocks = append(blocks, lane.Blocks...)
+	}
+	return blocks
 }
 
 type runtimeFakeObjects struct {

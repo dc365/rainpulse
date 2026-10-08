@@ -1,0 +1,441 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Workspace dataflow snapshot v1",
+  "description": "Read-only UI projection for the real-time radar processing dataflow screen. Composes radar scan runs, their per-stage jobs, automatic analysis cycles, automatic forecast runs and radar statuses inside one wall-clock window. The bounded domain tables in PostgreSQL remain the source of truth; this payload never carries radar arrays.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_at",
+    "window_start",
+    "window_minutes",
+    "stages",
+    "radar_lanes",
+    "analysis_blocks",
+    "forecast_blocks",
+    "radar_statuses",
+    "events"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "window_start": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "window_minutes": {
+      "type": "integer",
+      "minimum": 10,
+      "maximum": 360
+    },
+    "stages": {
+      "type": "array",
+      "description": "Chain beat strip in downstream order. Exactly seven entries.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "label",
+          "completed",
+          "running",
+          "queued",
+          "failed",
+          "p50_ms"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "enum": [
+              "ingest",
+              "decode",
+              "qc",
+              "grid",
+              "mosaic_qpe",
+              "nowcast",
+              "products"
+            ]
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "completed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "running": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "queued": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "failed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "p50_ms": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Median runtime of succeeded stage jobs inside the window. Zero when no succeeded job exists."
+          }
+        }
+      }
+    },
+    "radar_lanes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["radar_id", "blocks"],
+        "properties": {
+          "radar_id": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "blocks": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/scan_block" }
+          }
+        }
+      }
+    },
+    "analysis_blocks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/analysis_block" }
+    },
+    "forecast_blocks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/forecast_block" }
+    },
+    "radar_statuses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "radar_id",
+          "health",
+          "participating_in_latest_analysis"
+        ],
+        "properties": {
+          "radar_id": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "display_name": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "health": {
+            "type": "string",
+            "enum": ["HEALTHY", "DEGRADED", "UNAVAILABLE"]
+          },
+          "latest_scan_time": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "scan_status": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "scan_completeness": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "maximum": 1
+          },
+          "mean_quality_index": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "maximum": 1
+          },
+          "data_delay_seconds": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
+          "participating_in_latest_analysis": {
+            "type": "boolean"
+          },
+          "qc_duration_ms": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "description": "Runtime of the most recent succeeded radar QC job for this radar inside the window."
+          }
+        }
+      }
+    },
+    "events": {
+      "type": "array",
+      "description": "Recent terminal pipeline events derived from the same window query, newest first, at most 30 entries.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["time", "kind", "label"],
+        "properties": {
+          "time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "scan.received",
+              "job.succeeded",
+              "job.failed",
+              "analysis.created",
+              "run.published"
+            ],
+            "maxLength": 32
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 96
+          },
+          "radar_id": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "detail": {
+            "type": "string",
+            "maxLength": 256
+          }
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 64 }
+    }
+  },
+  "$defs": {
+    "job_stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stage",
+        "job_id",
+        "status",
+        "created_at"
+      ],
+      "properties": {
+        "stage": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Domain stage identity: decode, qc, grid, mosaic, qpe, diagnostics, nowcast_input, pysteps_lk, pysteps_steps, nowcastnet, products, verification, or a lowercased job type."
+        },
+        "job_id": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "status": {
+          "type": "string",
+          "enum": ["PENDING", "RUNNING", "SUCCEEDED", "FAILED", "SKIPPED"]
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "started_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "finished_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "runtime_ms": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "error_code": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "error_message": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "model_id": {
+          "type": "string",
+          "maxLength": 128
+        }
+      }
+    },
+    "scan_block": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scan_id",
+        "run_id",
+        "volume_start",
+        "volume_end",
+        "received_at",
+        "status",
+        "stages"
+      ],
+      "properties": {
+        "scan_id": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "run_id": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "volume_start": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "volume_end": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "received_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "maxLength": 64,
+          "enum": [
+            "RAW_RECEIVED",
+            "RAW_VALIDATING",
+            "DECODING",
+            "NORMALIZED",
+            "QC_RUNNING",
+            "QC_READY",
+            "GRID_RUNNING",
+            "RADAR_GRID_READY",
+            "DEGRADED",
+            "FAILED",
+            "SKIPPED"
+          ]
+        },
+        "degraded_reason": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "scan_completeness": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "mean_quality_index": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "stages": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/job_stage" }
+        }
+      }
+    },
+    "analysis_block": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "analysis_id",
+        "run_id",
+        "analysis_time",
+        "grid_id",
+        "status",
+        "created_at",
+        "stages"
+      ],
+      "properties": {
+        "analysis_id": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "run_id": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "analysis_time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "grid_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "status": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "degraded_reason": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "radar_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "coverage_ratio": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "stages": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/job_stage" }
+        }
+      }
+    },
+    "forecast_block": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "issue_time",
+        "grid_id",
+        "status",
+        "created_at",
+        "stages"
+      ],
+      "properties": {
+        "run_id": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "issue_time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "grid_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "status": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "stages": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/job_stage" }
+        }
+      }
+    }
+  }
+}

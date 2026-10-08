@@ -1,3 +1,22 @@
+## 2026-10-09 数据流历史回放（8月28案例）与雷达状态波段分组，更新 105
+
+- 用户追加：数据以历史案例（8月28）为准、下方雷达状态按 S/X 波段分类。当日实现并更新 105（版本串 unified-20261009-dataflow+4ce3dcfa7859）。
+- 历史回放：`GET /api/v1/workspace/dataflow?end=<RFC3339>`（须早于当前至少一个窗口否则 400）；前端顶栏 datetime-local 锚点（按北京时间解析）+ 回放/回到实时，锚点模式连接徽标显示"历史回放"。窗口轴全面改为**数据时间**（volume_end_time / analysis_time / issue_time ∈ [anchor-window, anchor)），修正首版仅有下界导致历史锚点返回全天累计数的缺陷（集成测试补：窗口外旧扫描与锚点后未来扫描均须排除）。
+- 回灌语义：8月28案例 volume 在 8/28、received 8/30、jobs 跑在 9/18–9/26（多次 QC 重试，含一个 9/22 起卡死的 grid RUNNING）。作业时间戳偏离数据时间 >30min 的块前端降级为 slot 比例分段（queue+runtime 占比铺满 6 分钟节拍槽，重试段并存），贴近的按真实时间戳渲染；服务端事件时间戳同样回退数据时间（dataflowEffectiveTime）。泳道块锚定 volume_end_time；分段 key 带序号支持同阶段多次重试。
+- 波段分组：RadarStatusStrip 按 S 波段 / X 波段候选 / 其它 三组（组头部数+不可用数，X 默认折叠）；bandOf 先查 radarSites 再按 z9*/zf* 命名约定，合成雷达归其它。
+- 105 验证：curl 探得 8/28 各小时真实分布（11:30 CST 最忙：259 arrivals/503 QC/207 失败/40 分析）；浏览器锚点 11:30 回放实测：泳道 10:30–11:30、309 块（S+X 29 行）、p50 真实（QC 89s）、判定横幅如实报 212 失败。前端 225/225、Go 全绿。无提交推送；回滚备份沿用 10-08 轮；凭据临时 askpass 用后即删。
+
+## 2026-10-08 数据流界面落地：免鉴权工作台路由 + workspace 投影 + SSE
+
+- 用户拍板"不做值班台落位、免鉴权，直接实现"。新增主工作台路由 `/dataflow`（App.tsx 三路由之一，入口链接在 MainWorkspace 顶栏），前端 `apps/web/src/dataflow/`（types/layout/useDataflow/StageStrip/Swimlanes/RadarStatusStrip/EventTicker/BlockDrawer/dataflow.css），无新依赖，全部手写 HTML/CSS 布局，尊重 prefers-reduced-motion。
+- 后端新增 `GET /api/v1/workspace/dataflow?window=`（10–360 分钟钳制，默认 60）与 SSE `GET /api/v1/workspace/dataflow/events`（`dataflow.changed` revision ping，间隔 env `RAINPULSE_DATAFLOW_EVENT_INTERVAL` 默认 2s，复用 workspaceEventHub）。合同先行：`contracts/schemas/dataflow-snapshot-v1.schema.json`。
+- 实现分层：postgres `workspace_dataflow_store.go` 三条窗口 join（scans+jobs、automatic analysis 排除重算、forecast 排除 rerun_of；attempt LATERAL 取错误码）→ workspace `dataflow_assembly.go` 纯装配（泳道分组、7 节点节拍统计+p50、雷达状态合并最新成功质控耗时、≤30 条终结事件，标签用 CST 固定时区显示、UTC 字段不变）。不新增 NATS 事件、不改 worker。
+- RuntimeStore 接口新增 `WorkspaceDataflowSnapshot/WorkspaceDataflowRevision`；radar 扫描/状态读失败整体 503，analysis/forecast 读失败降级为 warnings。
+- 验证：Go workspace/postgres/api 包测试全过（含 SSE revision ping、窗口钳制、装配单测；SQL 集成测试按 RAINPULSE_TEST_DATABASE_URL 门控跳过，本机无 PG）；前端 vitest 220/220、tsc+build 通过；mock 后端 + 浏览器目视验收三轮，修复节点截断/现在标签竖排/泳道未铺宽/UTC 事件标签/抽屉遮罩/数字列对齐。
+- 无部署、无提交推送；main 上近站研究 WIP 未动。mock 服务脚本在 /tmp/rp-dataflow-mock（仓库外，勿提交）。SSE 间隔与窗口参数为零配置默认，无新增必需 env。
+- 随后同日部署 105：本地 BDP 工作区交叉编译 unified 单进程二进制（Version=unified-20261008-dataflow, Rev=4ce3dcfa7859）+ pnpm dist，rsync 覆盖 `<root>/.build/linux-amd64/rainpulse` 与 `apps/web/dist/`（先备份 rainpulse.bak-20261008 与 /tmp/rainpulse-web-dist-bak-20261008.tgz），`systemctl restart rainpulse`。验证：/api/v1/system/status 版本正确、dataflow API 200/SSE 正常、journal 无错误、浏览器实测 /dataflow 渲染正确。部署中发现并补齐：窗口内无体扫的非 UNAVAILABLE 雷达保留空泳道行+断流标记（assembly 改动+单测，二次发版确认）。105 当前实时链路无新数据（最后体扫约 9 月 18 日），界面如实显示 5 部在册雷达断流、26 部不可用候选站不占泳道。SSH 凭据仅临时 askpass 使用，未落仓库/配置。
+
+
 ## 2026-10-08 组合说明条不再隐藏重现（第十七批补二，已部署 105）
 
 - 用户指认具体提示框："自动查看本时次最新组合；当前系列 N 个组合时次…"。该 alert 在

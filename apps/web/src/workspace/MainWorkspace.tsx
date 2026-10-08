@@ -340,6 +340,7 @@ export function MainWorkspace() {
             <strong>{followLatest && detail ? ageLabel(cycleAgeSeconds(detail, now)) : selectedCycle ? capabilityText(selectedCycle) : '读取中'}</strong>
           </div>
           {error ? <button type="button" className="workspace-warning-compact" title={error} aria-label={`部分数据源不可用，重试。${error}`} onClick={refresh}>数据异常 · 重试</button> : null}
+          <a className="admin-link" href="/dataflow">数据流</a>
           <a className="admin-link" href="/admin">后台</a>
         </div>
       </header>

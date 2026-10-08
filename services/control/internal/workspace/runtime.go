@@ -21,6 +21,8 @@ import (
 const (
 	workspaceSamplePath   = "/api/v1/workspace/sample"
 	workspaceEventsPath   = "/api/v1/workspace/events"
+	dataflowPath          = "/api/v1/workspace/dataflow"
+	dataflowEventsPath    = "/api/v1/workspace/dataflow/events"
 	workspaceStageSuffix  = "/stages"
 	workspaceCancelPrefix = "/api/v1/admin/regenerations/"
 	workspaceCancelSuffix = "/cancel"
@@ -38,20 +40,22 @@ type RuntimeOptions struct {
 }
 
 type runtimeHandler struct {
-	analysisOnce       sync.Once
-	analysis           *analysisJobs
-	eventHubOnce       sync.Once
-	eventHub           *workspaceEventHub
-	next               http.Handler
-	workspace          http.Handler
-	intervalProjection http.Handler
-	store              RuntimeStore
-	objects            RuntimeObjectReader
-	nowcastNetProducts nowcastNetProductStore
-	ensembleRoot       string
-	nowcastNetRoot     string
-	adminToken         string
-	now                func() time.Time
+	analysisOnce        sync.Once
+	analysis            *analysisJobs
+	eventHubOnce        sync.Once
+	eventHub            *workspaceEventHub
+	dataflowHubOnce     sync.Once
+	dataflowHub         *workspaceEventHub
+	next                http.Handler
+	workspace           http.Handler
+	intervalProjection  http.Handler
+	store               RuntimeStore
+	objects             RuntimeObjectReader
+	nowcastNetProducts  nowcastNetProductStore
+	ensembleRoot        string
+	nowcastNetRoot      string
+	adminToken          string
+	now                 func() time.Time
 }
 
 // NewRuntimeHandler composes the browser projection, PostgreSQL materialized
@@ -133,6 +137,12 @@ func (handler *runtimeHandler) ServeHTTP(response http.ResponseWriter, request *
 		return
 	case request.Method == http.MethodGet && request.URL.Path == workspaceEventsPath:
 		handler.streamWorkspaceEvents(response, request)
+		return
+	case request.Method == http.MethodGet && request.URL.Path == dataflowPath:
+		handler.getDataflow(response, request)
+		return
+	case request.Method == http.MethodGet && request.URL.Path == dataflowEventsPath:
+		handler.streamDataflowEvents(response, request)
 		return
 	case request.Method == http.MethodGet && strings.HasPrefix(request.URL.Path, workspacePrefix+"/") &&
 		strings.HasSuffix(request.URL.Path, workspaceStageSuffix):
