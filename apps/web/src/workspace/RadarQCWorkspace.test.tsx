@@ -65,7 +65,7 @@ it('distinguishes reference analysis times and can leave a pinned old composite 
   window.history.replaceState({},'',`/?preset=qc&mode=fusion&date=2026-08-28&time=${morning}&series=${old}`)
   render(<RadarQCWorkspace />)
   await screen.findByText(/本系列 1 个组合时次/)
-  expect(screen.getByText(/2 资料时次/)).toBeTruthy()
+  expect(screen.getByText(/2 分析周期/)).toBeTruthy()
   expect(screen.queryByText(/2 组合时次/)).toBeNull()
   fireEvent.click(screen.getByRole('button',{name:'查看最新组合'}))
   await waitFor(()=>expect(screen.getByRole('button',{name:'固定当前系列'})).toBeTruthy())
@@ -306,11 +306,11 @@ it('renders the observation timeline as a fit-all rail with inline availability'
   await waitFor(() => expect(document.querySelectorAll('[data-image="/dbzh_raw-z9591.png"]')).toHaveLength(1))
   const rail = container.querySelector('.workspace-timeline-rail')
   expect(rail?.classList.contains('observation-fit')).toBe(true)
-  expect(rail?.querySelectorAll('.workspace-timeline-frame')).toHaveLength(2)
+  await waitFor(()=>expect(rail?.querySelectorAll('.workspace-timeline-frame')).toHaveLength(3))
   expect(container.querySelector('.workspace-timeline-availability')).toBeNull()
   expect(container.querySelector('.workspace-timeline-inline-availability')).toBeTruthy()
   expect(screen.getByText('S 分析周期')).toBeTruthy()
-  expect(screen.getByText('第 1/2 帧')).toBeTruthy()
+  expect(screen.getByText('第 1/3 帧')).toBeTruthy()
 })
 
 it('distinguishes reading from no-scan while the X scan list is loading', async () => {
@@ -472,8 +472,41 @@ it('labels the shared analysis grid separately from the native X acquisition tim
   expect(new URLSearchParams(window.location.search).get('result')).toBe('result-x')
   await act(async () => { releaseScans?.() })
   await screen.findAllByText('08:08:25')
-  expect(screen.getByText('2 分析周期 · 分析时次')).toBeTruthy()
+  expect(screen.getByText('3 分析周期 · 分析时次')).toBeTruthy()
   expect(screen.getByText('08/28 08:06 北京时间')).toBeTruthy()
   expect(new URLSearchParams(window.location.search).get('time')).toBe(nativeTime)
   expect(new URLSearchParams(window.location.search).get('scan')).toBe('scan-x')
+})
+
+it('keeps one analysis clock and exact QC source across single, overlay and composite views', async () => {
+  setup()
+  const at='2026-08-28T02:48:00.000Z', before='2026-08-28T02:42:00Z'
+  const catalog=[before,at].map((issue_time,i)=>({...cycles[0],cycle_id:`aligned-${i}`,analysis_id:`analysis-${i}`,issue_time}))
+  const source={radar_id:'z9591',band:'S',scan_id:'ended-1043',asset_sha256:'current-qc',volume_start:'2026-08-28T02:37:49Z',volume_end:'2026-08-28T02:43:16Z'}
+  const series=[{series_id:'aligned-series',product_id:'horizontal',requested_radars:['z9591'],legacy:true}]
+  const exact=['DBZH_RAW','DBZH_QC'].map(field=>({scope:'polar',field,radar_id:'z9591',scan_id:source.scan_id,qc_content_sha256:source.asset_sha256,sweep_number:0,elevation_deg:.5,layer_id:field,image_url:`/exact-${field}.png`}))
+  vi.mocked(fetch).mockImplementation(async input=>{
+    const url=String(input)
+    const data=url.includes('radar-composites/')?{result_id:'aligned-result',manifest:{analysis_time:at,grid_id:'fuzhou',sources:[source],comparison:{products:[{product_id:'s_only',label:'S 组合反射率',status:'ready',map:{bounds:[118,25,123,27],object_path:'/exact-composite.png'}}]}}}
+      :url.includes('radar-composites?')?{selected_series_id:'aligned-series',series,items:[{result_id:'aligned-result',analysis_time:at,series_id:'aligned-series'}]}
+      :url.includes('/analysis-cycles/')?{layers:url.includes('analysis-0')?exact:exact.map(l=>({...l,scan_id:'future-1048'}))}
+      :url.includes('/cycles/aligned-')?{...cycleDetail(0),...catalog[1],panels:[panel('dbzh_raw',at),panel('dbzh_qc',at)]}
+      :url.includes('radar-stations')?{...stations,items:[]}
+      :{schema_version:'1.0',items:catalog,generated_at:at,next_cursor:null}
+    return new Response(JSON.stringify(data))
+  })
+  window.history.replaceState({},'',`/?preset=qc&band=S&mode=single&date=2026-08-28&time=${at}&station=z9591`)
+  render(<RadarQCWorkspace />)
+  const displayed=()=>screen.getAllByTestId('geo-image').flatMap(e=>[e.getAttribute('data-image'),e.getAttribute('data-layers')]).join(' ')
+  await waitFor(()=>expect(displayed()).toContain('/exact-DBZH_QC.png'))
+  expect(screen.getByText(/完整体扫结束后才进入组合/).textContent).toContain('10:43:16')
+  fireEvent.click(screen.getByRole('button',{name:'多站叠加'}))
+  fireEvent.click(await screen.findByRole('checkbox',{name:/Z9591/}))
+  await waitFor(()=>expect(displayed()).toContain('/exact-DBZH_QC.png'))
+  expect(displayed()).not.toContain('/dbzh_qc-z9591.png')
+  fireEvent.click(screen.getByRole('button',{name:'组合反射率'}))
+  await waitFor(()=>expect(displayed()).toContain('/exact-composite.png'))
+  fireEvent.click(screen.getByRole('button',{name:'单站验证'}))
+  await waitFor(()=>expect(displayed()).toContain('/exact-DBZH_QC.png'))
+  expect(Date.parse(new URLSearchParams(location.search).get('time')!)).toBe(Date.parse(at))
 })

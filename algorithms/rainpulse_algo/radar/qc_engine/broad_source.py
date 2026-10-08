@@ -19,6 +19,7 @@ class BroadSourceConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
     mode: Literal["audit", "experiment_quarantine"] = "audit"
     shared_range_term: bool = False
+    component_range_calibration: bool = False
     observed_range: bool = False
     distance_polar_reference: bool = False
     radial_opening: bool = False
@@ -81,6 +82,7 @@ def shared_range_term(native, valid, reference):
 def infer_broad_source(native, cfg, *, weather=None, conflicts=None, independent_weather_available=None):
     if (
         cfg.mode not in {"audit", "experiment_quarantine"}
+        or (cfg.component_range_calibration and not cfg.shared_range_term)
         or cfg.maximum_range_m <= cfg.minimum_range_m
     ):
         raise ValueError("invalid broad source policy/range")
@@ -185,9 +187,16 @@ def infer_broad_source(native, cfg, *, weather=None, conflicts=None, independent
         # No target or guard values enter any reference statistic or membership.
         train_geometry = in_range & (abs(blocks - block) > 1)
         if cfg.shared_range_term:
-            coefficient, term_diag = shared_range_term(native, valid, train_geometry)
+            if cfg.component_range_calibration:
+                from .paired_range_components import calibrate_components
+                coefficient, supported_rays, term_diag = calibrate_components(
+                    r, f["DBZH"], f["SNR"], valid, train_geometry,
+                )
+                power = f["DBZH"] - law[None, :] - coefficient[:, None] * r[None, :] / 1000
+            else:
+                coefficient, term_diag = shared_range_term(native, valid, train_geometry)
+                power = f["DBZH"] - law[None, :] - coefficient * r[None, :] / 1000
             range_term_folds.append(dict(term_diag, target_block=int(block)))
-            power = f["DBZH"] - law[None, :] - coefficient * r[None, :] / 1000
         fits = {}
         for ray in range(shape[0]):
             train = valid[ray] & train_geometry & ~reference_plateau[ray]
@@ -429,6 +438,21 @@ def infer_broad_source(native, cfg, *, weather=None, conflicts=None, independent
             mode=cfg.source_review.mode, folds=source_folds,
             action_proposal_additions=int(added_source.sum()) if cfg.source_review.mode == "experiment_quarantine" else 0,
         )}
+    baseline_retained = 0
+    if cfg.component_range_calibration and any(
+        item['status'] != 'original_measured_consistent' for item in range_term_folds
+    ):
+        baseline, _ = infer_broad_source(
+            native, cfg.model_copy(update={'component_range_calibration': False}),
+            weather=weather, conflicts=conflicts,
+            independent_weather_available=independent_weather_available,
+        )
+        retained = (baseline['BWS_CANDIDATE_MASK'] == 1) & ~candidate
+        baseline_retained = int(retained.sum())
+        candidate |= retained
+        reason[retained] |= baseline['BWS_REASON'][retained]
+        fold_ids[retained] = baseline['BWS_FOLD_ID'][retained]
+        residual[retained] = baseline['BWS_RANGE_RESIDUAL_DB'][retained]
     reason[obs & protected] |= int(Reason.WEATHER_PROTECTED)
     reason[obs & conflict] |= int(Reason.TARGET_CONFLICT)
     reason[obs & plateau] |= int(Reason.NUMERIC_PLATEAU)
@@ -446,6 +470,7 @@ def infer_broad_source(native, cfg, *, weather=None, conflicts=None, independent
         "operational_eligible": False,
         "folds": records,
         "range_term_folds": range_term_folds,
+        "baseline_retained_gates": baseline_retained,
         **({"near_sector": sector_summary} if cfg.near_sector_consensus else {}),
         **({"source_edge": edge_summary} if cfg.source_edge else {}),
         **(

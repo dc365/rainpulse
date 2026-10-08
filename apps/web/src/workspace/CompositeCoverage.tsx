@@ -5,7 +5,7 @@ type QCIdentity = {
 }
 export type CompositeCoverageManifest = {
   analysis_time: string
-  sources?: { radar_id: string; band?: string; volume_end: string; qc_version?: string | null; qc_identity?: QCIdentity }[]
+  sources?: { scan_id?: string; asset_sha256?: string; volume_start?: string; radar_id: string; band?: string; volume_end: string; qc_version?: string | null; qc_identity?: QCIdentity }[]
   skipped?: { radar_id: string; reason: string }[]
 }
 const reasons: Record<string,string> = {

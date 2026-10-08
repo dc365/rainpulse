@@ -12,7 +12,8 @@ import { readRadarCatalog } from './readRadarCatalog'
 import { WorkspacePresets } from './WorkspacePresets'
 import { SharedTimeline } from './MainWorkspace'
 import './radar-qc-workspace.css'
-import { useCompositeTimeline } from './CompositeMap'
+import { useCausalSFrames } from './useCausalSFrames'
+import { useComposite, useCompositeTimeline } from './CompositeMap'
 import { MultiStationMap } from './MultiStationMap'
 
 type Band = 'S' | 'X'
@@ -78,7 +79,7 @@ function SMap({ title, frame, siteID, sharedView, active, note, flagLegend, stal
   const extent: GISMapExtent = site ? radarDisplayExtent(site, shown?.maximum_range_km ?? site.maximumRangeKM) : [117.995, 24.995, 123.005, 27.005]
   const [failed, setFailed] = useState(false)
   return <section className={`radar-qc-map${active ? ' active' : ''}`} aria-label={title}>
-    <header><strong>{title}</strong><span>{shown?.observation_time ? localClock(shown.observation_time) : shown ? localClock(shown.valid_time) : '该时刻无图件'}</span></header>
+    <header><strong>{title}</strong><span>{shown ? localClock(shown.valid_time) : '该时刻无图件'}</span></header>
     <RasterGISMap imageUrl={shown?.image_url} imageDescription={`${siteID.toUpperCase()} ${title}`} imageExtent={extent} fitExtent={extent}
       validTimeLabel={shown ? localClock(shown.valid_time) : ''} contextLabel="S 波段 · 已定位" productLabel={title}
       legend={flagLegend ?? REFLECTIVITY_LEGEND} legendUnit={flagLegend ? '' : 'dBZ'} legendMode={flagLegend ? 'categorical' : 'scale'} footerNote={note ?? '原始与质控结果共用地图范围' } mapLabel={`${title}同步地图，EPSG:4326`}
@@ -130,12 +131,17 @@ export function RadarQCWorkspace() {
   const linkedCycle = initial.get('cycle') ? catalog?.data?.items.find(c=>c.cycle_id===initial.get('cycle')) : undefined
   const date = day || (band === 'X' ? xStations?.data ? localDay(xStations.data.start) : '' : linkedCycle ? localDay(linkedCycle.issue_time) : catalog?.data?.items[0] ? localDay(catalog.data.items[0].issue_time) : '')
   const [compositeSeries, setCompositeSeries] = useState(initial.get('series') ?? '')
-  const compositeTimeline = useCompositeTimeline(mode==='fusion'?date:'',revision,compositeSeries,target)
+  const compositeTimeline = useCompositeTimeline(date,revision,compositeSeries,target)
   const sTimes = (catalog?.data?.items ?? []).filter(c=>localDay(c.issue_time)===date && c.capabilities.radar).sort((a,b)=>Date.parse(a.issue_time)-Date.parse(b.issue_time))
   const sCycle = target ? sTimes.find(c=>slot(c.issue_time)===slot(target)) : linkedCycle ?? sTimes.at(-1)
   const sDetailState = useJSON<WorkspaceCycleDetail>(sCycle ? `/api/v1/workspace/cycles/${encodeURIComponent(sCycle.cycle_id)}` : '', revision)
-  const sDetail = sDetailState?.data && sDetailState.data.cycle_id === sCycle?.cycle_id ? sDetailState.data : undefined
-  const sDetailPending = Boolean(sCycle) && !sDetailState
+  const nativeDetail = sDetailState?.data && sDetailState.data.cycle_id === sCycle?.cycle_id ? sDetailState.data : undefined
+  const analysisTime = target || sCycle?.issue_time || ''
+  const sourceComposite = useComposite(analysisTime,revision,compositeTimeline?.seriesID)
+  const causal = useCausalSFrames(sourceComposite?.data,analysisTime,sTimes,revision)
+  const hasSourceIdentity = Boolean(sourceComposite?.data?.manifest.sources?.some(s=>s.band==='S' && s.scan_id))
+  const sDetail = hasSourceIdentity && nativeDetail ? {...nativeDetail,panels:[...nativeDetail.panels.filter(p=>!p.radar_id),...(causal?.data?.panels??[])]} : nativeDetail
+  const sDetailPending = !hasSourceIdentity && Boolean(sCycle) && !sDetailState
   const sIDs = [...new Set([sStationID, ...(sDetail ? radarIDs(sDetail) : []), ...(xStations?.data?.items.filter(s=>s.band==='S').map(s=>s.radar_id)??[])].filter(Boolean))]
   const selectedSID = sStationID || sIDs.find(id=>sDetail && panelByID(sDetail, `dbzh_raw:${id}`)?.frames.length && panelByID(sDetail, `dbzh_qc:${id}`)?.frames.length) || sIDs[0] || ''
   const selectedX = xStationID ? xStations?.data?.items.find(s=>s.radar_id===xStationID) : xStations?.data?.items.find(s=>s.band!=='S'&&s.qc_ready>0) ?? xStations?.data?.items.find(s=>s.band!=='S')
@@ -157,13 +163,13 @@ export function RadarQCWorkspace() {
   const xResult = xResultLive ?? (keptXResult?.radar_id === selectedX?.radar_id && keptXResult?.scan_id === scan?.scan_id && keptXResult?.result_id === xSelectedResult?.result_id ? keptXResult : undefined)
   const xCut = xResult?.sweeps.find(s=>s.sweep_number===xSweep) ?? xResult?.sweeps.reduce<XSweep|undefined>((a,b)=>!a||b.elevation_deg<a.elevation_deg?b:a,undefined)
   const xPair = useXPair(xCut,xSelectedResult?.result_id,flags)
-  const sOptions = sDetail ? qcSweepOptions(sDetail,selectedSID,sCycle?.issue_time ?? null) : []
+  const sOptions = sDetail ? qcSweepOptions(sDetail,selectedSID,analysisTime || null) : []
   const selectedSSweep = sOptions.some(s=>s.number===sSweep) ? sSweep : sOptions[0]?.number
   const sRawPanel = sDetail ? panelByID(sDetail,`dbzh_raw:${selectedSID}`) : null
   const sQCPanel = sDetail ? panelByID(sDetail,`dbzh_qc:${selectedSID}`) : null
   const sFlagPanel = sDetail ? panelByID(sDetail,`qc_flags:${selectedSID}`) : null
   const sFlagLegend = sFlagPanel?.legend?.map(entry=>({label:qcFlagLabel(entry.label??''),color:entry.color})) ?? []
-  const sRaw = sRawPanel?.frames.find(f=>f.sweep_number===selectedSSweep && f.valid_time===sCycle?.issue_time)
+  const sRaw = sRawPanel?.frames.find(f=>f.sweep_number===selectedSSweep && Date.parse(f.valid_time)===Date.parse(analysisTime))
   const sQC = (flags ? sFlagPanel : sQCPanel)?.frames.find(f=>f.sweep_number===selectedSSweep && f.scan_id===sRaw?.scan_id && f.valid_time===sRaw?.valid_time)
   const xUnifiedPalette = xResult?.legend?.length===REFLECTIVITY_STOPS.length && xResult.legend.every((entry,i)=>entry.minimum_dbzh===REFLECTIVITY_STOPS[i][0] && `#${entry.rgb.map(c=>c.toString(16).padStart(2,'0')).join('')}`===REFLECTIVITY_STOPS[i][1])
   // 组合说明条在切换时次时数据短暂在途：保留上一条渲染，避免提示框隐藏→出现推动布局。
@@ -174,8 +180,8 @@ export function RadarQCWorkspace() {
   const activeTime = target || (mode==='fusion' ? compositeTimeline?.times.at(-1) : undefined) || (band==='S' ? sCycle?.issue_time : scan?.volume_start) || ''
   const gridTimes = sTimes.map(c=>c.issue_time)
   const nearestGridTime = (time?: string) => time ? gridTimes.reduce<string|undefined>((best,t)=>!best||Math.abs(Date.parse(t)-Date.parse(time))<Math.abs(Date.parse(best)-Date.parse(time))?t:best,undefined) : undefined
-  const timeline = mode!=='single' ? [...new Set([...gridTimes,...(compositeTimeline?.times??[])].map(t=>new Date(Date.parse(t)).toISOString()))].sort() : gridTimes
-  const activeTimelineTime = mode!=='single' ? activeTime : band==='S' ? sCycle?.issue_time : nearestGridTime(scan?.volume_start)
+  const timeline = [...new Set([...gridTimes,...(compositeTimeline?.times??[])].map(t=>new Date(Date.parse(t)).toISOString()))].sort()
+  const activeTimelineTime = band==='X' && mode==='single' ? nearestGridTime(activeTime) : activeTime
   const timelinePanels:WorkspacePanel[] = (mode==='fusion'||band==='S') ? [{panel_id:'s-analysis',algorithm_id:'s-qc',display_name:'S 分析周期',role:'qc',lifecycle:'analysis',data_kind:'reflectivity',cadence_minutes:6,status:'ready',frames:sTimes.map(c=>({asset_id:c.cycle_id,valid_time:c.issue_time,lead_time_minutes:0,image_url:c.cycle_id,media_type:'application/json'}))}] : [{panel_id:'x-qc',algorithm_id:'x-qc',display_name:'X 质控结果',role:'qc',lifecycle:'shadow',data_kind:'reflectivity',cadence_minutes:6,status:'ready',frames:scans.filter(s=>s.results.length).map(s=>({asset_id:s.scan_id,valid_time:nearestGridTime(s.volume_start)??s.volume_start,lead_time_minutes:0,image_url:s.results[0].result_id,media_type:'image/png'}))}]
   if(mode==='fusion')timelinePanels.push({panel_id:'sx-composites',algorithm_id:'sx-composites',display_name:'S/X 组合产品',role:'qc',lifecycle:'shadow',data_kind:'reflectivity',cadence_minutes:6,status:'ready',frames:(compositeTimeline?.times??[]).map(time=>({asset_id:time,valid_time:time,lead_time_minutes:0,image_url:time,media_type:'application/json'}))})
   const issue = timeline[0] ?? `${date || '2026-08-28'}T00:00:00+08:00`
@@ -184,7 +190,7 @@ export function RadarQCWorkspace() {
     const params=new URLSearchParams({preset:'qc',band,mode})
     if(date)params.set('date',date)
     if(activeTime)params.set('time',activeTime)
-    if(mode==='fusion'&&compositeSeries)params.set('series',compositeSeries)
+    if(compositeSeries)params.set('series',compositeSeries)
     const station=band==='S'?selectedSID:selectedX?.radar_id||xStationID
     if(station)params.set('station',station)
     if(band==='X'){
@@ -213,7 +219,7 @@ export function RadarQCWorkspace() {
   const sError=catalog?.error||sDetailState?.error
   return <main className={`workspace-shell radar-qc-shell mode-${mode}`}>
     <header className="workspace-topbar"><a className="workspace-brand" href="/"><span aria-hidden="true"><i/><i/><i/></span><strong>RainPulse</strong><small>短临降水工作台</small></a><WorkspacePresets active="qc"/><a className="admin-link" href="/admin">后台</a></header>
-    <section className="radar-qc-controls" aria-label="资料选择"><div className="radar-qc-modes" role="group" aria-label="验证方式">{([{key:'single',text:'单站验证'},{key:'overlay',text:'多站叠加'},{key:'fusion',text:'组合反射率'}] as const).map(item=><button key={item.key} aria-pressed={mode===item.key} onClick={()=>{setMode(item.key);setLayout(item.key==='single'?'pair':'single');setPlaying(false)}}>{item.text}</button>)}</div><div className="radar-qc-band" role="group" aria-label="雷达波段"><span>波段</span>{(['S','X'] as const).map(value=><button key={value} aria-pressed={band===value} onClick={()=>changeBand(value)}>{value}</button>)}</div><label className="radar-qc-field-site">站点<select aria-label="站点" value={band==='S'?selectedSID:selectedX?.radar_id??''} onChange={event=>{if(band==='S'){setSStationID(event.target.value);setSSweep(null)}else{setXStationID(event.target.value);setXScanID('');setXResultID('');setXSweep(null)}setPlaying(false)}}>{band==='S'?sIDs.map(id=><option key={id} value={id}>{id.toUpperCase()} · {radarSiteFor(id)?.displayName??'S 波段'}</option>):xStations?.data?.items.filter(s=>s.band!=='S').map(s=><option key={s.radar_id} value={s.radar_id}>{s.radar_id.toUpperCase()} · {stationDisplayName(s.radar_id, s.display_name)}</option>)}</select></label><label className="radar-qc-field-sweep">仰角<select aria-label="仰角" value={band==='S'?selectedSSweep??'':xCut?.sweep_number??''} disabled={band==='S'?!sOptions.length:!xResult} onChange={event=>{if(band==='S')setSSweep(Number(event.target.value));else setXSweep(Number(event.target.value));setPlaying(false)}}>{band==='S'?sOptions.map(s=><option key={s.number} value={s.number}>{s.elevation.toFixed(2)}° · 编号 {s.number}</option>):xResult?.sweeps.map(s=><option key={s.sweep_number} value={s.sweep_number}>{s.elevation_deg.toFixed(2)}° · 编号 {s.sweep_number}</option>)}</select></label><div className="radar-qc-more"><button className="radar-qc-flag-toggle" onClick={()=>{setFlags(v=>!v);setPlaying(false)}} aria-pressed={flags}>{flags?'返回反射率':'质控标记'}</button><div className="radar-qc-layout" role="group" aria-label="对照布局">{(['pair','single'] as const).map(value=><button key={value} aria-pressed={layout===value} onClick={()=>setLayout(value)}>{({pair:'双图',single:'单图'} as const)[value]}</button>)}</div><button aria-label="刷新资料" onClick={()=>{setXResultID('');setRevision(n=>n+1)}}>刷新</button><details><summary>更多</summary><div><a href="/qc-review">证据复核</a><a href={band==='X'?`/admin?view=new&preset=x_qc&radar=${encodeURIComponent(selectedX?.radar_id??'')}`:'/admin?view=new'}>生成／重算</a></div></details></div></section>
+    <section className="radar-qc-controls" aria-label="资料选择"><div className="radar-qc-modes" role="group" aria-label="验证方式">{([{key:'single',text:'单站验证'},{key:'overlay',text:'多站叠加'},{key:'fusion',text:'组合反射率'}] as const).map(item=><button key={item.key} aria-pressed={mode===item.key} onClick={()=>{if(activeTime)setTarget(activeTime);setMode(item.key);setLayout(item.key==='single'?'pair':'single');setPlaying(false)}}>{item.text}</button>)}</div><div className="radar-qc-band" role="group" aria-label="雷达波段"><span>波段</span>{(['S','X'] as const).map(value=><button key={value} aria-pressed={band===value} onClick={()=>changeBand(value)}>{value}</button>)}</div><label className="radar-qc-field-site">站点<select aria-label="站点" value={band==='S'?selectedSID:selectedX?.radar_id??''} onChange={event=>{if(band==='S'){setSStationID(event.target.value);setSSweep(null)}else{setXStationID(event.target.value);setXScanID('');setXResultID('');setXSweep(null)}setPlaying(false)}}>{band==='S'?sIDs.map(id=><option key={id} value={id}>{id.toUpperCase()} · {radarSiteFor(id)?.displayName??'S 波段'}</option>):xStations?.data?.items.filter(s=>s.band!=='S').map(s=><option key={s.radar_id} value={s.radar_id}>{s.radar_id.toUpperCase()} · {stationDisplayName(s.radar_id, s.display_name)}</option>)}</select></label><label className="radar-qc-field-sweep">仰角<select aria-label="仰角" value={band==='S'?selectedSSweep??'':xCut?.sweep_number??''} disabled={band==='S'?!sOptions.length:!xResult} onChange={event=>{if(band==='S')setSSweep(Number(event.target.value));else setXSweep(Number(event.target.value));setPlaying(false)}}>{band==='S'?sOptions.map(s=><option key={s.number} value={s.number}>{s.elevation.toFixed(2)}° · 编号 {s.number}</option>):xResult?.sweeps.map(s=><option key={s.sweep_number} value={s.sweep_number}>{s.elevation_deg.toFixed(2)}° · 编号 {s.sweep_number}</option>)}</select></label><div className="radar-qc-more"><button className="radar-qc-flag-toggle" onClick={()=>{setFlags(v=>!v);setPlaying(false)}} aria-pressed={flags}>{flags?'返回反射率':'质控标记'}</button><div className="radar-qc-layout" role="group" aria-label="对照布局">{(['pair','single'] as const).map(value=><button key={value} aria-pressed={layout===value} onClick={()=>setLayout(value)}>{({pair:'双图',single:'单图'} as const)[value]}</button>)}</div><button aria-label="刷新资料" onClick={()=>{setXResultID('');setRevision(n=>n+1)}}>刷新</button><details><summary>更多</summary><div><a href="/qc-review">证据复核</a><a href={band==='X'?`/admin?view=new&preset=x_qc&radar=${encodeURIComponent(selectedX?.radar_id??'')}`:'/admin?view=new'}>生成／重算</a></div></details></div></section>
     {mode==='fusion'&&<label className="radar-qc-series">产品系列<select aria-label="组合产品系列" value={compositeSeries} onChange={e=>{setCompositeSeries(e.target.value);setPlaying(false);setTarget(activeTime)}}>
       {!compositeTimeline?.series.length&&<option value={compositeSeries}>该日期无所选系列</option>}
       {compositeTimeline?.series.map(s=><option key={s.series_id} value={s.series_id}>{s.product_id} · {s.requested_radars?.length ? `${new Set(s.requested_radars).size} 站 · ${s.requested_radars.map(r=>r.toUpperCase()).join(' + ')}` : s.network_release||'范围未记录'} · {s.series_id.slice(0,8)}{s.legacy?' · 身份待核':''}</option>)}
@@ -224,13 +230,15 @@ export function RadarQCWorkspace() {
     {band==='X'&&mode==='single'&&<XQCStatus completion={xCut?.xqc_v2}/>}
     {band==='X'&&mode==='single'&&xSelectedResult&&scan?.results[0]?.result_id!==xSelectedResult.result_id&&<div className="radar-qc-alert" role="status">正在查看历史质控结果（{xSelectedResult.version}）。<button onClick={()=>{setXResultID('');setPlaying(false)}}>查看最新结果</button></div>}
     <section className="radar-qc-stage" aria-label="质控图层">
-      {mode!=='single'?<MultiStationMap sIDs={sIDs} xStations={xStations?.data?.items.filter(s=>s.band!=='S')??[]} detail={sDetail} time={activeTime} day={date} revision={revision} sharedView={sharedView} layout={layout} onTimes={receiveTimes} composite={mode==='fusion'} compositeSeriesID={compositeTimeline?.seriesID} compositeRequestedRadars={compositeTimeline?.series.find(s=>s.series_id===compositeTimeline.seriesID)?.requested_radars}/>:<div className={`radar-qc-pair layout-${layout}`}>
+      {band==='S'&&!hasSourceIdentity&&<p role="status">原生体扫参考：本时次组合尚无可核对的来源记录，图件不是已确认的组合输入。</p>}
+      {hasSourceIdentity&&<p role="status">分析 {localClock(analysisTime)} · 三种视图共用组合的实际来源。{causal?.data?.sources.filter(s=>s.radar_id===selectedSID).map(s=><span key={s.scan_id}>体扫 {s.volume_start?localClock(s.volume_start)+'–':''}{localClock(s.volume_end)}；完整体扫结束后才进入组合。</span>)}{causal?.error ?? (!causal?.data?'正在核验来源图件。':'')}</p>}
+      {mode!=='single'?<MultiStationMap sIDs={sIDs} xStations={xStations?.data?.items.filter(s=>s.band!=='S')??[]} detail={sDetail} time={activeTime} day={date} revision={revision} sharedView={sharedView} layout={layout} onTimes={receiveTimes} composite={mode==='fusion'} alignedCompositeState={{data:sourceComposite?.data,error:sourceComposite?.error,pending:sourceComposite===undefined}} compositeSeriesID={compositeTimeline?.seriesID} compositeRequestedRadars={compositeTimeline?.series.find(s=>s.series_id===compositeTimeline.seriesID)?.requested_radars}/>:<div className={`radar-qc-pair layout-${layout}`}>
         {band==='S'&&selectedSID?<><SMap title="原始反射率" frame={sRaw} siteID={selectedSID} sharedView={sharedView} active={layout!=='single'} staleAllowed={sDetailPending}/><SMap title={flags?'质控标记':'质控后反射率'} frame={sQC} siteID={selectedSID} sharedView={sharedView} active note={flags?'标记颜色表示质控动作，不代表反射率强度':undefined} flagLegend={flags ? sFlagLegend : undefined} staleAllowed={sDetailPending}/></>:band==='X'&&scan?.results.length?<><XMap title="原始反射率" src={xPair?.raw} station={selectedX} geometry={xCut?.map} sharedView={sharedView} time={scan.volume_start}/><XMap title={flags?'质控标记':'质控后反射率'} src={xPair?.qc} flagLegend={flags ? X_FLAG_LEGEND : undefined} station={selectedX} geometry={xCut?.map} sharedView={sharedView} time={scan.volume_start}/></>:<div className="radar-qc-gate"><strong>{band!=='X'?'该时刻无分析周期':xScansLoading?'正在读取体扫…':scan?`${scan.qc_status} · 该体扫暂无质控结果`:'该时刻无体扫'}</strong><p>{band==='X'&&xScansLoading?'正在读取该站的体扫列表，请稍候。':'目标时刻保持不变。可在底部时间轴选择有资料的时次。'}</p></div>}
       </div>}
     </section>
     {mode!=='fusion'&&<section className="radar-qc-map-tools" aria-label="地图图例">{flags&&mode==='single'?<div className="radar-qc-flag-legend" aria-label="质控标记图例">{(band==='X'?X_FLAG_LEGEND:sFlagLegend).map(item=><span key={item.label}><i style={{background:item.color}}/>{item.label}</span>)}</div>:band==='X'&&xResult?.legend?.length&&mode==='single'?<div className="radar-qc-palette"><strong>dBZ</strong><ReflectivityLegend entries={xResult.legend.map(e=>({minimum:e.minimum_dbzh,label:String(e.minimum_dbzh),color:`rgb(${e.rgb.join(',')})`}))}/></div>:(band==='S'||mode!=='single')?<div className="radar-qc-palette"><strong>dBZ</strong><ReflectivityLegend/></div>:null}<details className="radar-qc-details"><summary>资料详情</summary><dl><dt>目标时间</dt><dd>{activeTime||'未选择'}</dd><dt>结果</dt><dd>{band==='X'?xSelectedResult?.result_id??'无':sCycle?.cycle_id??'无'}</dd><dt>站点资格</dt><dd>{band==='X'?'按体扫站点坐标、逐射线方位/仰角和距离门定位；站点坐标及业务融合资格待核验':'S 站点已定位'}</dd></dl></details></section>}
     {band==='X'&&xResult&&!xUnifiedPalette&&<p className="radar-qc-legacy">所选历史结果使用旧色谱，图件与色标均保持原版本。</p>}
     {compositeTimeline?.error&&<div className="radar-qc-alert" role="alert">{compositeTimeline.error} <button onClick={()=>setRevision(n=>n+1)}>重试</button></div>}
-    <SharedTimeline observationOnly timeBasis="analysis" observationLabel={mode==='fusion'?'资料时次':'分析周期'} issueTime={issue} values={timeline} panels={timelinePanels} selectedTime={activeTimelineTime||null} playing={playing} playSpeedMS={speed} onPlaySpeedChange={setSpeed} onTogglePlaying={()=>{if(!playing&&!selectable){const first=timeline[0];if(first)chooseTime(first)}setPlaying(v=>!v)}} onSelect={chooseTime} cycleControls={<div className="radar-qc-date-inline"><label>日期<input aria-label="资料日期" type="date" value={date} onChange={e=>{setDay(e.target.value);setTarget('');setXScanID('');setXResultID('');setPlaying(false)}}/></label></div>}/>
+    <SharedTimeline observationOnly timeBasis="analysis" observationLabel="分析周期" issueTime={issue} values={timeline} panels={timelinePanels} selectedTime={activeTimelineTime||null} playing={playing} playSpeedMS={speed} onPlaySpeedChange={setSpeed} onTogglePlaying={()=>{if(!playing&&!selectable){const first=timeline[0];if(first)chooseTime(first)}setPlaying(v=>!v)}} onSelect={chooseTime} cycleControls={<div className="radar-qc-date-inline"><label>日期<input aria-label="资料日期" type="date" value={date} onChange={e=>{setDay(e.target.value);setTarget('');setXScanID('');setXResultID('');setPlaying(false)}}/></label></div>}/>
   </main>
 }

@@ -20,11 +20,12 @@ type Scan = { scan_id: string; volume_start: string; volume_end: string; results
 type Resolved = { id: string; scan?: Scan; sweeps: Sweep[]; error?: string }
 type Choice = { id: string; visible: boolean; opacity: number; sweep?: number }
 const clock = (time: string) => new Date(Date.parse(time) + 8 * 3600_000).toISOString().slice(11, 19)
-export function MultiStationMap({ sIDs, xStations, detail, time, day, revision, sharedView, layout, composite, compositeSeriesID, compositeRequestedRadars, onTimes }: {
+export function MultiStationMap({ sIDs, xStations, detail, time, day, revision, sharedView, layout, composite, compositeSeriesID, compositeRequestedRadars, alignedCompositeState, onTimes }: {
   sIDs: string[]; xStations: Station[]; detail?: WorkspaceCycleDetail; time: string; day: string; revision: number;
   onTimes: (times: string[]) => void; sharedView: View; layout: 'single' | 'pair'; composite: boolean;
   compositeSeriesID?: string;
   compositeRequestedRadars?: string[];
+  alignedCompositeState?: {data?:CompositeResult;error?:string;pending:boolean};
 }) {
   const stations = useMemo(() => [...sIDs.map(id => ({ id, band: 'S', name: radarSiteFor(id)?.displayName ?? id })), ...xStations.map(s => ({ id: s.radar_id, band: 'X', name: stationDisplayName(s.radar_id, s.display_name) }))], [sIDs, xStations])
   const [choices, setChoices] = useState<Choice[]>(() => {
@@ -39,14 +40,15 @@ export function MultiStationMap({ sIDs, xStations, detail, time, day, revision, 
   const [resolved, setResolved] = useState<{ key: string; items: Resolved[] }>()
   const [point,setPoint] = useState<MapCoordinate|null>(null)
   const [productMode, setProductMode] = useState('s')
-  const compositeState = useComposite(composite ? time : '', revision, compositeSeriesID)
+  const independentCompositeState = useComposite(composite && !alignedCompositeState ? time : '', revision, compositeSeriesID)
+  const compositeState = alignedCompositeState ? alignedCompositeState.pending ? undefined : alignedCompositeState : independentCompositeState
   // 同时次、同系列刷新时才保留已确认结果；切时次立即移除旧图，避免贴上新时间。
   const [compositeMemory, setCompositeMemory] = useState<{ token: string; seriesID?: string; time: string; data?: CompositeResult }>()
   if (compositeState) {
     const token = compositeState.data ? `have:${compositeState.data.result_id}` : 'absent'
     if (compositeMemory?.token !== token || compositeMemory.seriesID !== compositeSeriesID || compositeMemory.time !== time) setCompositeMemory({ token, seriesID: compositeSeriesID, time, data: compositeState.data })
   }
-  const compositeData = compositeState?.data
+  const compositeData = alignedCompositeState ? alignedCompositeState.data : compositeState?.data
     ?? (composite && compositeSeriesID !== undefined && compositeMemory?.seriesID === compositeSeriesID && compositeMemory.time === time && compositeState === undefined && compositeMemory?.token.startsWith('have:') ? compositeMemory.data : undefined)
   useEffect(()=>{sessionStorage.setItem('rainpulse.multi-station.layers',JSON.stringify(choices))},[choices])
   const xIDs = choices.filter(c => c.visible && stations.some(s => s.id === c.id && s.band === 'X')).map(c => c.id).sort().join(',')
@@ -71,7 +73,7 @@ export function MultiStationMap({ sIDs, xStations, detail, time, day, revision, 
       const raw = detail && panelByID(detail, `dbzh_raw:${choice.id}`)?.frames.find(f => Date.parse(f.valid_time) === Date.parse(time) && f.sweep_number === sweep?.number)
       const qc = detail && panelByID(detail, `dbzh_qc:${choice.id}`)?.frames.find(f => Date.parse(f.valid_time) === Date.parse(time) && f.scan_id === raw?.scan_id && f.sweep_number === sweep?.number)
       const radar = radarSiteFor(choice.id)
-      return { choice, station, raw: raw?.image_url, qc: qc?.image_url, extent: radar ? radarDisplayExtent(radar, raw?.maximum_range_km ?? radar.maximumRangeKM) : DOMAIN, radar, options, selected: sweep?.number, status: raw && qc ? clock(raw.observation_time ?? raw.valid_time) : '该时次无图件' }
+      return { choice, station, raw: raw?.image_url, qc: qc?.image_url, extent: radar ? radarDisplayExtent(radar, raw?.maximum_range_km ?? radar.maximumRangeKM) : DOMAIN, radar, options, selected: sweep?.number, status: raw && qc ? raw.observation_time ? `体扫结束 ${clock(raw.observation_time)}` : `原生参考 ${clock(raw.valid_time)}` : '该时次无图件' }
     }
     const result = resolved?.key === key ? resolved.items.find(s => s.id === choice.id) : undefined
     const sweep = result?.sweeps.find(s => s.sweep_number === choice.sweep) ?? result?.sweeps.reduce<Sweep | undefined>((a,b) => !a || b.elevation_deg < a.elevation_deg ? b : a, undefined)
@@ -98,12 +100,12 @@ export function MultiStationMap({ sIDs, xStations, detail, time, day, revision, 
   // 切时次时 S 详情与 X 图层解析在途会让两列图层瞬时清空（闪空态文案+残白）：在途保留上一帧。
   const resolving = Boolean(xIDs) && resolved?.key !== key
   const layersPending = detail === undefined || resolving
-  const [keptRaw, setKeptRaw] = useState<GISImageLayer[] | undefined>()
-  const [keptQc, setKeptQc] = useState<GISImageLayer[] | undefined>()
-  if (rawLayers.length && keptRaw?.[0]?.url !== rawLayers[0].url) setKeptRaw(rawLayers)
-  if (qcLayers.length && keptQc?.[0]?.url !== qcLayers[0].url) setKeptQc(qcLayers)
-  const rawShown = rawLayers.length ? rawLayers : layersPending ? keptRaw ?? [] : []
-  const qcShown = qcLayers.length ? qcLayers : layersPending ? keptQc ?? [] : []
+  const [keptRaw, setKeptRaw] = useState<{time:string;layers:GISImageLayer[]} | undefined>()
+  const [keptQc, setKeptQc] = useState<{time:string;layers:GISImageLayer[]} | undefined>()
+  if (rawLayers.length && (keptRaw?.time !== time || keptRaw.layers[0]?.url !== rawLayers[0].url)) setKeptRaw({time,layers:rawLayers})
+  if (qcLayers.length && (keptQc?.time !== time || keptQc.layers[0]?.url !== qcLayers[0].url)) setKeptQc({time,layers:qcLayers})
+  const rawShown = rawLayers.length ? rawLayers : layersPending && keptRaw?.time===time ? keptRaw.layers : []
+  const qcShown = qcLayers.length ? qcLayers : layersPending && keptQc?.time===time ? keptQc.layers : []
   function patch(id: string, value: Partial<Choice>) { setChoices(items => items.map(c => c.id === id ? { ...c, ...value } : c)) }
   function toggle(id: string) { setChoices(items => items.some(c => c.id === id) ? items.filter(c => c.id !== id) : items.length>=32?items:[...items, { id, visible: true, opacity: 1 }]); setFocus(id) }
   function moveUp(id: string) { setChoices(items => { const index = items.findIndex(c => c.id === id); if (index < 0 || index === items.length - 1) return items; const copy = [...items]; [copy[index], copy[index + 1]] = [copy[index + 1], copy[index]]; return copy }) }
@@ -111,7 +113,7 @@ export function MultiStationMap({ sIDs, xStations, detail, time, day, revision, 
     function map(title: string, layers: GISImageLayer[], refs = contexts, mapLegend: readonly GISLegendEntry[] = REFLECTIVITY_LEGEND, unit='dBZ', pending = false) {
     const computed: GISMapExtent = composite && layers.length ? [Math.min(...layers.map(l=>l.extent[0])),Math.min(...layers.map(l=>l.extent[1])),Math.max(...layers.map(l=>l.extent[2])),Math.max(...layers.map(l=>l.extent[3]))] : DOMAIN
     const fitExtent = fittedExtent ?? computed
-    return <section className="radar-qc-map" aria-label={title}><header><strong>{title}</strong><span>{layers.length} 个图层</span></header><RasterGISMap imageLayers={layers} radarContexts={refs} imageDescription={title} imageExtent={DOMAIN} fitExtent={fitExtent} validTimeLabel={time ? clock(time) : ''} contextLabel="多站资料窗口" productLabel={title} legend={mapLegend} legendUnit={unit} point={point??undefined} onSelectPoint={setPoint} footerNote="" mapLabel={title} resetViewLabel="复位地图" loading={composite && !compositeState} layersPending={pending} sharedView={sharedView} comparisonMode basemapVisible referenceContext={FUZHOU_GIS_CONTEXT} rasterStyle="grid" zoomControls="hidden" emptyStateHint={composite ? !compositeState ? '正在读取本时次融合结果' : '本时次无可显示的融合图件；缺测不表示无回波' : '选择站点后显示该资料窗口的可用图件'} /></section> }
+    return <section className="radar-qc-map" aria-label={title}><header><strong>{title}</strong><span>{time ? clock(time)+' · ' : ''}{layers.length} 个图层</span></header><RasterGISMap imageLayers={layers} radarContexts={refs} imageDescription={title} imageExtent={DOMAIN} fitExtent={fitExtent} validTimeLabel={time ? clock(time) : ''} contextLabel="多站资料窗口" productLabel={title} legend={mapLegend} legendUnit={unit} point={point??undefined} onSelectPoint={setPoint} footerNote="" mapLabel={title} resetViewLabel="复位地图" loading={composite && !compositeState} layersPending={pending} sharedView={sharedView} comparisonMode basemapVisible referenceContext={FUZHOU_GIS_CONTEXT} rasterStyle="grid" zoomControls="hidden" emptyStateHint={composite ? !compositeState ? '正在读取本时次融合结果' : '本时次无可显示的融合图件；缺测不表示无回波' : '选择站点后显示该资料窗口的可用图件'} /></section> }
   const mosaic = detail && panelByID(detail, 'analysis:dbzh_qc')?.frames.find(f => Date.parse(f.valid_time) === Date.parse(time))
   const products = compositeData?.manifest.comparison.products ?? []
   const product = (id: string) => products.find(p=>p.product_id===id)
