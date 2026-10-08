@@ -57,6 +57,13 @@ const FUJIAN_RADAR_SITES: Record<string, RadarSiteMetadata> = {
     maximumRangeKM: 460,
     displayRangeRadiiKM: DISPLAY_RANGE_RADII_KM,
   },
+  z9595: {
+    radarID: 'z9595', displayName: '泉州', longitude: 118.4977798461914,
+    latitude: 24.89555549621582, siteAltitudeM: 444, antennaAltitudeM: 530,
+    radarBand: 'S', frequencyMHz: 2785, scanStrategy: 'VCP21D',
+    expectedUpdateSeconds: 344, maximumRangeKM: 460,
+    displayRangeRadiiKM: DISPLAY_RANGE_RADII_KM,
+  },
   z9598: {
     radarID: 'z9598',
     displayName: '三明',

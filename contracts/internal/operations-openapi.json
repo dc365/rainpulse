@@ -3492,6 +3492,9 @@
           },
           "verification": {
             "type": "string"
+          },
+          "qc_identity": {
+            "$ref": "#/components/schemas/UpstreamQCIdentity"
           }
         },
         "required": [
@@ -5386,6 +5389,58 @@
           "digest",
           "prefixes"
         ]
+      },
+      "UpstreamQCIdentity": {
+        "type": "object",
+        "properties": {
+          "radar_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 96
+          },
+          "scan_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "pipeline_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "parameters_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "implementation_revision": {
+            "type": "string",
+            "pattern": "^python-source-tree-v1:[a-f0-9]{64}$"
+          },
+          "profile": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "libraries": {
+            "type": "object",
+            "maxProperties": 32,
+            "propertyNames": {
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        },
+        "required": [
+          "radar_id",
+          "scan_id",
+          "pipeline_version",
+          "profile"
+        ],
+        "additionalProperties": false
       }
     }
   }

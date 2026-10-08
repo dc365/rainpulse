@@ -911,6 +911,36 @@ func (e VerificationSummaryStatus) Valid() bool {
 	}
 }
 
+// Defines values for ListWorkspaceRadarCompositesParamsSeriesMode.
+const (
+	N1 ListWorkspaceRadarCompositesParamsSeriesMode = "1"
+)
+
+// Valid indicates whether the value is a known member of the ListWorkspaceRadarCompositesParamsSeriesMode enum.
+func (e ListWorkspaceRadarCompositesParamsSeriesMode) Valid() bool {
+	switch e {
+	case N1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListWorkspaceRadarComposites200JSONResponseBodyContract.
+const (
+	RainpulseSxSeriesV1 ListWorkspaceRadarComposites200JSONResponseBodyContract = "rainpulse.sx-series-v1"
+)
+
+// Valid indicates whether the value is a known member of the ListWorkspaceRadarComposites200JSONResponseBodyContract enum.
+func (e ListWorkspaceRadarComposites200JSONResponseBodyContract) Valid() bool {
+	switch e {
+	case RainpulseSxSeriesV1:
+		return true
+	default:
+		return false
+	}
+}
+
 // AlertCounts defines model for AlertCounts.
 type AlertCounts struct {
 	Firing    int `json:"firing"`
@@ -2196,7 +2226,22 @@ type GetVerificationSummaryParams struct {
 type ListWorkspaceRadarCompositesParams struct {
 	Start time.Time `form:"start" json:"start"`
 	End   time.Time `form:"end" json:"end"`
+
+	// SeriesId Opaque frozen product and processing identity. When omitted, select the most recently published series in this window. An explicit series never falls back to another series.
+	SeriesId *string `form:"series_id,omitempty" json:"series_id,omitempty"`
+
+	// SeriesMode Versioned read-only catalog envelope; preserves published series IDs.
+	SeriesMode *ListWorkspaceRadarCompositesParamsSeriesMode `form:"series_mode,omitempty" json:"series_mode,omitempty"`
+
+	// Target Exact requested analysis time within the query window; never rounded to a six-minute frame.
+	Target *time.Time `form:"target,omitempty" json:"target,omitempty"`
 }
+
+// ListWorkspaceRadarCompositesParamsSeriesMode defines parameters for ListWorkspaceRadarComposites.
+type ListWorkspaceRadarCompositesParamsSeriesMode string
+
+// ListWorkspaceRadarComposites200JSONResponseBodyContract defines parameters for ListWorkspaceRadarComposites.
+type ListWorkspaceRadarComposites200JSONResponseBodyContract string
 
 // ProbeWorkspaceRadarLayersJSONBody defines parameters for ProbeWorkspaceRadarLayers.
 type ProbeWorkspaceRadarLayersJSONBody struct {
@@ -2379,7 +2424,7 @@ type ServerInterface interface {
 	// GetVerificationSummary Get verification summary for one run
 	// (GET /verification/summary)
 	GetVerificationSummary(w http.ResponseWriter, r *http.Request, params GetVerificationSummaryParams)
-	// ListWorkspaceRadarComposites Latest successful, non-retired S/X comparison per analysis time in a maximum 24-hour window (up to 1500 frames).
+	// ListWorkspaceRadarComposites Latest successful, non-retired S/X comparison per analysis time within one frozen product series (maximum 24 hours, 1500 frames).
 	// (GET /workspace/radar-composites)
 	ListWorkspaceRadarComposites(w http.ResponseWriter, r *http.Request, params ListWorkspaceRadarCompositesParams)
 
@@ -2670,7 +2715,7 @@ func (_ Unimplemented) GetVerificationSummary(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// ListWorkspaceRadarComposites Latest successful, non-retired S/X comparison per analysis time in a maximum 24-hour window (up to 1500 frames).
+// ListWorkspaceRadarComposites Latest successful, non-retired S/X comparison per analysis time within one frozen product series (maximum 24 hours, 1500 frames).
 // (GET /workspace/radar-composites)
 func (_ Unimplemented) ListWorkspaceRadarComposites(w http.ResponseWriter, r *http.Request, params ListWorkspaceRadarCompositesParams) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -4395,6 +4440,45 @@ func (siw *ServerInterfaceWrapper) ListWorkspaceRadarComposites(w http.ResponseW
 			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "end"})
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "end", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "series_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "series_id", r.URL.Query(), &params.SeriesId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "series_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "series_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "series_mode" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "series_mode", r.URL.Query(), &params.SeriesMode, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "series_mode"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "series_mode", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "target" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "target", r.URL.Query(), &params.Target, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "target"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "target", Err: err})
 		}
 		return
 	}

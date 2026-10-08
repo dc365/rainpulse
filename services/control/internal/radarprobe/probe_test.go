@@ -63,3 +63,29 @@ func TestFiniteExperimentalValueRetainsUncertainty(t *testing.T) {
 		t.Fatalf("%+v %v", result, err)
 	}
 }
+
+func TestSingleBandCompositeMissingAndNoEchoRemainDistinct(t *testing.T) {
+	for _, field := range []string{"CR_DBZH_S_ONLY", "CR_DBZH_X_ONLY"} {
+		for _, noEcho := range []float64{0, 1} {
+			values := make([]byte, 16)
+			binary.LittleEndian.PutUint64(values, math.Float64bits(math.NaN()))
+			binary.LittleEndian.PutUint64(values[8:], math.Float64bits(noEcho))
+			var compressed bytes.Buffer
+			writer := zlib.NewWriter(&compressed)
+			_, _ = writer.Write(values)
+			_ = writer.Close()
+			fields := []string{field, "NO_ECHO_MASK"}
+			raw, _ := json.Marshal(map[string]any{"encoding": "zlib-f64le", "width": 1, "height": 1, "fields": fields, "data": base64.StdEncoding.EncodeToString(compressed.Bytes())})
+			hash := sha256.Sum256(raw)
+			index := Index{Contract: "rainpulse.radar-probe-v1", Width: 1, Height: 1, TileSize: 64, Fields: fields, RowOrder: "north_to_south", Tiles: map[string]Tile{"0_0": {Path: "query/test.json", SHA256: hex.EncodeToString(hash[:])}}}
+			got, err := Sample(context.Background(), index, .5, .5, func(context.Context, string) ([]byte, error) { return raw, nil })
+			want := "missing"
+			if noEcho == 1 {
+				want = "no_echo"
+			}
+			if err != nil || got["state"] != want {
+				t.Fatalf("%s: %+v %v", field, got, err)
+			}
+		}
+	}
+}

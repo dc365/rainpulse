@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/fonwee/rainpulse-nowcast/services/control/internal/radarprobe"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -97,10 +98,24 @@ func (h *Handler) radarProbeOne(ctx context.Context, q radarProbeSelection) (map
 		}
 		for _, p := range m.Comparison.Products {
 			if p.ProductID == q.ProductID && p.Map != nil {
-				return radarprobe.Sample(ctx, p.Map.Probe, q.X, q.Y, func(ctx context.Context, key string) ([]byte, error) {
+				result, sampleErr := radarprobe.Sample(ctx, p.Map.Probe, q.X, q.Y, func(ctx context.Context, key string) ([]byte, error) {
 					data, _, e := h.service.Asset(ctx, task.ID, key)
 					return data, e
 				})
+				if sampleErr != nil {
+					return nil, sampleErr
+				}
+				if m.SourceContract == radarprobe.CompositeSourceContract {
+					return radarprobe.BindCompositeSource(result, raw, q.ProductID)
+				}
+				sources := p.Sources
+				if q.ProductID == "sx_composite" {
+					sources = m.Sources
+				}
+				if err := bindCompositeProbeSource(result, q.ProductID, sources); err != nil {
+					return nil, err
+				}
+				return result, nil
 			}
 		}
 		return nil, ErrNotFound
@@ -128,4 +143,58 @@ func (h *Handler) radarProbeOne(ctx context.Context, q radarProbeSelection) (map
 		}
 	}
 	return nil, ErrNotFound
+}
+
+func bindCompositeProbeSource(result map[string]any, product string, raw json.RawMessage) error {
+	if result["status"] != "available" || (product != "sx_composite" && product != "s_only" && product != "x_only") {
+		return nil
+	}
+	values, ok := result["values"].(map[string]any)
+	if !ok || values["WINNER_SOURCE"] == nil {
+		result["source_identity_status"] = "unreported"
+		return nil
+	}
+	index, ok := values["WINNER_SOURCE"].(float64)
+	if !ok || math.IsNaN(index) || math.IsInf(index, 0) || math.Trunc(index) != index || index < -1 || index > 65535 {
+		return ErrNotFound
+	}
+	if index == -1 {
+		result["source_identity_status"] = "no_winner"
+		return nil
+	}
+	if len(raw) == 0 || string(raw) == "null" {
+		result["source_identity_status"] = "unreported"
+		return nil
+	}
+	var sources []map[string]any
+	if json.Unmarshal(raw, &sources) != nil {
+		return ErrNotFound
+	}
+	var selected map[string]any
+	for _, source := range sources {
+		if source["index"] == index {
+			if selected != nil {
+				return ErrNotFound
+			}
+			selected = source
+		}
+	}
+	if selected == nil || (product == "s_only" && selected["band"] != "S") || (product == "x_only" && selected["band"] != "X") {
+		return ErrNotFound
+	}
+	if selected["band"] != "S" && selected["band"] != "X" {
+		return ErrNotFound
+	}
+	if sweep := values["WINNER_SWEEP_NUMBER"]; sweep != nil && selected["sweep_number"] != sweep {
+		return ErrNotFound
+	}
+	winning := map[string]any{}
+	for _, key := range []string{"index", "radar_id", "band", "scan_id", "sweep_number", "asset_sha256", "qc_version", "qc_identity", "volume_end", "available_at"} {
+		if value, exists := selected[key]; exists {
+			winning[key] = value
+		}
+	}
+	result["winning_source"] = winning
+	result["source_identity_status"] = "recorded"
+	return nil
 }

@@ -232,17 +232,18 @@ type AnalysisDiagnosticRadarInput struct {
 }
 
 type AnalysisDiagnosticsBundle struct {
-	AnalysisID            uuid.UUID
-	RunID                 uuid.UUID
-	RegenerationRequestID *uuid.UUID
-	AnalysisURI           string
-	ConfigVersion         string
-	RendererVersion       string
-	Config                json.RawMessage
-	ConfigSHA256          string
-	RadarInputs           []AnalysisDiagnosticRadarInput
-	Job                   Job
-	Outbox                OutboxEvent
+	SupplementalRadarInputs []AnalysisDiagnosticRadarInput
+	AnalysisID              uuid.UUID
+	RunID                   uuid.UUID
+	RegenerationRequestID   *uuid.UUID
+	AnalysisURI             string
+	ConfigVersion           string
+	RendererVersion         string
+	Config                  json.RawMessage
+	ConfigSHA256            string
+	RadarInputs             []AnalysisDiagnosticRadarInput
+	Job                     Job
+	Outbox                  OutboxEvent
 }
 
 type NowcastInputFrame struct {

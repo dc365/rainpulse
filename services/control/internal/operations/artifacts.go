@@ -87,7 +87,11 @@ func (s *Service) marker(ctx context.Context, uri string) (Marker, AssetRef, err
 	return m, ref, err
 }
 func (s *Service) Probe(ctx context.Context, uri string) (AssetRef, error) {
-	_, ref, err := s.marker(ctx, uri)
+	m, ref, err := s.marker(ctx, uri)
+	if err != nil {
+		return ref, err
+	}
+	ref.QCIdentity, err = markerQCIdentity(m, ref)
 	return ref, err
 }
 func (s *Service) candidate(ctx context.Context, request []byte, kind string) (Candidate, error) {

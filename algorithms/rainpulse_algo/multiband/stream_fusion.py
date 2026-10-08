@@ -7,6 +7,8 @@ a failure in the last cut cannot publish the preceding partial product.
 
 from __future__ import annotations
 
+from . import fusion_audit
+
 import shutil
 import time
 from collections import OrderedDict
@@ -28,10 +30,13 @@ from .fusion import (
     footprint,
     ground_geometry,
     prepare_polar,
+    source_qc_identity,
+    source_qc_version,
     tile_coordinates,
     update_tile,
 )
 from .model import MAX_FUSION_SWEEPS, Network, epoch, json_bytes
+
 
 def s_size(volume):
     return sum(s.fields["DBZH"].size for s in volume.sweeps)
@@ -150,6 +155,7 @@ class LayerWorkspace:
 
 
 @_perf_timed("fusion.consume_stream")
+@fusion_audit.audited
 def build_composite_streaming(
     volumes,
     network: Network,
@@ -279,9 +285,8 @@ def build_composite_streaming(
                     "volume_end": v.metadata["volume_end"],
                     "available_at": v.metadata["available_at"],
                     "scan_type": v.metadata["scan_type"],
-                    "qc_version": v.metadata.get(
-                        "qc_pipeline_version", v.metadata.get("processing")
-                    ),
+                    "qc_version": source_qc_version(v.metadata),
+                    "qc_identity": source_qc_identity(v.metadata),
                     "calibration_id": station.calibration_id,
                     "network_sha256": network.sha256,
                 }

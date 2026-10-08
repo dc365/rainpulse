@@ -1137,6 +1137,7 @@ button, select { min-height: 40px; }
 }
 .timeline-selected-time {
   position: absolute;
+  pointer-events: none;
   top: 9px;
   left: 50%;
   z-index: 4;

@@ -24,6 +24,14 @@
 `marker_checked`只验证标记格式/大小/声明摘要约束；它不等于完整资产验证或气象验收。
 `unverified`涵盖无法确认的情况，不能断言全部数据缺失。
 
+输入 `AssetRef` 可附带 `qc_identity`，固定完成标记声明的上游 QC 身份：
+`radar_id`、`scan_id`、`pipeline_version`、`parameters_sha256`、
+`implementation_revision`、`profile`、`libraries`。只有标记中 QC 完成事件
+明确关联该 URI、资产 SHA 和长度时才能记录。字段来自实际生产摘要；缺少参数、
+实现或库版本继续保留未知，不能从当前配置补写。预检只核验声明及资产关联，
+Worker 仍须完整校验输入并将声明与资产属性比较；这不等于数组或天气验收。
+无 `radar_qc` 声明的其它输入不添加此身份，旧计划继续兼容。
+
 ## 原接口扩展
 
 Task/Attempt增加可空queued_at；WorkerInfo增加pool_mode，Worker注册回执增加

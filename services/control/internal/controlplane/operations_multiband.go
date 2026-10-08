@@ -23,6 +23,30 @@ func managedNetwork() (multiband.Network, error) {
 }
 
 const defaultExecutionPolicySHA256 = "dfbf5acd53e2ef84a7c44b77f6a0ed2969d7cdfa8942d48c8bdb10e444063725"
+const sQCPolicyCapability = "s-qc-policy-v1"
+
+func multiBandVersions(release, executionSHA, preset string) map[string]string {
+	versions := map[string]string{"multiband_contract": "rainpulse.multiband.v1", "network_release": release, "execution_policy_sha256": executionSHA}
+	if preset == "sx_composite" {
+		versions["s_qc_policy"] = sQCPolicyCapability
+	}
+	return versions
+}
+
+func validateMultiBandPolicyCapability(spec operations.Spec) error {
+	var request struct {
+		Payload map[string]json.RawMessage `json:"payload"`
+	}
+	if err := json.Unmarshal(spec.Request, &request); err != nil {
+		return operations.Invalid("多波段冻结请求不可解析")
+	}
+	for _, key := range []string{"requested_s_radars", "s_qc_policy", "s_qc_policy_complete"} {
+		if _, declared := request.Payload[key]; declared && spec.Identity.Versions["s_qc_policy"] != sQCPolicyCapability {
+			return operations.Conflict("冻结上游QC策略需要支持s-qc-policy-v1的Worker，请重新预检查")
+		}
+	}
+	return nil
+}
 
 func managedExecutionPolicy() (string, string, error) {
 	path := strings.TrimSpace(os.Getenv("RAINPULSE_MULTIBAND_EXECUTION_CONFIG"))
@@ -37,6 +61,9 @@ func managedExecutionPolicy() (string, string, error) {
 }
 
 func (b *OperationsBuilder) validateMultiBand(ctx context.Context, spec operations.Spec) error {
+	if err := validateMultiBandPolicyCapability(spec); err != nil {
+		return err
+	}
 	n, e := managedNetwork()
 	if e != nil {
 		return e
@@ -162,6 +189,13 @@ func (b *OperationsBuilder) buildMultiBand(ctx context.Context, s operations.Sel
 		if s.Preset == "sx_composite" {
 			payload["product_id"] = product
 			payload["requested_radars"] = ids
+			sRadars := []string{}
+			for _, radar := range ids {
+				if n.Stations[radar].Band == "S" {
+					sRadars = append(sRadars, radar)
+				}
+			}
+			payload["requested_s_radars"] = sRadars
 		}
 		if s.Preset == "x_qc" {
 			payload["scan_id"] = snap.Sources[0].ScanID
@@ -181,7 +215,7 @@ func (b *OperationsBuilder) buildMultiBand(ctx context.Context, s operations.Sel
 			files["RAINPULSE_MULTIBAND_EXECUTION_CONFIG"] = executionSHA
 		}
 		specs = append(specs, operations.Spec{ID: id, Kind: "multiband", Name: taskName, InputURIs: uris, Request: operations.JSON(request),
-			Identity: operations.Identity{Kind: "multiband", Files: files, Versions: map[string]string{"multiband_contract": "rainpulse.multiband.v1", "network_release": n.Release, "execution_policy_sha256": executionSHA}}})
+			Identity: operations.Identity{Kind: "multiband", Files: files, Versions: multiBandVersions(n.Release, executionSHA, s.Preset)}})
 	}
 	state := "PASS"
 	if len(specs) == 0 {

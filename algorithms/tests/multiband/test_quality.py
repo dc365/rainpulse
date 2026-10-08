@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from rainpulse_algo.multiband.quality import x_qc, accept_s_qc, phase_linear, Flag
-from rainpulse_algo.multiband.model import XProfile
+from rainpulse_algo.multiband.model import XProfile, MAX_FUSION_SWEEPS
 from rainpulse_algo.multiband.product import polar_quicklook, x_qc_objects
 from conftest import volume
 
@@ -21,11 +21,13 @@ def test_upstream_correction_not_applied_twice(net):
         x_qc(v, replace(s, x_qc=XProfile(attenuation="phidp_linear", alpha_db_per_degree=.2)), net.sha256)
 
 
-def test_expanded_sweep_limit_applies_only_to_streamed_x_qc(net):
+def test_native_sweep_limits_remain_bounded(net):
     station = net.stations["x1"]
     v = volume(station)
-    v.sweeps = [replace(v.sweeps[0], number=i) for i in range(33)]
+    v.sweeps = [replace(v.sweeps[0], number=i) for i in range(MAX_FUSION_SWEEPS)]
     v.validate(station, require_geometry=False)
+    v.validate(station)
+    v.sweeps.append(replace(v.sweeps[0], number=MAX_FUSION_SWEEPS))
     with pytest.raises(ValueError, match="unsupported or incomplete"):
         v.validate(station)
 

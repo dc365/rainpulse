@@ -74,7 +74,7 @@ paths:
                       y: {type: number, description: Fraction from north edge of displayed immutable image.}
       responses:
         "200":
-          description: Per-layer source scalars, ray/gate indices, identity and explicit unavailable/outside state; NaN values remain null.
+          description: Per-layer source scalars, ray/gate indices, identity and explicit unavailable/outside state; NaN values remain null. Composite echo probes include winning_source from the same product's source index, with radar, scan, sweep, asset and declared QC identity. A single-band probe must never resolve its local source index against the fused product. Historical missing source metadata is explicit.
           content:
             application/json:
               schema: {type: object, additionalProperties: true}
@@ -82,27 +82,53 @@ paths:
     get:
       operationId: listWorkspaceRadarComposites
       tags: [radars]
-      summary: Latest successful, non-retired S/X comparison per analysis time in a maximum 24-hour window (up to 1500 frames).
+      summary: Latest successful, non-retired S/X comparison per analysis time within one frozen product series (maximum 24 hours, 1500 frames).
       parameters:
         - {name: start, in: query, required: true, schema: {type: string, format: date-time}}
         - {name: end, in: query, required: true, schema: {type: string, format: date-time}}
+        - name: series_id
+          in: query
+          required: false
+          description: Opaque frozen product and processing identity. When omitted, select the most recently published series in this window. An explicit series never falls back to another series.
+          schema: {type: string, pattern: '^[a-f0-9]{64}$'}
+        - {name: series_mode, in: query, required: false, description: Versioned read-only catalog envelope; preserves published series IDs., schema: {type: string, enum: ['1']}}
+        - {name: target, in: query, required: false, description: Exact requested analysis time within the query window; never rounded to a six-minute frame., schema: {type: string, format: date-time}}
       responses:
         "200":
-          description: Frozen task attempt identities and analysis times.
+          description: One selected series, its frozen task attempt identities and analysis times, and available series in this window. Product ID, requested station set and full worker identity separate methods, grids, cadence, network and configured QC implementations. Actual missing stations do not change series. Legacy tasks without a worker fingerprint or requested station set are isolated by run. Actual source QC versions remain in each manifest and require separate acceptance.
           content:
             application/json:
               schema:
                 type: object
-                required: [items]
+                required: [items, series, selected_series_id]
                 properties:
+                  selected_series_id: {type: string, description: Empty when no series is available and none was requested.}
+                  series_id: {type: string, description: Alias of selected_series_id in series_mode=1.}
+                  contract: {type: string, enum: [rainpulse.sx-series-v1]}
+                  truncated: {type: boolean, description: Present in series_mode=1; true when the selected series exceeds 1500 frames.}
+                  series:
+                    type: array
+                    items:
+                      type: object
+                      required: [series_id, product_id, network_release, fingerprint, requested_radars, legacy]
+                      properties:
+                        series_id: {type: string}
+                        product_id: {type: string}
+                        network_release: {type: string}
+                        fingerprint: {type: string}
+                        requested_radars: {type: array, items: {type: string}}
+                        legacy: {type: boolean}
+                        frame_count: {type: integer, nullable: true, minimum: 0, description: Selected series count only; other series remain unknown.}
+                        count_complete: {type: boolean, description: False when count is unknown or truncated.}
                   items:
                     type: array
                     items:
                       type: object
-                      required: [result_id, analysis_time]
+                      required: [result_id, analysis_time, series_id]
                       properties:
                         result_id: {type: string}
                         analysis_time: {type: string, format: date-time}
+                        series_id: {type: string}
   /workspace/radar-composites/{result_id}:
     get:
       operationId: getWorkspaceRadarComposite

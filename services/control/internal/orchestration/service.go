@@ -140,6 +140,8 @@ type AnalysisQPEInput struct {
 }
 
 type AnalysisDiagnosticsInput struct {
+	SupplementalRadarInputs []workflow.AnalysisDiagnosticRadarInput
+	SupplementalRevisionID  uuid.UUID
 	AnalysisID              uuid.UUID
 	RunID                   uuid.UUID
 	AnalysisTime            time.Time
@@ -926,6 +928,9 @@ func (service *Service) CreateAnalysisDiagnostics(
 	if input.RegenerationID != uuid.Nil {
 		identity = append(identity, input.RegenerationID.String())
 	}
+	if input.SupplementalRevisionID != uuid.Nil {
+		identity = append(identity, "station-supplement", input.SupplementalRevisionID.String())
+	}
 	jobID := stableID(append([]string{"analysis-diagnostics-job"}, identity...)...)
 	traceID := stableID("analysis-diagnostics-trace", jobID.String())
 	eventID := stableID("analysis-diagnostics-request", jobID.String())
@@ -938,6 +943,10 @@ func (service *Service) CreateAnalysisDiagnostics(
 		outputPrefix += "regenerations/" + input.RegenerationID.String() + "/"
 	}
 
+	if input.SupplementalRevisionID != uuid.Nil {
+		outputPrefix += "station-supplements/" + input.SupplementalRevisionID.String() + "/"
+	}
+	renderInputs := append(append([]workflow.AnalysisDiagnosticRadarInput{}, input.RadarInputs...), input.SupplementalRadarInputs...)
 	request := AnalysisDiagnosticsRequested{
 		SchemaVersion: SchemaVersion,
 		EventID:       eventID,
@@ -951,7 +960,7 @@ func (service *Service) CreateAnalysisDiagnostics(
 			AnalysisTime:          input.AnalysisTime.UTC(),
 			GridID:                input.GridID,
 			InputURI:              input.AnalysisURI,
-			RadarInputs:           input.RadarInputs,
+			RadarInputs:           renderInputs,
 			OutputPrefix:          outputPrefix,
 			DiagnosticConfig:      input.DiagnosticConfigVersion,
 			RendererVersion:       input.RendererVersion,
@@ -970,7 +979,8 @@ func (service *Service) CreateAnalysisDiagnostics(
 		RequestPayload: payload, CreatedAt: now,
 	}
 	bundle := workflow.AnalysisDiagnosticsBundle{
-		AnalysisID: input.AnalysisID, RunID: input.RunID,
+		SupplementalRadarInputs: input.SupplementalRadarInputs,
+		AnalysisID:              input.AnalysisID, RunID: input.RunID,
 		RegenerationRequestID: optionalUUID(input.RegenerationID),
 		AnalysisURI:           input.AnalysisURI,
 		ConfigVersion:         input.DiagnosticConfigVersion,
@@ -1008,9 +1018,12 @@ func validateAnalysisDiagnosticsInput(input AnalysisDiagnosticsInput) error {
 	if len(input.RadarInputs) == 0 {
 		return fmt.Errorf("at least one contributing QC radar input is required")
 	}
+	if len(input.SupplementalRadarInputs) > 0 && input.SupplementalRevisionID == uuid.Nil {
+		return fmt.Errorf("supplemental diagnostic inputs require an immutable revision ID")
+	}
 	radars := make(map[string]struct{}, len(input.RadarInputs))
 	scans := make(map[uuid.UUID]struct{}, len(input.RadarInputs))
-	for _, radar := range input.RadarInputs {
+	for _, radar := range append(append([]workflow.AnalysisDiagnosticRadarInput{}, input.RadarInputs...), input.SupplementalRadarInputs...) {
 		uri, uriErr := url.ParseRequestURI(radar.QCURI)
 		if radar.RadarID == "" || radar.ScanID == uuid.Nil || uriErr != nil || uri.Scheme != "s3" {
 			return fmt.Errorf("diagnostic radar identity and QC s3 URI are required")

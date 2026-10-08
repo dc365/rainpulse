@@ -4,10 +4,54 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
+
+func TestCompositeProbeBindsLocalProductSource(t *testing.T) {
+	sources := json.RawMessage(`[{"index":0,"radar_id":"zf101","band":"X","scan_id":"x-scan","sweep_number":2,"asset_sha256":"frozen","qc_identity":{"parameters_sha256":"actual"},"input_uri":"private-location"}]`)
+	probe := func(value any) map[string]any {
+		return map[string]any{"status": "available", "values": map[string]any{"WINNER_SOURCE": value, "CR_DBZH": 35.0}}
+	}
+	good := probe(0.0)
+	if err := bindCompositeProbeSource(good, "x_only", sources); err != nil {
+		t.Fatal(err)
+	}
+	winning := good["winning_source"].(map[string]any)
+	if winning["radar_id"] != "zf101" || winning["scan_id"] != "x-scan" || winning["input_uri"] != nil {
+		t.Fatal(winning)
+	}
+	if winning["qc_identity"].(map[string]any)["parameters_sha256"] != "actual" {
+		t.Fatal(winning)
+	}
+	for _, value := range []any{0.5, 1.0, math.NaN(), math.Inf(1)} {
+		if bindCompositeProbeSource(probe(value), "x_only", sources) == nil {
+			t.Fatalf("accepted invalid index %v", value)
+		}
+	}
+	if bindCompositeProbeSource(probe(0.0), "s_only", sources) == nil {
+		t.Fatal("S probe accepted X source")
+	}
+	mismatchedSweep := probe(0.0)
+	mismatchedSweep["values"].(map[string]any)["WINNER_SWEEP_NUMBER"] = 3.0
+	if bindCompositeProbeSource(mismatchedSweep, "x_only", sources) == nil {
+		t.Fatal("accepted source and numeric sweep contradiction")
+	}
+	duplicates := json.RawMessage(`[{"index":0,"band":"X"},{"index":0,"band":"X"}]`)
+	if bindCompositeProbeSource(probe(0.0), "x_only", duplicates) == nil {
+		t.Fatal("accepted ambiguous source")
+	}
+	noWinner := probe(-1.0)
+	if bindCompositeProbeSource(noWinner, "sx_composite", sources) != nil || noWinner["winning_source"] != nil {
+		t.Fatal(noWinner)
+	}
+	legacy := probe(0.0)
+	if bindCompositeProbeSource(legacy, "sx_composite", nil) != nil || legacy["source_identity_status"] != "unreported" {
+		t.Fatal(legacy)
+	}
+}
 
 func TestBatchProbesIsolateMissingSourceAndPreserveOrder(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

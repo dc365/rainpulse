@@ -86,6 +86,9 @@
               "available_at": {
                 "type": "string",
                 "format": "date-time"
+              },
+              "expected_qc_identity": {
+                "$ref": "#/$defs/upstreamQCIdentity"
               }
             },
             "required": [
@@ -124,6 +127,35 @@
             "type": "string",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
           }
+        },
+        "requested_s_radars": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_.-]{0,95}$"
+          }
+        },
+        "s_qc_policy": {
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": {
+            "pattern": "^[a-z0-9][a-z0-9_.-]{0,95}$"
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/sQCRecipe"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "s_qc_policy_complete": {
+          "type": "boolean"
         }
       },
       "required": [
@@ -160,9 +192,45 @@
               ]
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "s_qc_policy_complete": {
+                "const": true
+              }
+            },
+            "required": [
+              "s_qc_policy_complete"
+            ]
+          },
+          "then": {
+            "properties": {
+              "s_qc_policy": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/completeSQCRecipe"
+                }
+              }
+            }
+          }
         }
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "dependentRequired": {
+        "requested_s_radars": [
+          "s_qc_policy",
+          "s_qc_policy_complete"
+        ],
+        "s_qc_policy": [
+          "requested_s_radars",
+          "s_qc_policy_complete"
+        ],
+        "s_qc_policy_complete": [
+          "requested_s_radars",
+          "s_qc_policy"
+        ]
+      }
     }
   },
   "required": [
@@ -177,5 +245,145 @@
   ],
   "additionalProperties": false,
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Multi-band managed request. Frozen input markers remain in the existing ops Spec, not in arrays over HTTP."
+  "title": "Multi-band managed request. Frozen input markers remain in the existing ops Spec, not in arrays over HTTP.",
+  "$defs": {
+    "upstreamQCIdentity": {
+      "type": "object",
+      "properties": {
+        "radar_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 96
+        },
+        "scan_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "pipeline_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "parameters_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "implementation_revision": {
+          "type": "string",
+          "pattern": "^python-source-tree-v1:[a-f0-9]{64}$"
+        },
+        "profile": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "libraries": {
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": {
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        }
+      },
+      "required": [
+        "radar_id",
+        "scan_id",
+        "pipeline_version",
+        "profile"
+      ],
+      "additionalProperties": false
+    },
+    "sQCRecipe": {
+      "type": "object",
+      "properties": {
+        "pipeline_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "parameters_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "implementation_revision": {
+          "type": "string",
+          "pattern": "^python-source-tree-v1:[a-f0-9]{64}$"
+        },
+        "profile": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "libraries": {
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": {
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        }
+      },
+      "required": [
+        "pipeline_version",
+        "profile"
+      ],
+      "additionalProperties": false
+    },
+    "completeSQCRecipe": {
+      "type": "object",
+      "properties": {
+        "pipeline_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "parameters_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "implementation_revision": {
+          "type": "string",
+          "pattern": "^python-source-tree-v1:[a-f0-9]{64}$"
+        },
+        "profile": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "libraries": {
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": {
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "minProperties": 1
+        }
+      },
+      "required": [
+        "pipeline_version",
+        "profile",
+        "parameters_sha256",
+        "implementation_revision",
+        "libraries"
+      ],
+      "additionalProperties": false
+    }
+  }
 }

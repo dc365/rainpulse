@@ -45,7 +45,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Latest successful, non-retired S/X comparison per analysis time in a maximum 24-hour window (up to 1500 frames). */
+        /** Latest successful, non-retired S/X comparison per analysis time within one frozen product series (maximum 24 hours, 1500 frames). */
         get: operations["listWorkspaceRadarComposites"];
         put?: never;
         post?: never;
@@ -2188,7 +2188,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Per-layer source scalars, ray/gate indices, identity and explicit unavailable/outside state; NaN values remain null. */
+            /** @description Per-layer source scalars, ray/gate indices, identity and explicit unavailable/outside state; NaN values remain null. Composite echo probes include winning_source from the same product's source index, with radar, scan, sweep, asset and declared QC identity. A single-band probe must never resolve its local source index against the fused product. Historical missing source metadata is explicit. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2206,6 +2206,12 @@ export interface operations {
             query: {
                 start: string;
                 end: string;
+                /** @description Opaque frozen product and processing identity. When omitted, select the most recently published series in this window. An explicit series never falls back to another series. */
+                series_id?: string;
+                /** @description Versioned read-only catalog envelope; preserves published series IDs. */
+                series_mode?: "1";
+                /** @description Exact requested analysis time within the query window; never rounded to a six-minute frame. */
+                target?: string;
             };
             header?: never;
             path?: never;
@@ -2213,17 +2219,38 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Frozen task attempt identities and analysis times. */
+            /** @description One selected series, its frozen task attempt identities and analysis times, and available series in this window. Product ID, requested station set and full worker identity separate methods, grids, cadence, network and configured QC implementations. Actual missing stations do not change series. Legacy tasks without a worker fingerprint or requested station set are isolated by run. Actual source QC versions remain in each manifest and require separate acceptance. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": {
+                        /** @description Empty when no series is available and none was requested. */
+                        selected_series_id: string;
+                        /** @description Alias of selected_series_id in series_mode=1. */
+                        series_id?: string;
+                        /** @enum {string} */
+                        contract?: "rainpulse.sx-series-v1";
+                        /** @description Present in series_mode=1; true when the selected series exceeds 1500 frames. */
+                        truncated?: boolean;
+                        series: {
+                            series_id: string;
+                            product_id: string;
+                            network_release: string;
+                            fingerprint: string;
+                            requested_radars: string[];
+                            legacy: boolean;
+                            /** @description Selected series count only; other series remain unknown. */
+                            frame_count?: number | null;
+                            /** @description False when count is unknown or truncated. */
+                            count_complete?: boolean;
+                        }[];
                         items: {
                             result_id: string;
                             /** Format: date-time */
                             analysis_time: string;
+                            series_id: string;
                         }[];
                     };
                 };

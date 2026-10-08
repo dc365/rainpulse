@@ -18,6 +18,7 @@ from rainpulse_algo.performance import timed as _perf_timed
 from .input_reuse import cached_source, remember_source
 from .model import MAX_FUSION_SWEEPS, MAX_SWEEPS, epoch, json_bytes
 from .product import MAX_X_QC_PREVIEW_BYTES, sx_comparison_objects, x_qc_objects
+from .qc_identity import validate_frozen_qc_identity
 from .quality import accept_s_qc, x_qc
 from .stream_fusion import DTYPE, build_composite_streaming
 from .stream_io import GroupCuts, NPZCuts
@@ -94,6 +95,7 @@ def execute(executor, request, reader, *, started):
                 if reused is not None:
                     metrics["input_read_ms"] += (time.perf_counter() - mark) * 1000
                     for value in reused:
+                        validate_frozen_qc_identity(value.metadata, source, p)
                         yield value
                     del reused, value
                     continue
@@ -181,6 +183,7 @@ def execute(executor, request, reader, *, started):
                                 executor.cut_cache.put((*base_key, number), value)
                             else:
                                 metrics["decoded_cut_cache_hits"] += 1
+                            validate_frozen_qc_identity(value.metadata, source, p)
                             yield value
                             del value
                         remember_source(executor, source_identity, base_key, cuts.numbers,
@@ -219,6 +222,9 @@ def execute(executor, request, reader, *, started):
         # it pure fusion time; pure attribution needs substage instrumentation.
         metrics["stream_pipeline_ms"] = (time.perf_counter() - mark) * 1000
         composite.metadata["execution"] = receipt
+        if "s_qc_policy" in p:
+            composite.metadata.update(s_qc_policy=p["s_qc_policy"],
+                                      s_qc_policy_complete=p["s_qc_policy_complete"])
         mark = time.perf_counter()
         objects = sx_comparison_objects(composite, composite.band_comparisons)
         metrics["encode_ms"] += (time.perf_counter() - mark) * 1000

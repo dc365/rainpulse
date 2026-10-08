@@ -1,6 +1,28 @@
 package operations
 
-import "testing"
+import (
+	"net/url"
+	"strings"
+	"testing"
+)
+
+func TestCompositeSeriesQuery(t *testing.T) {
+	for _, value := range []string{"", strings.Repeat("a", 64)} {
+		got, err := compositeSeriesQuery(url.Values{"series_id": {value}})
+		if err != nil || got != value {
+			t.Fatalf("valid series %q: %q %v", value, got, err)
+		}
+	}
+	for _, values := range []url.Values{
+		{"series_id": {"short"}},
+		{"series_id": {strings.Repeat("A", 64)}},
+		{"series_id": {strings.Repeat("a", 64), strings.Repeat("b", 64)}},
+	} {
+		if _, err := compositeSeriesQuery(values); err == nil {
+			t.Fatalf("accepted ambiguous/invalid series: %v", values)
+		}
+	}
+}
 
 func TestCompositeMapManifest(t *testing.T) {
 	good := []byte(`{"contract":"rainpulse.multiband.composite-v1","comparison":{"same_grid":true,"products":[{"product_id":"s_only","map":{"crs":"EPSG:4326","bounds":[118,25,120,27],"object_path":"map/s_only.png"}}]}}`)

@@ -330,6 +330,9 @@ def from_group(
         "qc_pipeline_version": attrs.get("qc_pipeline_version"),
         "no_echo_semantics": "explicit_mask_or_unknown_no_return",
     }
+    from .qc_identity import copy_asset_qc_identity
+
+    copy_asset_qc_identity(attrs, metadata)
     if sampling:
         metadata["native_cut_sampling"] = sampling
     copy_path_provenance(attrs, metadata)

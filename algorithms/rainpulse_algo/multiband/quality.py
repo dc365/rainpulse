@@ -11,6 +11,9 @@ from rainpulse_algo.performance import (timed as _perf_timed)
 
 from enum import IntFlag
 import copy
+from dataclasses import asdict
+import hashlib
+import json
 
 import numpy as np
 from scipy.ndimage import median_filter
@@ -265,6 +268,9 @@ def x_qc(volume: Volume, station: Station, release_sha256: str) -> Volume:
             )
         )
         result.sweeps[-1].path_quality = path.summary()
+    parameters_sha256 = hashlib.sha256(json.dumps(
+        asdict(cfg), sort_keys=True, separators=(",", ":"), allow_nan=False,
+    ).encode()).hexdigest()
     result.metadata.update(
         path_quality_version=PATH_VERSION,
         attenuation_parameters={
@@ -274,6 +280,10 @@ def x_qc(volume: Volume, station: Station, release_sha256: str) -> Volume:
         },
         attenuation_dependency="standalone_x_no_s_reference",
         processing="x-moment-qc-v1",
+        xqc_parameter_sha256=parameters_sha256,
+        xqc_base_parameter_sha256=parameters_sha256,
+        xqc_implementation_revision="x-moment-qc-v1",
+        xqc_mode="baseline",
         network_sha256=release_sha256,
         quality_semantics="candidate-heuristic-not-probability-v1",
         dbzh_raw_semantics="unchanged_input_moment_may_be_vendor_corrected",

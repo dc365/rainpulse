@@ -712,6 +712,31 @@ WHERE analysis_id = $1 AND state = $2`,
 		return fmt.Errorf("diagnostic radar inputs must exactly match all analysis contributors")
 	}
 
+	seen := make(map[string]bool)
+	for _, radar := range bundle.RadarInputs {
+		seen[radar.RadarID] = true
+	}
+	for _, radar := range bundle.SupplementalRadarInputs {
+		if seen[radar.RadarID] {
+			return fmt.Errorf("supplement duplicates a diagnostic contributor")
+		}
+		seen[radar.RadarID] = true
+		var band, qcURI string
+		var ended, analysisTime time.Time
+		if err = tx.QueryRow(ctx, `
+SELECT c.config#>>'{hardware,radar_band}', COALESCE(rs.qc_uri,''), s.volume_end_time, a.analysis_time
+FROM radar_scan_runs rs JOIN radar_scans s USING(scan_id)
+JOIN radars d ON d.radar_id=rs.radar_id
+JOIN radar_config_versions c ON c.radar_id=d.radar_id AND c.radar_config_version=d.current_config_version
+JOIN analysis_cycles a ON a.analysis_id=$1
+WHERE rs.scan_id=$2 AND rs.radar_id=$3 AND rs.qc_uri IS NOT NULL FOR SHARE OF rs`, bundle.AnalysisID, radar.ScanID, radar.RadarID).Scan(&band, &qcURI, &ended, &analysisTime); err != nil {
+			return fmt.Errorf("verify supplemental native QC %s: %w", radar.RadarID, err)
+		}
+		if !validDiagnosticSupplement(band, qcURI, radar.QCURI, ended, analysisTime) {
+			return fmt.Errorf("supplement must be causal current native S QC within 720 seconds")
+		}
+	}
+
 	if _, err = tx.Exec(ctx, `
 INSERT INTO jobs (
     job_id, run_id, trace_id, job_type, model_id, model_version,
@@ -1500,4 +1525,8 @@ func scanAnalysis(row rowScanner) (workflow.AnalysisCycle, error) {
 		return workflow.AnalysisCycle{}, fmt.Errorf("scan analysis cycle: %w", err)
 	}
 	return cycle, nil
+}
+
+func validDiagnosticSupplement(band, committedURI, requestedURI string, ended, analysisTime time.Time) bool {
+	return band == "S" && strings.HasPrefix(committedURI, "s3://") && committedURI == requestedURI && !ended.IsZero() && !analysisTime.IsZero() && !ended.After(analysisTime) && analysisTime.Sub(ended) <= 720*time.Second
 }

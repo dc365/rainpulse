@@ -126,7 +126,7 @@ func (s Selection) Validate() error {
 			seen[id] = true
 		}
 	default:
-		return Invalid("支持QC/图件/诊断、X单站QC与S-X一分钟组合反射率预设")
+		return Invalid("支持QC/图件/诊断、X单站QC与S-X组合反射率预设")
 	}
 	return nil
 }
@@ -138,11 +138,21 @@ type Check struct {
 	Target  string `json:"target,omitempty"`
 }
 type AssetRef struct {
-	URI          string `json:"uri"`
-	MarkerSHA256 string `json:"marker_sha256"`
-	SHA256       string `json:"sha256"`
-	SizeBytes    int64  `json:"size_bytes"`
-	Verification string `json:"verification"`
+	URI          string              `json:"uri"`
+	MarkerSHA256 string              `json:"marker_sha256"`
+	SHA256       string              `json:"sha256"`
+	SizeBytes    int64               `json:"size_bytes"`
+	Verification string              `json:"verification"`
+	QCIdentity   *UpstreamQCIdentity `json:"qc_identity,omitempty"`
+}
+type UpstreamQCIdentity struct {
+	RadarID                string            `json:"radar_id"`
+	ScanID                 string            `json:"scan_id"`
+	PipelineVersion        string            `json:"pipeline_version"`
+	ParametersSHA256       string            `json:"parameters_sha256,omitempty"`
+	ImplementationRevision string            `json:"implementation_revision,omitempty"`
+	Profile                string            `json:"profile"`
+	Libraries              map[string]string `json:"libraries,omitempty"`
 }
 type Identity struct {
 	Kind        string            `json:"kind"`

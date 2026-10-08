@@ -14,6 +14,14 @@ describe('radar site references', () => {
     })
   })
 
+  it('locates Z9595 from its own native header', () => {
+    const site = radarSiteFor('Z9595')!
+    expect(site).toMatchObject({ displayName: '泉州', longitude: 118.4977798461914,
+      latitude: 24.89555549621582, antennaAltitudeM: 530, frequencyMHz: 2785,
+      expectedUpdateSeconds: 344, maximumRangeKM: 460 })
+    expect(radarDisplayExtent(site)[0]).toBeLessThan(118.4977798461914)
+  })
+
   it('builds closed range rings and orthogonal axes', () => {
     const site = radarSiteFor('z9591')!
     const geometry = radarRangeGeometry(site)

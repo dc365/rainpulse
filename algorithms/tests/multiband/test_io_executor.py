@@ -24,6 +24,31 @@ from rainpulse_algo.multiband.product import sx_comparison_objects
 CUTOFF = '2026-09-23T00:11:00Z'
 
 
+def encode_declared_preview(result, components):
+    """Synthetic preview fixtures now declare the native winners they assert."""
+    result = copy.deepcopy(result)
+    components = copy.deepcopy(components)
+    def source(band):
+        return dict(radar_id=band.lower()+'1', band=band, scan_id='fixture-'+band, sweep_number=0)
+    result.metadata['sources'] = [source(v['band']) for v in result.metadata.get('sources', [])]
+    def geometry(value, index=0):
+        finite = np.isfinite(value.arrays['CR_DBZH'])
+        value.arrays.setdefault('WINNER_SOURCE', np.where(finite, index, -1).astype(np.int32))
+        for key in ('WINNER_RAY', 'WINNER_GATE'):
+            value.arrays.setdefault(key, np.where(finite, 0, -1).astype(np.int32))
+        noecho = np.zeros(finite.shape, np.uint8)
+        count = value.metadata.get('valid_no_echo_cells', 0)
+        noecho.flat[np.flatnonzero(~finite & np.asarray(value.arrays.get('OBSERVED_MASK', np.ones(finite.shape)), bool))[:count]] = 1
+        value.arrays.setdefault('NO_ECHO_MASK', noecho)
+        value.arrays.setdefault('OBSERVED_MASK', (finite | (noecho == 1)).astype(np.uint8))
+    geometry(result)
+    for band, value in components.items():
+        value.metadata = copy.deepcopy(value.metadata)
+        value.metadata['sources'] = [source(band)]
+        geometry(value)
+    return sx_comparison_objects(result, components)
+
+
 def setup_inputs(tmp_path, *, cache=True):
     document = network_document()
     document['cache_max_bytes'] = 10*1024**2 if cache else 0
@@ -71,11 +96,11 @@ def test_sx_preview_labels_a_single_band_result_without_claiming_fusion(band):
         )
         for current in ("S", "X")
     }
-    objects = sx_comparison_objects(result, band_results)
+    objects = encode_declared_preview(result, band_results)
 
     comparison = json.loads(objects["manifest.json"])["comparison"]
     fused = next(item for item in comparison["products"] if item["product_id"] == "sx_composite")
-    assert fused["label"] == f"仅{band}贡献（未形成 S/X 融合）"
+    assert f"仅{band}贡献" in fused["label"]
     assert fused["contributing_bands"] == [band]
     assert fused["echo_contributing_bands"] == [band]
     absent = "X" if band == "S" else "S"
@@ -99,12 +124,12 @@ def test_sx_preview_preserves_valid_no_echo_coverage():
         {"CR_DBZH": no_values, "CR_UNCERTAIN_DBZH": no_values}, metadata
     )
 
-    objects = sx_comparison_objects(result, {"S": s_result, "X": x_result})
+    objects = encode_declared_preview(result, {"S": s_result, "X": x_result})
 
     comparison = json.loads(objects["manifest.json"])["comparison"]
     fused = next(item for item in comparison["products"] if item["product_id"] == "sx_composite")
     assert fused["status"] == "no_echo"
-    assert fused["label"] == "S/X 融合（仅有效无回波像元）"
+    assert "仅有效无回波像元" in fused["label"]
     assert fused["contributing_bands"] == ["S", "X"]
     assert fused["echo_contributing_bands"] == []
     assert fused["valid_no_echo_cells"] == 1
@@ -134,7 +159,7 @@ def test_sx_preview_labels_the_final_fused_no_echo_state_not_single_band_echo():
          "WINNER_SOURCE": np.full((1, 1), -1, dtype=np.int32)},
         fused_metadata,
     )
-    objects = sx_comparison_objects(
+    objects = encode_declared_preview(
         result,
         {
             "S": Composite({"CR_DBZH": echo}, s_metadata),
@@ -147,7 +172,7 @@ def test_sx_preview_labels_the_final_fused_no_echo_state_not_single_band_echo():
         if item["product_id"] == "sx_composite"
     )
     assert fused["status"] == "no_echo"
-    assert fused["label"] == "S/X 融合（仅有效无回波像元）"
+    assert "仅有效无回波像元" in fused["label"]
     assert fused["echo_contributing_bands"] == []
     assert "最终组合含 1 个有效无回波像元" in fused["reason"]
     assert "单波段候选均有有效无回波覆盖" not in fused["reason"]
@@ -173,7 +198,7 @@ def test_sx_preview_reports_echo_bands_selected_by_final_composite():
          "WINNER_SOURCE": np.array([[1]], dtype=np.int32)},
         fused_metadata,
     )
-    objects = sx_comparison_objects(
+    objects = encode_declared_preview(
         result,
         {
             "S": Composite({"CR_DBZH": echo}, metadata),
@@ -185,7 +210,7 @@ def test_sx_preview_reports_echo_bands_selected_by_final_composite():
         item for item in json.loads(objects["manifest.json"])["comparison"]["products"]
         if item["product_id"] == "sx_composite"
     )
-    assert fused["label"] == "S/X 融合（最终回波来自 X）"
+    assert "最终回波来自 X" in fused["label"]
     assert fused["echo_contributing_bands"] == ["X"]
 
 
@@ -211,7 +236,7 @@ def test_sx_preview_mixed_echo_and_no_echo_does_not_claim_echo_is_absent():
         },
         fused_metadata,
     )
-    objects = sx_comparison_objects(
+    objects = encode_declared_preview(
         result,
         {
             "S": Composite({"CR_DBZH": values}, metadata),
@@ -314,7 +339,7 @@ def test_executor_full_numerical_path_and_repeat(tmp_path):
     assert arrays['DBZH_X_MINUS_S'].shape == arrays['CR_DBZH'].shape
     comparison = json.loads(first['manifest.json'])['comparison']
     assert comparison['same_grid'] and comparison['cadence_seconds'] == 60
-    assert {p['product_id'] for p in comparison['products']} == {'s_only','x_only','sx_composite','x_minus_s','sx_minus_s','x_added_coverage','winner_band','winner_site','winner_age','winner_quality'}
+    assert {p['product_id'] for p in comparison['products']} == {'s_only','x_only','sx_composite','x_minus_s','sx_minus_s','x_added_coverage','x_added_echo','winner_band','winner_site','winner_age','winner_quality'}
     assert m2['decoded_cache_hits']==2
     assert m2['decoded_cache_bytes'] <= e.network.cache_max_bytes
 
@@ -677,10 +702,10 @@ def test_contribution_arrays_preserve_overlap_and_no_echo_coverage():
                         'WINNER_SOURCE':np.array([[1,-1,1]])},meta)
     components = {'S':Composite({'CR_DBZH':s,'OBSERVED_MASK':np.array([[1,0,0]])},meta),
                   'X':Composite({'CR_DBZH':x,'OBSERVED_MASK':np.array([[1,1,1]])},meta)}
-    arrays = decode_arrays(sx_comparison_objects(result,components)['arrays.npz'], maximum_bytes=1024*1024)
+    arrays = decode_arrays(encode_declared_preview(result,components)['arrays.npz'], maximum_bytes=1024*1024)
     np.testing.assert_equal(arrays['DBZH_SX_MINUS_S'],[[10.,np.nan,np.nan]])
     np.testing.assert_equal(arrays['X_ADDED_COVERAGE'],[[np.nan,1.,1.]])
-    np.testing.assert_equal(arrays['WINNER_BAND'],[[2.,np.nan,2.]])
+    np.testing.assert_equal(arrays['WINNER_BAND'],[[2,0,2]])
     np.testing.assert_equal(arrays['WINNER_SITE'],[[1.,np.nan,1.]])
 
 

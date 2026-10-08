@@ -34,7 +34,7 @@ type Index struct {
 type Read func(context.Context, string) ([]byte, error)
 
 func Sample(ctx context.Context, index Index, x, y float64, read Read) (map[string]any, error) {
-	if index.Contract != "rainpulse.radar-probe-v1" || index.TileSize != 64 || index.Width < 1 || index.Height < 1 || index.Width > 4096 || index.Height > 4096 || len(index.Fields) < 1 || len(index.Fields) > 16 || index.RowOrder != "north_to_south" {
+	if index.Contract != "rainpulse.radar-probe-v1" || index.TileSize != 64 || index.Width < 1 || index.Height < 1 || index.Width > 4096 || index.Height > 4096 || len(index.Fields) < 1 || len(index.Fields) > 24 || index.RowOrder != "north_to_south" {
 		return nil, fmt.Errorf("numeric index unavailable")
 	}
 	if math.IsNaN(x) || math.IsNaN(y) || math.IsInf(x, 0) || math.IsInf(y, 0) || x < 0 || x >= 1 || y < 0 || y >= 1 {
@@ -49,7 +49,7 @@ func Sample(ctx context.Context, index Index, x, y float64, read Read) (map[stri
 	if err != nil {
 		return nil, err
 	}
-	if len(raw) > 1024*1024 {
+	if len(raw) > 2*1024*1024 {
 		return nil, fmt.Errorf("tile too large")
 	}
 	hash := sha256.Sum256(raw)
@@ -104,6 +104,14 @@ func Sample(ctx context.Context, index Index, x, y float64, read Read) (map[stri
 	state := "valid"
 	rawValue, hasRaw := result["DBZH_RAW"]
 	cr, hasCR := result["CR_DBZH"]
+	if !hasCR {
+		for _, field := range []string{"CR_DBZH_S_ONLY", "CR_DBZH_X_ONLY"} {
+			if value, exists := result[field]; exists {
+				cr, hasCR = value, true
+				break
+			}
+		}
+	}
 	if (hasRaw && rawValue == nil) || (hasCR && cr == nil) {
 		state = "missing"
 		if result["NO_ECHO_MASK"] == float64(1) {

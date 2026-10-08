@@ -7,6 +7,8 @@ No temporal advection in v1: held S observations retain their measured age.
 
 from __future__ import annotations
 
+from . import fusion_audit
+
 from rainpulse_algo.performance import (timed as _perf_timed)
 
 from dataclasses import dataclass
@@ -16,6 +18,7 @@ from pyproj import Geod, Transformer
 
 from .model import Network, Station, Sweep, Volume, epoch
 from . import fusion_quality
+from .qc_identity import source_qc_identity
 
 EARTH_EFFECTIVE_M = 6371000.0 * 4.0 / 3.0
 GEOD = Geod(ellps="WGS84")
@@ -156,7 +159,13 @@ class Composite:
     metadata: dict
 
 
+def source_qc_version(metadata):
+    """Record the station QC implementation, retaining unknown as unknown."""
+    return source_qc_identity(metadata)["pipeline_version"]
+
+
 @_perf_timed("fusion.eager")
+@fusion_audit.audited
 def build_composite(
     volumes: list[Volume], network: Network, product: str, analysis_time: str, cutoff: str
 ) -> Composite:
@@ -215,9 +224,8 @@ def build_composite(
                     "volume_end": v.metadata["volume_end"],
                     "available_at": v.metadata["available_at"],
                     "scan_type": v.metadata["scan_type"],
-                    "qc_version": v.metadata.get(
-                        "qc_pipeline_version", v.metadata.get("processing")
-                    ),
+                    "qc_version": source_qc_version(v.metadata),
+                    "qc_identity": source_qc_identity(v.metadata),
                     "calibration_id": station.calibration_id,
                     "network_sha256": network.sha256,
                 }
@@ -323,6 +331,7 @@ def update_tile(layers, out, sl, fp, sweep, station, index, grid, *, backend="nu
         * np.exp(-fp.age / station.maximum_age_seconds)
         * np.minimum(1.0, grid.spacing_m / np.maximum(fp.resolution, 1))
     )
+    fusion_audit.trace_source(out, sweep, station, index, grid)
     half = np.maximum((fp.upper - fp.lower) / 2, 1)
     for li, level in enumerate(grid.levels_m_msl):
         represented = (level >= fp.lower) & (level <= fp.upper)
@@ -337,6 +346,7 @@ def update_tile(layers, out, sl, fp, sweep, station, index, grid, *, backend="nu
         )
         candidate = quality / (1 + np.abs(fp.height - level) / half)
         admitted = represented & eligible & (candidate > 0)
+        fusion_audit.trace_samples(out, index, fp.horizontal, represented, valid, eligible, admitted, noecho)
         select_winners(
             admitted,
             candidate,
@@ -362,6 +372,7 @@ def update_tile(layers, out, sl, fp, sweep, station, index, grid, *, backend="nu
 
 @_perf_timed("fusion.finish_tile")
 def finish_tile(layers, out, sl, grid):
+    fusion_audit.trace_layers(out, layers, sl, grid)
     score, values, winner, wray, wgate, h, age, resolution = layers
     for li, level in enumerate(grid.levels_m_msl):
         covered = winner[li] >= 0
@@ -438,4 +449,4 @@ def finish_composite(out, grid, network, product, analysis_time, cutoff, sources
     }
     if grid.method == fusion_quality.METHOD:
         fusion_quality.finish_quality(out, meta, sources)
-    return Composite(out, meta)
+    return fusion_audit.complete(Composite(out, meta))

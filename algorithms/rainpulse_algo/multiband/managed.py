@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from . import fusion_audit
+
 from rainpulse_algo.performance import (timed as _perf_timed)
 
 from collections import OrderedDict
@@ -20,6 +22,7 @@ from .fusion import build_composite
 from .model import MAX_SWEEPS, Network, Volume, epoch
 from .product import sx_comparison_objects, x_qc_objects
 from .quality import x_qc, accept_s_qc
+from .qc_identity import validate_frozen_qc_identity, validate_s_qc_policy
 
 # X_QC_FIELDS decodes the dual-pol moments plus per-moment masks; a real
 # 40-cut dual-pol X volume (zf101 2026-08-28) reaches 625.7 MiB decoded, so
@@ -123,6 +126,7 @@ class Executor:
         )
 
     @_perf_timed("multiband.execute", root=True)
+    @fusion_audit.request_context
     def execute(self, request: dict, reader, *, artifact_digest: Callable[[dict], str]):
         started = time.perf_counter()
         p = request["payload"]
@@ -146,6 +150,7 @@ class Executor:
                 raise ValueError("invalid requested station coverage")
         if epoch(p["input_cutoff"]) > epoch(request["occurred_at"]):
             raise ValueError("input cutoff cannot exceed the frozen task creation time")
+        validate_s_qc_policy(p, self.network)
         if p["mode"] == "x_qc" and len(inputs) != 1:
             raise ValueError("standalone X QC tasks contain exactly one scan")
         if p["mode"] == "sx_composite" and p["product_id"] not in self.network.products:
@@ -228,6 +233,7 @@ class Executor:
                 )
                 qc_ms += (time.perf_counter() - mark) * 1000
                 self.cache.put(key, v)
+            validate_frozen_qc_identity(v.metadata, source, p)
             volumes.append(v)
             del objects
             if sum(v.nbytes for v in volumes) > self.network.maximum_input_bytes:
@@ -253,6 +259,9 @@ class Executor:
             for band in ("S", "X")
         }
         fusion_ms += (time.perf_counter() - comparison_mark) * 1000
+        if "s_qc_policy" in p:
+            composite.metadata.update(s_qc_policy=p["s_qc_policy"],
+                                      s_qc_policy_complete=p["s_qc_policy_complete"])
         objects = sx_comparison_objects(composite, band_results)
         summary = {
             "multiband": {
