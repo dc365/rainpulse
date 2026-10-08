@@ -500,6 +500,9 @@ it('keeps one analysis clock and exact QC source across single, overlay and comp
   const displayed=()=>screen.getAllByTestId('geo-image').flatMap(e=>[e.getAttribute('data-image'),e.getAttribute('data-layers')]).join(' ')
   await waitFor(()=>expect(displayed()).toContain('/exact-DBZH_QC.png'))
   expect(screen.getByText(/完整体扫结束后才进入组合/).textContent).toContain('10:43:16')
+  // Source explanation must not consume a column of the map stage grid.
+  expect(screen.getByText(/完整体扫结束后才进入组合/).closest('.radar-qc-stage')).toBeNull()
+  expect(screen.getByRole('region',{name:'质控图层'}).children).toHaveLength(1)
   fireEvent.click(screen.getByRole('button',{name:'多站叠加'}))
   fireEvent.click(await screen.findByRole('checkbox',{name:/Z9591/}))
   await waitFor(()=>expect(displayed()).toContain('/exact-DBZH_QC.png'))

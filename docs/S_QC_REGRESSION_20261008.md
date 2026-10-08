@@ -28,7 +28,16 @@ These are source-stage checks, not independent weather truth or full-QC acceptan
 
 105 QC child workers and Web clock fix are installed. Original batch controllers and
 hourly follow-up remain paused with their handles retained. Two normal QC rebuilds,
-paired diagnostic generation and causal five-S composites at 10:48/14:12 are bounded
-verification only. Normal jobs/public PNG acceptance are pending capacity; do not resume
+paired diagnostic generation and repair of the existing composites at 10:48/14:12 are bounded
+verification only. Preserve their original 29-station scope and exact other S/X asset
+identities; only the repaired Z9591 QC input changes. This updates the automatic current
+frame without replacing a complete network with a smaller five-S experiment. No X QC
+or day-wide composite batch is submitted. Normal jobs/public PNG acceptance are pending capacity; do not resume
 the frozen v9 producers under the child profile. Private release/job/cleanup receipts are
 under `.build/s-five-station-pipeline-20261008/regression-z9591-1042-20261008` on 105.
+
+The time/source explanation is outside the map stage so it cannot squeeze the two
+map panels. The layout guard fails against the frozen parent and passes with the fix.
+Actual browser checks on 105 retain analysis 10:48 through all three modes, display
+10:37:49–10:43:16 separately, and show two equal-width maps. These screenshots still
+contain the old QC pixels until the normal rebuild and replacement publication finish.
