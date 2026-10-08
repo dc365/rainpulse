@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import './dataflow.css'
 import { StageStrip } from './StageStrip'
 import { Swimlanes } from './Swimlanes'
@@ -20,11 +20,13 @@ export function DataflowWorkspace() {
   const [selected, setSelected] = useState<SelectedBlock | null>(null)
   const [anchorDraft, setAnchorDraft] = useState('')
   const [anchorISO, setAnchorISO] = useState<string | null>(null)
+  const [stageFocus, setStageFocus] = useState<string | null>(null)
   const { snapshot, ingest, error, connection, now, refresh } = useDataflow(windowMinutes, anchorISO)
 
   const verdict = useMemo(() => verdictOf(snapshot, anchorISO), [snapshot, anchorISO])
   const anyRunning = useMemo(() =>
     (snapshot?.stages ?? []).some(stage => stage.running > 0 || stage.queued > 0), [snapshot])
+  const silentRadars = useMemo(() => silentRadarList(snapshot), [snapshot])
 
   const applyAnchor = () => {
     const trimmed = anchorDraft.trim()
@@ -37,6 +39,16 @@ export function DataflowWorkspace() {
     if (Number.isNaN(parsed)) return
     setAnchorISO(new Date(parsed).toISOString())
   }
+
+  // Escape closes the evidence drawer like every other panel on the screen.
+  useEffect(() => {
+    if (!selected) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSelected(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selected])
 
   return <main className="df-root">
     <header className="df-header">
@@ -74,6 +86,18 @@ export function DataflowWorkspace() {
 
     {error && <div className="df-notice df-notice-error" role="alert">{error}</div>}
     {!snapshot && !error && <div className="df-notice" role="status">正在读取链路快照…</div>}
+    {!anchorISO && silentRadars.length > 0 && <div className="df-silent-banner" role="alert">
+      <span className="df-gap-sample" aria-hidden="true"/>
+      <b>{silentRadars.length} 部雷达断流</b>
+      <span className="df-silent-list">
+        {silentRadars.map(item => <button
+          type="button"
+          key={item.radarID}
+          title="跳到雷达状态查看详情"
+          onClick={() => document.getElementById('df-radar-status')?.scrollIntoView({ behavior: 'smooth' })}
+        >{item.label} · {item.minutes} 分钟</button>)}
+      </span>
+    </div>}
 
     {snapshot && <>
       <section className={`df-verdict df-verdict-${verdict.tone}`} role="status">
@@ -96,7 +120,7 @@ export function DataflowWorkspace() {
           <h2>链路节拍</h2>
           <small>窗口内完成 / 执行 / 排队 / 失败 · 中位耗时</small>
         </div>
-        <StageStrip stages={snapshot.stages} nowActive={anyRunning}/>
+        <StageStrip stages={snapshot.stages} nowActive={anyRunning} focus={stageFocus} onFocus={setStageFocus}/>
       </section>
 
       <section className="df-panel">
@@ -110,18 +134,20 @@ export function DataflowWorkspace() {
           onSelect={setSelected}
           selected={selected}
           nowLabel={anchorISO ? formatClock(anchorISO) : '现在'}
+          stageFocus={stageFocus}
         />
         <p className="df-legend">
-          <span className="df-seg df-seg-done"/> 已完成
+          <span className="df-seg df-seg-done" data-stage="decode"/> 解码
+          <span className="df-seg df-seg-done" data-stage="qc"/> 质控
+          <span className="df-seg df-seg-done" data-stage="grid"/> 格点化
           <span className="df-seg df-seg-running"/> 执行中
           <span className="df-seg df-seg-failed"/> 失败
-          <span className="df-seg df-seg-queued"/> 排队
           <span className="df-gap-sample"/> 断流
         </p>
       </section>
 
       <div className="df-lower">
-        <section className="df-panel">
+        <section className="df-panel" id="df-radar-status">
           <div className="df-panel-head">
             <h2>雷达状态</h2>
             <small>按波段分组 · 每部雷达的当前质控进程与采集状况</small>
@@ -152,16 +178,47 @@ function ConnectionBadge({ state }: { state: 'connecting' | 'connected' | 'polli
 
 type Verdict = { tone: 'ok' | 'warn' | 'risk'; title: string; detail: string }
 
+// silentRadarList names the in-roster radars with no volume scan inside the
+// window; only the live view surfaces the banner because a historical case is
+// always fully in the past.
+function silentRadarList(snapshot: import('./types').DataflowSnapshot | null): { radarID: string; label: string; minutes: number }[] {
+  if (!snapshot) return []
+  const statusByRadar = new Map(snapshot.radar_statuses.map(status => [status.radar_id, status]))
+  const result: { radarID: string; label: string; minutes: number }[] = []
+  for (const lane of snapshot.radar_lanes) {
+    if (lane.blocks.length > 0) continue
+    const status = statusByRadar.get(lane.radar_id)
+    if (status?.health === 'UNAVAILABLE') continue
+    result.push({
+      radarID: lane.radar_id,
+      label: status?.display_name || lane.radar_id.toUpperCase(),
+      minutes: Math.round((Date.now() - Date.parse(status?.latest_scan_time ?? '')) / 60_000) || 0,
+    })
+  }
+  return result
+}
+
 function verdictOf(snapshot: import('./types').DataflowSnapshot | null, anchorISO: string | null): Verdict {
   if (!snapshot) return { tone: 'ok', title: '', detail: '' }
-  const total = snapshot.radar_statuses.length
-  const participating = snapshot.radar_statuses.filter(status => status.participating_in_latest_analysis).length
-  const unavailable = snapshot.radar_statuses.filter(status => status.health === 'UNAVAILABLE').length
   const failed = snapshot.stages.reduce((sum, stage) => sum + stage.failed, 0)
   const running = snapshot.stages.reduce((sum, stage) => sum + stage.running, 0)
   const latestAnalysis = snapshot.analysis_blocks[snapshot.analysis_blocks.length - 1]
+  if (anchorISO) {
+    // Historical replay: only facts from inside the window. Current-fleet
+    // health and participation describe September, not the anchored case.
+    const radarsWithData = snapshot.radar_lanes.filter(lane => lane.blocks.length > 0).length
+    const cycleText = latestAnalysis
+      ? `${formatClock(latestAnalysis.analysis_time)} 周期 · ${latestAnalysis.radar_count} 部参与`
+      : '窗口内无分析周期'
+    const detail = `${radarsWithData} 部雷达有体扫 · ${cycleText}`
+    if (failed > 0) return { tone: 'risk', title: `回放窗口内有 ${failed} 个失败作业`, detail }
+    return { tone: 'ok', title: '历史窗口回放', detail }
+  }
+  const total = snapshot.radar_statuses.length
+  const participating = snapshot.radar_statuses.filter(status => status.participating_in_latest_analysis).length
+  const unavailable = snapshot.radar_statuses.filter(status => status.health === 'UNAVAILABLE').length
   const cycleText = latestAnalysis
-    ? `${anchorISO ? '锚点周期' : '当前分析周期'} ${formatClock(latestAnalysis.analysis_time)} · ${latestAnalysis.status === 'ANALYSIS_READY' ? '已就绪' : latestAnalysis.status}`
+    ? `当前分析周期 ${formatClock(latestAnalysis.analysis_time)} · ${latestAnalysis.status === 'ANALYSIS_READY' ? '已就绪' : latestAnalysis.status}`
     : '暂无分析周期'
   const detail = `${participating}/${total} 雷达参与 · ${cycleText}`
   if (failed > 0 || unavailable > 0) {
@@ -172,5 +229,5 @@ function verdictOf(snapshot: import('./types').DataflowSnapshot | null, anchorIS
     }
   }
   if (running > 0) return { tone: 'ok', title: '链路正常运行', detail: `${detail} · ${running} 个阶段作业执行中` }
-  return { tone: 'ok', title: anchorISO ? '历史窗口回放' : '链路空闲', detail }
+  return { tone: 'ok', title: '链路空闲', detail }
 }

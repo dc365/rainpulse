@@ -250,6 +250,12 @@
 .df-node-risk { border-color: var(--critical); }
 .df-node-risk .df-node-dot { background: var(--critical); }
 
+.df-node-selected {
+  border-color: var(--teal);
+  outline: 2px solid var(--teal);
+  outline-offset: 1px;
+}
+
 .df-node-counts {
   display: flex;
   flex-direction: column;
@@ -372,6 +378,45 @@
   pointer-events: none;
 }
 
+/* Band group headers inside the swimlane column */
+.df-lane-group-block {
+  display: contents;
+}
+
+.df-lane-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+  font: inherit;
+  padding: 4px 10px;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.df-lane-group-head b { font-size: var(--fs-body); }
+
+.df-lane-group-head small {
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+
+.df-lane-group-head .df-radar-group-arrow {
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--muted);
+}
+
+.df-lane-group-closed .df-radar-group-arrow {
+  transform: rotate(-90deg);
+}
+
 .df-gridline {
   position: absolute;
   top: 0;
@@ -454,6 +499,12 @@
   background: var(--teal);
   animation: df-pulse 1.6s ease-in-out infinite;
 }
+
+/* Stage spotlight from the chain strip: focused segments keep their colour,
+   everything else fades into the background. */
+.df-seg-dim { opacity: 0.18; }
+
+.df-seg-focus { box-shadow: 0 0 0 1px var(--ink); }
 
 .df-seg-failed { background: var(--critical); }
 .df-seg-skipped { background: var(--unknown); }
@@ -698,6 +749,54 @@
   border-radius: 4px;
   cursor: pointer;
   padding: 2px 8px;
+}
+
+.df-drawer header button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.df-drawer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.df-drawer-actions small {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Silent-radar alert banner under the header, live view only. */
+.df-silent-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  border: 1px solid var(--risk);
+  border-left-width: 4px;
+  border-radius: 6px;
+  background: var(--risk-soft);
+  padding: 8px 14px;
+  font-size: var(--fs-caption);
+}
+
+.df-silent-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.df-silent-list button {
+  border: 1px solid var(--risk);
+  border-radius: 4px;
+  background: var(--paper);
+  font: inherit;
+  font-size: var(--fs-micro);
+  padding: 2px 8px;
+  cursor: pointer;
+  color: var(--risk);
 }
 
 .df-drawer-badge {

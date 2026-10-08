@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  GAP_THRESHOLD_MS,
   HEADROOM_MINUTES,
   PX_PER_MIN,
   axisTicks,
   delayTone,
   formatDuration,
   gapRanges,
+  laneGapThreshold,
   scanStatusLabel,
   segmentPlan,
   stageLabel,
@@ -109,6 +111,15 @@ describe('gapRanges', () => {
     expect(gaps.some(gap => gap.minutes >= 40)).toBe(true)
     const late = [NOW - 8 * 60_000]
     expect(gapRanges(late, start, end)).toHaveLength(1)
+  })
+
+  it('adapts the silence threshold to the lane observed cadence', () => {
+    const sparse = Array.from({ length: 8 }, (_, i) => NOW - (i + 1) * 30 * 60_000)
+    // Sparse 30-minute cadence raises the threshold, clamped at 30 minutes.
+    expect(laneGapThreshold(sparse)).toBe(30 * 60_000)
+    // A dense six-minute lane keeps a tight threshold; too few scans keep default.
+    expect(laneGapThreshold(Array.from({ length: 8 }, (_, i) => NOW - (i + 1) * 6 * 60_000))).toBe(15 * 60_000)
+    expect(laneGapThreshold([NOW - 6 * 60_000])).toBe(GAP_THRESHOLD_MS)
   })
 })
 

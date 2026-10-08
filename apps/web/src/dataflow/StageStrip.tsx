@@ -2,19 +2,34 @@ import type { DataflowStageSummary } from './types'
 import { formatDuration } from './layout'
 
 // StageStrip is the chain beat rail: seven downstream nodes with per-window
-// counts, a p50 runtime and a live connector between busy neighbours.
-export function StageStrip({ stages, nowActive }: { stages: DataflowStageSummary[]; nowActive: boolean }) {
+// counts, a p50 runtime and a live connector between busy neighbours. Clicking
+// a node spotlights that stage across every swimlane block; clicking the
+// active node again clears the spotlight.
+export function StageStrip({ stages, nowActive, focus, onFocus }: {
+  stages: DataflowStageSummary[]
+  nowActive: boolean
+  focus: string | null
+  onFocus: (key: string | null) => void
+}) {
   return <div className="df-strip" role="list">
     {stages.map((stage, index) => {
       const tone = stage.failed > 0 ? 'risk'
         : stage.running > 0 ? 'busy'
         : stage.completed > 0 || stage.queued > 0 ? 'ok' : 'idle'
       const flowing = nowActive && (stage.running > 0 || stage.queued > 0)
+      const selected = focus === stage.key
       return <div className="df-strip-cell" role="listitem" key={stage.key}>
-        <div className={`df-node df-node-${tone}`} data-flowing={flowing || undefined}>
+        <button
+          type="button"
+          className={selected ? 'df-node df-node-selected' : `df-node df-node-${tone}`}
+          data-flowing={flowing || undefined}
+          onClick={() => onFocus(selected ? null : stage.key)}
+          aria-pressed={selected}
+          title={`只高亮「${stage.label}」阶段；再点一次恢复全部`}
+        >
           <span className="df-node-dot" aria-hidden="true"/>
           <b>{stage.label}</b>
-        </div>
+        </button>
         <div className="df-node-counts">
           <span className="df-count-done">{stage.completed} 完成</span>
           {stage.running > 0 && <span className="df-count-run">{stage.running} 执行</span>}

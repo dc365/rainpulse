@@ -109,11 +109,19 @@ it('renders the chain strip, lanes, radar status and events from one snapshot', 
   expect(screen.getByText(/当前分析周期/)).toBeTruthy()
 })
 
+async function dataflowBlocks() {
+  await waitFor(() => {
+    if (!screen.queryAllByRole('button').some(button => button.className.includes('df-block'))) {
+      throw new Error('lane blocks have not rendered yet')
+    }
+  })
+  return screen.getAllByRole('button').filter(button => button.className.includes('df-block'))
+}
+
 it('opens the evidence drawer with per-stage timings when a block is clicked', async () => {
   stubFetch(fixture)
   render(<DataflowWorkspace />)
-  const blocks = await screen.findAllByRole('button', { name: '' }).then(buttons =>
-    buttons.filter(button => button.className.includes('df-block')))
+  const blocks = await dataflowBlocks()
   expect(blocks.length).toBeGreaterThanOrEqual(2)
   fireEvent.click(blocks[0])
   await waitFor(() => expect(screen.getByRole('dialog', { name: '数据块详情' })).toBeTruthy())
@@ -121,6 +129,15 @@ it('opens the evidence drawer with per-stage timings when a block is clicked', a
   expect(screen.getByText('链路完成')).toBeTruthy()
   expect(screen.getByText(/scan scan-old/)).toBeTruthy()
   expect(screen.getAllByText('已完成').length).toBeGreaterThanOrEqual(3)
+})
+
+it('carries a hover tooltip with radar, volume time and status on each block', async () => {
+  stubFetch(fixture)
+  render(<DataflowWorkspace />)
+  const blocks = await dataflowBlocks()
+  const title = blocks[0].getAttribute('title') ?? ''
+  expect(title).toContain('福州长乐')
+  expect(title).toContain('链路完成')
 })
 
 it('switches the wall-clock window from the picker', async () => {

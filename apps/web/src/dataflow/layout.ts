@@ -271,22 +271,41 @@ function blockLayout(
 
 export type GapRange = { left: number; width: number; minutes: number }
 
+// laneGapThreshold adapts the silence marker to the lane's own observed beat:
+// a six-minute S-band cadence flags after ~15 minutes, while a sparsely
+// backfilled X-band lane only flags after its own rhythm breaks. Clamped so a
+// single fast pair never collapses the threshold and nothing waits forever.
+export function laneGapThreshold(starts: number[]): number {
+  if (starts.length < 3) return GAP_THRESHOLD_MS
+  const sorted = [...starts].sort((a, b) => a - b)
+  const intervals: number[] = []
+  for (let index = 1; index < sorted.length; index += 1) {
+    const interval = sorted[index] - sorted[index - 1]
+    if (interval > 0) intervals.push(interval)
+  }
+  if (intervals.length === 0) return GAP_THRESHOLD_MS
+  intervals.sort((a, b) => a - b)
+  const median = intervals[Math.floor(intervals.length / 2)]
+  return Math.min(30 * 60_000, Math.max(6 * 60_000, median * 2.5))
+}
+
 // gapRanges marks wall-clock stretches without any volume scan for one radar.
 // The window before the first block counts as silence only when it is long.
-export function gapRanges(starts: number[], windowStart: number, windowEnd: number): GapRange[] {
+export function gapRanges(starts: number[], windowStart: number, windowEnd: number, threshold = GAP_THRESHOLD_MS): GapRange[] {
   const sorted = [...starts].sort((a, b) => a - b)
   const gaps: GapRange[] = []
+  const limit = Math.max(GAP_THRESHOLD_MS, threshold)
   let previous = windowStart
   for (const value of sorted) {
-    pushGap(gaps, previous, value, windowStart)
+    pushGap(gaps, previous, value, windowStart, limit)
     previous = Math.max(previous, value)
   }
-  pushGap(gaps, previous, windowEnd, windowStart)
+  pushGap(gaps, previous, windowEnd, windowStart, limit)
   return gaps
 }
 
-function pushGap(gaps: GapRange[], from: number, to: number, windowStart: number) {
-  if (to - from < GAP_THRESHOLD_MS) return
+function pushGap(gaps: GapRange[], from: number, to: number, windowStart: number, threshold: number) {
+  if (to - from < threshold) return
   const scale = PX_PER_MIN / 60_000
   gaps.push({
     left: (from - windowStart) * scale,

@@ -2,9 +2,9 @@ import type { DataflowAnalysisBlock, DataflowForecastBlock, DataflowScanBlock } 
 import { formatClock, formatDuration, formatRatio, scanStatusLabel, stageLabel } from './layout'
 
 export type SelectedBlock =
-  | { kind: 'scan'; radarID: string; block: DataflowScanBlock }
-  | { kind: 'analysis'; block: DataflowAnalysisBlock }
-  | { kind: 'forecast'; block: DataflowForecastBlock }
+  | { kind: 'scan'; radarID: string; block: DataflowScanBlock; position?: { index: number; total: number; move: (delta: number) => void } }
+  | { kind: 'analysis'; block: DataflowAnalysisBlock; position?: { index: number; total: number; move: (delta: number) => void } }
+  | { kind: 'forecast'; block: DataflowForecastBlock; position?: { index: number; total: number; move: (delta: number) => void } }
 
 export function selectedBlockKey(selected: SelectedBlock | null): string | null {
   if (!selected) return null
@@ -29,7 +29,26 @@ export function BlockDrawer({ selected, onClose }: {
           <h3>{body.title}</h3>
           <p>{body.subtitle}</p>
         </div>
-        <button type="button" onClick={onClose} aria-label="关闭详情">✕</button>
+        <div className="df-drawer-actions">
+          {selected.position && selected.position.total > 1 && <>
+            <button
+              type="button"
+              onClick={() => selected.position?.move(-1)}
+              disabled={selected.position.index <= 0}
+              aria-label="上一块"
+              title="上一块"
+            >←</button>
+            <small>{selected.position.index + 1}/{selected.position.total}</small>
+            <button
+              type="button"
+              onClick={() => selected.position?.move(1)}
+              disabled={selected.position.index >= selected.position.total - 1}
+              aria-label="下一块"
+              title="下一块"
+            >→</button>
+          </>}
+          <button type="button" onClick={onClose} aria-label="关闭详情">✕</button>
+        </div>
       </header>
       <p className={`df-drawer-badge df-drawer-badge-${body.tone}`}>{body.badge}</p>
       <table className="df-stage-table">
