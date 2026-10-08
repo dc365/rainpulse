@@ -105,17 +105,9 @@ func (h *Handler) radarProbeOne(ctx context.Context, q radarProbeSelection) (map
 				if sampleErr != nil {
 					return nil, sampleErr
 				}
-				if m.SourceContract == radarprobe.CompositeSourceContract {
-					return radarprobe.BindCompositeSource(result, raw, q.ProductID)
-				}
-				sources := p.Sources
-				if q.ProductID == "sx_composite" {
-					sources = m.Sources
-				}
-				if err := bindCompositeProbeSource(result, q.ProductID, sources); err != nil {
-					return nil, err
-				}
-				return result, nil
+				// Legacy manifests retain scalar access without guessing a cut
+				// from a volume-level or differently indexed source table.
+				return radarprobe.BindCompositeSource(result, raw, q.ProductID)
 			}
 		}
 		return nil, ErrNotFound
