@@ -10,7 +10,21 @@
 
 生产者新增来源合同；旧产品原样读取，不补造来源。S、X、联合产品各自使用自己的原生赢家。`WINNER_BAND` 是类别码（0 无有限回波赢家、1 S、2 X），0 不表示零雨量；反射率缺测仍为 NaN。新增统计与审计不参与 QC 准入或融合选值。
 
-同时集成已有的 S QC 冻结身份及 Z9595 单站诊断关联，以满足本次来源合同。新增镜像继承 105 已有五站融合镜像，仅覆盖所列融合与来源模块；S 质控科学算法、现有后台批次、阈值和配置不随此次发布更换。
+同时集成已有的 S QC 冻结身份及 Z9595 单站诊断关联，以满足本次来源合同。新增镜像继承 105 已有五站融合镜像，仅覆盖所列融合与来源模块；S/X 质控科学算法、现有后台批次、阈值和配置不随此次发布更换。
+
+## 105 发布验收（2026-10-08）
+
+实现提交 `99e333a`、旧组合标量点查兼容修订 `8fb83a2` 已在本地 main。Go/Web 以 `8fb83a2ab1eba771a449c9ce5ae184c999184d66` 构建并原位发布；Go 服务 PID 2667953，二进制 SHA-256 `3f5ce91b852cc4274db31caddf26ea08946ddea7dbdaf6beaf8c6fff5274a83f`。15 个新网页资源可用，保留 14 个上一版资源；16 个配置文件、41 个原有容器镜像及默认算法频道保持不变，任务准入已恢复。
+
+本地 Python 177 项、Web 198 项、Go 全包测试、Go vet、网页构建及生成合同检查通过。已发布 08:18 旧系列 `a7789d41…` 的原 result_id 和 series_id 保持一致；三个主产品点查均可用。旧产品缺新版来源合同，诚实返回 `legacy_unresolved`，不因此拒绝原有数值。浏览器实测自动选取完整请求站网，显示实际输入 5 S + 20 X、S+X 图层及回波；控制台无错误。该网页检查使用现有历史产品，没有把它标成新算法产物。
+
+候选镜像为 `rainpulse-cpu-worker:sx-finish-20261008-v3`，镜像 ID `sha256:801bc0403bd337eac18f99004c39cca428c51813d2113b5454fb33bf55791120`。容器 `rainpulse-ops-sx-finish-20261008-v3` 注册 ready，指纹 `6c436aa55009019fdeae4308473a0842aeda32e00365e918dcb89c903becea69`；4 GiB 内存上限、2 CPU，三个原配置挂载均只读。默认频道尚未选择此指纹，以免改变未完成的冻结五站批次。
+
+镜像打包验收发现，仓库的 `quality.py` 依赖较新的湿罩和相位模块，不能单独覆盖旧镜像。初版只在未发布的回放容器中失败；最终 v3 不覆盖 `quality.py`，完整继承基础镜像现行 X 质控实现及参数身份。基础镜像固定为 `sha256:6f1caf801b9049f558f4261eb7f1fb314a8c3015d02203a627c2f21ca2a7356b`。覆盖文件为 adapters、comparison_finish、comparison_provenance、composite_sampling、experimental、fusion、fusion_audit、horizontal_plan、managed、product、qc_identity、stream_fusion、stream_managed 共 13 个模块，各自 SHA 记录在 `worker-build-source-v3.json`；避免把仓库中其他科学改动带入运行时。
+
+真实 2026-08-28 08:18 北京时间、Z9591 + ZF101 原生资料在最终镜像内只读回放通过：51 个切面，S 有限回波格点 27130、X 1023，两站都有获胜贡献；联合水平反射率逐格等于 S/X 的 fmax，缺测一致。来源合同 `rainpulse.sx-source-v2`、请求/输入站数、非 QPE 资格及点查 24 字段/2 MiB 上限通过；耗时 96.8 秒，11 产品、2580 对象、约 9.57 MB。这是两站工程回放，不代表 29 站全网重算、等高科学验收或气象精度提升。
+
+105 回执位于现有部署目录下 `.build/sx-finish-20261008/`：`deployment.json`、`actual-image-replay.json`、`candidate-ready.json`、`worker-build-source-v3.json`。没有数据库迁移、RAW 修改、默认算法切换或新增全日重算；原有冻结任务继续运行。下一阶段先做全网代表时次来源与性能验收，再单独安排版本切换和补算。
 
 验收命令：`PYTHONPATH=algorithms algorithms/.venv/bin/python -m pytest -o addopts='' -q algorithms/tests/sx_finish_20261008 algorithms/tests/multiband`、`bash scripts/go_control.sh test ./...`、`bash scripts/go_control.sh vet ./...`、`pnpm --dir apps/web test`、`pnpm --dir apps/web build`、`bash scripts/check_generated_contracts.sh`。本地测试与 105 上的镜像、链接、点查验收分别记录；这些检查不代表气象精度提升，也不代表历史补算已经全部完成。
 
