@@ -87,6 +87,7 @@ export type DataflowStageTrendSeries = {
   key: string
   label: string
   values: (number | null)[]
+  failures?: (number | null)[]
 }
 
 export type DataflowStageTrend = {

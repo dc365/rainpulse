@@ -134,9 +134,10 @@ type DataflowStageTrend struct {
 }
 
 type DataflowStageTrendSeries struct {
-	Key    string   `json:"key"`
-	Label  string   `json:"label"`
-	Values []*int64 `json:"values"`
+	Key      string   `json:"key"`
+	Label    string   `json:"label"`
+	Values   []*int64 `json:"values"`
+	Failures []*int   `json:"failures"`
 }
 
 // DataflowStageRuntimeSample is one succeeded job feeding the trend: the
@@ -146,6 +147,13 @@ type DataflowStageRuntimeSample struct {
 	Group      string
 	FinishedAt time.Time
 	RuntimeMS  int64
+}
+
+// DataflowStageFailureSample is one failed automatic-lane job feeding the
+// trend's failure counts.
+type DataflowStageFailureSample struct {
+	Group      string
+	FinishedAt time.Time
 }
 
 // DataflowStripOrder is the fixed downstream order of the chain beat strip.

@@ -110,6 +110,63 @@
   color: var(--rain-blue);
 }
 
+.df-inspect-on {
+  border-color: var(--risk);
+  color: var(--risk);
+}
+
+/* Replay bookmarks bar */
+.df-bookmarks {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: var(--fs-micro);
+}
+
+.df-bookmarks > small { color: var(--muted); }
+
+.df-bookmark {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: var(--paper);
+  overflow: hidden;
+}
+
+.df-bookmark button {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--fs-micro);
+  padding: 2px 7px;
+  cursor: pointer;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.df-bookmark button:first-child:hover { color: var(--teal); }
+
+.df-bookmark .df-bookmark-x {
+  color: var(--muted);
+  padding: 2px 5px;
+  border-left: 1px solid var(--line);
+}
+
+.df-bookmark .df-bookmark-x:hover { color: var(--critical); }
+
+.df-trend-fail { fill: var(--critical); }
+
+.df-trend-fail-legend {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--critical);
+  vertical-align: middle;
+}
+
 .df-window-picker { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; }
 
 .df-window {

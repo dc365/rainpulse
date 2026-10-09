@@ -40,7 +40,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["key", "label", "values"],
+        "required": ["key", "label", "values", "failures"],
         "properties": {
           "key": {
             "type": "string",
@@ -52,6 +52,14 @@
           },
           "values": {
             "type": "array",
+            "items": {
+              "type": ["integer", "null"],
+              "minimum": 0
+            }
+          },
+          "failures": {
+            "type": "array",
+            "description": "Failed automatic-lane jobs per bucket, aligned with buckets. Null marks a bucket without failed samples (same shape as values).",
             "items": {
               "type": ["integer", "null"],
               "minimum": 0

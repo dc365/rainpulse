@@ -218,7 +218,7 @@ func TestBuildDataflowStageTrendBucketsAndMedians(t *testing.T) {
 		{Group: "qc", FinishedAt: inBucket(45), RuntimeMS: 90000}, // older 30-minute bucket
 		{Group: "decode", FinishedAt: inBucket(7), RuntimeMS: 8000},
 	}
-	trend := BuildDataflowStageTrend(now, 1, 30, samples)
+	trend := BuildDataflowStageTrend(now, 1, 30, samples, nil)
 	if trend.Hours != 1 || trend.BucketMinutes != 30 || len(trend.Buckets) != 2 {
 		t.Fatalf("trend shape wrong: hours=%d bucket=%d buckets=%d", trend.Hours, trend.BucketMinutes, len(trend.Buckets))
 	}
@@ -239,5 +239,30 @@ func TestBuildDataflowStageTrendBucketsAndMedians(t *testing.T) {
 	}
 	if len(trend.Series) != len(DataflowStripOrder)-1 {
 		t.Fatalf("series count = %d; want strip minus ingest", len(trend.Series))
+	}
+}
+
+func TestBuildDataflowStageTrendFailureCounts(t *testing.T) {
+	now := dataflowTestClock()
+	failures := []DataflowStageFailureSample{
+		{Group: "qc", FinishedAt: now.Add(-5 * time.Minute)},
+		{Group: "qc", FinishedAt: now.Add(-8 * time.Minute)},
+		{Group: "qc", FinishedAt: now.Add(-40 * time.Minute)},
+	}
+	trend := BuildDataflowStageTrend(now, 1, 30, nil, failures)
+	var qc *DataflowStageTrendSeries
+	for index := range trend.Series {
+		if trend.Series[index].Key == "qc" {
+			qc = &trend.Series[index]
+		}
+	}
+	if qc == nil || qc.Failures == nil {
+		t.Fatal("qc series with failures missing")
+	}
+	if qc.Failures[1] == nil || *qc.Failures[1] != 2 {
+		t.Fatalf("newest failure count = %v; want 2", qc.Failures[1])
+	}
+	if qc.Failures[0] == nil || *qc.Failures[0] != 1 {
+		t.Fatalf("older failure count = %v; want 1", qc.Failures[0])
 	}
 }

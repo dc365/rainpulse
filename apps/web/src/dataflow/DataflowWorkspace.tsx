@@ -28,7 +28,9 @@ export function DataflowWorkspace() {
   const [flashKey, setFlashKey] = useState<string | null>(null)
   const [playing, setPlaying] = useState(false)
   const [playSpeed, setPlaySpeed] = useState<1 | 2>(1)
+  const [inspect, setInspect] = useState(false)
   const [radarFocus, setRadarFocus] = useState<string | null>(null)
+  const [bookmarks, setBookmarks] = useState<string[]>(() => loadBookmarks())
   const { snapshot, trend, ingest, error, connection, now, refresh } = useDataflow(windowMinutes, anchorISO)
 
   const locateEvent = (event: DataflowEvent) => {
@@ -71,8 +73,27 @@ export function DataflowWorkspace() {
     // datetime-local carries no timezone; the operator-facing clock is CST.
     const parsed = Date.parse(`${trimmed}+08:00`)
     if (Number.isNaN(parsed)) return
-    setAnchorISO(new Date(parsed).toISOString())
+    const iso = new Date(parsed).toISOString()
+    setAnchorISO(iso)
+    saveBookmark(iso)
+    setBookmarks(loadBookmarks())
   }
+
+  // Inspection mode: while playing, the moment a window contains a failed
+  // block the playback stops on it and opens its evidence drawer — replay
+  // becomes a duty sweep.
+  useEffect(() => {
+    if (!playing || !inspect || !snapshot) return
+    for (const lane of snapshot.radar_lanes) {
+      const index = lane.blocks.findIndex(block => block.status === 'FAILED' || block.stages.some(stage => stage.status === 'FAILED'))
+      if (index < 0) continue
+      const block = lane.blocks[index]
+      setPlaying(false)
+      setFlashKey(block.scan_id)
+      setSelected(scanSelectionAt(lane, index, setSelected))
+      return
+    }
+  }, [playing, inspect, snapshot])
 
   // Escape closes the evidence drawer; arrows walk the lane's blocks while it
   // is open.
@@ -118,16 +139,25 @@ export function DataflowWorkspace() {
               onClick={() => setPlaying(value => !value)}
               title="按 6 分钟体扫节拍自动推进锚点"
             >{playing ? '⏸ 暂停' : '▶ 播放'}</button>
-            {playing && <button
-              type="button"
-              className="df-anchor-live"
-              onClick={() => setPlaySpeed(value => value === 1 ? 2 : 1)}
-              title="切换播放速度"
-            >{playSpeed}×</button>}
+            {playing && <>
+              <button
+                type="button"
+                className={inspect ? 'df-anchor-live df-inspect-on' : 'df-anchor-live'}
+                onClick={() => setInspect(value => !value)}
+                title="播放遇到失败块时自动停下并打开证据抽屉"
+              >{inspect ? '◎ 巡检中' : '◎ 巡检'}</button>
+              <button
+                type="button"
+                className="df-anchor-live"
+                onClick={() => setPlaySpeed(value => value === 1 ? 2 : 1)}
+                title="切换播放速度"
+              >{playSpeed}×</button>
+            </>}
             <button type="button" className="df-anchor-live" onClick={() => {
               setAnchorDraft('')
               setAnchorISO(null)
               setPlaying(false)
+              setInspect(false)
             }}>回到实时</button>
           </>}
         </div>
@@ -135,6 +165,20 @@ export function DataflowWorkspace() {
         <a className="df-home" href="/">返回工作台</a>
       </div>
     </header>
+
+    {bookmarks.length > 0 && <div className="df-bookmarks" role="group" aria-label="回放书签">
+      <small>书签</small>
+      {bookmarks.map(iso => <span className="df-bookmark" key={iso}>
+        <button type="button" title="跳到该锚点" onClick={() => {
+          setAnchorDraft(iso.slice(0, 16))
+          setAnchorISO(iso)
+        }}>{bookmarkLabel(iso)}</button>
+        <button type="button" className="df-bookmark-x" aria-label="删除书签" onClick={() => {
+          removeBookmark(iso)
+          setBookmarks(loadBookmarks())
+        }}>✕</button>
+      </span>)}
+    </div>}
 
     {error && <div className="df-notice df-notice-error" role="alert">{error}</div>}
     {!snapshot && !error && <div className="df-notice" role="status">正在读取链路快照…</div>}
@@ -323,4 +367,55 @@ function verdictOf(snapshot: import('./types').DataflowSnapshot | null, anchorIS
   }
   if (running > 0) return { tone: 'ok', title: '链路正常运行', detail: `${detail} · ${running} 个阶段作业执行中` }
   return { tone: 'ok', title: '链路空闲', detail }
+}
+
+// scanSelectionAt builds a drawer selection with lane-walking position, so
+// the inspector and badges can open a specific block programmatically.
+function scanSelectionAt(
+  lane: NonNullable<import('./types').DataflowSnapshot['radar_lanes'][number]>,
+  index: number,
+  onSelect: (block: SelectedBlock) => void,
+): SelectedBlock {
+  return {
+    kind: 'scan', radarID: lane.radar_id, block: lane.blocks[index],
+    position: {
+      index, total: lane.blocks.length,
+      move: delta => {
+        const next = Math.min(lane.blocks.length - 1, Math.max(0, index + delta))
+        if (next !== index) onSelect(scanSelectionAt(lane, next, onSelect))
+      },
+    },
+  }
+}
+
+const BOOKMARK_KEY = 'rainpulse-df-anchors'
+const BOOKMARK_MAX = 6
+
+function loadBookmarks(): string[] {
+  try {
+    const raw = window.localStorage.getItem(BOOKMARK_KEY)
+    const parsed = raw ? JSON.parse(raw) as unknown : []
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string').slice(0, BOOKMARK_MAX) : []
+  } catch {
+    return []
+  }
+}
+
+function saveBookmark(iso: string) {
+  try {
+    const next = [iso, ...loadBookmarks().filter(value => value !== iso)].slice(0, BOOKMARK_MAX)
+    window.localStorage.setItem(BOOKMARK_KEY, JSON.stringify(next))
+  } catch { /* Storage being unavailable never blocks the screen. */ }
+}
+
+function removeBookmark(iso: string) {
+  try {
+    window.localStorage.setItem(BOOKMARK_KEY, JSON.stringify(loadBookmarks().filter(value => value !== iso)))
+  } catch { /* same */ }
+}
+
+function bookmarkLabel(iso: string): string {
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Taipei', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(new Date(iso))
 }

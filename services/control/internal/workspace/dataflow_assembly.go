@@ -402,6 +402,7 @@ func BuildDataflowStageTrend(
 	hours int,
 	bucketMinutes int,
 	samples []DataflowStageRuntimeSample,
+	failures []DataflowStageFailureSample,
 ) DataflowStageTrend {
 	bucketCount := hours * 60 / bucketMinutes
 	buckets := make([]time.Time, bucketCount)
@@ -420,6 +421,18 @@ func BuildDataflowStageTrend(
 		}
 		perGroup[sample.Group][index] = append(perGroup[sample.Group][index], sample.RuntimeMS)
 	}
+	failedPerGroup := make(map[string][]int, len(DataflowStripOrder))
+	for _, sample := range failures {
+		offset := int(generatedAt.UTC().Sub(sample.FinishedAt).Minutes()) / bucketMinutes
+		index := bucketCount - 1 - offset
+		if index < 0 || index >= bucketCount {
+			continue
+		}
+		if failedPerGroup[sample.Group] == nil {
+			failedPerGroup[sample.Group] = make([]int, bucketCount)
+		}
+		failedPerGroup[sample.Group][index]++
+	}
 	series := make([]DataflowStageTrendSeries, 0, len(DataflowStripOrder)-1)
 	for _, node := range DataflowStripOrder {
 		if node.Key == "ingest" {
@@ -427,8 +440,16 @@ func BuildDataflowStageTrend(
 		}
 		runtimes := perGroup[node.Key]
 		values := make([]*int64, bucketCount)
+		failedCounts := failedPerGroup[node.Key]
+		failureValues := make([]*int, bucketCount)
+		for index := range buckets {
+			if failedCounts != nil && failedCounts[index] > 0 {
+				count := failedCounts[index]
+				failureValues[index] = &count
+			}
+		}
 		if len(runtimes) != bucketCount {
-			series = append(series, DataflowStageTrendSeries{Key: node.Key, Label: node.Label, Values: values})
+			series = append(series, DataflowStageTrendSeries{Key: node.Key, Label: node.Label, Values: values, Failures: failureValues})
 			continue
 		}
 		for index := range buckets {
@@ -439,7 +460,7 @@ func BuildDataflowStageTrend(
 			value := median
 			values[index] = &value
 		}
-		series = append(series, DataflowStageTrendSeries{Key: node.Key, Label: node.Label, Values: values})
+		series = append(series, DataflowStageTrendSeries{Key: node.Key, Label: node.Label, Values: values, Failures: failureValues})
 	}
 	return DataflowStageTrend{
 		SchemaVersion: "1.0",

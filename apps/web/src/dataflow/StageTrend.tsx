@@ -32,20 +32,29 @@ function lastValue(values: (number | null)[]): number | null {
 export function StageTrend({ trend }: { trend: DataflowStageTrend | null }) {
   if (!trend || !Array.isArray(trend.series) || trend.series.length === 0) return null
   return <div className="df-trend" role="group" aria-label="阶段耗时趋势">
-    <small className="df-trend-caption">近 {trend.hours} 小时 p50 · 每 {trend.bucket_minutes} 分钟一桶</small>
+    <small className="df-trend-caption">近 {trend.hours} 小时 p50 · 每 {trend.bucket_minutes} 分钟一桶 · <span className="df-trend-fail-legend"/> 失败数</small>
     <div className="df-trend-row">
       {trend.series.map((series: DataflowStageTrendSeries) => {
         const last = lastValue(series.values)
+        const failures = series.failures ?? []
+        const maxFail = Math.max(...failures.map(value => value ?? 0), 1)
         return <div className="df-trend-cell" key={series.key}>
           <svg
             className="df-trend-svg"
             width={120}
-            height={26}
-            viewBox="0 0 120 26"
+            height={30}
+            viewBox="0 0 120 30"
             preserveAspectRatio="none"
             aria-hidden="true"
           >
-            <path className="df-trend-line" d={sparklinePath(series.values, 120, 26)}/>
+            <path className="df-trend-line" d={sparklinePath(series.values, 120, 24)}/>
+            {failures.map((count, index) => count == null || count <= 0 ? null : <circle
+              className="df-trend-fail"
+              cx={valuesX(index, failures.length, 120)}
+              cy={27}
+              r={1.5 + (count / maxFail) * 2.5}
+              key={index}
+            />)}
           </svg>
           <b>{series.label}</b>
           <small>{last != null ? `p50 ${formatDuration(last)}` : '无样本'}</small>
@@ -53,4 +62,9 @@ export function StageTrend({ trend }: { trend: DataflowStageTrend | null }) {
       })}
     </div>
   </div>
+}
+
+function valuesX(index: number, length: number, width: number): number {
+  const step = length > 1 ? width / (length - 1) : width
+  return index * step
 }

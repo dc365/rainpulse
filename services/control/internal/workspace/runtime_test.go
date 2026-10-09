@@ -57,7 +57,7 @@ func (store *runtimeFakeStore) WorkspaceDataflowStageTrend(_ context.Context, no
 	if store.dataflowTrend.Series != nil {
 		return store.dataflowTrend, nil
 	}
-	return BuildDataflowStageTrend(now, hours, 30, nil), nil
+	return BuildDataflowStageTrend(now, hours, 30, nil, nil), nil
 }
 func (store *runtimeFakeStore) CancelWorkspaceRegeneration(_ context.Context, requestID uuid.UUID, reason string) (RegenerationCancellation, error) {
 	store.cancelled = RegenerationCancellation{RequestID: requestID, Status: "CANCELLED", Reason: reason}

@@ -323,6 +323,15 @@ WHERE j.status = 'SUCCEEDED' AND j.completed_at >= $1
   AND j.started_at IS NOT NULL AND j.regeneration_request_id IS NULL
 LIMIT 50000`
 
+// dataflowTrendFailedQuery collects failed automatic-lane jobs for the
+// trend's per-bucket failure counts.
+const dataflowTrendFailedQuery = `
+SELECT j.job_type, j.completed_at
+FROM jobs AS j
+WHERE j.status = 'FAILED' AND j.completed_at >= $1
+  AND j.regeneration_request_id IS NULL
+LIMIT 50000`
+
 // WorkspaceDataflowStageTrend builds the per-stage median-runtime history for
 // the sparkline panel. The window always spans the requested hours regardless
 // of the dataflow display window.
@@ -359,5 +368,25 @@ func (store *Store) WorkspaceDataflowStageTrend(
 	if err := rows.Err(); err != nil {
 		return workspace.DataflowStageTrend{}, fmt.Errorf("iterate dataflow trend rows: %w", err)
 	}
-	return workspace.BuildDataflowStageTrend(now.UTC(), hours, 30, samples), nil
+	failedRows, err := store.pool.Query(ctx, dataflowTrendFailedQuery, now.UTC().Add(-time.Duration(hours)*time.Hour))
+	if err != nil {
+		return workspace.DataflowStageTrend{}, fmt.Errorf("query dataflow trend failures: %w", err)
+	}
+	defer failedRows.Close()
+	failed := make([]workspace.DataflowStageFailureSample, 0)
+	for failedRows.Next() {
+		var jobType string
+		var finished time.Time
+		if err := failedRows.Scan(&jobType, &finished); err != nil {
+			return workspace.DataflowStageTrend{}, fmt.Errorf("scan dataflow trend failure row: %w", err)
+		}
+		failed = append(failed, workspace.DataflowStageFailureSample{
+			Group:      workspace.DataflowStripGroup(stageIdentity(jobType)),
+			FinishedAt: finished,
+		})
+	}
+	if err := failedRows.Err(); err != nil {
+		return workspace.DataflowStageTrend{}, fmt.Errorf("iterate dataflow trend failure rows: %w", err)
+	}
+	return workspace.BuildDataflowStageTrend(now.UTC(), hours, 30, samples, failed), nil
 }
