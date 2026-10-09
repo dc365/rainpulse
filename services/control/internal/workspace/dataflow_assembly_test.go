@@ -125,7 +125,7 @@ func TestAssembleDataflowSnapshotEventsNewestFirstAndCapped(t *testing.T) {
 		GridID: "grid", Status: "ANALYSIS_READY", RadarCount: 4,
 		CreatedAt: now.Add(-5 * time.Minute), Stages: []DataflowJobStage{},
 	}}
-	updated := now.Add(-4*time.Minute)
+	updated := now.Add(-4 * time.Minute)
 	forecasts := []DataflowForecastBlock{{
 		RunID: "f1", IssueTime: now.Add(-6 * time.Minute), GridID: "grid",
 		Status: "PUBLISHED", CreatedAt: now.Add(-6 * time.Minute), UpdatedAt: &updated,
@@ -206,3 +206,38 @@ func TestAssembleDataflowSnapshotWindowMetadata(t *testing.T) {
 }
 
 func ptrTime(value time.Time) *time.Time { return &value }
+
+func TestBuildDataflowStageTrendBucketsAndMedians(t *testing.T) {
+	now := dataflowTestClock()
+	inBucket := func(minutesAgo int) time.Time {
+		return now.Add(-time.Duration(minutesAgo) * time.Minute)
+	}
+	samples := []DataflowStageRuntimeSample{
+		{Group: "qc", FinishedAt: inBucket(5), RuntimeMS: 40000},
+		{Group: "qc", FinishedAt: inBucket(10), RuntimeMS: 50000},
+		{Group: "qc", FinishedAt: inBucket(45), RuntimeMS: 90000}, // older 30-minute bucket
+		{Group: "decode", FinishedAt: inBucket(7), RuntimeMS: 8000},
+	}
+	trend := BuildDataflowStageTrend(now, 1, 30, samples)
+	if trend.Hours != 1 || trend.BucketMinutes != 30 || len(trend.Buckets) != 2 {
+		t.Fatalf("trend shape wrong: hours=%d bucket=%d buckets=%d", trend.Hours, trend.BucketMinutes, len(trend.Buckets))
+	}
+	var qc *DataflowStageTrendSeries
+	for index := range trend.Series {
+		if trend.Series[index].Key == "qc" {
+			qc = &trend.Series[index]
+		}
+	}
+	if qc == nil {
+		t.Fatal("qc series missing")
+	}
+	if qc.Values[1] == nil || *qc.Values[1] != 45000 {
+		t.Fatalf("qc newest bucket = %v; want median 45000", qc.Values[1])
+	}
+	if qc.Values[0] == nil || *qc.Values[0] != 90000 {
+		t.Fatalf("qc older bucket = %v; want 90000", qc.Values[0])
+	}
+	if len(trend.Series) != len(DataflowStripOrder)-1 {
+		t.Fatalf("series count = %d; want strip minus ingest", len(trend.Series))
+	}
+}

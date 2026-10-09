@@ -40,22 +40,22 @@ type RuntimeOptions struct {
 }
 
 type runtimeHandler struct {
-	analysisOnce        sync.Once
-	analysis            *analysisJobs
-	eventHubOnce        sync.Once
-	eventHub            *workspaceEventHub
-	dataflowHubOnce     sync.Once
-	dataflowHub         *workspaceEventHub
-	next                http.Handler
-	workspace           http.Handler
-	intervalProjection  http.Handler
-	store               RuntimeStore
-	objects             RuntimeObjectReader
-	nowcastNetProducts  nowcastNetProductStore
-	ensembleRoot        string
-	nowcastNetRoot      string
-	adminToken          string
-	now                 func() time.Time
+	analysisOnce       sync.Once
+	analysis           *analysisJobs
+	eventHubOnce       sync.Once
+	eventHub           *workspaceEventHub
+	dataflowHubOnce    sync.Once
+	dataflowHub        *workspaceEventHub
+	next               http.Handler
+	workspace          http.Handler
+	intervalProjection http.Handler
+	store              RuntimeStore
+	objects            RuntimeObjectReader
+	nowcastNetProducts nowcastNetProductStore
+	ensembleRoot       string
+	nowcastNetRoot     string
+	adminToken         string
+	now                func() time.Time
 }
 
 // NewRuntimeHandler composes the browser projection, PostgreSQL materialized
@@ -140,6 +140,9 @@ func (handler *runtimeHandler) ServeHTTP(response http.ResponseWriter, request *
 		return
 	case request.Method == http.MethodGet && request.URL.Path == dataflowPath:
 		handler.getDataflow(response, request)
+		return
+	case request.Method == http.MethodGet && request.URL.Path == dataflowTrendPath:
+		handler.getDataflowStageTrend(response, request)
 		return
 	case request.Method == http.MethodGet && request.URL.Path == dataflowEventsPath:
 		handler.streamDataflowEvents(response, request)

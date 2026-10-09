@@ -311,3 +311,53 @@ func stageIdentity(jobType string) string {
 	stage, _ := pipelineStageIdentity(jobType)
 	return stage
 }
+
+// dataflowTrendQuery collects succeeded automatic-lane jobs with a computable
+// runtime in milliseconds; bucketing and medians happen in the workspace
+// assembler.
+const dataflowTrendQuery = `
+SELECT j.job_type, j.completed_at,
+       (EXTRACT(EPOCH FROM (j.completed_at - j.started_at)) * 1000)::bigint AS runtime_ms
+FROM jobs AS j
+WHERE j.status = 'SUCCEEDED' AND j.completed_at >= $1
+  AND j.started_at IS NOT NULL AND j.regeneration_request_id IS NULL
+LIMIT 50000`
+
+// WorkspaceDataflowStageTrend builds the per-stage median-runtime history for
+// the sparkline panel. The window always spans the requested hours regardless
+// of the dataflow display window.
+func (store *Store) WorkspaceDataflowStageTrend(
+	ctx context.Context,
+	now time.Time,
+	hours int,
+) (workspace.DataflowStageTrend, error) {
+	if hours < 1 || hours > 24 {
+		return workspace.DataflowStageTrend{}, fmt.Errorf("stage trend hours must be between 1 and 24")
+	}
+	rows, err := store.pool.Query(ctx, dataflowTrendQuery, now.UTC().Add(-time.Duration(hours)*time.Hour))
+	if err != nil {
+		return workspace.DataflowStageTrend{}, fmt.Errorf("query dataflow trend rows: %w", err)
+	}
+	defer rows.Close()
+	samples := make([]workspace.DataflowStageRuntimeSample, 0, 1024)
+	for rows.Next() {
+		var jobType string
+		var finished time.Time
+		var runtimeMS int64
+		if err := rows.Scan(&jobType, &finished, &runtimeMS); err != nil {
+			return workspace.DataflowStageTrend{}, fmt.Errorf("scan dataflow trend row: %w", err)
+		}
+		if runtimeMS < 0 {
+			continue
+		}
+		samples = append(samples, workspace.DataflowStageRuntimeSample{
+			Group:      workspace.DataflowStripGroup(stageIdentity(jobType)),
+			FinishedAt: finished,
+			RuntimeMS:  runtimeMS,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return workspace.DataflowStageTrend{}, fmt.Errorf("iterate dataflow trend rows: %w", err)
+	}
+	return workspace.BuildDataflowStageTrend(now.UTC(), hours, 30, samples), nil
+}

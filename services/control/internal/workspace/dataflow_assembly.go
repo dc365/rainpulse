@@ -12,18 +12,18 @@ import (
 // dataflowStageLabel renders the domain stage identity for humans. It stays in
 // sync with the job-type mapping done by the store layer.
 var dataflowStageLabel = map[string]string{
-	"decode":         "解码",
-	"qc":             "质控",
-	"grid":           "格点化",
-	"mosaic":         "拼图",
-	"qpe":            "QPE",
-	"diagnostics":    "诊断产品",
-	"nowcast_input":  "模型输入",
-	"pysteps_lk":     "pySTEPS-LK",
-	"pysteps_steps":  "pySTEPS-STEPS",
-	"nowcastnet":     "NowcastNet",
-	"products":       "应用产品",
-	"verification":   "检验",
+	"decode":        "解码",
+	"qc":            "质控",
+	"grid":          "格点化",
+	"mosaic":        "拼图",
+	"qpe":           "QPE",
+	"diagnostics":   "诊断产品",
+	"nowcast_input": "模型输入",
+	"pysteps_lk":    "pySTEPS-LK",
+	"pysteps_steps": "pySTEPS-STEPS",
+	"nowcastnet":    "NowcastNet",
+	"products":      "应用产品",
+	"verification":  "检验",
 }
 
 const dataflowEventCap = 30
@@ -392,4 +392,61 @@ func dataflowStageDisplay(stage string) string {
 		return label
 	}
 	return stage
+}
+
+// BuildDataflowStageTrend buckets succeeded-job runtimes per chain group and
+// takes the median of each bucket. The ingest node has no runtimes and is
+// left out of the series.
+func BuildDataflowStageTrend(
+	generatedAt time.Time,
+	hours int,
+	bucketMinutes int,
+	samples []DataflowStageRuntimeSample,
+) DataflowStageTrend {
+	bucketCount := hours * 60 / bucketMinutes
+	buckets := make([]time.Time, bucketCount)
+	for index := range buckets {
+		buckets[index] = generatedAt.UTC().Add(-time.Duration(bucketCount-1-index) * time.Duration(bucketMinutes) * time.Minute).Truncate(time.Duration(bucketMinutes) * time.Minute)
+	}
+	perGroup := make(map[string][][]int64, len(DataflowStripOrder))
+	for _, sample := range samples {
+		offset := int(generatedAt.UTC().Sub(sample.FinishedAt).Minutes()) / bucketMinutes
+		index := bucketCount - 1 - offset
+		if index < 0 || index >= bucketCount {
+			continue
+		}
+		if perGroup[sample.Group] == nil {
+			perGroup[sample.Group] = make([][]int64, bucketCount)
+		}
+		perGroup[sample.Group][index] = append(perGroup[sample.Group][index], sample.RuntimeMS)
+	}
+	series := make([]DataflowStageTrendSeries, 0, len(DataflowStripOrder)-1)
+	for _, node := range DataflowStripOrder {
+		if node.Key == "ingest" {
+			continue
+		}
+		runtimes := perGroup[node.Key]
+		values := make([]*int64, bucketCount)
+		if len(runtimes) != bucketCount {
+			series = append(series, DataflowStageTrendSeries{Key: node.Key, Label: node.Label, Values: values})
+			continue
+		}
+		for index := range buckets {
+			if len(runtimes[index]) == 0 {
+				continue
+			}
+			median := dataflowMedian(runtimes[index])
+			value := median
+			values[index] = &value
+		}
+		series = append(series, DataflowStageTrendSeries{Key: node.Key, Label: node.Label, Values: values})
+	}
+	return DataflowStageTrend{
+		SchemaVersion: "1.0",
+		GeneratedAt:   generatedAt.UTC(),
+		Hours:         hours,
+		BucketMinutes: bucketMinutes,
+		Buckets:       buckets,
+		Series:        series,
+	}
 }

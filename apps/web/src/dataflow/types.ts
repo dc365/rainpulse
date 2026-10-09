@@ -83,6 +83,21 @@ export type DataflowEvent = {
   detail?: string
 }
 
+export type DataflowStageTrendSeries = {
+  key: string
+  label: string
+  values: (number | null)[]
+}
+
+export type DataflowStageTrend = {
+  schema_version: string
+  generated_at: string
+  hours: number
+  bucket_minutes: number
+  buckets: string[]
+  series: DataflowStageTrendSeries[]
+}
+
 export type DataflowSnapshot = {
   schema_version: string
   generated_at: string

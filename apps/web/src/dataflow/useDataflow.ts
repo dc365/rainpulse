@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
-import type { DataflowSnapshot, IngestStatus } from './types'
+import type { DataflowSnapshot, DataflowStageTrend, IngestStatus } from './types'
 
 export type DataflowConnection = 'connecting' | 'connected' | 'polling' | 'historical'
 
@@ -7,6 +7,7 @@ export type DataflowConnection = 'connecting' | 'connected' | 'polling' | 'histo
 // of a recorded case); null follows the live clock with SSE push.
 export function useDataflow(windowMinutes: number, anchorISO: string | null) {
   const [snapshot, setSnapshot] = useState<DataflowSnapshot | null>(null)
+  const [trend, setTrend] = useState<DataflowStageTrend | null>(null)
   const [ingest, setIngest] = useState<IngestStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [connection, setConnection] = useState<DataflowConnection>(
@@ -38,6 +39,14 @@ export function useDataflow(windowMinutes: number, anchorISO: string | null) {
   useEffect(() => {
     const controller = new AbortController()
     load(controller.signal)
+    // The trend moves slowly and stays meaningful in replay: fetch it once per
+    // window/anchor change, not on every live ping.
+    void fetch('/api/v1/workspace/dataflow/stage-trend?hours=6', { signal: controller.signal })
+      .then(response => (response.ok ? response.json() : null))
+      .then(payload => {
+        if (!controller.signal.aborted && payload) setTrend(payload as DataflowStageTrend)
+      })
+      .catch(() => { /* The sparkline panel is auxiliary. */ })
     return () => controller.abort()
   }, [load, reloadKey])
 
@@ -111,5 +120,5 @@ export function useDataflow(windowMinutes: number, anchorISO: string | null) {
     }
   }, [anchorISO])
 
-  return { snapshot, ingest, error, connection, now, refresh: invalidate }
+  return { snapshot, trend, ingest, error, connection, now, refresh: invalidate }
 }

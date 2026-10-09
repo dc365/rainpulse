@@ -42,12 +42,12 @@ func TestGetDataflowReturnsSnapshotWithWindowClamping(t *testing.T) {
 			t.Fatalf("window %q: cache-control = %q", item.raw, cache)
 		}
 		var snapshot struct {
-			SchemaVersion  string `json:"schema_version"`
-			WindowMinutes  int    `json:"window_minutes"`
-			Stages         []struct{ Key string } `json:"stages"`
-			RadarLanes     []struct{ RadarID string } `json:"radar_lanes"`
-			RadarStatuses  []struct{ RadarID string } `json:"radar_statuses"`
-			GeneratedAt    string `json:"generated_at"`
+			SchemaVersion string                     `json:"schema_version"`
+			WindowMinutes int                        `json:"window_minutes"`
+			Stages        []struct{ Key string }     `json:"stages"`
+			RadarLanes    []struct{ RadarID string } `json:"radar_lanes"`
+			RadarStatuses []struct{ RadarID string } `json:"radar_statuses"`
+			GeneratedAt   string                     `json:"generated_at"`
 		}
 		if err := json.Unmarshal(recorder.Body.Bytes(), &snapshot); err != nil {
 			t.Fatalf("window %q: decode snapshot: %v", item.raw, err)
@@ -163,5 +163,40 @@ func TestStreamDataflowEventsSendsRevisionPing(t *testing.T) {
 	}
 	if !strings.Contains(body, "event: dataflow.changed") || !strings.Contains(body, `"revision":"rev-1"`) {
 		t.Fatalf("missing revision ping: %q", body)
+	}
+}
+
+func TestGetDataflowStageTrend(t *testing.T) {
+	value := int64(41000)
+	store := &runtimeFakeStore{dataflowTrend: DataflowStageTrend{
+		SchemaVersion: "1.0",
+		BucketMinutes: 30,
+		Series: []DataflowStageTrendSeries{{
+			Key: "qc", Label: "极坐标质控",
+			Values: []*int64{&value, nil},
+		}},
+	}}
+	handler := newDataflowTestHandler(store)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/workspace/dataflow/stage-trend?hours=12", nil)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d", recorder.Code)
+	}
+	if store.dataflowLastHours != 12 {
+		t.Fatalf("hours passed = %d; want 12", store.dataflowLastHours)
+	}
+	var trend struct {
+		SchemaVersion string `json:"schema_version"`
+		Series        []struct {
+			Key    string   `json:"key"`
+			Values []*int64 `json:"values"`
+		} `json:"series"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &trend); err != nil {
+		t.Fatal(err)
+	}
+	if trend.SchemaVersion != "1.0" || len(trend.Series) != 1 || trend.Series[0].Values[1] != nil {
+		t.Fatalf("trend payload = %+v", trend)
 	}
 }

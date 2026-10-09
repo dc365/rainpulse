@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Workspace dataflow stage trend v1",
+  "description": "Median runtime of succeeded automatic-lane jobs per chain-beat stage group, bucketed on the wall clock. Derived from the same jobs table as the dataflow snapshot; carries no radar arrays and no failure text. Values align index-for-index with buckets; null marks a bucket without samples.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_at",
+    "hours",
+    "bucket_minutes",
+    "buckets",
+    "series"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "hours": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 24
+    },
+    "bucket_minutes": {
+      "type": "integer",
+      "minimum": 5,
+      "maximum": 120
+    },
+    "buckets": {
+      "type": "array",
+      "items": { "type": "string", "format": "date-time" }
+    },
+    "series": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "label", "values"],
+        "properties": {
+          "key": {
+            "type": "string",
+            "enum": ["decode", "qc", "grid", "mosaic_qpe", "nowcast", "products"]
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": ["integer", "null"],
+              "minimum": 0
+            }
+          }
+        }
+      }
+    }
+  }
+}

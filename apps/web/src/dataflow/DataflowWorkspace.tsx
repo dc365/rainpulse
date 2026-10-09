@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './dataflow.css'
 import { StageStrip } from './StageStrip'
+import { StageTrend } from './StageTrend'
 import { Swimlanes } from './Swimlanes'
 import { RadarStatusStrip } from './RadarStatusStrip'
 import { EventTicker } from './EventTicker'
@@ -26,7 +27,9 @@ export function DataflowWorkspace() {
   const [failedCode, setFailedCode] = useState<string | null>(null)
   const [flashKey, setFlashKey] = useState<string | null>(null)
   const [playing, setPlaying] = useState(false)
-  const { snapshot, ingest, error, connection, now, refresh } = useDataflow(windowMinutes, anchorISO)
+  const [playSpeed, setPlaySpeed] = useState<1 | 2>(1)
+  const [radarFocus, setRadarFocus] = useState<string | null>(null)
+  const { snapshot, trend, ingest, error, connection, now, refresh } = useDataflow(windowMinutes, anchorISO)
 
   const locateEvent = (event: DataflowEvent) => {
     if (!snapshot) return
@@ -50,9 +53,9 @@ export function DataflowWorkspace() {
         return
       }
       setAnchorISO(new Date(next).toISOString())
-    }, 1_200)
+    }, 1_200 / playSpeed)
     return () => window.clearInterval(timer)
-  }, [playing, anchorISO])
+  }, [playing, anchorISO, playSpeed])
 
   const verdict = useMemo(() => verdictOf(snapshot, anchorISO), [snapshot, anchorISO])
   const anyRunning = useMemo(() =>
@@ -115,6 +118,12 @@ export function DataflowWorkspace() {
               onClick={() => setPlaying(value => !value)}
               title="按 6 分钟体扫节拍自动推进锚点"
             >{playing ? '⏸ 暂停' : '▶ 播放'}</button>
+            {playing && <button
+              type="button"
+              className="df-anchor-live"
+              onClick={() => setPlaySpeed(value => value === 1 ? 2 : 1)}
+              title="切换播放速度"
+            >{playSpeed}×</button>}
             <button type="button" className="df-anchor-live" onClick={() => {
               setAnchorDraft('')
               setAnchorISO(null)
@@ -164,6 +173,7 @@ export function DataflowWorkspace() {
           <small>窗口内完成 / 执行 / 排队 / 失败 · 中位耗时</small>
         </div>
         <StageStrip stages={snapshot.stages} nowActive={anyRunning} focus={stageFocus} onFocus={setStageFocus}/>
+        <StageTrend trend={trend}/>
       </section>
 
       <section className="df-panel">
@@ -179,6 +189,12 @@ export function DataflowWorkspace() {
               setFailedCode(null)
             }}
           >只看失败</button>
+          {radarFocus && <button
+            type="button"
+            className="df-failed-toggle df-failed-on"
+            onClick={() => setRadarFocus(null)}
+            title="取消只看该雷达"
+          >只看 {snapshot.radar_statuses.find(status => status.radar_id === radarFocus)?.display_name || radarFocus.toUpperCase()} ✕</button>}
         </div>
         {failures.length > 0 && <div className="df-failure-strip" role="group" aria-label="失败分类">
           <small>失败分类</small>
@@ -209,6 +225,8 @@ export function DataflowWorkspace() {
           failedOnly={failedOnly}
           failedCode={failedCode}
           flashKey={flashKey}
+          radarFocus={radarFocus}
+          onRadarFocus={radarID => setRadarFocus(current => current === radarID ? null : radarID)}
           viewResetKey={`${windowMinutes}-${anchorISO ?? 'live'}`}
         />
         <p className="df-legend">

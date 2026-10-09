@@ -15,6 +15,10 @@ const (
 	dataflowDefaultWindowMinutes = 60
 	dataflowMinWindowMinutes     = 10
 	dataflowMaxWindowMinutes     = 360
+	dataflowTrendPath            = "/api/v1/workspace/dataflow/stage-trend"
+	dataflowDefaultTrendHours    = 6
+	dataflowMinTrendHours        = 1
+	dataflowMaxTrendHours        = 24
 )
 
 // getDataflow serves the realtime dataflow screen projection. The window is a
@@ -104,6 +108,43 @@ func (handler *runtimeHandler) streamDataflowEvents(response http.ResponseWriter
 			flusher.Flush()
 		}
 	}
+}
+
+// dataflowWindowHours clamps the trend lookback; six hours covers a full
+// operational shift at the six-minute beat.
+func dataflowWindowHours(raw string) int {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return dataflowDefaultTrendHours
+	}
+	parsed, err := strconv.Atoi(trimmed)
+	if err != nil {
+		return dataflowDefaultTrendHours
+	}
+	if parsed < dataflowMinTrendHours {
+		return dataflowMinTrendHours
+	}
+	if parsed > dataflowMaxTrendHours {
+		return dataflowMaxTrendHours
+	}
+	return parsed
+}
+
+// getDataflowStageTrend serves the sparkline history: per-stage median
+// runtimes bucketed on the wall clock, straight from the jobs table.
+func (handler *runtimeHandler) getDataflowStageTrend(response http.ResponseWriter, request *http.Request) {
+	if handler.store == nil {
+		runtimeWriteError(response, http.StatusServiceUnavailable, "dataflow_store_unavailable", "dataflow snapshot store is unavailable")
+		return
+	}
+	hours := dataflowWindowHours(request.URL.Query().Get("hours"))
+	trend, err := handler.store.WorkspaceDataflowStageTrend(request.Context(), handler.now().UTC(), hours)
+	if err != nil {
+		runtimeWriteError(response, http.StatusServiceUnavailable, "dataflow_trend_unavailable", err.Error())
+		return
+	}
+	response.Header().Set("Cache-Control", "no-store")
+	writeJSON(response, http.StatusOK, trend)
 }
 
 func dataflowWindowMinutes(raw string) int {

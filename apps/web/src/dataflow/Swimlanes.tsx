@@ -38,6 +38,7 @@ type SwimlaneRow = {
   label: string
   caption?: string
   tone?: 'ok' | 'warn' | 'risk'
+  failedCount: number
   blocks: BlockLayout[]
   plansByBlock: SegmentPlan[]
   tooltip: (index: number) => string
@@ -108,6 +109,8 @@ export function Swimlanes({
   failedCode = null,
   flashKey = null,
   viewResetKey = '',
+  radarFocus = null,
+  onRadarFocus,
 }: {
   snapshot: DataflowSnapshot
   now: number
@@ -119,6 +122,8 @@ export function Swimlanes({
   failedCode?: string | null
   flashKey?: string | null
   viewResetKey?: string
+  radarFocus?: string | null
+  onRadarFocus?: (radarID: string | null) => void
 }) {
   const lanesRef = useRef<HTMLDivElement>(null)
   const [availableWidth, setAvailableWidth] = useState(0)
@@ -197,6 +202,7 @@ export function Swimlanes({
       label: source.label,
       caption: source.caption,
       tone: source.tone,
+      failedCount: source.blocks.filter(block => blockIsFailed(block)).length,
       blocks: kept.map(block => source.layoutOf(block)),
       plansByBlock: kept.map(block => source.planOf(block)),
       tooltip: index => source.tooltipOf(kept[index]),
@@ -204,7 +210,9 @@ export function Swimlanes({
     }
   }
 
-  const radarRows = snapshot.radar_lanes.map(lane => {
+  const radarRows = snapshot.radar_lanes
+    .filter(lane => !radarFocus || lane.radar_id === radarFocus)
+    .map(lane => {
     const status = statusByRadar.get(lane.radar_id)
     return makeRow({
       key: lane.radar_id,
@@ -308,6 +316,7 @@ export function Swimlanes({
         trackWidth={spec.width}
         stageFocus={stageFocus}
         flashKey={flashKey}
+        onRadarFocus={onRadarFocus}
       />)}
       {analysisRow && <LaneRow
         row={analysisRow}
@@ -397,7 +406,7 @@ function forecastSelection(
   }
 }
 
-function LaneGroupSection({ group, selectedKey, specStart, specEnd, trackWidth, stageFocus, flashKey }: {
+function LaneGroupSection({ group, selectedKey, specStart, specEnd, trackWidth, stageFocus, flashKey, onRadarFocus }: {
   group: LaneGroup
   selectedKey: string | null
   specStart: number
@@ -405,6 +414,7 @@ function LaneGroupSection({ group, selectedKey, specStart, specEnd, trackWidth, 
   trackWidth: number
   stageFocus: string | null
   flashKey: string | null
+  onRadarFocus?: (radarID: string | null) => void
 }) {
   const [open, setOpen] = useState(!group.collapsedByDefault)
   const visible = open || group.rows.some(row =>
@@ -429,6 +439,7 @@ function LaneGroupSection({ group, selectedKey, specStart, specEnd, trackWidth, 
       trackWidth={trackWidth}
       stageFocus={stageFocus}
       flashKey={flashKey}
+      onRadarFocus={onRadarFocus}
     />)}
   </div>
 }
@@ -441,6 +452,7 @@ function LaneRow({
   trackWidth,
   stageFocus,
   flashKey,
+  onRadarFocus,
 }: {
   row: SwimlaneRow
   selectedKey: string | null
@@ -449,6 +461,7 @@ function LaneRow({
   trackWidth: number
   stageFocus: string | null
   flashKey: string | null
+  onRadarFocus?: (radarID: string | null) => void
 }) {
   const starts = row.blocks.map(block => block.startAt)
   const gaps = gapRanges(starts, specStart, specEnd, laneGapThreshold(starts))
@@ -456,6 +469,12 @@ function LaneRow({
     <div className="df-lane-label">
       <b>{row.label}</b>
       {row.caption && <small>{row.caption}</small>}
+      {row.band !== 'other' && row.failedCount > 0 && <button
+        type="button"
+        className="df-row-badge"
+        title="只看这部雷达"
+        onClick={() => onRadarFocus?.(row.key)}
+      >失败 ×{row.failedCount}</button>}
     </div>
     <div className="df-lane-track" style={{ width: trackWidth }}>
       {gaps.map(gap => <span

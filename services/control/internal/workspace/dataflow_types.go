@@ -86,13 +86,13 @@ type DataflowAnalysisBlock struct {
 }
 
 type DataflowForecastBlock struct {
-	RunID      string             `json:"run_id"`
-	IssueTime  time.Time          `json:"issue_time"`
-	GridID     string             `json:"grid_id"`
-	Status     string             `json:"status"`
-	CreatedAt  time.Time          `json:"created_at"`
-	UpdatedAt  *time.Time         `json:"updated_at,omitempty"`
-	Stages     []DataflowJobStage `json:"stages"`
+	RunID     string             `json:"run_id"`
+	IssueTime time.Time          `json:"issue_time"`
+	GridID    string             `json:"grid_id"`
+	Status    string             `json:"status"`
+	CreatedAt time.Time          `json:"created_at"`
+	UpdatedAt *time.Time         `json:"updated_at,omitempty"`
+	Stages    []DataflowJobStage `json:"stages"`
 }
 
 // DataflowRadarStatus is the per-radar current snapshot for the status strip,
@@ -119,6 +119,33 @@ type DataflowEvent struct {
 	Label   string    `json:"label"`
 	RadarID string    `json:"radar_id,omitempty"`
 	Detail  string    `json:"detail,omitempty"`
+}
+
+// DataflowStageTrend is the per-stage median-runtime history behind the
+// sparkline panel. Values align index-for-index with Buckets; a nil value
+// marks a bucket without succeeded samples.
+type DataflowStageTrend struct {
+	SchemaVersion string                     `json:"schema_version"`
+	GeneratedAt   time.Time                  `json:"generated_at"`
+	Hours         int                        `json:"hours"`
+	BucketMinutes int                        `json:"bucket_minutes"`
+	Buckets       []time.Time                `json:"buckets"`
+	Series        []DataflowStageTrendSeries `json:"series"`
+}
+
+type DataflowStageTrendSeries struct {
+	Key    string   `json:"key"`
+	Label  string   `json:"label"`
+	Values []*int64 `json:"values"`
+}
+
+// DataflowStageRuntimeSample is one succeeded job feeding the trend: the
+// stage's chain group, finish time and runtime. The store collects them; the
+// assembler buckets and mediates.
+type DataflowStageRuntimeSample struct {
+	Group      string
+	FinishedAt time.Time
+	RuntimeMS  int64
 }
 
 // DataflowStripOrder is the fixed downstream order of the chain beat strip.
@@ -151,3 +178,7 @@ func dataflowStripGroup(stage string) string {
 	}
 	return ""
 }
+
+// DataflowStripGroup is the exported form used by store implementations when
+// collecting trend samples.
+func DataflowStripGroup(stage string) string { return dataflowStripGroup(stage) }

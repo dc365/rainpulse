@@ -41,6 +41,7 @@ type RuntimeStore interface {
 	WorkspacePipelineSnapshot(context.Context, string, time.Time) (PipelineSnapshot, error)
 	WorkspaceDataflowSnapshot(context.Context, time.Time, time.Duration) (DataflowSnapshot, error)
 	WorkspaceDataflowRevision(context.Context) (string, error)
+	WorkspaceDataflowStageTrend(context.Context, time.Time, int) (DataflowStageTrend, error)
 	CancelWorkspaceRegeneration(context.Context, uuid.UUID, string) (RegenerationCancellation, error)
 }
 

@@ -83,6 +83,13 @@ const fixture: DataflowSnapshot = {
 function stubFetch(payload: unknown) {
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
+    if (url.startsWith('/api/v1/workspace/dataflow/stage-trend')) {
+      return new Response(JSON.stringify({
+        schema_version: '1.0', generated_at: new Date(NOW).toISOString(),
+        hours: 6, bucket_minutes: 30, buckets: [],
+        series: [{ key: 'qc', label: '极坐标质控', values: [38000, 44000, null] }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
     if (url.startsWith('/api/v1/workspace/dataflow')) {
       const requested = Number(new URL(url, 'http://test.local').searchParams.get('window') ?? '60')
       const body = { ...(payload as object), window_minutes: requested }
@@ -99,7 +106,7 @@ it('renders the chain strip, lanes, radar status and events from one snapshot', 
   stubFetch(fixture)
   render(<DataflowWorkspace />)
   expect(await screen.findByText('链路节拍')).toBeTruthy()
-  expect(screen.getByText('极坐标质控')).toBeTruthy()
+  expect(screen.getAllByText('极坐标质控').length).toBeGreaterThanOrEqual(1)
   expect(screen.getAllByText(/1 执行/).length).toBeGreaterThanOrEqual(1)
   expect(screen.getAllByText('福州长乐').length).toBeGreaterThanOrEqual(2) // lane label + status card
   expect(screen.getByText('分析周期')).toBeTruthy()

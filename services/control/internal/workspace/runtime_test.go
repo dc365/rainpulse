@@ -23,7 +23,8 @@ type runtimeFakeStore struct {
 	dataflowErr       error
 	dataflowRevision  string
 	dataflowCalls     int
-	dataflowLastCalls int
+	dataflowTrend     DataflowStageTrend
+	dataflowLastHours int
 }
 
 func (store *runtimeFakeStore) GetAnalysisDiagnosticsByJob(context.Context, uuid.UUID) (workflow.AnalysisDiagnostics, error) {
@@ -50,6 +51,13 @@ func (store *runtimeFakeStore) WorkspaceDataflowSnapshot(_ context.Context, anch
 }
 func (store *runtimeFakeStore) WorkspaceDataflowRevision(context.Context) (string, error) {
 	return store.dataflowRevision, nil
+}
+func (store *runtimeFakeStore) WorkspaceDataflowStageTrend(_ context.Context, now time.Time, hours int) (DataflowStageTrend, error) {
+	store.dataflowLastHours = hours
+	if store.dataflowTrend.Series != nil {
+		return store.dataflowTrend, nil
+	}
+	return BuildDataflowStageTrend(now, hours, 30, nil), nil
 }
 func (store *runtimeFakeStore) CancelWorkspaceRegeneration(_ context.Context, requestID uuid.UUID, reason string) (RegenerationCancellation, error) {
 	store.cancelled = RegenerationCancellation{RequestID: requestID, Status: "CANCELLED", Reason: reason}
