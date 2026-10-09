@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import './dataflow.css'
 import { StageStrip } from './StageStrip'
 import { Swimlanes } from './Swimlanes'
@@ -6,7 +6,7 @@ import { RadarStatusStrip } from './RadarStatusStrip'
 import { EventTicker } from './EventTicker'
 import { BlockDrawer, type SelectedBlock } from './BlockDrawer'
 import { useDataflow } from './useDataflow'
-import { eventToBlockKey, formatClock, formatClockSeconds } from './layout'
+import { eventToBlockKey, failureSummary, formatClock, formatClockSeconds } from './layout'
 import type { DataflowEvent } from './types'
 
 const WINDOW_CHOICES = [30, 60, 180] as const
@@ -23,13 +23,36 @@ export function DataflowWorkspace() {
   const [anchorISO, setAnchorISO] = useState<string | null>(null)
   const [stageFocus, setStageFocus] = useState<string | null>(null)
   const [failedOnly, setFailedOnly] = useState(false)
+  const [failedCode, setFailedCode] = useState<string | null>(null)
   const [flashKey, setFlashKey] = useState<string | null>(null)
+  const [playing, setPlaying] = useState(false)
   const { snapshot, ingest, error, connection, now, refresh } = useDataflow(windowMinutes, anchorISO)
 
   const locateEvent = (event: DataflowEvent) => {
     if (!snapshot) return
     setFlashKey(eventToBlockKey(snapshot, event.radar_id, Date.parse(event.time)))
   }
+  const failures = useMemo(
+    () => snapshot ? failureSummary(snapshot) : [],
+    [snapshot],
+  )
+
+  // Replay stepper: advance the anchor one volume-scan beat per tick, clamped
+  // at the real present — a recorded case never plays into the future.
+  const realNow = useRef(Date.now())
+  useEffect(() => { realNow.current = Date.now() }, [playing])
+  useEffect(() => {
+    if (!playing || !anchorISO) return
+    const timer = window.setInterval(() => {
+      const next = Date.parse(anchorISO) + 6 * 60_000
+      if (next >= Date.now()) {
+        setPlaying(false)
+        return
+      }
+      setAnchorISO(new Date(next).toISOString())
+    }, 1_200)
+    return () => window.clearInterval(timer)
+  }, [playing, anchorISO])
 
   const verdict = useMemo(() => verdictOf(snapshot, anchorISO), [snapshot, anchorISO])
   const anyRunning = useMemo(() =>
@@ -48,11 +71,14 @@ export function DataflowWorkspace() {
     setAnchorISO(new Date(parsed).toISOString())
   }
 
-  // Escape closes the evidence drawer like every other panel on the screen.
+  // Escape closes the evidence drawer; arrows walk the lane's blocks while it
+  // is open.
   useEffect(() => {
     if (!selected) return
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setSelected(null)
+      if (event.key === 'ArrowLeft') { event.preventDefault(); selected.position?.move(-1) }
+      if (event.key === 'ArrowRight') { event.preventDefault(); selected.position?.move(1) }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -82,10 +108,19 @@ export function DataflowWorkspace() {
             aria-label="历史锚点时刻（北京时间）"
           />
           <button type="button" onClick={applyAnchor}>回放</button>
-          {anchorISO && <button type="button" className="df-anchor-live" onClick={() => {
-            setAnchorDraft('')
-            setAnchorISO(null)
-          }}>回到实时</button>}
+          {anchorISO && <>
+            <button
+              type="button"
+              className="df-anchor-live"
+              onClick={() => setPlaying(value => !value)}
+              title="按 6 分钟体扫节拍自动推进锚点"
+            >{playing ? '⏸ 暂停' : '▶ 播放'}</button>
+            <button type="button" className="df-anchor-live" onClick={() => {
+              setAnchorDraft('')
+              setAnchorISO(null)
+              setPlaying(false)
+            }}>回到实时</button>
+          </>}
         </div>
         <button type="button" className="df-refresh" onClick={refresh}>刷新</button>
         <a className="df-home" href="/">返回工作台</a>
@@ -139,9 +174,31 @@ export function DataflowWorkspace() {
             type="button"
             className={failedOnly ? 'df-failed-toggle df-failed-on' : 'df-failed-toggle'}
             aria-pressed={failedOnly}
-            onClick={() => setFailedOnly(value => !value)}
+            onClick={() => {
+              setFailedOnly(value => !value)
+              setFailedCode(null)
+            }}
           >只看失败</button>
         </div>
+        {failures.length > 0 && <div className="df-failure-strip" role="group" aria-label="失败分类">
+          <small>失败分类</small>
+          <button
+            type="button"
+            className={!failedCode ? 'df-failure-chip df-failure-on' : 'df-failure-chip'}
+            disabled={!failedOnly}
+            onClick={() => setFailedCode(null)}
+          >全部 ×{failures.reduce((sum, item) => sum + item.count, 0)}</button>
+          {failures.slice(0, 6).map(item => <button
+            type="button"
+            key={item.code}
+            className={failedCode === item.code ? 'df-failure-chip df-failure-on' : 'df-failure-chip'}
+            title="点击只看这一类失败"
+            onClick={() => {
+              setFailedOnly(true)
+              setFailedCode(current => current === item.code ? null : item.code)
+            }}
+          >{item.code} ×{item.count}</button>)}
+        </div>}
         <Swimlanes
           snapshot={snapshot}
           now={now}
@@ -150,6 +207,7 @@ export function DataflowWorkspace() {
           nowLabel={anchorISO ? formatClock(anchorISO) : '现在'}
           stageFocus={stageFocus}
           failedOnly={failedOnly}
+          failedCode={failedCode}
           flashKey={flashKey}
           viewResetKey={`${windowMinutes}-${anchorISO ?? 'live'}`}
         />

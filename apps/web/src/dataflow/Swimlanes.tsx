@@ -53,12 +53,25 @@ type LaneGroup = {
 }
 
 // blockIsFailed drives the 只看失败 filter: any failed stage or a failed lane
-// status counts; degraded stays visible in the normal view only.
+// status counts; degraded stays visible in the normal view only. With a code
+// set, only blocks carrying that exact failure code survive.
 export function blockIsFailed(block: {
   status: string
   stages: { status: string }[]
 }): boolean {
   return block.status === 'FAILED' || block.stages.some(stage => stage.status === 'FAILED')
+}
+
+function matchesFailure(
+  block: { status: string; degraded_reason?: string; stages: { status: string; error_code?: string }[] },
+  code: string | null,
+): boolean {
+  if (!blockIsFailed(block)) return false
+  if (!code) return true
+  if (block.stages.some(stage => stage.status === 'FAILED' && (stage.error_code || '未标注') === code)) {
+    return true
+  }
+  return block.status === 'FAILED' && (block.degraded_reason || '未标注') === code
 }
 
 // groupLanes mirrors the status strip's band grouping so both halves of the
@@ -92,6 +105,7 @@ export function Swimlanes({
   nowLabel = '现在',
   stageFocus = null,
   failedOnly = false,
+  failedCode = null,
   flashKey = null,
   viewResetKey = '',
 }: {
@@ -102,6 +116,7 @@ export function Swimlanes({
   nowLabel?: string
   stageFocus?: string | null
   failedOnly?: boolean
+  failedCode?: string | null
   flashKey?: string | null
   viewResetKey?: string
 }) {
@@ -162,7 +177,7 @@ export function Swimlanes({
 
   // makeRow keeps the failedOnly filter and the layout mapping aligned by
   // filtering the typed blocks first, then deriving positions from survivors.
-  function makeRow<T extends { status: string; stages: { status: string }[] }>(source: {
+  function makeRow<T extends { status: string; degraded_reason?: string; stages: { status: string; error_code?: string }[] }>(source: {
     key: string
     band: 'S' | 'X' | 'other'
     label: string
@@ -174,7 +189,7 @@ export function Swimlanes({
     tooltipOf: (block: T) => string
     onPressOf: (block: T) => void
   }): SwimlaneRow | null {
-    const kept = source.blocks.filter(block => !failedOnly || blockIsFailed(block))
+    const kept = source.blocks.filter(block => !failedOnly || matchesFailure(block, failedCode))
     if (failedOnly && kept.length === 0) return null
     return {
       key: source.key,
@@ -290,6 +305,7 @@ export function Swimlanes({
         selectedKey={selectedKey}
         specStart={spec.start}
         specEnd={spec.end}
+        trackWidth={spec.width}
         stageFocus={stageFocus}
         flashKey={flashKey}
       />)}
@@ -298,6 +314,7 @@ export function Swimlanes({
         selectedKey={selectedKey}
         specStart={spec.start}
         specEnd={spec.end}
+        trackWidth={spec.width}
         stageFocus={stageFocus}
         flashKey={flashKey}
       />}
@@ -306,6 +323,7 @@ export function Swimlanes({
         selectedKey={selectedKey}
         specStart={spec.start}
         specEnd={spec.end}
+        trackWidth={spec.width}
         stageFocus={stageFocus}
         flashKey={flashKey}
       />}
@@ -379,11 +397,12 @@ function forecastSelection(
   }
 }
 
-function LaneGroupSection({ group, selectedKey, specStart, specEnd, stageFocus, flashKey }: {
+function LaneGroupSection({ group, selectedKey, specStart, specEnd, trackWidth, stageFocus, flashKey }: {
   group: LaneGroup
   selectedKey: string | null
   specStart: number
   specEnd: number
+  trackWidth: number
   stageFocus: string | null
   flashKey: string | null
 }) {
@@ -407,6 +426,7 @@ function LaneGroupSection({ group, selectedKey, specStart, specEnd, stageFocus, 
       selectedKey={selectedKey}
       specStart={specStart}
       specEnd={specEnd}
+      trackWidth={trackWidth}
       stageFocus={stageFocus}
       flashKey={flashKey}
     />)}
@@ -418,6 +438,7 @@ function LaneRow({
   selectedKey,
   specStart,
   specEnd,
+  trackWidth,
   stageFocus,
   flashKey,
 }: {
@@ -425,6 +446,7 @@ function LaneRow({
   selectedKey: string | null
   specStart: number
   specEnd: number
+  trackWidth: number
   stageFocus: string | null
   flashKey: string | null
 }) {
@@ -435,7 +457,7 @@ function LaneRow({
       <b>{row.label}</b>
       {row.caption && <small>{row.caption}</small>}
     </div>
-    <div className="df-lane-track">
+    <div className="df-lane-track" style={{ width: trackWidth }}>
       {gaps.map(gap => <span
         className="df-gap"
         style={{ left: gap.left, width: gap.width }}

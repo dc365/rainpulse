@@ -381,6 +381,42 @@
   color: var(--critical);
 }
 
+/* Failure taxonomy strip inside the lanes panel */
+.df-failure-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.df-failure-strip > small { color: var(--muted); }
+
+.df-failure-chip {
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--paper);
+  font: inherit;
+  font-size: var(--fs-micro);
+  padding: 1px 10px;
+  cursor: pointer;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.df-failure-chip:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.df-failure-chip:not(:disabled):hover { border-color: var(--critical); color: var(--critical); }
+
+.df-failure-chip.df-failure-on {
+  border-color: var(--critical);
+  color: var(--critical);
+  background: var(--risk-soft);
+}
+
 .df-block-flash {
   outline: 2px solid var(--rain-blue);
   outline-offset: 1px;

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  failureSummary,
   GAP_THRESHOLD_MS,
   HEADROOM_MINUTES,
   PX_PER_MIN,
@@ -221,5 +222,43 @@ describe('eventToBlockKey', () => {
 
   it('returns null beyond ten minutes from any anchor', () => {
     expect(eventToBlockKey(payload, 'z9593', Date.parse('2026-08-28T10:33:00Z'))).toBeNull()
+  })
+})
+
+describe('failureSummary', () => {
+  const payload = {
+    radar_lanes: [{
+      blocks: [
+        { status: 'RADAR_GRID_READY', stages: [{ status: 'SUCCEEDED', error_code: '' }] },
+        { status: 'FAILED', degraded_reason: 'qc_failed', stages: [
+          { status: 'SUCCEEDED', error_code: '' },
+          { status: 'FAILED', error_code: 'qc_timeout' },
+        ] },
+        { status: 'QC_RUNNING', stages: [{ status: 'FAILED', error_code: 'qc_timeout' }] },
+        { status: 'RADAR_GRID_READY', stages: [{ status: 'FAILED', error_code: '' }] },
+      ],
+    }],
+    analysis_blocks: [{ status: 'FAILED', degraded_reason: '', stages: [{ status: 'FAILED', error_code: 'mosaic_error' }] }],
+    forecast_blocks: [],
+  }
+
+  it('groups failed blocks by error code, sorted by count', () => {
+    const groups = failureSummary(payload)
+    expect(groups[0]).toEqual({ code: 'qc_timeout', count: 2 })
+    const counts = Object.fromEntries(groups.map(group => [group.code, group.count]))
+    expect(counts).toEqual({
+      qc_timeout: 2,
+      未标注: 2,
+      qc_failed: 1,
+      mosaic_error: 1,
+    })
+  })
+
+  it('returns empty when nothing failed', () => {
+    expect(failureSummary({
+      radar_lanes: [{ blocks: [{ status: 'RADAR_GRID_READY', stages: [{ status: 'SUCCEEDED', error_code: '' }] }] }],
+      analysis_blocks: [],
+      forecast_blocks: [],
+    })).toEqual([])
   })
 })

@@ -447,3 +447,43 @@ export function eventToBlockKey(
   }
   return best ? best.key : null
 }
+
+// Failure taxonomy for the duty-review strip: every failed block contributes
+// its failed stages' error codes (or the degraded reason for whole-block
+// failures), grouped and sorted by frequency. Unlabelled failures bucket as
+// 未标注 instead of disappearing.
+export type FailureGroup = { code: string; count: number }
+
+export function blockHasFailureCode(block: {
+  status: string
+  degraded_reason?: string
+  stages: { status: string; error_code?: string }[]
+}, code: string): boolean {
+  if (block.stages.some(stage => stage.status === 'FAILED' && (stage.error_code || '未标注') === code)) {
+    return true
+  }
+  return block.status === 'FAILED' && (block.degraded_reason || '未标注') === code
+}
+
+export function failureSummary(payload: {
+  radar_lanes: { blocks: { status: string; degraded_reason?: string; stages: { status: string; error_code?: string }[] }[] }[]
+  analysis_blocks: { status: string; degraded_reason?: string; stages: { status: string; error_code?: string }[] }[]
+  forecast_blocks: { status: string; degraded_reason?: string; stages: { status: string; error_code?: string }[] }[]
+}): FailureGroup[] {
+  const counts = new Map<string, number>()
+  const consider = (block: { status: string; degraded_reason?: string; stages: { status: string; error_code?: string }[] }) => {
+    if (block.status !== 'FAILED' && !block.stages.some(stage => stage.status === 'FAILED')) return
+    const codes = new Set<string>()
+    for (const stage of block.stages) {
+      if (stage.status === 'FAILED') codes.add(stage.error_code || '未标注')
+    }
+    if (block.status === 'FAILED') codes.add(block.degraded_reason || '未标注')
+    for (const code of codes) counts.set(code, (counts.get(code) ?? 0) + 1)
+  }
+  for (const lane of payload.radar_lanes) for (const block of lane.blocks) consider(block)
+  for (const block of payload.analysis_blocks) consider(block)
+  for (const block of payload.forecast_blocks) consider(block)
+  return [...counts.entries()]
+    .map(([code, count]) => ({ code, count }))
+    .sort((left, right) => right.count - left.count || left.code.localeCompare(right.code))
+}
