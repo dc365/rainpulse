@@ -95,18 +95,28 @@ export function DataflowWorkspace() {
     }
   }, [playing, inspect, snapshot])
 
-  // Escape closes the evidence drawer; arrows walk the lane's blocks while it
-  // is open.
+  // Keyboard: Escape closes the drawer, arrows walk its lane, F resumes
+  // playback (the inspector's continue), Space toggles play/pause. Keys are
+  // ignored while typing in a field.
   useEffect(() => {
-    if (!selected) return
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setSelected(null)
-      if (event.key === 'ArrowLeft') { event.preventDefault(); selected.position?.move(-1) }
-      if (event.key === 'ArrowRight') { event.preventDefault(); selected.position?.move(1) }
+      const target = event.target as HTMLElement | null
+      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
+      if (selected) {
+        if (event.key === 'Escape') { setSelected(null); return }
+        if (event.key === 'ArrowLeft') { event.preventDefault(); selected.position?.move(-1); return }
+        if (event.key === 'ArrowRight') { event.preventDefault(); selected.position?.move(1); return }
+      }
+      if (!anchorISO) return
+      if (event.key === 'f' || event.key === 'F') setPlaying(true)
+      if (event.key === ' ') {
+        event.preventDefault()
+        setPlaying(value => !value)
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selected])
+  }, [selected, anchorISO])
 
   return <main className="df-root">
     <header className="df-header">
@@ -223,7 +233,7 @@ export function DataflowWorkspace() {
       <section className="df-panel">
         <div className="df-panel-head">
           <h2>雷达泳道{anchorISO ? ` · ${formatClock(snapshot.window_start)} – ${formatClock(now)}` : ` · 近 ${snapshot.window_minutes} 分钟`}</h2>
-          <small>滚轮缩放 · 拖拽平移 · 双击复位 · 点击块查看证据</small>
+          <small>滚轮缩放 · 拖拽平移 · 双击复位 · F 播放 · 空格 播停 · 点击块看证据</small>
           <button
             type="button"
             className={failedOnly ? 'df-failed-toggle df-failed-on' : 'df-failed-toggle'}

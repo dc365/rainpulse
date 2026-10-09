@@ -442,7 +442,7 @@
 }
 
 .df-lane-label {
-  width: 132px;
+  width: var(--df-label-w, 132px);
   flex: none;
   padding: 6px 10px;
   border-right: 1px solid var(--line);
@@ -1082,6 +1082,21 @@
 
 .df-drawer footer { margin-top: auto; }
 .df-drawer footer small { color: var(--unknown); word-break: break-all; }
+
+/* Narrow screens: denser paddings, stacked panels, full-width drawer. */
+@media (max-width: 720px) {
+  .df-root { padding: 10px 12px 40px; gap: 10px; }
+  .df-header { padding-bottom: 8px; }
+  .df-header-title p { display: none; }
+  .df-panel { padding: 10px 12px 12px; }
+  .df-strip-cell { min-width: 108px; }
+  .df-node-counts { min-width: 0; }
+  .df-lane-label { padding: 4px 6px; }
+  .df-lane-label small { display: none; }
+  .df-radar-facts { grid-template-columns: 1fr; }
+  .df-drawer { width: 100vw; }
+  .df-trend { gap: 4px 10px; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .df-nowline { transition: none; }

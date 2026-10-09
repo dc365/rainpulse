@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type {
   DataflowAnalysisBlock,
   DataflowForecastBlock,
@@ -131,6 +131,12 @@ export function Swimlanes({
   const [panning, setPanning] = useState(false)
   const drag = useRef({ startX: 0, startView: null as TimeView | null, moved: false })
 
+  // Mount-time synchronous measure guarantees compact mode on a fresh narrow
+  // load; the observer keeps tracking viewport changes afterwards.
+  useLayoutEffect(() => {
+    const element = lanesRef.current
+    if (element && element.clientWidth > 0) setAvailableWidth(element.clientWidth)
+  }, [])
   useEffect(() => {
     const element = lanesRef.current
     if (!element || typeof ResizeObserver === 'undefined') return
@@ -146,6 +152,7 @@ export function Swimlanes({
 
   const bounds: TimeView = { start: Date.parse(snapshot.window_start), end: now }
   const active: TimeView = view ?? bounds
+  const labelWidth = availableWidth > 0 && availableWidth < 640 ? 84 : LANE_LABEL_WIDTH
 
   // Wheel zoom needs a non-passive native listener; React registers wheel
   // passively and would swallow preventDefault.
@@ -157,8 +164,8 @@ export function Swimlanes({
       setView(current => {
         const base = current ?? bounds
         const rect = element.getBoundingClientRect()
-        const pxPerMin = fitPxPerMin(availableWidth, LANE_LABEL_WIDTH, viewMinutes(base))
-        const focus = base.start + ((event.clientX - rect.left - LANE_LABEL_WIDTH) / pxPerMin) * 60_000
+        const pxPerMin = fitPxPerMin(availableWidth, labelWidth, viewMinutes(base))
+        const focus = base.start + ((event.clientX - rect.left - labelWidth) / pxPerMin) * 60_000
         return zoomView(base, focus, Math.pow(1.0025, event.deltaY), bounds)
       })
     }
@@ -168,7 +175,7 @@ export function Swimlanes({
 
   const minutes = viewMinutes(active)
   const pxPerMin = availableWidth > 0
-    ? fitPxPerMin(availableWidth, LANE_LABEL_WIDTH, minutes)
+    ? fitPxPerMin(availableWidth, labelWidth, minutes)
     : 10
   const spec: WindowSpec = {
     start: active.start, end: active.end, minutes,
@@ -261,9 +268,12 @@ export function Swimlanes({
   }, [flashKey])
 
   const nowX = xForTime(now, spec)
+  const compact = availableWidth > 0 && availableWidth < 640
   return <div
     className={panning ? 'df-lanes df-lanes-panning' : 'df-lanes'}
     data-window={snapshot.window_minutes}
+    data-compact={compact || undefined}
+    style={{ '--df-label-w': `${labelWidth}px` } as import('react').CSSProperties}
     ref={lanesRef}
     onPointerDown={event => {
       if (event.button !== 0) return
@@ -296,7 +306,7 @@ export function Swimlanes({
     onDoubleClick={() => setView(null)}
     title="滚轮缩放 · 拖拽平移 · 双击复位"
   >
-    <div className="df-lanes-inner" style={{ width: LANE_LABEL_WIDTH + spec.width }}>
+    <div className="df-lanes-inner" style={{ width: labelWidth + spec.width }}>
       <div className="df-lane df-lane-axis">
         <div className="df-lane-label"/>
         <div className="df-lane-track" style={{ width: spec.width }}>
@@ -304,7 +314,7 @@ export function Swimlanes({
             className={tick.major ? 'df-tick df-tick-major' : 'df-tick'}
             style={{ left: tick.left }}
             key={tick.label + tick.left}
-          >{tick.label}</span>)}
+          >{spec.pxPerMin < 6 && !tick.major ? '' : tick.label}</span>)}
         </div>
       </div>
       {groupLanes(radarRows.filter((row): row is SwimlaneRow => row != null)).map(group => <LaneGroupSection
@@ -338,9 +348,9 @@ export function Swimlanes({
       />}
       <div className="df-lane-grid" aria-hidden="true">
         {ticks.map(tick => tick.major
-          ? <span className="df-gridline" style={{ left: LANE_LABEL_WIDTH + tick.left }} key={`grid-${tick.left}`}/>
+          ? <span className="df-gridline" style={{ left: labelWidth + tick.left }} key={`grid-${tick.left}`}/>
           : null)}
-        <div className="df-nowline" style={{ left: LANE_LABEL_WIDTH + nowX }}>
+        <div className="df-nowline" style={{ left: labelWidth + nowX }}>
           <span className="df-nowline-label">{nowLabel}</span>
         </div>
       </div>
