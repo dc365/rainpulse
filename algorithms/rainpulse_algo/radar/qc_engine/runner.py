@@ -618,6 +618,17 @@ def run_open_source_qc(
         extension_started = perf_counter()
         result = review_result(result, native, near_clutter_context=kwargs.get("near_clutter_context"))
         timings["volume_extensions_ms"] = (perf_counter() - extension_started) * 1000
+    if getattr(profile, "clearair_recurrence", None) is not None:
+        from .clearair_recurrence import review_result as review_clearair
+
+        extension_started = perf_counter()
+        result = review_clearair(
+            result,
+            native,
+            background=kwargs.get("clearair_background"),
+            anchor_volumes=kwargs.get("clearair_anchor_volumes"),
+        )
+        timings["clearair_recurrence_ms"] = (perf_counter() - extension_started) * 1000
     timings["complete_compute_ms"] = (perf_counter() - started) * 1000
     if kwargs.get("timing_sink") is not None:
         kwargs["timing_sink"].update(timings)

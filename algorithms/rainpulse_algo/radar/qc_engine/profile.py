@@ -246,6 +246,26 @@ class ContextConfig(FrozenConfig):
     strong_support: float = Field(default=0.7, ge=0, le=1)
 
 
+class ClearairRecurrenceConfig(FrozenConfig):
+    """Near-site weak-clutter clear-air recurrence exclusion (v3.1).
+
+    Off by default: the whole block is absent (None) in existing profiles, so
+    the frozen parameter identity is unchanged until a profile opts in.
+    Thresholds mirror contracts/data/qc-clearair-recurrence-v1.md.
+    """
+
+    t_clear: float = Field(default=0.5, ge=0.0, le=1.0)
+    t_clear_strict: float = Field(default=0.7, ge=0.0, le=1.0)
+    anchor_min_hits: int = Field(default=2, ge=1)
+    anchor_dilate_cells: int = Field(default=1, ge=0, le=5)
+    min_region_gates: int = Field(default=8, ge=1)
+    weak_lo_dbz: float = -10.0
+    weak_hi_dbz: float = 5.0
+    max_removed_elevation_deg: float = Field(default=6.0, gt=0.0, le=90.0)
+    background_asset_uri: str | None = None
+    background_asset_sha256: str | None = None
+
+
 from .volume_review.config import VolumeReviewConfig
 
 
@@ -312,6 +332,7 @@ class OpenSourceQCProfile(FrozenConfig):
     nonprecip_review: NonPrecipConfig | None = None
     phase: PhaseConfig = Field(default_factory=PhaseConfig)
     context: ContextConfig = Field(default_factory=ContextConfig)
+    clearair_recurrence: ClearairRecurrenceConfig | None = None
     _flag_masks: dict[str, np.uint32] = PrivateAttr(default_factory=dict)
 
     @property
@@ -330,6 +351,8 @@ class OpenSourceQCProfile(FrozenConfig):
         # Preserve the frozen v1 semantic identity when the new engine is absent.
         if self.rfi_objects is None:
             value.pop("rfi_objects", None)
+        if self.clearair_recurrence is None:
+            value.pop("clearair_recurrence", None)
         if self.literature is None:
             value.pop("literature", None)
         if self.cross_radar is None:
