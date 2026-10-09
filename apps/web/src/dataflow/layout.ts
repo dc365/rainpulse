@@ -4,7 +4,6 @@ import type {
   DataflowJobStage,
   DataflowScanBlock,
 } from './types'
-
 // Layout constants of the swimlane. Pixel math lives here so tests can pin it.
 export const LANE_LABEL_WIDTH = 132
 export const LANE_ROW_HEIGHT = 44
@@ -338,6 +337,41 @@ export function formatClock(time: number | string): string {
   }).format(typeof time === 'number' ? new Date(time) : new Date(time))
 }
 
+// View math for the swimlane timeline. The fetched snapshot bounds what can be
+// explored; zoom and pan only move the rendering window inside those bounds so
+// the screen never implies data it does not have.
+export type TimeView = { start: number; end: number }
+
+export const VIEW_MIN_MINUTES = 10
+
+export function viewMinutes(view: TimeView): number {
+  return (view.end - view.start) / 60_000
+}
+
+export function zoomView(view: TimeView, focus: number, factor: number, bounds: TimeView): TimeView {
+  const minutes = viewMinutes(view)
+  const next = Math.min(
+    viewMinutes(bounds),
+    Math.max(VIEW_MIN_MINUTES, minutes * factor),
+  )
+  if (next === minutes) return view
+  const ratio = (focus - view.start) / (view.end - view.start)
+  let start = focus - ratio * next * 60_000
+  let end = start + next * 60_000
+  if (start < bounds.start) { start = bounds.start; end = start + next * 60_000 }
+  if (end > bounds.end) { end = bounds.end; start = end - next * 60_000 }
+  return { start, end }
+}
+
+export function panView(view: TimeView, deltaMS: number, bounds: TimeView): TimeView {
+  const minutes = viewMinutes(view)
+  let start = view.start + deltaMS
+  let end = view.end + deltaMS
+  if (start < bounds.start) { start = bounds.start; end = start + minutes * 60_000 }
+  if (end > bounds.end) { end = bounds.end; start = end - minutes * 60_000 }
+  return { start, end }
+}
+
 export function formatClockSeconds(time: number | string): string {
   return new Intl.DateTimeFormat('zh-CN', {
     timeZone: 'Asia/Taipei', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
@@ -368,4 +402,48 @@ export function delayTone(seconds: number | null | undefined): 'ok' | 'warn' | '
   if (seconds > 720) return 'risk'
   if (seconds > 420) return 'warn'
   return 'ok'
+}
+
+// eventToBlockKey locates the swimlane block an event refers to. A radar
+// event matches the volume scan containing the moment (falling back to the
+// nearest volume end); analysis/forecast events match their nearest anchor
+// within ten minutes. Radar events never fall through to analysis blocks.
+export function eventToBlockKey(
+  payload: {
+    radar_lanes: { radar_id: string; blocks: { scan_id: string; volume_start: string; volume_end: string }[] }[]
+    analysis_blocks: { analysis_id: string; analysis_time: string }[]
+    forecast_blocks: { run_id: string; issue_time: string }[]
+  },
+  radarID: string | undefined,
+  time: number,
+): string | null {
+  if (radarID) {
+    const lane = payload.radar_lanes.find(item => item.radar_id === radarID)
+    if (!lane || lane.blocks.length === 0) return null
+    for (const block of lane.blocks) {
+      if (Date.parse(block.volume_start) <= time && time <= Date.parse(block.volume_end)) {
+        return block.scan_id
+      }
+    }
+    let nearest: { key: string; distance: number } | null = null
+    for (const block of lane.blocks) {
+      const distance = Math.abs(Date.parse(block.volume_end) - time)
+      if (!nearest || distance < nearest.distance) nearest = { key: block.scan_id, distance }
+    }
+    return nearest && nearest.distance <= 10 * 60_000 ? nearest.key : null
+  }
+  let best: { key: string; distance: number } | null = null
+  for (const block of payload.analysis_blocks) {
+    const distance = Math.abs(Date.parse(block.analysis_time) - time)
+    if (distance <= 10 * 60_000 && (!best || distance < best.distance)) {
+      best = { key: block.analysis_id, distance }
+    }
+  }
+  for (const block of payload.forecast_blocks) {
+    const distance = Math.abs(Date.parse(block.issue_time) - time)
+    if (distance <= 10 * 60_000 && (!best || distance < best.distance)) {
+      best = { key: block.run_id, distance }
+    }
+  }
+  return best ? best.key : null
 }

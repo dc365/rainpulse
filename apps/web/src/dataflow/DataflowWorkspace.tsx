@@ -6,7 +6,8 @@ import { RadarStatusStrip } from './RadarStatusStrip'
 import { EventTicker } from './EventTicker'
 import { BlockDrawer, type SelectedBlock } from './BlockDrawer'
 import { useDataflow } from './useDataflow'
-import { formatClock, formatClockSeconds } from './layout'
+import { eventToBlockKey, formatClock, formatClockSeconds } from './layout'
+import type { DataflowEvent } from './types'
 
 const WINDOW_CHOICES = [30, 60, 180] as const
 
@@ -21,7 +22,14 @@ export function DataflowWorkspace() {
   const [anchorDraft, setAnchorDraft] = useState('')
   const [anchorISO, setAnchorISO] = useState<string | null>(null)
   const [stageFocus, setStageFocus] = useState<string | null>(null)
+  const [failedOnly, setFailedOnly] = useState(false)
+  const [flashKey, setFlashKey] = useState<string | null>(null)
   const { snapshot, ingest, error, connection, now, refresh } = useDataflow(windowMinutes, anchorISO)
+
+  const locateEvent = (event: DataflowEvent) => {
+    if (!snapshot) return
+    setFlashKey(eventToBlockKey(snapshot, event.radar_id, Date.parse(event.time)))
+  }
 
   const verdict = useMemo(() => verdictOf(snapshot, anchorISO), [snapshot, anchorISO])
   const anyRunning = useMemo(() =>
@@ -126,7 +134,13 @@ export function DataflowWorkspace() {
       <section className="df-panel">
         <div className="df-panel-head">
           <h2>雷达泳道{anchorISO ? ` · ${formatClock(snapshot.window_start)} – ${formatClock(now)}` : ` · 近 ${snapshot.window_minutes} 分钟`}</h2>
-          <small>每块 = 一次体扫 · 内部分段 = 解码 | 质控 | 格点化 · 点击查看证据</small>
+          <small>滚轮缩放 · 拖拽平移 · 双击复位 · 点击块查看证据</small>
+          <button
+            type="button"
+            className={failedOnly ? 'df-failed-toggle df-failed-on' : 'df-failed-toggle'}
+            aria-pressed={failedOnly}
+            onClick={() => setFailedOnly(value => !value)}
+          >只看失败</button>
         </div>
         <Swimlanes
           snapshot={snapshot}
@@ -135,6 +149,9 @@ export function DataflowWorkspace() {
           selected={selected}
           nowLabel={anchorISO ? formatClock(anchorISO) : '现在'}
           stageFocus={stageFocus}
+          failedOnly={failedOnly}
+          flashKey={flashKey}
+          viewResetKey={`${windowMinutes}-${anchorISO ?? 'live'}`}
         />
         <p className="df-legend">
           <span className="df-seg df-seg-done" data-stage="decode"/> 解码
@@ -159,7 +176,7 @@ export function DataflowWorkspace() {
             <h2>事件流</h2>
             <small>{anchorISO ? '锚点窗口内终结事件' : `最近终结事件 · ${formatClock(now)} CST`}</small>
           </div>
-          <EventTicker events={snapshot.events}/>
+          <EventTicker events={snapshot.events} onSelectEvent={locateEvent}/>
         </section>
       </div>
     </>}

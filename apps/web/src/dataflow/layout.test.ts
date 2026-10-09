@@ -3,17 +3,21 @@ import {
   GAP_THRESHOLD_MS,
   HEADROOM_MINUTES,
   PX_PER_MIN,
+  VIEW_MIN_MINUTES,
   axisTicks,
   delayTone,
+  eventToBlockKey,
   formatDuration,
   gapRanges,
   laneGapThreshold,
+  panView,
   scanStatusLabel,
   segmentPlan,
   stageLabel,
   stageSegments,
   windowSpec,
   xForTime,
+  zoomView,
 } from './layout'
 import type { DataflowJobStage } from './types'
 
@@ -160,5 +164,62 @@ describe('formatters', () => {
     expect(stageLabel('pysteps_lk')).toBe('pySTEPS-LK')
     expect(scanStatusLabel('QC_RUNNING')).toBe('质控中')
     expect(scanStatusLabel('RADAR_GRID_READY')).toBe('链路完成')
+  })
+})
+
+describe('timeline view math', () => {
+  const bounds = { start: Date.parse('2026-08-28T10:00:00Z'), end: Date.parse('2026-08-28T11:00:00Z') }
+  const full = { ...bounds }
+
+  it('zooms around the cursor and clamps to bounds', () => {
+    const view = zoomView(full, Date.parse('2026-08-28T10:30:00Z'), 0.5, bounds)
+    expect(view.end - view.start).toBe(30 * 60_000)
+    // The focus time stays under the cursor.
+    const focusRatio = (Date.parse('2026-08-28T10:30:00Z') - view.start) / (view.end - view.start)
+    expect(focusRatio).toBeCloseTo(0.5, 5)
+  })
+
+  it('never zooms below the minimum or above the fetched window', () => {
+    let view = full
+    for (let i = 0; i < 20; i += 1) view = zoomView(view, bounds.start, 0.5, bounds)
+    expect(view.end - view.start).toBe(VIEW_MIN_MINUTES * 60_000)
+    // A nearly-full view may only grow to the fetched window itself.
+    expect(zoomView({ start: bounds.start + 1, end: bounds.end }, bounds.start, 2, bounds))
+      .toEqual(bounds)
+  })
+
+  it('pans within the bounds without resizing', () => {
+    const view = zoomView(full, Date.parse('2026-08-28T10:15:00Z'), 0.5, bounds)
+    const panned = panView(view, 20 * 60_000, bounds)
+    expect(panned.end - panned.start).toBe(view.end - view.start)
+    expect(panned.end).toBeLessThanOrEqual(bounds.end)
+    const clamped = panView(panned, 60 * 60_000, bounds)
+    expect(clamped.end).toBe(bounds.end)
+  })
+})
+
+describe('eventToBlockKey', () => {
+  const payload = {
+    radar_lanes: [{
+      radar_id: 'z9591',
+      blocks: [
+        { scan_id: 's-1030', volume_start: '2026-08-28T10:25:00Z', volume_end: '2026-08-28T10:30:00Z' },
+        { scan_id: 's-1036', volume_start: '2026-08-28T10:31:00Z', volume_end: '2026-08-28T10:36:00Z' },
+      ],
+    }],
+    analysis_blocks: [{ analysis_id: 'a-1036', analysis_time: '2026-08-28T10:36:00Z' }],
+    forecast_blocks: [{ run_id: 'f-1036', issue_time: '2026-08-28T10:36:00Z' }],
+  }
+
+  it('maps a radar job event to the volume containing the moment', () => {
+    expect(eventToBlockKey(payload, 'z9591', Date.parse('2026-08-28T10:33:00Z'))).toBe('s-1036')
+  })
+
+  it('maps an analysis event to the nearest analysis anchor', () => {
+    expect(eventToBlockKey(payload, undefined, Date.parse('2026-08-28T10:36:30Z'))).toBe('a-1036')
+  })
+
+  it('returns null beyond ten minutes from any anchor', () => {
+    expect(eventToBlockKey(payload, 'z9593', Date.parse('2026-08-28T10:33:00Z'))).toBeNull()
   })
 })
